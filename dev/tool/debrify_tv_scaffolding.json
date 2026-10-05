@@ -621,5 +621,3959 @@
     "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart": "class DebrifyTvDependencies {\n  final DebrifyTvOwners owners;\n  final BuildContext Function() context;\n  final bool Function() mounted;\n  final void Function(VoidCallback) setState;\n  late final DebrifyTvSections sections;\n  DebrifyTvDependencies({required this.owners, required this.context, required this.mounted, required this.setState});\n}\n",
     "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart": "class DebrifyTvOwners {\n  final DebrifyTvLibraryState library = DebrifyTvLibraryState();\n  final DebrifyTvStageState stage = DebrifyTvStageState();\n  final DebrifyTvSettingsState settings = DebrifyTvSettingsState();\n  final DebrifyTvSessionState session = DebrifyTvSessionState();\n  final DebrifyTvPrefetchState prefetch = DebrifyTvPrefetchState();\n  final DebrifyTvProgressState progress = DebrifyTvProgressState();\n  final DebrifyTvFocusState focus = DebrifyTvFocusState();\n}\n",
     "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart": "class DebrifyTvSections {\n  final DebrifyTvFeedback feedback;\n  final DebrifyTvSettingsLoader settings;\n  final DebrifyTvEngineLimits engines;\n  final DebrifyTvPlaybackFilters filters;\n  final DebrifyTvChannelLibrary library;\n  final DebrifyTvChannelWarmup warmup;\n  final DebrifyTvChannelEditor editor;\n  final DebrifyTvChannelActions actions;\n  final DebrifyTvChannelSave save;\n  final DebrifyTvChannelShare share;\n  final DebrifyTvChannelExport channelExport;\n  final DebrifyTvChannelImport channelImport;\n  final DebrifyTvUrlImport urlImport;\n  final DebrifyTvImportFormats formats;\n  final DebrifyTvImportPersistence persistence;\n  final DebrifyTvQuickPlay quickPlay;\n  final DebrifyTvQuickPlayTorbox quickTorbox;\n  final DebrifyTvQuickPlayPikPak quickPikPak;\n  final DebrifyTvQuickPlayPremiumize quickPremiumize;\n  final DebrifyTvQuickPlayAllDebrid quickAllDebrid;\n  final DebrifyTvChannelWatch channelWatch;\n  final DebrifyTvChannelSwitch channelSwitch;\n  final DebrifyTvCachedRealDebrid cachedRealDebrid;\n  final DebrifyTvCachedAllDebrid cachedAllDebrid;\n  final DebrifyTvCachedTorbox cachedTorbox;\n  final DebrifyTvCachedPikPak cachedPikPak;\n  final DebrifyTvCachedPremiumize cachedPremiumize;\n  final DebrifyTvPlayerHandoff handoff;\n  final DebrifyTvTorboxResolver torbox;\n  final DebrifyTvCloudResolvers cloud;\n  final DebrifyTvPrefetcher prefetch;\n  final DebrifyTvDormant dormant;\n  final DebrifyTvSettingsChips chips;\n  final DebrifyTvSettingsCard settingsCard;\n  final DebrifyTvDialogs dialogs;\n  final DebrifyTvSpotlightStage stage;\n  final DebrifyTvTopBar topBar;\n  final DebrifyTvGridLayout grid;\n  final DebrifyTvGridCards cards;\n  DebrifyTvSections(DebrifyTvDependencies deps)\n    : feedback = DebrifyTvFeedback(deps),\n      settings = DebrifyTvSettingsLoader(deps),\n      engines = DebrifyTvEngineLimits(deps),\n      filters = DebrifyTvPlaybackFilters(deps),\n      library = DebrifyTvChannelLibrary(deps),\n      warmup = DebrifyTvChannelWarmup(deps),\n      editor = DebrifyTvChannelEditor(deps),\n      actions = DebrifyTvChannelActions(deps),\n      save = DebrifyTvChannelSave(deps),\n      share = DebrifyTvChannelShare(deps),\n      channelExport = DebrifyTvChannelExport(deps),\n      channelImport = DebrifyTvChannelImport(deps),\n      urlImport = DebrifyTvUrlImport(deps),\n      formats = DebrifyTvImportFormats(deps),\n      persistence = DebrifyTvImportPersistence(deps),\n      quickPlay = DebrifyTvQuickPlay(deps),\n      quickTorbox = DebrifyTvQuickPlayTorbox(deps),\n      quickPikPak = DebrifyTvQuickPlayPikPak(deps),\n      quickPremiumize = DebrifyTvQuickPlayPremiumize(deps),\n      quickAllDebrid = DebrifyTvQuickPlayAllDebrid(deps),\n      channelWatch = DebrifyTvChannelWatch(deps),\n      channelSwitch = DebrifyTvChannelSwitch(deps),\n      cachedRealDebrid = DebrifyTvCachedRealDebrid(deps),\n      cachedAllDebrid = DebrifyTvCachedAllDebrid(deps),\n      cachedTorbox = DebrifyTvCachedTorbox(deps),\n      cachedPikPak = DebrifyTvCachedPikPak(deps),\n      cachedPremiumize = DebrifyTvCachedPremiumize(deps),\n      handoff = DebrifyTvPlayerHandoff(deps),\n      torbox = DebrifyTvTorboxResolver(deps),\n      cloud = DebrifyTvCloudResolvers(deps),\n      prefetch = DebrifyTvPrefetcher(deps),\n      dormant = DebrifyTvDormant(deps),\n      chips = DebrifyTvSettingsChips(deps),\n      settingsCard = DebrifyTvSettingsCard(deps),\n      dialogs = DebrifyTvDialogs(deps),\n      stage = DebrifyTvSpotlightStage(deps),\n      topBar = DebrifyTvTopBar(deps),\n      grid = DebrifyTvGridLayout(deps),\n      cards = DebrifyTvGridCards(deps) {\n    deps.sections = this;\n  }\n}\n"
-  }
+  },
+  "composition_scaffolds": [
+    {
+      "file": "lib/screens/magic_tv_screen.dart",
+      "owner": "DebrifyTVScreen",
+      "name": "DebrifyTVScreen",
+      "tokens": [
+        "const",
+        "DebrifyTVScreen",
+        "(",
+        "{",
+        "super",
+        ".",
+        "key",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/screens/magic_tv_screen.dart",
+      "owner": "DebrifyTVScreen",
+      "name": "createState",
+      "tokens": [
+        "@",
+        "override",
+        "State",
+        "<",
+        "DebrifyTVScreen",
+        ">",
+        "createState",
+        "(",
+        ")",
+        "=>",
+        "_DebrifyTVScreenState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/screens/magic_tv_screen.dart",
+      "owner": "_DebrifyTVScreenState",
+      "name": "_owners",
+      "tokens": [
+        "final",
+        "DebrifyTvOwners",
+        "_owners",
+        "=",
+        "DebrifyTvOwners",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart",
+      "owner": "_SpotlightMetaPill",
+      "name": "label",
+      "tokens": [
+        "final",
+        "String",
+        "label",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart",
+      "owner": "_SpotlightMetaPill",
+      "name": "value",
+      "tokens": [
+        "final",
+        "String",
+        "value",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart",
+      "owner": "_SpotlightMetaPill",
+      "name": "_SpotlightMetaPill",
+      "tokens": [
+        "const",
+        "_SpotlightMetaPill",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "label",
+        ",",
+        "required",
+        "this",
+        ".",
+        "value",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart",
+      "owner": "_SpotlightMetaPill",
+      "name": "build",
+      "tokens": [
+        "@",
+        "override",
+        "Widget",
+        "build",
+        "(",
+        "BuildContext",
+        "context",
+        ")",
+        "{",
+        "final",
+        "app",
+        "=",
+        "AppThemeScope",
+        ".",
+        "of",
+        "(",
+        "context",
+        ")",
+        ";",
+        "final",
+        "tv",
+        "=",
+        "app",
+        ".",
+        "debrifyTv",
+        ";",
+        "return",
+        "Container",
+        "(",
+        "padding",
+        ":",
+        "const",
+        "EdgeInsets",
+        ".",
+        "symmetric",
+        "(",
+        "horizontal",
+        ":",
+        "13",
+        ",",
+        "vertical",
+        ":",
+        "10",
+        ")",
+        ",",
+        "decoration",
+        ":",
+        "BoxDecoration",
+        "(",
+        "color",
+        ":",
+        "tv",
+        ".",
+        "fillWeak",
+        ",",
+        "borderRadius",
+        ":",
+        "app",
+        ".",
+        "shape",
+        ".",
+        "br",
+        "(",
+        "13",
+        ")",
+        ",",
+        "border",
+        ":",
+        "Border",
+        ".",
+        "all",
+        "(",
+        "color",
+        ":",
+        "tv",
+        ".",
+        "hairline",
+        ")",
+        ")",
+        ",",
+        "child",
+        ":",
+        "Column",
+        "(",
+        "mainAxisSize",
+        ":",
+        "MainAxisSize",
+        ".",
+        "min",
+        ",",
+        "crossAxisAlignment",
+        ":",
+        "CrossAxisAlignment",
+        ".",
+        "start",
+        ",",
+        "children",
+        ":",
+        "[",
+        "Text",
+        "(",
+        "label",
+        ".",
+        "toUpperCase",
+        "(",
+        ")",
+        ",",
+        "style",
+        ":",
+        "TextStyle",
+        "(",
+        "color",
+        ":",
+        "tv",
+        ".",
+        "textFaint",
+        ",",
+        "fontFamily",
+        ":",
+        "'JetBrainsMono'",
+        ",",
+        "fontSize",
+        ":",
+        "8",
+        ",",
+        "fontWeight",
+        ":",
+        "FontWeight",
+        ".",
+        "w700",
+        ",",
+        "letterSpacing",
+        ":",
+        "1.1",
+        ")",
+        ")",
+        ",",
+        "const",
+        "SizedBox",
+        "(",
+        "height",
+        ":",
+        "4",
+        ")",
+        ",",
+        "Text",
+        "(",
+        "value",
+        ",",
+        "style",
+        ":",
+        "TextStyle",
+        "(",
+        "color",
+        ":",
+        "app",
+        ".",
+        "core",
+        ".",
+        "tx",
+        ",",
+        "fontSize",
+        ":",
+        "13",
+        ",",
+        "fontWeight",
+        ":",
+        "FontWeight",
+        ".",
+        "w800",
+        ")",
+        ")",
+        "]",
+        ")",
+        ")",
+        ";",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "label",
+      "tokens": [
+        "final",
+        "String",
+        "label",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "selected",
+      "tokens": [
+        "final",
+        "bool",
+        "selected",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "enabled",
+      "tokens": [
+        "final",
+        "bool",
+        "enabled",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "onPressed",
+      "tokens": [
+        "final",
+        "VoidCallback",
+        "onPressed",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "trailingIcon",
+      "tokens": [
+        "final",
+        "IconData",
+        "?",
+        "trailingIcon",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "_SpotlightChoiceChip",
+      "tokens": [
+        "const",
+        "_SpotlightChoiceChip",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "label",
+        ",",
+        "required",
+        "this",
+        ".",
+        "selected",
+        ",",
+        "required",
+        "this",
+        ".",
+        "enabled",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onPressed",
+        ",",
+        "this",
+        ".",
+        "trailingIcon",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "_SpotlightChoiceChip",
+      "name": "createState",
+      "tokens": [
+        "@",
+        "override",
+        "State",
+        "<",
+        "_SpotlightChoiceChip",
+        ">",
+        "createState",
+        "(",
+        ")",
+        "=>",
+        "_SpotlightChoiceChipState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "_TvEngineWarmResult",
+      "name": "engine",
+      "tokens": [
+        "final",
+        "DynamicEngine",
+        "engine",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "_TvEngineWarmResult",
+      "name": "torrents",
+      "tokens": [
+        "final",
+        "List",
+        "<",
+        "Torrent",
+        ">",
+        "torrents",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "_TvEngineWarmResult",
+      "name": "pagesPulled",
+      "tokens": [
+        "final",
+        "int",
+        "pagesPulled",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "_TvEngineWarmResult",
+      "name": "failureMessage",
+      "tokens": [
+        "final",
+        "String",
+        "?",
+        "failureMessage",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "_TvEngineWarmResult",
+      "name": "_TvEngineWarmResult",
+      "tokens": [
+        "const",
+        "_TvEngineWarmResult",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "engine",
+        ",",
+        "required",
+        "this",
+        ".",
+        "torrents",
+        ",",
+        "required",
+        "this",
+        ".",
+        "pagesPulled",
+        ",",
+        "this",
+        ".",
+        "failureMessage",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "DebrifyTvChannelWarmup",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "DebrifyTvChannelWarmup",
+      "name": "DebrifyTvChannelWarmup",
+      "tokens": [
+        "DebrifyTvChannelWarmup",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "DebrifyTvChannelWarmup",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart",
+      "owner": "DebrifyTvChannelWarmup",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart",
+      "owner": "DebrifyTvTopBar",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart",
+      "owner": "DebrifyTvTopBar",
+      "name": "DebrifyTvTopBar",
+      "tokens": [
+        "DebrifyTvTopBar",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart",
+      "owner": "DebrifyTvTopBar",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart",
+      "owner": "DebrifyTvTopBar",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart",
+      "owner": "DebrifyTvFeedback",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart",
+      "owner": "DebrifyTvFeedback",
+      "name": "DebrifyTvFeedback",
+      "tokens": [
+        "DebrifyTvFeedback",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart",
+      "owner": "DebrifyTvFeedback",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart",
+      "owner": "DebrifyTvFeedback",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart",
+      "owner": "DebrifyTvSettingsLoader",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart",
+      "owner": "DebrifyTvSettingsLoader",
+      "name": "DebrifyTvSettingsLoader",
+      "tokens": [
+        "DebrifyTvSettingsLoader",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart",
+      "owner": "DebrifyTvSettingsLoader",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart",
+      "owner": "DebrifyTvSettingsLoader",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart",
+      "owner": "DebrifyTvEngineLimits",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart",
+      "owner": "DebrifyTvEngineLimits",
+      "name": "DebrifyTvEngineLimits",
+      "tokens": [
+        "DebrifyTvEngineLimits",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart",
+      "owner": "DebrifyTvEngineLimits",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart",
+      "owner": "DebrifyTvEngineLimits",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart",
+      "owner": "DebrifyTvChannelLibrary",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart",
+      "owner": "DebrifyTvChannelLibrary",
+      "name": "DebrifyTvChannelLibrary",
+      "tokens": [
+        "DebrifyTvChannelLibrary",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart",
+      "owner": "DebrifyTvChannelLibrary",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart",
+      "owner": "DebrifyTvChannelLibrary",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart",
+      "owner": "DebrifyTvTorboxResolver",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart",
+      "owner": "DebrifyTvTorboxResolver",
+      "name": "DebrifyTvTorboxResolver",
+      "tokens": [
+        "DebrifyTvTorboxResolver",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart",
+      "owner": "DebrifyTvTorboxResolver",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart",
+      "owner": "DebrifyTvTorboxResolver",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart",
+      "owner": "DebrifyTvPlaybackFilters",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart",
+      "owner": "DebrifyTvPlaybackFilters",
+      "name": "DebrifyTvPlaybackFilters",
+      "tokens": [
+        "DebrifyTvPlaybackFilters",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart",
+      "owner": "DebrifyTvPlaybackFilters",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart",
+      "owner": "DebrifyTvPlaybackFilters",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart",
+      "owner": "DebrifyTvSettingsChips",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart",
+      "owner": "DebrifyTvSettingsChips",
+      "name": "DebrifyTvSettingsChips",
+      "tokens": [
+        "DebrifyTvSettingsChips",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart",
+      "owner": "DebrifyTvSettingsChips",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart",
+      "owner": "DebrifyTvSettingsChips",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart",
+      "owner": "DebrifyTvChannelEditor",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart",
+      "owner": "DebrifyTvChannelEditor",
+      "name": "DebrifyTvChannelEditor",
+      "tokens": [
+        "DebrifyTvChannelEditor",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart",
+      "owner": "DebrifyTvChannelEditor",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart",
+      "owner": "DebrifyTvChannelEditor",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart",
+      "owner": "DebrifyTvChannelImport",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart",
+      "owner": "DebrifyTvChannelImport",
+      "name": "DebrifyTvChannelImport",
+      "tokens": [
+        "DebrifyTvChannelImport",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart",
+      "owner": "DebrifyTvChannelImport",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart",
+      "owner": "DebrifyTvChannelImport",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart",
+      "owner": "DebrifyTvChannelExport",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart",
+      "owner": "DebrifyTvChannelExport",
+      "name": "DebrifyTvChannelExport",
+      "tokens": [
+        "DebrifyTvChannelExport",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart",
+      "owner": "DebrifyTvChannelExport",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart",
+      "owner": "DebrifyTvChannelExport",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart",
+      "owner": "DebrifyTvChannelActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart",
+      "owner": "DebrifyTvChannelActions",
+      "name": "DebrifyTvChannelActions",
+      "tokens": [
+        "DebrifyTvChannelActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart",
+      "owner": "DebrifyTvChannelActions",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart",
+      "owner": "DebrifyTvChannelActions",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart",
+      "owner": "DebrifyTvUrlImport",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart",
+      "owner": "DebrifyTvUrlImport",
+      "name": "DebrifyTvUrlImport",
+      "tokens": [
+        "DebrifyTvUrlImport",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart",
+      "owner": "DebrifyTvUrlImport",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart",
+      "owner": "DebrifyTvUrlImport",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart",
+      "owner": "DebrifyTvImportFormats",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart",
+      "owner": "DebrifyTvImportFormats",
+      "name": "DebrifyTvImportFormats",
+      "tokens": [
+        "DebrifyTvImportFormats",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart",
+      "owner": "DebrifyTvImportFormats",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart",
+      "owner": "DebrifyTvImportFormats",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
+      "owner": "DebrifyTvImportPersistence",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
+      "owner": "DebrifyTvImportPersistence",
+      "name": "DebrifyTvImportPersistence",
+      "tokens": [
+        "DebrifyTvImportPersistence",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
+      "owner": "DebrifyTvImportPersistence",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
+      "owner": "DebrifyTvImportPersistence",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart",
+      "owner": "DebrifyTvChannelShare",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart",
+      "owner": "DebrifyTvChannelShare",
+      "name": "DebrifyTvChannelShare",
+      "tokens": [
+        "DebrifyTvChannelShare",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart",
+      "owner": "DebrifyTvChannelShare",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart",
+      "owner": "DebrifyTvChannelShare",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart",
+      "owner": "DebrifyTvChannelSave",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart",
+      "owner": "DebrifyTvChannelSave",
+      "name": "DebrifyTvChannelSave",
+      "tokens": [
+        "DebrifyTvChannelSave",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart",
+      "owner": "DebrifyTvChannelSave",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart",
+      "owner": "DebrifyTvChannelSave",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart",
+      "owner": "DebrifyTvChannelWatch",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart",
+      "owner": "DebrifyTvChannelWatch",
+      "name": "DebrifyTvChannelWatch",
+      "tokens": [
+        "DebrifyTvChannelWatch",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart",
+      "owner": "DebrifyTvChannelWatch",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart",
+      "owner": "DebrifyTvChannelWatch",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart",
+      "owner": "DebrifyTvQuickPlay",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart",
+      "owner": "DebrifyTvQuickPlay",
+      "name": "DebrifyTvQuickPlay",
+      "tokens": [
+        "DebrifyTvQuickPlay",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart",
+      "owner": "DebrifyTvQuickPlay",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart",
+      "owner": "DebrifyTvQuickPlay",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart",
+      "owner": "DebrifyTvQuickPlayTorbox",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart",
+      "owner": "DebrifyTvQuickPlayTorbox",
+      "name": "DebrifyTvQuickPlayTorbox",
+      "tokens": [
+        "DebrifyTvQuickPlayTorbox",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart",
+      "owner": "DebrifyTvQuickPlayTorbox",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart",
+      "owner": "DebrifyTvQuickPlayTorbox",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart",
+      "owner": "DebrifyTvQuickPlayPikPak",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart",
+      "owner": "DebrifyTvQuickPlayPikPak",
+      "name": "DebrifyTvQuickPlayPikPak",
+      "tokens": [
+        "DebrifyTvQuickPlayPikPak",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart",
+      "owner": "DebrifyTvQuickPlayPikPak",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart",
+      "owner": "DebrifyTvQuickPlayPikPak",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart",
+      "owner": "DebrifyTvCachedRealDebrid",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart",
+      "owner": "DebrifyTvCachedRealDebrid",
+      "name": "DebrifyTvCachedRealDebrid",
+      "tokens": [
+        "DebrifyTvCachedRealDebrid",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart",
+      "owner": "DebrifyTvCachedRealDebrid",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart",
+      "owner": "DebrifyTvCachedRealDebrid",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart",
+      "owner": "DebrifyTvCachedAllDebrid",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart",
+      "owner": "DebrifyTvCachedAllDebrid",
+      "name": "DebrifyTvCachedAllDebrid",
+      "tokens": [
+        "DebrifyTvCachedAllDebrid",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart",
+      "owner": "DebrifyTvCachedAllDebrid",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart",
+      "owner": "DebrifyTvCachedAllDebrid",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
+      "owner": "DebrifyTvPlayerHandoff",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
+      "owner": "DebrifyTvPlayerHandoff",
+      "name": "DebrifyTvPlayerHandoff",
+      "tokens": [
+        "DebrifyTvPlayerHandoff",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
+      "owner": "DebrifyTvPlayerHandoff",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
+      "owner": "DebrifyTvPlayerHandoff",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart",
+      "owner": "DebrifyTvChannelSwitch",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart",
+      "owner": "DebrifyTvChannelSwitch",
+      "name": "DebrifyTvChannelSwitch",
+      "tokens": [
+        "DebrifyTvChannelSwitch",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart",
+      "owner": "DebrifyTvChannelSwitch",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart",
+      "owner": "DebrifyTvChannelSwitch",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart",
+      "owner": "DebrifyTvCachedTorbox",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart",
+      "owner": "DebrifyTvCachedTorbox",
+      "name": "DebrifyTvCachedTorbox",
+      "tokens": [
+        "DebrifyTvCachedTorbox",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart",
+      "owner": "DebrifyTvCachedTorbox",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart",
+      "owner": "DebrifyTvCachedTorbox",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart",
+      "owner": "DebrifyTvCachedPikPak",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart",
+      "owner": "DebrifyTvCachedPikPak",
+      "name": "DebrifyTvCachedPikPak",
+      "tokens": [
+        "DebrifyTvCachedPikPak",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart",
+      "owner": "DebrifyTvCachedPikPak",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart",
+      "owner": "DebrifyTvCachedPikPak",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart",
+      "owner": "DebrifyTvDormant",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart",
+      "owner": "DebrifyTvDormant",
+      "name": "DebrifyTvDormant",
+      "tokens": [
+        "DebrifyTvDormant",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart",
+      "owner": "DebrifyTvDormant",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart",
+      "owner": "DebrifyTvDormant",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",
+      "owner": "DebrifyTvSpotlightStage",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",
+      "owner": "DebrifyTvSpotlightStage",
+      "name": "DebrifyTvSpotlightStage",
+      "tokens": [
+        "DebrifyTvSpotlightStage",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",
+      "owner": "DebrifyTvSpotlightStage",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",
+      "owner": "DebrifyTvSpotlightStage",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart",
+      "owner": "DebrifyTvGridLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart",
+      "owner": "DebrifyTvGridLayout",
+      "name": "DebrifyTvGridLayout",
+      "tokens": [
+        "DebrifyTvGridLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart",
+      "owner": "DebrifyTvGridLayout",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart",
+      "owner": "DebrifyTvGridLayout",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart",
+      "owner": "DebrifyTvGridCards",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart",
+      "owner": "DebrifyTvGridCards",
+      "name": "DebrifyTvGridCards",
+      "tokens": [
+        "DebrifyTvGridCards",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart",
+      "owner": "DebrifyTvGridCards",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart",
+      "owner": "DebrifyTvGridCards",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart",
+      "owner": "DebrifyTvDialogs",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart",
+      "owner": "DebrifyTvDialogs",
+      "name": "DebrifyTvDialogs",
+      "tokens": [
+        "DebrifyTvDialogs",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart",
+      "owner": "DebrifyTvDialogs",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart",
+      "owner": "DebrifyTvDialogs",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart",
+      "owner": "DebrifyTvSettingsCard",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart",
+      "owner": "DebrifyTvSettingsCard",
+      "name": "DebrifyTvSettingsCard",
+      "tokens": [
+        "DebrifyTvSettingsCard",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart",
+      "owner": "DebrifyTvSettingsCard",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart",
+      "owner": "DebrifyTvSettingsCard",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart",
+      "owner": "DebrifyTvCloudResolvers",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart",
+      "owner": "DebrifyTvCloudResolvers",
+      "name": "DebrifyTvCloudResolvers",
+      "tokens": [
+        "DebrifyTvCloudResolvers",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart",
+      "owner": "DebrifyTvCloudResolvers",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart",
+      "owner": "DebrifyTvCloudResolvers",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart",
+      "owner": "DebrifyTvCachedPremiumize",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart",
+      "owner": "DebrifyTvCachedPremiumize",
+      "name": "DebrifyTvCachedPremiumize",
+      "tokens": [
+        "DebrifyTvCachedPremiumize",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart",
+      "owner": "DebrifyTvCachedPremiumize",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart",
+      "owner": "DebrifyTvCachedPremiumize",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart",
+      "owner": "DebrifyTvQuickPlayPremiumize",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart",
+      "owner": "DebrifyTvQuickPlayPremiumize",
+      "name": "DebrifyTvQuickPlayPremiumize",
+      "tokens": [
+        "DebrifyTvQuickPlayPremiumize",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart",
+      "owner": "DebrifyTvQuickPlayPremiumize",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart",
+      "owner": "DebrifyTvQuickPlayPremiumize",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart",
+      "owner": "DebrifyTvQuickPlayAllDebrid",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart",
+      "owner": "DebrifyTvQuickPlayAllDebrid",
+      "name": "DebrifyTvQuickPlayAllDebrid",
+      "tokens": [
+        "DebrifyTvQuickPlayAllDebrid",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart",
+      "owner": "DebrifyTvQuickPlayAllDebrid",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart",
+      "owner": "DebrifyTvQuickPlayAllDebrid",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart",
+      "owner": "DebrifyTvPrefetcher",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "DebrifyTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart",
+      "owner": "DebrifyTvPrefetcher",
+      "name": "DebrifyTvPrefetcher",
+      "tokens": [
+        "DebrifyTvPrefetcher",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart",
+      "owner": "DebrifyTvPrefetcher",
+      "name": "_owners",
+      "tokens": [
+        "DebrifyTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart",
+      "owner": "DebrifyTvPrefetcher",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart",
+      "owner": "DebrifyTvAllDebridPrepared",
+      "name": "magnetId",
+      "tokens": [
+        "final",
+        "String",
+        "magnetId",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart",
+      "owner": "DebrifyTvAllDebridPrepared",
+      "name": "name",
+      "tokens": [
+        "final",
+        "String",
+        "name",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart",
+      "owner": "DebrifyTvAllDebridPrepared",
+      "name": "lockedLinks",
+      "tokens": [
+        "final",
+        "List",
+        "<",
+        "String",
+        ">",
+        "lockedLinks",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart",
+      "owner": "DebrifyTvAllDebridPrepared",
+      "name": "DebrifyTvAllDebridPrepared",
+      "tokens": [
+        "DebrifyTvAllDebridPrepared",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "magnetId",
+        ",",
+        "required",
+        "this",
+        ".",
+        "name",
+        ",",
+        "required",
+        "this",
+        ".",
+        "lockedLinks",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "owners",
+      "tokens": [
+        "final",
+        "DebrifyTvOwners",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "context",
+      "tokens": [
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "mounted",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "setState",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "sections",
+      "tokens": [
+        "late",
+        "final",
+        "DebrifyTvSections",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
+      "owner": "DebrifyTvDependencies",
+      "name": "DebrifyTvDependencies",
+      "tokens": [
+        "DebrifyTvDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "owners",
+        ",",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        "}",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "library",
+      "tokens": [
+        "final",
+        "DebrifyTvLibraryState",
+        "library",
+        "=",
+        "DebrifyTvLibraryState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "stage",
+      "tokens": [
+        "final",
+        "DebrifyTvStageState",
+        "stage",
+        "=",
+        "DebrifyTvStageState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "settings",
+      "tokens": [
+        "final",
+        "DebrifyTvSettingsState",
+        "settings",
+        "=",
+        "DebrifyTvSettingsState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "session",
+      "tokens": [
+        "final",
+        "DebrifyTvSessionState",
+        "session",
+        "=",
+        "DebrifyTvSessionState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "prefetch",
+      "tokens": [
+        "final",
+        "DebrifyTvPrefetchState",
+        "prefetch",
+        "=",
+        "DebrifyTvPrefetchState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "progress",
+      "tokens": [
+        "final",
+        "DebrifyTvProgressState",
+        "progress",
+        "=",
+        "DebrifyTvProgressState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart",
+      "owner": "DebrifyTvOwners",
+      "name": "focus",
+      "tokens": [
+        "final",
+        "DebrifyTvFocusState",
+        "focus",
+        "=",
+        "DebrifyTvFocusState",
+        "(",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "feedback",
+      "tokens": [
+        "final",
+        "DebrifyTvFeedback",
+        "feedback",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "settings",
+      "tokens": [
+        "final",
+        "DebrifyTvSettingsLoader",
+        "settings",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "engines",
+      "tokens": [
+        "final",
+        "DebrifyTvEngineLimits",
+        "engines",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "filters",
+      "tokens": [
+        "final",
+        "DebrifyTvPlaybackFilters",
+        "filters",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "library",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelLibrary",
+        "library",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "warmup",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelWarmup",
+        "warmup",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "editor",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelEditor",
+        "editor",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "actions",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelActions",
+        "actions",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "save",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelSave",
+        "save",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "share",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelShare",
+        "share",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "channelExport",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelExport",
+        "channelExport",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "channelImport",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelImport",
+        "channelImport",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "urlImport",
+      "tokens": [
+        "final",
+        "DebrifyTvUrlImport",
+        "urlImport",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "formats",
+      "tokens": [
+        "final",
+        "DebrifyTvImportFormats",
+        "formats",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "persistence",
+      "tokens": [
+        "final",
+        "DebrifyTvImportPersistence",
+        "persistence",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "quickPlay",
+      "tokens": [
+        "final",
+        "DebrifyTvQuickPlay",
+        "quickPlay",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "quickTorbox",
+      "tokens": [
+        "final",
+        "DebrifyTvQuickPlayTorbox",
+        "quickTorbox",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "quickPikPak",
+      "tokens": [
+        "final",
+        "DebrifyTvQuickPlayPikPak",
+        "quickPikPak",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "quickPremiumize",
+      "tokens": [
+        "final",
+        "DebrifyTvQuickPlayPremiumize",
+        "quickPremiumize",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "quickAllDebrid",
+      "tokens": [
+        "final",
+        "DebrifyTvQuickPlayAllDebrid",
+        "quickAllDebrid",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "channelWatch",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelWatch",
+        "channelWatch",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "channelSwitch",
+      "tokens": [
+        "final",
+        "DebrifyTvChannelSwitch",
+        "channelSwitch",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cachedRealDebrid",
+      "tokens": [
+        "final",
+        "DebrifyTvCachedRealDebrid",
+        "cachedRealDebrid",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cachedAllDebrid",
+      "tokens": [
+        "final",
+        "DebrifyTvCachedAllDebrid",
+        "cachedAllDebrid",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cachedTorbox",
+      "tokens": [
+        "final",
+        "DebrifyTvCachedTorbox",
+        "cachedTorbox",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cachedPikPak",
+      "tokens": [
+        "final",
+        "DebrifyTvCachedPikPak",
+        "cachedPikPak",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cachedPremiumize",
+      "tokens": [
+        "final",
+        "DebrifyTvCachedPremiumize",
+        "cachedPremiumize",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "handoff",
+      "tokens": [
+        "final",
+        "DebrifyTvPlayerHandoff",
+        "handoff",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "torbox",
+      "tokens": [
+        "final",
+        "DebrifyTvTorboxResolver",
+        "torbox",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cloud",
+      "tokens": [
+        "final",
+        "DebrifyTvCloudResolvers",
+        "cloud",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "prefetch",
+      "tokens": [
+        "final",
+        "DebrifyTvPrefetcher",
+        "prefetch",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "dormant",
+      "tokens": [
+        "final",
+        "DebrifyTvDormant",
+        "dormant",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "chips",
+      "tokens": [
+        "final",
+        "DebrifyTvSettingsChips",
+        "chips",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "settingsCard",
+      "tokens": [
+        "final",
+        "DebrifyTvSettingsCard",
+        "settingsCard",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "dialogs",
+      "tokens": [
+        "final",
+        "DebrifyTvDialogs",
+        "dialogs",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "stage",
+      "tokens": [
+        "final",
+        "DebrifyTvSpotlightStage",
+        "stage",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "topBar",
+      "tokens": [
+        "final",
+        "DebrifyTvTopBar",
+        "topBar",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "grid",
+      "tokens": [
+        "final",
+        "DebrifyTvGridLayout",
+        "grid",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "cards",
+      "tokens": [
+        "final",
+        "DebrifyTvGridCards",
+        "cards",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart",
+      "owner": "DebrifyTvSections",
+      "name": "DebrifyTvSections",
+      "tokens": [
+        "DebrifyTvSections",
+        "(",
+        "DebrifyTvDependencies",
+        "deps",
+        ")",
+        ":",
+        "feedback",
+        "=",
+        "DebrifyTvFeedback",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "settings",
+        "=",
+        "DebrifyTvSettingsLoader",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "engines",
+        "=",
+        "DebrifyTvEngineLimits",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "filters",
+        "=",
+        "DebrifyTvPlaybackFilters",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "library",
+        "=",
+        "DebrifyTvChannelLibrary",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "warmup",
+        "=",
+        "DebrifyTvChannelWarmup",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "editor",
+        "=",
+        "DebrifyTvChannelEditor",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "actions",
+        "=",
+        "DebrifyTvChannelActions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "save",
+        "=",
+        "DebrifyTvChannelSave",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "share",
+        "=",
+        "DebrifyTvChannelShare",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "channelExport",
+        "=",
+        "DebrifyTvChannelExport",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "channelImport",
+        "=",
+        "DebrifyTvChannelImport",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "urlImport",
+        "=",
+        "DebrifyTvUrlImport",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "formats",
+        "=",
+        "DebrifyTvImportFormats",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "persistence",
+        "=",
+        "DebrifyTvImportPersistence",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "quickPlay",
+        "=",
+        "DebrifyTvQuickPlay",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "quickTorbox",
+        "=",
+        "DebrifyTvQuickPlayTorbox",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "quickPikPak",
+        "=",
+        "DebrifyTvQuickPlayPikPak",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "quickPremiumize",
+        "=",
+        "DebrifyTvQuickPlayPremiumize",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "quickAllDebrid",
+        "=",
+        "DebrifyTvQuickPlayAllDebrid",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "channelWatch",
+        "=",
+        "DebrifyTvChannelWatch",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "channelSwitch",
+        "=",
+        "DebrifyTvChannelSwitch",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cachedRealDebrid",
+        "=",
+        "DebrifyTvCachedRealDebrid",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cachedAllDebrid",
+        "=",
+        "DebrifyTvCachedAllDebrid",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cachedTorbox",
+        "=",
+        "DebrifyTvCachedTorbox",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cachedPikPak",
+        "=",
+        "DebrifyTvCachedPikPak",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cachedPremiumize",
+        "=",
+        "DebrifyTvCachedPremiumize",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "handoff",
+        "=",
+        "DebrifyTvPlayerHandoff",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "torbox",
+        "=",
+        "DebrifyTvTorboxResolver",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cloud",
+        "=",
+        "DebrifyTvCloudResolvers",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "prefetch",
+        "=",
+        "DebrifyTvPrefetcher",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "dormant",
+        "=",
+        "DebrifyTvDormant",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "chips",
+        "=",
+        "DebrifyTvSettingsChips",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "settingsCard",
+        "=",
+        "DebrifyTvSettingsCard",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "dialogs",
+        "=",
+        "DebrifyTvDialogs",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "stage",
+        "=",
+        "DebrifyTvSpotlightStage",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "topBar",
+        "=",
+        "DebrifyTvTopBar",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "grid",
+        "=",
+        "DebrifyTvGridLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cards",
+        "=",
+        "DebrifyTvGridCards",
+        "(",
+        "deps",
+        ")",
+        "{",
+        "deps",
+        ".",
+        "sections",
+        "=",
+        "this",
+        ";",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart",
+      "owner": "",
+      "name": "debrifyTvChoiceChip",
+      "tokens": [
+        "Widget",
+        "debrifyTvChoiceChip",
+        "(",
+        "{",
+        "required",
+        "String",
+        "label",
+        ",",
+        "required",
+        "bool",
+        "selected",
+        ",",
+        "required",
+        "bool",
+        "enabled",
+        ",",
+        "required",
+        "VoidCallback",
+        "onPressed",
+        ",",
+        "IconData",
+        "?",
+        "trailingIcon",
+        "}",
+        ")",
+        "=>",
+        "DebrifyTvChoiceChip",
+        "(",
+        "label",
+        ":",
+        "label",
+        ",",
+        "selected",
+        ":",
+        "selected",
+        ",",
+        "enabled",
+        ":",
+        "enabled",
+        ",",
+        "onPressed",
+        ":",
+        "onPressed",
+        ",",
+        "trailingIcon",
+        ":",
+        "trailingIcon",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/screens/magic_tv_screen.dart",
+      "owner": "_DebrifyTVScreenState",
+      "name": "_composition",
+      "tokens": [
+        "DebrifyTvSections",
+        "?",
+        "_composition",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/magic_tv_screen.dart",
+      "owner": "_DebrifyTVScreenState",
+      "name": "_sections",
+      "tokens": [
+        "DebrifyTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_composition",
+        "??=",
+        "DebrifyTvSections",
+        "(",
+        "DebrifyTvDependencies",
+        "(",
+        "owners",
+        ":",
+        "_owners",
+        ",",
+        "context",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "context",
+        ",",
+        "mounted",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "mounted",
+        ",",
+        "setState",
+        ":",
+        "setState",
+        ")",
+        ")",
+        ";"
+      ]
+    }
+  ],
+  "constructor_forwarder_template": "Widget debrifyTvChoiceChip({\n  required String label,\n  required bool selected,\n  required bool enabled,\n  required VoidCallback onPressed,\n  IconData? trailingIcon,\n}) => DebrifyTvChoiceChip(\n  label: label,\n  selected: selected,\n  enabled: enabled,\n  onPressed: onPressed,\n  trailingIcon: trailingIcon,\n);\n",
+  "activation": "Exact composition declarations are frozen here for step 2/3; move a record into scaffolds only when its complete member exists. Active source guards reject every unregistered declaration. constructor_forwarders activates only with the exact frozen factory."
 }

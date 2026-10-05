@@ -5,6 +5,10 @@ set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
 reference_revision=991029f64a6e4ce27b68626ac4537bf9f38f483c
 checkpoint_subject='test(debrify-tv): step 0 original-code characterization checkpoint'
+review_subject='test(debrify-tv): step 0b review closure checkpoint'
+if [[ -n "$(git log -1 --format=%H --fixed-strings --grep="$review_subject" HEAD)" ]]; then
+  checkpoint_subject="$review_subject"
+fi
 revision_log="$(git log --format='%H %s' HEAD)"
 checkpoint_revision="$(python3 -c 'import sys; subject=sys.argv[1]; rows=sys.stdin.read().splitlines(); matches=[r[:40] for r in rows if r[41:]==subject]; assert len(matches)==1, (subject,matches); print(matches[0])' "$checkpoint_subject" <<< "$revision_log")"
 for input in lib pubspec.yaml pubspec.lock; do
@@ -33,9 +37,11 @@ flutter test --no-pub --concurrency=1 --dart-define=DEBRIFY_TV_CAPTURE_ORIGINAL_
   --update-goldens "$test_path" 2>&1 | tee "$evidence/linux-original-capture-first.txt"
 sha256sum test/goldens/debrify_tv/linux/*.png > "$evidence/linux-original-sha256-first.txt"
 [[ "$(find test/goldens/debrify_tv/linux -name '*.png' | wc -l | tr -d ' ')" == 6 ]]
+rm test/goldens/debrify_tv/linux/*.png
 flutter test --no-pub --concurrency=1 --dart-define=DEBRIFY_TV_CAPTURE_ORIGINAL_LINUX=true \
   --dart-define=DEBRIFY_TV_REVERSE_GOLDENS=true --update-goldens "$test_path" \
   2>&1 | tee "$evidence/linux-original-capture-reverse.txt"
+[[ "$(find test/goldens/debrify_tv/linux -name '*.png' | wc -l | tr -d ' ')" == 6 ]]
 sha256sum test/goldens/debrify_tv/linux/*.png > "$evidence/linux-original-sha256-reverse.txt"
 cmp "$evidence/linux-original-sha256-first.txt" "$evidence/linux-original-sha256-reverse.txt"
 flutter test --no-pub --concurrency=1 --dart-define=DEBRIFY_TV_REQUIRE_ORIGINAL_LINUX=true \

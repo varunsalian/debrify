@@ -19,6 +19,15 @@ void main() {
         await t.pumpWidget(const SizedBox.shrink());
         await t.pump();
         expect(MainPageBridge.watchDebrifyTvChannel, isNull);
+        expect(
+          MainPageBridge.requestTvContentFocus(),
+          isFalse,
+          reason: 'dispose removes the tab-3 content-focus handler',
+        );
+        MainPageBridge.notifyDebrifyTvLibraryChanged();
+        await f.settle(t);
+        expect(f.observer.players, isEmpty);
+        expect(t.takeException(), isNull);
       });
     },
   );

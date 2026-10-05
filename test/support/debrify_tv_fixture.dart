@@ -123,6 +123,7 @@ class DebrifyTvObserver extends NavigatorObserver {
   final dialogs = <Route<dynamic>>[];
   final activeDialogsAtPlayer = <int>[];
   void Function(VideoPlayerScreen)? onPlayer;
+  void Function(String)? onEvent;
   DebrifyTvObserver(this.hostKey);
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
@@ -139,6 +140,7 @@ class DebrifyTvObserver extends NavigatorObserver {
         activeDialogsAtPlayer.add(dialogs.where((r) => r.isActive).length);
         players.add(built);
         events.add('player');
+        onEvent?.call('push');
         onPlayer?.call(built);
         // Navigator is locked during didPush. Its microtask runs before the
         // next frame, so the original builder is observed but never mounted.
@@ -153,11 +155,13 @@ class DebrifyTvObserver extends NavigatorObserver {
     }
     if (previousRoute != null) dialogs.add(route);
     events.add(previousRoute == null ? 'home' : 'dialog');
+    onEvent?.call(previousRoute == null ? 'home' : 'dialog');
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     events.add('pop');
+    onEvent?.call('dialog close');
   }
 }
 
@@ -170,6 +174,7 @@ class DebrifyTvFixture {
   final clipboard = <String>[];
   final nativeCalls = <MethodCall>[];
   final probes = <String>[];
+  final debugMessages = <String>[];
   final originalLayoutDiagnostics = <FlutterErrorDetails>[];
   final channels = <DebrifyTvChannel>[];
   late final MockClient client = MockClient(respond);
@@ -745,6 +750,11 @@ Future<void> debrifyTvCase(
   final f = DebrifyTvFixture();
   final previousTypography = AppThemeAdapter.debugUseTestTypography;
   final previousErrorHandler = FlutterError.onError;
+  final previousDebugPrint = debugPrint;
+  debugPrint = (message, {wrapWidth}) {
+    if (message != null) f.debugMessages.add(message);
+    previousDebugPrint(message, wrapWidth: wrapWidth);
+  };
   FlutterError.onError = (details) {
     // Flutter 3.44.8 reports this existing SwitchRow/ListTile decoration on R.
     // Preserve the diagnostic as evidence; every other error remains fatal.
@@ -780,6 +790,7 @@ Future<void> debrifyTvCase(
     await t.pump();
     await t.runAsync(f.close);
     FlutterError.onError = previousErrorHandler;
+    debugPrint = previousDebugPrint;
     AppThemeAdapter.debugUseTestTypography = previousTypography;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null);

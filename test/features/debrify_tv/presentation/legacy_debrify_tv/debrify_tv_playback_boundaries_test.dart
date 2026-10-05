@@ -193,6 +193,11 @@ void main() {
           reason: 'disposed running prefetch never acquires a later torrent',
         );
         expect(adds, 2);
+        expect(
+          f.debugMessages.where((m) => m == 'MagicTV: Prefetch stopped.'),
+          hasLength(2),
+          reason: 'dispose stops its active prefetch as well as playback exit',
+        );
       });
     },
   );

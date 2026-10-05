@@ -241,6 +241,10 @@ def names(rows, owner=None):
             candidates[alias['original_name']] = {alias['alias']}
     mapping = {old: next(iter(news)) for old, news in candidates.items()
                if len(news) == 1 and old != next(iter(news))}
+    for forwarder in CONFIG.get('constructor_forwarders', []):
+        candidates[forwarder['original_name']] = {forwarder['call']}
+        mapping[forwarder['original_name']] = forwarder['call']
+        mapping[forwarder['alias']] = forwarder['call']
     mapping.update(CONFIG.get('type_renames', {}))
     return mapping
 

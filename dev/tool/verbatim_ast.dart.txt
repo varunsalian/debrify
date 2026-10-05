@@ -301,9 +301,12 @@ class OccurrenceBindings {
   }
   List<String> _qualifierTokens(Expression target) {
     final result = <String>[];
+    final formatting = References();
+    target.accept(formatting);
+    final optionalCommas = formatting.formatCommas.toSet();
     var token = target.beginToken;
     while (true) {
-      result.add(token.lexeme);
+      if (!optionalCommas.contains(token.offset)) result.add(token.lexeme);
       if (token == target.endToken || token.next == null) break;
       token = token.next!;
     }

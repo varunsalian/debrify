@@ -31,6 +31,17 @@ def self_test(original, sources, rows, config, package, leaves):
     selectors=member('void f() { print(cacheEntry.status); print(parsed.channels); }')['occurrences']
     assert any(o['name']=='status' and o['kind']=='selector' and o['qualifierTokens']==['cacheEntry'] for o in selectors)
     assert any(o['name']=='channels' and o['kind']=='selector' and o['qualifierTokens']==['parsed'] for o in selectors)
+    # Formatting commas inside selector targets must follow the same AST
+    # punctuation policy as a complete declaration; argument separators and
+    # a one-field record's required comma remain part of the target.
+    plain=member('void f() { Map.of(values).remove(key); values.where((v) => keep(v)).toList(); }')
+    formatted=member('void f() { Map.of(values,).remove(key); values.where((v) => keep(v,),).toList(); }')
+    selected=lambda node: [(o['name'], o['qualifierTokens']) for o in node['occurrences'] if o['kind']=='selector']
+    assert selected(plain)==selected(formatted), (selected(plain), selected(formatted))
+    different=member('void f() { Map.of(values, other).remove(key); values.where((v) => keep(v)).toList(); }')
+    assert selected(plain)!=selected(different)
+    record=member('void f() { receive((value,),).remove(key); }')
+    assert any(o['name']=='remove' and o['qualifierTokens']==['receive','(','(','value',',',')',')'] for o in record['occurrences'])
     unknown=member('void f() { _owners.settings.unregistered(); }')
     assert len(aligned(unknown,config))==len(unknown['occurrences'])
     def row_node(identity):

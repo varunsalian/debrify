@@ -36,6 +36,7 @@ def _located(row, lookup, source):
 
 def _canonical_name(name, rows, config):
     aliases = {a['alias']: a['original_name'] for a in config.get('type_aliases', [])}
+    aliases.update({f['call']: f['original_name'] for f in config.get('constructor_forwarders', [])})
     name = aliases.get(name, name)
     mapping = {r['original_name'].split('.')[-1]: r['new_name'] for r in rows}
     return mapping.get(name, name)

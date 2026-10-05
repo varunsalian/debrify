@@ -1,12 +1,16 @@
 {
   "reference": "991029f64a6e4ce27b68626ac4537bf9f38f483c",
   "checkpoint_subject": "test(debrify-tv): step 0 original-code characterization checkpoint",
-  "status": "Frozen proxy definitions; execution, compilation and assertion-failure proof belong to step 0b, after independent review.",
+  "status": "Frozen step-0b ORIGINAL behavioral proxies and separately classified moved-source guard mutants; each recorded rejection is reconciled against its named assertion.",
   "run_policy": "Apply each case to ORIGINAL application code in the owned detached worktree. Run every entire tests file with no name filtering. A compile error, harness crash, timeout or reader/checker rejection is not a behavioural proof. Record exact test name, expectation and failure message. Fix invalid proxy definitions without weakening frozen characterization assertions.",
   "coverage": {
-    "test_identities": 68,
-    "covered": 68,
-    "proxies": 60
+    "original_test_identities": 68,
+    "review_mutations": 29,
+    "proxies": 102,
+    "behavioral_proxies": 96,
+    "guard_proxies": 6,
+    "review_added_test_identities": 24,
+    "checkpoint_test_identities": 92
   },
   "cases": [
     {
@@ -198,7 +202,7 @@
     },
     {
       "label": "memo-hit-does-not-cancel-pending-B",
-      "evidence_class": "R",
+      "evidence_class": "S",
       "tests": [
         "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_settings_test.dart"
       ],
@@ -217,18 +221,19 @@
       ],
       "expectations_by_test": {
         "C8 R Spotlight debounce and memo return cancel pending B timer": "B remains unmemoized after B->A"
-      }
+      },
+      "classification_reason": "The focused-id recheck prevents off-focus publication; cancelling this timer has no distinct observable state in ORIGINAL. Guard proof preserves the cancellation before memo return."
     },
     {
       "label": "load-settings-dropped-assignment",
       "evidence_class": "O",
       "tests": [
-        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_settings_test.dart"
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_test.dart"
       ],
       "must_fail": [
-        "C4 C10 R/O live setters render and persist their own stored values"
+        "C3 O P5 complete arguments defaults and provider requests"
       ],
-      "expectation": "_loadSettings publishes stored startRandom",
+      "expectation": "P5 passes startFromRandom (false, unlike the true constructor default)",
       "edits": [
         {
           "member": "_DebrifyTVScreenState._loadSettings",
@@ -239,7 +244,7 @@
         }
       ],
       "expectations_by_test": {
-        "C4 C10 R/O live setters render and persist their own stored values": "_loadSettings publishes stored startRandom"
+        "C3 O P5 complete arguments defaults and provider requests": "P5 passes startFromRandom (false, unlike the true constructor default)"
       }
     },
     {
@@ -967,7 +972,7 @@
     },
     {
       "label": "choice-keyrepeat-ignored",
-      "evidence_class": "O",
+      "evidence_class": "S",
       "tests": [
         "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_controls_test.dart"
       ],
@@ -986,7 +991,8 @@
       ],
       "expectations_by_test": {
         "C9 R/O choice chip Select persists provider and KeyRepeat moves focus": "choice chip KeyRepeat traverses focus"
-      }
+      },
+      "classification_reason": "Removing this explicit branch still permits Flutter fallback traversal; use an assertion-failing consumed-repeat proxy for behavior and guard the exact original branch."
     },
     {
       "label": "long-press-action-label",
@@ -1414,6 +1420,988 @@
       "expectations_by_test": {
         "ORIGINAL golden settings_tv ready focus cache and dimensions": "Channel playback readiness marker rendered"
       }
+    },
+    {
+      "label": "choice-keyrepeat-consumed",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_controls_test.dart"
+      ],
+      "must_fail": [
+        "C9 R/O choice chip Select persists provider and KeyRepeat moves focus"
+      ],
+      "expectation": "choice chip KeyRepeat traverses focus",
+      "edits": [
+        {
+          "member": "_SpotlightChoiceChipState.build",
+          "before": "if (event is KeyDownEvent || event is KeyRepeatEvent)",
+          "after": "if (event is KeyRepeatEvent) return KeyEventResult.handled;\n        if (event is KeyDownEvent || event is KeyRepeatEvent)",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "spotlight-debounce-zero",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_settings_test.dart"
+      ],
+      "must_fail": [
+        "C8 R Spotlight debounce and memo return cancel pending B timer"
+      ],
+      "expectation": "stage stats remain null at 249ms",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._onSpotlightChannelFocused",
+          "before": "Duration(milliseconds: 250)",
+          "after": "Duration(milliseconds: 0)",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-A01_P12_pct_quick_to_channel",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P12 distinguishes channel and copied quick options"
+      ],
+      "expectation": "0b O P12 distinguishes channel and copied quick options",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithAllDebrid",
+          "before": "randomStartMaxPercent: _quickRandomStartPercent",
+          "after": "randomStartMaxPercent: _randomStartPercent",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        10735,
+        10745
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A02_P4_seekbar_quick_to_channel",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P4 distinguishes channel and copied quick options"
+      ],
+      "expectation": "0b O P4 distinguishes channel and copied quick options",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithPikPak",
+          "before": "hideSeekbar: _quickHideSeekbar",
+          "after": "hideSeekbar: _hideSeekbar",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        5860,
+        5875
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A03_P7_showname_channel_to_quick",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P7 distinguishes channel and copied quick options"
+      ],
+      "expectation": "0b O P7 distinguishes channel and copied quick options",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchTorboxWithCachedTorrents",
+          "before": "showChannelName: _showChannelName",
+          "after": "showChannelName: _quickShowChannelName",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        7455,
+        7470
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A04_P1_drop_premiumize_nextchannel",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P1 gates next callback with independently changed Premiumize provider"
+      ],
+      "expectation": "0b O P1 gates next callback with independently changed Premiumize provider",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watch",
+          "before": " ||\n                                    _quickProvider == _providerPremiumize)",
+          "after": ")",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        4850,
+        4860
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A05_next_channel_goes_prev",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O switch finishes at five seconds plus one frame"
+      ],
+      "expectation": "0b O switch finishes at five seconds plus one frame",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._requestNextChannel",
+          "before": "(currentIndex + 1) % _channels.length",
+          "after": "(currentIndex - 1 + _channels.length) % _channels.length",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6553,
+        6553
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A06_byid_wrong_target",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O real_debrid invokes captured by-id callback",
+        "0b O alldebrid invokes captured by-id callback"
+      ],
+      "expectation": "0b O real_debrid invokes captured by-id callback",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._requestChannelById",
+          "before": "if (channel.id == channelId) {",
+          "after": "if (channel.id != channelId) {",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6578,
+        6580
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A07_switch_delay_6s",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O switch finishes at five seconds plus one frame"
+      ],
+      "expectation": "0b O switch finishes at five seconds plus one frame",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._switchToChannel",
+          "before": "Duration(seconds: 5)",
+          "after": "Duration(seconds: 6)",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6641,
+        6641
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A08_P2_prefetch_after_pop",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P2 queued Cancel invalidates a pending prefetch start"
+      ],
+      "expectation": "0b O P2 queued Cancel invalidates a pending prefetch start",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watch",
+          "before": "      unawaited(_startPrefetch());\n\n      if (_progressOpen && _progressSheetContext != null) {\n        Navigator.of(_progressSheetContext!).pop();\n      }",
+          "after": "      if (_progressOpen && _progressSheetContext != null) {\n        Navigator.of(_progressSheetContext!).pop();\n      }\n      unawaited(_startPrefetch());",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        5137,
+        5143
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A09_P12_no_stop_prefetch_after_push",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P12 stops an active prefetch after intercepted push"
+      ],
+      "expectation": "0b O P12 stops an active prefetch after intercepted push",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithAllDebrid",
+          "before": "        );\n        await _stopPrefetch();\n      }",
+          "after": "        );\n      }",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        10755,
+        10762
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A10_cancel_no_stop_prefetch",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P5 queued Cancel invalidates a pending prefetch start"
+      ],
+      "expectation": "0b O P5 queued Cancel invalidates a pending prefetch start",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._cancelActiveWatch",
+          "before": "    unawaited(_stopPrefetch());\n    if (clearQueue)",
+          "after": "    if (clearQueue)",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        653,
+        660
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A11_quickTorbox_drop_postnative_cancel",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O TorBox queued Cancel after handoff suppresses final push"
+      ],
+      "expectation": "0b O TorBox queued Cancel after handoff suppresses final push",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithTorbox",
+          "before": "      if (_watchCancelled) {\n        return;\n      }\n      if (launchedOnTv) {\n        return;\n      }\n\n      if (!_watchCancelled) {",
+          "after": "      if (launchedOnTv) {\n        return;\n      }\n\n      if (true) {",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        5568,
+        5576
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A12_dispose_no_stop_prefetch",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_boundaries_test.dart"
+      ],
+      "must_fail": [
+        "C1 O unmount during held running prefetch issues no further requests"
+      ],
+      "expectation": "C1 O unmount during held running prefetch issues no further requests",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState.dispose",
+          "before": "    _prefetchStopRequested = true;\n    _stopPrefetch();\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        537,
+        539
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A13_dispose_no_unregister_tab3",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_lifecycle_test.dart"
+      ],
+      "must_fail": [
+        "C1 R/O mounted hooks focus Quick Play and dispose clears watch"
+      ],
+      "expectation": "C1 R/O mounted hooks focus Quick Play and dispose clears watch",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState.dispose",
+          "before": "    if (_tvContentFocusHandler != null) {\n      MainPageBridge.unregisterTvContentFocusHandler(\n        3,\n        _tvContentFocusHandler!,\n      );\n    }\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        531,
+        536
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A14_dispose_no_unregister_library",
+      "evidence_class": "S",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [],
+      "expectation": "Exact moved source must reject this ORIGINAL mutation",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState.dispose",
+          "before": "    MainPageBridge.unregisterDebrifyTvLibraryListener(\n      _handleSyncedDebrifyTvLibraryChanged,\n    );\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        528,
+        530
+      ],
+      "reviewer_mutation": true,
+      "classification_reason": "The bridge owns a private single listener and the stale ORIGINAL callback returns immediately when !mounted. Calling notify after unmount proves no effect but cannot observe detachment without changing the protected API."
+    },
+    {
+      "label": "review-A15_library_no_cache_clear",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O library signal invalidates the cached pool before tuning"
+      ],
+      "expectation": "0b O library signal invalidates the cached pool before tuning",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._handleSyncedDebrifyTvLibraryChanged",
+          "before": "      _channelCache.clear();\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        1063,
+        1064
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A16_autoplay_no_wait",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_settings_test.dart"
+      ],
+      "must_fail": [
+        "C2 O shell pending play starts saved channel unknown id does nothing"
+      ],
+      "expectation": "C2 O shell pending play starts saved channel unknown id does nothing",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._checkPendingAutoPlay",
+          "before": "const maxAttempts = 50;",
+          "after": "const maxAttempts = 0;",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        1114,
+        1114
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A17_searchback_no_refocus",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b R search Back reparks focus from the disappearing clear control"
+      ],
+      "expectation": "0b R search Back reparks focus from the disappearing clear control",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._handleChannelSearchBarBack",
+          "before": "        _channelSearchFocusNode.requestFocus();\n        return KeyEventResult.handled;",
+          "after": "        return KeyEventResult.handled;",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        565,
+        571
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A18_unique_suffix_from_3",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O colliding imported name begins at suffix two"
+      ],
+      "expectation": "0b O colliding imported name begins at suffix two",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._resolveUniqueChannelName",
+          "before": "int suffix = 2;",
+          "after": "int suffix = 3;",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        3578,
+        3578
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A19_text_limit_119",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_export_test.dart"
+      ],
+      "must_fail": [
+        "C6 O text accepts exactly 120 characters and 500 keywords"
+      ],
+      "expectation": "C6 O text accepts exactly 120 characters and 500 keywords",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._importTextBytes",
+          "before": "trimmed.length > 120",
+          "after": "trimmed.length > 119",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        3066,
+        3066
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A20_spotlight_cancel_after_memo",
+      "evidence_class": "S",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [],
+      "expectation": "Exact moved source must reject this ORIGINAL mutation",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._onSpotlightChannelFocused",
+          "before": "    _spotlightStatsDebounce?.cancel();\n    _spotlightFocusedId = channel.id;",
+          "after": "    _spotlightFocusedId = channel.id;",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        8001,
+        8007
+      ],
+      "reviewer_mutation": true,
+      "classification_reason": "The focused-id check prevents off-focus stats publication. Preserve timer cancellation order with the moved-source guard."
+    },
+    {
+      "label": "review-A21_prefetch_no_epoch_recheck",
+      "evidence_class": "S",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [],
+      "expectation": "Exact moved source must reject this ORIGINAL mutation",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._startPrefetch",
+          "before": "        startEpoch != _prefetchEpoch ||\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        10976,
+        10976
+      ],
+      "reviewer_mutation": true,
+      "classification_reason": "The await of a cached preference read has no independently held original boundary on this host. Preserve the epoch recheck with the occurrence/verbatim guard."
+    },
+    {
+      "label": "review-A22_P5_close_after_external",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P5 closes progress before prefetch and external notice"
+      ],
+      "expectation": "0b O P5 closes progress before prefetch and external notice",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithCachedTorrents",
+          "before": "      unawaited(_startPrefetch());\n      _closeProgressDialog();\n\n      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {\n        return;\n      }",
+          "after": "      unawaited(_startPrefetch());\n\n      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {\n        return;\n      }\n      _closeProgressDialog();",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6132,
+        6138
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A23_P12_native_drop_override",
+      "evidence_class": "S",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [],
+      "expectation": "Exact moved source must reject this ORIGINAL mutation",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithAllDebrid",
+          "before": "        showChannelNameOverride: _quickShowChannelName,\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        10712,
+        10726
+      ],
+      "reviewer_mutation": true,
+      "classification_reason": "The non-Android bridge returns false before the native call. Preserve this argument with the complete native ledger and moved-source guard; device verification remains pending."
+    },
+    {
+      "label": "review-A24_P5_prefetch_after_push",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_boundaries_test.dart"
+      ],
+      "must_fail": [
+        "C1 O unmount during held running prefetch issues no further requests"
+      ],
+      "expectation": "C1 O unmount during held running prefetch issues no further requests",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithCachedTorrents",
+          "before": "      unawaited(_startPrefetch());\n      _closeProgressDialog();",
+          "after": "      _closeProgressDialog();",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6132,
+        6134
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-A25_init_handler_focuses_search",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_lifecycle_test.dart"
+      ],
+      "must_fail": [
+        "C1 R/O mounted hooks focus Quick Play and dispose clears watch"
+      ],
+      "expectation": "C1 R/O mounted hooks focus Quick Play and dispose clears watch",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState.initState",
+          "before": "_quickPlayFocusNode.requestFocus();",
+          "after": "_channelSearchButtonFocusNode.requestFocus();",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        512,
+        514
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-B01_next_ignores_current_channel",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O next callback uses the channel selected by id"
+      ],
+      "expectation": "0b O next callback uses the channel selected by id",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._requestNextChannel",
+          "before": "if (_currentWatchingChannelId != null) {",
+          "after": "if (false) {",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6546,
+        6547
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-B02_P11_drop_premiumize",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_test.dart"
+      ],
+      "must_fail": [
+        "C3 O P11 complete arguments defaults and provider requests"
+      ],
+      "expectation": "C3 O P11 complete arguments defaults and provider requests",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithPremiumize",
+          "before": " ||\n                          _quickProvider == _providerPremiumize)",
+          "after": ")",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        10470,
+        10480
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-B03_switch_cooldown_zero",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_test.dart"
+      ],
+      "must_fail": [
+        "C3 O premiumize channel switch waits five seconds and preserves original result"
+      ],
+      "expectation": "C3 O premiumize channel switch waits five seconds and preserves original result",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._switchToChannel",
+          "before": "Duration(seconds: 5)",
+          "after": "Duration(seconds: 0)",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        6641,
+        6641
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-B04_cancel_keeps_queue",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_test.dart"
+      ],
+      "must_fail": [
+        "C3 O cached RD late launch after Cancel remains characterized"
+      ],
+      "expectation": "C3 O cached RD late launch after Cancel remains characterized",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._cancelActiveWatch",
+          "before": "      _queue.clear();\n",
+          "after": "",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ],
+      "reviewer_original_lines": [
+        660,
+        666
+      ],
+      "reviewer_mutation": true
+    },
+    {
+      "label": "review-P1-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P1 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P1 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watch",
+          "before": "startFromRandom: _quickStartRandom,",
+          "after": "startFromRandom: _startRandom,",
+          "occurrence": 0,
+          "matches": 2
+        }
+      ]
+    },
+    {
+      "label": "review-P2-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P2 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P2 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watch",
+          "before": "startFromRandom: _quickStartRandom,",
+          "after": "startFromRandom: _startRandom,",
+          "occurrence": 1,
+          "matches": 2
+        }
+      ]
+    },
+    {
+      "label": "review-P3-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P3 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P3 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithTorbox",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P4-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P4 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P4 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithPikPak",
+          "before": "startFromRandom: _quickStartRandom,",
+          "after": "startFromRandom: _startRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P5-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P5 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P5 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithCachedTorrents",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P6-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P6 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P6 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchAllDebridWithCachedTorrents",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P7-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P7 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P7 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchTorboxWithCachedTorrents",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P8-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P8 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P8 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchPikPakWithCachedTorrents",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P10-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P10 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P10 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchPremiumizeWithCachedTorrents",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P11-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P11 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P11 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithPremiumize",
+          "before": "startFromRandom: _startRandom,",
+          "after": "startFromRandom: _quickStartRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
+    },
+    {
+      "label": "review-P12-distinct-option-scope",
+      "evidence_class": "O",
+      "tests": [
+        "test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart"
+      ],
+      "must_fail": [
+        "0b O P12 distinguishes channel and copied quick options"
+      ],
+      "expectation": "P12 uses distinct channel/quick startFromRandom",
+      "edits": [
+        {
+          "member": "_DebrifyTVScreenState._watchWithAllDebrid",
+          "before": "startFromRandom: _quickStartRandom,",
+          "after": "startFromRandom: _startRandom,",
+          "occurrence": 0,
+          "matches": 1
+        }
+      ]
     }
   ]
 }

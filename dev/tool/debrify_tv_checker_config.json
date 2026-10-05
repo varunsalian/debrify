@@ -1724,5 +1724,14 @@
       "showTvChannelOptionsMenu"
     ]
   },
-  "conditional_scaffolds": true
+  "conditional_scaffolds": true,
+  "constructor_forwarders": [],
+  "planned_constructor_forwarders": [
+    {
+      "original_name": "_SpotlightChoiceChip",
+      "alias": "DebrifyTvChoiceChip",
+      "call": "debrifyTvChoiceChip",
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart"
+    }
+  ]
 }

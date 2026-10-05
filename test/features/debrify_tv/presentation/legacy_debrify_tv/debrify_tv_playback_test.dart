@@ -5,6 +5,7 @@ import 'package:debrify/screens/debrify_tv/dialogs/channel_creation_dialog.dart'
 import 'package:debrify/screens/debrify_tv/widgets/random_start_slider.dart';
 import 'package:debrify/screens/debrify_tv/widgets/switch_row.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
+import 'package:debrify/services/engine/settings_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -242,6 +243,14 @@ void main() {
     t,
   ) async {
     await debrifyTvCase(t, (f) async {
+      f.cacheKeywords = const [
+        ['one'],
+        ['two'],
+        ['three'],
+      ];
+      await t.runAsync(
+        () => SettingsManager().setGlobalBackgroundPrefetchEnabled(false),
+      );
       f.heldUnrestrict = Completer<http.Response>();
       await f.mount(t);
       await f.watch(t);
@@ -260,6 +269,20 @@ void main() {
         'https://streams.test/Original.720p.mkv',
         reason: 'Found-not-fixed cached RD late launch after cancel',
       );
+      Map<String, String>? next;
+      var done = false;
+      final pending = f.observer.players.single.requestMagicNext!().then((v) {
+        next = v;
+        done = true;
+      });
+      await f.until(t, () => done);
+      await pending;
+      expect(next, isNull, reason: 'Cancel empties the retained cached queue');
+      expect(
+        f.rdAdds,
+        1,
+        reason: 'Cancel prevents acquiring another cached torrent',
+      );
     });
   });
 
@@ -270,9 +293,9 @@ void main() {
         final held = Completer<http.Response>();
         http.Request? waiting;
         final path = switch (provider) {
-          'torbox' => '/createtorrent',
+          'torbox' => '/requestdl',
           'premiumize' => '/transfer/directdl',
-          'alldebrid' => '/magnet/upload',
+          'alldebrid' => '/link/unlock',
           _ => '/unrestrict/link',
         };
         f.onRequest = (r) async {
@@ -288,6 +311,13 @@ void main() {
         await f.tap(t, find.text('Cancel'));
         held.complete(await f.providerResponse(waiting!));
         await f.settle(t, frames: 120);
+        final stopped = f.requests.length;
+        await f.settle(t, frames: 40);
+        expect(
+          f.requests.length,
+          stopped,
+          reason: 'no requests after final-link Cancel',
+        );
         expect(
           f.observer.players,
           isEmpty,
@@ -321,6 +351,7 @@ void main() {
       (t) async {
         await debrifyTvCase(t, (f) async {
           await t.runAsync(() => f.provider(provider));
+          f.count = 3;
           await f.mount(t);
           await f.watch(t);
           await f.until(t, () => f.observer.players.isNotEmpty);

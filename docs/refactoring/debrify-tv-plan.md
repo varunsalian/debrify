@@ -464,11 +464,20 @@ commit measures each file.
 | `application/debrify_tv_random_start.dart` | 3 consts, `_clampRandomStartPercent` → public, `_parseRandomStartPercent` stays private and unused | 36 |
 | `application/debrify_tv_byte_format.dart` | `_formatBytes` → `formatDebrifyTvBytes` | 16 |
 | `presentation/debrify_tv_meta_pill.dart` | `_SpotlightMetaPill` (private, `typedef DebrifyTvMetaPill = _SpotlightMetaPill;`) | 52 |
-| `presentation/debrify_tv_choice_chip.dart` | `_SpotlightChoiceChip` + `_SpotlightChoiceChipState` (private, `typedef DebrifyTvChoiceChip = _SpotlightChoiceChip;`) | 125 |
+| `presentation/debrify_tv_choice_chip.dart` | `_SpotlightChoiceChip` + `_SpotlightChoiceChipState` (private, `typedef DebrifyTvChoiceChip = _SpotlightChoiceChip;`); the exact pure `debrifyTvChoiceChip` constructor forwarder frozen in step 0b | 125 + 13 |
 
 The typedef export keeps the private runtime types and keyless private
 constructors (the catalog/merged precedent); the rename probe inventories any
 resulting `library_private_types_in_public_api` identity.
+The full step-0b composition revealed a new `unused_element_parameter` warning
+for `trailingIcon` when callers construct the private choice chip through a
+typedef in another library. Its 13-line typed constructor forwarder returns
+the original widget, passing all five arguments in their original order; it
+adds no widget node, key, default, `const`, suppression or constructor change.
+Only choice-chip call sites use it. The typedef remains inside its own file;
+the meta pill continues to use its typedef directly. The forwarder and its
+arguments are frozen in `debrify_tv_scaffolding.json`, with opt-in name
+normalization in `constructor_forwarders` when step 3 creates the file.
 
 **`presentation/legacy_debrify_tv/` (the bridge; exact path in the guard):**
 
@@ -1497,6 +1506,117 @@ POINT 1:** step 0b, base2, step L, all production moves (steps 1–8), both gate
 Debrify TV device playback checks, remote CI and integration are pending
 Claude's Linux capture and independent step-0 review. No step-0b mutation,
 composition probe, or new baseline has begun.
+
+### Step 0b — independent review closure on ORIGINAL, 2026-10-05
+
+Parent characterization checkpoint **(b) =
+`58e9d5d9602c700d4361b25908b1830a2ba19baf`**; application execution base R,
+SDK, dependencies and lockfile stay unchanged. The review-closure checkpoint
+has the exact subject `test(debrify-tv): step 0b review closure checkpoint`;
+its SHA, tree/input hashes and ORIGINAL application object equality are in
+`step0b-checkpoint-provenance.json`. All evidence remains confined to
+`refactor-evidence/debrify_tv/`. Production code has not moved.
+
+The independent review's **29 exact mutations** are now frozen alongside the
+original proxy set in `debrify_tv_original_mutations.json`. There are **96
+behavioral proxies and six S proxies**. Every behavioral proxy has a completed
+ORIGINAL run failing its named assertion, with command, original mutation
+hash, test name, expectation and failure message in
+`step0b-behavioural-proxies.json`. All runs execute whole characterization
+files, without name filtering. Compile failures and surviving assertions were
+rejected as proof; corrected proxy definitions were replayed. All **24 new
+tests** have recorded assertion-failing mutations (`step0b-review-closure.json`).
+Existing assertions remain; the complete nine files now contain **92 passing
+tests**, including six strict macOS golden scenes.
+
+Review coverage invokes both captured by-id callbacks and compares the full
+returned map, uses three channels for next-channel selection, and separates
+the five configurable channel/quick option values at all 11 live push sites.
+The sixth field, `hideOptions`, is hardcoded false in the original constructors
+and remains an exact S ledger assertion; P9 is dormant S. P3/P11's original
+Flutter channel-option behavior is preserved. Final-link cancellation holds
+TorBox requestdl and AllDebrid unlock. Queued ORIGINAL Cancel callbacks cover
+the late TorBox push guards and pending prefetch start invalidation; the
+cached-RD late launch remains observable while its retained queue is emptied.
+Active P12 prefetch makes the post-push stop observable. Ordered dialog close,
+prefetch start, external handoff, push and stop are asserted at the reachable
+boundaries. Other additions cover a second provider in P1 gating, an exact
+five-second cooldown plus one frame, library cache invalidation, tab-handler
+removal, unmount prefetch stop, Back focus before the clear control disappears,
+and the first colliding import suffix `(2)`.
+
+Four reviewer mutations remain S with recorded guard rejections: library
+listener removal (the original mounted guard masks notifications after
+unmount), Spotlight debounce cancellation (the focused-id recheck masks it),
+the prefetch epoch recheck, and native helper arguments. The original memo-hit
+cancel proxy and explicit key-repeat branch proxy also remain S where original
+fallback behavior masks removal; separate observable debounce-delay and
+handled-repeat proxies fail their behavioral assertions. All six S cases are
+rejected by both the real checker and source reader. Five additional guard
+mutants cover lifecycle, flow closure, dialog shadowed setter, paint lexical
+context and hazard record (`step0b-guard-mutants.json`); constructor argument,
+callback identity and cached composition changes are rejected separately in
+`step0b-composition-scaffold-mutants.json`.
+
+The owned detached compiling probe builds **all 265 moves**, seven owners,
+bindings and all 39 sections, exceeding the five-kind stub requirement. Its
+real CLI uses an isolated parser package and `--self-test` at R. The facade
+uses eager owners and the specified nullable cache/getter, without `late`
+fields; an in-flight probe that used `late` was corrected before acceptance.
+The formatted facade is **107 lines**: imports 8, widget 6, State header/close
+2, owners/composition 10, lifecycle 63, build 14, remaining blanks/comments 4
+(sum 107). AST spans, source hashes and the compiling source copy are in
+`step0b-composition-proof.json` and `step0b-compiling-sources/`. Creation-step
+caps are measured at **946** for quick play and **524** for channel switch;
+all other probe destinations are at most 500. The production exception caps
+remain zero until those files are created. Frozen composition scaffolds are
+inactive until their full declarations exist, with exact activation rules
+recorded in the sidecar. The 37 ordinary comments outside leaf AST spans are
+frozen verbatim with their destinations in `debrify_tv_comment_moves.json`.
+
+The full composition has **53 strict diagnostics: 11 inherited warnings and
+42 infos**, with zero new warnings. Compared by original member/rule/message,
+six private unused-field warnings, 21 import-ordering infos and 13 context
+infos disappear; receiver qualification plus normal formatting produces 21
+brace infos when existing one-line statements wrap. They are inventoried,
+without adding braces or suppressions, in `debrify_tv_analyzer_inventory.json`;
+ORIGINAL and probe combine by maximum per identity. The temporary typedef-only
+`trailingIcon` warning is rejected and eliminated by the exact constructor
+forwarder described above. Root `flutter analyze` retains all **1,686** observed
+diagnostic identities. The binder now ignores only AST-identified optional
+formatter commas within selector qualifiers; actual argument separators and
+record commas remain significant. Raw qualifier positives/negatives cover this.
+The default adapter output is byte-identical for all 15 other manifests
+(`step0b-adapter-default-output-proof.json`); every manifest runs its existing
+self-tests with its own isolated worktree-local parser/kernel package.
+
+Recorded checks also cover unconditional architecture scans, sizes, storage
+references/self-tests, shape/source/native guards, the **488** shape floor with
+zero slack, **19 TV theme files / 228 sites**, read-only CI format, CI scoped
+analysis/allowlist and diff checks. Root and probe characterization runs are
+92/92. The new full-suite **`base2`** runs serialized on the exact committed
+ORIGINAL review-closure tree, paths `[]`, flags `--no-pub --concurrency=4`;
+`base2.env.json`, `base2-comparison.txt` and `base2-provenance.json` record
+SDK/input closure and identity reconciliation against `base`. Only passing
+additions are accepted; no baseline recording/update option is used.
+The first baseline attempt overlapped heavy AST self-tests and hit four new
+UDP pairing bounded-wait failures. It was stopped and rejected as evidence,
+preserved under `base2-rejected-contention*`. Whole-file causal replays on both
+ORIGINAL and the checkpoint passed **5/5**, with identical application/test
+objects and hashed inputs (`step0b-udp-causal-replays.json`). The accepted
+full-suite retry runs after the checker jobs finish, using the same concurrency
+and SDK; no timeout or failed identity is added to an allowlist.
+
+**Decisions and stop:** retain every Found-not-fixed behavior and all historical
+failure assertions. Claude's six Linux PNGs captured at (b), plus their evidence,
+remain preserved and uncommitted. Step 0b adds observer/debug capture to the
+shared golden fixture, so Linux must be recaptured from this new ORIGINAL
+checkpoint before step L. The capture script resolves that exact checkpoint,
+deletes all six first-pass PNGs before reverse capture, requires exactly six
+new reverse-pass files, compares their hashes, then runs strict replay. No
+step L, production extraction, full-suite gate, push or branch switch has
+begun. Pending: Linux recapture and Claude's composition review, step L,
+steps 1–8 and both gates, device-only TV playback, remote CI and integration.
 
 ## Found, not fixed
 

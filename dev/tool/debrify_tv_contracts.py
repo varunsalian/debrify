@@ -16,6 +16,9 @@ def check_contracts(lookup, rows, source, config):
         return lookup.get((row['destination_file'], row['destination_class'], row['new_name'])) or lookup[(source, owner, name or identity)]
 
     def call_name(name):
+        forwarder = next((f['call'] for f in config.get('constructor_forwarders', []) if f['original_name']==name), None)
+        if forwarder:
+            return forwarder
         alias = next((a['alias'] for a in config.get('type_aliases', []) if a['original_name']==name), None)
         if alias:
             return alias

@@ -64,11 +64,21 @@ def self_test(package=None):
         probe(base + 'presentation/view.dart', '// TEMP(debrify_tv)\n', 'temporary cross-call outside its exact legacy bridge')
         # Actual exception values stay zero until creation. Synthetic measured
         # values test both caps, their exact filenames, and growth rejection.
-        assert set(checker.DEBRIFY_TV_SIZE_EXCEPTIONS.values()) == {0}
+        created = [path for path in checker.DEBRIFY_TV_SIZE_EXCEPTIONS if (root / path).exists()]
+        if not created:
+            assert set(checker.DEBRIFY_TV_SIZE_EXCEPTIONS.values()) == {0}
+        else:
+            for path, cap in checker.DEBRIFY_TV_SIZE_EXCEPTIONS.items():
+                assert cap == (len((root / path).read_text().splitlines()) if path in created else 0), (path, cap)
+
         for path, cap in [(bridge + 'debrify_tv_quick_play.dart', 930), (bridge + 'debrify_tv_channel_switch.dart', 530)]:
+            original_cap = checker.DEBRIFY_TV_SIZE_EXCEPTIONS[path]
             checker.DEBRIFY_TV_SIZE_EXCEPTIONS[path] = cap
-            probe(path, '\n' * cap)
-            probe(path, '\n' * cap + '// extra\n', str(cap) + '-line Debrify TV extraction limit')
+            try:
+                probe(path, '\n' * cap)
+                probe(path, '\n' * cap + '// extra\n', str(cap) + '-line Debrify TV extraction limit')
+            finally:
+                checker.DEBRIFY_TV_SIZE_EXCEPTIONS[path] = original_cap
         probe(bridge + 'other_large.dart', '\n' * 930, '500-line Debrify TV extraction limit')
         probe(bridge + 'temporary.dart', '// TEMP(debrify_tv)\n')
         checker.DEBRIFY_TV_COMPLETE = True
