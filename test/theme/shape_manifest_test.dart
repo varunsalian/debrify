@@ -37,6 +37,8 @@ import 'package:flutter_test/flutter_test.dart';
 const Map<String, int> kShapeResidue = {
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
+      0,
   'lib/screens/magic_tv_screen.dart': 0,
 
   // Addon hub: every destination and the facade, including zero budgets.
@@ -244,7 +246,19 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/models/debrify_tv_kinds.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart':
       0,
@@ -252,7 +266,11 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_focus_state.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_state.dart':
       0,
@@ -275,6 +293,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_stage_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart':
       0,
 
   // Addon hub: every destination and the facade, including zero budgets.

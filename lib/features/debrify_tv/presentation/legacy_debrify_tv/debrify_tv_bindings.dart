@@ -14,13 +14,6 @@ class DebrifyTvDependencies {
   late final DebrifyTvSections sections;
 
   // TEMP(debrify_tv): exact borrowed State tear-offs until their move step.
-  final Future<void> Function() handleImportChannels;
-  final Future<void> Function() handleExportChannels;
-  final Future<void> Function() handleAddChannel;
-  final Future<void> Function(DebrifyTvChannel) handleEditChannel;
-  final Future<void> Function(DebrifyTvChannel) handleDeleteChannel;
-  final Future<void> Function(DebrifyTvChannel) handleShareChannelAsMagnet;
-  final Future<void> Function() handleDeleteAllChannels;
   final Future<void> Function(DebrifyTvChannel, {CachedTorrent? leadWith})
   watchChannel;
   final Widget Function(double) buildTvGridLayout;
@@ -32,13 +25,6 @@ class DebrifyTvDependencies {
     required this.context,
     required this.mounted,
     required this.setState,
-    required this.handleImportChannels,
-    required this.handleExportChannels,
-    required this.handleAddChannel,
-    required this.handleEditChannel,
-    required this.handleDeleteChannel,
-    required this.handleShareChannelAsMagnet,
-    required this.handleDeleteAllChannels,
     required this.watchChannel,
     required this.buildTvGridLayout,
     required this.showQuickPlayDialog,
