@@ -2,7 +2,6 @@
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 22221 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 18106 lib/screens/video_player_screen.dart
-11271 lib/screens/magic_tv_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 397 lib/screens/debrid_downloads_screen.dart
@@ -154,3 +153,4 @@
 823 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart
+946 lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart

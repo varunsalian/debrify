@@ -35,6 +35,19 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
+  'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart':
+      0,
+
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/presentation/addon_hub_action_button.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_dialog.dart': 0,
@@ -159,7 +172,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_button.dart': 0,
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
-  'lib/screens/magic_tv_screen.dart': 7,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
@@ -234,6 +246,103 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
+  'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
+  'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,
+  'lib/features/debrify_tv/models/debrify_tv_constants.dart': 0,
+  'lib/features/debrify_tv/models/debrify_tv_kinds.dart': 0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_export.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_import.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_focus_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_progress_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_session_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_stage_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart':
+      0,
+  'lib/screens/magic_tv_screen.dart': 0,
+
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/application/addon_hub_labels.dart': 0,
   'lib/features/addon_hub/models/addon_hub_kinds.dart': 0,

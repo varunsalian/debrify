@@ -32,3 +32,32 @@ warning | unused_element | lib/features/detail_showcase/presentation/showcase_st
 # 2026-10-04 catalog_detail step 3: formatted ORIGINAL adc2e32e write-only field;
 # private field and both writers move together, strict symbol/message identity retained.
 warning | unused_field | lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart | The value of the field '_simklStatus' isn't used. Try removing the field, or using it
+
+# 2026-10-05 debrify_tv step 1: ORIGINAL 991029f6 unused parser retained verbatim.
+warning | unused_element | lib/features/debrify_tv/application/debrify_tv_random_start.dart | The declaration '_parseRandomStartPercent' isn't referenced. Try removing the declaration of '_parseRandomStartPercent'
+
+# 2026-10-05 debrify_tv step 5: relocated ORIGINAL 991029f6 warnings.
+# _DebrifyTVScreenState._playNextFromQueue
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart | The declaration '_playNextFromQueue' isn't referenced. Try removing the declaration of '_playNextFromQueue'
+
+# 2026-10-05 debrify_tv step 6: relocated ORIGINAL 991029f6 warnings.
+# _DebrifyTVScreenState._watchTorboxWithCachedTorrents
+warning | unnecessary_cast | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart | Unnecessary cast. Try removing the cast
+
+# 2026-10-05 debrify_tv step 7: relocated ORIGINAL 991029f6 warnings.
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'showChannelName' isn't used. Try removing the variable or using it
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setShowChannelName' isn't referenced. Try removing the declaration of 'setShowChannelName'
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'showVideoTitle' isn't used. Try removing the variable or using it
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setShowVideoTitle' isn't referenced. Try removing the declaration of 'setShowVideoTitle'
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'hideOptions' isn't used. Try removing the variable or using it
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setHideOptions' isn't referenced. Try removing the declaration of 'setHideOptions'
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'hideBackButton' isn't used. Try removing the variable or using it
+# _DebrifyTVScreenState._buildSettingsCard
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setHideBackButton' isn't referenced. Try removing the declaration of 'setHideBackButton'

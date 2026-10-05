@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:debrify/theme/app_surfaces.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/debrify_tv_source.dart';
+
 /// Files inside a still-frozen surface that have been converted to the token
 /// layer ahead of their root's classification flip.
 ///
@@ -45,9 +47,9 @@ const List<String> kStillFrozenPaths = [
 /// call site written by pattern-matching on neighbouring code) will not.
 void main() {
   test('VideoPlayerScreen is constructed only where the freeze exists', () {
-    const allowed = {
+    final allowed = {
       'lib/screens/video_player_screen.dart', // itself
-      'lib/screens/magic_tv_screen.dart', // 12 pushes, all FrozenLegacyPageRoute
+      ...debrifyTvSourceFiles(),
       'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart', // the shared factory
     };
     final factory = _code(
@@ -60,6 +62,15 @@ void main() {
       hasLength(1),
       reason: 'the shared extension must construct exactly one frozen player',
     );
+    for (final path in debrifyTvSourceFiles()) {
+      final source = _code(File(path)).replaceAll(RegExp(r'\s+'), '');
+      expect(
+        RegExp(r'videoPlayerRoute\(builder:\(_\)=>VideoPlayerScreen\(')
+            .allMatches(source),
+        hasLength('VideoPlayerScreen('.allMatches(source).length),
+        reason: '$path must construct every player inside videoPlayerRoute(builder:)',
+      );
+    }
     final offenders = <String>[];
     for (final file in _libDartFiles()) {
       if (allowed.contains(_rel(file))) continue;
@@ -78,7 +89,7 @@ void main() {
   });
 
   test('magic_tv_screen pushes the player only via FrozenLegacyPageRoute', () {
-    final source = _code(File('lib/screens/magic_tv_screen.dart'));
+    final source = debrifyTvSourceFiles().map((path) => _code(File(path))).join();
     expect(
       source.contains('MaterialPageRoute'),
       isFalse,

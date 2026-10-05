@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/debrify_tv_source.dart';
+
 // Complements the executable projection/Activity tests and device smoke test:
 // guard the caller routing, especially terminal failures versus fallback.
 void main() {
@@ -14,7 +16,7 @@ void main() {
       .listSync(recursive: true).whereType<File>()
       .where((file) => file.path.endsWith('.dart'))
       .map((file) => file.readAsStringSync()).join('\n');
-  final magic = File('lib/screens/magic_tv_screen.dart').readAsStringSync();
+  final magic = debrifyTvOriginalSource();
 
   test(
     'all three bridge launches bind profile ownership and refresh before handoff',
