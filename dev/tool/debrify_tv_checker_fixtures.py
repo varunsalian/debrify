@@ -1,8 +1,8 @@
-"""Real-manifest source layouts for the step-0 syntax/ownership guard proofs.
+"""Live production inputs and historical step-0 syntax/ownership layouts.
 
-These deliberately contain no composition scaffolding. Compilation of the real
-composition is a separate step-0b proof; these fixtures exercise the checker on
-raw declaration moves without changing production files.
+Historical layouts deliberately contain no composition scaffolding. Step 0b
+records a separate compilation proof for the real composition. Live inputs
+include that composition so mutation negatives exercise its enabled guards.
 """
 import csv
 import json
@@ -16,8 +16,8 @@ def inputs(package, *, original_fixture=False):
     config = json.loads((ROOT/'dev/tool/debrify_tv_checker_config.json').read_text())
     rows = list(csv.DictReader((ROOT/'dev/tool/debrify_tv_manifest.tsv').open(), delimiter='\t'))
     if original_fixture:
-        # ORIGINAL/raw-layout mutation fixtures use the reviewed planned map,
-        # while the CLI's production check uses the live intermediate manifest.
+        # Historical ORIGINAL/raw-layout fixtures use the reviewed planned map;
+        # production mutation fixtures and the CLI use the live configuration.
         checkpoint = '58e3e599c5d5f29b0437b111cca1af9827cc3de1'
         def frozen(path):
             return subprocess.check_output(['git', 'show', checkpoint+':'+path], cwd=ROOT, text=True)
@@ -33,6 +33,14 @@ def inputs(package, *, original_fixture=False):
     parsed = parse({'<original>': original}, package, occurrence_bindings=True)
     leaves = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     return original, rows, config, leaves
+
+
+def live_sources(config):
+    """Exercise the current config and its actual scaffolds, aliases and sections."""
+    from check_verbatim_moves import ROOT
+    return {config['source']: (ROOT/config['source']).read_text(),
+            **{path.relative_to(ROOT).as_posix(): path.read_text()
+               for path in (ROOT/config['feature']).rglob('*.dart')}}
 
 
 def moved_body(row, node, rows, config, selected=None):

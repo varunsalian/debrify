@@ -7,8 +7,8 @@ import re
 def _self_test(package=None):
     from debrify_tv_architecture_test import self_test as architecture_tests
     architecture_tests()
-    from debrify_tv_checker_fixtures import inputs, layout
-    from check_settings_moves import all_nodes, check, tokens, configured
+    from debrify_tv_checker_fixtures import inputs, layout, live_sources
+    from check_settings_moves import all_nodes, check, tokens, configured, normalize
     from check_verbatim_moves import parse
     from torbox_callback_identity import argument_ranges, member_occurrences, check_callback_identities
     original, rows, base_config, leaves = inputs(package, original_fixture=True)
@@ -20,10 +20,66 @@ def _self_test(package=None):
     print('TV real config ORIGINAL and simulated complete positives: PASS')
     from debrify_tv_source_reader_test import self_test as reader_tests
     reader_tests(original,rows,base_config,leaves,package)
+    # Historical layouts retain their reviewed map; mutation negatives must
+    # exercise every guard enabled in the live production configuration.
+    original, rows, config, leaves = inputs(package)
+    source = config['source']
+    sources = live_sources(config)
+    assert not check(original,sources,rows,source,package,context_guard=True,config=config)
+    print('TV LIVE config and production-source positive: PASS')
     from debrify_tv_binding_fixtures import self_test as binding_tests
     with configured(config):
         binding_tests(original,sources,rows,config,package,leaves)
     lookup=all_nodes(parse(sources,package,occurrence_bindings=True))
+    def reject_sources(label, changed, expected, cfg=config):
+        errors=check(original,changed,rows,source,package,context_guard=True,config=cfg)
+        assert any(expected in error for error in errors),(label,errors)
+        print('TV LIVE '+label+': rejected')
+    # A scaffold-only file has no manifest leaf to make deletion fail through
+    # ordinary ownership. Prove the completion rule itself rejects each one.
+    for path in config['scaffolds']:
+        changed=dict(sources);changed.pop(path)
+        reject_sources('deleted scaffold '+path,changed,'Missing registered scaffold file: '+path)
+        from debrify_tv_source_reader import validate
+        try:validate(original,changed,rows,config,package)
+        except ValueError as error:
+            assert 'Missing registered scaffold file: '+path in str(error),(path,error)
+        else:raise AssertionError('Reader accepted deleted scaffold '+path)
+    bindings=next(path for path in config['scaffolds'] if path.endswith('bindings.dart'))
+    missing_bindings=dict(sources);missing_bindings.pop(bindings)
+    assert not check(original,missing_bindings,rows,source,package,context_guard=True,
+                     config={**config,'completed_step':config['required_scaffolds_step']-1})
+    optional={k:v for k,v in config.items() if k!='required_scaffolds_step'}
+    assert not check(original,missing_bindings,rows,source,package,context_guard=True,config=optional)
+    print('TV scaffold requirement: completion-only and opt-in PASS')
+    for forwarder in config['constructor_forwarders']:
+        with configured(config):
+            expected=[forwarder['call'],'(',')']
+            assert normalize([forwarder['original_name'],'(',')'],rows)==expected
+            assert normalize([forwarder['alias'],'(',')'],rows)==expected
+        path=forwarder['file'];changed=dict(sources)
+        assert 'required String label,' in changed[path]
+        changed[path]=changed[path].replace('required String label,',"String label = 'Default',",1)
+        reject_sources('loosened constructor forwarder',changed,'Registered settings scaffold changed')
+        altered=copy.deepcopy(config)
+        altered['constructor_forwarders'][0]['call']='wrongChoiceChip'
+        reject_sources('altered forwarder registration',sources,'Non-verbatim settings declaration',altered)
+    for alias in config['type_aliases']:
+        path=alias['file'];changed=dict(sources)
+        before='typedef '+alias['alias']+' = '+alias['original_name']+';'
+        assert before in changed[path]
+        changed[path]=changed[path].replace(before,'typedef '+alias['alias']+' = Object;',1)
+        reject_sources('altered alias '+alias['alias'],changed,'Private widget constructor alias changed')
+        altered=copy.deepcopy(config)
+        entry=next(a for a in altered['type_aliases'] if a['alias']==alias['alias'])
+        entry['alias']+='Changed'
+        reject_sources('altered alias registration '+alias['alias'],sources,'Private widget constructor alias changed',altered)
+    for section in config['plain_sections']:
+        path=section['file'];changed=dict(sources)
+        before='class '+section['owner']+' {'
+        assert before in changed[path]
+        changed[path]=changed[path].replace(before,'class '+section['owner']+' extends Object {',1)
+        reject_sources('inherited plain section '+section['owner'],changed,'Registered plain section class changed')
     def located(identity):
         row=next(r for r in rows if r['original_name']==identity)
         return (row['destination_file'],row['destination_class'],row['new_name'])
@@ -62,7 +118,7 @@ def _self_test(package=None):
         ('_DebrifyTVScreenState._watchWithTorbox','_owners.settings.quickShowChannelName','_owners.settings.showChannelName','P3 quick option -> channel'),
         ('_DebrifyTVScreenState._watchWithPremiumize','_owners.settings.quickShowChannelName','_owners.settings.showChannelName','P11 quick option -> channel'),
         ('_DebrifyTVScreenState._watchWithAllDebrid','if (_owners.session.watchCancelled) return;','','post-native masked cancel removed'),
-        ('_DebrifyTVScreenState._persistImportedZipChannels','_owners.library.channels = [..._owners.library.channels, ...appendedChannels];','_owners.library.channels = appendedChannels;','ZIP append replaced by assignment'),
+        ('_DebrifyTVScreenState._persistImportedZipChannels','_owners.library.channels = [\n          ..._owners.library.channels,\n          ...appendedChannels,\n        ];','_owners.library.channels = appendedChannels;','ZIP append replaced by assignment'),
         ('_DebrifyTVScreenState._watchWithTorbox','_owners.session.watchCancelled','false','quick cancel removed'),
         ('_DebrifyTVScreenState._viewerForcesNsfw','!ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent)','false','live NSFW getter cached'),
         ('_SpotlightMetaPill','return Container(','return const Container(','new const'),

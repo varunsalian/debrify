@@ -1139,7 +1139,13 @@ def _check(original_source, sources, rows, source_path, package=None,
         errors.extend(check_contracts(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
-    if CONFIG.get('conditional_scaffolds'):
+    required_step = CONFIG.get('required_scaffolds_step')
+    require_scaffolds = (required_step is not None
+                         and CONFIG.get('completed_step', 0) >= required_step)
+    if require_scaffolds:
+        for path in sorted({s['file'] for s in scaffolds} - sources.keys()):
+            errors.append('Missing registered scaffold file: ' + path)
+    if CONFIG.get('conditional_scaffolds') and not require_scaffolds:
         scaffolds = [s for s in scaffolds if not s.get('when_file_present') or s['file'] in sources]
     errors.extend(check_scaffolds(lookup, scaffolds))
     errors.extend(check_live_widget_factory(lookup, CONFIG))

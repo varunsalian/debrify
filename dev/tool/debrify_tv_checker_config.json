@@ -5,6 +5,7 @@
   "engine": "sections",
   "context_guard": true,
   "completed_step": 8,
+  "required_scaffolds_step": 8,
   "receivers": [
     "_deps",
     "_owners",
