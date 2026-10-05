@@ -395,9 +395,18 @@ lexical locals).
    awaits), the hard-coded `hideOptions`/`hideBackButton` false, the single
    `setState` assigning every field, the post-`setState`
    `_refreshSpotlightStatsIfFocused`, the `hideSeekbar` rewrite and the
-   provider save. Channel-scope toggles persist through the original
-   `DebrifyTvStorage` calls; quick-scope toggles do not; Reset writes exactly
-   the keys it writes today; filter chips persist qualities and sizes
+   provider save. `_buildSettingsCard` is rendered **only** by
+   `_showGlobalSettingsDialog` (9541) with `_SettingsScope.channels` and
+   `includeNsfwToggle: false`, so its live controls are the provider chips,
+   the start-random switch (`setStartRandom`, 9266–9271), the random-start
+   slider (`setRandomStartPercent` plus `onChangeEnd`, 9272–9285), the filter
+   chips and Reset; each channel-scope write goes through the original
+   `DebrifyTvStorage` call. `setShowChannelName` and `setShowVideoTitle` are
+   unused, `setHideOptions`/`setHideBackButton` are unused no-ops
+   (9182–9228), and the card's quick-scope and NSFW branches are unreachable;
+   all stay verbatim. Quick-play options are set only by the Play-now copy in
+   `_showQuickPlayDialog` (9489–9503), which persists nothing. Reset writes
+   exactly the keys it writes today; filter chips persist qualities and sizes
    unawaited. `_viewerForcesNsfw` stays a **live getter** evaluated at each of
    its 14 read sites (never cached).
 5. **Channel library and cache.** Loading, favourites, the synced-library
@@ -740,22 +749,53 @@ As in the Spotlight and catalog plans, plus:
    manifest's behaviour and self-tests unchanged), implemented beside the
    Spotlight helper and run **before** declaration normalization and before
    the source reader:
-   - **Occurrence correspondence.** For each moved declaration, pair original
-     and destination identifier occurrences in token order (comments and
-     string-literal text excluded; `${...}` interpolations are code, e.g.
-     `'… queue=${_queue.length}'` in `_watch`). Each original occurrence
-     that the analyzer binds to a State field must correspond to a
-     destination occurrence bound to the registered record member through the
-     registered receiver path (`_owners.<record>.<newName>`), with the same
-     read/write role and the same enclosing lexical scope (method, closure,
-     builder). Each original occurrence bound to a parameter, local or
-     closure local must still bind to that same declaration.
-   - **Mandatory qualification.** In Debrify TV destination files, a moved
-     field is never referenced bare: not in sections, not in record classes
-     (records hold only declarations and initializers; their one getter,
-     `viewerForcesNsfw`, reads no field). A bare identifier that names a
-     record member is rejected even where it would resolve.
-   - **Negatives** (real config, each must fail): ordinary capture
+   - **Binder (syntax-based, explicit).** The AST adapter
+     (`dev/tool/verbatim_ast.dart.txt`) is syntax-only: it uses `parseString`
+     (494) and exposes name sets per scope (`References`, 19–25, 164–165), not
+     resolved declaration identities. Resolved analysis is not adopted (it
+     would need the whole app's package resolution inside the isolated parser
+     package). Instead the adapter gains an opt-in **declaration/scope binder**
+     (emitted only when the config asks for `occurrence_field_bindings`; output
+     for every other manifest is unchanged). For each manifest leaf it emits
+     the ordered list of `SimpleIdentifier` occurrences outside comments and
+     string text (identifiers inside `${…}` interpolations are included) with:
+     the token index; the scope path (member → each enclosing
+     `FunctionExpression`, local `FunctionDeclaration`, block, `for`, `catch`
+     and pattern scope); the **binding**, resolved syntactically by
+     innermost-scope lookup — `decl:<scope path>#<name>#<ordinal>` for a
+     parameter, local variable, local function, loop/catch/pattern variable,
+     or `unbound` when no enclosing lexical declaration exists; the
+     **qualifier chain** when the identifier is the property of a
+     `PrefixedIdentifier`/`PropertyAccess`/method target (for example
+     `_owners`, `settings`); and the role (read, write, read-write,
+     invocation, tear-off). Declarations later in a block do not bind earlier
+     uses (Dart scoping), and named-argument labels are excluded.
+   - **Alignment.** Destination occurrences are aligned with original ones
+     after removing **only registered receiver scaffolding**: the qualifier
+     chains listed in `receiver_paths`/`receiver_owners`
+     (`_owners.<record>.`, `_sections.<key>.`) and the live-getter forms
+     `_deps.context()`, `_deps.mounted()`, `_deps.setState`, plus the
+     registered renames. Any other inserted, removed or reordered identifier
+     fails alignment. This runs on the raw destination AST **before** the
+     destructive token normalization in `check_settings_moves.py`.
+   - **Binding rules per aligned pair.** An original `unbound` occurrence whose
+     name is a State field (from the original class member set) must align
+     with a destination occurrence qualified by exactly its registered record
+     path and new name (`_owners.settings.startRandom`), same role and same
+     scope path. An original `decl:` occurrence must align with a destination
+     `decl:` occurrence of the **same** scope path, name and ordinal (so a
+     same-named local stays that local). A destination occurrence that is
+     `unbound` and whose name is a record member is a **bare field reference**
+     and is rejected in every Debrify TV file (sections and records; records
+     hold only declarations and initializers, and their one getter,
+     `viewerForcesNsfw`, reads no field). A bare identifier that binds a
+     legitimate local or parameter of the same name is allowed.
+   - **Wiring.** `check_settings_moves.py` calls the binder check (opt-in key)
+     before normalization; the Debrify TV reader calls the same check before
+     returning ORIGINAL text, so a source-text test can never pass over a
+     re-bound field.
+   - **Negatives** (real config, each must fail, through both the checker
+     and the reader): ordinary capture
      (`_owners.settings.startRandom = startRandom` turned into a bare
      `startRandom` that binds the local in `_loadSettings`); balanced
      field/local relocation (swap one field read and one same-named local read
@@ -840,7 +880,8 @@ As in the Spotlight and catalog plans, plus:
    whole-repo analyzer (`flutter analyze --no-pub`), with tree and SDK
    provenance. Record `format-idempotence.json` for R (Technique 1).
 2. **Dependency report** (`docs/refactoring/debrify-tv-deps.md`). For every
-   leaf (78 fields, 15 statics, the getter, every method, the 13 top-level
+   leaf (78 fields, 15 statics, the getter, every method, the 21 top-level
+   declarations — 19 outside the retained widget and State —
    declarations, comment fragments and banners) it records the destination;
    reads of `context` (State or lexical), `mounted`, `setState` (State or
    shadowed); every field read/write with its record and new name and every
@@ -855,6 +896,8 @@ As in the Spotlight and catalog plans, plus:
    `engine` `sections`, `context_guard` true, receivers `_deps`, `_owners`,
    `_sections`, `live_getter_callbacks` `context`/`mounted`,
    `lexical_state_setters`, `spotlight_state_field_bindings`,
+   `occurrence_field_bindings` (Technique 4; consumed by the checker and the
+   reader), `scaffolds` (the three registered scaffold files, below),
    `callback_identities`, `lifecycle` for `initState`/`dispose`/`build`,
    `type_renames`, sidecars), `debrify_tv_checker_test.py` with
    **real-config** fixtures and `self_test_module`. Negatives (each must
@@ -932,13 +975,13 @@ As in the Spotlight and catalog plans, plus:
    | C3 cancel (honoured) | In the paths that check `_watchCancelled` — quick TorBox, quick Premiumize, quick AllDebrid, `_watch` early launch (closure #1) and cached PikPak where served — Cancel while the resolve is held pops the dialog and clears the queue and busy state; after release there is **no push** (R/O). |
    | C3 cancel (late launch, as-is) | Cached RD: Cancel while `unrestrictLink` (6070) is held pops the dialog and clears the queue; after release the closure returns the stream (6091), may re-add the torrent to the cleared queue, restarts the prefetcher and **pushes the player** (O: captured push after cancel). This characterizes the original late-launch behaviour (Found, not fixed); the same holds for the other cached flows without a `_watchCancelled` check, which are (S). |
    | C3 switching | Invoke the captured `requestNextChannel()` with 2 channels under fake time: no result before 5 s, then the map with the five keys for the next channel and `isCurrent` moved in the directory of the next launch (O); Premiumize returns null (O). |
-   | C4 Settings | Seeded prefs render in the global settings dialog (R); channel-scope toggles write their keys, quick-scope ones do not (O); Reset writes exactly the original keys (O); provider chips disabled when unavailable and default resolution by availability (R); filter chips persist and invalidate stage stats (O); child profile forces NSFW on and the switch is inert (R). |
+   | C4 Settings | The global settings dialog renders the seeded provider, start-random switch and (when on) slider value (R). The **two live option controls**: toggling start-random writes `saveDebrifyTvStartRandom` and moving the slider writes `saveDebrifyTvRandomStartPercent` (O: prefs re-read). Quick-scope values change **without persistence**: Play now in the quick-play dialog copies the channel options and the NSFW choice into the quick set, and afterwards no `DebrifyTvStorage` key changed (O) while the captured P4/P12 player fields carry the copied values (O). Settings the dialog does not render (`hideSeekbar`, `showChannelName`, `showVideoTitle`, `hideOptions`) are observed only through captured player fields after seeding prefs (O); the unused/no-op setters and the unreachable quick/NSFW branches of the card are (S). Reset writes exactly the original keys (O); provider chips disabled when unavailable and default resolution by availability (R); filter chips persist and invalidate stage stats (O); a child profile forces NSFW on, and the switch is inert, in the channel editor and quick-play dialog (R). |
    | C5 Library | Grid renders seeded channels with favourites first (R); favourite toggle persists (O); delete and delete-all with confirmation, including cancel (R/O). |
    | C6 Import/export/share | Device import of `.zip`, `.yaml`, `.txt`, `.debrify` and an extension-less PK file through the fake picker → DB rows and summary text (O/R); text limits (120 chars, 500 keywords) and empty file messages (R); URL import with MockClient 200 (progress text, persisted) and 404 (error) (O/R); community import of two channels with one failure (O/R); share: copied link decodes to the exact YAML (O); export on tvOS shows the refusal (R); export selection reaches the save step with the captured profile (O where the save platform can be mocked, else S). |
    | C7 Editor | Validation messages; comma and Enter keyword entry; the 1000 cap message (R); edit with removed keywords prunes the cached pool without network (O); NSFW change forces a full rebuild path (O or S). |
    | C8 Spotlight | Style `spotlight` mounts `SpotlightLayout` with Quick Play as entry node (R); a rail focus computes stats only after 250 ms (fake time) (R); gliding B→A with A memoised cancels B's pending timer (R). |
    | C9 D-pad | Top bar Left → sidebar probe, Right/Up traversal, activate (R/O); search Escape ladder (clear, then close and refocus) (R); menu open by Select and closed by Escape with focus restored (R); channel card long-press opens the options menu (R); choice chip KeyRepeat moves focus (R). |
-   | C10 Field binding (behavioural proxies) | Behaviour that a lost field write would change: after `_loadSettings` the settings dialog shows every stored non-default value (R); `_syncProviderAvailability` toggles chip availability when a key is added (R); each settings-card setter changes the visible and persisted value of its own field (R/O). The ZIP **append before reload** (3431–3436) is not observable: `_loadChannels()` immediately republishes the persisted rows and no existing boundary holds that read, so the append is (S), pinned by the occurrence-level binding guard and a source guard on the exact `setState` body. |
+   | C10 Field binding (behavioural proxies) | Behaviour that a lost field write would change: after `_loadSettings`, the rendered settings (provider, start-random, slider percent) and, through captured player fields, the unrendered ones (`hideSeekbar`, `showChannelName`, `showVideoTitle`; `hideOptions` is hard-coded false) carry the stored non-default values (R/O); `_syncProviderAvailability` toggles chip availability when a key is added (R); the two live setters (`setStartRandom`, `setRandomStartPercent`) change their own field's rendered and persisted value (R/O). The dead and no-op setters are (S). The ZIP **append before reload** (3431–3436) is not observable: `_loadChannels()` immediately republishes the persisted rows and no existing boundary holds that read, so the append is (S), pinned by the occurrence-level binding guard and a source guard on the exact `setState` body. |
 
    **Mutation proofs** come in two kinds, recorded separately.
    - **Behavioural (ORIGINAL) proxies** (`original-mutations.json`): named,
@@ -949,8 +992,14 @@ As in the Spotlight and catalog plans, plus:
      quick) and at P3 (channel → quick); `requestNextChannel` always null at
      P5; the P5 prefetch start moved after the push; `_closeProgressDialog()`
      removed before the P5 push; **every** `_watchCancelled` check in quick
-     TorBox removed together (5437–5531; any single check is redundant with its
-     neighbours and masked, so single-check removals are guard mutations, S);
+     TorBox removed together — all **17** occurrences in `_watchWithTorbox`
+     (5231–5622): 5437 `if`, 5440 `while (!…)`, 5448 `&& !…`, 5467 `if`, 5476
+     `if`, 5480 `&& !…`, 5487 `if`, 5501 `if`, 5505 `&& !…`, 5508 `&& !…`,
+     5515 `if`, 5522 `&& !…`, 5531 `if`, 5536 `&& !…`, 5568 `if`, 5575
+     `if (!…)`, 5605 `&& !…`, each replaced by its not-cancelled value
+     (`false`, `true`, or the conjunct dropped), so the held prepare's result
+     reaches the push (any single or partial removal is masked by the
+     remaining checks, so those are guard mutations, S);
      the 5 s cooldown set to
      0; the debounce cancel moved after the memo return; a dropped field
      assignment in `_loadSettings`'s `setState` (e.g. `_startRandom =
@@ -1006,15 +1055,28 @@ As in the Spotlight and catalog plans, plus:
 8. **Source-text inventory.**
    - **Reader** (`test/support/debrify_tv_source.dart` +
      `dev/tool/debrify_tv_source_reader.py`). Ownership is resolved **per
-     declaration** from the manifest: a declaration is read from its retained
-     original location (the facade) until its destination file exists, and
-     from its destination once it does. The reader rejects a declaration with
-     no owner (in neither place), a declaration present in both (duplicate
-     ownership), a destination file the manifest does not list, and — once
-     `DEBRIFY_TV_COMPLETE` is true — any final destination missing. Its tests
-     cover three layouts: ORIGINAL (everything in the facade), a partial
-     layout (one simulated moved section of each kind) and the completed
-     layout (simulated), plus each rejection.
+     declaration** from the manifest by **AST declaration presence**, not
+     file existence: for each row the reader parses the destination file (if
+     any) and the facade; the declaration is owned by the destination when
+     its destination class/member is declared there, else by its retained
+     original declaration in the facade. A row declared in **both** places is
+     duplicate ownership and rejected; a row declared in **neither** is missing
+     and rejected. Several rows retained in one facade declaration (fields of
+     one statement, or members still in the facade) dedupe to one location.
+     Files under `lib/features/debrify_tv/` must each own at least one
+     manifest declaration **or** be one of the explicitly registered scaffold
+     files (`scaffolds` in the config: `debrify_tv_bindings.dart`,
+     `debrify_tv_owners.dart`, `debrify_tv_sections.dart`, each with its
+     pinned scaffold declarations, as `check_settings_moves.py`
+     `destination_ownership` does, 800–815); any other file is rejected. Once
+     `DEBRIFY_TV_COMPLETE` is true, every final destination must own its
+     declarations. Tests cover: ORIGINAL (everything in the facade); a partial
+     layout; the completed layout (simulated); a **scaffold-only destination**
+     (scaffold files present while every declaration is still in the facade,
+     the step-2 shape); a **mixed file** (a destination owning some moved
+     declarations while sibling rows of the same file are still retained in
+     the facade); and each rejection (duplicate, missing, unregistered extra
+     file, scaffold declaring a manifest leaf).
      `debrifyTvOriginalSource()` returns the **raw ORIGINAL text** (from the
      baseline, whitespace and comments preserved), but only after the
      checker's AST token comparison proves every current declaration equals
@@ -1039,14 +1101,23 @@ As in the Spotlight and catalog plans, plus:
      deleted, the failure block re-indented by two spaces, or the call renamed
      to another member each make the reader fail (or, for a change the reader
      would accept, the existing expectation fail); none passes.
-   - `test/theme/source_guard_test.dart`: the `allowed` set (50) and the
-     `MaterialPageRoute` test (80–90) read the single path. In (b), the
-     allowed set becomes `debrifyTvSourceFiles()` — the files that currently
-     own a Debrify TV declaration under the per-declaration rule above (only
-     the facade at (b)) — with one added assertion that every
-     `VideoPlayerScreen(` in those files is the `builder:` result of a
-     `videoPlayerRoute(` call; the `MaterialPageRoute` test reads the current
-     text of the same files. Lines 118, 185 and 228 keep naming the facade (it
+   - `test/theme/source_guard_test.dart`: in the `allowed` set (48–52),
+     replace **only** the `'lib/screens/magic_tv_screen.dart'` entry:
+     ```dart
+     final allowed = {
+       'lib/screens/video_player_screen.dart', // itself
+       'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart', // the shared factory
+       ...debrifyTvSourceFiles(),
+     };
+     ```
+     where `debrifyTvSourceFiles()` is the set of files that currently own a
+     Debrify TV declaration under the reader's ownership rule (only the facade
+     at (b)). The player screen and the shared factory stay allowed, and the
+     factory's existing single-construction assertion is unchanged. One new
+     assertion applies **only to `debrifyTvSourceFiles()`**: every
+     `VideoPlayerScreen(` there is the `builder:` result of a
+     `videoPlayerRoute(` call. The `MaterialPageRoute` test (80–90) reads the
+     current text of the same Debrify TV files. Lines 118, 185 and 228 keep naming the facade (it
      still defines `DebrifyTVScreen`). No assertion is deleted or weakened.
    - **CI history for reader-based tests.** The reader loads ORIGINAL with
      `git show <R>:lib/screens/magic_tv_screen.dart`, like the Spotlight
@@ -1080,9 +1151,16 @@ As in the Spotlight and catalog plans, plus:
 9. **Linux capture script** (`dev/tool/capture_debrify_tv_linux_goldens.sh`,
    `set -euo pipefail`, checks Linux and Flutter 3.44.8): resolves checkpoint
    (b) by its exact subject and R by SHA or exact subject, requires equal
-   `lib`, `pubspec.yaml` and `pubspec.lock` objects, captures once in a
+   `lib`, `pubspec.yaml` and `pubspec.lock` objects, captures **twice** — a
+   first pass in scene order and an independent reverse pass in reversed
+   scene order, each in its own process with its own log
+   (`linux-original-capture-first.txt`, `linux-original-capture-reverse.txt`)
+   and SHA-256 list (`linux-original-sha256-first.txt`,
+   `linux-original-sha256-reverse.txt`), failing unless the lists are
+   identical — in a
    detached worktree of (b) using only (b)'s tests, verifies strictly, copies
-   PNGs and writes `linux-original-{capture,strict,sha256,revision}.txt` under
+   PNGs and writes the first/reverse capture logs and hash lists above plus
+   `linux-original-{strict,revision}.txt` under
    `refactor-evidence/debrify_tv/`. Never `awk '{…; exit}'` or `head` in a
    pipeline under `pipefail` (SIGPIPE); use `git log -1 --format=%H
    --grep=…` or capture to a variable.
@@ -1095,12 +1173,22 @@ As in the Spotlight and catalog plans, plus:
     theme, light-ink, CI format, scoped analyzer with allowlist, strict
     comparison, staged diff. Commit the checkpoint with the exact subject.
 
-**Step 0b review** (before any extraction). On (b): every mutation above is
-rejected by an assertion across the **entire** characterization files (no
-name filtering); the reader's simulated moves (one per section kind:
-lifecycle, a flow with a closure, a dialog with a shadowed setter, a paint
-builder with lexical contexts) pass, and executable, receiver, shadow and
-comment mutations of them fail. A **compiling-composition probe** on a
+**Step 0b review** (before any extraction). Two separate proof runs on (b):
+- **Behavioural proxies against ORIGINAL.** Each mutation in
+  `original-mutations.json` is applied to R's application code in the detached
+  original worktree; the **entire** characterization files run (no name
+  filtering), and the run must fail on the **named behavioural assertion**
+  the mutation targets (recorded per mutation: test name, expectation and
+  failure message). A compile error, a harness crash, or a reader/source-guard
+  rejection does not count as evidence for a behavioural proxy.
+- **Guard mutants against simulated moved source.** Each S mutation is
+  applied to a simulated moved layout (one per section kind: lifecycle, a
+  flow with a closure, a dialog with a shadowed setter, a paint builder with
+  lexical contexts, a record with hazard fields), and must be rejected by the
+  named guard (manifest checker, occurrence binding guard, callback-identity
+  checker or reader); the unmutated simulated layouts pass. Results are
+  recorded separately (`step0b-behavioural-proxies.json`,
+  `step0b-guard-mutants.json`). A **compiling-composition probe** on a
 throwaway branch of (b) builds the facade, owners, bindings, composition and
 one stub section of each kind, compiles under the strict config with no new
 warnings, runs the **real manifest checker** through its CLI wrapper
@@ -1153,7 +1241,10 @@ callback-identity helper, `shape_manifest_test.dart`,
 `theme_surface_manifest.txt`, `ci_behavior_tests.txt`,
 `ci_behavior_known_failures.txt`, `analyzer_allowlist.txt`, `checks.yml`
 (including the behaviour job's `fetch-depth: 0`), the new opt-in
-`occurrence_field_bindings` helper,
+`occurrence_field_bindings` helper and its **adapter change** in
+`dev/tool/verbatim_ast.dart.txt` (the declaration/scope binder output, emitted
+only on request; every other manifest's adapter output and self-tests must be
+byte-identical before and after), the reader's `scaffolds`/ownership rules,
 `file_size_baseline.txt`, `test/theme/source_guard_test.dart` and
 `test/native_player_settings_wiring_test.dart`. Merge rules: union and dedupe
 registrations, exceptions, CI paths, known failures, theme patterns and shape
@@ -1335,3 +1426,43 @@ Codex design review round 1 (`~/.codex-runs/tv-design/last.txt`, reviewed at
     (`home_saved_composition.dart:89` → `HomeHeroShellBridge.playSavedDebrifyChannel`
     → `MainPageBridge` → the screen) and the remote router's data-only channel
     import are named in Contract 2. The facts file was corrected to match.
+
+## Round 2 review resolution
+
+Codex design review round 2 (reviewed at `ec928209`); each point re-checked
+against the source.
+
+1. **P1 C10/settings.** Confirmed `_buildSettingsCard` is rendered only from
+   `_showGlobalSettingsDialog` (9541) with channel scope and no NSFW toggle;
+   only `setStartRandom` and `setRandomStartPercent` are wired (9266–9285);
+   the other four setters are unused (two are no-ops). Contract 4, C4 and C10
+   now name the two live controls, assert their persisted writes, assert that
+   quick-scope values change without persistence (Play-now copy, captured
+   P4/P12 fields), observe unrendered settings through captured player fields,
+   and classify the dead/no-op setters and unreachable branches as S.
+2. **P1 theme allow-list.** Confirmed `source_guard_test.dart:48–52`. Only the
+   Debrify TV entry is replaced (`...debrifyTvSourceFiles()`); the player
+   screen and shared factory stay, the factory's assertion is unchanged, and
+   the new `videoPlayerRoute(builder:)` assertion applies only to Debrify TV
+   files.
+3. **P2 occurrence guard.** Confirmed the adapter is syntax-only (`parseString`
+   494, name sets 164–165). Technique 4 now specifies an explicit syntax-based
+   declaration/scope binder in the adapter, alignment after removing only
+   registered receiver scaffolding, binding checks before destructive
+   normalization, bare-field rejection with same-named locals allowed, and
+   wiring into both checker and reader; the key is in the Step 0 config
+   inventory and the adapter change is listed under Integration.
+4. **P2 reader ownership.** Ownership is by AST declaration presence with
+   duplicate/missing rejection and deduped retained locations; the three
+   scaffold files are registered explicitly (the `destination_ownership`
+   precedent, `check_settings_moves.py:800–815`) and other extras rejected;
+   positives added for a scaffold-only destination and a mixed file.
+5. **P2 mutations.** All 17 `_watchCancelled` occurrences in `_watchWithTorbox`
+   (5437 … 5605) are listed for the behavioural proxy. Step 0b now runs
+   behavioural proxies against ORIGINAL (each must fail its named behavioural
+   assertion; reader/guard rejection does not count) and guard mutants
+   against simulated moved source, recorded separately.
+6. **P3.** The dependency-report inventory says 21 top-level declarations (19
+   outside the retained widget and State); the Linux script captures first and
+   reverse passes with separate logs and SHA-256 lists and fails unless they
+   match.
