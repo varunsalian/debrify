@@ -63,6 +63,13 @@ def validate(original, sources, rows, config, package):
         target = next(r for r in rows if r['original_name'] == '_DebrifyTVScreenState._showNativeSettingsFailure')
         replacement = '_sections.feedback.'+target['new_name']+'(e);'
         physical = [line.replace(replacement, '_showNativeSettingsFailure(e);') for line in physical]
+        if target['destination_file'] == config['source']:
+            # The checked intermediate facade uses its frozen public rename and
+            # qualified State receiver; preserve the same physical block proof.
+            replacement = 'this.'+target['new_name']+'(e);'
+            physical = [line.replace(replacement, '_showNativeSettingsFailure(e);') for line in physical]
+            replacement = ' '+target['new_name']+'(e);'
+            physical = [line.replace(replacement, ' _showNativeSettingsFailure(e);') for line in physical]
         if physical != block(reference):
             raise ValueError('Native-settings physical indentation/block changed')
     return sorted(files)

@@ -11,7 +11,7 @@ def _self_test(package=None):
     from check_settings_moves import all_nodes, check, tokens, configured
     from check_verbatim_moves import parse
     from torbox_callback_identity import argument_ranges, member_occurrences, check_callback_identities
-    original, rows, base_config, leaves = inputs(package)
+    original, rows, base_config, leaves = inputs(package, original_fixture=True)
     source=base_config['source']
     assert not check(original,{source:original},rows,source,package,context_guard=True,config=base_config)
     config={**base_config,'type_aliases':base_config['planned_type_aliases']}

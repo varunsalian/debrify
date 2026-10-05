@@ -2,13 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:debrify/features/debrify_tv/application/debrify_tv_random_start.dart';
-import 'package:debrify/features/debrify_tv/models/debrify_tv_kinds.dart';
-import 'package:debrify/features/debrify_tv/application/debrify_tv_byte_format.dart';
-import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart';
-import 'package:debrify/features/debrify_tv/models/debrify_tv_constants.dart';
-import 'package:debrify/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart';
 
+import 'package:collection/collection.dart';
+import 'package:debrify/features/debrify_tv/application/debrify_tv_byte_format.dart';
+import 'package:debrify/features/debrify_tv/application/debrify_tv_random_start.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_constants.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_kinds.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
@@ -19,73 +23,70 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:collection/collection.dart';
 
-import '../models/torrent.dart';
-import '../models/torrent_filter_state.dart';
-import '../widgets/torrent_result_row.dart' show qualityTierForName;
-import '../models/debrify_tv_cache.dart';
-import '../models/torbox_file.dart';
-import '../models/torbox_torrent.dart';
-import '../models/debrify_tv_channel_record.dart';
+import '../models/debrify_tv/cache_results.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/debrify_tv/channel_stats.dart';
-import '../models/debrify_tv/prepared_torrents.dart';
-import '../models/debrify_tv/cache_results.dart';
 import '../models/debrify_tv/import_results.dart';
+import '../models/debrify_tv/prepared_torrents.dart';
+import '../models/debrify_tv_cache.dart';
+import '../models/debrify_tv_channel_record.dart';
+import '../models/premiumize_file.dart';
+import '../models/profiles/profile_policy.dart';
+import '../models/torbox_file.dart';
+import '../models/torbox_torrent.dart';
+import '../models/torrent.dart';
+import '../models/torrent_filter_state.dart';
+import '../services/alldebrid_service.dart';
 import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
-import '../services/debrid_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/pikpak_tv_service.dart';
-import '../services/video_player_launcher.dart';
-import '../services/debrify_tv_channel_archive_service.dart';
-import '../services/debrify_tv_cache_service.dart';
-import '../services/debrify_tv_repository.dart';
-import '../models/premiumize_file.dart';
-import '../services/premiumize_service.dart';
-import '../services/alldebrid_service.dart';
-import '../services/torbox_service.dart';
-import '../services/torrent_service.dart';
-import '../services/engine/engine_registry.dart';
-import '../services/engine/dynamic_engine.dart';
-import '../services/engine/settings_manager.dart';
-import '../services/debrify_tv_zip_importer.dart';
-import '../services/community/magnet_yaml_service.dart';
 import '../services/community/community_channel_model.dart';
 import '../services/community/community_channels_service.dart';
+import '../services/community/magnet_yaml_service.dart';
+import '../services/debrid_service.dart';
+import '../services/debrify_tv_cache_service.dart';
+import '../services/debrify_tv_channel_archive_service.dart';
+import '../services/debrify_tv_repository.dart';
+import '../services/debrify_tv_zip_importer.dart';
+import '../services/engine/dynamic_engine.dart';
+import '../services/engine/engine_registry.dart';
 import '../services/main_page_bridge.dart';
-import '../models/profiles/profile_policy.dart';
-import '../services/profiles/profile_policy_guard.dart';
+import '../services/pikpak_api_service.dart';
+import '../services/pikpak_tv_service.dart';
+import '../services/premiumize_service.dart';
 import '../services/profiles/profile_async_authorization.dart';
+import '../services/torbox_service.dart';
+import '../services/torrent_service.dart';
+import '../services/video_player_launcher.dart';
 import '../services/webdav_sync/webdav_sync_library_models.dart';
-import 'video_player/player_pip_route.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
+import '../utils/debrify_tv_filters.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
 import '../utils/platform_util.dart';
 import '../utils/rd_blocked_filter.dart';
-import '../utils/debrify_tv_filters.dart';
 import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
+import '../widgets/torrent_result_row.dart' show qualityTierForName;
 import '../widgets/tv_text_field.dart';
-import 'video_player_screen.dart';
+import 'debrify_tv/dialogs/cached_loading_dialog.dart';
+import 'debrify_tv/dialogs/channel_creation_dialog.dart';
+import 'debrify_tv/dialogs/community_channels_dialog.dart';
+import 'debrify_tv/dialogs/export_channels_dialog.dart';
+import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
+import 'debrify_tv/dialogs/import_channels_dialog.dart';
+import 'debrify_tv/dialogs/spotlight_dialog.dart';
 import 'debrify_tv/layouts/debrify_tv_view.dart';
 import 'debrify_tv/layouts/spotlight_layout.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
 import 'debrify_tv/widgets/switch_row.dart';
 import 'debrify_tv/widgets/tv_focusable_button.dart';
 import 'debrify_tv/widgets/tv_focusable_card.dart';
-import 'debrify_tv/dialogs/cached_loading_dialog.dart';
-import 'debrify_tv/dialogs/channel_creation_dialog.dart';
-import 'debrify_tv/dialogs/community_channels_dialog.dart';
-import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
-import 'debrify_tv/dialogs/export_channels_dialog.dart';
-import 'debrify_tv/dialogs/import_channels_dialog.dart';
-import 'debrify_tv/dialogs/spotlight_dialog.dart';
 import 'settings/profile_backup_flows.dart';
+import 'video_player/player_pip_route.dart';
+import 'video_player_screen.dart';
 
 class _SpotlightMetaPill extends StatelessWidget {
   final String label;
@@ -272,191 +273,87 @@ class DebrifyTVScreen extends StatefulWidget {
 }
 
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
-  final SettingsManager _settingsManager = SettingsManager();
-  final TextEditingController _keywordsController = TextEditingController();
-  // Mixed queue: can contain Torrent items or RD-restricted link maps
-  final List<dynamic> _queue = [];
-  bool _isBusy = false;
-  String _status = '';
-  List<DebrifyTvChannel> _channels = <DebrifyTvChannel>[];
-
-  /// `debrify_tv_style`, read once per mount from the mirror warmed in
-  /// `main()`: tabs are keyed by index and rebuilt on switch, so a picker
-  /// change is picked up on the next entry — no bridge, like `iptv_style`.
-  final String _debrifyTvStyle = DebrifyTvStorage.debrifyTvStyleCached;
-
-  // ── Spotlight stage data (rail cheap, stage lazy — plan §7) ─────────
-  Map<String, DebrifyTvRailHealth> _spotlightRailHealth = const {};
-  final Map<String, DebrifyTvChannelStats> _spotlightStats = {};
-  Timer? _spotlightStatsDebounce;
-  String? _spotlightFocusedId;
-  final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
-  List<Torrent>? _pikpakCandidatePool;
-  final Map<String, bool> _tvEngineStates = <String, bool>{};
-  final Map<String, int> _tvSmallChannelMaxByEngine = <String, int>{};
-  final Map<String, int> _tvLargeChannelMaxByEngine = <String, int>{};
-  final Map<String, int> _tvQuickPlayMaxByEngine = <String, int>{};
-  int _channelBatchSize = 4;
-  int _keywordThreshold = 10;
-  int _minTorrentsPerKeyword = 5;
-
-  // Quick Play limits
-  int _quickPlayMaxKeywords = 5;
-
-  final TextEditingController _channelSearchController =
-      TextEditingController();
-  String _channelSearchTerm = '';
-  String?
-  _currentWatchingChannelId; // Track currently playing channel for switching
-
-  // Advanced options
-  bool _startRandom = true;
-  int _randomStartPercent = randomStartPercentDefault;
-  bool _hideSeekbar = true;
-  bool _showChannelName = true;
-  bool _showVideoTitle = true;
-  bool _hideOptions = false;
-  bool _hideBackButton = false;
-  String _provider = DebrifyTvConstants.providerRealDebrid;
-
-  // Quick play options
-  bool _quickStartRandom = true;
-  int _quickRandomStartPercent = randomStartPercentDefault;
-  bool _quickHideSeekbar = true;
-  bool _quickShowChannelName = true;
-  bool _quickShowVideoTitle = true;
-  bool _quickHideOptions = false;
-  bool _quickHideBackButton = false;
-  bool _quickAvoidNsfw = true;
-
-  /// The viewer-scoped, role-locked NSFW rail: forced for a child profile
-  /// regardless of any channel's stored flag or dialog toggle. Evaluated
-  /// live so a profile switch retunes filtering without a rebuild dance.
-  bool get _viewerForcesNsfw =>
-      !ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
-  bool _rdSkipBlockedTorrents = true;
-  String _quickProvider = DebrifyTvConstants.providerRealDebrid;
-
-  // Debrify TV playback filters. Shared by channels and quick play (one
-  // Debrify TV feed preference, unlike provider/NSFW which are per-scope).
-  // Quality narrows torrents by release name; size narrows FILES once a
-  // provider has returned them. See DebrifyTvFilters for why they split.
-  DebrifyTvFilters _tvFilters = const DebrifyTvFilters.empty();
-  // Rate-limits the "filter relaxed" snackbar to once per playback session.
-  bool _qualityFallbackNotified = false;
-
-  int _rdSizeRejections = 0;
-  bool _sizeFilterRelaxed = false;
-
-  bool _rdAvailable = false;
-  bool _torboxAvailable = false;
-  bool _pikpakAvailable = false;
-  bool _premiumizeAvailable = false;
-  bool _allDebridAvailable = false;
-  // De-dupe sets for RD-restricted entries
-  final Set<String> _seenRestrictedLinks = {};
-  final Set<String> _seenLinkWithTorrentId = {};
-
-  bool _prefetchRunning = false;
-  bool _prefetchStopRequested = false;
-  Future<void>? _prefetchTask;
-  // Invalidates an async start when playback exits while the preference is
-  // still being read. Without this, a stopped player could start a late
-  // prefetch loop after _stopPrefetch returned.
-  int _prefetchEpoch = 0;
-  String? _activeApiKey;
-  // Which provider the active prefetch run resolves through. RD and AllDebrid
-  // are the two cache-check-less providers that use the background prefetcher;
-  // this tells _prefetchOneAtIndex / requestMagicNext which add+resolve path to
-  // use against _activeApiKey.
-  String _activeProvider = DebrifyTvConstants.providerRealDebrid;
-  final Set<String> _inflightInfohashes = {};
-  bool _isAndroidTv = false;
-  bool _showSearchBar = false;
-  Set<String> _favoriteChannelIds = {};
-  late final FocusNode _channelSearchFocusNode;
-  final FocusNode _quickPlayFocusNode = FocusNode(
-    debugLabel: 'DebrifyTVQuickPlay',
+  final DebrifyTvOwners _owners = DebrifyTvOwners();
+  DebrifyTvSections? _composition;
+  DebrifyTvSections get _sections => _composition ??= DebrifyTvSections(
+    DebrifyTvDependencies(
+      owners: _owners,
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      loadSettings: loadSettings,
+      loadChannels: loadChannels,
+      handleSyncedDebrifyTvLibraryChanged: handleSyncedDebrifyTvLibraryChanged,
+      loadFavoriteChannels: loadFavoriteChannels,
+      watchChannelById: watchChannelById,
+      checkPendingAutoPlay: checkPendingAutoPlay,
+      buildSpotlightView: buildSpotlightView,
+      buildTvGridLayout: buildTvGridLayout,
+      stopPrefetch: stopPrefetch,
+    ),
   );
-  final FocusNode _channelSearchButtonFocusNode = FocusNode(
-    debugLabel: 'DebrifyTVChannelSearchButton',
-  );
-  final FocusNode _channelSearchClearFocusNode = FocusNode(
-    debugLabel: 'DebrifyTVChannelSearchClear',
-  );
-  final FocusNode _channelMenuFocusNode = FocusNode(
-    debugLabel: 'DebrifyTVChannelMenu',
-  );
-  final MenuController _channelMenuController = MenuController();
-
-  // TV content focus handler (stored for proper unregistration)
-  VoidCallback? _tvContentFocusHandler;
-
-  // Progress UI state
-  final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
-  BuildContext? _progressSheetContext;
-  bool _progressOpen = false;
-  int _lastQueueSize = 0;
-  DateTime? _lastSearchAt;
-  bool _launchedPlayer = false;
-  bool _watchCancelled = false;
-  int? _originalMaxCap;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('magic_tv');
-    _channelSearchFocusNode = FocusNode(debugLabel: 'DebrifyTVChannelSearch');
-    _loadSettings();
-    _loadChannels(); // also warms the Spotlight rail health, once per reload
-    _loadFavoriteChannels();
+    _owners.focus.channelSearchFocusNode = FocusNode(
+      debugLabel: 'DebrifyTVChannelSearch',
+    );
+    _sections.legacy.loadSettings();
+    _sections.legacy
+        .loadChannels(); // also warms the Spotlight rail health, once per reload
+    _sections.legacy.loadFavoriteChannels();
 
     // Register watch channel handler for external calls (e.g., from home screen)
-    MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
+    MainPageBridge.watchDebrifyTvChannel = _sections.legacy.watchChannelById;
     MainPageBridge.registerDebrifyTvLibraryListener(
-      _handleSyncedDebrifyTvLibraryChanged,
+      _sections.legacy.handleSyncedDebrifyTvLibraryChanged,
     );
 
     // Register TV sidebar focus handler (tab index 3 = Debrify TV)
-    _tvContentFocusHandler = () {
-      _quickPlayFocusNode.requestFocus();
+    _owners.focus.tvContentFocusHandler = () {
+      _owners.focus.quickPlayFocusNode.requestFocus();
     };
-    MainPageBridge.registerTvContentFocusHandler(3, _tvContentFocusHandler!);
+    MainPageBridge.registerTvContentFocusHandler(
+      3,
+      _owners.focus.tvContentFocusHandler!,
+    );
 
     // Check for pending auto-play from home screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkPendingAutoPlay();
+      _sections.legacy.checkPendingAutoPlay();
     });
   }
 
   @override
   void dispose() {
-    _spotlightStatsDebounce?.cancel();
+    _owners.stage.spotlightStatsDebounce?.cancel();
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
     MainPageBridge.unregisterDebrifyTvLibraryListener(
-      _handleSyncedDebrifyTvLibraryChanged,
+      _sections.legacy.handleSyncedDebrifyTvLibraryChanged,
     );
-    if (_tvContentFocusHandler != null) {
+    if (_owners.focus.tvContentFocusHandler != null) {
       MainPageBridge.unregisterTvContentFocusHandler(
         3,
-        _tvContentFocusHandler!,
+        _owners.focus.tvContentFocusHandler!,
       );
     }
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
-    _prefetchStopRequested = true;
-    _stopPrefetch();
+    _owners.prefetch.prefetchStopRequested = true;
+    _sections.legacy.stopPrefetch();
     // Clean up dialog state to avoid dangling context references
-    _progressSheetContext = null;
-    _progressOpen = false;
-    _progress.dispose();
-    _keywordsController.dispose();
-    _channelSearchController.dispose();
-    _channelSearchFocusNode.dispose();
-    _quickPlayFocusNode.dispose();
-    _channelSearchButtonFocusNode.dispose();
-    _channelSearchClearFocusNode.dispose();
-    _channelMenuFocusNode.dispose();
+    _owners.progress.progressSheetContext = null;
+    _owners.progress.progressOpen = false;
+    _owners.progress.progress.dispose();
+    _owners.library.keywordsController.dispose();
+    _owners.focus.channelSearchController.dispose();
+    _owners.focus.channelSearchFocusNode.dispose();
+    _owners.focus.quickPlayFocusNode.dispose();
+    _owners.focus.channelSearchButtonFocusNode.dispose();
+    _owners.focus.channelSearchClearFocusNode.dispose();
+    _owners.focus.channelMenuFocusNode.dispose();
     AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
   }
@@ -464,51 +361,51 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Back/Escape ladder for the channel search bar: clear text first, then
   /// close the bar. Sits on an ancestor Focus of the search field so it runs
   /// when the TvTextField shell lets the key bubble.
-  KeyEventResult _handleChannelSearchBarBack(FocusNode node, KeyEvent event) {
+  KeyEventResult handleChannelSearchBarBack(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      if (_channelSearchController.text.isNotEmpty) {
-        _channelSearchController.clear();
+      if (_owners.focus.channelSearchController.text.isNotEmpty) {
+        _owners.focus.channelSearchController.clear();
         setState(() {
-          _channelSearchTerm = '';
+          _owners.focus.channelSearchTerm = '';
         });
         // Clearing unmounts the suffix ✕ — if IT held focus, focus would be
         // stranded; parking on the field covers both cases.
-        _channelSearchFocusNode.requestFocus();
+        _owners.focus.channelSearchFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
-      if (_showSearchBar) {
+      if (_owners.focus.showSearchBar) {
         setState(() {
-          _showSearchBar = false;
+          _owners.focus.showSearchBar = false;
         });
-        _channelSearchButtonFocusNode.requestFocus();
+        _owners.focus.channelSearchButtonFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
     }
     return KeyEventResult.ignored;
   }
 
-  void _closeProgressDialog() {
-    if (!_progressOpen) {
+  void closeProgressDialog() {
+    if (!_owners.progress.progressOpen) {
       return;
     }
-    if (_progressSheetContext != null) {
+    if (_owners.progress.progressSheetContext != null) {
       try {
-        Navigator.of(_progressSheetContext!).pop();
+        Navigator.of(_owners.progress.progressSheetContext!).pop();
       } catch (_) {}
-      _progressSheetContext = null;
-      _progressOpen = false;
+      _owners.progress.progressSheetContext = null;
+      _owners.progress.progressOpen = false;
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_progressOpen) {
+      if (!_owners.progress.progressOpen) {
         return;
       }
-      if (_progressSheetContext != null) {
-        _closeProgressDialog();
+      if (_owners.progress.progressSheetContext != null) {
+        closeProgressDialog();
         return;
       }
       if (mounted) {
@@ -516,12 +413,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
       }
-      _progressSheetContext = null;
-      _progressOpen = false;
+      _owners.progress.progressSheetContext = null;
+      _owners.progress.progressOpen = false;
     });
   }
 
-  void _updateProgress(Iterable<String> messages, {bool replace = false}) {
+  void updateProgress(Iterable<String> messages, {bool replace = false}) {
     final sanitized = messages
         .map((message) => message.trim())
         .where((message) => message.isNotEmpty)
@@ -530,23 +427,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    if (replace || _progress.value.isEmpty) {
-      _progress.value = sanitized;
+    if (replace || _owners.progress.progress.value.isEmpty) {
+      _owners.progress.progress.value = sanitized;
       return;
     }
 
-    final copy = List<String>.from(_progress.value)..addAll(sanitized);
-    _progress.value = copy;
+    final copy = List<String>.from(_owners.progress.progress.value)
+      ..addAll(sanitized);
+    _owners.progress.progress.value = copy;
   }
 
-  void _cancelActiveWatch({
+  void cancelActiveWatch({
     BuildContext? dialogContext,
     bool clearQueue = true,
   }) {
     debugPrint(
-      '[MagicTV] _cancelActiveWatch called, dialogContext=$dialogContext, clearQueue=$clearQueue, _watchCancelled=$_watchCancelled',
+      '[MagicTV] _cancelActiveWatch called, dialogContext=$dialogContext, clearQueue=$clearQueue, _watchCancelled=${_owners.session.watchCancelled}',
     );
-    if (_watchCancelled) {
+    if (_owners.session.watchCancelled) {
       debugPrint(
         '[MagicTV] _cancelActiveWatch: Already cancelled, just popping dialog',
       );
@@ -559,19 +457,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
       return;
     }
-    _watchCancelled = true;
-    _prefetchStopRequested = true;
+    _owners.session.watchCancelled = true;
+    _owners.prefetch.prefetchStopRequested = true;
     debugPrint(
       '[MagicTV] _cancelActiveWatch: Set _watchCancelled=true, stopping prefetch',
     );
-    unawaited(_stopPrefetch());
+    unawaited(stopPrefetch());
     if (clearQueue) {
       debugPrint(
-        '[MagicTV] _cancelActiveWatch: Clearing queue (had ${_queue.length} items)',
+        '[MagicTV] _cancelActiveWatch: Clearing queue (had ${_owners.session.queue.length} items)',
       );
-      _queue.clear();
+      _owners.session.queue.clear();
     }
-    _progress.value = [];
+    _owners.progress.progress.value = [];
     if (dialogContext != null) {
       debugPrint(
         '[MagicTV] _cancelActiveWatch: Popping dialog via dialogContext',
@@ -581,24 +479,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       } catch (e) {
         debugPrint('[MagicTV] _cancelActiveWatch: Error popping dialog: $e');
       }
-      _progressOpen = false;
-      _progressSheetContext = null;
-    } else if (_progressOpen) {
+      _owners.progress.progressOpen = false;
+      _owners.progress.progressSheetContext = null;
+    } else if (_owners.progress.progressOpen) {
       debugPrint(
         '[MagicTV] _cancelActiveWatch: No dialogContext, calling _closeProgressDialog',
       );
-      _closeProgressDialog();
+      closeProgressDialog();
     }
     if (mounted) {
       setState(() {
-        _isBusy = false;
-        _status = '';
+        _owners.session.isBusy = false;
+        _owners.session.status = '';
       });
     }
     debugPrint('[MagicTV] _cancelActiveWatch: Done');
   }
 
-  String _determineDefaultProvider(
+  String determineDefaultProvider(
     String? preferred,
     bool rdAvailable,
     bool torboxAvailable,
@@ -646,23 +544,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return DebrifyTvConstants.providerRealDebrid;
   }
 
-  bool _isProviderSelectable(String provider) {
+  bool isProviderSelectable(String provider) {
     if (provider == DebrifyTvConstants.providerTorbox) {
-      return _torboxAvailable;
+      return _owners.settings.torboxAvailable;
     }
     if (provider == DebrifyTvConstants.providerPikPak) {
-      return _pikpakAvailable;
+      return _owners.settings.pikpakAvailable;
     }
     if (provider == DebrifyTvConstants.providerPremiumize) {
-      return _premiumizeAvailable;
+      return _owners.settings.premiumizeAvailable;
     }
     if (provider == DebrifyTvConstants.providerAllDebrid) {
-      return _allDebridAvailable;
+      return _owners.settings.allDebridAvailable;
     }
-    return _rdAvailable;
+    return _owners.settings.rdAvailable;
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> loadSettings() async {
     final startRandom = await DebrifyTvStorage.getDebrifyTvStartRandom();
     final randomStartPercent =
         await DebrifyTvStorage.getDebrifyTvRandomStartPercent();
@@ -672,7 +570,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await DebrifyTvStorage.getDebrifyTvShowChannelName();
     final showVideoTitle = await DebrifyTvStorage.getDebrifyTvShowVideoTitle();
     // hideBackButton is hardcoded to false - no longer loading from storage
-    final avoidNsfw = await _settingsManager.getGlobalAvoidNsfw(true);
+    final avoidNsfw = await _owners.settings.settingsManager.getGlobalAvoidNsfw(
+      true,
+    );
     final rdSkipBlocked = await RealDebridStorage.getRdSkipBlockedTorrents();
     final tvFilters = await DebrifyTvFilters.load();
     final storedProvider = await DebrifyTvStorage.getDebrifyTvProvider();
@@ -704,26 +604,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         continue;
       }
       final engineId = engine.name;
-      tvEngineStates[engineId] = await _settingsManager.getTvEnabled(
-        engineId,
-        tvMode.enabledDefault,
-      );
-      tvSmallChannelMaxByEngine[engineId] = await _settingsManager
+      tvEngineStates[engineId] = await _owners.settings.settingsManager
+          .getTvEnabled(engineId, tvMode.enabledDefault);
+      tvSmallChannelMaxByEngine[engineId] = await _owners
+          .settings
+          .settingsManager
           .getTvSmallChannelMax(engineId, tvMode.smallChannel.maxResults);
-      tvLargeChannelMaxByEngine[engineId] = await _settingsManager
+      tvLargeChannelMaxByEngine[engineId] = await _owners
+          .settings
+          .settingsManager
           .getTvLargeChannelMax(engineId, tvMode.largeChannel.maxResults);
-      tvQuickPlayMaxByEngine[engineId] = await _settingsManager
+      tvQuickPlayMaxByEngine[engineId] = await _owners.settings.settingsManager
           .getTvQuickPlayMax(engineId, tvMode.quickPlay.maxResults);
     }
 
     // Global TV settings
-    final channelBatchSize = await _settingsManager.getGlobalBatchSize(4);
-    final keywordThreshold = await _settingsManager.getGlobalKeywordThreshold(
-      10,
-    );
-    final minTorrentsPerKeyword = await _settingsManager
+    final channelBatchSize = await _owners.settings.settingsManager
+        .getGlobalBatchSize(4);
+    final keywordThreshold = await _owners.settings.settingsManager
+        .getGlobalKeywordThreshold(10);
+    final minTorrentsPerKeyword = await _owners.settings.settingsManager
         .getGlobalMinTorrentsPerKeyword(5);
-    final quickPlayMaxKeywords = await _settingsManager.getGlobalMaxKeywords(5);
+    final quickPlayMaxKeywords = await _owners.settings.settingsManager
+        .getGlobalMaxKeywords(5);
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
@@ -744,7 +647,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         allDebridIntegrationEnabled &&
         allDebridKey != null &&
         allDebridKey.isNotEmpty;
-    final defaultProvider = _determineDefaultProvider(
+    final defaultProvider = determineDefaultProvider(
       hasStoredProvider ? storedProvider : null,
       rdAvailable,
       torboxAvailable,
@@ -756,61 +659,60 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (mounted) {
       setState(() {
-        _startRandom = startRandom;
-        _randomStartPercent = clampDebrifyTvRandomStartPercent(
+        _owners.settings.startRandom = startRandom;
+        _owners.settings.randomStartPercent = clampDebrifyTvRandomStartPercent(
           randomStartPercent,
         );
-        _hideSeekbar = hideOptions;
-        _showChannelName = showChannelName;
-        _showVideoTitle = showVideoTitle;
-        _hideOptions = false; // Hardcoded to false
-        _hideBackButton = false; // Hardcoded to false
-        _rdAvailable = rdAvailable;
-        _torboxAvailable = torboxAvailable;
-        _pikpakAvailable = pikpakAvailable;
-        _premiumizeAvailable = premiumizeAvailable;
-        _allDebridAvailable = allDebridAvailable;
-        _provider = defaultProvider;
-        _isAndroidTv = isTv;
+        _owners.settings.hideSeekbar = hideOptions;
+        _owners.settings.showChannelName = showChannelName;
+        _owners.settings.showVideoTitle = showVideoTitle;
+        _owners.settings.hideOptions = false; // Hardcoded to false
+        _owners.settings.hideBackButton = false; // Hardcoded to false
+        _owners.settings.rdAvailable = rdAvailable;
+        _owners.settings.torboxAvailable = torboxAvailable;
+        _owners.settings.pikpakAvailable = pikpakAvailable;
+        _owners.settings.premiumizeAvailable = premiumizeAvailable;
+        _owners.settings.allDebridAvailable = allDebridAvailable;
+        _owners.settings.provider = defaultProvider;
+        _owners.settings.isAndroidTv = isTv;
 
-        _quickStartRandom = startRandom;
-        _quickRandomStartPercent = clampDebrifyTvRandomStartPercent(
-          randomStartPercent,
-        );
-        _quickHideSeekbar = hideOptions;
-        _quickShowChannelName = showChannelName;
-        _quickShowVideoTitle = showVideoTitle;
-        _quickHideOptions = false; // Hardcoded to false
-        _quickHideBackButton = false; // Hardcoded to false
-        _quickAvoidNsfw = avoidNsfw;
-        _rdSkipBlockedTorrents = rdSkipBlocked;
-        _quickProvider = defaultProvider;
-        _tvFilters = tvFilters;
+        _owners.settings.quickStartRandom = startRandom;
+        _owners.settings.quickRandomStartPercent =
+            clampDebrifyTvRandomStartPercent(randomStartPercent);
+        _owners.settings.quickHideSeekbar = hideOptions;
+        _owners.settings.quickShowChannelName = showChannelName;
+        _owners.settings.quickShowVideoTitle = showVideoTitle;
+        _owners.settings.quickHideOptions = false; // Hardcoded to false
+        _owners.settings.quickHideBackButton = false; // Hardcoded to false
+        _owners.settings.quickAvoidNsfw = avoidNsfw;
+        _owners.settings.rdSkipBlockedTorrents = rdSkipBlocked;
+        _owners.settings.quickProvider = defaultProvider;
+        _owners.settings.tvFilters = tvFilters;
         // The filter is an INPUT to the memoised stage numbers: anything
         // computed before this load landed used the empty default.
-        _spotlightStats.clear();
+        _owners.stage.spotlightStats.clear();
 
         // Update search settings
-        _tvEngineStates
+        _owners.settings.tvEngineStates
           ..clear()
           ..addAll(tvEngineStates);
-        _tvSmallChannelMaxByEngine
+        _owners.settings.tvSmallChannelMaxByEngine
           ..clear()
           ..addAll(tvSmallChannelMaxByEngine);
-        _tvLargeChannelMaxByEngine
+        _owners.settings.tvLargeChannelMaxByEngine
           ..clear()
           ..addAll(tvLargeChannelMaxByEngine);
-        _tvQuickPlayMaxByEngine
+        _owners.settings.tvQuickPlayMaxByEngine
           ..clear()
           ..addAll(tvQuickPlayMaxByEngine);
-        _channelBatchSize = channelBatchSize;
-        _keywordThreshold = keywordThreshold;
-        _minTorrentsPerKeyword = minTorrentsPerKeyword;
-        _quickPlayMaxKeywords = quickPlayMaxKeywords;
+        _owners.settings.channelBatchSize = channelBatchSize;
+        _owners.settings.keywordThreshold = keywordThreshold;
+        _owners.settings.minTorrentsPerKeyword = minTorrentsPerKeyword;
+        _owners.settings.quickPlayMaxKeywords = quickPlayMaxKeywords;
       });
       // Outside the setState callback: recomputing the focused channel's
       // numbers schedules its own rebuild.
-      _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
+      refreshSpotlightStatsIfFocused(_owners.stage.spotlightFocusedId);
     }
 
     if (await DebrifyTvStorage.getDebrifyTvHideSeekbar() != hideOptions) {
@@ -852,13 +754,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  List<DynamicEngine> _enabledTvKeywordEngines(EngineRegistry registry) {
+  List<DynamicEngine> enabledTvKeywordEngines(EngineRegistry registry) {
     final engines = registry
         .getTvModeEngines()
         .where(
           (engine) =>
               engine.supportsKeywordSearch &&
-              (_tvEngineStates[engine.name] ??
+              (_owners.settings.tvEngineStates[engine.name] ??
                   engine.tvModeConfig?.enabledDefault ??
                   false),
         )
@@ -867,11 +769,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return engines;
   }
 
-  int _tvChannelMaxResultsForEngine(DynamicEngine engine, int totalKeywords) {
-    final useSmallChannelLimit = totalKeywords < _keywordThreshold;
+  int tvChannelMaxResultsForEngine(DynamicEngine engine, int totalKeywords) {
+    final useSmallChannelLimit =
+        totalKeywords < _owners.settings.keywordThreshold;
     final storedLimit = useSmallChannelLimit
-        ? _tvSmallChannelMaxByEngine[engine.name]
-        : _tvLargeChannelMaxByEngine[engine.name];
+        ? _owners.settings.tvSmallChannelMaxByEngine[engine.name]
+        : _owners.settings.tvLargeChannelMaxByEngine[engine.name];
     if (storedLimit != null) {
       return storedLimit;
     }
@@ -885,7 +788,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         : tvMode.largeChannel.maxResults;
   }
 
-  int _estimatePagesPulledForEngine(DynamicEngine engine, int resultCount) {
+  int estimatePagesPulledForEngine(DynamicEngine engine, int resultCount) {
     if (resultCount <= 0) {
       return 0;
     }
@@ -907,7 +810,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _estimatePageRequestsForEngine(DynamicEngine engine, int totalKeywords) {
-    final maxResults = _tvChannelMaxResultsForEngine(engine, totalKeywords);
+    final maxResults = tvChannelMaxResultsForEngine(engine, totalKeywords);
     final pagination = engine.config.pagination;
     final resultsPerPage = pagination.resultsPerPage;
     if (pagination.type == 'none' ||
@@ -927,17 +830,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return estimatedPages;
   }
 
-  Map<String, int> _quickPlayMaxResultsOverrides() {
-    return Map<String, int>.from(_tvQuickPlayMaxByEngine);
+  Map<String, int> quickPlayMaxResultsOverrides() {
+    return Map<String, int>.from(_owners.settings.tvQuickPlayMaxByEngine);
   }
 
-  Future<Map<String, bool>> _tvEngineSearchStates() async {
+  Future<Map<String, bool>> tvEngineSearchStates() async {
     final registry = EngineRegistry.instance;
     await registry.initialize();
     return <String, bool>{
       for (final engine in registry.getKeywordSearchEngines())
         engine.name:
-            _tvEngineStates[engine.name] ??
+            _owners.settings.tvEngineStates[engine.name] ??
             engine.tvModeConfig?.enabledDefault ??
             false,
     };
@@ -957,42 +860,42 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return list;
   }
 
-  Future<void> _loadChannels() async {
+  Future<void> loadChannels() async {
     final records = await DebrifyTvRepository.instance.fetchAllChannels();
     if (!mounted) return;
     setState(() {
-      _channels = records
+      _owners.library.channels = records
           .map(DebrifyTvChannel.fromRecord)
           .toList(growable: false);
     });
     // Every path that reloads channels (create, edit, delete-all, ZIP/YAML/
     // community imports) has fresh pools too, so the rail's pips ride along
     // here rather than each call site remembering to refresh them.
-    if (_debrifyTvStyle == 'spotlight') {
-      await _loadSpotlightRailHealth();
+    if (_owners.library.debrifyTvStyle == 'spotlight') {
+      await loadSpotlightRailHealth();
     }
   }
 
-  void _handleSyncedDebrifyTvLibraryChanged() {
+  void handleSyncedDebrifyTvLibraryChanged() {
     if (!mounted) return;
     setState(() {
-      _channelCache.clear();
-      _spotlightStats.clear();
-      _spotlightRailHealth = const <String, DebrifyTvRailHealth>{};
+      _owners.library.channelCache.clear();
+      _owners.stage.spotlightStats.clear();
+      _owners.stage.spotlightRailHealth = const <String, DebrifyTvRailHealth>{};
     });
-    unawaited(_loadChannels());
+    unawaited(loadChannels());
   }
 
-  Future<void> _loadFavoriteChannels() async {
+  Future<void> loadFavoriteChannels() async {
     final favoriteIds = await DebrifyTvStorage.getDebrifyTvFavoriteChannelIds();
     if (!mounted) return;
     setState(() {
-      _favoriteChannelIds = favoriteIds;
+      _owners.library.favoriteChannelIds = favoriteIds;
     });
   }
 
-  Future<void> _toggleChannelFavorite(DebrifyTvChannel channel) async {
-    final isFavorited = _favoriteChannelIds.contains(channel.id);
+  Future<void> toggleChannelFavorite(DebrifyTvChannel channel) async {
+    final isFavorited = _owners.library.favoriteChannelIds.contains(channel.id);
     final newState = !isFavorited;
 
     await DebrifyTvStorage.setDebrifyTvChannelFavorited(channel.id, newState);
@@ -1000,9 +903,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (!mounted) return;
     setState(() {
       if (newState) {
-        _favoriteChannelIds = {..._favoriteChannelIds, channel.id};
+        _owners.library.favoriteChannelIds = {
+          ..._owners.library.favoriteChannelIds,
+          channel.id,
+        };
       } else {
-        _favoriteChannelIds = _favoriteChannelIds
+        _owners.library.favoriteChannelIds = _owners.library.favoriteChannelIds
             .where((id) => id != channel.id)
             .toSet();
       }
@@ -1010,38 +916,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   /// Watch a channel by ID (called from external sources like home screen)
-  Future<void> _watchChannelById(String channelId) async {
-    final channel = _channels.firstWhereOrNull((c) => c.id == channelId);
+  Future<void> watchChannelById(String channelId) async {
+    final channel = _owners.library.channels.firstWhereOrNull(
+      (c) => c.id == channelId,
+    );
     if (channel != null) {
-      _watchChannel(channel);
+      watchChannel(channel);
     } else {
       debugPrint('DebrifyTVScreen: Channel with ID $channelId not found');
     }
   }
 
   /// Check for pending auto-play channel from home screen
-  Future<void> _checkPendingAutoPlay() async {
+  Future<void> checkPendingAutoPlay() async {
     final channelId = MainPageBridge.getAndClearDebrifyTvChannelToAutoPlay();
     if (channelId == null) return;
 
     // Wait for channels to load
     int attempts = 0;
     const maxAttempts = 50; // 5 seconds max wait
-    while (_channels.isEmpty && attempts < maxAttempts) {
+    while (_owners.library.channels.isEmpty && attempts < maxAttempts) {
       await Future.delayed(const Duration(milliseconds: 100));
       attempts++;
       if (!mounted) return;
     }
 
-    if (_channels.isEmpty) {
+    if (_owners.library.channels.isEmpty) {
       debugPrint('DebrifyTVScreen: Channels not loaded for auto-play');
       return;
     }
 
-    _watchChannelById(channelId);
+    watchChannelById(channelId);
   }
 
-  Future<DebrifyTvChannelCacheEntry> _computeChannelCacheEntry(
+  Future<DebrifyTvChannelCacheEntry> computeChannelCacheEntry(
     DebrifyTvChannel channel,
     List<String> normalizedKeywords, {
     DebrifyTvChannelCacheEntry? baseline,
@@ -1051,10 +959,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // role-locked for a child profile no matter who authored the channel or
     // what its stored flag says (the rail is viewer-scoped, evaluated at
     // search/play — never only at creation).
-    final channelAvoidNsfw = channel.avoidNsfw || _viewerForcesNsfw;
+    final channelAvoidNsfw =
+        channel.avoidNsfw || _owners.settings.viewerForcesNsfw;
     final registry = EngineRegistry.instance;
     await registry.initialize();
-    final enabledTvEngines = _enabledTvKeywordEngines(registry);
+    final enabledTvEngines = enabledTvKeywordEngines(registry);
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final accumulator = <String, CachedTorrent>{};
@@ -1065,7 +974,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         baseline,
         normalizedKeywords,
       )) {
-        final normalizedHash = _normalizeInfohash(cached.infohash);
+        final normalizedHash = normalizeInfohash(cached.infohash);
         if (normalizedHash.isEmpty) {
           continue;
         }
@@ -1097,7 +1006,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     List<String> pendingKeywords = List<String>.from(keywordsToWarm);
     while (pendingKeywords.isNotEmpty) {
-      final batch = pendingKeywords.take(_channelBatchSize).toList();
+      final batch = pendingKeywords
+          .take(_owners.settings.channelBatchSize)
+          .toList();
       pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
       final futures = batch.map((keyword) async {
@@ -1109,7 +1020,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           now: now,
           totalKeywords: normalizedKeywords.length,
           avoidNsfw: channelAvoidNsfw, // Use channel's NSFW setting
-          minTorrentsPerKeyword: _minTorrentsPerKeyword,
+          minTorrentsPerKeyword: _owners.settings.minTorrentsPerKeyword,
         );
       }).toList();
 
@@ -1171,7 +1082,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     final searchResults = await Future.wait(
       enabledEngines.map((engine) async {
-        final maxResults = _tvChannelMaxResultsForEngine(engine, totalKeywords);
+        final maxResults = tvChannelMaxResultsForEngine(engine, totalKeywords);
         try {
           final torrents = await engine.executeSearch(
             query: keyword,
@@ -1180,7 +1091,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return _TvEngineWarmResult(
             engine: engine,
             torrents: torrents,
-            pagesPulled: _estimatePagesPulledForEngine(engine, torrents.length),
+            pagesPulled: estimatePagesPulledForEngine(engine, torrents.length),
           );
         } catch (e) {
           debugPrint(
@@ -1264,7 +1175,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     for (final entry in filteredByEngine.entries) {
       final source = entry.key.name;
       for (final torrent in entry.value) {
-        final hash = _normalizeInfohash(torrent.infohash);
+        final hash = normalizeInfohash(torrent.infohash);
         if (hash.isEmpty) {
           continue;
         }
@@ -1303,22 +1214,27 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<void> _deleteChannel(String id) async {
+  Future<void> deleteChannel(String id) async {
     setState(() {
-      _channels = _channels.where((c) => c.id != id).toList();
+      _owners.library.channels = _owners.library.channels
+          .where((c) => c.id != id)
+          .toList();
     });
     await DebrifyTvRepository.instance.deleteChannel(id);
     setState(() {
-      _channelCache.remove(id);
-      _spotlightStats.remove(id);
-      _spotlightRailHealth = Map.of(_spotlightRailHealth)..remove(id);
+      _owners.library.channelCache.remove(id);
+      _owners.stage.spotlightStats.remove(id);
+      _owners.stage.spotlightRailHealth = Map.of(
+        _owners.stage.spotlightRailHealth,
+      )..remove(id);
       // The layout's staged-channel repair fires onChannelFocused for its
       // replacement; a dangling id here would make that look like a no-move.
-      if (_spotlightFocusedId == id) _spotlightFocusedId = null;
+      if (_owners.stage.spotlightFocusedId == id)
+        _owners.stage.spotlightFocusedId = null;
     });
   }
 
-  Future<void> _syncProviderAvailability() async {
+  Future<void> syncProviderAvailability() async {
     final rdIntegrationEnabled =
         await RealDebridStorage.getRealDebridIntegrationEnabled();
     final rdKey = await RealDebridStorage.getApiKey();
@@ -1346,16 +1262,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final torboxAvailable =
         torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
 
-    final nextChannelProvider = _determineDefaultProvider(
-      _provider,
+    final nextChannelProvider = determineDefaultProvider(
+      _owners.settings.provider,
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
       premiumizeAvailable,
       allDebridAvailable,
     );
-    final nextQuickProvider = _determineDefaultProvider(
-      _quickProvider,
+    final nextQuickProvider = determineDefaultProvider(
+      _owners.settings.quickProvider,
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
@@ -1364,15 +1280,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     if (!mounted) return;
-    final providerChanged = nextChannelProvider != _provider;
+    final providerChanged = nextChannelProvider != _owners.settings.provider;
     setState(() {
-      _rdAvailable = rdAvailable;
-      _torboxAvailable = torboxAvailable;
-      _pikpakAvailable = pikpakAvailable;
-      _premiumizeAvailable = premiumizeAvailable;
-      _allDebridAvailable = allDebridAvailable;
-      _provider = nextChannelProvider;
-      _quickProvider = nextQuickProvider;
+      _owners.settings.rdAvailable = rdAvailable;
+      _owners.settings.torboxAvailable = torboxAvailable;
+      _owners.settings.pikpakAvailable = pikpakAvailable;
+      _owners.settings.premiumizeAvailable = premiumizeAvailable;
+      _owners.settings.allDebridAvailable = allDebridAvailable;
+      _owners.settings.provider = nextChannelProvider;
+      _owners.settings.quickProvider = nextQuickProvider;
     });
 
     if (providerChanged) {
@@ -1380,7 +1296,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  List<String> _parseKeywords(String input) {
+  List<String> parseKeywords(String input) {
     return input
         .split(',')
         .map((s) => s.trim())
@@ -1388,7 +1304,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toList();
   }
 
-  List<String> _normalizedKeywords(List<String> keywords) {
+  List<String> normalizedKeywords(List<String> keywords) {
     final seen = <String>{};
     final normalized = <String>[];
     for (final keyword in keywords) {
@@ -1402,26 +1318,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return normalized;
   }
 
-  Future<DebrifyTvChannelCacheEntry?> _ensureCacheEntry(
-    String channelId,
-  ) async {
-    final cached = _channelCache[channelId];
+  Future<DebrifyTvChannelCacheEntry?> ensureCacheEntry(String channelId) async {
+    final cached = _owners.library.channelCache[channelId];
     if (cached != null) {
       return cached;
     }
     final fetched = await DebrifyTvCacheService.getEntry(channelId);
     if (fetched != null) {
-      _channelCache[channelId] = fetched;
+      _owners.library.channelCache[channelId] = fetched;
     }
     return fetched;
   }
 
-  Future<List<String>> _getChannelKeywords(String channelId) async {
-    final index = _channels.indexWhere((c) => c.id == channelId);
+  Future<List<String>> getChannelKeywords(String channelId) async {
+    final index = _owners.library.channels.indexWhere((c) => c.id == channelId);
     if (index == -1) {
       return const <String>[];
     }
-    final existing = _channels[index];
+    final existing = _owners.library.channels[index];
     if (existing.keywords.isNotEmpty) {
       return existing.keywords;
     }
@@ -1433,14 +1347,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     final updated = existing.copyWith(keywords: fetched);
     setState(() {
-      final next = List<DebrifyTvChannel>.from(_channels);
+      final next = List<DebrifyTvChannel>.from(_owners.library.channels);
       next[index] = updated;
-      _channels = next;
+      _owners.library.channels = next;
     });
     return fetched;
   }
 
-  Future<TorboxCacheWindowResult> _fetchTorboxCacheWindow({
+  Future<TorboxCacheWindowResult> fetchTorboxCacheWindow({
     required List<Torrent> candidates,
     required int startIndex,
     required String apiKey,
@@ -1458,7 +1372,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       cursor = end;
 
       final List<String> hashes = chunk
-          .map((torrent) => _normalizeInfohash(torrent.infohash))
+          .map((torrent) => normalizeInfohash(torrent.infohash))
           .where((hash) => hash.isNotEmpty)
           .toList();
 
@@ -1484,8 +1398,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       hits.addAll(
         chunk.where(
-          (torrent) =>
-              normalized.contains(_normalizeInfohash(torrent.infohash)),
+          (torrent) => normalized.contains(normalizeInfohash(torrent.infohash)),
         ),
       );
     }
@@ -1498,7 +1411,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  int _estimatedWarmDurationSeconds(
+  int estimatedWarmDurationSeconds(
     int keywordCount, {
     int? totalKeywordUniverse,
   }) {
@@ -1507,14 +1420,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final int effectiveUniverse = max(1, totalKeywordUniverse ?? keywordCount);
-    final enabledEngines = _enabledTvKeywordEngines(EngineRegistry.instance);
+    final enabledEngines = enabledTvKeywordEngines(EngineRegistry.instance);
     if (enabledEngines.isEmpty) {
       return 0;
     }
 
     final int batches = max(
       1,
-      ((keywordCount + _channelBatchSize - 1) ~/ _channelBatchSize),
+      ((keywordCount + _owners.settings.channelBatchSize - 1) ~/
+          _owners.settings.channelBatchSize),
     );
 
     final int requestWavesPerKeyword = enabledEngines.fold<int>(
@@ -1576,16 +1490,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// nothing at the requested quality — a filtered channel that plays nothing
   /// reads as broken, so it degrades instead of failing.
   List<CachedTorrent> _applyQualityFilterToCached(List<CachedTorrent> all) {
-    if (!_tvFilters.hasQuality || all.isEmpty) return all;
+    if (!_owners.settings.tvFilters.hasQuality || all.isEmpty) return all;
     final matched = all
-        .where((cached) => _tvFilters.qualityMatchesName(cached.name))
+        .where(
+          (cached) =>
+              _owners.settings.tvFilters.qualityMatchesName(cached.name),
+        )
         .toList();
     if (matched.isEmpty) {
       debugPrint(
         'DebrifyTV: Quality filter matched 0/${all.length} cached torrents — '
         'falling back to unfiltered.',
       );
-      _notifyQualityFallback();
+      notifyQualityFallback();
       return all;
     }
     if (matched.length != all.length) {
@@ -1607,16 +1524,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// none. Strict here means the queue simply stays empty until a matching
   /// result arrives. Pass true only once the result set is final, where an
   /// empty match genuinely means "this search has nothing".
-  List<Torrent> _applyQualityFilterToTorrents(
+  List<Torrent> applyQualityFilterToTorrents(
     List<Torrent> torrents, {
     bool allowFallback = false,
   }) {
-    if (!_tvFilters.hasQuality || torrents.isEmpty) return torrents;
+    if (!_owners.settings.tvFilters.hasQuality || torrents.isEmpty)
+      return torrents;
     final matched = torrents
-        .where((t) => _tvFilters.qualityMatchesName(t.name))
+        .where((t) => _owners.settings.tvFilters.qualityMatchesName(t.name))
         .toList();
     if (matched.isEmpty && allowFallback) {
-      _notifyQualityFallback();
+      notifyQualityFallback();
       return torrents;
     }
     return matched;
@@ -1625,11 +1543,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Tells the user once per playback session that the quality filter was
   /// relaxed. Rate-limited because the quick-play queue is rebuilt per engine
   /// and channel switches re-enter the same path.
-  void _notifyQualityFallback() {
-    if (_qualityFallbackNotified) return;
-    _qualityFallbackNotified = true;
-    _showSnack(
-      'No ${_tvFilters.summary()} sources found — playing anything available.',
+  void notifyQualityFallback() {
+    if (_owners.session.qualityFallbackNotified) return;
+    _owners.session.qualityFallbackNotified = true;
+    showSnack(
+      'No ${_owners.settings.tvFilters.summary()} sources found — playing anything available.',
       color: Colors.orange,
     );
   }
@@ -1645,21 +1563,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// [_rdSizeRejectionLimit] consecutive size-only rejections the size filter
   /// is relaxed for the rest of the session (with a snackbar) — the same
   /// degrade-don't-fail contract the other providers get per torrent.
-  bool _rdLinkPassesSizeRules(Map<String, dynamic> unrestrict) {
+  bool rdLinkPassesSizeRules(Map<String, dynamic> unrestrict) {
     final bytes = (unrestrict['filesize'] as num?)?.toInt() ?? 0;
     if (bytes <= 0) return true; // RD didn't report a size — don't guess.
     // Trailer/sample guard, matching Torbox/Premiumize/PikPak/AllDebrid.
     if (bytes < DebrifyTvConstants.torboxMinVideoSizeBytes) return false;
-    if (_sizeFilterRelaxed || !_tvFilters.hasSize) return true;
-    if (_tvFilters.sizeMatchesBytes(bytes)) {
-      _rdSizeRejections = 0;
+    if (_owners.session.sizeFilterRelaxed ||
+        !_owners.settings.tvFilters.hasSize)
+      return true;
+    if (_owners.settings.tvFilters.sizeMatchesBytes(bytes)) {
+      _owners.session.rdSizeRejections = 0;
       return true;
     }
-    _rdSizeRejections++;
-    if (_rdSizeRejections >= DebrifyTvConstants.rdSizeRejectionLimit) {
-      _sizeFilterRelaxed = true;
-      _showSnack(
-        'Few ${_tvFilters.summary()} files here — playing other sizes too.',
+    _owners.session.rdSizeRejections++;
+    if (_owners.session.rdSizeRejections >=
+        DebrifyTvConstants.rdSizeRejectionLimit) {
+      _owners.session.sizeFilterRelaxed = true;
+      showSnack(
+        'Few ${_owners.settings.tvFilters.summary()} files here — playing other sizes too.',
         color: Colors.orange,
       );
       return true;
@@ -1667,7 +1588,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return false;
   }
 
-  List<CachedTorrent> _selectTorrentsForPlayback(
+  List<CachedTorrent> selectTorrentsForPlayback(
     DebrifyTvChannelCacheEntry entry,
     List<String> normalizedKeywords,
   ) {
@@ -1689,7 +1610,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         int count = 0;
         for (final cached in all) {
           if (!cached.keywords.contains(keyword)) continue;
-          final hash = _normalizeInfohash(cached.infohash);
+          final hash = normalizeInfohash(cached.infohash);
           if (hash.isEmpty || seenHashes.contains(hash)) {
             continue;
           }
@@ -1709,7 +1630,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (selected.length < DebrifyTvConstants.playbackTorrentThreshold) {
       for (final cached in all) {
-        final hash = _normalizeInfohash(cached.infohash);
+        final hash = normalizeInfohash(cached.infohash);
         if (hash.isEmpty || seenHashes.contains(hash)) {
           continue;
         }
@@ -1726,7 +1647,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return selected;
   }
 
-  String _providerDisplay(String provider) {
+  String providerDisplay(String provider) {
     if (provider == DebrifyTvConstants.providerTorbox) return 'Torbox';
     if (provider == DebrifyTvConstants.providerPikPak) return 'PikPak';
     if (provider == DebrifyTvConstants.providerPremiumize) return 'Premiumize';
@@ -1737,19 +1658,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Quality + size pickers for Debrify TV playback. One shared setting for
   /// both channels and quick play, so the same feed rules apply wherever you
   /// start watching. Nothing selected in a row = that facet is off.
-  Widget _tvFilterChips({StateSetter? dialogSetState}) {
+  Widget tvFilterChips({StateSetter? dialogSetState}) {
     void applyFilters(DebrifyTvFilters next) {
-      setState(() => _tvFilters = next);
+      setState(() => _owners.settings.tvFilters = next);
       // "At your quality" is computed WITH the filter; stale memos would
       // keep the old filter's count while playback uses the new one.
-      _invalidateSpotlightStats();
+      invalidateSpotlightStats();
       dialogSetState?.call(() {});
     }
 
     void toggleQuality(QualityTier quality) {
-      final next = Set<QualityTier>.from(_tvFilters.qualities);
+      final next = Set<QualityTier>.from(_owners.settings.tvFilters.qualities);
       if (!next.remove(quality)) next.add(quality);
-      applyFilters(DebrifyTvFilters(qualities: next, sizes: _tvFilters.sizes));
+      applyFilters(
+        DebrifyTvFilters(
+          qualities: next,
+          sizes: _owners.settings.tvFilters.sizes,
+        ),
+      );
       unawaited(
         DebrifyTvStorage.setDebrifyTvFilterQualities(
           next.map((e) => e.name).toList(),
@@ -1758,10 +1684,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     void toggleSize(SizeBucket bucket) {
-      final next = Set<SizeBucket>.from(_tvFilters.sizes);
+      final next = Set<SizeBucket>.from(_owners.settings.tvFilters.sizes);
       if (!next.remove(bucket)) next.add(bucket);
       applyFilters(
-        DebrifyTvFilters(qualities: _tvFilters.qualities, sizes: next),
+        DebrifyTvFilters(
+          qualities: _owners.settings.tvFilters.qualities,
+          sizes: next,
+        ),
       );
       unawaited(
         DebrifyTvStorage.setDebrifyTvFilterSizes(
@@ -1799,8 +1728,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             for (final quality in QualityTier.values)
               _SpotlightChoiceChip(
                 label: DebrifyTvFilters.qualityLabel(quality),
-                selected: _tvFilters.qualities.contains(quality),
-                enabled: !_isBusy,
+                selected: _owners.settings.tvFilters.qualities.contains(
+                  quality,
+                ),
+                enabled: !_owners.session.isBusy,
                 onPressed: () => toggleQuality(quality),
               ),
           ],
@@ -1815,8 +1746,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             for (final bucket in SizeBucket.values)
               _SpotlightChoiceChip(
                 label: DebrifyTvFilters.sizeLabel(bucket),
-                selected: _tvFilters.sizes.contains(bucket),
-                enabled: !_isBusy,
+                selected: _owners.settings.tvFilters.sizes.contains(bucket),
+                enabled: !_owners.session.isBusy,
                 onPressed: () => toggleSize(bucket),
               ),
           ],
@@ -1825,33 +1756,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Widget _providerChoiceChips(
+  Widget providerChoiceChips(
     DebrifyTvSettingsScope scope, {
     StateSetter? dialogSetState,
   }) {
     final bool isQuickScope = scope == DebrifyTvSettingsScope.quickPlay;
-    final String currentProvider = isQuickScope ? _quickProvider : _provider;
+    final String currentProvider = isQuickScope
+        ? _owners.settings.quickProvider
+        : _owners.settings.provider;
 
     void handleSelection(String value) {
-      if (!_isProviderSelectable(value)) {
+      if (!isProviderSelectable(value)) {
         return;
       }
       if (isQuickScope) {
-        if (_quickProvider == value) {
+        if (_owners.settings.quickProvider == value) {
           return;
         }
         setState(() {
-          _quickProvider = value;
+          _owners.settings.quickProvider = value;
         });
         dialogSetState?.call(() {});
         return;
       }
 
-      if (_provider == value) {
+      if (_owners.settings.provider == value) {
         return;
       }
       setState(() {
-        _provider = value;
+        _owners.settings.provider = value;
       });
       dialogSetState?.call(() {});
       unawaited(DebrifyTvStorage.saveDebrifyTvProvider(value));
@@ -1868,7 +1801,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         child: _SpotlightChoiceChip(
           label: label,
           selected: currentProvider == value,
-          enabled: available && !_isBusy,
+          enabled: available && !_owners.session.isBusy,
           onPressed: () => handleSelection(value),
         ),
       );
@@ -1881,33 +1814,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         providerChip(
           value: DebrifyTvConstants.providerRealDebrid,
           label: 'Real Debrid',
-          available: _rdAvailable,
+          available: _owners.settings.rdAvailable,
           unavailableMessage:
               'Enable Real Debrid and add an API key in Settings.',
         ),
         providerChip(
           value: DebrifyTvConstants.providerTorbox,
           label: 'Torbox',
-          available: _torboxAvailable,
+          available: _owners.settings.torboxAvailable,
           unavailableMessage: 'Enable Torbox and add an API key in Settings.',
         ),
         providerChip(
           value: DebrifyTvConstants.providerPikPak,
           label: 'PikPak',
-          available: _pikpakAvailable,
+          available: _owners.settings.pikpakAvailable,
           unavailableMessage: 'Log in to PikPak in Settings.',
         ),
         providerChip(
           value: DebrifyTvConstants.providerPremiumize,
           label: 'Premiumize',
-          available: _premiumizeAvailable,
+          available: _owners.settings.premiumizeAvailable,
           unavailableMessage:
               'Enable Premiumize and add an API key in Settings.',
         ),
         providerChip(
           value: DebrifyTvConstants.providerAllDebrid,
           label: 'AllDebrid',
-          available: _allDebridAvailable,
+          available: _owners.settings.allDebridAvailable,
           unavailableMessage:
               'Enable AllDebrid and add an API key in Settings.',
         ),
@@ -1921,7 +1854,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     void Function(void Function()) setState,
   ) {
     if (raw.isEmpty) return false;
-    final parsed = _parseKeywords(raw.replaceAll('\n', ','));
+    final parsed = parseKeywords(raw.replaceAll('\n', ','));
     if (parsed.isEmpty) return false;
     var limitReached = false;
     setState(() {
@@ -1942,14 +1875,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         keywordList.length >= DebrifyTvConstants.maxChannelKeywords;
   }
 
-  Future<DebrifyTvChannel?> _openChannelDialog({
+  Future<DebrifyTvChannel?> openChannelDialog({
     DebrifyTvChannel? existing,
   }) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final keywordInputController = TextEditingController();
     FocusNode? channelNameFocus;
     FocusNode? channelKeywordFocus;
-    if (_isAndroidTv) {
+    if (_owners.settings.isAndroidTv) {
       channelNameFocus = FocusNode(debugLabel: 'DebrifyTVChannelName');
       channelKeywordFocus = FocusNode(debugLabel: 'DebrifyTVChannelKeyword');
     }
@@ -1984,7 +1917,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               Future<void> submit() async {
                 final pendingRaw = keywordInputController.text.trim();
                 if (pendingRaw.isNotEmpty) {
-                  final pendingKeywords = _parseKeywords(pendingRaw);
+                  final pendingKeywords = parseKeywords(pendingRaw);
                   for (final rawKw in pendingKeywords) {
                     final trimmedKw = rawKw.trim();
                     if (trimmedKw.isEmpty) {
@@ -2071,7 +2004,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     TvTextField(
                       controller: nameController,
                       focusNode: channelNameFocus,
-                      autofocus: _isAndroidTv,
+                      autofocus: _owners.settings.isAndroidTv,
                       textCapitalization: TextCapitalization.words,
                       // The shared TV shell/keyboard chrome follows
                       // settings.accent. NOT debrifyTv.accent: legacy
@@ -2209,12 +2142,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       label: 'Channel settings',
                       child: SwitchRow(
                         title: 'Avoid NSFW content',
-                        subtitle: _viewerForcesNsfw
+                        subtitle: _owners.settings.viewerForcesNsfw
                             ? 'Always on for this profile'
                             : 'Best-effort filter while building this channel',
-                        value: _viewerForcesNsfw || avoidNsfw,
+                        value: _owners.settings.viewerForcesNsfw || avoidNsfw,
                         onChanged: (v) {
-                          if (_viewerForcesNsfw) return;
+                          if (_owners.settings.viewerForcesNsfw) return;
                           setModalState(() => avoidNsfw = v);
                         },
                       ),
@@ -2263,14 +2196,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return result;
   }
 
-  Future<void> _handleImportChannels() async {
-    if (_isBusy) {
+  Future<void> handleImportChannels() async {
+    if (_owners.session.isBusy) {
       return;
     }
 
     // Set busy to block interactions during dialog
     setState(() {
-      _isBusy = true;
+      _owners.session.isBusy = true;
     });
 
     final mode = await _selectImportMode();
@@ -2285,7 +2218,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (mode == null || !mounted) {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
@@ -2296,7 +2229,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await _handleImportChannelsFromDevice();
         break;
       case ImportChannelsMode.url:
-        await _handleImportChannelsFromUrl();
+        await handleImportChannelsFromUrl();
         break;
       case ImportChannelsMode.community:
         await _handleImportChannelsFromCommunity();
@@ -2313,7 +2246,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return ImportChannelsDialog(isAndroidTv: _isAndroidTv);
+        return ImportChannelsDialog(isAndroidTv: _owners.settings.isAndroidTv);
       },
     );
   }
@@ -2375,16 +2308,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<void> _handleExportChannels() async {
-    if (_isBusy || !mounted) return;
+  Future<void> handleExportChannels() async {
+    if (_owners.session.isBusy || !mounted) return;
     if (PlatformUtil.isTvOS) {
       await _showChannelExportUnavailableOnAppleTv();
       return;
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Loading channels for export…';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Loading channels for export…';
     });
 
     try {
@@ -2400,7 +2333,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final health = await runCaptured(DebrifyTvCacheService.loadRailHealth);
       if (!mounted) return;
       if (channels.isEmpty) {
-        _showSnack('There are no channels to export.', color: Colors.orange);
+        showSnack('There are no channels to export.', color: Colors.orange);
         return;
       }
 
@@ -2417,7 +2350,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       if (!mounted || selectedIds == null || selectedIds.isEmpty) return;
 
-      setState(() => _status = 'Preparing channel archive…');
+      setState(() => _owners.session.status = 'Preparing channel archive…');
       late List<DebrifyTvChannelArchiveSource> sources;
       final bytes = await _runChannelExportProgress<Uint8List>((
         setStage,
@@ -2457,7 +2390,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       if (!mounted) return;
       if (bytes.length > DebrifyTvZipImporter.maxPortableFileBytes) {
-        _showSnack(
+        showSnack(
           'The ZIP is over 100 MB. Export fewer channels at a time.',
           color: Colors.orange,
         );
@@ -2487,7 +2420,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         0,
         (sum, source) => sum + source.savedHashCount,
       );
-      _showSnack(
+      showSnack(
         'Exported ${sources.length} channel${sources.length == 1 ? '' : 's'} '
         'with $hashes saved hash${hashes == 1 ? '' : 'es'}.',
         color: Colors.green,
@@ -2497,23 +2430,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         'DebrifyTV: channel archive export failed (${error.runtimeType})',
       );
       if (mounted) {
-        _showSnack('Failed to export channels.', color: Colors.red);
+        showSnack('Failed to export channels.', color: Colors.red);
       }
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
       }
     }
   }
 
-  Future<void> _handleAddChannel() async {
-    await _syncProviderAvailability();
-    final channel = await _openChannelDialog();
+  Future<void> handleAddChannel() async {
+    await syncProviderAvailability();
+    final channel = await openChannelDialog();
     if (channel != null) {
-      await _createOrUpdateChannel(channel, isEdit: false);
+      await createOrUpdateChannel(channel, isEdit: false);
     }
   }
 
@@ -2536,22 +2469,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Reject an implausibly large pick before reading it into memory.
     if (pickedFile.size > DebrifyTvZipImporter.maxPortableFileBytes) {
-      _showSnack('Selected file is too large to import.', color: Colors.orange);
+      showSnack('Selected file is too large to import.', color: Colors.orange);
       return;
     }
     Uint8List bytes;
     try {
       bytes = await _readPickedFileBytes(pickedFile);
     } catch (error) {
-      _showSnack(
-        'Unable to read selected file: ${_formatImportError(error)}',
+      showSnack(
+        'Unable to read selected file: ${formatImportError(error)}',
         color: Colors.red,
       );
       return;
     }
 
     if (bytes.isEmpty) {
-      _showSnack('Selected file appears to be empty.', color: Colors.orange);
+      showSnack('Selected file appears to be empty.', color: Colors.orange);
       return;
     }
 
@@ -2560,38 +2493,38 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Importing channel from local storage…';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Importing channel from local storage…';
     });
 
     try {
-      await _safeImportChannelBytes(
+      await safeImportChannelBytes(
         sourceName: pickedFile.name,
         bytes: bytes,
         origin: DebrifyTvChannelImportOrigin.device,
       );
     } catch (error) {
-      _showSnack(
-        'Import failed: ${_formatImportError(error)}',
+      showSnack(
+        'Import failed: ${formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
-        _closeProgressDialog();
+        closeProgressDialog();
       }
     }
   }
 
-  Future<void> _handleImportChannelsFromUrl() async {
+  Future<void> handleImportChannelsFromUrl() async {
     final input = await _promptImportUrl();
     if (input == null) {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
@@ -2614,13 +2547,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         throw const FormatException('invalid');
       }
     } catch (_) {
-      _showSnack(
+      showSnack(
         'Enter a valid debrify:// link or http(s) URL.',
         color: Colors.red,
       );
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
@@ -2631,12 +2564,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Downloading channel file…';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Downloading channel file…';
     });
 
-    _showChannelCreationDialog('Importing channel…');
-    _updateProgress(['Downloading channel file…']);
+    showChannelCreationDialog('Importing channel…');
+    updateProgress(['Downloading channel file…']);
 
     try {
       final streamedResponse = await http.Request('GET', uri).send();
@@ -2657,13 +2590,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final progressMessage = percent != null
             ? 'Downloading… ${percent.toStringAsFixed(0)}%'
             : 'Downloading… ${formatDebrifyTvBytes(receivedBytes)}';
-        _updateProgress([progressMessage], replace: true);
+        updateProgress([progressMessage], replace: true);
       }
 
       final bytes = builder.takeBytes();
       if (bytes.isEmpty) {
-        _updateProgress(['Downloaded file is empty.'], replace: true);
-        _showSnack('Downloaded file is empty.', color: Colors.orange);
+        updateProgress(['Downloaded file is empty.'], replace: true);
+        showSnack('Downloaded file is empty.', color: Colors.orange);
         return;
       }
 
@@ -2671,25 +2604,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ? uri.pathSegments.last
           : 'channel.${_guessExtensionFromHeaders(streamedResponse.headers)}';
 
-      _updateProgress(['Download complete. Processing…'], replace: true);
+      updateProgress(['Download complete. Processing…'], replace: true);
 
-      await _safeImportChannelBytes(
+      await safeImportChannelBytes(
         sourceName: sourceName,
         bytes: bytes,
         origin: DebrifyTvChannelImportOrigin.url,
       );
     } catch (error) {
-      _showSnack(
-        'Import failed: ${_formatImportError(error)}',
+      showSnack(
+        'Import failed: ${formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
-        _closeProgressDialog();
+        closeProgressDialog();
       }
     }
   }
@@ -2699,7 +2632,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (selectedChannels == null || selectedChannels.isEmpty) {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
@@ -2717,11 +2650,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Importing community channels...';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Importing community channels...';
     });
 
-    _showChannelCreationDialog('Importing community channels...');
+    showChannelCreationDialog('Importing community channels...');
 
     int successCount = 0;
     int failureCount = 0;
@@ -2729,7 +2662,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     for (int i = 0; i < selectedChannels.length; i++) {
       final channel = selectedChannels[i];
-      _updateProgress([
+      updateProgress([
         'Downloading channel ${i + 1} of ${selectedChannels.length}...',
         channel.name,
       ], replace: true);
@@ -2745,7 +2678,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         // Import using existing method (don't show dialog/summary for each channel)
-        final success = await _importDebrifyBytes(
+        final success = await importDebrifyBytes(
           channel.name,
           bytes,
           showDialog: false,
@@ -2764,7 +2697,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    _updateProgress([
+    updateProgress([
       'Import complete!',
       if (successCount > 0) 'Successfully imported $successCount channel(s)',
       if (failureCount > 0) 'Failed to import $failureCount channel(s)',
@@ -2780,17 +2713,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ? 'Imported $successCount channel${successCount > 1 ? 's' : ''}${failureCount > 0 ? ', $failureCount failed' : ''}'
         : 'Failed to import channels';
 
-    _showSnack(message, color: snackColor);
+    showSnack(message, color: snackColor);
 
     // Keep dialog open for 2 seconds to show summary
     await Future.delayed(const Duration(seconds: 2));
 
     if (mounted) {
       setState(() {
-        _isBusy = false;
-        _status = '';
+        _owners.session.isBusy = false;
+        _owners.session.status = '';
       });
-      _closeProgressDialog();
+      closeProgressDialog();
     }
   }
 
@@ -2803,7 +2736,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return CommunityChannelsDialog(isAndroidTv: _isAndroidTv);
+        return CommunityChannelsDialog(
+          isAndroidTv: _owners.settings.isAndroidTv,
+        );
       },
     );
   }
@@ -2832,7 +2767,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     final type = _determineImportType(sourceName, bytes);
     if (type == null) {
-      _showSnack(
+      showSnack(
         'Unsupported file type. Select a .zip, .yaml, .txt, or .debrify file.',
         color: Colors.orange,
       );
@@ -2847,11 +2782,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       case DebrifyTvChannelImportType.text:
         return await _importTextBytes(sourceName, bytes);
       case DebrifyTvChannelImportType.debrify:
-        return await _importDebrifyBytes(sourceName, bytes);
+        return await importDebrifyBytes(sourceName, bytes);
     }
   }
 
-  Future<bool> _safeImportChannelBytes({
+  Future<bool> safeImportChannelBytes({
     required String sourceName,
     required Uint8List bytes,
     required DebrifyTvChannelImportOrigin origin,
@@ -2863,13 +2798,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         origin: origin,
       );
     } on FormatException catch (error) {
-      _showSnack(error.message, color: Colors.red);
+      showSnack(error.message, color: Colors.red);
       return false;
     } catch (error) {
       // Corrupt archives throw ArchiveException/RangeError etc., not just
       // FormatException — surface them the same way instead of leaving the
       // import flow (and any progress dialog) stuck.
-      _showSnack('Failed to import channel file: $error', color: Colors.red);
+      showSnack('Failed to import channel file: $error', color: Colors.red);
       return false;
     }
   }
@@ -2921,23 +2856,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ? 'Importing zip…'
         : 'Processing zip…';
 
-    _showChannelCreationDialog(dialogLabel);
-    _updateProgress(['Parsing archive…']);
+    showChannelCreationDialog(dialogLabel);
+    updateProgress(['Parsing archive…']);
 
     final parsed = await parseZipInBackground(bytes);
-    _updateProgress([
+    updateProgress([
       'Parsed ${parsed.channels.length} channel(s)',
       'Saving channel data…',
     ]);
 
-    final persistence = await _persistImportedZipChannels(parsed.channels);
-    _updateProgress([
+    final persistence = await persistImportedZipChannels(parsed.channels);
+    updateProgress([
       'Saved ${persistence.successes.length} channel(s)',
       if (persistence.failures.isNotEmpty)
         '${persistence.failures.length} channel(s) failed',
     ]);
 
-    await _showZipImportSummary(parsed, persistence);
+    await showZipImportSummary(parsed, persistence);
     return persistence.successes.isNotEmpty;
   }
 
@@ -2951,8 +2886,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ? 'Importing YAML…'
         : 'Processing YAML…';
 
-    _showChannelCreationDialog(dialogLabel);
-    _updateProgress(['Parsing YAML…']);
+    showChannelCreationDialog(dialogLabel);
+    updateProgress(['Parsing YAML…']);
 
     final channel = await parseYamlInBackground(sourceName, content);
 
@@ -2961,15 +2896,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       failures: const [],
     );
 
-    _updateProgress(['Saving channel…']);
-    final persistence = await _persistImportedZipChannels(parsed.channels);
-    _updateProgress([
+    updateProgress(['Saving channel…']);
+    final persistence = await persistImportedZipChannels(parsed.channels);
+    updateProgress([
       'Saved ${persistence.successes.length} channel(s)',
       if (persistence.failures.isNotEmpty)
         '${persistence.failures.length} channel(s) failed',
     ]);
 
-    await _showZipImportSummary(parsed, persistence);
+    await showZipImportSummary(parsed, persistence);
     return persistence.successes.isNotEmpty;
   }
 
@@ -3008,8 +2943,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final baseName = _stripExtension(sourceName);
-    final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
-    final channelName = _resolveUniqueChannelName(baseName, lowerExisting);
+    final lowerExisting = _owners.library.channels
+        .map((c) => c.name.toLowerCase())
+        .toSet();
+    final channelName = resolveUniqueChannelName(baseName, lowerExisting);
     final now = DateTime.now();
     final channel = DebrifyTvChannel(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -3021,12 +2958,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       updatedAt: now,
     );
 
-    await _createOrUpdateChannel(channel, isEdit: false);
-    _showSnack('Imported "${channel.name}"', color: Colors.green);
+    await createOrUpdateChannel(channel, isEdit: false);
+    showSnack('Imported "${channel.name}"', color: Colors.green);
     return true;
   }
 
-  Future<bool> _importDebrifyBytes(
+  Future<bool> importDebrifyBytes(
     String sourceName,
     Uint8List bytes, {
     bool showDialog = true,
@@ -3040,14 +2977,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     if (showDialog) {
-      _showChannelCreationDialog('Importing channel…');
+      showChannelCreationDialog('Importing channel…');
     }
-    _updateProgress(['Decoding debrify link…']);
+    updateProgress(['Decoding debrify link…']);
 
     // Decode debrify link
     final result = MagnetYamlService.decode(content);
 
-    _updateProgress(['Parsing channel data…']);
+    updateProgress(['Parsing channel data…']);
 
     // Parse the decoded YAML
     final channel = await parseYamlInBackground(
@@ -3060,16 +2997,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       failures: const [],
     );
 
-    _updateProgress(['Saving channel…']);
-    final persistence = await _persistImportedZipChannels(parsed.channels);
-    _updateProgress([
+    updateProgress(['Saving channel…']);
+    final persistence = await persistImportedZipChannels(parsed.channels);
+    updateProgress([
       'Saved ${persistence.successes.length} channel(s)',
       if (persistence.failures.isNotEmpty)
         '${persistence.failures.length} channel(s) failed',
     ]);
 
     if (showSummary) {
-      await _showZipImportSummary(parsed, persistence);
+      await showZipImportSummary(parsed, persistence);
     }
     return persistence.successes.isNotEmpty;
   }
@@ -3080,29 +3017,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Decoding debrify link…';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Decoding debrify link…';
     });
 
     try {
       final bytes = utf8.encode(debrifyLink);
-      await _safeImportChannelBytes(
+      await safeImportChannelBytes(
         sourceName: 'debrify_link',
         bytes: Uint8List.fromList(bytes),
         origin: DebrifyTvChannelImportOrigin.url,
       );
     } catch (error) {
-      _showSnack(
-        'Import failed: ${_formatImportError(error)}',
+      showSnack(
+        'Import failed: ${formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
-        _closeProgressDialog();
+        closeProgressDialog();
       }
     }
   }
@@ -3255,7 +3192,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return result;
   }
 
-  Future<ZipImportPersistenceResult> _persistImportedZipChannels(
+  Future<ZipImportPersistenceResult> persistImportedZipChannels(
     List<DebrifyTvZipImportedChannel> channels,
   ) async {
     if (channels.isEmpty) {
@@ -3268,7 +3205,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final List<DebrifyTvChannel> appendedChannels = [];
     final Map<String, DebrifyTvChannelCacheEntry> appendedCache = {};
 
-    final Set<String> usedNames = _channels
+    final Set<String> usedNames = _owners.library.channels
         .map((channel) => channel.name.toLowerCase())
         .toSet();
 
@@ -3286,7 +3223,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         continue;
       }
 
-      final uniqueName = _resolveUniqueChannelName(
+      final uniqueName = resolveUniqueChannelName(
         channel.channelName,
         usedNames,
       );
@@ -3346,7 +3283,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ZipImportSaveFailure(
             sourceName: channel.sourceName,
             channelName: uniqueName,
-            reason: _formatImportError(error),
+            reason: formatImportError(error),
           ),
         );
       }
@@ -3354,16 +3291,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (appendedChannels.isNotEmpty && mounted) {
       setState(() {
-        _channels = [..._channels, ...appendedChannels];
-        _channelCache.addAll(appendedCache);
+        _owners.library.channels = [
+          ..._owners.library.channels,
+          ...appendedChannels,
+        ];
+        _owners.library.channelCache.addAll(appendedCache);
       });
-      await _loadChannels();
+      await loadChannels();
     }
 
     return ZipImportPersistenceResult(successes: successes, failures: failures);
   }
 
-  Future<void> _showZipImportSummary(
+  Future<void> showZipImportSummary(
     DebrifyTvZipImportResult parsed,
     ZipImportPersistenceResult persisted,
   ) async {
@@ -3390,10 +3330,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     ];
 
     if (!hasSuccess && failureRows.isEmpty) {
-      _showSnack(
-        'No channels found in the selected zip.',
-        color: Colors.orange,
-      );
+      showSnack('No channels found in the selected zip.', color: Colors.orange);
       return;
     }
 
@@ -3478,19 +3415,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final String names = persisted.successes
           .map((success) => '"${success.channelName}"')
           .join(', ');
-      _showSnack(
+      showSnack(
         'Imported ${persisted.successes.length} channel${persisted.successes.length == 1 ? '' : 's'}: $names',
         color: Colors.green,
       );
     } else if (failureRows.isNotEmpty) {
-      _showSnack(
+      showSnack(
         'Zip import failed: ${failureRows.first.reason}',
         color: Colors.red,
       );
     }
   }
 
-  String _resolveUniqueChannelName(
+  String resolveUniqueChannelName(
     String baseName,
     Set<String> usedLowerCaseNames,
   ) {
@@ -3506,15 +3443,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return candidate;
   }
 
-  Future<void> _handleEditChannel(DebrifyTvChannel channel) async {
-    await _syncProviderAvailability();
+  Future<void> handleEditChannel(DebrifyTvChannel channel) async {
+    await syncProviderAvailability();
 
     // Store current channel's NSFW setting before dialog
     final nsfwBeforeEdit = channel.avoidNsfw;
 
-    final keywords = await _getChannelKeywords(channel.id);
+    final keywords = await getChannelKeywords(channel.id);
     final hydrated = channel.copyWith(keywords: keywords);
-    final updated = await _openChannelDialog(existing: hydrated);
+    final updated = await openChannelDialog(existing: hydrated);
     if (updated != null) {
       // Check if channel's NSFW setting changed
       final nsfwAfterEdit = updated.avoidNsfw;
@@ -3527,18 +3464,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
 
         // Clear existing cache to force full rebuild
-        _channelCache.remove(updated.id);
+        _owners.library.channelCache.remove(updated.id);
 
         // Rebuild cache with new NSFW filter setting (isEdit: false forces full rebuild)
-        await _createOrUpdateChannel(updated, isEdit: false);
+        await createOrUpdateChannel(updated, isEdit: false);
 
-        _showSnack(
+        showSnack(
           'Channel cache rebuilt with updated NSFW filter.',
           color: Colors.green,
         );
       } else {
         // No NSFW change, just normal update
-        await _createOrUpdateChannel(updated, isEdit: true);
+        await createOrUpdateChannel(updated, isEdit: true);
       }
     }
   }
@@ -3588,10 +3525,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return result ?? false;
   }
 
-  Future<void> _handleDeleteChannel(DebrifyTvChannel channel) async {
+  Future<void> handleDeleteChannel(DebrifyTvChannel channel) async {
     // Set busy immediately to block any other interactions
     setState(() {
-      _isBusy = true;
+      _owners.session.isBusy = true;
     });
 
     final confirmed = await _showDebrifyTvConfirmation(
@@ -3612,26 +3549,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     if (confirmed == true && mounted) {
-      await _deleteChannel(channel.id);
-      _showSnack('Channel deleted', color: Colors.orange);
+      await deleteChannel(channel.id);
+      showSnack('Channel deleted', color: Colors.orange);
     }
 
     // Release busy state
     if (mounted) {
       setState(() {
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
     }
   }
 
-  Future<void> _handleShareChannelAsMagnet(DebrifyTvChannel channel) async {
+  Future<void> handleShareChannelAsMagnet(DebrifyTvChannel channel) async {
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Generating channel link…';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Generating channel link…';
     });
 
     try {
@@ -3725,7 +3662,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 tone: DebrifyTvDialogButtonTone.primary,
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: magnetLink));
-                  _showSnack('Channel link copied!', color: Colors.green);
+                  showSnack('Channel link copied!', color: Colors.green);
                   Navigator.of(dialogContext).pop();
                 },
               ),
@@ -3734,15 +3671,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         },
       );
     } catch (error) {
-      _showSnack(
-        'Failed to generate channel link: ${_formatImportError(error)}',
+      showSnack(
+        'Failed to generate channel link: ${formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
       }
     }
@@ -3812,9 +3749,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .replaceAll('\t', '\\t');
   }
 
-  Future<void> _handleDeleteAllChannels() async {
-    if (_channels.isEmpty) {
-      _showSnack('No channels to delete.', color: Colors.orange);
+  Future<void> handleDeleteAllChannels() async {
+    if (_owners.library.channels.isEmpty) {
+      showSnack('No channels to delete.', color: Colors.orange);
       return;
     }
 
@@ -3824,14 +3761,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Set busy immediately to block any other interactions
     setState(() {
-      _isBusy = true;
+      _owners.session.isBusy = true;
     });
 
     final confirmed = await _showDebrifyTvConfirmation(
-      eyebrow: 'Channel library · ${_channels.length} channels',
+      eyebrow: 'Channel library · ${_owners.library.channels.length} channels',
       title: 'Delete every channel?',
       message:
-          'This removes all ${_channels.length} channels and every cached title pool. This cannot be undone.',
+          'This removes all ${_owners.library.channels.length} channels and every cached title pool. This cannot be undone.',
       confirmLabel: 'Delete all',
       icon: Icons.delete_sweep_outlined,
       danger: true,
@@ -3848,14 +3785,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       // Release busy state if cancelled
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
     }
 
     setState(() {
-      _isBusy = true;
+      _owners.session.isBusy = true;
     });
 
     try {
@@ -3864,31 +3801,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         origin: WebDavSyncMutationOrigin.maintenance,
       );
       setState(() {
-        _channels = const <DebrifyTvChannel>[];
-        _channelCache.clear();
+        _owners.library.channels = const <DebrifyTvChannel>[];
+        _owners.library.channelCache.clear();
       });
-      _showSnack('All channels deleted.', color: Colors.orange);
+      showSnack('All channels deleted.', color: Colors.orange);
     } catch (error) {
-      _showSnack(
-        'Failed to delete channels: ${_formatImportError(error)}',
+      showSnack(
+        'Failed to delete channels: ${formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
     }
   }
 
-  Future<void> _createOrUpdateChannel(
+  Future<void> createOrUpdateChannel(
     DebrifyTvChannel channel, {
     required bool isEdit,
   }) async {
-    final normalizedKeywords = _normalizedKeywords(channel.keywords);
+    final normalizedKeywords = this.normalizedKeywords(channel.keywords);
     if (normalizedKeywords.isEmpty) {
-      _showSnack(
+      showSnack(
         'Add at least one keyword before saving.',
         color: Colors.orange,
       );
@@ -3899,14 +3836,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       'DebrifyTV: ${isEdit ? 'Updating' : 'Creating'} channel "${channel.name}" with ${normalizedKeywords.length} keyword(s): ${normalizedKeywords.join(', ')}',
     );
 
-    final int estimatedSeconds = _estimatedWarmDurationSeconds(
+    final int estimatedSeconds = estimatedWarmDurationSeconds(
       normalizedKeywords.length,
       totalKeywordUniverse: normalizedKeywords.length,
     );
     bool progressShown = false;
     void ensureProgressDialog({int? countdownSeconds}) {
       if (!progressShown) {
-        _showChannelCreationDialog(
+        showChannelCreationDialog(
           channel.name,
           countdownSeconds: countdownSeconds ?? estimatedSeconds,
         );
@@ -3915,9 +3852,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     try {
-      final baseline = isEdit ? await _ensureCacheEntry(channel.id) : null;
+      final baseline = isEdit ? await ensureCacheEntry(channel.id) : null;
       if (normalizedKeywords.length > DebrifyTvConstants.maxChannelKeywords) {
-        _showSnack(
+        showSnack(
           'Channels support up to ${DebrifyTvConstants.maxChannelKeywords} keywords. Remove some and try again.',
           color: Colors.orange,
         );
@@ -3976,7 +3913,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         if (addedKeywords.isNotEmpty) {
           ensureProgressDialog(
-            countdownSeconds: _estimatedWarmDurationSeconds(
+            countdownSeconds: estimatedWarmDurationSeconds(
               addedKeywords.length,
               totalKeywordUniverse: normalizedKeywords.length,
             ),
@@ -3984,7 +3921,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint(
             'DebrifyTV: Warming new keywords for "${channel.name}": ${addedKeywords.join(', ')}',
           );
-          workingEntry = await _computeChannelCacheEntry(
+          workingEntry = await computeChannelCacheEntry(
             channel,
             normalizedKeywords,
             baseline: workingEntry,
@@ -4006,7 +3943,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       } else {
         ensureProgressDialog();
         debugPrint('DebrifyTV: Running full warm-up for "${channel.name}"');
-        workingEntry = await _computeChannelCacheEntry(
+        workingEntry = await computeChannelCacheEntry(
           channel,
           normalizedKeywords,
         );
@@ -4017,7 +3954,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       final entry = workingEntry;
       if (entry == null) {
-        _showSnack(
+        showSnack(
           'Failed to build channel cache. Please try again.',
           color: Colors.red,
         );
@@ -4042,18 +3979,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         if (isEdit && baseline != null) {
           setState(() {
-            _channelCache[channel.id] = baseline;
-            _spotlightStats.remove(channel.id);
+            _owners.library.channelCache[channel.id] = baseline;
+            _owners.stage.spotlightStats.remove(channel.id);
           });
-          _refreshSpotlightStatsIfFocused(channel.id);
+          refreshSpotlightStatsIfFocused(channel.id);
           await DebrifyTvCacheService.saveEntry(
             baseline,
             origin: WebDavSyncMutationOrigin.rollback,
           );
         } else {
           setState(() {
-            _channelCache.remove(channel.id);
-            _spotlightStats.remove(channel.id);
+            _owners.library.channelCache.remove(channel.id);
+            _owners.stage.spotlightStats.remove(channel.id);
           });
           await DebrifyTvCacheService.removeEntry(
             channel.id,
@@ -4061,7 +3998,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           );
         }
 
-        _showSnack(message, color: Colors.orange);
+        showSnack(message, color: Colors.orange);
         return;
       }
 
@@ -4072,43 +4009,48 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
 
       setState(() {
-        final index = _channels.indexWhere((c) => c.id == displayChannel.id);
+        final index = _owners.library.channels.indexWhere(
+          (c) => c.id == displayChannel.id,
+        );
         if (index == -1) {
-          _channels = <DebrifyTvChannel>[..._channels, displayChannel];
+          _owners.library.channels = <DebrifyTvChannel>[
+            ..._owners.library.channels,
+            displayChannel,
+          ];
         } else {
-          final next = List<DebrifyTvChannel>.from(_channels);
+          final next = List<DebrifyTvChannel>.from(_owners.library.channels);
           next[index] = displayChannel;
-          _channels = next;
+          _owners.library.channels = next;
         }
-        _channelCache[displayChannel.id] = entry;
-        _spotlightStats.remove(displayChannel.id);
+        _owners.library.channelCache[displayChannel.id] = entry;
+        _owners.stage.spotlightStats.remove(displayChannel.id);
       });
 
       await DebrifyTvRepository.instance.upsertChannel(
         updatedChannel.toRecord(),
       );
       await DebrifyTvCacheService.saveEntry(entry);
-      await _loadChannels();
+      await loadChannels();
       // Memo removal alone would leave the stage on its placeholder: only a
       // focus MOVE computes, and editing from the stage doesn't move focus.
-      _refreshSpotlightStatsIfFocused(displayChannel.id);
+      refreshSpotlightStatsIfFocused(displayChannel.id);
 
       final successMsg = isEdit
           ? 'Channel "${updatedChannel.name}" updated'
           : 'Channel "${updatedChannel.name}" saved';
-      _showSnack(successMsg, color: Colors.green);
+      showSnack(successMsg, color: Colors.green);
       debugPrint(
         'DebrifyTV: $successMsg (torrents cached: ${entry.torrents.length})',
       );
     } catch (e) {
       debugPrint('DebrifyTV: Channel creation failed for ${channel.name}: $e');
-      _showSnack(
+      showSnack(
         'Failed to build channel cache. Please try again.',
         color: Colors.red,
       );
     } finally {
       if (progressShown) {
-        _closeProgressDialog();
+        closeProgressDialog();
       }
     }
   }
@@ -4118,49 +4060,51 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// single-element queue — the pick may not be cached at the provider, and
   /// a one-item queue has nothing to fall back to, which would make a
   /// deliberate choice fail exactly where Tune in would have succeeded.
-  Future<void> _watchChannel(
+  Future<void> watchChannel(
     DebrifyTvChannel channel, {
     CachedTorrent? leadWith,
   }) async {
     debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
-    _qualityFallbackNotified = false;
-    _rdSizeRejections = 0;
-    _sizeFilterRelaxed = false;
+    _owners.session.qualityFallbackNotified = false;
+    _owners.session.rdSizeRejections = 0;
+    _owners.session.sizeFilterRelaxed = false;
 
-    final keywords = await _getChannelKeywords(channel.id);
+    final keywords = await getChannelKeywords(channel.id);
     if (keywords.isEmpty) {
       debugPrint('❌ [WATCH] No keywords');
       MainPageBridge.notifyAutoLaunchFailed('Channel has no keywords');
-      _showSnack('Channel has no keywords yet', color: Colors.orange);
+      showSnack('Channel has no keywords yet', color: Colors.orange);
       return;
     }
     debugPrint('✅ [WATCH] Keywords: ${keywords.length}');
 
-    await _syncProviderAvailability();
-    final bool providerReady = switch (_provider) {
-      DebrifyTvConstants.providerTorbox => _torboxAvailable,
-      DebrifyTvConstants.providerPikPak => _pikpakAvailable,
-      DebrifyTvConstants.providerPremiumize => _premiumizeAvailable,
-      DebrifyTvConstants.providerAllDebrid => _allDebridAvailable,
-      _ => _rdAvailable,
+    await syncProviderAvailability();
+    final bool providerReady = switch (_owners.settings.provider) {
+      DebrifyTvConstants.providerTorbox => _owners.settings.torboxAvailable,
+      DebrifyTvConstants.providerPikPak => _owners.settings.pikpakAvailable,
+      DebrifyTvConstants.providerPremiumize =>
+        _owners.settings.premiumizeAvailable,
+      DebrifyTvConstants.providerAllDebrid =>
+        _owners.settings.allDebridAvailable,
+      _ => _owners.settings.rdAvailable,
     };
     if (!providerReady) {
-      debugPrint('❌ [WATCH] Provider not ready: $_provider');
+      debugPrint('❌ [WATCH] Provider not ready: ${_owners.settings.provider}');
       MainPageBridge.notifyAutoLaunchFailed('Provider not configured');
-      final providerName = _providerDisplay(_provider);
-      _showSnack(
+      final providerName = providerDisplay(_owners.settings.provider);
+      showSnack(
         'Enable $providerName in Settings to watch this channel',
         color: Colors.orange,
       );
       return;
     }
-    debugPrint('✅ [WATCH] Provider ready: $_provider');
+    debugPrint('✅ [WATCH] Provider ready: ${_owners.settings.provider}');
 
-    final cacheEntry = await _ensureCacheEntry(channel.id);
+    final cacheEntry = await ensureCacheEntry(channel.id);
     if (cacheEntry == null) {
       debugPrint('❌ [WATCH] Cache entry is null');
       MainPageBridge.notifyAutoLaunchFailed('Cache entry not found');
-      _showSnack(
+      showSnack(
         'Channel cache not found. Edit the channel to rebuild it.',
         color: Colors.orange,
       );
@@ -4176,14 +4120,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final message =
           cacheEntry.errorMessage ??
           'Channel cache failed to build. Try editing and saving again.';
-      _showSnack(message, color: Colors.orange);
+      showSnack(message, color: Colors.orange);
       return;
     }
 
     if (cacheEntry.torrents.isEmpty) {
       debugPrint('❌ [WATCH] Cache has no torrents');
       MainPageBridge.notifyAutoLaunchFailed('Cache has no torrents');
-      _showSnack(
+      showSnack(
         'No torrents cached yet. Try editing the channel keywords.',
         color: Colors.orange,
       );
@@ -4191,17 +4135,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     debugPrint('✅ [WATCH] Cache has ${cacheEntry.torrents.length} torrents');
 
-    final previousKeywords = _keywordsController.text;
+    final previousKeywords = _owners.library.keywordsController.text;
 
-    final int resolvedChannelNumber = _resolveChannelNumber(channel);
+    final int resolvedChannelNumber = resolveChannelNumber(channel);
 
     setState(() {
-      _currentWatchingChannelId = channel.id; // Track for channel switching
+      _owners.library.currentWatchingChannelId =
+          channel.id; // Track for channel switching
     });
-    _keywordsController.text = keywords.join(', ');
+    _owners.library.keywordsController.text = keywords.join(', ');
 
-    final normalizedKeywords = _normalizedKeywords(keywords);
-    final playbackSelection = _selectTorrentsForPlayback(
+    final normalizedKeywords = this.normalizedKeywords(keywords);
+    final playbackSelection = selectTorrentsForPlayback(
       cacheEntry,
       normalizedKeywords,
     );
@@ -4231,44 +4176,46 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       '✅ [WATCH] Selected ${cachedTorrents.length} torrents for playback',
     );
 
-    if (_provider == DebrifyTvConstants.providerTorbox) {
+    if (_owners.settings.provider == DebrifyTvConstants.providerTorbox) {
       debugPrint('🎬 [WATCH] Launching Torbox flow...');
-      await _watchTorboxWithCachedTorrents(
+      await watchTorboxWithCachedTorrents(
         cachedTorrents,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == DebrifyTvConstants.providerPikPak) {
+    } else if (_owners.settings.provider == DebrifyTvConstants.providerPikPak) {
       debugPrint('🎬 [WATCH] Launching PikPak flow...');
-      await _watchPikPakWithCachedTorrents(
+      await watchPikPakWithCachedTorrents(
         cachedTorrents,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == DebrifyTvConstants.providerPremiumize) {
+    } else if (_owners.settings.provider ==
+        DebrifyTvConstants.providerPremiumize) {
       debugPrint('🎬 [WATCH] Launching Premiumize flow...');
-      await _watchPremiumizeWithCachedTorrents(
+      await watchPremiumizeWithCachedTorrents(
         cachedTorrents,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == DebrifyTvConstants.providerAllDebrid) {
+    } else if (_owners.settings.provider ==
+        DebrifyTvConstants.providerAllDebrid) {
       debugPrint('🎬 [WATCH] Launching AllDebrid flow...');
-      await _watchAllDebridWithCachedTorrents(
+      await watchAllDebridWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _owners.settings.viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
     } else {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
-      await _watchWithCachedTorrents(
+      await watchWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _owners.settings.viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
@@ -4279,72 +4226,73 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    _keywordsController.text = previousKeywords;
+    _owners.library.keywordsController.text = previousKeywords;
   }
 
-  Future<void> _watch() async {
-    _launchedPlayer = false;
-    await _stopPrefetch();
-    _prefetchStopRequested = false;
-    _watchCancelled = false;
-    _qualityFallbackNotified = false;
-    _rdSizeRejections = 0;
-    _sizeFilterRelaxed = false;
-    _originalMaxCap = null;
+  Future<void> watch() async {
+    _owners.session.launchedPlayer = false;
+    await stopPrefetch();
+    _owners.prefetch.prefetchStopRequested = false;
+    _owners.session.watchCancelled = false;
+    _owners.session.qualityFallbackNotified = false;
+    _owners.session.rdSizeRejections = 0;
+    _owners.session.sizeFilterRelaxed = false;
+    _owners.session.originalMaxCap = null;
     void _log(String m) {
-      final copy = List<String>.from(_progress.value)..add(m);
-      _progress.value = copy;
+      final copy = List<String>.from(_owners.progress.progress.value)..add(m);
+      _owners.progress.progress.value = copy;
       debugPrint('DebrifyTV: ' + m);
     }
 
-    await _syncProviderAvailability();
-    if (!_rdAvailable &&
-        !_torboxAvailable &&
-        !_pikpakAvailable &&
-        !_premiumizeAvailable &&
-        !_allDebridAvailable) {
+    await syncProviderAvailability();
+    if (!_owners.settings.rdAvailable &&
+        !_owners.settings.torboxAvailable &&
+        !_owners.settings.pikpakAvailable &&
+        !_owners.settings.premiumizeAvailable &&
+        !_owners.settings.allDebridAvailable) {
       if (mounted) {
         setState(() {
-          _status =
+          _owners.session.status =
               'Connect Real Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use Debrify TV.';
         });
       }
-      _showSnack(
+      showSnack(
         'Connect Real Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use Debrify TV.',
         color: Colors.orange,
       );
       return;
     }
-    final text = _keywordsController.text.trim();
+    final text = _owners.library.keywordsController.text.trim();
     debugPrint('DebrifyTV: Watch started. Raw input="$text"');
     if (text.isEmpty) {
       setState(() {
-        _status = 'Enter one or more keywords, separated by commas';
+        _owners.session.status =
+            'Enter one or more keywords, separated by commas';
       });
       debugPrint('DebrifyTV: Aborting. No keywords provided.');
       return;
     }
 
-    final keywords = _parseKeywords(text);
+    final keywords = parseKeywords(text);
     debugPrint(
       'DebrifyTV: Parsed ${keywords.length} keyword(s): ${keywords.join(' | ')}',
     );
     if (keywords.isEmpty) {
       setState(() {
-        _status = 'Enter valid keywords';
+        _owners.session.status = 'Enter valid keywords';
       });
       debugPrint(
         'DebrifyTV: Aborting. Parsed keywords became empty after trimming.',
       );
       return;
     }
-    if (keywords.length > _quickPlayMaxKeywords) {
+    if (keywords.length > _owners.settings.quickPlayMaxKeywords) {
       setState(() {
-        _status =
-            'Quick Play supports up to $_quickPlayMaxKeywords keywords. Create a channel for larger sets.';
+        _owners.session.status =
+            'Quick Play supports up to ${_owners.settings.quickPlayMaxKeywords} keywords. Create a channel for larger sets.';
       });
-      _showSnack(
-        'Quick Play supports up to $_quickPlayMaxKeywords keywords. Create a channel for bigger combos.',
+      showSnack(
+        'Quick Play supports up to ${_owners.settings.quickPlayMaxKeywords} keywords. Create a channel for bigger combos.',
         color: Colors.orange,
       );
       debugPrint(
@@ -4354,21 +4302,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Searching...';
-      _queue.clear();
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Searching...';
+      _owners.session.queue.clear();
     });
 
     // show non-dismissible loading modal
-    _progress.value = [];
-    _progressOpen = true;
-    final providerLabel = _quickProvider == DebrifyTvConstants.providerTorbox
+    _owners.progress.progress.value = [];
+    _owners.progress.progressOpen = true;
+    final providerLabel =
+        _owners.settings.quickProvider == DebrifyTvConstants.providerTorbox
         ? 'Torbox'
-        : _quickProvider == DebrifyTvConstants.providerPikPak
+        : _owners.settings.quickProvider == DebrifyTvConstants.providerPikPak
         ? 'PikPak'
-        : _quickProvider == DebrifyTvConstants.providerPremiumize
+        : _owners.settings.quickProvider ==
+              DebrifyTvConstants.providerPremiumize
         ? 'Premiumize'
-        : _quickProvider == DebrifyTvConstants.providerAllDebrid
+        : _owners.settings.quickProvider == DebrifyTvConstants.providerAllDebrid
         ? 'AllDebrid'
         : 'Real Debrid';
     // ignore: unawaited_futures
@@ -4376,37 +4326,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       context: context,
       barrierDismissible: false, // Prevent dismissing by tapping outside
       builder: (ctx) {
-        _progressSheetContext = ctx;
+        _owners.progress.progressSheetContext = ctx;
         return CachedLoadingDialog(
           eyebrow: 'Quick play · $providerLabel',
           title: 'Searching for something to play',
           subtitle:
               'Debrify is searching your keywords, applying filters, and checking $providerLabel.',
-          onCancel: () => _cancelActiveWatch(dialogContext: ctx),
+          onCancel: () => cancelActiveWatch(dialogContext: ctx),
         );
       },
     ).whenComplete(() {
-      _progressOpen = false;
-      _progressSheetContext = null;
+      _owners.progress.progressOpen = false;
+      _owners.progress.progressSheetContext = null;
     });
 
-    if (_quickProvider == DebrifyTvConstants.providerTorbox) {
-      await _watchWithTorbox(keywords, _log);
+    if (_owners.settings.quickProvider == DebrifyTvConstants.providerTorbox) {
+      await watchWithTorbox(keywords, _log);
       return;
     }
 
-    if (_quickProvider == DebrifyTvConstants.providerPikPak) {
-      await _watchWithPikPak(keywords, _log);
+    if (_owners.settings.quickProvider == DebrifyTvConstants.providerPikPak) {
+      await watchWithPikPak(keywords, _log);
       return;
     }
 
-    if (_quickProvider == DebrifyTvConstants.providerPremiumize) {
-      await _watchWithPremiumize(keywords, _log);
+    if (_owners.settings.quickProvider ==
+        DebrifyTvConstants.providerPremiumize) {
+      await watchWithPremiumize(keywords, _log);
       return;
     }
 
-    if (_quickProvider == DebrifyTvConstants.providerAllDebrid) {
-      await _watchWithAllDebrid(keywords, _log);
+    if (_owners.settings.quickProvider ==
+        DebrifyTvConstants.providerAllDebrid) {
+      await watchWithAllDebrid(keywords, _log);
       return;
     }
 
@@ -4442,15 +4394,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       String firstTitle = 'Debrify TV';
 
       Future<Map<String, String>?> requestMagicNext() async {
-        if (_watchCancelled) {
+        if (_owners.session.watchCancelled) {
           return null;
         }
         debugPrint(
-          'DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}',
+          'DebrifyTV: requestMagicNext() called. queueSize=${_owners.session.queue.length}',
         );
-        while (_queue.isNotEmpty && !_watchCancelled) {
-          final item = _queue.removeAt(0);
-          if (_watchCancelled) {
+        while (_owners.session.queue.isNotEmpty &&
+            !_owners.session.watchCancelled) {
+          final item = _owners.session.queue.removeAt(0);
+          if (_owners.session.watchCancelled) {
             break;
           }
           // Case 1: RD-restricted entry (append-only items)
@@ -4467,10 +4420,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 apiKeyEarly,
                 link,
               );
-              if (_watchCancelled) {
+              if (_owners.session.watchCancelled) {
                 return null;
               }
-              if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+              if (!rdLinkPassesSizeRules(unrestrict)) continue;
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -4483,7 +4436,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     ? inferred
                     : (display ?? 'Debrify TV');
                 firstTitle = chosenTitle;
-                if (_watchCancelled) {
+                if (_owners.session.watchCancelled) {
                   return null;
                 }
                 return {'url': videoUrl, 'title': chosenTitle};
@@ -4506,7 +4459,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 apiKeyEarly,
                 magnetLink,
               );
-              if (_watchCancelled) {
+              if (_owners.session.watchCancelled) {
                 return null;
               }
               final elapsed = DateTime.now().difference(started).inSeconds;
@@ -4521,7 +4474,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               }
 
               final newLinks = rdLinks
-                  .where((link) => !_seenRestrictedLinks.contains(link))
+                  .where(
+                    (link) =>
+                        !_owners.session.seenRestrictedLinks.contains(link),
+                  )
                   .toList();
               if (newLinks.isEmpty) {
                 continue;
@@ -4532,19 +4488,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               // than re-queuing the torrent after a single reject — that would
               // cost another add+info round trip per sibling file (see the
               // cached-channel flow for the same reasoning).
-              while (newLinks.isNotEmpty && !_watchCancelled) {
+              while (newLinks.isNotEmpty && !_owners.session.watchCancelled) {
                 final selectedLink = newLinks.removeAt(0);
-                _seenRestrictedLinks.add(selectedLink);
-                _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+                _owners.session.seenRestrictedLinks.add(selectedLink);
+                _owners.session.seenLinkWithTorrentId.add(
+                  '$torrentId|$selectedLink',
+                );
 
                 final unrestrict = await DebridService.unrestrictLink(
                   apiKeyEarly,
                   selectedLink,
                 );
-                if (_watchCancelled) {
+                if (_owners.session.watchCancelled) {
                   return null;
                 }
-                if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+                if (!rdLinkPassesSizeRules(unrestrict)) continue;
                 final videoUrl = unrestrict['download'] as String?;
                 if (videoUrl == null || videoUrl.isEmpty) continue;
 
@@ -4557,11 +4515,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
                 firstTitle = chosenTitle;
 
-                if (!_watchCancelled && newLinks.isNotEmpty) {
-                  _queue.add(item);
+                if (!_owners.session.watchCancelled && newLinks.isNotEmpty) {
+                  _owners.session.queue.add(item);
                 }
 
-                if (_watchCancelled) {
+                if (_owners.session.watchCancelled) {
                   return null;
                 }
                 return {'url': videoUrl, 'title': chosenTitle};
@@ -4578,13 +4536,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       final Map<String, Torrent> dedupByInfohash = {};
-      final engineStates = await _tvEngineSearchStates();
-      final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+      final engineStates = await tvEngineSearchStates();
+      final maxResultsOverrides = quickPlayMaxResultsOverrides();
 
       // Launch limited batches of per-keyword searches so we don't overwhelm
       List<String> pendingKeywords = List<String>.from(keywords);
-      while (pendingKeywords.isNotEmpty && !_watchCancelled) {
-        final batch = pendingKeywords.take(_channelBatchSize).toList();
+      while (pendingKeywords.isNotEmpty && !_owners.session.watchCancelled) {
+        final batch = pendingKeywords
+            .take(_owners.settings.channelBatchSize)
+            .toList();
         pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
         final futures = batch.map((kw) {
@@ -4597,7 +4557,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }).toList();
 
         await for (final result in Stream.fromFutures(futures)) {
-          if (_watchCancelled) {
+          if (_owners.session.watchCancelled) {
             break;
           }
           final List<Torrent> torrents =
@@ -4622,7 +4582,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           // Apply NSFW filter if enabled
           List<Torrent> torrentsToProcess = torrents;
-          if (_quickAvoidNsfw || _viewerForcesNsfw) {
+          if (_owners.settings.quickAvoidNsfw ||
+              _owners.settings.viewerForcesNsfw) {
             final beforeCount = torrents.length;
             torrentsToProcess = torrents.where((torrent) {
               if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -4639,7 +4600,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           // Filter out RD-blocked torrents
-          if (_rdSkipBlockedTorrents) {
+          if (_owners.settings.rdSkipBlockedTorrents) {
             torrentsToProcess = torrentsToProcess
                 .where((t) => !isRdBlockedTorrent(t.name))
                 .toList();
@@ -4653,67 +4614,70 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
           }
           if (added > 0) {
-            if (_watchCancelled) {
+            if (_owners.session.watchCancelled) {
               break;
             }
-            final combined = _applyQualityFilterToTorrents(
+            final combined = applyQualityFilterToTorrents(
               dedupByInfohash.values.toList(),
             );
             combined.shuffle(Random());
-            _queue
+            _owners.session.queue
               ..clear()
               ..addAll(combined);
-            _lastQueueSize = _queue.length;
-            _lastSearchAt = DateTime.now();
+            _owners.session.lastQueueSize = _owners.session.queue.length;
+            _owners.session.lastSearchAt = DateTime.now();
             // Silent approach - no progress logging needed
-            if (mounted && !_watchCancelled) {
+            if (mounted && !_owners.session.watchCancelled) {
               setState(() {
-                _status = 'Preparing your content...';
+                _owners.session.status = 'Preparing your content...';
               });
             }
 
             // Do not start prefetch until player launches
 
             // Try to launch player as soon as a playable stream is available
-            if (!_launchedPlayer && !_watchCancelled) {
+            if (!_owners.session.launchedPlayer &&
+                !_owners.session.watchCancelled) {
               final first = await requestMagicNext();
-              if (_watchCancelled) {
+              if (_owners.session.watchCancelled) {
                 break;
               }
               if (first != null &&
                   mounted &&
-                  !_launchedPlayer &&
-                  !_watchCancelled) {
-                _launchedPlayer = true;
+                  !_owners.session.launchedPlayer &&
+                  !_owners.session.watchCancelled) {
+                _owners.session.launchedPlayer = true;
                 final firstUrl = first['url'] ?? '';
                 final firstTitleResolved =
                     (first['title'] ?? firstTitle).trim().isNotEmpty
                     ? (first['title'] ?? firstTitle)
                     : firstTitle;
-                if (!_watchCancelled &&
-                    _progressOpen &&
-                    _progressSheetContext != null) {
-                  Navigator.of(_progressSheetContext!).pop();
+                if (!_owners.session.watchCancelled &&
+                    _owners.progress.progressOpen &&
+                    _owners.progress.progressSheetContext != null) {
+                  Navigator.of(_owners.progress.progressSheetContext!).pop();
                 }
                 debugPrint(
-                  'DebrifyTV: Launching player early. Remaining queue=${_queue.length}',
+                  'DebrifyTV: Launching player early. Remaining queue=${_owners.session.queue.length}',
                 );
 
                 // Start background prefetch only while player is active
-                if (!_watchCancelled) {
-                  _activeApiKey = apiKeyEarly;
-                  _activeProvider = DebrifyTvConstants.providerRealDebrid;
-                  unawaited(_startPrefetch());
+                if (!_owners.session.watchCancelled) {
+                  _owners.prefetch.activeApiKey = apiKeyEarly;
+                  _owners.prefetch.activeProvider =
+                      DebrifyTvConstants.providerRealDebrid;
+                  unawaited(startPrefetch());
 
-                  final String? activeChannelId = _currentWatchingChannelId;
+                  final String? activeChannelId =
+                      _owners.library.currentWatchingChannelId;
                   final int? activeChannelNumber;
                   if (activeChannelId != null) {
-                    final int idx = _channels.indexWhere(
+                    final int idx = _owners.library.channels.indexWhere(
                       (c) => c.id == activeChannelId,
                     );
                     if (idx >= 0) {
-                      final int resolvedNumber = _resolveChannelNumber(
-                        _channels[idx],
+                      final int resolvedNumber = resolveChannelNumber(
+                        _owners.library.channels[idx],
                       );
                       activeChannelNumber = resolvedNumber > 0
                           ? resolvedNumber
@@ -4725,15 +4689,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     activeChannelNumber = null;
                   }
                   final List<Map<String, dynamic>>? activeChannelDirectory =
-                      _channels.isNotEmpty
-                      ? _androidTvChannelMetadata(
+                      _owners.library.channels.isNotEmpty
+                      ? androidTvChannelMetadata(
                           activeChannelId: activeChannelId,
                         )
                       : null;
 
                   // External player set as the default: hand this one title
                   // over and stop the search — nothing rotates past it.
-                  if (await _handOffToExternalPlayer(
+                  if (await handOffToExternalPlayer(
                     firstUrl,
                     firstTitleResolved,
                   )) {
@@ -4741,10 +4705,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   }
 
                   // Try to launch on Android TV first (early launch path)
-                  final launchedOnTv = await _launchRealDebridOnAndroidTv(
+                  final launchedOnTv = await launchRealDebridOnAndroidTv(
                     firstStream: first,
                     requestNext: requestMagicNext,
-                    showChannelNameOverride: _quickShowChannelName,
+                    showChannelNameOverride:
+                        _owners.settings.quickShowChannelName,
                     channelId: activeChannelId,
                     channelNumber: activeChannelNumber,
                     channelDirectory: activeChannelDirectory,
@@ -4768,109 +4733,113 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       builder: (_) => VideoPlayerScreen(
                         videoUrl: firstUrl,
                         title: firstTitleResolved,
-                        startFromRandom: _quickStartRandom,
-                        randomStartMaxPercent: _quickRandomStartPercent,
-                        hideSeekbar: _quickHideSeekbar,
-                        showChannelName: _quickShowChannelName,
+                        startFromRandom: _owners.settings.quickStartRandom,
+                        randomStartMaxPercent:
+                            _owners.settings.quickRandomStartPercent,
+                        hideSeekbar: _owners.settings.quickHideSeekbar,
+                        showChannelName: _owners.settings.quickShowChannelName,
                         channelName: null,
                         channelNumber: null,
-                        showVideoTitle: _quickShowVideoTitle,
-                        hideOptions: _quickHideOptions,
+                        showVideoTitle: _owners.settings.quickShowVideoTitle,
+                        hideOptions: _owners.settings.quickHideOptions,
                         requestMagicNext: requestMagicNext,
                         requestNextChannel:
-                            _channels.length > 1 &&
-                                (_quickProvider ==
+                            _owners.library.channels.length > 1 &&
+                                (_owners.settings.quickProvider ==
                                         DebrifyTvConstants.providerRealDebrid ||
-                                    _quickProvider ==
+                                    _owners.settings.quickProvider ==
                                         DebrifyTvConstants.providerTorbox ||
-                                    _quickProvider ==
+                                    _owners.settings.quickProvider ==
                                         DebrifyTvConstants.providerPikPak ||
-                                    _quickProvider ==
+                                    _owners.settings.quickProvider ==
                                         DebrifyTvConstants.providerPremiumize)
-                            ? _requestNextChannel
+                            ? requestNextChannel
                             : null,
                         channelDirectory: activeChannelDirectory,
-                        requestChannelById: _channels.length > 1
-                            ? _requestChannelById
+                        requestChannelById: _owners.library.channels.length > 1
+                            ? requestChannelById
                             : null,
                       ),
                     ),
                   );
 
                   // Stop prefetch when player exits
-                  await _stopPrefetch();
+                  await stopPrefetch();
                 }
               }
             }
           }
         }
-        if (_watchCancelled) {
+        if (_owners.session.watchCancelled) {
           break;
         }
       }
       // Final queue snapshot (if we didn't launch early)
-      if (!_launchedPlayer) {
+      if (!_owners.session.launchedPlayer) {
         // The per-batch rebuilds above filter strictly, so an empty queue here
         // means nothing in the whole search matched the quality filter. This
         // is the point where that's genuinely known — degrade to unfiltered
         // rather than reporting "no results" for a search that found plenty.
-        if (_queue.isEmpty &&
-            _tvFilters.hasQuality &&
+        if (_owners.session.queue.isEmpty &&
+            _owners.settings.tvFilters.hasQuality &&
             dedupByInfohash.isNotEmpty &&
-            !_watchCancelled) {
-          _notifyQualityFallback();
+            !_owners.session.watchCancelled) {
+          notifyQualityFallback();
           final fallback = dedupByInfohash.values.toList()..shuffle(Random());
-          _queue
+          _owners.session.queue
             ..clear()
             ..addAll(fallback);
         }
-        debugPrint('DebrifyTV: Queue prepared. size=${_queue.length}');
-        _lastQueueSize = _queue.length;
-        _lastSearchAt = DateTime.now();
+        debugPrint(
+          'DebrifyTV: Queue prepared. size=${_owners.session.queue.length}',
+        );
+        _owners.session.lastQueueSize = _owners.session.queue.length;
+        _owners.session.lastSearchAt = DateTime.now();
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _status = 'Search failed: $e';
+        _owners.session.status = 'Search failed: $e';
       });
       debugPrint('DebrifyTV: Search failed: $e');
       if (e is NativePlayerSettingsUnavailable) {
-        _showNativeSettingsFailure(e);
+        showNativeSettingsFailure(e);
         return;
       }
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
     }
 
-    if (_watchCancelled) {
+    if (_owners.session.watchCancelled) {
       debugPrint('DebrifyTV: Watch was cancelled before completion.');
       return;
     }
 
     if (!mounted) return;
-    if (_queue.isEmpty) {
+    if (_owners.session.queue.isEmpty) {
       if (!mounted) return;
       setState(() {
-        _status = 'No results found';
+        _owners.session.status = 'No results found';
       });
       debugPrint('DebrifyTV: No results found after combining.');
       _log('❌ No results found - trying different search strategies');
 
       // Close popup and show user-friendly message
-      if (_progressOpen && _progressSheetContext != null) {
-        Navigator.of(_progressSheetContext!).pop();
-        _progressOpen = false;
-        _progressSheetContext = null;
+      if (_owners.progress.progressOpen &&
+          _owners.progress.progressSheetContext != null) {
+        Navigator.of(_owners.progress.progressSheetContext!).pop();
+        _owners.progress.progressOpen = false;
+        _owners.progress.progressSheetContext = null;
       }
 
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = 'No results found. Try different keywords.';
+          _owners.session.isBusy = false;
+          _owners.session.status = 'No results found. Try different keywords.';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -4886,10 +4855,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     // If we already launched the player early, we're done here
-    if (_launchedPlayer) {
+    if (_owners.session.launchedPlayer) {
       if (!mounted) return;
       setState(() {
-        _status = '';
+        _owners.session.status = '';
       });
       return;
     }
@@ -4922,10 +4891,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     Future<Map<String, String>?> requestMagicNext() async {
       debugPrint(
-        'MagicTV: requestMagicNext() called. queueSize=${_queue.length}',
+        'MagicTV: requestMagicNext() called. queueSize=${_owners.session.queue.length}',
       );
-      while (_queue.isNotEmpty) {
-        final item = _queue.removeAt(0);
+      while (_owners.session.queue.isNotEmpty) {
+        final item = _owners.session.queue.removeAt(0);
         // Case 1: RD-restricted entry (append-only items)
         if (item is Map && item['type'] == 'rd_restricted') {
           final String link = item['restrictedLink'] as String? ?? '';
@@ -4935,7 +4904,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           try {
             final started = DateTime.now();
             final unrestrict = await DebridService.unrestrictLink(apiKey, link);
-            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+            if (!rdLinkPassesSizeRules(unrestrict)) continue;
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -4981,13 +4950,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 final String link = rdLinks[i]?.toString() ?? '';
                 if (link.isEmpty) continue;
                 final String combined = '$torrentId|$link';
-                if (_seenRestrictedLinks.contains(link) ||
-                    _seenLinkWithTorrentId.contains(combined)) {
+                if (_owners.session.seenRestrictedLinks.contains(link) ||
+                    _owners.session.seenLinkWithTorrentId.contains(combined)) {
                   continue;
                 }
-                _seenRestrictedLinks.add(link);
-                _seenLinkWithTorrentId.add(combined);
-                _queue.add({
+                _owners.session.seenRestrictedLinks.add(link);
+                _owners.session.seenLinkWithTorrentId.add(combined);
+                _owners.session.queue.add({
                   'type': 'rd_restricted',
                   'restrictedLink': link,
                   'torrentId': torrentId,
@@ -4996,7 +4965,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               }
               if (rdLinks.length > 1) {
                 debugPrint(
-                  'MagicTV: Enqueued ${rdLinks.length - 1} additional RD links to tail. New queueSize=${_queue.length}',
+                  'MagicTV: Enqueued ${rdLinks.length - 1} additional RD links to tail. New queueSize=${_owners.session.queue.length}',
                 );
               }
             }
@@ -5022,8 +4991,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _status = 'Finding a playable stream...';
-      _isBusy = true;
+      _owners.session.status = 'Finding a playable stream...';
+      _owners.session.isBusy = true;
     });
     _log('🎬 Selecting the best quality stream for you');
 
@@ -5031,16 +5000,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final first = await requestMagicNext();
       if (first == null) {
         // Close popup and show user-friendly message
-        if (_progressOpen && _progressSheetContext != null) {
-          Navigator.of(_progressSheetContext!).pop();
-          _progressOpen = false;
-          _progressSheetContext = null;
+        if (_owners.progress.progressOpen &&
+            _owners.progress.progressSheetContext != null) {
+          Navigator.of(_owners.progress.progressSheetContext!).pop();
+          _owners.progress.progressOpen = false;
+          _owners.progress.progressSheetContext = null;
         }
 
         if (mounted) {
           setState(() {
-            _isBusy = false;
-            _status = 'No playable torrents found. Try different keywords.';
+            _owners.session.isBusy = false;
+            _owners.session.status =
+                'No playable torrents found. Try different keywords.';
           });
           MainPageBridge.notifyAutoLaunchFailed('No playable streams found');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -5062,23 +5033,30 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           : firstTitle;
 
       if (!mounted) return;
-      debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
+      debugPrint(
+        'MagicTV: Launching player. Remaining queue=${_owners.session.queue.length}',
+      );
 
       // Start background prefetch while player is active
-      _activeApiKey = apiKey;
-      _activeProvider = DebrifyTvConstants.providerRealDebrid;
-      unawaited(_startPrefetch());
+      _owners.prefetch.activeApiKey = apiKey;
+      _owners.prefetch.activeProvider = DebrifyTvConstants.providerRealDebrid;
+      unawaited(startPrefetch());
 
-      if (_progressOpen && _progressSheetContext != null) {
-        Navigator.of(_progressSheetContext!).pop();
+      if (_owners.progress.progressOpen &&
+          _owners.progress.progressSheetContext != null) {
+        Navigator.of(_owners.progress.progressSheetContext!).pop();
       }
 
-      final String? activeChannelId = _currentWatchingChannelId;
+      final String? activeChannelId = _owners.library.currentWatchingChannelId;
       final int? activeChannelNumber;
       if (activeChannelId != null) {
-        final int idx = _channels.indexWhere((c) => c.id == activeChannelId);
+        final int idx = _owners.library.channels.indexWhere(
+          (c) => c.id == activeChannelId,
+        );
         if (idx >= 0) {
-          final int resolvedNumber = _resolveChannelNumber(_channels[idx]);
+          final int resolvedNumber = resolveChannelNumber(
+            _owners.library.channels[idx],
+          );
           activeChannelNumber = resolvedNumber > 0 ? resolvedNumber : null;
         } else {
           activeChannelNumber = null;
@@ -5087,19 +5065,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         activeChannelNumber = null;
       }
       final List<Map<String, dynamic>>? quickChannelDirectory =
-          _channels.isNotEmpty
-          ? _androidTvChannelMetadata(activeChannelId: activeChannelId)
+          _owners.library.channels.isNotEmpty
+          ? androidTvChannelMetadata(activeChannelId: activeChannelId)
           : null;
 
-      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
         return;
       }
 
       // Try to launch on Android TV first
-      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+      final launchedOnTv = await launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
-        showChannelNameOverride: _quickShowChannelName,
+        showChannelNameOverride: _owners.settings.quickShowChannelName,
         channelId: activeChannelId,
         channelNumber: activeChannelNumber,
         channelDirectory: quickChannelDirectory,
@@ -5121,58 +5099,62 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
-            startFromRandom: _quickStartRandom,
-            randomStartMaxPercent: _quickRandomStartPercent,
-            hideSeekbar: _quickHideSeekbar,
-            showChannelName: _quickShowChannelName,
+            startFromRandom: _owners.settings.quickStartRandom,
+            randomStartMaxPercent: _owners.settings.quickRandomStartPercent,
+            hideSeekbar: _owners.settings.quickHideSeekbar,
+            showChannelName: _owners.settings.quickShowChannelName,
             channelName: null,
             channelNumber: null,
-            showVideoTitle: _quickShowVideoTitle,
-            hideOptions: _quickHideOptions,
+            showVideoTitle: _owners.settings.quickShowVideoTitle,
+            hideOptions: _owners.settings.quickHideOptions,
             requestMagicNext: requestMagicNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_quickProvider == DebrifyTvConstants.providerRealDebrid ||
-                        _quickProvider == DebrifyTvConstants.providerTorbox ||
-                        _quickProvider == DebrifyTvConstants.providerPikPak)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.quickProvider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.quickProvider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.quickProvider ==
+                            DebrifyTvConstants.providerPikPak)
+                ? requestNextChannel
                 : null,
             channelDirectory: quickChannelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
       // Stop prefetch when player exits
-      await _stopPrefetch();
+      await stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
-          _status = '';
+          _owners.session.isBusy = false;
+          _owners.session.status = '';
         });
         debugPrint('MagicTV: Watch flow finished.');
       }
     }
   }
 
-  Future<void> _watchWithTorbox(
+  Future<void> watchWithTorbox(
     List<String> keywords,
     void Function(String message) log,
   ) async {
     final integrationEnabled =
         await TorboxStorage.getTorboxIntegrationEnabled();
     if (!integrationEnabled) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status = 'Enable Torbox in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.status =
+            'Enable Torbox in Settings to use this provider.';
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Enable Torbox in Settings to use this provider.',
         color: Colors.orange,
       );
@@ -5181,13 +5163,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status = 'Add your Torbox API key in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.status =
+            'Add your Torbox API key in Settings to use this provider.';
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Please add your Torbox API key in Settings first!',
         color: Colors.red,
       );
@@ -5196,8 +5179,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 Torbox: searching for cached torrents...');
     final Map<String, Torrent> dedup = <String, Torrent>{};
-    final engineStates = await _tvEngineSearchStates();
-    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+    final engineStates = await tvEngineSearchStates();
+    final maxResultsOverrides = quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
@@ -5228,7 +5211,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw || _viewerForcesNsfw) {
+        if (_owners.settings.quickAvoidNsfw ||
+            _owners.settings.viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5246,7 +5230,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         int added = 0;
         for (final torrent in torrentsToProcess) {
-          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          final normalizedHash = normalizeInfohash(torrent.infohash);
           if (normalizedHash.isEmpty) continue;
           if (!dedup.containsKey(normalizedHash)) {
             dedup[normalizedHash] = torrent;
@@ -5254,34 +5238,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
         }
         if (added > 0) {
-          final combined = _applyQualityFilterToTorrents(dedup.values.toList());
+          final combined = applyQualityFilterToTorrents(dedup.values.toList());
           combined.shuffle(Random());
-          _queue
+          _owners.session.queue
             ..clear()
             ..addAll(combined);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
+          _owners.session.lastQueueSize = _owners.session.queue.length;
+          _owners.session.lastSearchAt = DateTime.now();
           if (mounted) {
             setState(() {
-              _status = 'Checking Torbox cache...';
+              _owners.session.status = 'Checking Torbox cache...';
             });
           }
         }
       }
 
-      final combinedList = _applyQualityFilterToTorrents(
+      final combinedList = applyQualityFilterToTorrents(
         dedup.values.toList(),
         // Search is complete here — an empty match means this search really
         // has nothing at the requested quality, so degrade rather than fail.
         allowFallback: true,
       );
       if (combinedList.isEmpty) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
           setState(() {
-            _status = 'No results found. Try different keywords.';
+            _owners.session.status =
+                'No results found. Try different keywords.';
           });
-          _showSnack(
+          showSnack(
             'No results found. Try different keywords.',
             color: Colors.red,
           );
@@ -5292,7 +5277,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       combinedList.shuffle(Random());
       if (mounted) {
         setState(() {
-          _status = 'Checking Torbox cache...';
+          _owners.session.status = 'Checking Torbox cache...';
         });
       }
 
@@ -5303,7 +5288,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (candidateCursor >= combinedList.length) {
             return false;
           }
-          final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+          final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
             candidates: combinedList,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -5315,19 +5300,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
             continue;
           }
-          _queue
+          _owners.session.queue
             ..clear()
             ..addAll(window.cachedTorrents);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
+          _owners.session.lastQueueSize = _owners.session.queue.length;
+          _owners.session.lastSearchAt = DateTime.now();
           if (mounted) {
             setState(() {
-              _status = _queue.isEmpty
+              _owners.session.status = _owners.session.queue.isEmpty
                   ? ''
-                  : 'Queue has ${_queue.length} remaining';
+                  : 'Queue has ${_owners.session.queue.length} remaining';
             });
           }
-          log('✅ Found ${_queue.length} cached Torbox torrent(s)');
+          log(
+            '✅ Found ${_owners.session.queue.length} cached Torbox torrent(s)',
+          );
           return true;
         }
       }
@@ -5337,13 +5324,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         seeded = await populateQueue();
       } catch (e) {
         log('❌ Torbox cache check failed: $e');
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
           setState(() {
-            _status = 'Torbox cache check failed. Try again.';
+            _owners.session.status = 'Torbox cache check failed. Try again.';
           });
-          _showSnack(
-            'Torbox cache check failed: ${_formatTorboxError(e)}',
+          showSnack(
+            'Torbox cache check failed: ${formatTorboxError(e)}',
             color: Colors.red,
           );
         }
@@ -5351,12 +5338,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!seeded) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
           setState(() {
-            _status = 'Torbox has no cached results for these keywords.';
+            _owners.session.status =
+                'Torbox has no cached results for these keywords.';
           });
-          _showSnack(
+          showSnack(
             'Torbox has no cached results for these keywords.',
             color: Colors.orange,
           );
@@ -5365,23 +5353,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       Future<Map<String, String>?> requestTorboxNext() async {
-        if (_watchCancelled) {
+        if (_owners.session.watchCancelled) {
           return null;
         }
-        while (!_watchCancelled) {
-          if (_queue.isEmpty) {
+        while (!_owners.session.watchCancelled) {
+          if (_owners.session.queue.isEmpty) {
             bool replenished;
             try {
               replenished = await populateQueue();
             } catch (e) {
               log('❌ Torbox cache check failed: $e');
-              _closeProgressDialog();
-              if (mounted && !_watchCancelled) {
+              closeProgressDialog();
+              if (mounted && !_owners.session.watchCancelled) {
                 setState(() {
-                  _status = 'Torbox cache check failed. Try again.';
+                  _owners.session.status =
+                      'Torbox cache check failed. Try again.';
                 });
-                _showSnack(
-                  'Torbox cache check failed: ${_formatTorboxError(e)}',
+                showSnack(
+                  'Torbox cache check failed: ${formatTorboxError(e)}',
                   color: Colors.red,
                 );
               }
@@ -5391,32 +5380,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               break;
             }
           }
-          if (_queue.isEmpty) {
+          if (_owners.session.queue.isEmpty) {
             break;
           }
-          final item = _queue.removeAt(0);
-          if (_watchCancelled) {
+          final item = _owners.session.queue.removeAt(0);
+          if (_owners.session.watchCancelled) {
             break;
           }
           if (item is Map &&
               item['type'] == DebrifyTvConstants.torboxFileEntryType) {
-            final resolved = await _resolveTorboxQueuedFile(
+            final resolved = await resolveTorboxQueuedFile(
               entry: item as Map<String, dynamic>,
               apiKey: apiKey,
               log: log,
             );
-            if (_watchCancelled) {
+            if (_owners.session.watchCancelled) {
               return null;
             }
             if (resolved != null) {
-              if (mounted && !_watchCancelled) {
+              if (mounted && !_owners.session.watchCancelled) {
                 setState(() {
-                  _status = _queue.isEmpty
+                  _owners.session.status = _owners.session.queue.isEmpty
                       ? ''
-                      : 'Queue has ${_queue.length} remaining';
+                      : 'Queue has ${_owners.session.queue.length} remaining';
                 });
               }
-              if (_watchCancelled) {
+              if (_owners.session.watchCancelled) {
                 return null;
               }
               return resolved;
@@ -5425,52 +5414,52 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           if (item is Torrent) {
-            final result = await _prepareTorboxTorrent(
+            final result = await prepareTorboxTorrent(
               candidate: item,
               apiKey: apiKey,
               log: log,
             );
-            if (_watchCancelled) {
+            if (_owners.session.watchCancelled) {
               return null;
             }
             if (result != null) {
-              if (result.hasMore && !_watchCancelled) {
+              if (result.hasMore && !_owners.session.watchCancelled) {
                 combinedList.add(item);
               }
-              if (mounted && !_watchCancelled) {
+              if (mounted && !_owners.session.watchCancelled) {
                 setState(() {
-                  _status = _queue.isEmpty
+                  _owners.session.status = _owners.session.queue.isEmpty
                       ? ''
-                      : 'Queue has ${_queue.length} remaining';
+                      : 'Queue has ${_owners.session.queue.length} remaining';
                 });
               }
-              if (_watchCancelled) {
+              if (_owners.session.watchCancelled) {
                 return null;
               }
               return {'url': result.streamUrl, 'title': result.title};
             }
           }
         }
-        if (mounted && !_watchCancelled) {
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status = 'No more cached Torbox streams available.';
+            _owners.session.status = 'No more cached Torbox streams available.';
           });
         }
         return null;
       }
 
       final first = await requestTorboxNext();
-      if (_watchCancelled) {
+      if (_owners.session.watchCancelled) {
         return;
       }
       if (first == null) {
-        _closeProgressDialog();
-        if (mounted && !_watchCancelled) {
+        closeProgressDialog();
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status =
+            _owners.session.status =
                 'No playable Torbox streams found. Try different keywords.';
           });
-          _showSnack(
+          showSnack(
             'No playable Torbox streams found. Try different keywords.',
             color: Colors.red,
           );
@@ -5478,33 +5467,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await _launchTorboxOnAndroidTv(
+      final launchedOnTv = await launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
-        showChannelNameOverride: _quickShowChannelName,
+        showChannelNameOverride: _owners.settings.quickShowChannelName,
         channelName: null,
         channelId: null,
         channelNumber: null,
         channelDirectory: null,
       );
-      if (_watchCancelled) {
+      if (_owners.session.watchCancelled) {
         return;
       }
       if (launchedOnTv) {
         return;
       }
 
-      if (!_watchCancelled) {
+      if (!_owners.session.watchCancelled) {
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
 
@@ -5513,60 +5502,62 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
-              startFromRandom: _startRandom,
-              randomStartMaxPercent: _randomStartPercent,
-              hideSeekbar: _hideSeekbar,
-              showChannelName: _showChannelName,
+              startFromRandom: _owners.settings.startRandom,
+              randomStartMaxPercent: _owners.settings.randomStartPercent,
+              hideSeekbar: _owners.settings.hideSeekbar,
+              showChannelName: _owners.settings.showChannelName,
               channelName: null,
               channelNumber: null,
-              showVideoTitle: _showVideoTitle,
-              hideOptions: _hideOptions,
+              showVideoTitle: _owners.settings.showVideoTitle,
+              hideOptions: _owners.settings.hideOptions,
               requestMagicNext: requestTorboxNext,
               requestNextChannel:
-                  _channels.length > 1 &&
-                      (_quickProvider ==
+                  _owners.library.channels.length > 1 &&
+                      (_owners.settings.quickProvider ==
                               DebrifyTvConstants.providerRealDebrid ||
-                          _quickProvider == DebrifyTvConstants.providerTorbox ||
-                          _quickProvider == DebrifyTvConstants.providerPikPak)
-                  ? _requestNextChannel
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerTorbox ||
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerPikPak)
+                  ? requestNextChannel
                   : null,
             ),
           ),
         );
       }
 
-      if (mounted && !_watchCancelled) {
+      if (mounted && !_owners.session.watchCancelled) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
     }
   }
 
-  Future<void> _watchWithPikPak(
+  Future<void> watchWithPikPak(
     List<String> keywords,
     void Function(String message) log,
   ) async {
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
     if (!pikpakAvailable) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status = 'Please login to PikPak in Settings first!';
-        _isBusy = false;
+        _owners.session.status = 'Please login to PikPak in Settings first!';
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Please login to PikPak in Settings first!',
         color: Colors.orange,
       );
@@ -5575,8 +5566,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 PikPak: searching for torrents...');
     final Map<String, Torrent> dedup = <String, Torrent>{};
-    final engineStates = await _tvEngineSearchStates();
-    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+    final engineStates = await tvEngineSearchStates();
+    final maxResultsOverrides = quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
@@ -5607,7 +5598,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw || _viewerForcesNsfw) {
+        if (_owners.settings.quickAvoidNsfw ||
+            _owners.settings.viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5625,7 +5617,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         int added = 0;
         for (final torrent in torrentsToProcess) {
-          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          final normalizedHash = normalizeInfohash(torrent.infohash);
           if (normalizedHash.isEmpty) continue;
           if (!dedup.containsKey(normalizedHash)) {
             dedup[normalizedHash] = torrent;
@@ -5633,34 +5625,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
         }
         if (added > 0) {
-          final combined = _applyQualityFilterToTorrents(dedup.values.toList());
+          final combined = applyQualityFilterToTorrents(dedup.values.toList());
           combined.shuffle(Random());
-          _queue
+          _owners.session.queue
             ..clear()
             ..addAll(combined);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
+          _owners.session.lastQueueSize = _owners.session.queue.length;
+          _owners.session.lastSearchAt = DateTime.now();
           if (mounted) {
             setState(() {
-              _status = 'Preparing PikPak stream...';
+              _owners.session.status = 'Preparing PikPak stream...';
             });
           }
         }
       }
 
-      final combinedList = _applyQualityFilterToTorrents(
+      final combinedList = applyQualityFilterToTorrents(
         dedup.values.toList(),
         // Search is complete here — an empty match means this search really
         // has nothing at the requested quality, so degrade rather than fail.
         allowFallback: true,
       );
       if (combinedList.isEmpty) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
           setState(() {
-            _status = 'No results found. Try different keywords.';
+            _owners.session.status =
+                'No results found. Try different keywords.';
           });
-          _showSnack(
+          showSnack(
             'No results found. Try different keywords.',
             color: Colors.red,
           );
@@ -5669,25 +5662,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       combinedList.shuffle(Random());
-      _queue
+      _owners.session.queue
         ..clear()
         ..addAll(combinedList);
-      _lastQueueSize = _queue.length;
-      _lastSearchAt = DateTime.now();
+      _owners.session.lastQueueSize = _owners.session.queue.length;
+      _owners.session.lastSearchAt = DateTime.now();
 
       if (mounted) {
         setState(() {
-          _status = 'Preparing PikPak stream...';
+          _owners.session.status = 'Preparing PikPak stream...';
         });
       }
 
       Future<Map<String, String>?> requestPikPakNext() async {
-        if (_watchCancelled) {
+        if (_owners.session.watchCancelled) {
           return null;
         }
-        while (_queue.isNotEmpty && !_watchCancelled) {
-          final item = _queue.removeAt(0);
-          if (_watchCancelled) {
+        while (_owners.session.queue.isNotEmpty &&
+            !_owners.session.watchCancelled) {
+          final item = _owners.session.queue.removeAt(0);
+          if (_owners.session.watchCancelled) {
             break;
           }
           if (item is! Torrent) {
@@ -5695,12 +5689,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           log('Trying torrent: ${item.name}');
-          final prepared = await _preparePikPakTorrent(
+          final prepared = await preparePikPakTorrent(
             candidate: item,
             log: (msg) => debugPrint('DebrifyTV/PikPak: $msg'),
           );
 
-          if (_watchCancelled) {
+          if (_owners.session.watchCancelled) {
             return null;
           }
 
@@ -5711,17 +5705,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           // Add back to queue if there are more files in this torrent
           if (prepared.hasMore) {
-            _queue.add(item);
+            _owners.session.queue.add(item);
             log(
-              'Multi-file torrent: added back to queue (${_queue.length} remaining)',
+              'Multi-file torrent: added back to queue (${_owners.session.queue.length} remaining)',
             );
           }
 
-          if (mounted && !_watchCancelled) {
+          if (mounted && !_owners.session.watchCancelled) {
             setState(() {
-              _status = _queue.isEmpty
+              _owners.session.status = _owners.session.queue.isEmpty
                   ? ''
-                  : 'Queue has ${_queue.length} remaining';
+                  : 'Queue has ${_owners.session.queue.length} remaining';
             });
           }
 
@@ -5732,27 +5726,27 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             'pikpakFileId': '',
           };
         }
-        if (mounted && !_watchCancelled) {
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status = 'No more PikPak streams available.';
+            _owners.session.status = 'No more PikPak streams available.';
           });
         }
         return null;
       }
 
       final first = await requestPikPakNext();
-      if (_watchCancelled) {
+      if (_owners.session.watchCancelled) {
         return;
       }
       if (first == null) {
-        _closeProgressDialog();
-        if (mounted && !_watchCancelled) {
+        closeProgressDialog();
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status =
+            _owners.session.status =
                 'No playable PikPak streams found. Try different keywords.';
           });
           MainPageBridge.notifyAutoLaunchFailed('No PikPak streams available');
-          _showSnack(
+          showSnack(
             'No playable PikPak streams found. Try different keywords.',
             color: Colors.red,
           );
@@ -5760,10 +5754,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
@@ -5771,23 +5765,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       // Try Android TV native player first
-      final launchedOnTv = await _launchPikPakOnAndroidTv(
+      final launchedOnTv = await launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPikPakNext,
-        showChannelNameOverride: _quickShowChannelName,
+        showChannelNameOverride: _owners.settings.quickShowChannelName,
         channelName: null,
         channelId: null,
         channelNumber: null,
         channelDirectory: null,
       );
-      if (_watchCancelled) {
+      if (_owners.session.watchCancelled) {
         return;
       }
       if (launchedOnTv) {
         return;
       }
 
-      if (!_watchCancelled) {
+      if (!_owners.session.watchCancelled) {
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
 
@@ -5796,48 +5790,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
-              startFromRandom: _quickStartRandom,
-              randomStartMaxPercent: _quickRandomStartPercent,
-              hideSeekbar: _quickHideSeekbar,
-              showChannelName: _quickShowChannelName,
+              startFromRandom: _owners.settings.quickStartRandom,
+              randomStartMaxPercent: _owners.settings.quickRandomStartPercent,
+              hideSeekbar: _owners.settings.quickHideSeekbar,
+              showChannelName: _owners.settings.quickShowChannelName,
               channelName: null,
               channelNumber: null,
-              showVideoTitle: _quickShowVideoTitle,
-              hideOptions: _quickHideOptions,
+              showVideoTitle: _owners.settings.quickShowVideoTitle,
+              hideOptions: _owners.settings.quickHideOptions,
               requestMagicNext: requestPikPakNext,
               requestNextChannel:
-                  _channels.length > 1 &&
-                      (_quickProvider ==
+                  _owners.library.channels.length > 1 &&
+                      (_owners.settings.quickProvider ==
                               DebrifyTvConstants.providerRealDebrid ||
-                          _quickProvider == DebrifyTvConstants.providerTorbox ||
-                          _quickProvider == DebrifyTvConstants.providerPikPak)
-                  ? _requestNextChannel
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerTorbox ||
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerPikPak)
+                  ? requestNextChannel
                   : null,
             ),
           ),
         );
       }
 
-      if (mounted && !_watchCancelled) {
+      if (mounted && !_owners.session.watchCancelled) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
     }
   }
 
-  Future<void> _watchWithCachedTorrents(
+  Future<void> watchWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     required bool applyNsfwFilter,
     String? channelName,
@@ -5846,38 +5842,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     if (cachedTorrents.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
-      _showSnack(
+      showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
       );
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
-        ? _androidTvChannelMetadata(
-            activeChannelId: channelId ?? _currentWatchingChannelId,
+    final List<Map<String, dynamic>>? channelDirectory =
+        _owners.library.channels.isNotEmpty
+        ? androidTvChannelMetadata(
+            activeChannelId:
+                channelId ?? _owners.library.currentWatchingChannelId,
           )
         : null;
 
-    _launchedPlayer = false;
-    await _stopPrefetch();
-    _prefetchStopRequested = false;
-    _originalMaxCap = null;
-    _seenRestrictedLinks.clear();
-    _seenLinkWithTorrentId.clear();
+    _owners.session.launchedPlayer = false;
+    await stopPrefetch();
+    _owners.prefetch.prefetchStopRequested = false;
+    _owners.session.originalMaxCap = null;
+    _owners.session.seenRestrictedLinks.clear();
+    _owners.session.seenLinkWithTorrentId.clear();
 
     final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       MainPageBridge.notifyAutoLaunchFailed('No Real Debrid API key');
-      _showSnack(
+      showSnack(
         'Please add your Real Debrid API key in Settings first!',
         color: Colors.orange,
       );
       return;
     }
 
-    _showCachedPlaybackDialog();
+    showCachedPlaybackDialog();
 
     // Apply NSFW filter to cached torrents if enabled
     List<Torrent> torrentsToUse = cachedTorrents;
@@ -5900,7 +5898,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     // Filter out RD-blocked torrents
-    if (_rdSkipBlockedTorrents) {
+    if (_owners.settings.rdSkipBlockedTorrents) {
       final beforeCount = torrentsToUse.length;
       torrentsToUse = torrentsToUse
           .where((t) => !isRdBlockedTorrent(t.name))
@@ -5912,11 +5910,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    _queue
+    _owners.session.queue
       ..clear()
       ..addAll(List<Torrent>.from(torrentsToUse)..shuffle(Random()));
-    _lastQueueSize = _queue.length;
-    _lastSearchAt = DateTime.now();
+    _owners.session.lastQueueSize = _owners.session.queue.length;
+    _owners.session.lastSearchAt = DateTime.now();
 
     String _inferTitleFromUrl(String url) {
       final uri = Uri.tryParse(url);
@@ -5930,10 +5928,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     Future<Map<String, String>?> requestMagicNext() async {
       debugPrint(
-        'DebrifyTV: Cached requestMagicNext() queueSize=${_queue.length}',
+        'DebrifyTV: Cached requestMagicNext() queueSize=${_owners.session.queue.length}',
       );
-      while (_queue.isNotEmpty) {
-        final item = _queue.removeAt(0);
+      while (_owners.session.queue.isNotEmpty) {
+        final item = _owners.session.queue.removeAt(0);
         if (item is Map && item['type'] == 'rd_restricted') {
           final String link = item['restrictedLink'] as String? ?? '';
           final String rdTid = item['torrentId'] as String? ?? '';
@@ -5942,7 +5940,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           try {
             final started = DateTime.now();
             final unrestrict = await DebridService.unrestrictLink(apiKey, link);
-            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+            if (!rdLinkPassesSizeRules(unrestrict)) continue;
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
@@ -5984,7 +5982,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
 
             final newLinks = rdLinks
-                .where((link) => !_seenRestrictedLinks.contains(link))
+                .where(
+                  (link) => !_owners.session.seenRestrictedLinks.contains(link),
+                )
                 .toList();
             if (newLinks.isEmpty) {
               continue;
@@ -5998,14 +5998,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             // nothing. Unrestrict calls are the cheap half — spend those.
             while (newLinks.isNotEmpty) {
               final selectedLink = newLinks.removeAt(0);
-              _seenRestrictedLinks.add(selectedLink);
-              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+              _owners.session.seenRestrictedLinks.add(selectedLink);
+              _owners.session.seenLinkWithTorrentId.add(
+                '$torrentId|$selectedLink',
+              );
 
               final unrestrict = await DebridService.unrestrictLink(
                 apiKey,
                 selectedLink,
               );
-              if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+              if (!rdLinkPassesSizeRules(unrestrict)) continue;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl == null || videoUrl.isEmpty) continue;
 
@@ -6019,7 +6021,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               firstTitle = chosenTitle;
 
               if (newLinks.isNotEmpty) {
-                _queue.add(item);
+                _owners.session.queue.add(item);
               }
 
               return {'url': videoUrl, 'title': chosenTitle};
@@ -6034,22 +6036,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _status = 'Finding a playable stream...';
-      _isBusy = true;
+      _owners.session.status = 'Finding a playable stream...';
+      _owners.session.isBusy = true;
     });
 
     try {
       final first = await requestMagicNext();
       if (first == null) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (!mounted) return;
         setState(() {
-          _isBusy = false;
-          _status =
+          _owners.session.isBusy = false;
+          _owners.session.status =
               'No cached torrents played successfully. Try refreshing the channel.';
         });
         MainPageBridge.notifyAutoLaunchFailed('No cached streams available');
-        _showSnack(
+        showSnack(
           'No cached torrents played successfully. Try refreshing the channel.',
           color: Colors.orange,
         );
@@ -6062,17 +6064,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           : firstTitle;
 
       if (!mounted) return;
-      _activeApiKey = apiKey;
-      _activeProvider = DebrifyTvConstants.providerRealDebrid;
-      unawaited(_startPrefetch());
-      _closeProgressDialog();
+      _owners.prefetch.activeApiKey = apiKey;
+      _owners.prefetch.activeProvider = DebrifyTvConstants.providerRealDebrid;
+      unawaited(startPrefetch());
+      closeProgressDialog();
 
-      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
         return;
       }
 
       // Try to launch on Android TV first (for cached flow)
-      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+      final launchedOnTv = await launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         channelName: channelName,
@@ -6099,39 +6101,43 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
+            startFromRandom: _owners.settings.startRandom,
+            randomStartMaxPercent: _owners.settings.randomStartPercent,
+            hideSeekbar: _owners.settings.hideSeekbar,
+            showChannelName: _owners.settings.showChannelName,
             channelName: channelName,
             channelNumber: channelNumber,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
+            showVideoTitle: _owners.settings.showVideoTitle,
+            hideOptions: _owners.settings.hideOptions,
             requestMagicNext: requestMagicNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_provider == DebrifyTvConstants.providerRealDebrid ||
-                        _provider == DebrifyTvConstants.providerTorbox ||
-                        _provider == DebrifyTvConstants.providerPikPak ||
-                        _provider == DebrifyTvConstants.providerPremiumize)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.provider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPikPak ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPremiumize)
+                ? requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
-      await _stopPrefetch();
+      await stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _isBusy = false;
-        _status = '';
+        _owners.session.isBusy = false;
+        _owners.session.status = '';
       });
       debugPrint('DebrifyTV: Cached watch flow finished.');
     }
@@ -6141,7 +6147,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// (sequential add-and-probe, no cache-check API) but resolves each candidate
   /// through AllDebrid's `ready`-flag add (no polling) and lazily unlocks links
   /// on demand. The background prefetcher keeps upcoming items prepared.
-  Future<void> _watchAllDebridWithCachedTorrents(
+  Future<void> watchAllDebridWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     required bool applyNsfwFilter,
     String? channelName,
@@ -6150,38 +6156,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     if (cachedTorrents.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
-      _showSnack(
+      showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
       );
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
-        ? _androidTvChannelMetadata(
-            activeChannelId: channelId ?? _currentWatchingChannelId,
+    final List<Map<String, dynamic>>? channelDirectory =
+        _owners.library.channels.isNotEmpty
+        ? androidTvChannelMetadata(
+            activeChannelId:
+                channelId ?? _owners.library.currentWatchingChannelId,
           )
         : null;
 
-    _launchedPlayer = false;
-    await _stopPrefetch();
-    _prefetchStopRequested = false;
-    _originalMaxCap = null;
-    _seenRestrictedLinks.clear();
-    _seenLinkWithTorrentId.clear();
+    _owners.session.launchedPlayer = false;
+    await stopPrefetch();
+    _owners.prefetch.prefetchStopRequested = false;
+    _owners.session.originalMaxCap = null;
+    _owners.session.seenRestrictedLinks.clear();
+    _owners.session.seenLinkWithTorrentId.clear();
 
     final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       MainPageBridge.notifyAutoLaunchFailed('No AllDebrid API key');
-      _showSnack(
+      showSnack(
         'Please add your AllDebrid API key in Settings first!',
         color: Colors.orange,
       );
       return;
     }
 
-    _showCachedPlaybackDialog();
+    showCachedPlaybackDialog();
 
     // Apply NSFW filter to cached torrents if enabled
     List<Torrent> torrentsToUse = cachedTorrents;
@@ -6203,11 +6211,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    _queue
+    _owners.session.queue
       ..clear()
       ..addAll(List<Torrent>.from(torrentsToUse)..shuffle(Random()));
-    _lastQueueSize = _queue.length;
-    _lastSearchAt = DateTime.now();
+    _owners.session.lastQueueSize = _owners.session.queue.length;
+    _owners.session.lastSearchAt = DateTime.now();
 
     String _inferTitleFromUrl(String url) {
       final uri = Uri.tryParse(url);
@@ -6220,9 +6228,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String firstTitle = 'Debrify TV';
 
     Future<Map<String, String>?> requestMagicNext() async {
-      debugPrint('DebrifyTV/AD: requestMagicNext() queueSize=${_queue.length}');
-      while (_queue.isNotEmpty) {
-        final item = _queue.removeAt(0);
+      debugPrint(
+        'DebrifyTV/AD: requestMagicNext() queueSize=${_owners.session.queue.length}',
+      );
+      while (_owners.session.queue.isNotEmpty) {
+        final item = _owners.session.queue.removeAt(0);
         if (item is Map && item['type'] == 'ad_locked') {
           final String link = item['allDebridLink'] as String? ?? '';
           if (link.isEmpty) continue;
@@ -6247,7 +6257,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint(
             'DebrifyTV/AD: Cached trying torrent name="${item.name}" hash=${item.infohash}',
           );
-          final prepared = await _resolveAllDebridLinks(item, apiKey);
+          final prepared = await resolveAllDebridLinks(item, apiKey);
           if (prepared == null || prepared.lockedLinks.isEmpty) {
             continue;
           }
@@ -6256,7 +6266,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           // AllDebrid returns every file at once: enqueue the remaining video
           // files (still locked) so siblings aren't lost if the head fails.
           for (final link in links) {
-            _queue.add({
+            _owners.session.queue.add({
               'type': 'ad_locked',
               'allDebridLink': link,
               'magnetId': prepared.magnetId,
@@ -6287,22 +6297,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _status = 'Finding a playable stream...';
-      _isBusy = true;
+      _owners.session.status = 'Finding a playable stream...';
+      _owners.session.isBusy = true;
     });
 
     try {
       final first = await requestMagicNext();
       if (first == null) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (!mounted) return;
         setState(() {
-          _isBusy = false;
-          _status =
+          _owners.session.isBusy = false;
+          _owners.session.status =
               'No cached torrents played successfully. Try refreshing the channel.';
         });
         MainPageBridge.notifyAutoLaunchFailed('No cached streams available');
-        _showSnack(
+        showSnack(
           'No cached torrents played successfully. Try refreshing the channel.',
           color: Colors.orange,
         );
@@ -6315,18 +6325,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           : firstTitle;
 
       if (!mounted) return;
-      _activeApiKey = apiKey;
-      _activeProvider = DebrifyTvConstants.providerAllDebrid;
-      unawaited(_startPrefetch());
-      _closeProgressDialog();
+      _owners.prefetch.activeApiKey = apiKey;
+      _owners.prefetch.activeProvider = DebrifyTvConstants.providerAllDebrid;
+      unawaited(startPrefetch());
+      closeProgressDialog();
 
-      if (await _handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
         return;
       }
 
       // Try to launch on Android TV first (reuses the generic direct-URL
       // launcher; AllDebrid streams are ready URLs just like Real-Debrid's).
-      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+      final launchedOnTv = await launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         channelName: channelName,
@@ -6351,52 +6361,57 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
+            startFromRandom: _owners.settings.startRandom,
+            randomStartMaxPercent: _owners.settings.randomStartPercent,
+            hideSeekbar: _owners.settings.hideSeekbar,
+            showChannelName: _owners.settings.showChannelName,
             channelName: channelName,
             channelNumber: channelNumber,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
+            showVideoTitle: _owners.settings.showVideoTitle,
+            hideOptions: _owners.settings.hideOptions,
             requestMagicNext: requestMagicNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_provider == DebrifyTvConstants.providerRealDebrid ||
-                        _provider == DebrifyTvConstants.providerTorbox ||
-                        _provider == DebrifyTvConstants.providerPikPak ||
-                        _provider == DebrifyTvConstants.providerPremiumize ||
-                        _provider == DebrifyTvConstants.providerAllDebrid)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.provider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPikPak ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPremiumize ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerAllDebrid)
+                ? requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
-      await _stopPrefetch();
+      await stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _isBusy = false;
-        _status = '';
+        _owners.session.isBusy = false;
+        _owners.session.status = '';
       });
       debugPrint('DebrifyTV: AllDebrid cached watch flow finished.');
     }
   }
 
-  void _showNativeSettingsFailure(NativePlayerSettingsUnavailable error) {
-    unawaited(_stopPrefetch());
+  void showNativeSettingsFailure(NativePlayerSettingsUnavailable error) {
+    unawaited(stopPrefetch());
     MainPageBridge.notifyAutoLaunchFailed(error.message.toString());
-    if (mounted) _showSnack(error.message.toString(), color: Colors.orange);
+    if (mounted) showSnack(error.message.toString(), color: Colors.orange);
   }
 
-  Future<bool> _launchTorboxOnAndroidTv({
+  Future<bool> launchTorboxOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
     String? channelName,
@@ -6405,7 +6420,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     int? channelNumber,
     List<Map<String, dynamic>>? channelDirectory,
   }) async {
-    if (!_isAndroidTv) {
+    if (!_owners.settings.isAndroidTv) {
       return false;
     }
     final initialUrl = firstStream['url'] ?? '';
@@ -6427,34 +6442,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         title: title.isEmpty ? 'Debrify TV' : title,
         magnets: magnets,
         requestNext: requestNext,
-        requestChannelSwitch: _channels.length > 1 ? _requestNextChannel : null,
-        requestChannelById: _channels.length > 1 ? _requestChannelById : null,
+        requestChannelSwitch: _owners.library.channels.length > 1
+            ? requestNextChannel
+            : null,
+        requestChannelById: _owners.library.channels.length > 1
+            ? requestChannelById
+            : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
           if (!mounted) {
             return;
           }
           setState(() {
-            _status = _queue.isEmpty
+            _owners.session.status = _owners.session.queue.isEmpty
                 ? ''
-                : 'Queue has ${_queue.length} remaining';
+                : 'Queue has ${_owners.session.queue.length} remaining';
           });
         },
-        startFromRandom: _startRandom,
-        randomStartMaxPercent: _randomStartPercent,
-        hideSeekbar: _hideSeekbar,
-        hideOptions: _hideOptions,
-        showVideoTitle: _showVideoTitle,
-        showChannelName: showChannelNameOverride ?? _showChannelName,
+        startFromRandom: _owners.settings.startRandom,
+        randomStartMaxPercent: _owners.settings.randomStartPercent,
+        hideSeekbar: _owners.settings.hideSeekbar,
+        hideOptions: _owners.settings.hideOptions,
+        showVideoTitle: _owners.settings.showVideoTitle,
+        showChannelName:
+            showChannelNameOverride ?? _owners.settings.showChannelName,
         channelName: channelName,
         channels: channelDirectory,
-        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
         currentChannelNumber: channelNumber,
       );
       if (launched) {
         if (mounted) {
           setState(() {
-            _status = 'Playing via Android TV';
+            _owners.session.status = 'Playing via Android TV';
           });
         }
         return true;
@@ -6469,47 +6489,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   /// Handle channel switching on Android TV - cycles to next channel with looping
-  Future<Map<String, dynamic>?> _requestNextChannel() async {
+  Future<Map<String, dynamic>?> requestNextChannel() async {
     debugPrint('DebrifyTV: _requestNextChannel() called');
 
-    if (_channels.isEmpty) {
+    if (_owners.library.channels.isEmpty) {
       debugPrint('DebrifyTV: No channels available');
       return null;
     }
 
     int currentIndex = -1;
-    if (_currentWatchingChannelId != null) {
-      currentIndex = _channels.indexWhere(
-        (c) => c.id == _currentWatchingChannelId,
+    if (_owners.library.currentWatchingChannelId != null) {
+      currentIndex = _owners.library.channels.indexWhere(
+        (c) => c.id == _owners.library.currentWatchingChannelId,
       );
     }
 
-    final int nextIndex = (currentIndex + 1) % _channels.length;
-    final DebrifyTvChannel targetChannel = _channels[nextIndex];
+    final int nextIndex = (currentIndex + 1) % _owners.library.channels.length;
+    final DebrifyTvChannel targetChannel = _owners.library.channels[nextIndex];
 
     debugPrint(
       'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
     );
 
-    return _switchToChannel(
+    return switchToChannel(
       targetChannel,
       fallbackIndex: nextIndex,
       reason: 'next',
     );
   }
 
-  Future<Map<String, dynamic>?> _requestChannelById(String channelId) async {
+  Future<Map<String, dynamic>?> requestChannelById(String channelId) async {
     debugPrint('DebrifyTV: _requestChannelById($channelId) called');
 
-    if (_channels.isEmpty) {
+    if (_owners.library.channels.isEmpty) {
       debugPrint('DebrifyTV: No channels available for direct selection');
       return null;
     }
 
     DebrifyTvChannel? targetChannel;
     int discoveredIndex = -1;
-    for (var i = 0; i < _channels.length; i++) {
-      final channel = _channels[i];
+    for (var i = 0; i < _owners.library.channels.length; i++) {
+      final channel = _owners.library.channels[i];
       if (channel.id == channelId) {
         targetChannel = channel;
         discoveredIndex = i;
@@ -6522,7 +6542,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
 
-    if (_currentWatchingChannelId == targetChannel.id) {
+    if (_owners.library.currentWatchingChannelId == targetChannel.id) {
       debugPrint(
         'DebrifyTV: Selected channel is already active; refreshing playback',
       );
@@ -6532,14 +6552,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
     }
 
-    return _switchToChannel(
+    return switchToChannel(
       targetChannel,
       fallbackIndex: discoveredIndex >= 0 ? discoveredIndex : null,
       reason: 'direct',
     );
   }
 
-  Future<Map<String, dynamic>?> _switchToChannel(
+  Future<Map<String, dynamic>?> switchToChannel(
     DebrifyTvChannel targetChannel, {
     int? fallbackIndex,
     String reason = 'direct',
@@ -6550,12 +6570,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final int computedIndex =
         fallbackIndex ??
-        _channels.indexWhere((channel) => channel.id == targetChannel.id);
+        _owners.library.channels.indexWhere(
+          (channel) => channel.id == targetChannel.id,
+        );
     final int targetChannelNumber = targetChannel.channelNumber > 0
         ? targetChannel.channelNumber
         : (computedIndex >= 0 ? computedIndex + 1 : 0);
 
-    final cacheEntry = await _ensureCacheEntry(targetChannel.id);
+    final cacheEntry = await ensureCacheEntry(targetChannel.id);
     if (cacheEntry == null) {
       debugPrint(
         'DebrifyTV: Channel "${targetChannel.name}" has no cache entry',
@@ -6574,49 +6596,49 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     debugPrint('DebrifyTV: Stopping old channel prefetcher...');
-    await _stopPrefetch();
+    await stopPrefetch();
     debugPrint('DebrifyTV: Prefetcher stopped. Waiting for RD cooldown...');
     await Future.delayed(const Duration(seconds: 5));
     debugPrint('DebrifyTV: Cooldown complete. Proceeding with channel switch.');
 
-    final previousChannelId = _currentWatchingChannelId;
+    final previousChannelId = _owners.library.currentWatchingChannelId;
     if (previousChannelId != null) {
-      _channelCache.remove(previousChannelId);
+      _owners.library.channelCache.remove(previousChannelId);
       debugPrint(
         'DebrifyTV: Evicted cache entry for previous channel $previousChannelId',
       );
     }
 
-    _seenRestrictedLinks.clear();
-    _seenLinkWithTorrentId.clear();
+    _owners.session.seenRestrictedLinks.clear();
+    _owners.session.seenLinkWithTorrentId.clear();
     // New channel, new filter verdict — let it warn again if this one has
     // nothing at the requested quality/size.
-    _qualityFallbackNotified = false;
-    _rdSizeRejections = 0;
-    _sizeFilterRelaxed = false;
+    _owners.session.qualityFallbackNotified = false;
+    _owners.session.rdSizeRejections = 0;
+    _owners.session.sizeFilterRelaxed = false;
     debugPrint('DebrifyTV: Cleared prefetch state');
 
-    final keywords = await _getChannelKeywords(targetChannel.id);
+    final keywords = await getChannelKeywords(targetChannel.id);
     if (keywords.isEmpty) {
       debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
-      if (_provider == DebrifyTvConstants.providerRealDebrid ||
-          _provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(_startPrefetch());
+      if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
+          _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
+        unawaited(startPrefetch());
       }
       return null;
     }
 
-    final normalizedKeywords = _normalizedKeywords(keywords);
-    final playbackSelection = _selectTorrentsForPlayback(
+    final normalizedKeywords = this.normalizedKeywords(keywords);
+    final playbackSelection = selectTorrentsForPlayback(
       cacheEntry,
       normalizedKeywords,
     );
 
     if (playbackSelection.isEmpty) {
       debugPrint('DebrifyTV: No torrents matched in selected channel');
-      if (_provider == DebrifyTvConstants.providerRealDebrid ||
-          _provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(_startPrefetch());
+      if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
+          _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
+        unawaited(startPrefetch());
       }
       return null;
     }
@@ -6626,15 +6648,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toList();
     if (allTorrents.isEmpty) {
       debugPrint('DebrifyTV: No playable torrents resolved for channel');
-      if (_provider == DebrifyTvConstants.providerRealDebrid ||
-          _provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(_startPrefetch());
+      if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
+          _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
+        unawaited(startPrefetch());
       }
       return null;
     }
 
     List<Torrent> filteredTorrents = allTorrents;
-    if (_provider == DebrifyTvConstants.providerTorbox) {
+    if (_owners.settings.provider == DebrifyTvConstants.providerTorbox) {
       final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         debugPrint('DebrifyTV: ❌ No Torbox API key configured');
@@ -6651,7 +6673,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       try {
         while (candidateCursor < torboxCandidates.length &&
             cachedCandidates.isEmpty) {
-          final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+          final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
             candidates: torboxCandidates,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -6683,7 +6705,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     try {
-      if (_provider == DebrifyTvConstants.providerRealDebrid) {
+      if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid) {
         debugPrint('DebrifyTV: Selected channel uses Real-Debrid provider');
         final apiKey = await RealDebridStorage.getApiKey();
         if (apiKey == null || apiKey.isEmpty) {
@@ -6691,7 +6713,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return null;
         }
 
-        if (_rdSkipBlockedTorrents) {
+        if (_owners.settings.rdSkipBlockedTorrents) {
           filteredTorrents = filteredTorrents
               .where((t) => !isRdBlockedTorrent(t.name))
               .toList();
@@ -6728,7 +6750,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           final torrentId = selection['torrentId']?.toString() ?? '';
           List<String> newLinks = rdLinks
-              .where((link) => !_seenRestrictedLinks.contains(link))
+              .where(
+                (link) => !_owners.session.seenRestrictedLinks.contains(link),
+              )
               .toList();
           if (newLinks.isEmpty) {
             newLinks = List<String>.from(rdLinks);
@@ -6740,9 +6764,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           // episode sitting right behind it.
           String? videoUrl;
           for (final selectedLink in newLinks) {
-            _seenRestrictedLinks.add(selectedLink);
+            _owners.session.seenRestrictedLinks.add(selectedLink);
             if (torrentId.isNotEmpty) {
-              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+              _owners.session.seenLinkWithTorrentId.add(
+                '$torrentId|$selectedLink',
+              );
             }
 
             Map<String, dynamic> unrestrict;
@@ -6758,7 +6784,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               continue;
             }
 
-            if (!_rdLinkPassesSizeRules(unrestrict)) continue;
+            if (!rdLinkPassesSizeRules(unrestrict)) continue;
 
             final String? resolved = unrestrict['download'] as String?;
             if (resolved == null || resolved.isEmpty) {
@@ -6785,17 +6811,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (mounted) {
             final remaining = filteredTorrents.skip(index + 1).toList();
             setState(() {
-              _currentWatchingChannelId = targetChannel.id;
-              _queue
+              _owners.library.currentWatchingChannelId = targetChannel.id;
+              _owners.session.queue
                 ..clear()
                 ..addAll(remaining);
             });
-            _keywordsController.text = keywords.join(', ');
+            _owners.library.keywordsController.text = keywords.join(', ');
           }
 
-          _activeApiKey = apiKey;
-          _activeProvider = DebrifyTvConstants.providerRealDebrid;
-          unawaited(_startPrefetch());
+          _owners.prefetch.activeApiKey = apiKey;
+          _owners.prefetch.activeProvider =
+              DebrifyTvConstants.providerRealDebrid;
+          unawaited(startPrefetch());
           debugPrint(
             'DebrifyTV: Started Real-Debrid prefetcher for new channel',
           );
@@ -6814,7 +6841,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == DebrifyTvConstants.providerAllDebrid) {
+      if (_owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
         debugPrint('DebrifyTV: Selected channel uses AllDebrid provider');
         final apiKey = await AllDebridStorage.getAllDebridApiKey();
         if (apiKey == null || apiKey.isEmpty) {
@@ -6825,7 +6852,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await _resolveAllDebridLinks(candidate, apiKey);
+          final prepared = await resolveAllDebridLinks(candidate, apiKey);
           if (prepared == null || prepared.lockedLinks.isEmpty) {
             // Not cached/ready or no usable video; try the next candidate.
             continue;
@@ -6859,8 +6886,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (mounted) {
             final remaining = filteredTorrents.skip(index + 1).toList();
             setState(() {
-              _currentWatchingChannelId = targetChannel.id;
-              _queue
+              _owners.library.currentWatchingChannelId = targetChannel.id;
+              _owners.session.queue
                 ..clear()
                 // Remaining video files of this torrent first (already
                 // resolved, still locked), then the other candidates.
@@ -6876,12 +6903,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 )
                 ..addAll(remaining);
             });
-            _keywordsController.text = keywords.join(', ');
+            _owners.library.keywordsController.text = keywords.join(', ');
           }
 
-          _activeApiKey = apiKey;
-          _activeProvider = DebrifyTvConstants.providerAllDebrid;
-          unawaited(_startPrefetch());
+          _owners.prefetch.activeApiKey = apiKey;
+          _owners.prefetch.activeProvider =
+              DebrifyTvConstants.providerAllDebrid;
+          unawaited(startPrefetch());
           debugPrint('DebrifyTV: Started AllDebrid prefetcher for new channel');
           debugPrint('DebrifyTV: Successfully got stream from channel: $title');
 
@@ -6898,7 +6926,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == DebrifyTvConstants.providerTorbox) {
+      if (_owners.settings.provider == DebrifyTvConstants.providerTorbox) {
         final apiKey = await TorboxStorage.getTorboxApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Torbox API key configured');
@@ -6908,7 +6936,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await _prepareTorboxTorrent(
+          final prepared = await prepareTorboxTorrent(
             candidate: candidate,
             apiKey: apiKey,
             log: (message) => debugPrint(message),
@@ -6924,15 +6952,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (mounted) {
             final remaining = filteredTorrents.skip(index + 1).toList();
             setState(() {
-              _currentWatchingChannelId = targetChannel.id;
-              _queue
+              _owners.library.currentWatchingChannelId = targetChannel.id;
+              _owners.session.queue
                 ..clear()
                 ..addAll(remaining);
               if (prepared.hasMore) {
-                _queue.add(candidate);
+                _owners.session.queue.add(candidate);
               }
             });
-            _keywordsController.text = keywords.join(', ');
+            _owners.library.keywordsController.text = keywords.join(', ');
           }
 
           debugPrint(
@@ -6951,7 +6979,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == DebrifyTvConstants.providerPikPak) {
+      if (_owners.settings.provider == DebrifyTvConstants.providerPikPak) {
         final pikpakAvailable = await PikPakTvService.instance.isAvailable();
         if (!pikpakAvailable) {
           debugPrint('DebrifyTV: PikPak not authenticated');
@@ -6961,7 +6989,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await _preparePikPakTorrent(
+          final prepared = await preparePikPakTorrent(
             candidate: candidate,
             log: (message) => debugPrint('DebrifyTV/PikPak: $message'),
           );
@@ -6976,16 +7004,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (mounted) {
             final remaining = filteredTorrents.skip(index + 1).toList();
             setState(() {
-              _currentWatchingChannelId = targetChannel.id;
-              _queue
+              _owners.library.currentWatchingChannelId = targetChannel.id;
+              _owners.session.queue
                 ..clear()
                 ..addAll(remaining);
               // Add back to queue if there are more files in this torrent
               if (prepared.hasMore) {
-                _queue.add(candidate);
+                _owners.session.queue.add(candidate);
               }
             });
-            _keywordsController.text = keywords.join(', ');
+            _owners.library.keywordsController.text = keywords.join(', ');
           }
 
           debugPrint(
@@ -7005,7 +7033,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       debugPrint(
-        'DebrifyTV: Unsupported provider for channel switching: $_provider',
+        'DebrifyTV: Unsupported provider for channel switching: ${_owners.settings.provider}',
       );
       return null;
     } catch (e) {
@@ -7013,38 +7041,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     debugPrint('DebrifyTV: Channel switch failed');
-    if (_provider == DebrifyTvConstants.providerRealDebrid ||
-        _provider == DebrifyTvConstants.providerAllDebrid) {
-      unawaited(_startPrefetch());
+    if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
+        _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
+      unawaited(startPrefetch());
       debugPrint('DebrifyTV: Restarted prefetcher for current channel');
     }
     return null;
   }
 
-  int _resolveChannelNumber(DebrifyTvChannel channel) {
+  int resolveChannelNumber(DebrifyTvChannel channel) {
     if (channel.channelNumber > 0) {
       return channel.channelNumber;
     }
-    final int index = _channels.indexWhere(
+    final int index = _owners.library.channels.indexWhere(
       (element) => element.id == channel.id,
     );
     if (index >= 0) {
       return index + 1;
     }
-    final int fallback = _channels.indexOf(channel);
+    final int fallback = _owners.library.channels.indexOf(channel);
     return fallback >= 0 ? fallback + 1 : 0;
   }
 
-  List<Map<String, dynamic>> _androidTvChannelMetadata({
+  List<Map<String, dynamic>> androidTvChannelMetadata({
     String? activeChannelId,
   }) {
-    if (_channels.isEmpty) {
+    if (_owners.library.channels.isEmpty) {
       return const <Map<String, dynamic>>[];
     }
-    final String? highlightId = activeChannelId ?? _currentWatchingChannelId;
+    final String? highlightId =
+        activeChannelId ?? _owners.library.currentWatchingChannelId;
     final List<Map<String, dynamic>> payload = <Map<String, dynamic>>[];
-    for (var i = 0; i < _channels.length; i++) {
-      final channel = _channels[i];
+    for (var i = 0; i < _owners.library.channels.length; i++) {
+      final channel = _owners.library.channels[i];
       payload.add({
         'id': channel.id,
         'name': channel.name,
@@ -7057,7 +7086,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return payload;
   }
 
-  Future<bool> _launchRealDebridOnAndroidTv({
+  Future<bool> launchRealDebridOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
     String? channelName,
@@ -7067,9 +7096,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     List<Map<String, dynamic>>? channelDirectory,
   }) async {
     debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
-    debugPrint('DebrifyTV: _isAndroidTv=$_isAndroidTv');
+    debugPrint('DebrifyTV: _isAndroidTv=${_owners.settings.isAndroidTv}');
 
-    if (!_isAndroidTv) {
+    if (!_owners.settings.isAndroidTv) {
       debugPrint('DebrifyTV: Not Android TV, skipping native launch');
       return false;
     }
@@ -7092,10 +7121,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       final bool canSwitchChannels =
-          _currentWatchingChannelId != null &&
-          _channels.length > 1 &&
-          (_provider == DebrifyTvConstants.providerRealDebrid ||
-              _provider == DebrifyTvConstants.providerAllDebrid);
+          _owners.library.currentWatchingChannelId != null &&
+          _owners.library.channels.length > 1 &&
+          (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
+              _owners.settings.provider ==
+                  DebrifyTvConstants.providerAllDebrid);
 
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
@@ -7105,32 +7135,34 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         title: title.isEmpty ? 'Debrify TV' : title,
         channelName: channelName,
         requestNext: requestNext,
-        requestChannelSwitch: canSwitchChannels ? _requestNextChannel : null,
-        requestChannelById: canSwitchChannels ? _requestChannelById : null,
+        requestChannelSwitch: canSwitchChannels ? requestNextChannel : null,
+        requestChannelById: canSwitchChannels ? requestChannelById : null,
         onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
 
           // Stop prefetcher when exiting player
-          await _stopPrefetch();
+          await stopPrefetch();
           debugPrint('DebrifyTV: Stopped prefetcher on player exit');
 
           AndroidTvPlayerBridge.clearStreamProvider();
-          _currentWatchingChannelId = null; // Clear channel tracking
+          _owners.library.currentWatchingChannelId =
+              null; // Clear channel tracking
           if (!mounted) return;
           setState(() {
-            _status = _queue.isEmpty
+            _owners.session.status = _owners.session.queue.isEmpty
                 ? ''
-                : 'Queue has ${_queue.length} remaining';
+                : 'Queue has ${_owners.session.queue.length} remaining';
           });
         },
-        startFromRandom: _startRandom,
-        randomStartMaxPercent: _randomStartPercent,
-        hideSeekbar: _hideSeekbar,
-        hideOptions: _hideOptions,
-        showVideoTitle: _showVideoTitle,
-        showChannelName: showChannelNameOverride ?? _showChannelName,
+        startFromRandom: _owners.settings.startRandom,
+        randomStartMaxPercent: _owners.settings.randomStartPercent,
+        hideSeekbar: _owners.settings.hideSeekbar,
+        hideOptions: _owners.settings.hideOptions,
+        showVideoTitle: _owners.settings.showVideoTitle,
+        showChannelName:
+            showChannelNameOverride ?? _owners.settings.showChannelName,
         channels: channelDirectory,
-        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
         currentChannelNumber: channelNumber,
       );
 
@@ -7141,7 +7173,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (launched) {
         if (mounted) {
           setState(() {
-            _status = 'Playing via Android TV';
+            _owners.session.status = 'Playing via Android TV';
           });
         }
         debugPrint(
@@ -7164,7 +7196,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return false;
   }
 
-  Future<void> _watchTorboxWithCachedTorrents(
+  Future<void> watchTorboxWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     String? channelName,
     String? channelId,
@@ -7172,16 +7204,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     if (cachedTorrents.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
-      _showSnack(
+      showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
       );
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
-        ? _androidTvChannelMetadata(
-            activeChannelId: channelId ?? _currentWatchingChannelId,
+    final List<Map<String, dynamic>>? channelDirectory =
+        _owners.library.channels.isNotEmpty
+        ? androidTvChannelMetadata(
+            activeChannelId:
+                channelId ?? _owners.library.currentWatchingChannelId,
           )
         : null;
 
@@ -7192,7 +7226,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final integrationEnabled =
         await TorboxStorage.getTorboxIntegrationEnabled();
     if (!integrationEnabled) {
-      _showSnack(
+      showSnack(
         'Enable Torbox in Settings to use this provider.',
         color: Colors.orange,
       );
@@ -7202,22 +7236,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No Torbox API key');
-      _showSnack(
+      showSnack(
         'Please add your Torbox API key in Settings first!',
         color: Colors.orange,
       );
       return;
     }
 
-    _showCachedPlaybackDialog();
+    showCachedPlaybackDialog();
 
     final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
     candidatePool.shuffle(Random());
 
     if (mounted) {
       setState(() {
-        _status = 'Checking Torbox cache...';
-        _isBusy = true;
+        _owners.session.status = 'Checking Torbox cache...';
+        _owners.session.isBusy = true;
       });
     }
 
@@ -7228,7 +7262,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (candidateCursor >= candidatePool.length) {
           return false;
         }
-        final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+        final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
           candidates: candidatePool,
           startIndex: candidateCursor,
           apiKey: apiKey,
@@ -7240,19 +7274,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           continue;
         }
-        _queue
+        _owners.session.queue
           ..clear()
           ..addAll(window.cachedTorrents);
-        _lastQueueSize = _queue.length;
-        _lastSearchAt = DateTime.now();
+        _owners.session.lastQueueSize = _owners.session.queue.length;
+        _owners.session.lastSearchAt = DateTime.now();
         if (mounted) {
           setState(() {
-            _status = _queue.isEmpty
+            _owners.session.status = _owners.session.queue.isEmpty
                 ? ''
-                : 'Queue has ${_queue.length} remaining';
+                : 'Queue has ${_owners.session.queue.length} remaining';
           });
         }
-        log('✅ Cached Torbox batch ready with ${_queue.length} item(s)');
+        log(
+          '✅ Cached Torbox batch ready with ${_owners.session.queue.length} item(s)',
+        );
         return true;
       }
     }
@@ -7261,28 +7297,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       seeded = await populateQueue();
     } catch (e) {
-      _closeProgressDialog();
-      _showSnack(
-        'Torbox cache check failed: ${_formatTorboxError(e)}',
+      closeProgressDialog();
+      showSnack(
+        'Torbox cache check failed: ${formatTorboxError(e)}',
         color: Colors.orange,
       );
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
     }
 
     if (!seeded) {
-      _closeProgressDialog();
-      _showSnack(
+      closeProgressDialog();
+      showSnack(
         'Cached torrents are no longer available on Torbox. Please refresh the channel.',
         color: Colors.orange,
       );
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _owners.session.isBusy = false;
         });
       }
       return;
@@ -7290,19 +7326,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     Future<Map<String, String>?> requestTorboxNext() async {
       while (true) {
-        if (_queue.isEmpty) {
+        if (_owners.session.queue.isEmpty) {
           bool replenished;
           try {
             replenished = await populateQueue();
           } catch (e) {
-            _closeProgressDialog();
-            _showSnack(
-              'Torbox cache check failed: ${_formatTorboxError(e)}',
+            closeProgressDialog();
+            showSnack(
+              'Torbox cache check failed: ${formatTorboxError(e)}',
               color: Colors.orange,
             );
             if (mounted) {
               setState(() {
-                _isBusy = false;
+                _owners.session.isBusy = false;
               });
             }
             return null;
@@ -7311,14 +7347,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             break;
           }
         }
-        if (_queue.isEmpty) {
+        if (_owners.session.queue.isEmpty) {
           break;
         }
 
-        final next = _queue.removeAt(0);
+        final next = _owners.session.queue.removeAt(0);
         if (next is Map &&
             next['type'] == DebrifyTvConstants.torboxFileEntryType) {
-          final resolved = await _resolveTorboxQueuedFile(
+          final resolved = await resolveTorboxQueuedFile(
             entry: Map<String, dynamic>.from(next as Map),
             apiKey: apiKey,
             log: log,
@@ -7333,7 +7369,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        final prepared = await _prepareTorboxTorrent(
+        final prepared = await prepareTorboxTorrent(
           candidate: next,
           apiKey: apiKey,
           log: log,
@@ -7353,16 +7389,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       final first = await requestTorboxNext();
       if (first == null) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (!mounted) return;
         setState(() {
-          _status = 'No playable Torbox streams found. Try refreshing.';
-          _isBusy = false;
+          _owners.session.status =
+              'No playable Torbox streams found. Try refreshing.';
+          _owners.session.isBusy = false;
         });
         MainPageBridge.notifyAutoLaunchFailed(
           'No cached Torbox streams available',
         );
-        _showSnack(
+        showSnack(
           'No cached Torbox streams are playable. Try refreshing the channel.',
           color: Colors.orange,
         );
@@ -7370,16 +7407,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!mounted) return;
-      _closeProgressDialog();
+      closeProgressDialog();
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await _launchTorboxOnAndroidTv(
+      final launchedOnTv = await launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
         channelName: channelName,
@@ -7399,49 +7436,53 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
+            startFromRandom: _owners.settings.startRandom,
+            randomStartMaxPercent: _owners.settings.randomStartPercent,
+            hideSeekbar: _owners.settings.hideSeekbar,
+            showChannelName: _owners.settings.showChannelName,
             channelName: channelName,
             channelNumber: channelNumber,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
+            showVideoTitle: _owners.settings.showVideoTitle,
+            hideOptions: _owners.settings.hideOptions,
             requestMagicNext: requestTorboxNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_provider == DebrifyTvConstants.providerRealDebrid ||
-                        _provider == DebrifyTvConstants.providerTorbox ||
-                        _provider == DebrifyTvConstants.providerPikPak ||
-                        _provider == DebrifyTvConstants.providerPremiumize)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.provider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPikPak ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPremiumize)
+                ? requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
       if (mounted) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
     }
   }
 
-  Future<void> _watchPikPakWithCachedTorrents(
+  Future<void> watchPikPakWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     String? channelName,
     String? channelId,
@@ -7449,16 +7490,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     if (cachedTorrents.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
-      _showSnack(
+      showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
       );
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
-        ? _androidTvChannelMetadata(
-            activeChannelId: channelId ?? _currentWatchingChannelId,
+    final List<Map<String, dynamic>>? channelDirectory =
+        _owners.library.channels.isNotEmpty
+        ? androidTvChannelMetadata(
+            activeChannelId:
+                channelId ?? _owners.library.currentWatchingChannelId,
           )
         : null;
 
@@ -7468,49 +7511,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
     if (!pikpakAvailable) {
-      _showSnack(
+      showSnack(
         'Please login to PikPak in Settings first!',
         color: Colors.orange,
       );
       return;
     }
 
-    _showCachedPlaybackDialog();
+    showCachedPlaybackDialog();
 
-    _pikpakCandidatePool = List<Torrent>.from(cachedTorrents);
-    _pikpakCandidatePool!.shuffle(Random());
+    _owners.session.pikpakCandidatePool = List<Torrent>.from(cachedTorrents);
+    _owners.session.pikpakCandidatePool!.shuffle(Random());
 
     if (mounted) {
       setState(() {
-        _status = 'Preparing PikPak stream...';
-        _isBusy = true;
-        _queue
+        _owners.session.status = 'Preparing PikPak stream...';
+        _owners.session.isBusy = true;
+        _owners.session.queue
           ..clear()
-          ..addAll(_pikpakCandidatePool!);
+          ..addAll(_owners.session.pikpakCandidatePool!);
       });
     }
 
     Future<Map<String, String>?> requestPikPakNext() async {
-      if (_watchCancelled) return null;
+      if (_owners.session.watchCancelled) return null;
 
-      while (_queue.isNotEmpty && !_watchCancelled) {
-        final next = _queue.removeAt(0);
-        if (_watchCancelled) break;
+      while (_owners.session.queue.isNotEmpty &&
+          !_owners.session.watchCancelled) {
+        final next = _owners.session.queue.removeAt(0);
+        if (_owners.session.watchCancelled) break;
 
         if (next is! Torrent) {
           continue;
         }
 
-        final prepared = await _preparePikPakTorrent(candidate: next, log: log);
+        final prepared = await preparePikPakTorrent(candidate: next, log: log);
 
-        if (_watchCancelled) return null;
+        if (_owners.session.watchCancelled) return null;
 
         if (prepared == null) {
           continue;
         }
 
         if (prepared.hasMore) {
-          _queue.add(next);
+          _owners.session.queue.add(next);
         }
 
         return {
@@ -7525,14 +7569,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       final first = await requestPikPakNext();
       if (first == null) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (!mounted) return;
         setState(() {
-          _status = 'No playable PikPak streams found. Try refreshing.';
-          _isBusy = false;
+          _owners.session.status =
+              'No playable PikPak streams found. Try refreshing.';
+          _owners.session.isBusy = false;
         });
         MainPageBridge.notifyAutoLaunchFailed('No PikPak streams available');
-        _showSnack(
+        showSnack(
           'No PikPak streams are playable. Try refreshing the channel.',
           color: Colors.orange,
         );
@@ -7540,9 +7585,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!mounted) return;
-      _closeProgressDialog();
+      closeProgressDialog();
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
@@ -7550,7 +7595,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       // Try Android TV native player first
-      final launchedOnTv = await _launchPikPakOnAndroidTv(
+      final launchedOnTv = await launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPikPakNext,
         channelName: channelName,
@@ -7570,49 +7615,53 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
+            startFromRandom: _owners.settings.startRandom,
+            randomStartMaxPercent: _owners.settings.randomStartPercent,
+            hideSeekbar: _owners.settings.hideSeekbar,
+            showChannelName: _owners.settings.showChannelName,
             channelName: channelName,
             channelNumber: channelNumber,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
+            showVideoTitle: _owners.settings.showVideoTitle,
+            hideOptions: _owners.settings.hideOptions,
             requestMagicNext: requestPikPakNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_provider == DebrifyTvConstants.providerRealDebrid ||
-                        _provider == DebrifyTvConstants.providerTorbox ||
-                        _provider == DebrifyTvConstants.providerPikPak ||
-                        _provider == DebrifyTvConstants.providerPremiumize)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.provider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPikPak ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPremiumize)
+                ? requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
       if (mounted) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
     }
   }
 
-  Future<bool> _launchPikPakOnAndroidTv({
+  Future<bool> launchPikPakOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
     String? channelName,
@@ -7621,7 +7670,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     int? channelNumber,
     List<Map<String, dynamic>>? channelDirectory,
   }) async {
-    if (!_isAndroidTv) {
+    if (!_owners.settings.isAndroidTv) {
       return false;
     }
     final initialUrl = firstStream['url'] ?? '';
@@ -7640,34 +7689,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         title: title.isEmpty ? 'Debrify TV' : title,
         magnets: const [],
         requestNext: requestNext,
-        requestChannelSwitch: _channels.length > 1 ? _requestNextChannel : null,
-        requestChannelById: _channels.length > 1 ? _requestChannelById : null,
+        requestChannelSwitch: _owners.library.channels.length > 1
+            ? requestNextChannel
+            : null,
+        requestChannelById: _owners.library.channels.length > 1
+            ? requestChannelById
+            : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
           if (!mounted) {
             return;
           }
           setState(() {
-            _status = _queue.isEmpty
+            _owners.session.status = _owners.session.queue.isEmpty
                 ? ''
-                : 'Queue has ${_queue.length} remaining';
+                : 'Queue has ${_owners.session.queue.length} remaining';
           });
         },
-        startFromRandom: _startRandom,
-        randomStartMaxPercent: _randomStartPercent,
-        hideSeekbar: _hideSeekbar,
-        hideOptions: _hideOptions,
-        showVideoTitle: _showVideoTitle,
-        showChannelName: showChannelNameOverride ?? _showChannelName,
+        startFromRandom: _owners.settings.startRandom,
+        randomStartMaxPercent: _owners.settings.randomStartPercent,
+        hideSeekbar: _owners.settings.hideSeekbar,
+        hideOptions: _owners.settings.hideOptions,
+        showVideoTitle: _owners.settings.showVideoTitle,
+        showChannelName:
+            showChannelNameOverride ?? _owners.settings.showChannelName,
         channelName: channelName,
         channels: channelDirectory,
-        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
         currentChannelNumber: channelNumber,
       );
       if (launched) {
         if (mounted) {
           setState(() {
-            _status = 'Playing via Android TV';
+            _owners.session.status = 'Playing via Android TV';
           });
         }
         return true;
@@ -7681,14 +7735,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return false;
   }
 
-  void _showChannelCreationDialog(String channelName, {int? countdownSeconds}) {
-    if (_progressOpen || !mounted) {
+  void showChannelCreationDialog(String channelName, {int? countdownSeconds}) {
+    if (_owners.progress.progressOpen || !mounted) {
       return;
     }
-    _progress.value = [];
-    _progressOpen = true;
+    _owners.progress.progress.value = [];
+    _owners.progress.progressOpen = true;
     Future.microtask(() {
-      if (!mounted || !_progressOpen) {
+      if (!mounted || !_owners.progress.progressOpen) {
         return;
       }
       // showGeneralDialog skips InheritedTheme capture; snapshot this frozen
@@ -7705,7 +7759,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               channelName: channelName,
               countdownSeconds: countdownSeconds,
               onReady: (dialogCtx) {
-                _progressSheetContext = dialogCtx;
+                _owners.progress.progressSheetContext = dialogCtx;
               },
             ),
           );
@@ -7724,26 +7778,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
   }
 
-  void _showCachedPlaybackDialog() {
+  void showCachedPlaybackDialog() {
     debugPrint(
-      '[MagicTV] _showCachedPlaybackDialog called, _progressOpen=$_progressOpen, mounted=$mounted, _watchCancelled=$_watchCancelled',
+      '[MagicTV] _showCachedPlaybackDialog called, _progressOpen=${_owners.progress.progressOpen}, mounted=$mounted, _watchCancelled=${_owners.session.watchCancelled}',
     );
-    if (_progressOpen || !mounted) {
+    if (_owners.progress.progressOpen || !mounted) {
       return;
     }
 
     // Reset cancellation flag for new playback session.
     // This must happen before the auto-launch check so that playback can proceed
     // even when the dialog is skipped (auto-launch has its own overlay UI).
-    _watchCancelled = false;
+    _owners.session.watchCancelled = false;
     debugPrint(
       '[MagicTV] _showCachedPlaybackDialog: Reset _watchCancelled to false',
     );
 
-    _progress.value = [];
-    _progressOpen = true;
+    _owners.progress.progress.value = [];
+    _owners.progress.progressOpen = true;
     Future.microtask(() {
-      if (!mounted || !_progressOpen) {
+      if (!mounted || !_owners.progress.progressOpen) {
         return;
       }
       // Same snapshot rule as the channel-creation dialog above.
@@ -7755,12 +7809,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (ctx, _, __) {
           // Use pageBuilder context directly - simpler and avoids race conditions
-          _progressSheetContext = ctx;
+          _owners.progress.progressSheetContext = ctx;
           return capturedThemes.wrap(
             CachedLoadingDialog(
               onCancel: () {
                 debugPrint('[MagicTV] onCancel callback triggered');
-                _cancelActiveWatch(dialogContext: ctx);
+                cancelActiveWatch(dialogContext: ctx);
               },
             ),
           );
@@ -7780,7 +7834,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _playNextFromQueue() async {
-    if (_isBusy) return;
+    if (_owners.session.isBusy) return;
     final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
@@ -7795,13 +7849,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _isBusy = true;
-      _status = 'Finding a playable stream...';
+      _owners.session.isBusy = true;
+      _owners.session.status = 'Finding a playable stream...';
     });
 
     try {
-      while (_queue.isNotEmpty) {
-        final next = _queue.removeAt(0);
+      while (_owners.session.queue.isNotEmpty) {
+        final next = _owners.session.queue.removeAt(0);
         final magnetLink = 'magnet:?xt=urn:btih:${next.infohash}';
         try {
           final result = await DebridService.addTorrentToDebridPreferVideos(
@@ -7812,10 +7866,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (videoUrl != null && videoUrl.isNotEmpty) {
             if (!mounted) return;
             setState(() {
-              _status = 'Playing: ${next.name}';
+              _owners.session.status = 'Playing: ${next.name}';
             });
 
-            if (await _handOffToExternalPlayer(videoUrl, next.name)) {
+            if (await handOffToExternalPlayer(videoUrl, next.name)) {
               break;
             }
 
@@ -7827,14 +7881,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 builder: (_) => VideoPlayerScreen(
                   videoUrl: videoUrl,
                   title: next.name,
-                  startFromRandom: _quickStartRandom,
-                  randomStartMaxPercent: _quickRandomStartPercent,
-                  hideSeekbar: _quickHideSeekbar,
-                  showChannelName: _quickShowChannelName,
+                  startFromRandom: _owners.settings.quickStartRandom,
+                  randomStartMaxPercent:
+                      _owners.settings.quickRandomStartPercent,
+                  hideSeekbar: _owners.settings.quickHideSeekbar,
+                  showChannelName: _owners.settings.quickShowChannelName,
                   channelName: null,
                   channelNumber: null,
-                  showVideoTitle: _quickShowVideoTitle,
-                  hideOptions: _quickHideOptions,
+                  showVideoTitle: _owners.settings.quickShowVideoTitle,
+                  hideOptions: _owners.settings.quickHideOptions,
                 ),
               ),
             );
@@ -7846,18 +7901,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
 
-      if (_queue.isEmpty) {
+      if (_owners.session.queue.isEmpty) {
         // Close popup and show user-friendly message
-        if (_progressOpen && _progressSheetContext != null) {
-          Navigator.of(_progressSheetContext!).pop();
-          _progressOpen = false;
-          _progressSheetContext = null;
+        if (_owners.progress.progressOpen &&
+            _owners.progress.progressSheetContext != null) {
+          Navigator.of(_owners.progress.progressSheetContext!).pop();
+          _owners.progress.progressOpen = false;
+          _owners.progress.progressSheetContext = null;
         }
 
         if (mounted) {
           setState(() {
-            _isBusy = false;
-            _status = 'No playable torrents found. Try different keywords.';
+            _owners.session.isBusy = false;
+            _owners.session.status =
+                'No playable torrents found. Try different keywords.';
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -7871,12 +7928,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       } else {
         setState(() {
-          _status = 'Queue has ${_queue.length} remaining';
+          _owners.session.status =
+              'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } finally {
       setState(() {
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
     }
   }
@@ -7884,50 +7942,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    if (_debrifyTvStyle == 'spotlight') {
+    if (_owners.library.debrifyTvStyle == 'spotlight') {
       return SpotlightLayout(
-        view: _buildSpotlightView(),
+        view: _sections.legacy.buildSpotlightView(),
         bottomInset: bottomInset,
-        entryFocusNode: _quickPlayFocusNode,
+        entryFocusNode: _owners.focus.quickPlayFocusNode,
       );
     }
     // The historical layout, byte-identical under `grid` — the branch calls
     // it unchanged, never a re-implementation.
-    return _buildTvGridLayout(bottomInset);
+    return _sections.legacy.buildTvGridLayout(bottomInset);
   }
 
   /// The Spotlight layout's window onto this state. Paint only: every
   /// callback is an existing method, every playback path is shared verbatim.
-  DebrifyTvView _buildSpotlightView() {
+  DebrifyTvView buildSpotlightView() {
     return DebrifyTvView(
-      channels: _channels,
-      favoriteIds: _favoriteChannelIds,
-      railHealth: _spotlightRailHealth,
-      stats: _spotlightFocusedId == null
+      channels: _owners.library.channels,
+      favoriteIds: _owners.library.favoriteChannelIds,
+      railHealth: _owners.stage.spotlightRailHealth,
+      stats: _owners.stage.spotlightFocusedId == null
           ? null
-          : _spotlightStats[_spotlightFocusedId],
-      busy: _isBusy,
-      onQuickPlay: _showQuickPlayDialog,
-      onAdd: _handleAddChannel,
-      onImport: _handleImportChannels,
-      onExport: _handleExportChannels,
-      onDeleteAll: _handleDeleteAllChannels,
-      onSettings: _showGlobalSettingsDialog,
-      onWatch: _watchChannel,
-      onEdit: _handleEditChannel,
-      onShare: _handleShareChannelAsMagnet,
-      onDelete: _handleDeleteChannel,
-      onToggleFavorite: _toggleChannelFavorite,
+          : _owners.stage.spotlightStats[_owners.stage.spotlightFocusedId],
+      busy: _owners.session.isBusy,
+      onQuickPlay: showQuickPlayDialog,
+      onAdd: handleAddChannel,
+      onImport: handleImportChannels,
+      onExport: handleExportChannels,
+      onDeleteAll: handleDeleteAllChannels,
+      onSettings: showGlobalSettingsDialog,
+      onWatch: watchChannel,
+      onEdit: handleEditChannel,
+      onShare: handleShareChannelAsMagnet,
+      onDelete: handleDeleteChannel,
+      onToggleFavorite: toggleChannelFavorite,
       onChannelFocused: _onSpotlightChannelFocused,
       onWatchOne: (channel, torrent) =>
-          _watchChannel(channel, leadWith: torrent),
+          watchChannel(channel, leadWith: torrent),
     );
   }
 
-  Future<void> _loadSpotlightRailHealth() async {
+  Future<void> loadSpotlightRailHealth() async {
     final health = await DebrifyTvCacheService.loadRailHealth();
     if (!mounted) return;
-    setState(() => _spotlightRailHealth = health);
+    setState(() => _owners.stage.spotlightRailHealth = health);
   }
 
   /// Focus moved to a channel row. The stage's numbers need a per-row name
@@ -7938,14 +7996,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Cancel FIRST, unconditionally: a memo hit must still kill a pending
     // timer for the previous channel, or gliding B→A (A memoised) classifies
     // B off-focus.
-    _spotlightStatsDebounce?.cancel();
-    _spotlightFocusedId = channel.id;
+    _owners.stage.spotlightStatsDebounce?.cancel();
+    _owners.stage.spotlightFocusedId = channel.id;
     // Rebuild NOW either way. On a miss the view's stats go null and the
     // stage draws placeholders — never another channel's numbers, which a
     // plate press would turn into another channel's torrent.
     setState(() {});
-    if (_spotlightStats.containsKey(channel.id)) return;
-    _spotlightStatsDebounce = Timer(
+    if (_owners.stage.spotlightStats.containsKey(channel.id)) return;
+    _owners.stage.spotlightStatsDebounce = Timer(
       const Duration(milliseconds: 250),
       () => _computeSpotlightStats(channel),
     );
@@ -7954,35 +8012,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Wipe every memoised stage snapshot and recompute the focused channel's.
   /// For when the numbers' INPUTS change — the quality filter — rather than
   /// one channel's pool.
-  void _invalidateSpotlightStats() {
-    if (_debrifyTvStyle != 'spotlight') return;
-    _spotlightStats.clear();
-    _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
+  void invalidateSpotlightStats() {
+    if (_owners.library.debrifyTvStyle != 'spotlight') return;
+    _owners.stage.spotlightStats.clear();
+    refreshSpotlightStatsIfFocused(_owners.stage.spotlightFocusedId);
   }
 
   /// A channel's pool (or the filter over it) changed; if it is the one the
   /// stage is showing, schedule fresh numbers — memo removal alone leaves
   /// the stage on its placeholder forever, since only a focus MOVE computes.
-  void _refreshSpotlightStatsIfFocused(String? channelId) {
-    if (_debrifyTvStyle != 'spotlight' || channelId == null) return;
-    if (_spotlightFocusedId != channelId) return;
-    final channel = _channels.firstWhereOrNull((c) => c.id == channelId);
+  void refreshSpotlightStatsIfFocused(String? channelId) {
+    if (_owners.library.debrifyTvStyle != 'spotlight' || channelId == null)
+      return;
+    if (_owners.stage.spotlightFocusedId != channelId) return;
+    final channel = _owners.library.channels.firstWhereOrNull(
+      (c) => c.id == channelId,
+    );
     if (channel != null) _onSpotlightChannelFocused(channel);
   }
 
   Future<void> _computeSpotlightStats(DebrifyTvChannel channel) async {
-    if (!mounted || _spotlightStats.containsKey(channel.id)) return;
-    final entry = await _ensureCacheEntry(channel.id);
+    if (!mounted || _owners.stage.spotlightStats.containsKey(channel.id))
+      return;
+    final entry = await ensureCacheEntry(channel.id);
     // Focus may have moved during the read; bail rather than classify an
     // off-focus pool. The entry stays in _channelCache, so a return visit
     // pays only the classify.
-    if (!mounted || _spotlightFocusedId != channel.id) return;
+    if (!mounted || _owners.stage.spotlightFocusedId != channel.id) return;
     final torrents = entry?.torrents ?? const <CachedTorrent>[];
 
     // ONE pass classifies every name: the quality count and the mix buckets
     // share it. Quality only — size is a per-file rule the pool rows cannot
     // answer, and counting it here would promise what playback can't keep.
-    final hasQuality = _tvFilters.hasQuality;
+    final hasQuality = _owners.settings.tvFilters.hasQuality;
     int uhd = 0, fhd = 0, rest = 0, atQuality = 0;
     for (final t in torrents) {
       switch (qualityTierForName(t.name)) {
@@ -7994,7 +8056,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         case QualityTier.sd:
           rest++;
       }
-      if (!hasQuality || _tvFilters.qualityMatchesName(t.name)) {
+      if (!hasQuality ||
+          _owners.settings.tvFilters.qualityMatchesName(t.name)) {
         atQuality++;
       }
     }
@@ -8024,36 +8087,36 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       sample: sample.take(4).toList(),
     );
     setState(() {
-      _spotlightStats[channel.id] = stats;
+      _owners.stage.spotlightStats[channel.id] = stats;
     });
   }
 
   void _toggleChannelSearchBar() {
     setState(() {
-      _showSearchBar = !_showSearchBar;
-      if (_showSearchBar) {
+      _owners.focus.showSearchBar = !_owners.focus.showSearchBar;
+      if (_owners.focus.showSearchBar) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _channelSearchFocusNode.requestFocus();
+            _owners.focus.channelSearchFocusNode.requestFocus();
           }
         });
       } else {
-        _channelSearchController.clear();
-        _channelSearchTerm = '';
+        _owners.focus.channelSearchController.clear();
+        _owners.focus.channelSearchTerm = '';
       }
     });
   }
 
-  void _clearChannelSearchAndRefocus() {
-    _channelSearchController.clear();
+  void clearChannelSearchAndRefocus() {
+    _owners.focus.channelSearchController.clear();
     setState(() {
-      _channelSearchTerm = '';
+      _owners.focus.channelSearchTerm = '';
     });
-    _channelSearchFocusNode.requestFocus();
+    _owners.focus.channelSearchFocusNode.requestFocus();
   }
 
-  void _focusBelowChannelSearch() {
-    final fieldContext = _channelSearchFocusNode.context;
+  void focusBelowChannelSearch() {
+    final fieldContext = _owners.focus.channelSearchFocusNode.context;
     if (fieldContext != null) {
       FocusScope.of(fieldContext).nextFocus();
     }
@@ -8062,19 +8125,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   void _handleTopMenuAction(DebrifyTvTopMenuAction action) {
     switch (action) {
       case DebrifyTvTopMenuAction.import:
-        _handleImportChannels();
+        handleImportChannels();
         break;
       case DebrifyTvTopMenuAction.export:
-        _handleExportChannels();
+        handleExportChannels();
         break;
       case DebrifyTvTopMenuAction.add:
-        _handleAddChannel();
+        handleAddChannel();
         break;
       case DebrifyTvTopMenuAction.deleteAll:
-        _handleDeleteAllChannels();
+        handleDeleteAllChannels();
         break;
       case DebrifyTvTopMenuAction.settings:
-        _showGlobalSettingsDialog();
+        showGlobalSettingsDialog();
         break;
     }
   }
@@ -8114,8 +8177,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowUp) {
-          if (upToSearch && _showSearchBar) {
-            _channelSearchFocusNode.requestFocus();
+          if (upToSearch && _owners.focus.showSearchBar) {
+            _owners.focus.channelSearchFocusNode.requestFocus();
           }
           return KeyEventResult.handled;
         }
@@ -8201,45 +8264,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ),
     );
     return Focus(
-      focusNode: _channelMenuFocusNode,
+      focusNode: _owners.focus.channelMenuFocusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
 
-        if (_channelMenuController.isOpen) {
+        if (_owners.focus.channelMenuController.isOpen) {
           if (key == LogicalKeyboardKey.escape ||
               key == LogicalKeyboardKey.goBack) {
-            _channelMenuController.close();
-            _channelMenuFocusNode.requestFocus();
+            _owners.focus.channelMenuController.close();
+            _owners.focus.channelMenuFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         }
 
         if (key == LogicalKeyboardKey.arrowLeft) {
-          _channelSearchButtonFocusNode.requestFocus();
+          _owners.focus.channelSearchButtonFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowRight) {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowUp) {
-          if (_showSearchBar) {
-            _channelSearchFocusNode.requestFocus();
+          if (_owners.focus.showSearchBar) {
+            _owners.focus.channelSearchFocusNode.requestFocus();
           }
           return KeyEventResult.handled;
         }
         if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-          _channelMenuController.open();
+          _owners.focus.channelMenuController.open();
           return KeyEventResult.handled;
         }
 
         return KeyEventResult.ignored;
       },
       child: ListenableBuilder(
-        listenable: _channelMenuFocusNode,
+        listenable: _owners.focus.channelMenuFocusNode,
         builder: (context, _) => MenuAnchor(
-          controller: _channelMenuController,
+          controller: _owners.focus.channelMenuController,
           style: MenuStyle(
             backgroundColor: WidgetStatePropertyAll(tv.noticeBg),
             surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -8257,7 +8320,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               autofocus: true,
               style: itemStyle,
               leadingIcon: const Icon(Icons.cloud_download_rounded),
-              onPressed: _isBusy
+              onPressed: _owners.session.isBusy
                   ? null
                   : () => _handleTopMenuAction(DebrifyTvTopMenuAction.import),
               child: const Text('Import'),
@@ -8265,7 +8328,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             MenuItemButton(
               style: itemStyle,
               leadingIcon: const Icon(Icons.folder_zip_rounded),
-              onPressed: _isBusy || _channels.isEmpty
+              onPressed:
+                  _owners.session.isBusy || _owners.library.channels.isEmpty
                   ? null
                   : () => _handleTopMenuAction(DebrifyTvTopMenuAction.export),
               child: const Text('Export Channels'),
@@ -8273,7 +8337,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             MenuItemButton(
               style: itemStyle,
               leadingIcon: const Icon(Icons.add_rounded),
-              onPressed: _isBusy
+              onPressed: _owners.session.isBusy
                   ? null
                   : () => _handleTopMenuAction(DebrifyTvTopMenuAction.add),
               child: const Text('Add Channel'),
@@ -8281,7 +8345,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             MenuItemButton(
               style: itemStyle,
               leadingIcon: const Icon(Icons.delete_outline_rounded),
-              onPressed: _isBusy || _channels.isEmpty
+              onPressed:
+                  _owners.session.isBusy || _owners.library.channels.isEmpty
                   ? null
                   : () =>
                         _handleTopMenuAction(DebrifyTvTopMenuAction.deleteAll),
@@ -8296,7 +8361,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ],
           builder: (context, controller, child) {
-            final focused = _channelMenuFocusNode.hasFocus;
+            final focused = _owners.focus.channelMenuFocusNode.hasFocus;
 
             return Tooltip(
               message: 'Options',
@@ -8338,31 +8403,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Widget _buildTopActions() {
+  Widget buildTopActions() {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildTopActionButton(
-          focusNode: _quickPlayFocusNode,
+          focusNode: _owners.focus.quickPlayFocusNode,
           icon: Icons.play_arrow_rounded,
           tooltip: 'Play',
-          onPressed: _isBusy ? null : _showQuickPlayDialog,
+          onPressed: _owners.session.isBusy ? null : showQuickPlayDialog,
           activeColor: tv.fillStrong,
           leftToSidebar: true,
-          rightFocusNode: _channelSearchButtonFocusNode,
+          rightFocusNode: _owners.focus.channelSearchButtonFocusNode,
         ),
         const SizedBox(width: 10),
         _buildTopActionButton(
-          focusNode: _channelSearchButtonFocusNode,
+          focusNode: _owners.focus.channelSearchButtonFocusNode,
           icon: Icons.search_rounded,
-          tooltip: _showSearchBar ? 'Close search' : 'Search channels',
+          tooltip: _owners.focus.showSearchBar
+              ? 'Close search'
+              : 'Search channels',
           onPressed: _toggleChannelSearchBar,
           activeColor: tv.fillStrong,
-          isActive: _showSearchBar || _channelSearchTerm.isNotEmpty,
-          leftFocusNode: _quickPlayFocusNode,
-          rightFocusNode: _channelMenuFocusNode,
+          isActive:
+              _owners.focus.showSearchBar ||
+              _owners.focus.channelSearchTerm.isNotEmpty,
+          leftFocusNode: _owners.focus.quickPlayFocusNode,
+          rightFocusNode: _owners.focus.channelMenuFocusNode,
           upToSearch: true,
         ),
         const SizedBox(width: 10),
@@ -8372,13 +8441,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // Grid Layout for all devices (responsive)
-  Widget _buildTvGridLayout(double bottomInset) {
+  Widget buildTvGridLayout(double bottomInset) {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
-    final searchTerm = _channelSearchTerm.trim().toLowerCase();
+    final searchTerm = _owners.focus.channelSearchTerm.trim().toLowerCase();
     final filteredChannels = searchTerm.isEmpty
-        ? _channels
-        : _channels
+        ? _owners.library.channels
+        : _owners.library.channels
               .where(
                 (channel) => channel.name.toLowerCase().contains(searchTerm),
               )
@@ -8399,17 +8468,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Centered top controls: Play, Search, and overflow.
-          _buildTopActions(),
+          buildTopActions(),
           // Search field for TV (only show when toggled)
-          if (_showSearchBar) ...[
+          if (_owners.focus.showSearchBar) ...[
             const SizedBox(height: 16),
             Focus(
               canRequestFocus: false,
               skipTraversal: true,
-              onKeyEvent: _handleChannelSearchBarBack,
+              onKeyEvent: handleChannelSearchBarBack,
               child: TvTextField(
-                focusNode: _channelSearchFocusNode,
-                controller: _channelSearchController,
+                focusNode: _owners.focus.channelSearchFocusNode,
+                controller: _owners.focus.channelSearchController,
                 style: TextStyle(color: app.core.tx),
                 // Shared TV shell/keyboard chrome — settings.accent, with the
                 // keyboard's own panel ground and ink.
@@ -8419,13 +8488,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 keyboardInkOnAccent: app.inkOn(app.settings.accent),
                 onLeftArrow: () => MainPageBridge.focusTvSidebar?.call(),
                 onRightArrow: () {
-                  if (_channelSearchController.text.isNotEmpty) {
-                    _channelSearchClearFocusNode.requestFocus();
+                  if (_owners.focus.channelSearchController.text.isNotEmpty) {
+                    _owners.focus.channelSearchClearFocusNode.requestFocus();
                   }
                 },
-                onUpArrow: () => _channelSearchButtonFocusNode.requestFocus(),
-                onSubmitted: (_) => _focusBelowChannelSearch(),
-                onDownArrow: _focusBelowChannelSearch,
+                onUpArrow: () =>
+                    _owners.focus.channelSearchButtonFocusNode.requestFocus(),
+                onSubmitted: (_) => focusBelowChannelSearch(),
+                onDownArrow: focusBelowChannelSearch,
                 decoration: InputDecoration(
                   hintText: 'Search channels...',
                   hintStyle: TextStyle(
@@ -8435,9 +8505,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     Icons.search_rounded,
                     color: app.core.tx.withValues(alpha: 0.35),
                   ),
-                  suffixIcon: _channelSearchTerm.isNotEmpty
+                  suffixIcon: _owners.focus.channelSearchTerm.isNotEmpty
                       ? Focus(
-                          focusNode: _channelSearchClearFocusNode,
+                          focusNode: _owners.focus.channelSearchClearFocusNode,
                           skipTraversal: true,
                           onKeyEvent: (node, event) {
                             if (event is! KeyDownEvent) {
@@ -8445,20 +8515,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             }
                             final key = event.logicalKey;
                             if (key == LogicalKeyboardKey.arrowLeft) {
-                              _channelSearchFocusNode.requestFocus();
+                              _owners.focus.channelSearchFocusNode
+                                  .requestFocus();
                               return KeyEventResult.handled;
                             }
                             if (key == LogicalKeyboardKey.arrowRight) {
-                              _channelMenuFocusNode.requestFocus();
+                              _owners.focus.channelMenuFocusNode.requestFocus();
                               return KeyEventResult.handled;
                             }
                             if (key == LogicalKeyboardKey.arrowUp) {
-                              _channelSearchButtonFocusNode.requestFocus();
+                              _owners.focus.channelSearchButtonFocusNode
+                                  .requestFocus();
                               return KeyEventResult.handled;
                             }
                             if (isActivateKey(key) ||
                                 key == LogicalKeyboardKey.space) {
-                              _clearChannelSearchAndRefocus();
+                              clearChannelSearchAndRefocus();
                               return KeyEventResult.handled;
                             }
                             return KeyEventResult.ignored;
@@ -8484,7 +8556,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                         ? ink
                                         : ink.withValues(alpha: 0.5),
                                   ),
-                                  onPressed: _clearChannelSearchAndRefocus,
+                                  onPressed: clearChannelSearchAndRefocus,
                                 ),
                               );
                             },
@@ -8518,7 +8590,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 textInputAction: TextInputAction.search,
                 onChanged: (value) {
                   setState(() {
-                    _channelSearchTerm = value;
+                    _owners.focus.channelSearchTerm = value;
                   });
                 },
               ),
@@ -8526,9 +8598,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ],
           const SizedBox(height: 16),
           // Favorite channels section (only shows if there are favorites)
-          _buildFavoriteChannelsSection(),
+          buildFavoriteChannelsSection(),
           // "All" section header (only show when there are favorites to distinguish)
-          if (_favoriteChannelIds.isNotEmpty && filteredChannels.isNotEmpty)
+          if (_owners.library.favoriteChannelIds.isNotEmpty &&
+              filteredChannels.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 12),
               child: Row(
@@ -8595,13 +8668,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             // "Add Channel" card at the end
                             return KeyedSubtree(
                               key: const ValueKey('add_channel_card'),
-                              child: _buildTvAddChannelCard(),
+                              child: buildTvAddChannelCard(),
                             );
                           }
                           final channel = filteredChannels[index];
                           return KeyedSubtree(
                             key: ValueKey('channel_${channel.id}'),
-                            child: _buildTvChannelCard(channel),
+                            child: buildTvChannelCard(channel),
                           );
                         },
                       );
@@ -8638,7 +8711,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
           const SizedBox(height: 32),
           TvFocusableButton(
-            onPressed: _handleAddChannel,
+            onPressed: handleAddChannel,
             icon: Icons.add_rounded,
             label: 'Add Channel',
             backgroundColor: tv.accent,
@@ -8650,12 +8723,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // Favorite Channels Section (horizontal row)
-  Widget _buildFavoriteChannelsSection() {
+  Widget buildFavoriteChannelsSection() {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
     // Get favorite channels from the channels list
-    final favoriteChannels = _channels
-        .where((channel) => _favoriteChannelIds.contains(channel.id))
+    final favoriteChannels = _owners.library.channels
+        .where(
+          (channel) => _owners.library.favoriteChannelIds.contains(channel.id),
+        )
         .toList();
 
     // Don't show if no favorites
@@ -8715,8 +8790,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       width: 160,
       height: 100,
       child: TvFocusableCard(
-        onPressed: () => _watchChannel(channel),
-        onLongPress: () => _showTvChannelOptionsMenu(channel),
+        onPressed: () => watchChannel(channel),
+        onLongPress: () => showTvChannelOptionsMenu(channel),
         child: Stack(
           children: [
             // Main content
@@ -8735,7 +8810,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       borderRadius: app.shape.br(6),
                     ),
                     child: Text(
-                      'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
+                      'CH ${channel.channelNumber > 0 ? channel.channelNumber : _owners.library.channels.indexOf(channel) + 1}',
                       style: TextStyle(
                         color: app.inkOn(tv.accent),
                         fontSize: 11,
@@ -8786,19 +8861,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // TV Channel Card (Grid item)
-  Widget _buildTvChannelCard(DebrifyTvChannel channel) {
+  Widget buildTvChannelCard(DebrifyTvChannel channel) {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
-    final isFavorited = _favoriteChannelIds.contains(channel.id);
+    final isFavorited = _owners.library.favoriteChannelIds.contains(channel.id);
 
     return TvFocusableCard(
       onPressed: () {
-        _watchChannel(channel);
+        watchChannel(channel);
       },
       onLongPress: () {
-        _showTvChannelOptionsMenu(channel);
+        showTvChannelOptionsMenu(channel);
       },
-      showLongPressHint: _isAndroidTv, // Only show hint on Android TV
+      showLongPressHint:
+          _owners.settings.isAndroidTv, // Only show hint on Android TV
       child: Stack(
         children: [
           // Favorite star indicator (top-left)
@@ -8835,7 +8911,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     borderRadius: app.shape.br(8),
                   ),
                   child: Text(
-                    'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
+                    'CH ${channel.channelNumber > 0 ? channel.channelNumber : _owners.library.channels.indexOf(channel) + 1}',
                     style: TextStyle(
                       color: app.inkOn(tv.accent),
                       fontSize: 14,
@@ -8865,7 +8941,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ),
           // 3-dot menu for non-Android TV devices
-          if (!_isAndroidTv)
+          if (!_owners.settings.isAndroidTv)
             Positioned(
               top: 2,
               right: 2,
@@ -8893,13 +8969,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   ),
                   onSelected: (value) {
                     if (value == 'favorite') {
-                      _toggleChannelFavorite(channel);
+                      toggleChannelFavorite(channel);
                     } else if (value == 'edit') {
-                      _handleEditChannel(channel);
+                      handleEditChannel(channel);
                     } else if (value == 'share') {
-                      _handleShareChannelAsMagnet(channel);
+                      handleShareChannelAsMagnet(channel);
                     } else if (value == 'delete') {
-                      _handleDeleteChannel(channel);
+                      handleDeleteChannel(channel);
                     }
                   },
                   itemBuilder: (context) => [
@@ -8963,8 +9039,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // TV Channel Options Menu (Edit/Delete)
-  Future<void> _showTvChannelOptionsMenu(DebrifyTvChannel channel) async {
-    final isFavorited = _favoriteChannelIds.contains(channel.id);
+  Future<void> showTvChannelOptionsMenu(DebrifyTvChannel channel) async {
+    final isFavorited = _owners.library.favoriteChannelIds.contains(channel.id);
 
     await showDialog<void>(
       context: context,
@@ -8992,7 +9068,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 tag: isFavorited ? 'Pinned' : 'Pin',
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
-                  _toggleChannelFavorite(channel);
+                  toggleChannelFavorite(channel);
                 },
               ),
               const SizedBox(height: 10),
@@ -9003,7 +9079,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 tag: 'Edit',
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
-                  _handleEditChannel(channel);
+                  handleEditChannel(channel);
                 },
               ),
               const SizedBox(height: 10),
@@ -9014,7 +9090,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 tag: 'Link',
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
-                  _handleShareChannelAsMagnet(channel);
+                  handleShareChannelAsMagnet(channel);
                 },
               ),
               const SizedBox(height: 10),
@@ -9026,7 +9102,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 danger: true,
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
-                  _handleDeleteChannel(channel);
+                  handleDeleteChannel(channel);
                 },
               ),
             ],
@@ -9043,10 +9119,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // TV "Add Channel" Card
-  Widget _buildTvAddChannelCard() {
+  Widget buildTvAddChannelCard() {
     final tv = AppThemeScope.of(context).debrifyTv;
     return TvFocusableCard(
-      onPressed: _handleAddChannel,
+      onPressed: handleAddChannel,
       child: SizedBox(
         height: double.infinity, // Ensures consistent height
         child: Column(
@@ -9077,7 +9153,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Widget _buildSettingsCard({
+  Widget buildSettingsCard({
     required DebrifyTvSettingsScope scope,
     required bool includeNsfwToggle,
     required String title,
@@ -9087,13 +9163,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final tv = app.debrifyTv;
     final bool isQuickScope = scope == DebrifyTvSettingsScope.quickPlay;
 
-    final bool startRandom = isQuickScope ? _quickStartRandom : _startRandom;
+    final bool startRandom = isQuickScope
+        ? _owners.settings.quickStartRandom
+        : _owners.settings.startRandom;
     void setStartRandom(bool value) {
       setState(() {
         if (isQuickScope) {
-          _quickStartRandom = value;
+          _owners.settings.quickStartRandom = value;
         } else {
-          _startRandom = value;
+          _owners.settings.startRandom = value;
         }
       });
       dialogSetState?.call(() {});
@@ -9103,14 +9181,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final int randomStartPercent = isQuickScope
-        ? _quickRandomStartPercent
-        : _randomStartPercent;
+        ? _owners.settings.quickRandomStartPercent
+        : _owners.settings.randomStartPercent;
     void setRandomStartPercent(int value) {
       setState(() {
         if (isQuickScope) {
-          _quickRandomStartPercent = value;
+          _owners.settings.quickRandomStartPercent = value;
         } else {
-          _randomStartPercent = value;
+          _owners.settings.randomStartPercent = value;
         }
       });
       dialogSetState?.call(() {});
@@ -9120,14 +9198,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final bool showChannelName = isQuickScope
-        ? _quickShowChannelName
-        : _showChannelName;
+        ? _owners.settings.quickShowChannelName
+        : _owners.settings.showChannelName;
     void setShowChannelName(bool value) {
       setState(() {
         if (isQuickScope) {
-          _quickShowChannelName = value;
+          _owners.settings.quickShowChannelName = value;
         } else {
-          _showChannelName = value;
+          _owners.settings.showChannelName = value;
         }
       });
       dialogSetState?.call(() {});
@@ -9137,14 +9215,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final bool showVideoTitle = isQuickScope
-        ? _quickShowVideoTitle
-        : _showVideoTitle;
+        ? _owners.settings.quickShowVideoTitle
+        : _owners.settings.showVideoTitle;
     void setShowVideoTitle(bool value) {
       setState(() {
         if (isQuickScope) {
-          _quickShowVideoTitle = value;
+          _owners.settings.quickShowVideoTitle = value;
         } else {
-          _showVideoTitle = value;
+          _owners.settings.showVideoTitle = value;
         }
       });
       dialogSetState?.call(() {});
@@ -9201,7 +9279,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            _providerChoiceChips(scope, dialogSetState: dialogSetState),
+            providerChoiceChips(scope, dialogSetState: dialogSetState),
             const SizedBox(height: 16),
             SwitchRow(
               title: 'Start from random timestamp',
@@ -9213,7 +9291,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               const SizedBox(height: 8),
               RandomStartSlider(
                 value: randomStartPercent,
-                isAndroidTv: _isAndroidTv,
+                isAndroidTv: _owners.settings.isAndroidTv,
                 onChanged: (next) => setRandomStartPercent(next),
                 onChangeEnd: isQuickScope
                     ? null
@@ -9229,15 +9307,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               const SizedBox(height: 8),
               SwitchRow(
                 title: 'Avoid NSFW content',
-                subtitle: _viewerForcesNsfw
+                subtitle: _owners.settings.viewerForcesNsfw
                     ? 'Always on for this profile'
                     : 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                value: _viewerForcesNsfw || _quickAvoidNsfw,
+                value:
+                    _owners.settings.viewerForcesNsfw ||
+                    _owners.settings.quickAvoidNsfw,
                 onChanged: (v) {
                   // Role-locked: a child session cannot loosen it.
-                  if (_viewerForcesNsfw) return;
+                  if (_owners.settings.viewerForcesNsfw) return;
                   setState(() {
-                    _quickAvoidNsfw = v;
+                    _owners.settings.quickAvoidNsfw = v;
                   });
                   dialogSetState?.call(() {});
                 },
@@ -9247,48 +9327,53 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             // Kept LAST (above Reset) on purpose: these are ~14 focusable
             // chips, and placing them higher would push every existing switch
             // that many extra D-pad presses away on TV.
-            _tvFilterChips(dialogSetState: dialogSetState),
+            tvFilterChips(dialogSetState: dialogSetState),
             const SizedBox(height: 16),
             DebrifyTvDialogButton(
               expand: true,
               icon: Icons.restore_rounded,
               label: 'Reset to defaults',
               onPressed: () async {
-                final defaultProvider = _determineDefaultProvider(
+                final defaultProvider = determineDefaultProvider(
                   null,
-                  _rdAvailable,
-                  _torboxAvailable,
-                  _pikpakAvailable,
-                  _premiumizeAvailable,
-                  _allDebridAvailable,
+                  _owners.settings.rdAvailable,
+                  _owners.settings.torboxAvailable,
+                  _owners.settings.pikpakAvailable,
+                  _owners.settings.premiumizeAvailable,
+                  _owners.settings.allDebridAvailable,
                 );
 
                 setState(() {
                   if (isQuickScope) {
-                    _quickStartRandom = true;
-                    _quickRandomStartPercent = randomStartPercentDefault;
-                    _quickHideSeekbar = true;
-                    _quickShowChannelName = true;
-                    _quickShowVideoTitle = true;
-                    _quickHideOptions = false; // Hardcoded to false
-                    _quickHideBackButton = false; // Hardcoded to false
-                    _quickAvoidNsfw = true;
-                    _quickProvider = defaultProvider;
+                    _owners.settings.quickStartRandom = true;
+                    _owners.settings.quickRandomStartPercent =
+                        randomStartPercentDefault;
+                    _owners.settings.quickHideSeekbar = true;
+                    _owners.settings.quickShowChannelName = true;
+                    _owners.settings.quickShowVideoTitle = true;
+                    _owners.settings.quickHideOptions =
+                        false; // Hardcoded to false
+                    _owners.settings.quickHideBackButton =
+                        false; // Hardcoded to false
+                    _owners.settings.quickAvoidNsfw = true;
+                    _owners.settings.quickProvider = defaultProvider;
                   } else {
-                    _startRandom = true;
-                    _randomStartPercent = randomStartPercentDefault;
-                    _hideSeekbar = true;
-                    _showChannelName = true;
-                    _showVideoTitle = true;
-                    _hideOptions = false; // Hardcoded to false
-                    _hideBackButton = false; // Hardcoded to false
-                    _provider = defaultProvider;
+                    _owners.settings.startRandom = true;
+                    _owners.settings.randomStartPercent =
+                        randomStartPercentDefault;
+                    _owners.settings.hideSeekbar = true;
+                    _owners.settings.showChannelName = true;
+                    _owners.settings.showVideoTitle = true;
+                    _owners.settings.hideOptions = false; // Hardcoded to false
+                    _owners.settings.hideBackButton =
+                        false; // Hardcoded to false
+                    _owners.settings.provider = defaultProvider;
                   }
                   // Playback filters are shared by both scopes, so reset
                   // them from either one.
-                  _tvFilters = const DebrifyTvFilters.empty();
+                  _owners.settings.tvFilters = const DebrifyTvFilters.empty();
                 });
-                _invalidateSpotlightStats();
+                invalidateSpotlightStats();
                 dialogSetState?.call(() {});
 
                 await DebrifyTvStorage.setDebrifyTvFilterQualities(const []);
@@ -9322,12 +9407,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<void> _showQuickPlayDialog() async {
-    if (_isBusy) {
+  Future<void> showQuickPlayDialog() async {
+    if (_owners.session.isBusy) {
       return;
     }
 
-    bool avoidNsfw = _quickAvoidNsfw;
+    bool avoidNsfw = _owners.settings.quickAvoidNsfw;
     String? error;
     // Create a separate controller for Quick Play to avoid sharing state with edit dialog
     final TextEditingController controller = TextEditingController();
@@ -9346,7 +9431,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               eyebrow: 'Quick play · no channel needed',
               title: 'Play anything',
               subtitle:
-                  'Enter up to $_quickPlayMaxKeywords search terms. Nothing is saved when playback ends.',
+                  'Enter up to ${_owners.settings.quickPlayMaxKeywords} search terms. Nothing is saved when playback ends.',
               icon: Icons.play_arrow_rounded,
               maxWidth: 680,
               child: Column(
@@ -9389,13 +9474,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   const SizedBox(height: 12),
                   SwitchRow(
                     title: 'Avoid NSFW content',
-                    subtitle: _viewerForcesNsfw
+                    subtitle: _owners.settings.viewerForcesNsfw
                         ? 'Always on for this profile'
                         : 'Best-effort filter while searching',
-                    value: _viewerForcesNsfw || avoidNsfw,
+                    value: _owners.settings.viewerForcesNsfw || avoidNsfw,
                     onChanged: (value) {
                       // Role-locked: a child session cannot loosen it.
-                      if (_viewerForcesNsfw) return;
+                      if (_owners.settings.viewerForcesNsfw) return;
                       setDialogState(() => avoidNsfw = value);
                     },
                   ),
@@ -9428,18 +9513,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
                     if (mounted) {
                       setState(() {
-                        _quickStartRandom = _startRandom;
-                        _quickRandomStartPercent = _randomStartPercent;
-                        _quickHideSeekbar = _hideSeekbar;
-                        _quickShowChannelName = _showChannelName;
-                        _quickShowVideoTitle = _showVideoTitle;
-                        _quickHideOptions = false; // Always false now
-                        _quickHideBackButton = false; // Always false now
-                        _quickAvoidNsfw = avoidNsfw;
-                        _quickProvider = _provider;
+                        _owners.settings.quickStartRandom =
+                            _owners.settings.startRandom;
+                        _owners.settings.quickRandomStartPercent =
+                            _owners.settings.randomStartPercent;
+                        _owners.settings.quickHideSeekbar =
+                            _owners.settings.hideSeekbar;
+                        _owners.settings.quickShowChannelName =
+                            _owners.settings.showChannelName;
+                        _owners.settings.quickShowVideoTitle =
+                            _owners.settings.showVideoTitle;
+                        _owners.settings.quickHideOptions =
+                            false; // Always false now
+                        _owners.settings.quickHideBackButton =
+                            false; // Always false now
+                        _owners.settings.quickAvoidNsfw = avoidNsfw;
+                        _owners.settings.quickProvider =
+                            _owners.settings.provider;
                       });
                       // Copy keywords from Quick Play controller to main controller for _watch()
-                      _keywordsController.text = keywords;
+                      _owners.library.keywordsController.text = keywords;
                     }
 
                     Navigator.of(dialogContext).pop();
@@ -9448,7 +9541,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     await WidgetsBinding.instance.endOfFrame;
                     await WidgetsBinding.instance.endOfFrame;
                     if (mounted) {
-                      await _watch();
+                      await watch();
                     }
                   },
                 ),
@@ -9463,7 +9556,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     controller.dispose();
   }
 
-  Future<void> _showGlobalSettingsDialog() async {
+  Future<void> showGlobalSettingsDialog() async {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -9478,7 +9571,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               icon: Icons.settings_rounded,
               maxWidth: 920,
               maxHeightFactor: .94,
-              child: _buildSettingsCard(
+              child: buildSettingsCard(
                 scope: DebrifyTvSettingsScope.channels,
                 includeNsfwToggle: false,
                 title: 'Playback rules',
@@ -9500,7 +9593,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<Map<String, String>?> _resolveTorboxQueuedFile({
+  Future<Map<String, String>?> resolveTorboxQueuedFile({
     required Map<String, dynamic> entry,
     required String apiKey,
     required void Function(String message) log,
@@ -9526,12 +9619,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<TorboxPreparedTorrent?> _prepareTorboxTorrent({
+  Future<TorboxPreparedTorrent?> prepareTorboxTorrent({
     required Torrent candidate,
     required String apiKey,
     required void Function(String message) log,
   }) async {
-    final infohash = _normalizeInfohash(candidate.infohash);
+    final infohash = normalizeInfohash(candidate.infohash);
     if (infohash.isEmpty) {
       return null;
     }
@@ -9599,7 +9692,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final random = Random();
     final filteredEntries = playableEntries
         .where(
-          (entry) => !_seenLinkWithTorrentId.contains(
+          (entry) => !_owners.session.seenLinkWithTorrentId.contains(
             '${currentTorrent.id}|${entry.file.id}',
           ),
         )
@@ -9618,7 +9711,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         fileId: next.file.id,
       );
       log('🎬 Torbox: streaming ${next.title}');
-      _seenLinkWithTorrentId.add('${currentTorrent.id}|${next.file.id}');
+      _owners.session.seenLinkWithTorrentId.add(
+        '${currentTorrent.id}|${next.file.id}',
+      );
       return TorboxPreparedTorrent(
         streamUrl: streamUrl,
         title: next.title,
@@ -9630,11 +9725,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<PikPakPreparedTorrent?> _preparePikPakTorrent({
+  Future<PikPakPreparedTorrent?> preparePikPakTorrent({
     required Torrent candidate,
     required void Function(String message) log,
   }) async {
-    final infohash = _normalizeInfohash(candidate.infohash);
+    final infohash = normalizeInfohash(candidate.infohash);
     if (infohash.isEmpty) {
       return null;
     }
@@ -9680,17 +9775,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final fileId = file['id'] as String?;
         if (fileId == null || fileId.isEmpty) return false;
         final trackingKey = '$infohash|$fileId';
-        if (_seenLinkWithTorrentId.contains(trackingKey)) return false;
+        if (_owners.session.seenLinkWithTorrentId.contains(trackingKey))
+          return false;
         final size = (file['size'] as num?)?.toInt() ?? 0;
         if (size > 0 && size < DebrifyTvConstants.torboxMinVideoSizeBytes)
           return false;
-        if (applySizeFilter && !_tvFilters.sizeMatchesBytes(size)) return false;
+        if (applySizeFilter &&
+            !_owners.settings.tvFilters.sizeMatchesBytes(size))
+          return false;
         return true;
       }).toList();
     }
 
     var unseenFiles = filterUnseen(applySizeFilter: true);
-    if (unseenFiles.isEmpty && _tvFilters.hasSize) {
+    if (unseenFiles.isEmpty && _owners.settings.tvFilters.hasSize) {
       // Nothing in this torrent matched — take it unfiltered rather than
       // discarding the torrent (see the Torbox builder).
       log('⚠️ PikPak: no file matched the size filter — using unfiltered');
@@ -9738,7 +9836,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     // Mark as seen
-    _seenLinkWithTorrentId.add('$infohash|$selectedFileId');
+    _owners.session.seenLinkWithTorrentId.add('$infohash|$selectedFileId');
 
     return PikPakPreparedTorrent(
       streamUrl: streamUrl,
@@ -9749,7 +9847,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // ── Premiumize helpers ──────────────────────────────────────────────────────
 
-  Future<TorboxCacheWindowResult> _fetchPremiumizeCacheWindow({
+  Future<TorboxCacheWindowResult> fetchPremiumizeCacheWindow({
     required List<Torrent> candidates,
     required int startIndex,
     required String apiKey,
@@ -9767,10 +9865,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       cursor = end;
 
       final List<Torrent> validChunk = chunk
-          .where((t) => _normalizeInfohash(t.infohash).isNotEmpty)
+          .where((t) => normalizeInfohash(t.infohash).isNotEmpty)
           .toList();
       final List<String> hashes = validChunk
-          .map((t) => _normalizeInfohash(t.infohash))
+          .map((t) => normalizeInfohash(t.infohash))
           .toList();
 
       if (hashes.isEmpty) continue;
@@ -9795,12 +9893,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<PremiumizePreparedTorrent?> _preparePremiumizeTorrent({
+  Future<PremiumizePreparedTorrent?> preparePremiumizeTorrent({
     required Torrent candidate,
     required String apiKey,
     required void Function(String message) log,
   }) async {
-    final infohash = _normalizeInfohash(candidate.infohash);
+    final infohash = normalizeInfohash(candidate.infohash);
     if (infohash.isEmpty) return null;
 
     log('⏳ Premiumize: preparing ${candidate.name}');
@@ -9830,7 +9928,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final filteredEntries = playableEntries
         .where(
-          (e) => !_seenLinkWithTorrentId.contains('$infohash|${e.file.path}'),
+          (e) => !_owners.session.seenLinkWithTorrentId.contains(
+            '$infohash|${e.file.path}',
+          ),
         )
         .toList();
     if (filteredEntries.isEmpty) {
@@ -9841,7 +9941,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     filteredEntries.shuffle(Random());
     final next = filteredEntries.removeAt(0);
     final streamUrl = next.file.streamLink ?? next.file.link;
-    _seenLinkWithTorrentId.add('$infohash|${next.file.path}');
+    _owners.session.seenLinkWithTorrentId.add('$infohash|${next.file.path}');
     log('🎬 Premiumize: streaming ${next.title}');
     return PremiumizePreparedTorrent(
       streamUrl: streamUrl,
@@ -9862,14 +9962,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!_premiumizeFileLooksLikeVideo(file)) continue;
       if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
       // Per-FILE size filter (see the Torbox builder for the rationale).
-      if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
+      if (applySizeFilter &&
+          !_owners.settings.tvFilters.sizeMatchesBytes(file.size))
+        continue;
 
       final displayName = file.fileName.isNotEmpty
           ? file.fileName
           : fallbackTitle;
       final info = SeriesParser.parseFilenameConservative(displayName);
       final title = info.isSeries
-          ? _formatTorboxSeriesTitle(info, fallbackTitle)
+          ? formatTorboxSeriesTitle(info, fallbackTitle)
           : (displayName.isNotEmpty ? displayName : fallbackTitle);
       final entry = PremiumizePlayableEntry(
         file: file,
@@ -9899,7 +10001,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ...otherCandidates,
     ];
     entries.shuffle(Random());
-    if (entries.isEmpty && applySizeFilter && _tvFilters.hasSize) {
+    if (entries.isEmpty &&
+        applySizeFilter &&
+        _owners.settings.tvFilters.hasSize) {
       debugPrint(
         'DebrifyTV/Premiumize: no file matched the size filter in '
         '"$fallbackTitle" — using it unfiltered.',
@@ -9919,7 +10023,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return FileUtils.isVideoFile(name);
   }
 
-  Future<void> _watchPremiumizeWithCachedTorrents(
+  Future<void> watchPremiumizeWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     String? channelName,
     String? channelId,
@@ -9927,16 +10031,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     if (cachedTorrents.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
-      _showSnack(
+      showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
       );
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
-        ? _androidTvChannelMetadata(
-            activeChannelId: channelId ?? _currentWatchingChannelId,
+    final List<Map<String, dynamic>>? channelDirectory =
+        _owners.library.channels.isNotEmpty
+        ? androidTvChannelMetadata(
+            activeChannelId:
+                channelId ?? _owners.library.currentWatchingChannelId,
           )
         : null;
 
@@ -9945,7 +10051,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final integrationEnabled =
         await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     if (!integrationEnabled) {
-      _showSnack(
+      showSnack(
         'Enable Premiumize in Settings to use this provider.',
         color: Colors.orange,
       );
@@ -9955,22 +10061,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No Premiumize API key');
-      _showSnack(
+      showSnack(
         'Please add your Premiumize API key in Settings first!',
         color: Colors.orange,
       );
       return;
     }
 
-    _showCachedPlaybackDialog();
+    showCachedPlaybackDialog();
 
     final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
     candidatePool.shuffle(Random());
 
     if (mounted) {
       setState(() {
-        _status = 'Checking Premiumize cache...';
-        _isBusy = true;
+        _owners.session.status = 'Checking Premiumize cache...';
+        _owners.session.isBusy = true;
       });
     }
 
@@ -9979,30 +10085,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     Future<bool> populateQueue() async {
       while (true) {
         if (candidateCursor >= candidatePool.length) return false;
-        final TorboxCacheWindowResult window =
-            await _fetchPremiumizeCacheWindow(
-              candidates: candidatePool,
-              startIndex: candidateCursor,
-              apiKey: apiKey,
-            );
+        final TorboxCacheWindowResult window = await fetchPremiumizeCacheWindow(
+          candidates: candidatePool,
+          startIndex: candidateCursor,
+          apiKey: apiKey,
+        );
         candidateCursor = window.nextCursor;
         if (window.cachedTorrents.isEmpty) {
           if (window.exhausted) return false;
           continue;
         }
-        _queue
+        _owners.session.queue
           ..clear()
           ..addAll(window.cachedTorrents);
-        _lastQueueSize = _queue.length;
-        _lastSearchAt = DateTime.now();
+        _owners.session.lastQueueSize = _owners.session.queue.length;
+        _owners.session.lastSearchAt = DateTime.now();
         if (mounted) {
           setState(() {
-            _status = _queue.isEmpty
+            _owners.session.status = _owners.session.queue.isEmpty
                 ? ''
-                : 'Queue has ${_queue.length} remaining';
+                : 'Queue has ${_owners.session.queue.length} remaining';
           });
         }
-        log('✅ Cached Premiumize batch ready with ${_queue.length} item(s)');
+        log(
+          '✅ Cached Premiumize batch ready with ${_owners.session.queue.length} item(s)',
+        );
         return true;
       }
     }
@@ -10011,45 +10118,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       seeded = await populateQueue();
     } catch (e) {
-      _closeProgressDialog();
-      _showSnack('Premiumize cache check failed: $e', color: Colors.orange);
-      if (mounted) setState(() => _isBusy = false);
+      closeProgressDialog();
+      showSnack('Premiumize cache check failed: $e', color: Colors.orange);
+      if (mounted) setState(() => _owners.session.isBusy = false);
       return;
     }
 
     if (!seeded) {
-      _closeProgressDialog();
-      _showSnack(
+      closeProgressDialog();
+      showSnack(
         'No cached torrents found on Premiumize. Please refresh the channel.',
         color: Colors.orange,
       );
-      if (mounted) setState(() => _isBusy = false);
+      if (mounted) setState(() => _owners.session.isBusy = false);
       return;
     }
 
     Future<Map<String, String>?> requestPremiumizeNext() async {
       while (true) {
-        if (_queue.isEmpty) {
+        if (_owners.session.queue.isEmpty) {
           bool replenished;
           try {
             replenished = await populateQueue();
           } catch (e) {
-            _closeProgressDialog();
-            _showSnack(
+            closeProgressDialog();
+            showSnack(
               'Premiumize cache check failed: $e',
               color: Colors.orange,
             );
-            if (mounted) setState(() => _isBusy = false);
+            if (mounted) setState(() => _owners.session.isBusy = false);
             return null;
           }
           if (!replenished) break;
         }
-        if (_queue.isEmpty) break;
+        if (_owners.session.queue.isEmpty) break;
 
-        final next = _queue.removeAt(0);
+        final next = _owners.session.queue.removeAt(0);
         if (next is! Torrent) continue;
 
-        final prepared = await _preparePremiumizeTorrent(
+        final prepared = await preparePremiumizeTorrent(
           candidate: next,
           apiKey: apiKey,
           log: log,
@@ -10064,16 +10171,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       final first = await requestPremiumizeNext();
       if (first == null) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (!mounted) return;
         setState(() {
-          _status = 'No playable Premiumize streams found. Try refreshing.';
-          _isBusy = false;
+          _owners.session.status =
+              'No playable Premiumize streams found. Try refreshing.';
+          _owners.session.isBusy = false;
         });
         MainPageBridge.notifyAutoLaunchFailed(
           'No cached Premiumize streams available',
         );
-        _showSnack(
+        showSnack(
           'No cached Premiumize streams are playable. Try refreshing the channel.',
           color: Colors.orange,
         );
@@ -10081,16 +10189,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!mounted) return;
-      _closeProgressDialog();
+      closeProgressDialog();
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await _launchPikPakOnAndroidTv(
+      final launchedOnTv = await launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
         channelName: channelName,
@@ -10107,60 +10215,65 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
+            startFromRandom: _owners.settings.startRandom,
+            randomStartMaxPercent: _owners.settings.randomStartPercent,
+            hideSeekbar: _owners.settings.hideSeekbar,
+            showChannelName: _owners.settings.showChannelName,
             channelName: channelName,
             channelNumber: channelNumber,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
+            showVideoTitle: _owners.settings.showVideoTitle,
+            hideOptions: _owners.settings.hideOptions,
             requestMagicNext: requestPremiumizeNext,
             requestNextChannel:
-                _channels.length > 1 &&
-                    (_provider == DebrifyTvConstants.providerRealDebrid ||
-                        _provider == DebrifyTvConstants.providerTorbox ||
-                        _provider == DebrifyTvConstants.providerPikPak ||
-                        _provider == DebrifyTvConstants.providerPremiumize)
-                ? _requestNextChannel
+                _owners.library.channels.length > 1 &&
+                    (_owners.settings.provider ==
+                            DebrifyTvConstants.providerRealDebrid ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerTorbox ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPikPak ||
+                        _owners.settings.provider ==
+                            DebrifyTvConstants.providerPremiumize)
+                ? requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
-            requestChannelById: _channels.length > 1
-                ? _requestChannelById
+            requestChannelById: _owners.library.channels.length > 1
+                ? requestChannelById
                 : null,
           ),
         ),
       );
       if (mounted) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
-      setState(() => _isBusy = false);
+      setState(() => _owners.session.isBusy = false);
     }
   }
 
-  Future<void> _watchWithPremiumize(
+  Future<void> watchWithPremiumize(
     List<String> keywords,
     void Function(String message) log,
   ) async {
     final integrationEnabled =
         await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     if (!integrationEnabled) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status = 'Enable Premiumize in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.status =
+            'Enable Premiumize in Settings to use this provider.';
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Enable Premiumize in Settings to use this provider.',
         color: Colors.orange,
       );
@@ -10169,14 +10282,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status =
+        _owners.session.status =
             'Add your Premiumize API key in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Please add your Premiumize API key in Settings first!',
         color: Colors.red,
       );
@@ -10185,8 +10298,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 Premiumize: searching for cached torrents...');
     final Map<String, Torrent> dedup = {};
-    final engineStates = await _tvEngineSearchStates();
-    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+    final engineStates = await tvEngineSearchStates();
+    final maxResultsOverrides = quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
@@ -10204,34 +10317,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw || _viewerForcesNsfw) {
+        if (_owners.settings.quickAvoidNsfw ||
+            _owners.settings.viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();
         }
 
         for (final torrent in torrentsToProcess) {
-          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          final normalizedHash = normalizeInfohash(torrent.infohash);
           if (normalizedHash.isEmpty) continue;
           dedup.putIfAbsent(normalizedHash, () => torrent);
         }
 
         if (dedup.isNotEmpty && mounted) {
-          setState(() => _status = 'Checking Premiumize cache...');
+          setState(
+            () => _owners.session.status = 'Checking Premiumize cache...',
+          );
         }
       }
 
-      final combinedList = _applyQualityFilterToTorrents(
+      final combinedList = applyQualityFilterToTorrents(
         dedup.values.toList(),
         // Search is complete here — an empty match means this search really
         // has nothing at the requested quality, so degrade rather than fail.
         allowFallback: true,
       );
       if (combinedList.isEmpty) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
-          setState(() => _status = 'No results found. Try different keywords.');
-          _showSnack(
+          setState(
+            () => _owners.session.status =
+                'No results found. Try different keywords.',
+          );
+          showSnack(
             'No results found. Try different keywords.',
             color: Colors.red,
           );
@@ -10240,14 +10359,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       combinedList.shuffle(Random());
-      if (mounted) setState(() => _status = 'Checking Premiumize cache...');
+      if (mounted)
+        setState(() => _owners.session.status = 'Checking Premiumize cache...');
 
       int candidateCursor = 0;
 
       Future<bool> populateQueue() async {
         while (true) {
           if (candidateCursor >= combinedList.length) return false;
-          final window = await _fetchPremiumizeCacheWindow(
+          final window = await fetchPremiumizeCacheWindow(
             candidates: combinedList,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -10257,19 +10377,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (window.exhausted) return false;
             continue;
           }
-          _queue
+          _owners.session.queue
             ..clear()
             ..addAll(window.cachedTorrents);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
+          _owners.session.lastQueueSize = _owners.session.queue.length;
+          _owners.session.lastSearchAt = DateTime.now();
           if (mounted) {
             setState(() {
-              _status = _queue.isEmpty
+              _owners.session.status = _owners.session.queue.isEmpty
                   ? ''
-                  : 'Queue has ${_queue.length} remaining';
+                  : 'Queue has ${_owners.session.queue.length} remaining';
             });
           }
-          log('✅ Found ${_queue.length} cached Premiumize torrent(s)');
+          log(
+            '✅ Found ${_owners.session.queue.length} cached Premiumize torrent(s)',
+          );
           return true;
         }
       }
@@ -10279,22 +10401,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         seeded = await populateQueue();
       } catch (e) {
         log('❌ Premiumize cache check failed: $e');
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
-          setState(() => _status = 'Premiumize cache check failed. Try again.');
-          _showSnack('Premiumize cache check failed: $e', color: Colors.red);
+          setState(
+            () => _owners.session.status =
+                'Premiumize cache check failed. Try again.',
+          );
+          showSnack('Premiumize cache check failed: $e', color: Colors.red);
         }
         return;
       }
 
       if (!seeded) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
           setState(
-            () => _status =
+            () => _owners.session.status =
                 'Premiumize has no cached results for these keywords.',
           );
-          _showSnack(
+          showSnack(
             'Premiumize has no cached results for these keywords.',
             color: Colors.orange,
           );
@@ -10303,20 +10428,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       Future<Map<String, String>?> requestPremiumizeNext() async {
-        if (_watchCancelled) return null;
-        while (!_watchCancelled) {
-          if (_queue.isEmpty) {
+        if (_owners.session.watchCancelled) return null;
+        while (!_owners.session.watchCancelled) {
+          if (_owners.session.queue.isEmpty) {
             bool replenished;
             try {
               replenished = await populateQueue();
             } catch (e) {
               log('❌ Premiumize cache check failed: $e');
-              _closeProgressDialog();
-              if (mounted && !_watchCancelled) {
+              closeProgressDialog();
+              if (mounted && !_owners.session.watchCancelled) {
                 setState(
-                  () => _status = 'Premiumize cache check failed. Try again.',
+                  () => _owners.session.status =
+                      'Premiumize cache check failed. Try again.',
                 );
-                _showSnack(
+                showSnack(
                   'Premiumize cache check failed: $e',
                   color: Colors.red,
                 );
@@ -10325,47 +10451,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
             if (!replenished) break;
           }
-          if (_queue.isEmpty) break;
+          if (_owners.session.queue.isEmpty) break;
 
-          final item = _queue.removeAt(0);
-          if (_watchCancelled) break;
+          final item = _owners.session.queue.removeAt(0);
+          if (_owners.session.watchCancelled) break;
           if (item is! Torrent) continue;
 
-          final result = await _preparePremiumizeTorrent(
+          final result = await preparePremiumizeTorrent(
             candidate: item,
             apiKey: apiKey,
             log: log,
           );
-          if (_watchCancelled) return null;
+          if (_owners.session.watchCancelled) return null;
           if (result != null) {
-            if (result.hasMore && !_watchCancelled) combinedList.add(item);
-            if (mounted && !_watchCancelled) {
+            if (result.hasMore && !_owners.session.watchCancelled)
+              combinedList.add(item);
+            if (mounted && !_owners.session.watchCancelled) {
               setState(() {
-                _status = _queue.isEmpty
+                _owners.session.status = _owners.session.queue.isEmpty
                     ? ''
-                    : 'Queue has ${_queue.length} remaining';
+                    : 'Queue has ${_owners.session.queue.length} remaining';
               });
             }
-            if (_watchCancelled) return null;
+            if (_owners.session.watchCancelled) return null;
             return {'url': result.streamUrl, 'title': result.title};
           }
         }
-        if (mounted && !_watchCancelled) {
-          setState(() => _status = 'No more cached Premiumize streams.');
+        if (mounted && !_owners.session.watchCancelled) {
+          setState(
+            () => _owners.session.status = 'No more cached Premiumize streams.',
+          );
         }
         return null;
       }
 
       final first = await requestPremiumizeNext();
-      if (_watchCancelled) return;
+      if (_owners.session.watchCancelled) return;
       if (first == null) {
-        _closeProgressDialog();
-        if (mounted && !_watchCancelled) {
+        closeProgressDialog();
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status =
+            _owners.session.status =
                 'No playable Premiumize streams found. Try different keywords.';
           });
-          _showSnack(
+          showSnack(
             'No playable Premiumize streams found. Try different keywords.',
             color: Colors.red,
           );
@@ -10373,71 +10502,73 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
 
-      if (await _handOffToExternalPlayer(
+      if (await handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await _launchPikPakOnAndroidTv(
+      final launchedOnTv = await launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
-        showChannelNameOverride: _quickShowChannelName,
+        showChannelNameOverride: _owners.settings.quickShowChannelName,
         channelName: null,
         channelId: null,
         channelNumber: null,
         channelDirectory: null,
       );
-      if (_watchCancelled) return;
+      if (_owners.session.watchCancelled) return;
       if (launchedOnTv) return;
 
-      if (!_watchCancelled) {
+      if (!_owners.session.watchCancelled) {
         MainPageBridge.notifyPlayerLaunching();
         await Navigator.of(context).push(
           videoPlayerRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
-              startFromRandom: _startRandom,
-              randomStartMaxPercent: _randomStartPercent,
-              hideSeekbar: _hideSeekbar,
-              showChannelName: _showChannelName,
+              startFromRandom: _owners.settings.startRandom,
+              randomStartMaxPercent: _owners.settings.randomStartPercent,
+              hideSeekbar: _owners.settings.hideSeekbar,
+              showChannelName: _owners.settings.showChannelName,
               channelName: null,
               channelNumber: null,
-              showVideoTitle: _showVideoTitle,
-              hideOptions: _hideOptions,
+              showVideoTitle: _owners.settings.showVideoTitle,
+              hideOptions: _owners.settings.hideOptions,
               requestMagicNext: requestPremiumizeNext,
               requestNextChannel:
-                  _channels.length > 1 &&
-                      (_quickProvider ==
+                  _owners.library.channels.length > 1 &&
+                      (_owners.settings.quickProvider ==
                               DebrifyTvConstants.providerRealDebrid ||
-                          _quickProvider == DebrifyTvConstants.providerTorbox ||
-                          _quickProvider == DebrifyTvConstants.providerPikPak ||
-                          _quickProvider ==
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerTorbox ||
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerPikPak ||
+                          _owners.settings.quickProvider ==
                               DebrifyTvConstants.providerPremiumize)
-                  ? _requestNextChannel
+                  ? requestNextChannel
                   : null,
             ),
           ),
         );
       }
 
-      if (mounted && !_watchCancelled) {
+      if (mounted && !_owners.session.watchCancelled) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
-      if (mounted) setState(() => _isBusy = false);
+      closeProgressDialog();
+      if (mounted) setState(() => _owners.session.isBusy = false);
     }
   }
 
@@ -10446,20 +10577,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// add-and-probe + background prefetcher) since AllDebrid has no cache-check
   /// API. Each candidate is added trusting the `ready` flag (no polling) and
   /// links are unlocked lazily on demand.
-  Future<void> _watchWithAllDebrid(
+  Future<void> watchWithAllDebrid(
     List<String> keywords,
     void Function(String message) log,
   ) async {
     final integrationEnabled =
         await AllDebridStorage.getAllDebridIntegrationEnabled();
     if (!integrationEnabled) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status = 'Enable AllDebrid in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.status =
+            'Enable AllDebrid in Settings to use this provider.';
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Enable AllDebrid in Settings to use this provider.',
         color: Colors.orange,
       );
@@ -10468,14 +10600,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
       setState(() {
-        _status =
+        _owners.session.status =
             'Add your AllDebrid API key in Settings to use this provider.';
-        _isBusy = false;
+        _owners.session.isBusy = false;
       });
-      _showSnack(
+      showSnack(
         'Please add your AllDebrid API key in Settings first!',
         color: Colors.red,
       );
@@ -10484,8 +10616,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 AllDebrid: searching for torrents...');
     final Map<String, Torrent> dedup = {};
-    final engineStates = await _tvEngineSearchStates();
-    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+    final engineStates = await tvEngineSearchStates();
+    final maxResultsOverrides = quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
@@ -10499,39 +10631,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           .toList();
 
       await for (final result in Stream.fromFutures(futures)) {
-        if (_watchCancelled) return;
+        if (_owners.session.watchCancelled) return;
         final torrents =
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw || _viewerForcesNsfw) {
+        if (_owners.settings.quickAvoidNsfw ||
+            _owners.settings.viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();
         }
 
         for (final torrent in torrentsToProcess) {
-          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          final normalizedHash = normalizeInfohash(torrent.infohash);
           if (normalizedHash.isEmpty) continue;
           dedup.putIfAbsent(normalizedHash, () => torrent);
         }
 
         if (dedup.isNotEmpty && mounted) {
-          setState(() => _status = 'Finding a playable stream...');
+          setState(
+            () => _owners.session.status = 'Finding a playable stream...',
+          );
         }
       }
 
-      final combinedList = _applyQualityFilterToTorrents(
+      final combinedList = applyQualityFilterToTorrents(
         dedup.values.toList(),
         // Search is complete here — an empty match means this search really
         // has nothing at the requested quality, so degrade rather than fail.
         allowFallback: true,
       );
       if (combinedList.isEmpty) {
-        _closeProgressDialog();
+        closeProgressDialog();
         if (mounted) {
-          setState(() => _status = 'No results found. Try different keywords.');
-          _showSnack(
+          setState(
+            () => _owners.session.status =
+                'No results found. Try different keywords.',
+          );
+          showSnack(
             'No results found. Try different keywords.',
             color: Colors.red,
           );
@@ -10543,13 +10681,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Seed the queue with raw torrents — sequential add-and-probe, no cache
       // check (mirrors Real-Debrid). The prefetcher prepares the rest.
-      _queue
+      _owners.session.queue
         ..clear()
         ..addAll(combinedList);
-      _lastQueueSize = _queue.length;
-      _lastSearchAt = DateTime.now();
-      _seenRestrictedLinks.clear();
-      _seenLinkWithTorrentId.clear();
+      _owners.session.lastQueueSize = _owners.session.queue.length;
+      _owners.session.lastSearchAt = DateTime.now();
+      _owners.session.seenRestrictedLinks.clear();
+      _owners.session.seenLinkWithTorrentId.clear();
 
       String _inferTitleFromUrl(String url) {
         final uri = Uri.tryParse(url);
@@ -10562,16 +10700,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       String firstTitle = 'Debrify TV';
 
       Future<Map<String, String>?> requestMagicNext() async {
-        if (_watchCancelled) return null;
-        debugPrint('MagicTV/AD: requestMagicNext() queueSize=${_queue.length}');
-        while (_queue.isNotEmpty && !_watchCancelled) {
-          final item = _queue.removeAt(0);
+        if (_owners.session.watchCancelled) return null;
+        debugPrint(
+          'MagicTV/AD: requestMagicNext() queueSize=${_owners.session.queue.length}',
+        );
+        while (_owners.session.queue.isNotEmpty &&
+            !_owners.session.watchCancelled) {
+          final item = _owners.session.queue.removeAt(0);
           if (item is Map && item['type'] == 'ad_locked') {
             final String link = item['allDebridLink'] as String? ?? '';
             if (link.isEmpty) continue;
             try {
               final videoUrl = await AllDebridService.unlockLink(apiKey, link);
-              if (_watchCancelled) return null;
+              if (_owners.session.watchCancelled) return null;
               if (videoUrl.isNotEmpty) {
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final display = (item['displayName'] as String?)?.trim();
@@ -10588,15 +10729,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           if (item is Torrent) {
-            final prepared = await _resolveAllDebridLinks(item, apiKey);
-            if (_watchCancelled) return null;
+            final prepared = await resolveAllDebridLinks(item, apiKey);
+            if (_owners.session.watchCancelled) return null;
             if (prepared == null || prepared.lockedLinks.isEmpty) {
               continue;
             }
             final links = List<String>.from(prepared.lockedLinks);
             final String headLink = links.removeAt(0);
             for (final link in links) {
-              _queue.add({
+              _owners.session.queue.add({
                 'type': 'ad_locked',
                 'allDebridLink': link,
                 'magnetId': prepared.magnetId,
@@ -10608,7 +10749,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 apiKey,
                 headLink,
               );
-              if (_watchCancelled) return null;
+              if (_owners.session.watchCancelled) return null;
               if (videoUrl.isNotEmpty) {
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final chosenTitle = inferred.isNotEmpty
@@ -10628,15 +10769,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       final first = await requestMagicNext();
-      if (_watchCancelled) return;
+      if (_owners.session.watchCancelled) return;
       if (first == null) {
-        _closeProgressDialog();
-        if (mounted && !_watchCancelled) {
+        closeProgressDialog();
+        if (mounted && !_owners.session.watchCancelled) {
           setState(() {
-            _status =
+            _owners.session.status =
                 'No playable AllDebrid streams found. Try different keywords.';
           });
-          _showSnack(
+          showSnack(
             'No playable AllDebrid streams found. Try different keywords.',
             color: Colors.red,
           );
@@ -10648,74 +10789,76 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ? (first['title'] ?? firstTitle)
           : firstTitle;
 
-      _closeProgressDialog();
+      closeProgressDialog();
       if (!mounted) return;
 
-      _activeApiKey = apiKey;
-      _activeProvider = DebrifyTvConstants.providerAllDebrid;
-      unawaited(_startPrefetch());
+      _owners.prefetch.activeApiKey = apiKey;
+      _owners.prefetch.activeProvider = DebrifyTvConstants.providerAllDebrid;
+      unawaited(startPrefetch());
 
-      if (await _handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
+      if (await handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
         return;
       }
 
-      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+      final launchedOnTv = await launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
-        showChannelNameOverride: _quickShowChannelName,
+        showChannelNameOverride: _owners.settings.quickShowChannelName,
         channelId: null,
         channelNumber: null,
         channelDirectory: null,
       );
-      if (_watchCancelled) return;
+      if (_owners.session.watchCancelled) return;
       if (launchedOnTv) return;
 
-      if (!_watchCancelled) {
+      if (!_owners.session.watchCancelled) {
         MainPageBridge.notifyPlayerLaunching();
         await Navigator.of(context).push(
           videoPlayerRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: firstTitle,
-              startFromRandom: _quickStartRandom,
-              randomStartMaxPercent: _quickRandomStartPercent,
-              hideSeekbar: _quickHideSeekbar,
-              showChannelName: _quickShowChannelName,
+              startFromRandom: _owners.settings.quickStartRandom,
+              randomStartMaxPercent: _owners.settings.quickRandomStartPercent,
+              hideSeekbar: _owners.settings.quickHideSeekbar,
+              showChannelName: _owners.settings.quickShowChannelName,
               channelName: null,
               channelNumber: null,
-              showVideoTitle: _quickShowVideoTitle,
-              hideOptions: _quickHideOptions,
+              showVideoTitle: _owners.settings.quickShowVideoTitle,
+              hideOptions: _owners.settings.quickHideOptions,
               requestMagicNext: requestMagicNext,
               requestNextChannel:
-                  _channels.length > 1 &&
-                      (_quickProvider ==
+                  _owners.library.channels.length > 1 &&
+                      (_owners.settings.quickProvider ==
                               DebrifyTvConstants.providerRealDebrid ||
-                          _quickProvider == DebrifyTvConstants.providerTorbox ||
-                          _quickProvider == DebrifyTvConstants.providerPikPak ||
-                          _quickProvider ==
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerTorbox ||
+                          _owners.settings.quickProvider ==
+                              DebrifyTvConstants.providerPikPak ||
+                          _owners.settings.quickProvider ==
                               DebrifyTvConstants.providerPremiumize ||
-                          _quickProvider ==
+                          _owners.settings.quickProvider ==
                               DebrifyTvConstants.providerAllDebrid)
-                  ? _requestNextChannel
+                  ? requestNextChannel
                   : null,
             ),
           ),
         );
-        await _stopPrefetch();
+        await stopPrefetch();
       }
 
-      if (mounted && !_watchCancelled) {
+      if (mounted && !_owners.session.watchCancelled) {
         setState(() {
-          _status = _queue.isEmpty
+          _owners.session.status = _owners.session.queue.isEmpty
               ? ''
-              : 'Queue has ${_queue.length} remaining';
+              : 'Queue has ${_owners.session.queue.length} remaining';
         });
       }
     } on NativePlayerSettingsUnavailable catch (error) {
-      _showNativeSettingsFailure(error);
+      showNativeSettingsFailure(error);
     } finally {
-      _closeProgressDialog();
-      if (mounted) setState(() => _isBusy = false);
+      closeProgressDialog();
+      if (mounted) setState(() => _owners.session.isBusy = false);
     }
   }
 
@@ -10733,12 +10876,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
       // Per-FILE size filter: a pack's files are individual episodes, so this
       // compares against the number the user actually meant.
-      if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
+      if (applySizeFilter &&
+          !_owners.settings.tvFilters.sizeMatchesBytes(file.size))
+        continue;
 
       final displayName = _torboxDisplayName(file);
       final info = SeriesParser.parseFilenameConservative(displayName);
       final title = info.isSeries
-          ? _formatTorboxSeriesTitle(info, fallbackTitle)
+          ? formatTorboxSeriesTitle(info, fallbackTitle)
           : (displayName.isNotEmpty ? displayName : fallbackTitle);
       final entry = TorboxPlayableEntry(file: file, title: title, info: info);
 
@@ -10768,7 +10913,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Nothing in THIS torrent matched the size filter — take it unfiltered
     // rather than discarding the torrent, so a strict filter narrows what
     // plays instead of walking the whole queue and playing nothing.
-    if (entries.isEmpty && applySizeFilter && _tvFilters.hasSize) {
+    if (entries.isEmpty &&
+        applySizeFilter &&
+        _owners.settings.tvFilters.hasSize) {
       debugPrint(
         'DebrifyTV/Torbox: no file matched the size filter in '
         '"$fallbackTitle" — using it unfiltered.',
@@ -10782,7 +10929,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return entries;
   }
 
-  String _formatTorboxSeriesTitle(SeriesInfo info, String fallback) {
+  String formatTorboxSeriesTitle(SeriesInfo info, String fallback) {
     final season = info.season?.toString().padLeft(2, '0');
     final episode = info.episode?.toString().padLeft(2, '0');
     final descriptor = info.episodeTitle?.trim().isNotEmpty == true
@@ -10816,11 +10963,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return 'File ${file.id}';
   }
 
-  String _normalizeInfohash(String hash) {
+  String normalizeInfohash(String hash) {
     return hash.trim().toLowerCase();
   }
 
-  void _showSnack(String message, {Color color = Colors.blueGrey}) {
+  void showSnack(String message, {Color color = Colors.blueGrey}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -10841,11 +10988,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return null;
   }
 
-  String _formatTorboxError(Object error) {
+  String formatTorboxError(Object error) {
     return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
-  String _formatImportError(Object error) {
+  String formatImportError(Object error) {
     if (error is FormatException) {
       return error.message;
     }
@@ -10868,12 +11015,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// this also stops the prefetcher that exists purely to feed it. A failed
   /// launch leaves the prefetcher running, because the in-app player that
   /// picks the flow back up still wants it.
-  Future<bool> _handOffToExternalPlayer(String url, String title) async {
+  Future<bool> handOffToExternalPlayer(String url, String title) async {
     if (url.isEmpty || !mounted) return false;
     if (!await VideoPlayerLauncher.isExternalPlayerDefault()) return false;
     if (!mounted) return false;
 
-    _closeProgressDialog();
+    closeProgressDialog();
     // The home-screen auto-launch overlay draws above routes, so drop it
     // before the notice or the notice appears underneath it. Only the overlay
     // — firing notifyPlayerLaunching here would stop other screens' trailers
@@ -10888,7 +11035,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // dialog entry points, so setting it here would leave channel plays
     // stuck-cancelled on the next attempt.
     if (!await ExternalPlayerNoticeDialog.confirm(context)) {
-      await _stopPrefetch();
+      await stopPrefetch();
       return true;
     }
     if (!mounted) return true;
@@ -10899,8 +11046,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       title: title.trim().isEmpty ? 'Debrify TV' : title.trim(),
     );
     if (launched) {
-      _launchedPlayer = true;
-      await _stopPrefetch();
+      _owners.session.launchedPlayer = true;
+      await stopPrefetch();
       return true;
     }
     return false;
@@ -10908,22 +11055,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // ===================== Prefetcher =====================
 
-  Future<void> _startPrefetch() async {
-    if (_prefetchRunning || _activeApiKey == null || _activeApiKey!.isEmpty) {
+  Future<void> startPrefetch() async {
+    if (_owners.prefetch.prefetchRunning ||
+        _owners.prefetch.activeApiKey == null ||
+        _owners.prefetch.activeApiKey!.isEmpty) {
       return;
     }
 
-    final startEpoch = _prefetchEpoch;
-    final enabled = await _settingsManager.getGlobalBackgroundPrefetchEnabled();
+    final startEpoch = _owners.prefetch.prefetchEpoch;
+    final enabled = await _owners.settings.settingsManager
+        .getGlobalBackgroundPrefetchEnabled();
 
     // Re-check mutable state after the preference read. Multiple playback
     // paths can request a start at nearly the same time, and playback may
     // have stopped while this method was awaiting SharedPreferences.
     if (!mounted ||
-        startEpoch != _prefetchEpoch ||
-        _prefetchRunning ||
-        _activeApiKey == null ||
-        _activeApiKey!.isEmpty) {
+        startEpoch != _owners.prefetch.prefetchEpoch ||
+        _owners.prefetch.prefetchRunning ||
+        _owners.prefetch.activeApiKey == null ||
+        _owners.prefetch.activeApiKey!.isEmpty) {
       return;
     }
     if (!enabled) {
@@ -10931,27 +11081,27 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    _prefetchRunning = true;
-    _prefetchStopRequested = false;
+    _owners.prefetch.prefetchRunning = true;
+    _owners.prefetch.prefetchStopRequested = false;
     debugPrint('MagicTV: Prefetch started.');
-    _prefetchTask = _runPrefetchLoop();
+    _owners.prefetch.prefetchTask = _runPrefetchLoop();
   }
 
-  Future<void> _stopPrefetch() async {
-    _prefetchEpoch++;
-    if (!_prefetchRunning) return;
-    _prefetchStopRequested = true;
+  Future<void> stopPrefetch() async {
+    _owners.prefetch.prefetchEpoch++;
+    if (!_owners.prefetch.prefetchRunning) return;
+    _owners.prefetch.prefetchStopRequested = true;
     try {
-      await _prefetchTask;
+      await _owners.prefetch.prefetchTask;
     } catch (_) {}
-    _prefetchRunning = false;
-    _prefetchTask = null;
-    _inflightInfohashes.clear();
+    _owners.prefetch.prefetchRunning = false;
+    _owners.prefetch.prefetchTask = null;
+    _owners.prefetch.inflightInfohashes.clear();
     debugPrint('MagicTV: Prefetch stopped.');
   }
 
   Future<void> _runPrefetchLoop() async {
-    while (mounted && !_prefetchStopRequested) {
+    while (mounted && !_owners.prefetch.prefetchStopRequested) {
       try {
         final prepared = _countPreparedInLookahead();
         if (prepared >= DebrifyTvConstants.minPrepared) {
@@ -10978,12 +11128,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _countPreparedInLookahead() {
-    final end = _queue.length < DebrifyTvConstants.lookaheadWindow
-        ? _queue.length
+    final end =
+        _owners.session.queue.length < DebrifyTvConstants.lookaheadWindow
+        ? _owners.session.queue.length
         : DebrifyTvConstants.lookaheadWindow;
     int count = 0;
     for (int i = 0; i < end; i++) {
-      final item = _queue[i];
+      final item = _owners.session.queue[i];
       if (item is Map &&
           (item['type'] == 'rd_restricted' || item['type'] == 'ad_locked')) {
         count++;
@@ -10993,12 +11144,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _findUnpreparedTorrentIndexInLookahead() {
-    final end = _queue.length < DebrifyTvConstants.lookaheadWindow
-        ? _queue.length
+    final end =
+        _owners.session.queue.length < DebrifyTvConstants.lookaheadWindow
+        ? _owners.session.queue.length
         : DebrifyTvConstants.lookaheadWindow;
     for (int i = 0; i < end; i++) {
-      final item = _queue[i];
-      if (item is Torrent && !_inflightInfohashes.contains(item.infohash)) {
+      final item = _owners.session.queue[i];
+      if (item is Torrent &&
+          !_owners.prefetch.inflightInfohashes.contains(item.infohash)) {
         return i;
       }
     }
@@ -11006,21 +11159,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _prefetchOneAtIndex(int idx) async {
-    if (_activeApiKey == null || _activeApiKey!.isEmpty) return;
-    if (idx < 0 || idx >= _queue.length) return;
-    final item = _queue[idx];
+    if (_owners.prefetch.activeApiKey == null ||
+        _owners.prefetch.activeApiKey!.isEmpty)
+      return;
+    if (idx < 0 || idx >= _owners.session.queue.length) return;
+    final item = _owners.session.queue[idx];
     if (item is! Torrent) return;
-    if (_activeProvider == DebrifyTvConstants.providerAllDebrid) {
+    if (_owners.prefetch.activeProvider ==
+        DebrifyTvConstants.providerAllDebrid) {
       await _prefetchOneAllDebrid(idx, item);
       return;
     }
     final infohash = item.infohash;
-    _inflightInfohashes.add(infohash);
+    _owners.prefetch.inflightInfohashes.add(infohash);
     debugPrint('MagicTV: Prefetching torrent at idx=$idx name="${item.name}"');
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
       final result = await DebridService.addTorrentToDebridPreferVideos(
-        _activeApiKey!,
+        _owners.prefetch.activeApiKey!,
         magnetLink,
       );
       final String torrentId = result['torrentId'] as String? ?? '';
@@ -11029,9 +11185,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (rdLinks.isEmpty) {
         // Nothing ready; move to tail to retry later
-        if (idx < _queue.length && identical(_queue[idx], item)) {
-          _queue.removeAt(idx);
-          _queue.add(item);
+        if (idx < _owners.session.queue.length &&
+            identical(_owners.session.queue[idx], item)) {
+          _owners.session.queue.removeAt(idx);
+          _owners.session.queue.add(item);
         }
         debugPrint(
           'MagicTV: Prefetch: no links; moved torrent to tail idx=$idx',
@@ -11043,24 +11200,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final headLinkCandidates = rdLinks
           .map((link) => link?.toString() ?? '')
           .where(
-            (link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link),
+            (link) =>
+                link.isNotEmpty &&
+                !_owners.session.seenRestrictedLinks.contains(link),
           )
           .toList();
       if (headLinkCandidates.isEmpty) {
-        if (idx < _queue.length && identical(_queue[idx], item)) {
-          _queue.removeAt(idx);
-          _queue.add(item);
+        if (idx < _owners.session.queue.length &&
+            identical(_owners.session.queue[idx], item)) {
+          _owners.session.queue.removeAt(idx);
+          _owners.session.queue.add(item);
         }
         return;
       }
 
       headLinkCandidates.shuffle(Random());
       final headLink = headLinkCandidates.removeAt(0);
-      _seenRestrictedLinks.add(headLink);
-      _seenLinkWithTorrentId.add('$torrentId|$headLink');
+      _owners.session.seenRestrictedLinks.add(headLink);
+      _owners.session.seenLinkWithTorrentId.add('$torrentId|$headLink');
 
-      if (idx < _queue.length && identical(_queue[idx], item)) {
-        _queue[idx] = {
+      if (idx < _owners.session.queue.length &&
+          identical(_owners.session.queue[idx], item)) {
+        _owners.session.queue[idx] = {
           'type': 'rd_restricted',
           'restrictedLink': headLink,
           'torrentId': torrentId,
@@ -11069,17 +11230,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (headLinkCandidates.isNotEmpty) {
-        _queue.add(item);
+        _owners.session.queue.add(item);
       }
     } catch (e) {
       // On failure, move to tail for retry later
-      if (idx < _queue.length && identical(_queue[idx], item)) {
-        _queue.removeAt(idx);
-        _queue.add(item);
+      if (idx < _owners.session.queue.length &&
+          identical(_owners.session.queue[idx], item)) {
+        _owners.session.queue.removeAt(idx);
+        _owners.session.queue.add(item);
       }
       debugPrint('MagicTV: Prefetch failed for $infohash: $e (moved to tail)');
     } finally {
-      _inflightInfohashes.remove(infohash);
+      _owners.prefetch.inflightInfohashes.remove(infohash);
     }
   }
 
@@ -11089,7 +11251,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// is deleted in that case) or has no usable video files. Each returned link
   /// is still locked and must be unlocked via [AllDebridService.unlockLink]
   /// before playback — the lazy model mirrors Real-Debrid's restricted links.
-  Future<DebrifyTvAllDebridPrepared?> _resolveAllDebridLinks(
+  Future<DebrifyTvAllDebridPrepared?> resolveAllDebridLinks(
     Torrent candidate,
     String apiKey,
   ) async {
@@ -11116,20 +11278,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (f.size > 0 &&
                 f.size < DebrifyTvConstants.torboxMinVideoSizeBytes)
               return false;
-            if (applySizeFilter && !_tvFilters.sizeMatchesBytes(f.size)) {
+            if (applySizeFilter &&
+                !_owners.settings.tvFilters.sizeMatchesBytes(f.size)) {
               return false;
             }
             return true;
           })
           .map((f) => f.link)
           .where(
-            (link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link),
+            (link) =>
+                link.isNotEmpty &&
+                !_owners.session.seenRestrictedLinks.contains(link),
           )
           .toList();
     }
 
     var freshLinks = collectLinks(applySizeFilter: true);
-    if (freshLinks.isEmpty && _tvFilters.hasSize) {
+    if (freshLinks.isEmpty && _owners.settings.tvFilters.hasSize) {
       // Nothing matched in this torrent — take it unfiltered rather than
       // discarding the torrent (see the Torbox builder).
       debugPrint(
@@ -11140,7 +11305,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     if (freshLinks.isEmpty) return null;
     for (final link in freshLinks) {
-      _seenRestrictedLinks.add(link);
+      _owners.session.seenRestrictedLinks.add(link);
     }
     return DebrifyTvAllDebridPrepared(
       magnetId: result.magnetId,
@@ -11155,17 +11320,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// files immediately rather than re-adding the torrent.
   Future<void> _prefetchOneAllDebrid(int idx, Torrent item) async {
     final infohash = item.infohash;
-    _inflightInfohashes.add(infohash);
+    _owners.prefetch.inflightInfohashes.add(infohash);
     debugPrint(
       'MagicTV: Prefetching AllDebrid torrent at idx=$idx name="${item.name}"',
     );
     try {
-      final prepared = await _resolveAllDebridLinks(item, _activeApiKey!);
+      final prepared = await resolveAllDebridLinks(
+        item,
+        _owners.prefetch.activeApiKey!,
+      );
       if (prepared == null || prepared.lockedLinks.isEmpty) {
         // Not ready / no usable video; move to tail to retry later.
-        if (idx < _queue.length && identical(_queue[idx], item)) {
-          _queue.removeAt(idx);
-          _queue.add(item);
+        if (idx < _owners.session.queue.length &&
+            identical(_owners.session.queue[idx], item)) {
+          _owners.session.queue.removeAt(idx);
+          _owners.session.queue.add(item);
         }
         debugPrint(
           'MagicTV: AllDebrid prefetch: not ready/no links; moved to tail idx=$idx',
@@ -11182,25 +11351,27 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         'displayName': item.name,
       };
 
-      if (idx < _queue.length && identical(_queue[idx], item)) {
-        _queue[idx] = lockedEntry(headLink);
+      if (idx < _owners.session.queue.length &&
+          identical(_owners.session.queue[idx], item)) {
+        _owners.session.queue[idx] = lockedEntry(headLink);
       } else {
         // Slot shifted out from under us; don't lose the resolved head link.
-        _queue.add(lockedEntry(headLink));
+        _owners.session.queue.add(lockedEntry(headLink));
       }
       for (final link in links) {
-        _queue.add(lockedEntry(link));
+        _owners.session.queue.add(lockedEntry(link));
       }
     } catch (e) {
-      if (idx < _queue.length && identical(_queue[idx], item)) {
-        _queue.removeAt(idx);
-        _queue.add(item);
+      if (idx < _owners.session.queue.length &&
+          identical(_owners.session.queue[idx], item)) {
+        _owners.session.queue.removeAt(idx);
+        _owners.session.queue.add(item);
       }
       debugPrint(
         'MagicTV: AllDebrid prefetch failed for $infohash: $e (moved to tail)',
       );
     } finally {
-      _inflightInfohashes.remove(infohash);
+      _owners.prefetch.inflightInfohashes.remove(infohash);
     }
   }
 }

@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/magic_tv_screen.dart': 0,
+
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/presentation/addon_hub_action_button.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_dialog.dart': 0,
@@ -159,7 +161,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_button.dart': 0,
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
-  'lib/screens/magic_tv_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
@@ -239,7 +240,27 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_constants.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_kinds.dart': 0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_focus_state.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_progress_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_session_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_stage_state.dart':
       0,
 
   // Addon hub: every destination and the facade, including zero budgets.

@@ -3,6 +3,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import shutil
 import tempfile
@@ -27,6 +28,8 @@ def self_test(package=None):
             return result, output.getvalue()
 
         assert run()[0] == 0, run()[1]
+        # Exercise the pre-completion scan even after the real tree completes.
+        checker.DEBRIFY_TV_COMPLETE = False
 
         def probe(path, text, message=None):
             file = copy / path
@@ -82,9 +85,26 @@ def self_test(package=None):
         probe(bridge + 'other_large.dart', '\n' * 930, '500-line Debrify TV extraction limit')
         probe(bridge + 'temporary.dart', '// TEMP(debrify_tv)\n')
         checker.DEBRIFY_TV_COMPLETE = True
+        temporary = [p for p in (copy/base).rglob('*.dart')
+                     if 'TEMP(debrify_tv)' in p.read_text()]
+        if temporary:
+            result, output = run()
+            assert result != 0 and all(p.relative_to(copy).as_posix() in output
+                                       for p in temporary), output
+            print('TV real intermediate TEMP scaffolds at completion: rejected')
+            # Completion/cap negatives need a completed structural fixture.
+            # Replace only owned-copy temporary composition files with their
+            # already-frozen final templates; never alter the production tree.
+            templates = json.loads((root/'dev/tool/debrify_tv_scaffolding.json').read_text())['templates']
+            for file in temporary:
+                path = file.relative_to(copy).as_posix()
+                assert path in templates, path
+                file.write_text(templates[path])
         facade = copy / checker.DEBRIFY_TV_FACADE
         facade.write_text('class DebrifyTVScreen {}\n')
         assert run()[0] == 0, run()[1]
+        probe(base + 'models/debrify_tv_kinds.dart', '\n' * 801, '800-line ceiling')
+        probe('lib/features/catalog_detail/presentation/legacy_catalog_detail/debrify_tv_size_probe.dart', '\n' * 801, '800-line ceiling')
         probe(bridge + 'temporary.dart', '// TEMP(debrify_tv)\n', 'temporary cross-call outside its exact legacy bridge')
         probe(checker.DEBRIFY_TV_FACADE, '\n' * checker.DEBRIFY_TV_FACADE_CAP + '// extra\n', 'Debrify TV facade limit')
         probe(checker.DEBRIFY_TV_FACADE, '// TEMP(debrify_tv)\n', 'temporary cross-call remains in the facade')

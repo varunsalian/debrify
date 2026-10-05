@@ -6,14 +6,29 @@ raw declaration moves without changing production files.
 """
 import csv
 import json
+import io
 import subprocess
 from collections import defaultdict
 
 
-def inputs(package):
+def inputs(package, *, original_fixture=False):
     from check_verbatim_moves import ROOT, original_leaves, parse, split_names
     config = json.loads((ROOT/'dev/tool/debrify_tv_checker_config.json').read_text())
     rows = list(csv.DictReader((ROOT/'dev/tool/debrify_tv_manifest.tsv').open(), delimiter='\t'))
+    if original_fixture:
+        # ORIGINAL/raw-layout mutation fixtures use the reviewed planned map,
+        # while the CLI's production check uses the live intermediate manifest.
+        checkpoint = '58e3e599c5d5f29b0437b111cca1af9827cc3de1'
+        def frozen(path):
+            return subprocess.check_output(['git', 'show', checkpoint+':'+path], cwd=ROOT, text=True)
+        config = json.loads(frozen('dev/tool/debrify_tv_checker_config.json'))
+        rows = list(csv.DictReader(io.StringIO(frozen('dev/tool/debrify_tv_manifest.tsv')), delimiter='\t'))
+        sidecar = ROOT/'.dart_tool/debrify_tv_parser/frozen_fixture_scaffolding.json'
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        text = frozen('dev/tool/debrify_tv_scaffolding.json')
+        if not sidecar.exists() or sidecar.read_text() != text:
+            sidecar.write_text(text)
+        config['sidecars']['scaffolding'] = str(sidecar)
     original = subprocess.check_output(['git','show',config['baseline']+':'+config['source']], cwd=ROOT, text=True)
     parsed = parse({'<original>': original}, package, occurrence_bindings=True)
     leaves = original_leaves(parsed['<original>']['declarations'], split_names(rows))

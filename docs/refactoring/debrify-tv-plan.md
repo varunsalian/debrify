@@ -1660,6 +1660,31 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Step 2 — extract eager owners and live composition, 2026-10-05
+
+Previous checkpoint: `77b504c40e2b6c8e7562a07dff848114f63b0aee`. All 78 fields and the live NSFW getter move to seven eager records. The cached nullable composition has its first consumer in the unchanged lifecycle. Exact typed dependency slots temporarily borrow direct State tear-offs; remove each slot with its scheduled method move and all by step 7. Remaining State methods use only their frozen public visibility names; necessary this qualification prevents the two normalizedKeywords local captures, with no added diagnostics. This is intermediate wiring, not a facade accessor or final forwarder. The architecture completion fixture now explicitly rejects every real temporary file, then substitutes only the frozen final scaffolds in its owned copy; the initial fixture assumption failure is preserved as step2-manifest-debrify_tv-rejected-fixture.txt and its fresh isolated-package rerun passes. The raw ORIGINAL/partial/completed fixture set remains frozen at the reviewed 0b map while the production CLI checks the live intermediate map and exact scaffolds. The facade ratchet is raised only to the measured intermediate count; receiver wraps and temporary argument wiring disappear in steps 3–7.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**58 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step2-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **11377** lines. AST breakdown: retained original top levels 173, widget 6, state header and close 2, owners composition 19, lifecycle 63, retained original bodies 10842, build 14, imports 87, remaining blank comment lines 171
+(sum 11377). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
