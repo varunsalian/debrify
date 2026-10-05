@@ -1798,6 +1798,31 @@ under `refactor-evidence/debrify_tv/`. No baseline recording or regression
 acceptance. All Found-not-fixed behaviors remain. Device-only Debrify TV
 playback, remote CI and integration remain pending; no push or branch switch.
 
+### Step 7 — extract paint and finish the facade, 2026-10-05
+
+Previous checkpoint: `e9edf28531bb668226dc71705777f617b4d20091`. Rendering, focus, keyboard Back/repeat, dialog scopes, callbacks, widget keys/consts and all 16 shape tokens are verbatim. Every temporary borrowed slot disappears; the facade contains only widget, eager owners/cache, lifecycle and build. Move its zero budget into kExtractedShapeResidue.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**53 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step7-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **109** lines. AST breakdown: widget 6, state header and close 2, owners composition 10, lifecycle 63, build 14, imports 8, remaining blank comment lines 6
+(sum 109). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

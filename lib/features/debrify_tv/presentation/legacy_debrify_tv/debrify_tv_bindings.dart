@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart';
 import 'package:flutter/material.dart';
@@ -10,18 +8,10 @@ class DebrifyTvDependencies {
   final bool Function() mounted;
   final void Function(VoidCallback) setState;
   late final DebrifyTvSections sections;
-
-  // TEMP(debrify_tv): exact borrowed State tear-offs until their move step.
-  final Widget Function(double) buildTvGridLayout;
-  final Future<void> Function() showQuickPlayDialog;
-  final Future<void> Function() showGlobalSettingsDialog;
   DebrifyTvDependencies({
     required this.owners,
     required this.context,
     required this.mounted,
     required this.setState,
-    required this.buildTvGridLayout,
-    required this.showQuickPlayDialog,
-    required this.showGlobalSettingsDialog,
   });
 }

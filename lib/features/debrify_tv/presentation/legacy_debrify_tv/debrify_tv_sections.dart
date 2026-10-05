@@ -15,9 +15,12 @@ import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debri
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_formats.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart';
@@ -28,14 +31,15 @@ import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debri
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart';
 import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart';
 
 class DebrifyTvSections {
-  // TEMP(debrify_tv): borrows remaining facade callbacks; removed in step 7.
-  final DebrifyTvDependencies legacy;
   final DebrifyTvFeedback feedback;
   final DebrifyTvSettingsLoader settings;
   final DebrifyTvEngineLimits engines;
@@ -68,10 +72,15 @@ class DebrifyTvSections {
   final DebrifyTvCloudResolvers cloud;
   final DebrifyTvPrefetcher prefetch;
   final DebrifyTvDormant dormant;
+  final DebrifyTvSettingsChips chips;
+  final DebrifyTvSettingsCard settingsCard;
+  final DebrifyTvDialogs dialogs;
   final DebrifyTvSpotlightStage stage;
+  final DebrifyTvTopBar topBar;
+  final DebrifyTvGridLayout grid;
+  final DebrifyTvGridCards cards;
   DebrifyTvSections(DebrifyTvDependencies deps)
-    : legacy = deps,
-      feedback = DebrifyTvFeedback(deps),
+    : feedback = DebrifyTvFeedback(deps),
       settings = DebrifyTvSettingsLoader(deps),
       engines = DebrifyTvEngineLimits(deps),
       filters = DebrifyTvPlaybackFilters(deps),
@@ -103,7 +112,13 @@ class DebrifyTvSections {
       cloud = DebrifyTvCloudResolvers(deps),
       prefetch = DebrifyTvPrefetcher(deps),
       dormant = DebrifyTvDormant(deps),
-      stage = DebrifyTvSpotlightStage(deps) {
+      chips = DebrifyTvSettingsChips(deps),
+      settingsCard = DebrifyTvSettingsCard(deps),
+      dialogs = DebrifyTvDialogs(deps),
+      stage = DebrifyTvSpotlightStage(deps),
+      topBar = DebrifyTvTopBar(deps),
+      grid = DebrifyTvGridLayout(deps),
+      cards = DebrifyTvGridCards(deps) {
     deps.sections = this;
   }
 }

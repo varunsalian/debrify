@@ -39,7 +39,14 @@ const Map<String, int> kShapeResidue = {
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
       0,
-  'lib/screens/magic_tv_screen.dart': 0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_cards.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_grid_layout.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_top_bar.dart':
+      0,
 
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/presentation/addon_hub_action_button.dart': 0,
@@ -276,6 +283,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dialogs.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart':
@@ -318,6 +327,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_session_state.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_chips.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_state.dart':
@@ -330,6 +341,7 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart':
       0,
+  'lib/screens/magic_tv_screen.dart': 0,
 
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/application/addon_hub_labels.dart': 0,
