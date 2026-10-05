@@ -2,6 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:debrify/features/debrify_tv/application/debrify_tv_random_start.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_kinds.dart';
+import 'package:debrify/features/debrify_tv/application/debrify_tv_byte_format.dart';
+import 'package:debrify/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_constants.dart';
+import 'package:debrify/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
@@ -80,45 +86,6 @@ import 'debrify_tv/dialogs/export_channels_dialog.dart';
 import 'debrify_tv/dialogs/import_channels_dialog.dart';
 import 'debrify_tv/dialogs/spotlight_dialog.dart';
 import 'settings/profile_backup_flows.dart';
-
-const int _randomStartPercentDefault = 20;
-const int _randomStartPercentMin = 10;
-const int _randomStartPercentMax = 90;
-
-int _clampRandomStartPercent(int? value) {
-  final candidate = value ?? _randomStartPercentDefault;
-  if (candidate < _randomStartPercentMin) {
-    return _randomStartPercentMin;
-  }
-  if (candidate > _randomStartPercentMax) {
-    return _randomStartPercentMax;
-  }
-  return candidate;
-}
-
-int _parseRandomStartPercent(dynamic value) {
-  if (value is int) {
-    return _clampRandomStartPercent(value);
-  }
-  if (value is double) {
-    return _clampRandomStartPercent(value.round());
-  }
-  if (value is String) {
-    final parsed = int.tryParse(value);
-    if (parsed != null) {
-      return _clampRandomStartPercent(parsed);
-    }
-  }
-  return _randomStartPercentDefault;
-}
-
-enum _SettingsScope { quickPlay, channels }
-
-enum _DebrifyTvTopMenuAction { import, export, add, deleteAll, settings }
-
-enum _ChannelImportOrigin { device, url }
-
-enum _ChannelImportType { zip, yaml, text, debrify }
 
 class _SpotlightMetaPill extends StatelessWidget {
   final String label;
@@ -283,46 +250,6 @@ class _SpotlightChoiceChipState extends State<_SpotlightChoiceChip> {
   }
 }
 
-String _formatBytes(int bytes) {
-  if (bytes <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  final exponent = min(units.length - 1, (log(bytes) / log(1024)).floor());
-  final value = bytes / pow(1024, exponent);
-  final formatted = value >= 10
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(1);
-  return '$formatted ${units[exponent]}';
-}
-
-Future<DebrifyTvZipImportResult> _parseZipInBackground(Uint8List bytes) {
-  return compute(_parseZipCompute, bytes);
-}
-
-DebrifyTvZipImportResult _parseZipCompute(Uint8List bytes) {
-  return DebrifyTvZipImporter.parseZip(bytes);
-}
-
-Future<DebrifyTvZipImportedChannel> _parseYamlInBackground(
-  String sourceName,
-  String content,
-) {
-  return compute(_parseYamlCompute, <String, String>{
-    'sourceName': sourceName,
-    'content': content,
-  });
-}
-
-DebrifyTvZipImportedChannel _parseYamlCompute(Map<String, String> payload) {
-  final sourceName = payload['sourceName'] ?? 'channel.yaml';
-  final content = payload['content'] ?? '';
-  return DebrifyTvZipImporter.parseYaml(
-    sourceName: sourceName,
-    content: content,
-  );
-}
-
 class _TvEngineWarmResult {
   final DynamicEngine engine;
   final List<Torrent> torrents;
@@ -345,15 +272,6 @@ class DebrifyTVScreen extends StatefulWidget {
 }
 
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
-  static const String _providerRealDebrid = 'real_debrid';
-  static const String _providerTorbox = 'torbox';
-  static const String _providerPikPak = 'pikpak';
-  static const String _providerPremiumize = 'premiumize';
-  static const String _providerAllDebrid = 'alldebrid';
-  static const String _torboxFileEntryType = 'torbox_file';
-  static const int _torboxMinVideoSizeBytes =
-      50 * 1024 * 1024; // 50 MB filter threshold
-
   final SettingsManager _settingsManager = SettingsManager();
   final TextEditingController _keywordsController = TextEditingController();
   // Mixed queue: can contain Torrent items or RD-restricted link maps
@@ -385,11 +303,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   // Quick Play limits
   int _quickPlayMaxKeywords = 5;
 
-  static const int _playbackTorrentThreshold = 1000;
-  static const int _maxTorrentsPerKeywordPlayback = 25;
-  static const int _minimumTorrentsForChannel = 1;
-  static const int _maxChannelKeywords = 1000;
-  static const int _keywordWarmEstimateMs = 1000;
   final TextEditingController _channelSearchController =
       TextEditingController();
   String _channelSearchTerm = '';
@@ -398,17 +311,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // Advanced options
   bool _startRandom = true;
-  int _randomStartPercent = _randomStartPercentDefault;
+  int _randomStartPercent = randomStartPercentDefault;
   bool _hideSeekbar = true;
   bool _showChannelName = true;
   bool _showVideoTitle = true;
   bool _hideOptions = false;
   bool _hideBackButton = false;
-  String _provider = _providerRealDebrid;
+  String _provider = DebrifyTvConstants.providerRealDebrid;
 
   // Quick play options
   bool _quickStartRandom = true;
-  int _quickRandomStartPercent = _randomStartPercentDefault;
+  int _quickRandomStartPercent = randomStartPercentDefault;
   bool _quickHideSeekbar = true;
   bool _quickShowChannelName = true;
   bool _quickShowVideoTitle = true;
@@ -422,7 +335,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool get _viewerForcesNsfw =>
       !ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
   bool _rdSkipBlockedTorrents = true;
-  String _quickProvider = _providerRealDebrid;
+  String _quickProvider = DebrifyTvConstants.providerRealDebrid;
 
   // Debrify TV playback filters. Shared by channels and quick play (one
   // Debrify TV feed preference, unlike provider/NSFW which are per-scope).
@@ -431,9 +344,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   DebrifyTvFilters _tvFilters = const DebrifyTvFilters.empty();
   // Rate-limits the "filter relaxed" snackbar to once per playback session.
   bool _qualityFallbackNotified = false;
-  // Real-Debrid only: consecutive links rejected purely on size, and the
-  // resulting session-wide relaxation. See _rdLinkPassesSizeRules.
-  static const int _rdSizeRejectionLimit = 12;
+
   int _rdSizeRejections = 0;
   bool _sizeFilterRelaxed = false;
 
@@ -445,9 +356,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
-  // Prefetch state
-  static const int _minPrepared = 6; // maintain at least 6 prepared items
-  static const int _lookaheadWindow = 10; // window near head to keep prepared
+
   bool _prefetchRunning = false;
   bool _prefetchStopRequested = false;
   Future<void>? _prefetchTask;
@@ -460,7 +369,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   // are the two cache-check-less providers that use the background prefetcher;
   // this tells _prefetchOneAtIndex / requestMagicNext which add+resolve path to
   // use against _activeApiKey.
-  String _activeProvider = _providerRealDebrid;
+  String _activeProvider = DebrifyTvConstants.providerRealDebrid;
   final Set<String> _inflightInfohashes = {};
   bool _isAndroidTv = false;
   bool _showSearchBar = false;
@@ -698,54 +607,56 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool allDebridAvailable,
   ) {
     // If user has a preferred provider that's available, use it
-    if (preferred == _providerPremiumize && premiumizeAvailable) {
-      return _providerPremiumize;
+    if (preferred == DebrifyTvConstants.providerPremiumize &&
+        premiumizeAvailable) {
+      return DebrifyTvConstants.providerPremiumize;
     }
-    if (preferred == _providerAllDebrid && allDebridAvailable) {
-      return _providerAllDebrid;
+    if (preferred == DebrifyTvConstants.providerAllDebrid &&
+        allDebridAvailable) {
+      return DebrifyTvConstants.providerAllDebrid;
     }
-    if (preferred == _providerPikPak && pikpakAvailable) {
-      return _providerPikPak;
+    if (preferred == DebrifyTvConstants.providerPikPak && pikpakAvailable) {
+      return DebrifyTvConstants.providerPikPak;
     }
-    if (preferred == _providerTorbox && torboxAvailable) {
-      return _providerTorbox;
+    if (preferred == DebrifyTvConstants.providerTorbox && torboxAvailable) {
+      return DebrifyTvConstants.providerTorbox;
     }
-    if (preferred == _providerRealDebrid && rdAvailable) {
-      return _providerRealDebrid;
+    if (preferred == DebrifyTvConstants.providerRealDebrid && rdAvailable) {
+      return DebrifyTvConstants.providerRealDebrid;
     }
 
     // Fallback: pick first available provider
     if (rdAvailable) {
-      return _providerRealDebrid;
+      return DebrifyTvConstants.providerRealDebrid;
     }
     if (torboxAvailable) {
-      return _providerTorbox;
+      return DebrifyTvConstants.providerTorbox;
     }
     if (premiumizeAvailable) {
-      return _providerPremiumize;
+      return DebrifyTvConstants.providerPremiumize;
     }
     if (allDebridAvailable) {
-      return _providerAllDebrid;
+      return DebrifyTvConstants.providerAllDebrid;
     }
     if (pikpakAvailable) {
-      return _providerPikPak;
+      return DebrifyTvConstants.providerPikPak;
     }
 
     // No provider available, default to RD (will show as unavailable)
-    return _providerRealDebrid;
+    return DebrifyTvConstants.providerRealDebrid;
   }
 
   bool _isProviderSelectable(String provider) {
-    if (provider == _providerTorbox) {
+    if (provider == DebrifyTvConstants.providerTorbox) {
       return _torboxAvailable;
     }
-    if (provider == _providerPikPak) {
+    if (provider == DebrifyTvConstants.providerPikPak) {
       return _pikpakAvailable;
     }
-    if (provider == _providerPremiumize) {
+    if (provider == DebrifyTvConstants.providerPremiumize) {
       return _premiumizeAvailable;
     }
-    if (provider == _providerAllDebrid) {
+    if (provider == DebrifyTvConstants.providerAllDebrid) {
       return _allDebridAvailable;
     }
     return _rdAvailable;
@@ -846,7 +757,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (mounted) {
       setState(() {
         _startRandom = startRandom;
-        _randomStartPercent = _clampRandomStartPercent(randomStartPercent);
+        _randomStartPercent = clampDebrifyTvRandomStartPercent(
+          randomStartPercent,
+        );
         _hideSeekbar = hideOptions;
         _showChannelName = showChannelName;
         _showVideoTitle = showVideoTitle;
@@ -861,7 +774,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _isAndroidTv = isTv;
 
         _quickStartRandom = startRandom;
-        _quickRandomStartPercent = _clampRandomStartPercent(randomStartPercent);
+        _quickRandomStartPercent = clampDebrifyTvRandomStartPercent(
+          randomStartPercent,
+        );
         _quickHideSeekbar = hideOptions;
         _quickShowChannelName = showChannelName;
         _quickShowVideoTitle = showVideoTitle;
@@ -1610,7 +1525,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ),
     );
     final int estimatedMs =
-        batches * requestWavesPerKeyword * _keywordWarmEstimateMs;
+        batches *
+        requestWavesPerKeyword *
+        DebrifyTvConstants.keywordWarmEstimateMs;
 
     return (estimatedMs + 999) ~/ 1000;
   }
@@ -1732,14 +1649,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final bytes = (unrestrict['filesize'] as num?)?.toInt() ?? 0;
     if (bytes <= 0) return true; // RD didn't report a size — don't guess.
     // Trailer/sample guard, matching Torbox/Premiumize/PikPak/AllDebrid.
-    if (bytes < _torboxMinVideoSizeBytes) return false;
+    if (bytes < DebrifyTvConstants.torboxMinVideoSizeBytes) return false;
     if (_sizeFilterRelaxed || !_tvFilters.hasSize) return true;
     if (_tvFilters.sizeMatchesBytes(bytes)) {
       _rdSizeRejections = 0;
       return true;
     }
     _rdSizeRejections++;
-    if (_rdSizeRejections >= _rdSizeRejectionLimit) {
+    if (_rdSizeRejections >= DebrifyTvConstants.rdSizeRejectionLimit) {
       _sizeFilterRelaxed = true;
       _showSnack(
         'Few ${_tvFilters.summary()} files here — playing other sizes too.',
@@ -1758,7 +1675,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // selection draws from the full matching pool rather than from a
     // pre-narrowed sample that the filter then guts.
     final all = _applyQualityFilterToCached(entry.torrents);
-    if (all.length <= _playbackTorrentThreshold) {
+    if (all.length <= DebrifyTvConstants.playbackTorrentThreshold) {
       final list = List<CachedTorrent>.from(all);
       list.shuffle(Random());
       return list;
@@ -1779,7 +1696,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           selected.add(cached);
           seenHashes.add(hash);
           count++;
-          if (count >= _maxTorrentsPerKeywordPlayback) {
+          if (count >= DebrifyTvConstants.maxTorrentsPerKeywordPlayback) {
             break;
           }
         }
@@ -1787,10 +1704,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     if (selected.isEmpty) {
-      return all.take(_playbackTorrentThreshold).toList();
+      return all.take(DebrifyTvConstants.playbackTorrentThreshold).toList();
     }
 
-    if (selected.length < _playbackTorrentThreshold) {
+    if (selected.length < DebrifyTvConstants.playbackTorrentThreshold) {
       for (final cached in all) {
         final hash = _normalizeInfohash(cached.infohash);
         if (hash.isEmpty || seenHashes.contains(hash)) {
@@ -1798,7 +1715,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
         selected.add(cached);
         seenHashes.add(hash);
-        if (selected.length >= _playbackTorrentThreshold) {
+        if (selected.length >= DebrifyTvConstants.playbackTorrentThreshold) {
           break;
         }
       }
@@ -1810,10 +1727,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   String _providerDisplay(String provider) {
-    if (provider == _providerTorbox) return 'Torbox';
-    if (provider == _providerPikPak) return 'PikPak';
-    if (provider == _providerPremiumize) return 'Premiumize';
-    if (provider == _providerAllDebrid) return 'AllDebrid';
+    if (provider == DebrifyTvConstants.providerTorbox) return 'Torbox';
+    if (provider == DebrifyTvConstants.providerPikPak) return 'PikPak';
+    if (provider == DebrifyTvConstants.providerPremiumize) return 'Premiumize';
+    if (provider == DebrifyTvConstants.providerAllDebrid) return 'AllDebrid';
     return 'Real Debrid';
   }
 
@@ -1909,10 +1826,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _providerChoiceChips(
-    _SettingsScope scope, {
+    DebrifyTvSettingsScope scope, {
     StateSetter? dialogSetState,
   }) {
-    final bool isQuickScope = scope == _SettingsScope.quickPlay;
+    final bool isQuickScope = scope == DebrifyTvSettingsScope.quickPlay;
     final String currentProvider = isQuickScope ? _quickProvider : _provider;
 
     void handleSelection(String value) {
@@ -1962,33 +1879,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       runSpacing: 8,
       children: [
         providerChip(
-          value: _providerRealDebrid,
+          value: DebrifyTvConstants.providerRealDebrid,
           label: 'Real Debrid',
           available: _rdAvailable,
           unavailableMessage:
               'Enable Real Debrid and add an API key in Settings.',
         ),
         providerChip(
-          value: _providerTorbox,
+          value: DebrifyTvConstants.providerTorbox,
           label: 'Torbox',
           available: _torboxAvailable,
           unavailableMessage: 'Enable Torbox and add an API key in Settings.',
         ),
         providerChip(
-          value: _providerPikPak,
+          value: DebrifyTvConstants.providerPikPak,
           label: 'PikPak',
           available: _pikpakAvailable,
           unavailableMessage: 'Log in to PikPak in Settings.',
         ),
         providerChip(
-          value: _providerPremiumize,
+          value: DebrifyTvConstants.providerPremiumize,
           label: 'Premiumize',
           available: _premiumizeAvailable,
           unavailableMessage:
               'Enable Premiumize and add an API key in Settings.',
         ),
         providerChip(
-          value: _providerAllDebrid,
+          value: DebrifyTvConstants.providerAllDebrid,
           label: 'AllDebrid',
           available: _allDebridAvailable,
           unavailableMessage:
@@ -2009,7 +1926,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     var limitReached = false;
     setState(() {
       for (final kw in parsed) {
-        if (keywordList.length >= _maxChannelKeywords) {
+        if (keywordList.length >= DebrifyTvConstants.maxChannelKeywords) {
           limitReached = true;
           break;
         }
@@ -2021,7 +1938,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
     });
-    return limitReached || keywordList.length >= _maxChannelKeywords;
+    return limitReached ||
+        keywordList.length >= DebrifyTvConstants.maxChannelKeywords;
   }
 
   Future<DebrifyTvChannel?> _openChannelDialog({
@@ -2047,7 +1965,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (seenKeywords.contains(lower)) continue;
       seenKeywords.add(lower);
       keywordList.add(trimmed);
-      if (keywordList.length >= _maxChannelKeywords) break;
+      if (keywordList.length >= DebrifyTvConstants.maxChannelKeywords) break;
     }
     // Channel defaults - keep NSFW preference per channel only
     bool avoidNsfw = existing?.avoidNsfw ?? true;
@@ -2079,10 +1997,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     if (alreadyPresent) {
                       continue;
                     }
-                    if (keywordList.length >= _maxChannelKeywords) {
+                    if (keywordList.length >=
+                        DebrifyTvConstants.maxChannelKeywords) {
                       setModalState(() {
                         error =
-                            'You can add up to $_maxChannelKeywords keywords per channel.';
+                            'You can add up to ${DebrifyTvConstants.maxChannelKeywords} keywords per channel.';
                       });
                       return;
                     }
@@ -2114,10 +2033,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   });
                   return;
                 }
-                if (keywords.length > _maxChannelKeywords) {
+                if (keywords.length > DebrifyTvConstants.maxChannelKeywords) {
                   setModalState(() {
                     error =
-                        'You can add up to $_maxChannelKeywords keywords per channel.';
+                        'You can add up to ${DebrifyTvConstants.maxChannelKeywords} keywords per channel.';
                   });
                   return;
                 }
@@ -2176,7 +2095,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Keywords (${keywordList.length}/$_maxChannelKeywords)',
+                      'Keywords (${keywordList.length}/${DebrifyTvConstants.maxChannelKeywords})',
                       style: TextStyle(
                         color: tv.textDim,
                         fontSize: 12,
@@ -2204,9 +2123,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                 keywordList.remove(keyword);
                                 if (error != null &&
                                     error!.contains(
-                                      '$_maxChannelKeywords keywords',
+                                      '${DebrifyTvConstants.maxChannelKeywords} keywords',
                                     ) &&
-                                    keywordList.length < _maxChannelKeywords) {
+                                    keywordList.length <
+                                        DebrifyTvConstants.maxChannelKeywords) {
                                   error = null;
                                 }
                               });
@@ -2246,11 +2166,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               if (limitReached) {
                                 setModalState(() {
                                   error =
-                                      'You can add up to $_maxChannelKeywords keywords per channel.';
+                                      'You can add up to ${DebrifyTvConstants.maxChannelKeywords} keywords per channel.';
                                 });
                               } else if (error != null &&
                                   error!.contains(
-                                    '$_maxChannelKeywords keywords',
+                                    '${DebrifyTvConstants.maxChannelKeywords} keywords',
                                   )) {
                                 setModalState(() {
                                   error = null;
@@ -2268,11 +2188,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                 if (limitReached) {
                                   setModalState(() {
                                     error =
-                                        'You can add up to $_maxChannelKeywords keywords per channel.';
+                                        'You can add up to ${DebrifyTvConstants.maxChannelKeywords} keywords per channel.';
                                   });
                                 } else if (error != null &&
                                     error!.contains(
-                                      '$_maxChannelKeywords keywords',
+                                      '${DebrifyTvConstants.maxChannelKeywords} keywords',
                                     )) {
                                   setModalState(() {
                                     error = null;
@@ -2648,7 +2568,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _safeImportChannelBytes(
         sourceName: pickedFile.name,
         bytes: bytes,
-        origin: _ChannelImportOrigin.device,
+        origin: DebrifyTvChannelImportOrigin.device,
       );
     } catch (error) {
       _showSnack(
@@ -2736,7 +2656,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             : null;
         final progressMessage = percent != null
             ? 'Downloading… ${percent.toStringAsFixed(0)}%'
-            : 'Downloading… ${_formatBytes(receivedBytes)}';
+            : 'Downloading… ${formatDebrifyTvBytes(receivedBytes)}';
         _updateProgress([progressMessage], replace: true);
       }
 
@@ -2756,7 +2676,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _safeImportChannelBytes(
         sourceName: sourceName,
         bytes: bytes,
-        origin: _ChannelImportOrigin.url,
+        origin: DebrifyTvChannelImportOrigin.url,
       );
     } catch (error) {
       _showSnack(
@@ -2908,7 +2828,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _importChannelBytes({
     required String sourceName,
     required Uint8List bytes,
-    required _ChannelImportOrigin origin,
+    required DebrifyTvChannelImportOrigin origin,
   }) async {
     final type = _determineImportType(sourceName, bytes);
     if (type == null) {
@@ -2920,13 +2840,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     switch (type) {
-      case _ChannelImportType.zip:
+      case DebrifyTvChannelImportType.zip:
         return await _importZipBytes(bytes, origin);
-      case _ChannelImportType.yaml:
+      case DebrifyTvChannelImportType.yaml:
         return await _importYamlBytes(sourceName, bytes, origin);
-      case _ChannelImportType.text:
+      case DebrifyTvChannelImportType.text:
         return await _importTextBytes(sourceName, bytes);
-      case _ChannelImportType.debrify:
+      case DebrifyTvChannelImportType.debrify:
         return await _importDebrifyBytes(sourceName, bytes);
     }
   }
@@ -2934,7 +2854,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _safeImportChannelBytes({
     required String sourceName,
     required Uint8List bytes,
-    required _ChannelImportOrigin origin,
+    required DebrifyTvChannelImportOrigin origin,
   }) async {
     try {
       return await _importChannelBytes(
@@ -2954,34 +2874,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  _ChannelImportType? _determineImportType(String sourceName, Uint8List bytes) {
+  DebrifyTvChannelImportType? _determineImportType(
+    String sourceName,
+    Uint8List bytes,
+  ) {
     final lower = sourceName.toLowerCase();
 
     // Check extension first
     if (lower.endsWith('.zip')) {
-      return _ChannelImportType.zip;
+      return DebrifyTvChannelImportType.zip;
     }
     if (lower.endsWith('.debrify')) {
-      return _ChannelImportType.debrify;
+      return DebrifyTvChannelImportType.debrify;
     }
     if (lower.endsWith('.yaml') || lower.endsWith('.yml')) {
-      return _ChannelImportType.yaml;
+      return DebrifyTvChannelImportType.yaml;
     }
     if (lower.endsWith('.txt')) {
-      return _ChannelImportType.text;
+      return DebrifyTvChannelImportType.text;
     }
 
     // Fallback: check file signature for zip
     if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4b) {
       // PK — zip signature
-      return _ChannelImportType.zip;
+      return DebrifyTvChannelImportType.zip;
     }
 
     // Smart content detection for unknown extensions
     try {
       final content = utf8.decode(bytes).trim();
       if (content.startsWith('debrify://')) {
-        return _ChannelImportType.debrify;
+        return DebrifyTvChannelImportType.debrify;
       }
     } catch (_) {
       // If UTF-8 decode fails, not a text file
@@ -2992,16 +2915,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<bool> _importZipBytes(
     Uint8List bytes,
-    _ChannelImportOrigin origin,
+    DebrifyTvChannelImportOrigin origin,
   ) async {
-    final dialogLabel = origin == _ChannelImportOrigin.device
+    final dialogLabel = origin == DebrifyTvChannelImportOrigin.device
         ? 'Importing zip…'
         : 'Processing zip…';
 
     _showChannelCreationDialog(dialogLabel);
     _updateProgress(['Parsing archive…']);
 
-    final parsed = await _parseZipInBackground(bytes);
+    final parsed = await parseZipInBackground(bytes);
     _updateProgress([
       'Parsed ${parsed.channels.length} channel(s)',
       'Saving channel data…',
@@ -3021,17 +2944,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _importYamlBytes(
     String sourceName,
     Uint8List bytes,
-    _ChannelImportOrigin origin,
+    DebrifyTvChannelImportOrigin origin,
   ) async {
     final content = utf8.decode(bytes);
-    final dialogLabel = origin == _ChannelImportOrigin.device
+    final dialogLabel = origin == DebrifyTvChannelImportOrigin.device
         ? 'Importing YAML…'
         : 'Processing YAML…';
 
     _showChannelCreationDialog(dialogLabel);
     _updateProgress(['Parsing YAML…']);
 
-    final channel = await _parseYamlInBackground(sourceName, content);
+    final channel = await parseYamlInBackground(sourceName, content);
 
     final parsed = DebrifyTvZipImportResult(
       channels: [channel],
@@ -3127,7 +3050,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _updateProgress(['Parsing channel data…']);
 
     // Parse the decoded YAML
-    final channel = await _parseYamlInBackground(
+    final channel = await parseYamlInBackground(
       result.channelName,
       result.yamlContent,
     );
@@ -3166,7 +3089,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _safeImportChannelBytes(
         sourceName: 'debrify_link',
         bytes: Uint8List.fromList(bytes),
-        origin: _ChannelImportOrigin.url,
+        origin: DebrifyTvChannelImportOrigin.url,
       );
     } catch (error) {
       _showSnack(
@@ -3350,13 +3273,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toSet();
 
     for (final channel in channels) {
-      if (channel.normalizedKeywords.length > _maxChannelKeywords) {
+      if (channel.normalizedKeywords.length >
+          DebrifyTvConstants.maxChannelKeywords) {
         failures.add(
           ZipImportSaveFailure(
             sourceName: channel.sourceName,
             channelName: channel.channelName,
             reason:
-                'Channel has ${channel.normalizedKeywords.length} keywords; maximum supported is $_maxChannelKeywords.',
+                'Channel has ${channel.normalizedKeywords.length} keywords; maximum supported is ${DebrifyTvConstants.maxChannelKeywords}.',
           ),
         );
         continue;
@@ -3775,7 +3699,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   children: [
                     _SpotlightMetaPill(
                       label: 'Link size',
-                      value: _formatBytes(estimatedSize),
+                      value: formatDebrifyTvBytes(estimatedSize),
                     ),
                     _SpotlightMetaPill(
                       label: 'Compression',
@@ -3992,9 +3916,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       final baseline = isEdit ? await _ensureCacheEntry(channel.id) : null;
-      if (normalizedKeywords.length > _maxChannelKeywords) {
+      if (normalizedKeywords.length > DebrifyTvConstants.maxChannelKeywords) {
         _showSnack(
-          'Channels support up to $_maxChannelKeywords keywords. Remove some and try again.',
+          'Channels support up to ${DebrifyTvConstants.maxChannelKeywords} keywords. Remove some and try again.',
           color: Colors.orange,
         );
         debugPrint(
@@ -4105,9 +4029,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!entry.isReady ||
-          entry.torrents.length < _minimumTorrentsForChannel) {
+          entry.torrents.length <
+              DebrifyTvConstants.minimumTorrentsForChannel) {
         final message = entry.isReady
-            ? 'Need at least $_minimumTorrentsForChannel torrents to save this channel. Try different keywords.'
+            ? 'Need at least ${DebrifyTvConstants.minimumTorrentsForChannel} torrents to save this channel. Try different keywords.'
             : (entry.errorMessage ??
                   'Unable to find torrents for these keywords. Try again later.');
 
@@ -4213,10 +4138,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     await _syncProviderAvailability();
     final bool providerReady = switch (_provider) {
-      _providerTorbox => _torboxAvailable,
-      _providerPikPak => _pikpakAvailable,
-      _providerPremiumize => _premiumizeAvailable,
-      _providerAllDebrid => _allDebridAvailable,
+      DebrifyTvConstants.providerTorbox => _torboxAvailable,
+      DebrifyTvConstants.providerPikPak => _pikpakAvailable,
+      DebrifyTvConstants.providerPremiumize => _premiumizeAvailable,
+      DebrifyTvConstants.providerAllDebrid => _allDebridAvailable,
       _ => _rdAvailable,
     };
     if (!providerReady) {
@@ -4294,7 +4219,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 .where((t) => t.infohash != leadWith.infohash)
                 .toList()
               ..shuffle(Random());
-        playbackSelection.addAll(rest.take(_playbackTorrentThreshold));
+        playbackSelection.addAll(
+          rest.take(DebrifyTvConstants.playbackTorrentThreshold),
+        );
       }
     }
     final cachedTorrents = playbackSelection
@@ -4304,7 +4231,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       '✅ [WATCH] Selected ${cachedTorrents.length} torrents for playback',
     );
 
-    if (_provider == _providerTorbox) {
+    if (_provider == DebrifyTvConstants.providerTorbox) {
       debugPrint('🎬 [WATCH] Launching Torbox flow...');
       await _watchTorboxWithCachedTorrents(
         cachedTorrents,
@@ -4312,7 +4239,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == _providerPikPak) {
+    } else if (_provider == DebrifyTvConstants.providerPikPak) {
       debugPrint('🎬 [WATCH] Launching PikPak flow...');
       await _watchPikPakWithCachedTorrents(
         cachedTorrents,
@@ -4320,7 +4247,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == _providerPremiumize) {
+    } else if (_provider == DebrifyTvConstants.providerPremiumize) {
       debugPrint('🎬 [WATCH] Launching Premiumize flow...');
       await _watchPremiumizeWithCachedTorrents(
         cachedTorrents,
@@ -4328,7 +4255,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
-    } else if (_provider == _providerAllDebrid) {
+    } else if (_provider == DebrifyTvConstants.providerAllDebrid) {
       debugPrint('🎬 [WATCH] Launching AllDebrid flow...');
       await _watchAllDebridWithCachedTorrents(
         cachedTorrents,
@@ -4435,13 +4362,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // show non-dismissible loading modal
     _progress.value = [];
     _progressOpen = true;
-    final providerLabel = _quickProvider == _providerTorbox
+    final providerLabel = _quickProvider == DebrifyTvConstants.providerTorbox
         ? 'Torbox'
-        : _quickProvider == _providerPikPak
+        : _quickProvider == DebrifyTvConstants.providerPikPak
         ? 'PikPak'
-        : _quickProvider == _providerPremiumize
+        : _quickProvider == DebrifyTvConstants.providerPremiumize
         ? 'Premiumize'
-        : _quickProvider == _providerAllDebrid
+        : _quickProvider == DebrifyTvConstants.providerAllDebrid
         ? 'AllDebrid'
         : 'Real Debrid';
     // ignore: unawaited_futures
@@ -4463,22 +4390,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _progressSheetContext = null;
     });
 
-    if (_quickProvider == _providerTorbox) {
+    if (_quickProvider == DebrifyTvConstants.providerTorbox) {
       await _watchWithTorbox(keywords, _log);
       return;
     }
 
-    if (_quickProvider == _providerPikPak) {
+    if (_quickProvider == DebrifyTvConstants.providerPikPak) {
       await _watchWithPikPak(keywords, _log);
       return;
     }
 
-    if (_quickProvider == _providerPremiumize) {
+    if (_quickProvider == DebrifyTvConstants.providerPremiumize) {
       await _watchWithPremiumize(keywords, _log);
       return;
     }
 
-    if (_quickProvider == _providerAllDebrid) {
+    if (_quickProvider == DebrifyTvConstants.providerAllDebrid) {
       await _watchWithAllDebrid(keywords, _log);
       return;
     }
@@ -4775,7 +4702,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 // Start background prefetch only while player is active
                 if (!_watchCancelled) {
                   _activeApiKey = apiKeyEarly;
-                  _activeProvider = _providerRealDebrid;
+                  _activeProvider = DebrifyTvConstants.providerRealDebrid;
                   unawaited(_startPrefetch());
 
                   final String? activeChannelId = _currentWatchingChannelId;
@@ -4852,10 +4779,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         requestMagicNext: requestMagicNext,
                         requestNextChannel:
                             _channels.length > 1 &&
-                                (_quickProvider == _providerRealDebrid ||
-                                    _quickProvider == _providerTorbox ||
-                                    _quickProvider == _providerPikPak ||
-                                    _quickProvider == _providerPremiumize)
+                                (_quickProvider ==
+                                        DebrifyTvConstants.providerRealDebrid ||
+                                    _quickProvider ==
+                                        DebrifyTvConstants.providerTorbox ||
+                                    _quickProvider ==
+                                        DebrifyTvConstants.providerPikPak ||
+                                    _quickProvider ==
+                                        DebrifyTvConstants.providerPremiumize)
                             ? _requestNextChannel
                             : null,
                         channelDirectory: activeChannelDirectory,
@@ -5135,7 +5066,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
-      _activeProvider = _providerRealDebrid;
+      _activeProvider = DebrifyTvConstants.providerRealDebrid;
       unawaited(_startPrefetch());
 
       if (_progressOpen && _progressSheetContext != null) {
@@ -5201,9 +5132,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_quickProvider == _providerRealDebrid ||
-                        _quickProvider == _providerTorbox ||
-                        _quickProvider == _providerPikPak)
+                    (_quickProvider == DebrifyTvConstants.providerRealDebrid ||
+                        _quickProvider == DebrifyTvConstants.providerTorbox ||
+                        _quickProvider == DebrifyTvConstants.providerPikPak)
                 ? _requestNextChannel
                 : null,
             channelDirectory: quickChannelDirectory,
@@ -5467,7 +5398,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (_watchCancelled) {
             break;
           }
-          if (item is Map && item['type'] == _torboxFileEntryType) {
+          if (item is Map &&
+              item['type'] == DebrifyTvConstants.torboxFileEntryType) {
             final resolved = await _resolveTorboxQueuedFile(
               entry: item as Map<String, dynamic>,
               apiKey: apiKey,
@@ -5592,9 +5524,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               requestMagicNext: requestTorboxNext,
               requestNextChannel:
                   _channels.length > 1 &&
-                      (_quickProvider == _providerRealDebrid ||
-                          _quickProvider == _providerTorbox ||
-                          _quickProvider == _providerPikPak)
+                      (_quickProvider ==
+                              DebrifyTvConstants.providerRealDebrid ||
+                          _quickProvider == DebrifyTvConstants.providerTorbox ||
+                          _quickProvider == DebrifyTvConstants.providerPikPak)
                   ? _requestNextChannel
                   : null,
             ),
@@ -5874,9 +5807,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               requestMagicNext: requestPikPakNext,
               requestNextChannel:
                   _channels.length > 1 &&
-                      (_quickProvider == _providerRealDebrid ||
-                          _quickProvider == _providerTorbox ||
-                          _quickProvider == _providerPikPak)
+                      (_quickProvider ==
+                              DebrifyTvConstants.providerRealDebrid ||
+                          _quickProvider == DebrifyTvConstants.providerTorbox ||
+                          _quickProvider == DebrifyTvConstants.providerPikPak)
                   ? _requestNextChannel
                   : null,
             ),
@@ -6129,7 +6063,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (!mounted) return;
       _activeApiKey = apiKey;
-      _activeProvider = _providerRealDebrid;
+      _activeProvider = DebrifyTvConstants.providerRealDebrid;
       unawaited(_startPrefetch());
       _closeProgressDialog();
 
@@ -6176,10 +6110,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox ||
-                        _provider == _providerPikPak ||
-                        _provider == _providerPremiumize)
+                    (_provider == DebrifyTvConstants.providerRealDebrid ||
+                        _provider == DebrifyTvConstants.providerTorbox ||
+                        _provider == DebrifyTvConstants.providerPikPak ||
+                        _provider == DebrifyTvConstants.providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -6382,7 +6316,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (!mounted) return;
       _activeApiKey = apiKey;
-      _activeProvider = _providerAllDebrid;
+      _activeProvider = DebrifyTvConstants.providerAllDebrid;
       unawaited(_startPrefetch());
       _closeProgressDialog();
 
@@ -6428,11 +6362,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox ||
-                        _provider == _providerPikPak ||
-                        _provider == _providerPremiumize ||
-                        _provider == _providerAllDebrid)
+                    (_provider == DebrifyTvConstants.providerRealDebrid ||
+                        _provider == DebrifyTvConstants.providerTorbox ||
+                        _provider == DebrifyTvConstants.providerPikPak ||
+                        _provider == DebrifyTvConstants.providerPremiumize ||
+                        _provider == DebrifyTvConstants.providerAllDebrid)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -6665,7 +6599,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final keywords = await _getChannelKeywords(targetChannel.id);
     if (keywords.isEmpty) {
       debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
-      if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
+      if (_provider == DebrifyTvConstants.providerRealDebrid ||
+          _provider == DebrifyTvConstants.providerAllDebrid) {
         unawaited(_startPrefetch());
       }
       return null;
@@ -6679,7 +6614,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (playbackSelection.isEmpty) {
       debugPrint('DebrifyTV: No torrents matched in selected channel');
-      if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
+      if (_provider == DebrifyTvConstants.providerRealDebrid ||
+          _provider == DebrifyTvConstants.providerAllDebrid) {
         unawaited(_startPrefetch());
       }
       return null;
@@ -6690,14 +6626,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toList();
     if (allTorrents.isEmpty) {
       debugPrint('DebrifyTV: No playable torrents resolved for channel');
-      if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
+      if (_provider == DebrifyTvConstants.providerRealDebrid ||
+          _provider == DebrifyTvConstants.providerAllDebrid) {
         unawaited(_startPrefetch());
       }
       return null;
     }
 
     List<Torrent> filteredTorrents = allTorrents;
-    if (_provider == _providerTorbox) {
+    if (_provider == DebrifyTvConstants.providerTorbox) {
       final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         debugPrint('DebrifyTV: ❌ No Torbox API key configured');
@@ -6746,7 +6683,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     try {
-      if (_provider == _providerRealDebrid) {
+      if (_provider == DebrifyTvConstants.providerRealDebrid) {
         debugPrint('DebrifyTV: Selected channel uses Real-Debrid provider');
         final apiKey = await RealDebridStorage.getApiKey();
         if (apiKey == null || apiKey.isEmpty) {
@@ -6857,7 +6794,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           _activeApiKey = apiKey;
-          _activeProvider = _providerRealDebrid;
+          _activeProvider = DebrifyTvConstants.providerRealDebrid;
           unawaited(_startPrefetch());
           debugPrint(
             'DebrifyTV: Started Real-Debrid prefetcher for new channel',
@@ -6877,7 +6814,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == _providerAllDebrid) {
+      if (_provider == DebrifyTvConstants.providerAllDebrid) {
         debugPrint('DebrifyTV: Selected channel uses AllDebrid provider');
         final apiKey = await AllDebridStorage.getAllDebridApiKey();
         if (apiKey == null || apiKey.isEmpty) {
@@ -6943,7 +6880,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           _activeApiKey = apiKey;
-          _activeProvider = _providerAllDebrid;
+          _activeProvider = DebrifyTvConstants.providerAllDebrid;
           unawaited(_startPrefetch());
           debugPrint('DebrifyTV: Started AllDebrid prefetcher for new channel');
           debugPrint('DebrifyTV: Successfully got stream from channel: $title');
@@ -6961,7 +6898,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == _providerTorbox) {
+      if (_provider == DebrifyTvConstants.providerTorbox) {
         final apiKey = await TorboxStorage.getTorboxApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Torbox API key configured');
@@ -7014,7 +6951,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (_provider == _providerPikPak) {
+      if (_provider == DebrifyTvConstants.providerPikPak) {
         final pikpakAvailable = await PikPakTvService.instance.isAvailable();
         if (!pikpakAvailable) {
           debugPrint('DebrifyTV: PikPak not authenticated');
@@ -7076,7 +7013,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     debugPrint('DebrifyTV: Channel switch failed');
-    if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
+    if (_provider == DebrifyTvConstants.providerRealDebrid ||
+        _provider == DebrifyTvConstants.providerAllDebrid) {
       unawaited(_startPrefetch());
       debugPrint('DebrifyTV: Restarted prefetcher for current channel');
     }
@@ -7156,7 +7094,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final bool canSwitchChannels =
           _currentWatchingChannelId != null &&
           _channels.length > 1 &&
-          (_provider == _providerRealDebrid || _provider == _providerAllDebrid);
+          (_provider == DebrifyTvConstants.providerRealDebrid ||
+              _provider == DebrifyTvConstants.providerAllDebrid);
 
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
@@ -7377,7 +7316,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         final next = _queue.removeAt(0);
-        if (next is Map && next['type'] == _torboxFileEntryType) {
+        if (next is Map &&
+            next['type'] == DebrifyTvConstants.torboxFileEntryType) {
           final resolved = await _resolveTorboxQueuedFile(
             entry: Map<String, dynamic>.from(next as Map),
             apiKey: apiKey,
@@ -7470,10 +7410,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestTorboxNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox ||
-                        _provider == _providerPikPak ||
-                        _provider == _providerPremiumize)
+                    (_provider == DebrifyTvConstants.providerRealDebrid ||
+                        _provider == DebrifyTvConstants.providerTorbox ||
+                        _provider == DebrifyTvConstants.providerPikPak ||
+                        _provider == DebrifyTvConstants.providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -7641,10 +7581,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestPikPakNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox ||
-                        _provider == _providerPikPak ||
-                        _provider == _providerPremiumize)
+                    (_provider == DebrifyTvConstants.providerRealDebrid ||
+                        _provider == DebrifyTvConstants.providerTorbox ||
+                        _provider == DebrifyTvConstants.providerPikPak ||
+                        _provider == DebrifyTvConstants.providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -8119,21 +8059,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  void _handleTopMenuAction(_DebrifyTvTopMenuAction action) {
+  void _handleTopMenuAction(DebrifyTvTopMenuAction action) {
     switch (action) {
-      case _DebrifyTvTopMenuAction.import:
+      case DebrifyTvTopMenuAction.import:
         _handleImportChannels();
         break;
-      case _DebrifyTvTopMenuAction.export:
+      case DebrifyTvTopMenuAction.export:
         _handleExportChannels();
         break;
-      case _DebrifyTvTopMenuAction.add:
+      case DebrifyTvTopMenuAction.add:
         _handleAddChannel();
         break;
-      case _DebrifyTvTopMenuAction.deleteAll:
+      case DebrifyTvTopMenuAction.deleteAll:
         _handleDeleteAllChannels();
         break;
-      case _DebrifyTvTopMenuAction.settings:
+      case DebrifyTvTopMenuAction.settings:
         _showGlobalSettingsDialog();
         break;
     }
@@ -8319,7 +8259,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               leadingIcon: const Icon(Icons.cloud_download_rounded),
               onPressed: _isBusy
                   ? null
-                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.import),
+                  : () => _handleTopMenuAction(DebrifyTvTopMenuAction.import),
               child: const Text('Import'),
             ),
             MenuItemButton(
@@ -8327,7 +8267,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               leadingIcon: const Icon(Icons.folder_zip_rounded),
               onPressed: _isBusy || _channels.isEmpty
                   ? null
-                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.export),
+                  : () => _handleTopMenuAction(DebrifyTvTopMenuAction.export),
               child: const Text('Export Channels'),
             ),
             MenuItemButton(
@@ -8335,7 +8275,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               leadingIcon: const Icon(Icons.add_rounded),
               onPressed: _isBusy
                   ? null
-                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.add),
+                  : () => _handleTopMenuAction(DebrifyTvTopMenuAction.add),
               child: const Text('Add Channel'),
             ),
             MenuItemButton(
@@ -8344,14 +8284,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               onPressed: _isBusy || _channels.isEmpty
                   ? null
                   : () =>
-                        _handleTopMenuAction(_DebrifyTvTopMenuAction.deleteAll),
+                        _handleTopMenuAction(DebrifyTvTopMenuAction.deleteAll),
               child: const Text('Delete All'),
             ),
             MenuItemButton(
               style: itemStyle,
               leadingIcon: const Icon(Icons.settings_rounded),
               onPressed: () =>
-                  _handleTopMenuAction(_DebrifyTvTopMenuAction.settings),
+                  _handleTopMenuAction(DebrifyTvTopMenuAction.settings),
               child: const Text('Settings'),
             ),
           ],
@@ -9138,14 +9078,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildSettingsCard({
-    required _SettingsScope scope,
+    required DebrifyTvSettingsScope scope,
     required bool includeNsfwToggle,
     required String title,
     StateSetter? dialogSetState,
   }) {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
-    final bool isQuickScope = scope == _SettingsScope.quickPlay;
+    final bool isQuickScope = scope == DebrifyTvSettingsScope.quickPlay;
 
     final bool startRandom = isQuickScope ? _quickStartRandom : _startRandom;
     void setStartRandom(bool value) {
@@ -9326,7 +9266,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 setState(() {
                   if (isQuickScope) {
                     _quickStartRandom = true;
-                    _quickRandomStartPercent = _randomStartPercentDefault;
+                    _quickRandomStartPercent = randomStartPercentDefault;
                     _quickHideSeekbar = true;
                     _quickShowChannelName = true;
                     _quickShowVideoTitle = true;
@@ -9336,7 +9276,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     _quickProvider = defaultProvider;
                   } else {
                     _startRandom = true;
-                    _randomStartPercent = _randomStartPercentDefault;
+                    _randomStartPercent = randomStartPercentDefault;
                     _hideSeekbar = true;
                     _showChannelName = true;
                     _showVideoTitle = true;
@@ -9539,7 +9479,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               maxWidth: 920,
               maxHeightFactor: .94,
               child: _buildSettingsCard(
-                scope: _SettingsScope.channels,
+                scope: DebrifyTvSettingsScope.channels,
                 includeNsfwToggle: false,
                 title: 'Playback rules',
                 dialogSetState: setDialogState,
@@ -9742,7 +9682,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final trackingKey = '$infohash|$fileId';
         if (_seenLinkWithTorrentId.contains(trackingKey)) return false;
         final size = (file['size'] as num?)?.toInt() ?? 0;
-        if (size > 0 && size < _torboxMinVideoSizeBytes) return false;
+        if (size > 0 && size < DebrifyTvConstants.torboxMinVideoSizeBytes)
+          return false;
         if (applySizeFilter && !_tvFilters.sizeMatchesBytes(size)) return false;
         return true;
       }).toList();
@@ -9919,7 +9860,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     for (final file in files) {
       if (!_premiumizeFileLooksLikeVideo(file)) continue;
-      if (file.size < _torboxMinVideoSizeBytes) continue;
+      if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
       // Per-FILE size filter (see the Torbox builder for the rationale).
       if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
 
@@ -10177,10 +10118,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestPremiumizeNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                    (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox ||
-                        _provider == _providerPikPak ||
-                        _provider == _providerPremiumize)
+                    (_provider == DebrifyTvConstants.providerRealDebrid ||
+                        _provider == DebrifyTvConstants.providerTorbox ||
+                        _provider == DebrifyTvConstants.providerPikPak ||
+                        _provider == DebrifyTvConstants.providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -10472,10 +10413,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               requestMagicNext: requestPremiumizeNext,
               requestNextChannel:
                   _channels.length > 1 &&
-                      (_quickProvider == _providerRealDebrid ||
-                          _quickProvider == _providerTorbox ||
-                          _quickProvider == _providerPikPak ||
-                          _quickProvider == _providerPremiumize)
+                      (_quickProvider ==
+                              DebrifyTvConstants.providerRealDebrid ||
+                          _quickProvider == DebrifyTvConstants.providerTorbox ||
+                          _quickProvider == DebrifyTvConstants.providerPikPak ||
+                          _quickProvider ==
+                              DebrifyTvConstants.providerPremiumize)
                   ? _requestNextChannel
                   : null,
             ),
@@ -10709,7 +10652,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
 
       _activeApiKey = apiKey;
-      _activeProvider = _providerAllDebrid;
+      _activeProvider = DebrifyTvConstants.providerAllDebrid;
       unawaited(_startPrefetch());
 
       if (await _handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
@@ -10745,11 +10688,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               requestMagicNext: requestMagicNext,
               requestNextChannel:
                   _channels.length > 1 &&
-                      (_quickProvider == _providerRealDebrid ||
-                          _quickProvider == _providerTorbox ||
-                          _quickProvider == _providerPikPak ||
-                          _quickProvider == _providerPremiumize ||
-                          _quickProvider == _providerAllDebrid)
+                      (_quickProvider ==
+                              DebrifyTvConstants.providerRealDebrid ||
+                          _quickProvider == DebrifyTvConstants.providerTorbox ||
+                          _quickProvider == DebrifyTvConstants.providerPikPak ||
+                          _quickProvider ==
+                              DebrifyTvConstants.providerPremiumize ||
+                          _quickProvider ==
+                              DebrifyTvConstants.providerAllDebrid)
                   ? _requestNextChannel
                   : null,
             ),
@@ -10784,7 +10730,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     for (final file in torrent.files) {
       if (!_torboxFileLooksLikeVideo(file)) continue;
-      if (file.size < _torboxMinVideoSizeBytes) continue;
+      if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
       // Per-FILE size filter: a pack's files are individual episodes, so this
       // compares against the number the user actually meant.
       if (applySizeFilter && !_tvFilters.sizeMatchesBytes(file.size)) continue;
@@ -11008,7 +10954,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     while (mounted && !_prefetchStopRequested) {
       try {
         final prepared = _countPreparedInLookahead();
-        if (prepared >= _minPrepared) {
+        if (prepared >= DebrifyTvConstants.minPrepared) {
           await Future.delayed(const Duration(milliseconds: 750));
           continue;
         }
@@ -11032,9 +10978,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _countPreparedInLookahead() {
-    final end = _queue.length < _lookaheadWindow
+    final end = _queue.length < DebrifyTvConstants.lookaheadWindow
         ? _queue.length
-        : _lookaheadWindow;
+        : DebrifyTvConstants.lookaheadWindow;
     int count = 0;
     for (int i = 0; i < end; i++) {
       final item = _queue[i];
@@ -11047,9 +10993,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _findUnpreparedTorrentIndexInLookahead() {
-    final end = _queue.length < _lookaheadWindow
+    final end = _queue.length < DebrifyTvConstants.lookaheadWindow
         ? _queue.length
-        : _lookaheadWindow;
+        : DebrifyTvConstants.lookaheadWindow;
     for (int i = 0; i < end; i++) {
       final item = _queue[i];
       if (item is Torrent && !_inflightInfohashes.contains(item.infohash)) {
@@ -11064,7 +11010,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (idx < 0 || idx >= _queue.length) return;
     final item = _queue[idx];
     if (item is! Torrent) return;
-    if (_activeProvider == _providerAllDebrid) {
+    if (_activeProvider == DebrifyTvConstants.providerAllDebrid) {
       await _prefetchOneAllDebrid(idx, item);
       return;
     }
@@ -11143,7 +11089,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// is deleted in that case) or has no usable video files. Each returned link
   /// is still locked and must be unlocked via [AllDebridService.unlockLink]
   /// before playback — the lazy model mirrors Real-Debrid's restricted links.
-  Future<_AllDebridPrepared?> _resolveAllDebridLinks(
+  Future<DebrifyTvAllDebridPrepared?> _resolveAllDebridLinks(
     Torrent candidate,
     String apiKey,
   ) async {
@@ -11167,7 +11113,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return result.files
           .where((f) {
             if (!FileUtils.isVideoFile(f.fileName)) return false;
-            if (f.size > 0 && f.size < _torboxMinVideoSizeBytes) return false;
+            if (f.size > 0 &&
+                f.size < DebrifyTvConstants.torboxMinVideoSizeBytes)
+              return false;
             if (applySizeFilter && !_tvFilters.sizeMatchesBytes(f.size)) {
               return false;
             }
@@ -11194,7 +11142,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     for (final link in freshLinks) {
       _seenRestrictedLinks.add(link);
     }
-    return _AllDebridPrepared(
+    return DebrifyTvAllDebridPrepared(
       magnetId: result.magnetId,
       name: result.name,
       lockedLinks: freshLinks,
@@ -11255,17 +11203,4 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _inflightInfohashes.remove(infohash);
     }
   }
-}
-
-/// Result of adding an AllDebrid magnet for Debrify TV: the resolved (still
-/// locked) video-file links plus identifiers for the created magnet.
-class _AllDebridPrepared {
-  final String magnetId;
-  final String name;
-  final List<String> lockedLinks;
-  _AllDebridPrepared({
-    required this.magnetId,
-    required this.name,
-    required this.lockedLinks,
-  });
 }

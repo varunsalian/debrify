@@ -130,8 +130,8 @@ def _self_test(package=None):
 
 def self_test(package=None):
     # Repeated negatives recheck the same unchanged leaves. Cache only the
-    # real normalizer's exact input/output in this fixture process, never AST
-    # binding, ownership or a checker result. Keep config/rows alive so ids
+    # real normalizer's exact input/output in this fixture process, never a
+    # binding/ownership comparison or a checker result. Keep config/rows alive so ids
     # cannot be reused between nested configured() scopes.
     import json
     import check_settings_moves as settings
@@ -152,7 +152,10 @@ def self_test(package=None):
         return list(cache[key])
     settings.normalize=memoized
     bindings._canonical_name=canonical
-    try:_self_test(package)
+    from debrify_tv_fixture_parse_cache import exact_parse_cache
+    try:
+        with exact_parse_cache(package):
+            _self_test(package)
     finally:
         settings.normalize=normalize
         bindings._canonical_name=_canonical_name

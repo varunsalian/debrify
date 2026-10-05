@@ -1637,6 +1637,29 @@ production application/dependency objects remain unchanged. Step 0b's Linux
 recapture prerequisite is resolved; proceed with steps 1–8 and both gates.
 Device-only playback, remote CI and integration remain pending.
 
+### Step 1 — extract pure models, helpers and compute entrypoints, 2026-10-05
+
+Previous checkpoint: `42f329819b826eb3c3bc25b17042d2bfd70edf42`. Guard registrations from step 0b remain unconditional. All six first destinations are registered for shape, including zero-token files; the facade budget is zero. Theme patterns are explicit in all four feature directories. The unused parser and its inherited warning remain. A TV-only fixture parser cache proves batched/per-unit AST output identical in both modes, defensively copies results, reparses every changed input and reruns every guard; production checks and other manifests are unchanged. The first Linux retry lacked the disposable container's package cache; reject that harness failure and preserve it as step1-linux-rejected-cache.txt. The calibrated image now uses a worktree-local package cache and enforces the unchanged lockfile.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Architecture, sizes, storage, shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**52 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step1-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **11206** lines. AST breakdown: retained original top levels 173, widget 6, state header and close 2, retained original bodies 10664, lifecycle 57, build 14, imports 86, remaining blank comment lines 204
+(sum 11206). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
