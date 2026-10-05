@@ -218,11 +218,6 @@ class _ThemeTokensPageState extends State<ThemeTokensPage> {
 
   ThemeOverrides get _o => AppThemeController.instance.overrides;
 
-  /// `SettingsTile.onTap` is non-nullable, and a disabled row still has to
-  /// supply something. Doing nothing is the honest behaviour for "there is
-  /// nothing to reset".
-  static Future<void> _noop() async {}
-
   Future<void> _set(String key, String? value) async {
     await AppThemeController.instance.setOverrides(_o.with_(key, value));
     if (mounted) setState(() {});

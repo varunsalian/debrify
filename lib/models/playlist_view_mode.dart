@@ -1,5 +1,3 @@
-import '../utils/series_parser.dart';
-
 /// Defines how a playlist should be displayed and organized in the video player
 enum PlaylistViewMode {
   /// Display playlist as-is without sorting or series organization
@@ -90,17 +88,4 @@ extension PlaylistViewModeStorage on PlaylistViewMode {
         return null; // Auto-detect
     }
   }
-}
-
-/// Helper function to determine viewMode from isSeries boolean
-/// Used for migrating existing code
-PlaylistViewMode? viewModeFromIsSeries(bool? isSeries) {
-  if (isSeries == null) return null;
-  return isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted;
-}
-
-/// Helper function to auto-detect viewMode from filenames
-PlaylistViewMode autoDetectViewMode(List<String> filenames) {
-  final isSeries = SeriesParser.isSeriesPlaylist(filenames);
-  return isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted;
 }

@@ -125,8 +125,6 @@ class MagnetYamlService {
       );
     } on FormatException catch (e) {
       throw MagnetYamlException('Invalid debrify link format: ${e.message}');
-    } on ArchiveException catch (e) {
-      throw MagnetYamlException('Failed to decompress data: $e');
     } catch (e) {
       throw MagnetYamlException('Failed to decode debrify link: $e');
     }

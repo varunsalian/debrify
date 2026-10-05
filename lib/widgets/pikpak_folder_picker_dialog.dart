@@ -19,20 +19,12 @@ class _FolderNode {
   final String id;
   final String name;
   final int level;
-  bool isExpanded;
-  bool isLoading;
-  bool hasLoadedChildren;
-  List<_FolderNode> children;
+  bool isExpanded = false;
+  bool isLoading = false;
+  bool hasLoadedChildren = false;
+  List<_FolderNode> children = const [];
 
-  _FolderNode({
-    required this.id,
-    required this.name,
-    required this.level,
-    this.isExpanded = false,
-    this.isLoading = false,
-    this.hasLoadedChildren = false,
-    this.children = const [],
-  });
+  _FolderNode({required this.id, required this.name, required this.level});
 }
 
 class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
@@ -390,7 +382,6 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
       }
     }
   }
-
 
   void _ensureFocusNodes() {
     final flatFolders = _getFlattenedFolders();
@@ -847,12 +838,6 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
           : null,
       child: itemWidget,
     );
-  }
-
-  String _truncateFolderName(String name) {
-    const maxLength = 30;
-    if (name.length <= maxLength) return name;
-    return '${name.substring(0, maxLength - 3)}...';
   }
 
   @override

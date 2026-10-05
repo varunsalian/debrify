@@ -4,21 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../utils/platform_util.dart';
 
-/// What the recognizer is doing right now, as far as the UI cares.
-enum TvVoicePhase {
-  /// Session opened, engine not listening yet (service bind, model warm-up).
-  starting,
-
-  /// Microphone is live and waiting for words.
-  listening,
-
-  /// Words are actually arriving.
-  hearing,
-
-  /// User stopped talking; the engine is turning audio into text.
-  processing,
-}
-
 /// One event from the native recognizer.
 class TvVoiceEvent {
   const TvVoiceEvent._(this.type, {this.text, this.level, this.code, this.message});

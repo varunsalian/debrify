@@ -31,7 +31,6 @@ class PikPakTvService {
   // Timing constants
   static const Duration _initialWait = Duration(seconds: 1);
   static const Duration _pollInterval = Duration(seconds: 1);
-  static const Duration _maxWaitDuration = Duration(seconds: 10);
 
   /// Try to prepare a torrent for streaming.
   /// Returns {url, title, allVideoFiles, pikpakFolderId} on success, null if not cached/ready.

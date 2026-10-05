@@ -63,8 +63,6 @@ class SeasonWatchedService {
             for (final e in result.data!.entries)
               if (e.value >= 100) e.key,
           };
-        default:
-          return null;
       }
       return inventory == null
           ? null

@@ -245,9 +245,6 @@ class AppLook {
   }
 }
 
-/// What the picker shows when no bundle matches.
-const String kCustomLookId = 'custom';
-
 abstract final class AppLooks {
   /// The shipped bundles.
   ///

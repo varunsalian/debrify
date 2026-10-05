@@ -383,23 +383,3 @@ class PaginationHandler {
   }
 }
 
-/// Factory for creating pagination handlers
-class PaginationHandlerFactory {
-  /// Create a pagination handler from a config
-  static PaginationHandler create(PaginationConfig config) {
-    return PaginationHandler(config);
-  }
-
-  /// Create a pagination handler with default "none" config
-  static PaginationHandler createDefault() {
-    return PaginationHandler(const PaginationConfig(type: 'none'));
-  }
-
-  /// Create a pagination handler from a config map
-  static PaginationHandler fromMap(Map<String, dynamic>? map) {
-    if (map == null) {
-      return createDefault();
-    }
-    return PaginationHandler(PaginationConfig.fromMap(map));
-  }
-}

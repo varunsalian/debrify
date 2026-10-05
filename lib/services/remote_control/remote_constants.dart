@@ -14,7 +14,6 @@ const String kBroadcastAddress = '255.255.255.255';
 const Duration kDiscoveryTimeout = Duration(seconds: 10);
 const Duration kHeartbeatInterval = Duration(seconds: 5);
 const Duration kConnectionTimeout = Duration(seconds: 15);
-const Duration kReconnectDelay = Duration(seconds: 2);
 
 /// Message types
 class RemoteMessageType {

@@ -174,19 +174,6 @@ String _getDedupeKey(Map<String, dynamic> item) {
   }
 
   // Always use horizontal scroll layout (matching home screen)
-  bool _isHorizontalLayout(double screenWidth) => true;
-
-  (int, double) _getGridParams(double screenWidth) {
-    if (screenWidth > 900) {
-      return (4, 1.65);
-    } else if (screenWidth > 600) {
-      return (3, 1.6);
-    } else if (screenWidth > 500) {
-      return (2, 1.55);
-    } else {
-      return (2, 1.5);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -351,30 +338,6 @@ String _getDedupeKey(Map<String, dynamic> item) {
           },
         ),
       ),
-      ),
-    );
-  }
-
-  /// Mobile/Tablet layout: Responsive grid
-  Widget _buildGrid(double screenWidth) {
-    final (crossAxisCount, childAspectRatio) = _getGridParams(screenWidth);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        primary: false,
-        addAutomaticKeepAlives: true,
-        addRepaintBoundaries: true,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: childAspectRatio,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: widget.items.length,
-        itemBuilder: _buildCardItem,
       ),
     );
   }

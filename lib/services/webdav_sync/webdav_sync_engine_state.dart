@@ -1388,7 +1388,4 @@ Map<String, dynamic> _map(Object? source, String label) {
   }
 }
 
-int encodedEngineStateBytes(WebDavSyncEngineState state) =>
-    utf8.encode(jsonEncode(state.toJson())).length;
-
 final RegExp _safeSyncIdentifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');

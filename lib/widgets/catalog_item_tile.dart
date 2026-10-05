@@ -522,15 +522,6 @@ class _CatalogItemTileState extends State<CatalogItemTile>
   }
 }
 
-/// Number of grid columns for a given width. Fewer columns = bigger posters
-/// = a more premium feel. TV tops out at 5.
-int catalogGridColumnsFor(double width, {bool isTelevision = false}) {
-  if (isTelevision || width >= 1500) return 5;
-  if (width >= 1100) return 4;
-  if (width >= 700) return 3;
-  return 2;
-}
-
 class _GlassChip extends StatelessWidget {
   final String label;
   const _GlassChip({required this.label});

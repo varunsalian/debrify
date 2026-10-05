@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -501,25 +500,3 @@ class IdentAlphaSets {
   }
 }
 
-/// Partial stroke of [path] — the dash-draw idiom (Marquee emblem, ring
-/// draws).
-///
-/// NOT for the hot path: [ui.PathMetric.extractPath] mints a fresh native
-/// Path on every call, so driving this straight off progress allocates per
-/// frame. Pre-extract a quantized ladder of prefixes at layout instead (see
-/// Blueprint's `_draw`) and index into it.
-void identDrawPathPartial(
-  Canvas canvas,
-  Path path,
-  double t,
-  Paint paint,
-) {
-  if (t <= 0) return;
-  if (t >= 1) {
-    canvas.drawPath(path, paint);
-    return;
-  }
-  for (final metric in path.computeMetrics()) {
-    canvas.drawPath(metric.extractPath(0, metric.length * t), paint);
-  }
-}
