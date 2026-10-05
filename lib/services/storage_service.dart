@@ -530,6 +530,8 @@ class StorageService {
       'stremio_tv_random_episodes';
   static const String _stremioTvLocalCatalogsKey =
       'stremio_tv_local_catalogs_v1';
+  static const String _stremioTvChannelOrderKey =
+      'stremio_tv_channel_order_v1';
   static const String _stremioTvCatalogRepoUrlsKey =
       'stremio_tv_catalog_repo_urls_v1';
   static const String _stremioTvHideNowPlayingKey =
@@ -10314,6 +10316,26 @@ class StorageService {
     } catch (e) {
       debugPrint('Error reading Stremio TV channel favorites: $e');
       return {};
+    }
+  }
+
+  // ==========================================================================
+  // Stremio TV Channel Order
+  // ==========================================================================
+
+  /// User-defined Stremio TV channel order. Unknown/new channel IDs are
+  /// appended after the saved IDs by the discovery service.
+  static Future<List<String>> getStremioTvChannelOrder() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getStringList(_stremioTvChannelOrderKey) ?? const [];
+  }
+
+  static Future<void> setStremioTvChannelOrder(List<String> channelIds) async {
+    final prefs = await ProfilePreferences.instance();
+    if (channelIds.isEmpty) {
+      await prefs.remove(_stremioTvChannelOrderKey);
+    } else {
+      await prefs.setStringList(_stremioTvChannelOrderKey, channelIds);
     }
   }
 

@@ -3,6 +3,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+import 'stremio_tv_channel_order_page.dart';
 
 class StremioTvSettingsPage extends StatefulWidget {
   const StremioTvSettingsPage({super.key});
@@ -519,6 +520,25 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             },
                             contentPadding: EdgeInsets.zero,
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.reorder_rounded),
+                          title: const Text('Channel order'),
+                          subtitle: const Text(
+                            'Choose the order of channels shown in Stremio TV',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () async {
+                            await Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const StremioTvChannelOrderPage(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 16),

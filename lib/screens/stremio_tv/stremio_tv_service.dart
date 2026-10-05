@@ -128,10 +128,36 @@ class StremioTvService {
       }
 
       _disambiguateDuplicateIds(channels, favoriteIds);
+      await _applySavedChannelOrder(channels);
       return channels;
     } catch (e) {
       debugPrint('StremioTvService: Error discovering channels: $e');
       return [];
+    }
+  }
+
+  Future<void> _applySavedChannelOrder(List<StremioTvChannel> channels) async {
+    final saved = await StorageService.getStremioTvChannelOrder();
+    if (saved.isEmpty || channels.length < 2) return;
+
+    final rank = <String, int>{
+      for (int i = 0; i < saved.length; i++) saved[i]: i,
+    };
+    final originalRank = <String, int>{
+      for (int i = 0; i < channels.length; i++) channels[i].id: i,
+    };
+
+    channels.sort((a, b) {
+      final ar = rank[a.id];
+      final br = rank[b.id];
+      if (ar != null && br != null) return ar.compareTo(br);
+      if (ar != null) return -1;
+      if (br != null) return 1;
+      return (originalRank[a.id] ?? 0).compareTo(originalRank[b.id] ?? 0);
+    });
+
+    for (int i = 0; i < channels.length; i++) {
+      channels[i].channelNumber = i + 1;
     }
   }
 

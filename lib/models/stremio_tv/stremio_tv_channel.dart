@@ -27,7 +27,7 @@ class StremioTvChannel {
   final String? genre;
 
   /// Auto-assigned channel number (1-based)
-  final int channelNumber;
+  int channelNumber;
 
   /// Whether this channel is favorited by the user
   bool isFavorite;
