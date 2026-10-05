@@ -38,11 +38,15 @@ recorded in the env file, not in the paths list.
 
 ## Goal
 
-`lib/screens/magic_tv_screen.dart` is **11,271 lines**: 82 import lines, no
-`part`, 4 private enums, 5 top-level functions, 3 top-level consts, 5 private
-classes (`_SpotlightMetaPill`, `_SpotlightChoiceChip` and its State,
-`_TvEngineWarmResult`, `_AllDebridPrepared`), the public `DebrifyTVScreen`,
-and one State, `_DebrifyTVScreenState` (347–11258, about 10,900 lines,
+`lib/screens/magic_tv_screen.dart` is **11,271 lines**: 80 import
+directives in the 82-line import span, no `part`, and **21 top-level
+declarations** — 3 consts, 7 functions (`_clampRandomStartPercent`,
+`_parseRandomStartPercent`, `_formatBytes`, `_parseZipInBackground`,
+`_parseZipCompute`, `_parseYamlInBackground`, `_parseYamlCompute`), 4 private
+enums and 7 classes (`_SpotlightMetaPill`, `_SpotlightChoiceChip` and its
+State, `_TvEngineWarmResult`, `_AllDebridPrepared`, the public
+`DebrifyTVScreen` and its State). The 19 declarations outside the retained
+widget/State move. The State, `_DebrifyTVScreenState` (347–11258, about 10,900 lines,
 78 instance fields, 15 static consts, 1 getter, about 140 methods, 162
 `setState(` tokens). It is Debrify TV: channel grid and Spotlight layouts,
 keyword search across engines, channel cache warm-up, the five provider
@@ -65,8 +69,9 @@ becomes the facade, because `lib/main.dart:60` imports it, the theme source
 guards name it (`test/theme/source_guard_test.dart:118`), and
 `dev/tool/theme_rendered_set.py:30` uses it as the surface root.
 
-**Playback-adjacent, not player work.** The file *starts* playback (12 live
-`Navigator.push(videoPlayerRoute(... VideoPlayerScreen(...)))` sites, three
+**Playback-adjacent, not player work.** The file *starts* playback (11 live
+`Navigator.push(videoPlayerRoute(... VideoPlayerScreen(...)))` sites plus one
+in the dormant `_playNextFromQueue`, three
 Android TV bridge launches, the external-player handoff) and supplies the
 player's next/channel callbacks. All of it moves verbatim and is pinned by the
 PLAYBACK CONTRACT below. `video_player_screen.dart`, `lib/screens/video_player/`,
@@ -133,8 +138,8 @@ names `_DebrifyTVScreenState`; the State keeps that name, so the doc stays true.
 | 11260–11271 | `_AllDebridPrepared` |
 
 **State and resources.** Fields group into seven owners: library (6),
-Spotlight stage (4), settings/provider (35), playback session (14), prefetch
-(7), progress dialog (3) and focus/search (11, including the `late final
+Spotlight stage (4), settings/provider (34), playback session (14), prefetch
+(7), progress dialog (3) and focus/search (10, including the `late final
 _channelSearchFocusNode` assigned in `initState`). Owned resources: two
 `TextEditingController`s, one `ValueNotifier`, five `FocusNode`s, one
 `MenuController` (no dispose API), one `Timer` (`_spotlightStatsDebounce`), the
@@ -189,12 +194,26 @@ lexical locals).
    `_watchChannelById` tear-off of the live section and is nulled
    unconditionally in `dispose`. `_checkPendingAutoPlay` keeps its 50 ×
    100 ms wait with a `mounted` check per iteration. `focusTvSidebar` (8166,
-   8480) is called at the original sites. The 16 `DebrifyTvView` callbacks
+   8480) is called at the original sites. The 13 `DebrifyTvView` callbacks
    (7970–7983) keep their targets, including the `onWatchOne` closure.
+   **Auto-play paths, named:** the Home saved-channel action
+   (`lib/screens/search_screen/home_saved_composition.dart:89`) calls
+   `HomeHeroShellBridge.playSavedDebrifyChannel`
+   (`lib/features/home/presentation/home_hero_shell_bridge.dart:155–162`),
+   which calls `MainPageBridge.watchDebrifyTvChannel` when the screen is
+   mounted (→ `_watchChannelById`), else stores the id with
+   `MainPageBridge.notifyDebrifyTvChannelToAutoPlay` and switches to the tab,
+   where the screen's post-frame `_checkPendingAutoPlay` consumes it. The
+   remote-control router only **imports channel data**
+   (`lib/services/remote_control/remote_command_router.dart`, e.g.
+   `DebrifyTvZipImporter.parseYaml` at 4360, writing through the repository and
+   cache service); it has no hook into the screen, which sees that data on its
+   next `_loadChannels` (or a WebDAV `notifyDebrifyTvLibraryChanged`). Neither
+   path is edited.
 3. **PLAYBACK CONTRACT.** Nothing in the handoff changes. Pinned per site by
    the source reader plus the callback-identity checker, and by behaviour
-   tests where a host test can observe it (Step 0, contract C7).
-   1. **Flutter player pushes.** The 12 live sites keep their receiver
+   tests where a host test can observe it (Step 0, contract C3).
+   1. **Flutter player pushes.** The 11 live sites (and dormant P9) keep their receiver
       (`Navigator.of(context)` with the State's context), the
       `videoPlayerRoute(builder: (_) => VideoPlayerScreen(...))` wrapper and
       **every argument expression and its order**:
@@ -251,12 +270,27 @@ lexical locals).
       = null` → `mounted` → status), the `rethrow` of
       `NativePlayerSettingsUnavailable` (3 sites) and the fall-through
       `clear*Provider(); return false`. Premiumize keeps using
-      `_launchPikPakOnAndroidTv` (10152, 10445).
+      `_launchPikPakOnAndroidTv` (10152, 10445). Recorded as-is: the native
+      helpers always pass the **channel** options (`_startRandom`,
+      `_randomStartPercent`, `_hideSeekbar`, `_hideOptions`, `_showVideoTitle`)
+      even for quick play, whose only quick-scope input is
+      `showChannelNameOverride: _quickShowChannelName`; and the native
+      profile is captured **at bridge launch entry**
+      (`final launchScope = ProfileRuntime.scope.value` inside
+      `AndroidTvPlayerBridge.launch*Playback`), not when the watch action
+      starts. Neither moves or changes.
    4. **Callbacks handed to the players are live tear-offs of one section
       instance.** `_requestNextChannel` (14 sites) and `_requestChannelById`
-      (10 sites) become `_sections.channelSwitch.requestNextChannel` /
-      `.requestChannelById`, evaluated at the original site (never cached in
-      a field, never wrapped in a closure, never another section's member).
+      (10 sites) become `_sections.channelWatch.requestNextChannel` /
+      `_sections.channelWatch.requestChannelById` — both are owned by the
+      `channelWatch` section (`DebrifyTvChannelWatch`,
+      `debrify_tv_channel_watch.dart`), which calls
+      `_sections.channelSwitch.switchToChannel`; the switch file holds
+      `_switchToChannel` alone. They are evaluated at the original site (never
+      cached in a field, never wrapped in a closure, never another section's
+      member). The receiver is frozen in the section map (Destination layout)
+      and used identically by the contract, manifest, composition and
+      callback fixtures.
       The `request*Next` closures stay local closures in their moved method,
       capturing the same locals (`apiKey`, `firstTitle`, `candidateCursor`,
       `combinedList`/`candidatePool`, `log`).
@@ -278,6 +312,18 @@ lexical locals).
       `Future.microtask` deferral, the `captureAppThemes(context)` snapshot and
       who sets `_progressSheetContext` (`onReady` vs `pageBuilder`). `_watch`
       keeps `// ignore: unawaited_futures` and the `.whenComplete` reset.
+      **Which flows honour cancellation (as-is):** `_watch`'s early-launch
+      loop and closure #1, quick TorBox, quick PikPak, quick Premiumize, quick
+      AllDebrid and cached PikPak check `_watchCancelled`. The cached RD,
+      AllDebrid, TorBox and Premiumize flows and `_watch`'s final closure #2
+      do **not**: after Cancel, a held resolve (for example the
+      `unrestrictLink` at 6070 in cached RD) can complete, return a stream
+      (6091), re-add sibling work to the just-cleared queue (6087–6089),
+      restart the prefetcher (`_startPrefetch` resets
+      `_prefetchStopRequested`) and reach the handoff (6130 onward) with only a
+      `mounted` check. That late launch is original behaviour; it is
+      characterized as-is and listed in Found, not fixed. No cancellation fix is
+      made in this split.
    7. **Prefetch.** `_startPrefetch` keeps the epoch capture, the preference
       read, the post-await re-check (`mounted`, epoch, running, key) and the
       flag order; `_stopPrefetch` increments the epoch **first**, then awaits
@@ -287,8 +333,9 @@ lexical locals).
       on `_activeProvider` is unchanged.
    8. **Channel switching.** `_switchToChannel` keeps `await _stopPrefetch()` →
       **`await Future.delayed(const Duration(seconds: 5))`** → previous-cache
-      eviction → seen/filter resets → per-provider resolve → the four
-      prefetch restarts for RD/AllDebrid → the returned map keys
+      eviction → seen/filter resets → per-provider resolve → its **six**
+      prefetch starts (two on success: RD 6861, AllDebrid 6947; four failure
+      restarts for RD/AllDebrid: 6669, 6683, 6694, 7080) → the returned map keys
       (`channelId`, `channelName`, `channelNumber`, `firstUrl`, `firstTitle`).
       Premiumize still falls through to "Unsupported provider" (Found, not
       fixed).
@@ -301,6 +348,49 @@ lexical locals).
        `player_launch` or `lib/screens/video_player/` outside the files that
        hold the moved sites, and any new `VideoPlayerScreen(` outside a
        `videoPlayerRoute(builder:` argument.
+   11. **Argument ledger (frozen).** Step 0 commits
+       `dev/tool/debrify_tv_handoff_ledger.json`: for each of the 12
+       `VideoPlayerScreen(` constructions (11 live + dormant P9), the 11
+       `_launch*OnAndroidTv(` invocations and the 3 `AndroidTvPlayerBridge.launch*`
+       calls, the ordered list of `name: expression` pairs exactly as
+       written, plus "every other parameter is not passed (constructor
+       default)". The checker compares each moved call site with its ledger
+       entry token-for-token (receiver qualification reversed), and the C3
+       tests compare captured `VideoPlayerScreen` fields with the ledger's
+       expected values for their fixture. Ledger at `47e7d385`:
+
+       | Site | `videoUrl` / `title` | options (`startFromRandom`, `randomStartMaxPercent`, `hideSeekbar`, `showChannelName`, `showVideoTitle`, `hideOptions`) | `channelName` / `channelNumber` | `requestMagicNext` | `requestNextChannel` | `channelDirectory` | `requestChannelById` |
+       | --- | --- | --- | --- | --- | --- | --- | --- |
+       | P1 4841 | `firstUrl` / `firstTitleResolved` | `_quick*` | `null` / `null` | `requestMagicNext` | `_channels.length > 1 && (_quickProvider == RD ∨ TorBox ∨ PikPak ∨ Premiumize) ? _requestNextChannel : null` | `activeChannelDirectory` | `_channels.length > 1 ? _requestChannelById : null` |
+       | P2 5190 | `firstUrl` / `firstTitle` | `_quick*` | `null` / `null` | `requestMagicNext` | same with RD ∨ TorBox ∨ PikPak | `quickChannelDirectory` | same |
+       | P3 5581 | `first['url'] ?? ''` / `first['title'] ?? 'Debrify TV'` | channel | `null` / `null` | `requestTorboxNext` | `_quickProvider` RD ∨ TorBox ∨ PikPak | not passed | not passed |
+       | P4 5863 | as P3 | `_quick*` | `null` / `null` | `requestPikPakNext` | `_quickProvider` RD ∨ TorBox ∨ PikPak | not passed | not passed |
+       | P5 6165 | `firstUrl` / `firstTitle` | channel | `channelName` / `channelNumber` | `requestMagicNext` | `_provider` RD ∨ TorBox ∨ PikPak ∨ Premiumize | `channelDirectory` | `_channels.length > 1 ? …` |
+       | P6 6417 | as P5 | channel | as P5 | `requestMagicNext` | `_provider` all five | `channelDirectory` | same |
+       | P7 7459 | as P3 | channel | as P5 | `requestTorboxNext` | `_provider` RD ∨ TorBox ∨ PikPak ∨ Premiumize | `channelDirectory` | same |
+       | P8 7630 | as P3 | channel | as P5 | `requestPikPakNext` | as P7 | `channelDirectory` | same |
+       | P9 7887 (dormant) | `videoUrl` / `next.name` | `_quick*` | `null` / `null` | not passed | not passed | not passed | not passed |
+       | P10 10166 | as P3 | channel | as P5 | `requestPremiumizeNext` | as P7 | `channelDirectory` | same |
+       | P11 10461 | as P3 | channel | `null` / `null` | `requestPremiumizeNext` | `_quickProvider` RD ∨ TorBox ∨ PikPak ∨ Premiumize | not passed | not passed |
+       | P12 10734 | `first['url'] ?? ''` / `firstTitle` | `_quick*` | `null` / `null` | `requestMagicNext` | `_quickProvider` all five | not passed | not passed |
+
+       Native helper invocations (`firstStream: first` and `requestNext:` the
+       flow's closure at every site): 4817 and 5168 RD with
+       `showChannelNameOverride: _quickShowChannelName`, `channelId:
+       activeChannelId`, `channelNumber: activeChannelNumber`,
+       `channelDirectory: activeChannelDirectory` / `quickChannelDirectory`;
+       5559 TorBox, 5841 PikPak, 10445 PikPak (Premiumize) with
+       `showChannelNameOverride: _quickShowChannelName` and
+       `channelName`/`channelId`/`channelNumber`/`channelDirectory: null`;
+       10719 RD (AllDebrid) with the override and `channelId`,
+       `channelNumber`, `channelDirectory: null` (no `channelName`); 6141, 6395
+       RD, 7442 TorBox, 7613 and 10152 PikPak with `channelName`, `channelId`,
+       `channelNumber`, `channelDirectory` and no override. Bridge calls:
+       6491 and 7698 `launchTorboxPlayback` and 7164 `launchRealDebridPlayback`
+       with the argument lists in Contract 3.3 (`magnets: magnets` at 6491,
+       `magnets: const []` at 7698). The two bridge methods order their
+       arguments differently (`magnets` vs `channelName` after `title`); each
+       site keeps its own order.
 4. **Settings and persistence.** `_loadSettings` keeps its read order (30
    awaits), the hard-coded `hideOptions`/`hideBackButton` false, the single
    `setState` assigning every field, the post-`setState`
@@ -379,7 +469,7 @@ resulting `library_private_types_in_public_api` identity.
 | `debrify_tv_owners.dart` | `DebrifyTvOwners` composing the seven records, eager | 30 |
 | `debrify_tv_library_state.dart` | `_keywordsController`, `_channels`, `_debrifyTvStyle`, `_channelCache`, `_currentWatchingChannelId`, `_favoriteChannelIds` | 25 |
 | `debrify_tv_stage_state.dart` | four Spotlight stage fields | 16 |
-| `debrify_tv_settings_state.dart` | 35 settings/provider fields + the live `viewerForcesNsfw` getter | 70 |
+| `debrify_tv_settings_state.dart` | 34 settings/provider fields + the live `viewerForcesNsfw` getter | 70 |
 | `debrify_tv_session_state.dart` | 14 session fields (`_queue` … `_originalMaxCap`) | 35 |
 | `debrify_tv_prefetch_state.dart` | 7 prefetch fields with their comments | 25 |
 | `debrify_tv_progress_state.dart` | `_progress`, `_progressSheetContext`, `_progressOpen` | 14 |
@@ -425,6 +515,50 @@ resulting `library_private_types_in_public_api` identity.
 | `debrify_tv_top_bar.dart` | search Back ladder, toggle/clear/focus-below, top menu action, action button, menu button, top actions | 440 |
 | `debrify_tv_grid_layout.dart` | `_buildTvGridLayout`, `_buildTvEmptyState` | 315 |
 | `debrify_tv_grid_cards.dart` | favourites section/card, channel card, add card | 390 |
+
+**Frozen section map.** The composition key, class and file of every
+section are fixed here and used identically by the contracts, manifest,
+composition and callback fixtures (`receiver_paths`/`receiver_owners` and
+`callback_instances` in the config):
+
+| Key (`_sections.<key>`) | Class | File (`legacy_debrify_tv/`) |
+| --- | --- | --- |
+| `feedback` | `DebrifyTvFeedback` | `debrify_tv_feedback.dart` |
+| `settings` | `DebrifyTvSettingsLoader` | `debrify_tv_settings_loader.dart` |
+| `engines` | `DebrifyTvEngineLimits` | `debrify_tv_engine_limits.dart` |
+| `filters` | `DebrifyTvPlaybackFilters` | `debrify_tv_playback_filters.dart` |
+| `library` | `DebrifyTvChannelLibrary` | `debrify_tv_channel_library.dart` |
+| `warmup` | `DebrifyTvChannelWarmup` | `debrify_tv_channel_warmup.dart` |
+| `editor` | `DebrifyTvChannelEditor` | `debrify_tv_channel_editor.dart` |
+| `actions` | `DebrifyTvChannelActions` | `debrify_tv_channel_actions.dart` |
+| `save` | `DebrifyTvChannelSave` | `debrify_tv_channel_save.dart` |
+| `share` | `DebrifyTvChannelShare` | `debrify_tv_channel_share.dart` |
+| `channelExport` | `DebrifyTvChannelExport` | `debrify_tv_channel_export.dart` |
+| `channelImport` | `DebrifyTvChannelImport` | `debrify_tv_channel_import.dart` |
+| `urlImport` | `DebrifyTvUrlImport` | `debrify_tv_url_import.dart` |
+| `formats` | `DebrifyTvImportFormats` | `debrify_tv_import_formats.dart` |
+| `persistence` | `DebrifyTvImportPersistence` | `debrify_tv_import_persistence.dart` |
+| `quickPlay` | `DebrifyTvQuickPlay` | `debrify_tv_quick_play.dart` |
+| `quickTorbox` / `quickPikPak` / `quickPremiumize` / `quickAllDebrid` | `DebrifyTvQuickPlayTorbox` / `…PikPak` / `…Premiumize` / `…AllDebrid` | `debrify_tv_quick_play_{torbox,pikpak,premiumize,alldebrid}.dart` |
+| `channelWatch` | `DebrifyTvChannelWatch` (`watchChannel`, **`requestNextChannel`, `requestChannelById`**) | `debrify_tv_channel_watch.dart` |
+| `channelSwitch` | `DebrifyTvChannelSwitch` (`switchToChannel` only) | `debrify_tv_channel_switch.dart` |
+| `cachedRealDebrid` / `cachedAllDebrid` / `cachedTorbox` / `cachedPikPak` / `cachedPremiumize` | `DebrifyTvCached{RealDebrid,AllDebrid,Torbox,PikPak,Premiumize}` | `debrify_tv_cached_{real_debrid,all_debrid,torbox,pikpak,premiumize}.dart` |
+| `handoff` | `DebrifyTvPlayerHandoff` | `debrify_tv_player_handoff.dart` |
+| `torbox` | `DebrifyTvTorboxResolver` | `debrify_tv_torbox_resolver.dart` |
+| `cloud` | `DebrifyTvCloudResolvers` | `debrify_tv_cloud_resolvers.dart` |
+| `prefetch` | `DebrifyTvPrefetcher` | `debrify_tv_prefetch.dart` |
+| `dormant` | `DebrifyTvDormant` | `debrify_tv_dormant.dart` |
+| `chips` | `DebrifyTvSettingsChips` | `debrify_tv_settings_chips.dart` |
+| `settingsCard` | `DebrifyTvSettingsCard` | `debrify_tv_settings_card.dart` |
+| `dialogs` | `DebrifyTvDialogs` | `debrify_tv_dialogs.dart` |
+| `stage` | `DebrifyTvSpotlightStage` | `debrify_tv_spotlight_stage.dart` |
+| `topBar` | `DebrifyTvTopBar` | `debrify_tv_top_bar.dart` |
+| `grid` | `DebrifyTvGridLayout` | `debrify_tv_grid_layout.dart` |
+| `cards` | `DebrifyTvGridCards` | `debrify_tv_grid_cards.dart` |
+
+(`import`/`export` are avoided as keys: they are Dart built-in identifiers.)
+Owner records are `_owners.library`, `.stage`, `.settings`, `.session`,
+`.prefetch`, `.progress`, `.focus`. A change to this map is a plan amendment.
 
 **Cross-class privates** become manifest-listed public names
 (`_watchChannel` → `watchChannel`, …). Each section exposes only what other
@@ -479,9 +613,15 @@ rejection); `DEBRIFY_TV_FACADE_CAP = <measured>` and the
 `TEMP(debrify_tv)` rejection as for `SPOTLIGHT_BOARD_FACADE`. Tests run **the
 real checker** against a temporary copy of the tree and must reject: the
 facade missing; the facade at cap + 1; `TEMP(debrify_tv)` in the facade and
-in a feature file; the URL-import file at its exception + 1; another feature
-file importing `package:http`; a non-bridge file importing `lib/services/`.
-The unmodified tree passes.
+in a feature file; **each of the two size-exception files**
+(`debrify_tv_quick_play.dart`, `debrify_tv_channel_switch.dart`) at its
+measured cap + 1; an **unrelated** registered file (another Debrify TV
+destination, and separately a file of another feature) grown above 800 lines,
+proving the generalised ceiling does not spread the exemption; the
+`package:http` import in any Debrify TV file other than
+`debrify_tv_url_import.dart` (the D1 pair is an import permission, not a size
+exception); a non-bridge file importing `lib/services/`. The unmodified tree
+passes.
 
 ## Size exceptions
 
@@ -525,8 +665,8 @@ As in the Spotlight and catalog plans, plus:
    - R is used everywhere: the manifest `--baseline`, the relocation
      comparison, the hash rule, the Linux script and every replay.
 2. **Strict-lint baseline** (probe at `47e7d385`, scratch copy, same SDK):
-   **72** diagnostics under the features config = the root **50** (18
-   warnings, 32 infos) + **21 `directives_ordering`** + **1
+   **72** diagnostics under the features config = the root **50** (17
+   warnings, 33 infos, re-counted by identity from the measured output) + **21 `directives_ordering`** + **1
    `prefer_const_constructors`** (3521). Root warnings: `unused_element` ×6
    (`_parseRandomStartPercent`, `_playNextFromQueue`, `setShowChannelName`,
    `setShowVideoTitle`, `setHideOptions`, `setHideBackButton`),
@@ -589,22 +729,48 @@ As in the Spotlight and catalog plans, plus:
    `randomStartPercent`, `showChannelName`, `showVideoTitle`, `hideOptions`,
    `hideBackButton` beside closures that write the fields;
    `_persistImportedZipChannels` takes `channels` and writes `_channels`.
-   The Spotlight **State-field binding comparison** is reused through its
-   existing config key (`spotlight_state_field_bindings`, which is
-   feature-agnostic in `spotlight_board_field_bindings.py`) listing
-   `_DebrifyTVScreenState` and `_SpotlightChoiceChipState`: before
-   declaration normalization, every original field read and write must map to
-   the registered receiver path and new name, and no destination reference
-   to a moved field may resolve to a lexical parameter, local or closure
-   local. Comment and literal text are excluded; `${...}` interpolations are
-   code (for example `'… queue=${_queue.length}'` in `_watch`). Required
-   negatives, each rejected by the guard **and** by an assertion in the
-   characterization suite run on an original-code mutation:
-   `_owners.settings.startRandom = startRandom` written as `startRandom =
-   startRandom`; `_owners.library.channels` read as `channels` in
-   `_persistImportedZipChannels`; a `_buildSettingsCard` setter writing the
-   local `startRandom`; an unqualified read in a record. Positive fixtures
-   cover every record. The guard runs at every step from 2.
+   **Guard: occurrence-level binding with mandatory qualification (new,
+   opt-in).** The reused Spotlight comparison
+   (`spotlight_board_field_bindings.py`) is not enough: it compares
+   *counters* keyed by field identity and read/write role, so a balanced
+   relocation (one field read turned into a local read while a local read
+   elsewhere becomes the field read) keeps the counts, and it accepts a bare
+   field inside its destination class (lines 44–46). Add a config-scoped key,
+   `occurrence_field_bindings` (Debrify TV config only; every other
+   manifest's behaviour and self-tests unchanged), implemented beside the
+   Spotlight helper and run **before** declaration normalization and before
+   the source reader:
+   - **Occurrence correspondence.** For each moved declaration, pair original
+     and destination identifier occurrences in token order (comments and
+     string-literal text excluded; `${...}` interpolations are code, e.g.
+     `'… queue=${_queue.length}'` in `_watch`). Each original occurrence
+     that the analyzer binds to a State field must correspond to a
+     destination occurrence bound to the registered record member through the
+     registered receiver path (`_owners.<record>.<newName>`), with the same
+     read/write role and the same enclosing lexical scope (method, closure,
+     builder). Each original occurrence bound to a parameter, local or
+     closure local must still bind to that same declaration.
+   - **Mandatory qualification.** In Debrify TV destination files, a moved
+     field is never referenced bare: not in sections, not in record classes
+     (records hold only declarations and initializers; their one getter,
+     `viewerForcesNsfw`, reads no field). A bare identifier that names a
+     record member is rejected even where it would resolve.
+   - **Negatives** (real config, each must fail): ordinary capture
+     (`_owners.settings.startRandom = startRandom` turned into a bare
+     `startRandom` that binds the local in `_loadSettings`); balanced
+     field/local relocation (swap one field read and one same-named local read
+     in `_buildSettingsCard`, counts unchanged); a bare owner-field reference
+     inside a record and inside a section; `_owners.library.channels` replaced
+     by the `channels` parameter in `_persistImportedZipChannels`. Positives
+     cover every record and every hazard method above. The existing
+     `spotlight_state_field_bindings` check also stays on for
+     `_DebrifyTVScreenState` and `_SpotlightChoiceChipState`.
+   These are **checker-level** negatives over moved source; they are not
+   original-code behavioural mutations (several cannot even compile on R:
+   `startRandom` is a `final` local at 755 and 9150, and the ZIP parameter's
+   elements are `DebrifyTvZipImportedChannel`, not `DebrifyTvChannel`). The
+   behavioural proxies that *can* run on R are listed in Step 0.5. The guard
+   runs at every step from 2.
 5. **Receivers and composition.** Sections follow the Spotlight shape:
    `final DebrifyTvDependencies _deps;` with `DebrifyTvOwners get _owners`
    and `DebrifyTvSections get _sections` getters. Cross-section calls are
@@ -618,7 +784,7 @@ As in the Spotlight and catalog plans, plus:
    with wrapper and same-class receiver-swap negatives) for: the library
    listener register/unregister pair; `watchDebrifyTvChannel` assignment; the
    stored tab-3 handler at register and unregister; `_requestNextChannel` (14
-   sites) and `_requestChannelById` (10 sites); the 16 `DebrifyTvView`
+   sites) and `_requestChannelById` (10 sites), both on `_sections.channelWatch`; the 13 `DebrifyTvView`
    callbacks; each `request*Next` argument at its push and native launch; the
    three `onFinished` closures' bodies; `_cancelActiveWatch` inside both
    dialogs' cancel callbacks; the Spotlight debounce `Timer` callback; the
@@ -655,7 +821,7 @@ As in the Spotlight and catalog plans, plus:
 
 | # | Work | Contracts |
 | --- | --- | --- |
-| 0 | Baseline `base`; format idempotence (no format commit); strict and rename probes; dependency report; manifest and config; harness, characterization tests, source reader, source-test switch, macOS goldens; checkpoint (b); CI list; source-text inventory; Linux capture script | Nothing moves |
+| 0 | Baseline `base`; format idempotence (no format commit); strict and rename probes; dependency report; manifest, config and handoff ledger; harness, characterization tests, per-declaration source reader, source-test switch, `fetch-depth: 0` for the behaviour job with the shallow-clone proof, macOS goldens (two reversed-order captures); checkpoint (b); CI list; source-text inventory; Linux capture script | Nothing moves |
 | 0b | Independent review; original-only mutation proofs; compiling-composition probe with the real checker and facade measurement; `base2` at (b) | Nothing moves |
 | L | **Prerequisite before step 2:** supplied Linux originals hash-verified, committed separately, Linux golden test made strict | Goldens |
 | 1 | Guard registration (feature, bridge, D1 pair, size-exception placeholders, bans); models; application helpers; import parsing (compute entrypoints); shape/theme registrations begin | Surface, 6 (compute) |
@@ -725,9 +891,16 @@ As in the Spotlight and catalog plans, plus:
    pattern in a Debrify-TV-owned support file); a fake `FilePicker.platform`;
    a Clipboard mock; `MainPageBridge` probes (`hideAutoLaunchOverlay`,
    `focusTvSidebar`, the content-focus request) reset in teardown;
-   `EngineRegistry` with a single fixture engine whose search is served by
-   the `MockClient` if the executor uses package `http` (else quick-play
-   search is source-guard evidence only — record the choice);
+   **a fixture search engine installed through production storage**: the
+   fixture writes one engine YAML (keyword search, `tv_mode` enabled, one
+   page, fixed result mapping) with `LocalEngineStorage.instance.saveEngine(…)`
+   (the `addon_hub_engines_test.dart` precedent, 238/275/407), then awaits
+   `EngineRegistry.instance.reload()`; `ConfigLoader.loadEngineConfigs`
+   reads it from `getAllEngineFilePaths()`. Its HTTP goes through
+   `engine_executor.dart`'s package-level `http.get`/`http.post` (577 onward),
+   so the same recording `MockClient` under `http.runWithClient` serves
+   deterministic search results. No registry seam is added; quick-play search
+   is therefore **observable** (O), not source-only;
    `DebrifyTvStorage` style mirror set before mount for Spotlight cases;
    pinned `tester.view` size and DPR; `AppThemeScope` with a pinned look.
    **The player-route interceptor:** a `NavigatorObserver` records each
@@ -751,12 +924,13 @@ As in the Spotlight and catalog plans, plus:
    | Contract | Coverage |
    | --- | --- |
    | C1 Lifecycle | After mount: `watchDebrifyTvChannel` set, content-focus request focuses Quick Play (R/O); after unmount: `watchDebrifyTvChannel` null (O), a running prefetch issues no further request (O), focus/controller disposal and `clearTorboxProvider` (S); `initState`/`dispose`/`build` bodies (S). |
-   | C2 Hooks | `notifyDebrifyTvChannelToAutoPlay(id)` before mount starts that channel after the post-frame wait (O); `watchDebrifyTvChannel(id)` while mounted starts it (O); unknown id does nothing (O); `notifyDebrifyTvLibraryChanged()` after a DB change shows the new channel and clears stage stats (R); register/unregister identity (S). |
-   | C3 Playback handoff (RD channel, P5) | Seeded channel + RD `MockClient`: Tune in → `CachedLoadingDialog` shown (R) → add/info/unrestrict requests in order (O) → dialog closed **before** the push (O: observer order) → captured `VideoPlayerScreen` arguments equal the table row exactly, including `requestNextChannel` present only with >1 channel and an allowed provider (O) → invoking the captured `requestMagicNext` resolves the next queue item (O) → after the interceptor removes the route, `_stopPrefetch` ran (no further prefetch request) and the busy state cleared (R/O). |
-   | C3 other flows | TorBox (P7), Premiumize (P10), AllDebrid (P6) channel flows and quick-play TorBox/Premiumize/AllDebrid (P3, P11, P12) with their MockClient sequences and captured arguments, including the channel-vs-quick option sets (O). PikPak flows and quick-play RD search (P1/P2/P4) are (O) where the harness can serve them, else (S) with the reason recorded. |
+   | C2 Hooks | `HomeHeroShellBridge.playSavedDebrifyChannel(id)` with the screen unmounted stores the id; mounting starts that channel after the post-frame wait (O); the same call while mounted goes through `watchDebrifyTvChannel` and starts it (O); unknown id does nothing (O); `notifyDebrifyTvLibraryChanged()` after a DB change shows the new channel and clears stage stats (R). Listener **detachment after unmount is unobservable** (the retained callback returns on `!mounted`, 1061–1062), so register/unregister identity is (S) with checker mutations (unregister call dropped; a different tear-off receiver). |
+   | C3 Playback handoff (RD channel, P5) | Seeded channel + RD `MockClient`: Tune in → `CachedLoadingDialog` shown (R) → add/info/unrestrict requests in order (O) → dialog closed **before** the push (O: observer order) → captured `VideoPlayerScreen` fields equal the P5 ledger entry (Contract 3.11) field by field, with unlisted parameters at their constructor defaults, including `requestNextChannel` present only with >1 channel and an allowed provider (O) → invoking the captured `requestMagicNext` resolves the next queue item (O) → after the interceptor removes the route, `_stopPrefetch` ran (no further prefetch request) and the busy state cleared (R/O). |
+   | C3 other flows | TorBox (P7), Premiumize (P10), AllDebrid (P6) channel flows and quick-play TorBox/Premiumize/AllDebrid (P3, P11, P12) with their MockClient sequences and captured arguments compared field by field with the ledger (Contract 3.11), including the channel-vs-quick option sets (O). **Separate quick-play RD fixtures:** P1 — the fixture engine returns a playable result, so the early launch fires from closure #1 (O: push before the search loop ends, `firstTitleResolved`, `activeChannelDirectory`, the Premiumize-inclusive `requestNextChannel` set); P2 — a quality filter no result matches, so every per-batch queue is empty, the end-of-search fallback (4886–4895) fills the queue and closure #2 launches (O: fallback snackbar, then push with `firstTitle`, `quickChannelDirectory` and the Premiumize-exclusive set). PikPak flows (P4, P8) are (O) if `PikPakTvService`/`PikPakApiService` resolve through package `http` under the fixture (step 0 proves it), else (S) with the reason recorded. |
    | C3 native TV | With the tvOS override (so `_isAndroidTv` is true): `AndroidTvPlayerBridge` returns false on the non-Android host, so the flow clears the provider and falls back to the Flutter push, and `hideAutoLaunchOverlay` fires once from the native attempt and once before the push (O); bridge arguments and `onFinished` bodies (S). Without the override `_isAndroidTv` is false and the native arm is skipped (O). |
    | C3 external | External player as default: notice declined → no push, prefetch stopped, flow ends (O); accepted with a failing launch → in-app push follows (O). |
-   | C3 cancel | Cancel on the cached dialog while a response is held: dialog pops, no push after release, queue cleared, busy cleared (R/O). |
+   | C3 cancel (honoured) | In the paths that check `_watchCancelled` — quick TorBox, quick Premiumize, quick AllDebrid, `_watch` early launch (closure #1) and cached PikPak where served — Cancel while the resolve is held pops the dialog and clears the queue and busy state; after release there is **no push** (R/O). |
+   | C3 cancel (late launch, as-is) | Cached RD: Cancel while `unrestrictLink` (6070) is held pops the dialog and clears the queue; after release the closure returns the stream (6091), may re-add the torrent to the cleared queue, restarts the prefetcher and **pushes the player** (O: captured push after cancel). This characterizes the original late-launch behaviour (Found, not fixed); the same holds for the other cached flows without a `_watchCancelled` check, which are (S). |
    | C3 switching | Invoke the captured `requestNextChannel()` with 2 channels under fake time: no result before 5 s, then the map with the five keys for the next channel and `isCurrent` moved in the directory of the next launch (O); Premiumize returns null (O). |
    | C4 Settings | Seeded prefs render in the global settings dialog (R); channel-scope toggles write their keys, quick-scope ones do not (O); Reset writes exactly the original keys (O); provider chips disabled when unavailable and default resolution by availability (R); filter chips persist and invalidate stage stats (O); child profile forces NSFW on and the switch is inert (R). |
    | C5 Library | Grid renders seeded channels with favourites first (R); favourite toggle persists (O); delete and delete-all with confirmation, including cancel (R/O). |
@@ -764,36 +938,64 @@ As in the Spotlight and catalog plans, plus:
    | C7 Editor | Validation messages; comma and Enter keyword entry; the 1000 cap message (R); edit with removed keywords prunes the cached pool without network (O); NSFW change forces a full rebuild path (O or S). |
    | C8 Spotlight | Style `spotlight` mounts `SpotlightLayout` with Quick Play as entry node (R); a rail focus computes stats only after 250 ms (fake time) (R); gliding B→A with A memoised cancels B's pending timer (R). |
    | C9 D-pad | Top bar Left → sidebar probe, Right/Up traversal, activate (R/O); search Escape ladder (clear, then close and refocus) (R); menu open by Select and closed by Escape with focus restored (R); channel card long-press opens the options menu (R); choice chip KeyRepeat moves focus (R). |
-   | C10 Field binding | Behaviour assertions that fail if a renamed field were captured: after `_loadSettings` the dialog shows the stored values, not defaults (R); `_syncProviderAvailability` changes chip availability (R); importing a ZIP appends to, not replaces, the visible channel list (R). |
+   | C10 Field binding (behavioural proxies) | Behaviour that a lost field write would change: after `_loadSettings` the settings dialog shows every stored non-default value (R); `_syncProviderAvailability` toggles chip availability when a key is added (R); each settings-card setter changes the visible and persisted value of its own field (R/O). The ZIP **append before reload** (3431–3436) is not observable: `_loadChannels()` immediately republishes the persisted rows and no existing boundary holds that read, so the append is (S), pinned by the occurrence-level binding guard and a source guard on the exact `setState` body. |
 
-   **Mutation proofs** (`original-mutations.json`): every new identity is
-   covered by at least one named mutation of R's application code, applied in
-   the detached original, rejected by an **assertion** (not a compile error),
-   with original/mutated hashes and logs. Required mutations include: an
-   option-set swap at P5 and at P3; `requestNextChannel` always null; the
-   prefetch started after the push; `_closeProgressDialog` removed before the
-   push; `_watchCancelled` check removed after the native launch; the 5 s
-   cooldown set to 0; the debounce cancel moved after the memo check; the
-   library listener not unregistered (observed through a bridge probe); the
-   tab-3 handler unregistered with a new closure; a `_loadSettings` field
-   assignment captured by its local; `_persistImportedZipChannels` writing the
-   parameter; NSFW not forced for a child profile; Reset writing an extra key;
-   the 120-character limit off by one.
+   **Mutation proofs** come in two kinds, recorded separately.
+   - **Behavioural (ORIGINAL) proxies** (`original-mutations.json`): named,
+     *compilable* mutations of R's application code, applied in the detached
+     original and each rejected by an **assertion** (never a compile error),
+     with original/mutated hashes and logs; every new behavioural identity is
+     covered by at least one. Required: an option-set swap at P5 (channel →
+     quick) and at P3 (channel → quick); `requestNextChannel` always null at
+     P5; the P5 prefetch start moved after the push; `_closeProgressDialog()`
+     removed before the P5 push; **every** `_watchCancelled` check in quick
+     TorBox removed together (5437–5531; any single check is redundant with its
+     neighbours and masked, so single-check removals are guard mutations, S);
+     the 5 s cooldown set to
+     0; the debounce cancel moved after the memo return; a dropped field
+     assignment in `_loadSettings`'s `setState` (e.g. `_startRandom =
+     startRandom;` removed) and a settings-card setter writing the wrong scope
+     (the proxies for capture, which cannot be written as `startRandom =
+     startRandom` because the locals are `final`, 755 and 9150); NSFW not
+     forced for a child profile; Reset writing an extra key; the 120-character
+     limit off by one; `watchDebrifyTvChannel` not nulled in `dispose`.
+   - **Checker/guard mutations (S)** over moved source, for what no host test
+     can observe: the library listener's unregister call dropped or given a
+     different receiver (unobservable: the callback returns on `!mounted`);
+     the tab-3 handler unregistered with a new closure; the post-native
+     `if (_watchCancelled) return;` (10727) removed (masked by the guarded push
+     and status update that follow); the ZIP append replaced by assignment
+     (masked by the reload); `_persistImportedZipChannels` capturing the
+     `channels` parameter and the `_loadSettings` capture (both non-compiling
+     on R, so checker-only); native bridge argument changes. Each is rejected
+     by the manifest checker, the occurrence-level binding guard or the
+     callback-identity checker, and is classified **S** in the case table.
 6. **Goldens** (macOS captured by execution in (b), Linux by Claude; strict
    from capture). Scenes: **(1)** grid, TV 1920×1080, `isTelevision` true,
    six channels with two favourites, focus on Quick Play; **(2)** grid,
    phone 390×844, search bar open with a term matching three channels;
    **(3)** empty state, desktop 1280×800; **(4)** Spotlight style, TV
    1920×1080, rail focus on the second channel after the 250 ms debounce with
-   a **one-torrent pool per channel** (the stage sample is a `shuffle`, so a
-   larger pool is not deterministic); **(5)** global settings dialog (channel
+   a **ready one-torrent cache per channel stored with `fetchedAt: 0`** (the
+   stage sample is a `shuffle`, so a larger pool is not deterministic; and the
+   stage's freshness text calls `DateTime.now()`
+   (`lib/screens/debrify_tv/layouts/spotlight_stage.dart:480`), while
+   `_computeSpotlightStats` maps `fetchedAt <= 0` to `null` (8080–8082), which
+   renders the fixed "never"); the test asserts the stats are populated and
+   "never" is visible before capturing; **(5)** global settings dialog (channel
    scope), TV; **(6)** channel editor (edit, three keyword chips, child
    profile with NSFW forced), phone. Scenes (1), (4) and (5) set the tvOS
    override so `_isAndroidTv` (long-press hint, slider mode, autofocus) takes
    its TV value. All scenes: no network images (the
    screen draws none), the golden helpers' fonts including JetBrainsMono, DPR
    1.0, pinned theme, `en-US`, text scale 1.0, a named initial focus or none,
-   bounded fixed pumps, no wall-clock text.
+   bounded fixed pumps, no wall-clock text. **Readiness and order
+   independence:** each scene asserts its readiness markers (channels
+   rendered, intended focus owner, dialog fully shown, stats present) before
+   capture; the macOS originals are captured **twice in independent
+   processes, the second in reversed scene order**, and both sets must be
+   byte-identical (the Episodes Progress precedent) before (b) is committed;
+   the Linux capture script does the same in the container.
 7. **CI list and pre-existing failures.** Add every new test and the golden
    test to `ci_behavior_tests.txt` (the facade has no test importers; the two
    source-text tests are already listed at 48 and 50). Add **only failures
@@ -802,24 +1004,65 @@ As in the Spotlight and catalog plans, plus:
    by CI coverage; observed in debrify_tv/base`. A test passing in `base` must
    keep passing.
 8. **Source-text inventory.**
+   - **Reader** (`test/support/debrify_tv_source.dart` +
+     `dev/tool/debrify_tv_source_reader.py`). Ownership is resolved **per
+     declaration** from the manifest: a declaration is read from its retained
+     original location (the facade) until its destination file exists, and
+     from its destination once it does. The reader rejects a declaration with
+     no owner (in neither place), a declaration present in both (duplicate
+     ownership), a destination file the manifest does not list, and — once
+     `DEBRIFY_TV_COMPLETE` is true — any final destination missing. Its tests
+     cover three layouts: ORIGINAL (everything in the facade), a partial
+     layout (one simulated moved section of each kind) and the completed
+     layout (simulated), plus each rejection.
+     `debrifyTvOriginalSource()` returns the **raw ORIGINAL text** (from the
+     baseline, whitespace and comments preserved), but only after the
+     checker's AST token comparison proves every current declaration equals
+     its original under the registered substitutions **and** a
+     **physical-source guard** proves that indentation-sensitive blocks are
+     physically unchanged in their current location: the
+     `if (e is NativePlayerSettingsUnavailable) {` / `_showNativeSettingsFailure(e)`
+     / `return;` block of `_watch` (4906–4908) is compared line by line
+     with its original leading whitespace reproduced exactly (the body moves
+     at the same nesting depth, so its indentation is unchanged; the
+     receiver-qualified call is compared through the registered rename). The
+     Spotlight reader's whitespace-stripped return (`spotlight_board_source_reader.py:106`)
+     is **not** reused for this.
    - `test/native_player_settings_wiring_test.dart:17` reads the file by
      path; its counts (3 `rethrow`, 10 `on NativePlayerSettingsUnavailable
-     catch (error)`, and the exact 8-space-indented `_showNativeSettingsFailure(e)`
-     string) would break when `_watch` moves. In (b), replace **only** the
-     `File(...).readAsStringSync()` with the reader's verified original text
-     for the facade plus feature files (`debrifyTvOriginalSource()`); every
-     expectation stays byte-identical. Prove on R: positives pass; deleting
-     one `rethrow`, one catch, or changing the indentation/name in the moved
-     `_watch` fails.
+     catch (error)`) and the exact 8-space-indented
+     `_showNativeSettingsFailure(e)` string would break when `_watch` moves.
+     In (b), replace **only** the `File(...).readAsStringSync()` with
+     `debrifyTvOriginalSource()`; every expectation stays byte-identical.
+     Reader negatives (run against simulated moves) prove the expectations
+     still bite: a moved `_watch` with one `rethrow` deleted, one catch
+     deleted, the failure block re-indented by two spaces, or the call renamed
+     to another member each make the reader fail (or, for a change the reader
+     would accept, the existing expectation fail); none passes.
    - `test/theme/source_guard_test.dart`: the `allowed` set (50) and the
      `MaterialPageRoute` test (80–90) read the single path. In (b), the
-     allowed set becomes the facade plus the manifest's destination files
-     (read through `debrifyTvSourceFiles()`, failing if the manifest lists a
-     missing file), with one added assertion that every `VideoPlayerScreen(`
-     in those files is the `builder:` result of a `videoPlayerRoute(` call;
-     the `MaterialPageRoute` test reads `debrifyTvSource()`. Lines 118, 185
-     and 228 keep naming the facade (it still defines `DebrifyTVScreen`). No
-     assertion is deleted or weakened.
+     allowed set becomes `debrifyTvSourceFiles()` — the files that currently
+     own a Debrify TV declaration under the per-declaration rule above (only
+     the facade at (b)) — with one added assertion that every
+     `VideoPlayerScreen(` in those files is the `builder:` result of a
+     `videoPlayerRoute(` call; the `MaterialPageRoute` test reads the current
+     text of the same files. Lines 118, 185 and 228 keep naming the facade (it
+     still defines `DebrifyTVScreen`). No assertion is deleted or weakened.
+   - **CI history for reader-based tests.** The reader loads ORIGINAL with
+     `git show <R>:lib/screens/magic_tv_screen.dart`, like the Spotlight
+     reader (`spotlight_board_source_reader.py:116`), but the
+     `sources-behavior` job's `actions/checkout@v4` (`checks.yml:67`) uses
+     the default `fetch-depth: 1`, so R is absent in CI. In the (b) commit,
+     set `fetch-depth: 0` on that checkout (R is an arbitrary older commit on
+     the refactor history, so no smaller fixed depth is reliably sufficient).
+     This also supplies the history the already-listed Spotlight reader test
+     (`spotlight_board_source_contracts_test.dart`, CI list 270) needs. Prove
+     it locally: in a fresh `git clone --depth 1 file://…` of the (b) commit
+     the reader test fails with a missing-object error; after `git fetch
+     --unshallow` (the equivalent of `fetch-depth: 0`) it passes. Record both
+     logs. (A committed ORIGINAL snapshot with a provenance hash was
+     considered and rejected: it duplicates 11,271 lines and adds a second
+     source of truth.)
    - Shape and theme: Technique 8–9. `file_size_baseline.txt:5` is lowered as
      the facade shrinks (removed below 800) and gains the `_watch` file by
      hand (Size exceptions); the step-2 intermediate growth from receiver
@@ -908,7 +1151,9 @@ exceptions, generalised 800 ceiling, facade path in `main()`,
 source-reader helper (the opt-in `lexical_state_setters` key), the
 callback-identity helper, `shape_manifest_test.dart`,
 `theme_surface_manifest.txt`, `ci_behavior_tests.txt`,
-`ci_behavior_known_failures.txt`, `analyzer_allowlist.txt`, `checks.yml`,
+`ci_behavior_known_failures.txt`, `analyzer_allowlist.txt`, `checks.yml`
+(including the behaviour job's `fetch-depth: 0`), the new opt-in
+`occurrence_field_bindings` helper,
 `file_size_baseline.txt`, `test/theme/source_guard_test.dart` and
 `test/native_player_settings_wiring_test.dart`. Merge rules: union and dedupe
 registrations, exceptions, CI paths, known failures, theme patterns and shape
@@ -997,6 +1242,22 @@ All pre-existing; the extraction keeps each exactly.
 14. `MenuController` is never disposed (no API).
 15. Strings are unlocalized; several icon-only controls lack `Semantics`
     labels beyond their tooltips.
+16. **Late launch after Cancel in cached flows.** Cached RD, AllDebrid,
+    TorBox and Premiumize never check `_watchCancelled`: a resolve held
+    across Cancel (e.g. `unrestrictLink` at 6070) can return a stream (6091),
+    re-add sibling work to the cleared queue (6087–6089), restart the
+    prefetcher (which resets `_prefetchStopRequested`) and push the player
+    (6130 onward) with only a `mounted` check. `_watch`'s final closure #2
+    behaves the same.
+17. Several `_watchCancelled` checks in the quick-play flows are redundant
+    (e.g. 10727 is followed by the guarded push), so removing one alone
+    changes nothing observable.
+18. The ZIP import appends channels with `setState` and immediately
+    republishes them through `_loadChannels()` (3431–3436); the append is
+    invisible.
+19. Native quick play passes the channel playback options (only the
+    channel-name flag comes from quick play), and the native profile is
+    captured at bridge launch, not when the watch starts.
 
 ## Decisions taken before design review (Claude, 2026-10-05)
 
@@ -1011,3 +1272,66 @@ All pre-existing; the extraction keeps each exactly.
    base is reference R.
 4. Pre-existing unused members move verbatim with their analyzer warnings
    allowlisted at their destinations; deleting them is a separate decision.
+
+## Round 1 review resolution
+
+Codex design review round 1 (`~/.codex-runs/tv-design/last.txt`, reviewed at
+`b8de4ff2`); each point was re-checked against the source before revising.
+
+1. **P1 cached cancellation.** Confirmed: cached RD's closure has no
+   `_watchCancelled` check (6070/6087–6091/6130). Contract 3.6 now lists which
+   flows honour cancellation; C3 is split into "honoured" (quick TorBox,
+   Premiumize, AllDebrid, `_watch` closure #1, cached PikPak) and "late
+   launch, as-is" (cached RD observed, the others S); Found, not fixed 16. No
+   production change.
+2. **P1 unprovable mutations.** Confirmed (`final` locals at 755/9150;
+   `DebrifyTvZipImportedChannel` vs `DebrifyTvChannel` at 3335; `!mounted`
+   return at 1061; redundant check at 10727; reload at 3436). Step 0.5 now
+   separates compilable ORIGINAL behavioural proxies from checker/guard
+   mutations (S); C2 and C10 reclassify detachment and the ZIP append as S;
+   Technique 4 states the capture negatives are checker-level.
+3. **P1 reader at (b).** Ownership is resolved per declaration (facade until
+   the destination exists), with missing/duplicate/unlisted rejections and a
+   completion rule; tested on ORIGINAL, partial and completed layouts.
+4. **P1 CI history.** Confirmed `checks.yml:67` uses checkout v4 defaults and
+   the Spotlight reader uses `git show` (116). Step 0.8 sets `fetch-depth: 0`
+   on the behaviour job in (b), with a fresh shallow-clone failure/unshallow
+   pass proof; it also covers the existing Spotlight reader test. Integration
+   lists the change.
+5. **P2 binding guard.** Confirmed counter semantics and bare-owner
+   acceptance (`spotlight_board_field_bindings.py:36–51`). Technique 4 adds
+   the opt-in `occurrence_field_bindings` guard (occurrence/scope pairing and
+   mandatory qualification) with ordinary-capture, balanced-relocation and
+   bare-owner negatives; other configs unchanged.
+6. **P2 callback ownership.** Both channel callbacks are owned by
+   `_sections.channelWatch` (`DebrifyTvChannelWatch`,
+   `debrify_tv_channel_watch.dart`); `channel_switch` holds
+   `switchToChannel` only. A frozen section map (key/class/file) is in the
+   Destination layout and used everywhere.
+7. **P2 playback characterization.** The fixture engine is installed through
+   `LocalEngineStorage.saveEngine` + `EngineRegistry.instance.reload()` and
+   served by the `MockClient` (`engine_executor.dart:577`); P1 and P2 have
+   separate observable fixtures; Contract 3.11 freezes the complete named-
+   argument ledger for all 12 constructors (11 live + P9), the 11 native
+   helper invocations and the 3 bridge calls; Contract 3.3 records channel
+   options in native quick play and bridge-entry profile capture.
+8. **P2 reader whitespace.** Confirmed the Spotlight reader returns
+   whitespace-stripped text (106). `debrifyTvOriginalSource()` returns raw
+   ORIGINAL text after the token proof and a physical-source guard for the
+   native-failure block; reader negatives prove the expectations still bite.
+9. **P2 goldens and size negatives.** Confirmed `DateTime.now()` at
+   `spotlight_stage.dart:480` and the `fetchedAt <= 0 → null → "never"` path
+   (8080–8082). Scene 4 uses `fetchedAt: 0`, scenes assert readiness, and
+   originals are captured twice in reversed order with identical bytes.
+   Real-checker negatives now cover both size-exception files at cap + 1 and
+   unrelated files above 800; the D1 pair is treated as an import permission.
+10. **P3 inventory.** Corrected: 7 top-level functions and 21 top-level
+    declarations (19 outside the retained widget/State); 80 import
+    directives in the 82-line span; settings owner 34 and focus/search 10
+    (sum 78); 13 `DebrifyTvView` callbacks; 11 live pushes plus dormant P9;
+    six `_switchToChannel` prefetch starts (four failure restarts, two
+    success); root diagnostics 17 warnings / 33 infos; the playback Step-0
+    reference is C3; the auto-play path
+    (`home_saved_composition.dart:89` → `HomeHeroShellBridge.playSavedDebrifyChannel`
+    → `MainPageBridge` → the screen) and the remote router's data-only channel
+    import are named in Contract 2. The facts file was corrected to match.
