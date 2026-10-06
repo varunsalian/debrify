@@ -9,7 +9,7 @@
     "unchanged"
   ],
   "receivers": [],
-  "completed_step": 3,
+  "completed_step": 4,
   "self_test_module": "stremio_tv_catalogs_staged_checker_test",
   "extension_declarations": [
     "_TraktListSourceExt"

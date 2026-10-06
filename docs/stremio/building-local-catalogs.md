@@ -4,7 +4,7 @@ Stremio TV lets you create your own channel lineups by importing JSON catalogs. 
 
 This guide is for advanced users who want to create the catalog JSON itself. If you just want to use Stremio TV inside the app, start with the main Stremio TV guide first.
 
-> All examples here match the logic in `LocalCatalogImporter` inside `lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart`.
+> All examples here match the logic in `LocalCatalogImporter` inside `lib/features/stremio_tv_catalogs/data/local_catalog_importer.dart`.
 
 ## 1. Quick start
 

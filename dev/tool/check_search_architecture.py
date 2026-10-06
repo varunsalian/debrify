@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
-STREMIO_TV_CATALOGS_COMPLETE = False
+STREMIO_TV_CATALOGS_COMPLETE = True
 STREMIO_TV_CATALOGS_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart"
 STREMIO_TV_CATALOGS_BRIDGE = "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/"
 # Measured pure-export facade; completion activates its cap.
@@ -173,6 +173,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Pure catalog compatibility export surface; feature files own declarations.
+    STREMIO_TV_CATALOGS_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,

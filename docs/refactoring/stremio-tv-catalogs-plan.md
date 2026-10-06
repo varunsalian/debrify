@@ -797,3 +797,52 @@ Every created destination has its measured budget; theme surface metrics
 remain unchanged/uncovered and text-white exclusion remains effective
 (`step3-inventory.json`). Suite runs serialized; no allowlist changes,
 no re-record, no application-body edits beyond the registered aliases.
+
+### Step 4 — completion and gate 2 (2026-10-06)
+
+Parent `4be0ee974062c80c002565b94c9dd638bc9c9595`; tested/proof commit `060008320679a017a7416e8f67c3931ef5dbdd98`,
+tree `6f357f988351ad3bb6e199d0af343af6e4cbc2d3`. Final amendment adds only this Progress entry.
+Evidence names below are relative to the common Git directory’s
+`refactor-evidence/stremio_tv_catalogs/`.
+
+Measured physical lines: `local_catalog_export.dart` 38, `local_catalog_importer.dart` 347, `local_catalog_editor_dialog.dart` 632, `local_catalog_json_import_dialog.dart` 230, `local_catalog_mdblist_import_dialog.dart` 346, `local_catalog_trakt_import_dialog.dart` 554, `local_catalog_url_import_dialog.dart` 264, `local_catalogs_manage_dialog.dart` 488, `stremio_tv_local_catalogs_dialog.dart` 8.
+Activated completion, facade scanning/composition registration, pure-export
+cap and TEMP rejection everywhere. CI format includes facade + support glob;
+analyze includes facade, all paths inside commands before `| tee`. Updated
+`docs/stremio/building-local-catalogs.md:7` to the importer destination and
+removed the original’s size-baseline entry. Trakt 554/editor 632 exceptions
+remain exact. Final Step 1–3 commits: 1 `7e42a14a6bab7a0cfc85ef42d0dee80cde93c81e`, 2 `709c563f8349682f73c3bbb544a34eac80c91913`, 3 `4be0ee974062c80c002565b94c9dd638bc9c9595`.
+
+All 19 whole declarations and seven section dividers are byte-identical to R
+except the 5 registered alias-use substitutions
+(`step4-byte-audit.json`). All 119 characterizations and both support
+files are unchanged from 0b; 119/119 pass, paths
+`[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s`. Shape/theme 13/13 pass, paths
+`[test/theme/shape_manifest_test.dart, test/theme/source_guard_test.dart]`,
+same flags (`step4-{characterization,shape-theme}.jsonl` / `.env.json`).
+
+17/17 integrated manifests + self-tests pass with fresh isolated
+`.dart_tool/stremio_tv_catalogs_step4_parsers/` packages and copied
+`*.dill` deleted (`step4-integrated-checkers.json`). Architecture/sizes,
+31 architecture probes (23 rejections), CI format, scoped
+analyzer/allowlist, storage and diff checks pass (`step4-quality.json`).
+CI identities 325→325, zero additions after exact source relocation;
+strict identities retain both dropdown deprecations, only ORIGINAL directive
+ordering disappears (`step4-strict-identities.json`).
+
+Exact shape floor 488, catalogs radii 4 and token calls 6. Original budget
+0; original moved to `kExtractedShapeResidue`; URL/JSON/editor remain in `kShapeResidue`.
+Every created destination has its measured budget; theme surface metrics
+remain unchanged/uncovered and text-white exclusion remains effective
+(`step4-inventory.json`). Suite runs serialized; no allowlist changes,
+no re-record, no application-body edits beyond the registered aliases.
+
+Gate 2: 11773 success / 13 failure /
+28 error / 20 skipped; 1146 suites.
+Paths `[]`; flags `--no-pub --concurrency=2 --timeout=120s`; Flutter 3.44.8 / Dart 3.12.2.
+`gate2.jsonl` / `.env.json` runs on the clean proof commit above.
+Compared against base and gate 1: PASS, zero new failures/missing/new skips;
+exactly 119 added passing identities vs base, all frozen characterizations
+(`gate2-vs-*.txt`, `gate2-summary.json`).
+Gate 2 is complete; stop here. No requested check remains pending.
