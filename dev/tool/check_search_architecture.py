@@ -14,9 +14,9 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launc
 FEATURES += ("debrify_tv",)
 # settings_widgets: feature checks apply from the first move; facade completes at step 4.
 FEATURES += ("settings_widgets",)
-SETTINGS_WIDGETS_COMPLETE = False
+SETTINGS_WIDGETS_COMPLETE = True
 SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"
-SETTINGS_WIDGETS_FACADE_CAP = 0  # Measured and activated at step 4.
+SETTINGS_WIDGETS_FACADE_CAP = 63  # settings_widgets: 63 export lines, 0 comments/blanks.
 SETTINGS_WIDGETS_PUBLIC_NAMES = frozenset(['ConnectionCard', 'ConnectionInfo', 'ConnectionsSummary', 'SettingsBackground', 'SettingsBannerTone', 'SettingsHeader', 'SettingsInfoBanner', 'SettingsInfoTile', 'SettingsLookHero', 'SettingsPageHeader', 'SettingsPageScaffold', 'SettingsRowContent', 'SettingsRows', 'SettingsSection', 'SettingsSectionLabel', 'SettingsSelectDropdown', 'SettingsSelectOption', 'SettingsSkeleton', 'SettingsTile', 'SettingsToggleTile', 'TvRenderQualityChoice', 'TvUiScaleChoice', 'WebDavSyncPendingBadge', 'kSettingsAccent', 'kSettingsAccent2', 'kSettingsAmber', 'kSettingsBg', 'kSettingsDim', 'kSettingsDim2', 'kSettingsGreen', 'kSettingsLine', 'kSettingsMaxWidth', 'kSettingsPanel', 'kSettingsPanel2', 'kSettingsRed', 'kTvRenderQualityChoices', 'kTvUiScaleChoices', 'launchSettingsUrl', 'pushSettingsPage', 'settingsConnectionIsReady', 'settingsConnectionNeedsAttention', 'settingsInitialsFor', 'settingsPageTheme', 'showLegacyModeInfoDialog', 'showSettingsDialog', 'tvRenderQualityLabel', 'tvUiScaleLabel'])
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
@@ -159,6 +159,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # settings_widgets: pure compatibility exports; feature files own every declaration.
+    SETTINGS_WIDGETS_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,

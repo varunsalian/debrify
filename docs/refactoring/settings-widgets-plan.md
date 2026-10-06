@@ -1315,3 +1315,37 @@ exact 0b subject and retains R equality checks. It was syntax-checked only.
   ≤378 lines. The dialog is 63 lines including its two import-format markers;
   no size exception or compressed body formatting is used. Found 11 records
   the guard's formatting constraint.
+
+
+### Step 4 — completion checks and gate 2
+
+- Step 3 commit: `b86332e35`. Step 4 enables SETTINGS_WIDGETS_COMPLETE,
+  registers the pure facade in COMPOSITION_ROOTS/main and activates its exact
+  63-line cap / 47-name / feature-target / no-declaration rules.
+  TEMP(settings_widgets) is rejected in the facade and every feature file.
+- CI format now includes the facade and test/support/settings_widgets_*.dart;
+  analyze includes the facade inside the command before `| tee analyze.txt`.
+  The real-main architecture fixture tool is required in CI. The existing
+  behavior list already contains all importing/new tests; mandatory Linux
+  define remains. No dependency, frozen input, application body or original
+  caller changes.
+- Evidence: `step4/`, `step4-focused.*`; gate 2 records `gate2.*` on the clean
+  committed tree and compares by exact outcome maps against base3b and gate1.
+  Linux gate-2 replay and the device checklist remain the specified handoff.
+
+- Step 4 verification: all 17 manifests/self-tests pass with distinct cleaned
+  parser copies; completed architecture main passes 1468 files and its real
+  fixtures pass six positives/reject 31 negatives. Size and CI format pass;
+  scoped analyzer has only the unchanged 25 allowed warnings. Strict per-owner
+  diagnostics retain four original infos/zero additions; whole scope-aware
+  relocation is unchanged at 1693 reports (the four ORIGINAL strict-scope
+  infos reproduced in Step 3, no other addition). Shape is 26/7/488 and facade
+  0/0; settings theme 238 files / 657 sites; light-ink 774 / 198, PRIMARY
+  240 / 67. Frozen twenty inputs, 132 original importers, ten existing
+  Spotlight PNGs and all original macOS/new Linux PNGs remain unchanged.
+  CI list covers 11 characterization files and 14 original runnable importers
+  plus gallery/contrast consumers. Focused comparison against base3b passes
+  with 295 success / one existing failure and no identity/skip regression.
+- `completion-inventory.json` records the final facade breakdown, exact cap,
+  per-file sizes, importer/frozen/golden equality and CI command placement.
+  The gate-2 commit and full-suite comparison follow before stopping.
