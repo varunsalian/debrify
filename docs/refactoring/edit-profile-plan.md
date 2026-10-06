@@ -899,7 +899,7 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
 
 ### Step 2 — extract owners and setup composition, 2026-10-06
 
-- **Commit:** `refactor(edit-profile): step 2 extract owners and setup composition`. Previous checkpoint
+- **Commit:** `1998eb161` (`refactor(edit-profile): step 2 extract owners and setup composition`). Previous checkpoint
   `292ec6e52`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
 - **Files (formatted physical lines):** facade **2390**; edit_profile_access_state.dart 12; edit_profile_admin_guard.dart 32; edit_profile_dependencies.dart 54; edit_profile_form_state.dart 28; edit_profile_owners.dart 9; edit_profile_sections.dart 14; edit_profile_selection.dart 83; edit_profile_setup_options.dart 89; edit_profile_tv_focus_state.dart 15.
 - **Verification:** wiring reviewed before pinning; compiling checkpoint,
@@ -921,3 +921,23 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   composition classes; checker/reader reject the reorder and all six live
   wiring negatives. Production stayed unchanged; before/after proof is
   `step2-scaffold-order-gap.json` and the checker logs.
+
+### Step 3 — extract save and admin actions, 2026-10-06
+
+- **Commit:** `refactor(edit-profile): step 3 extract save and admin actions`. Previous checkpoint
+  `1998eb161`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
+- **Files (formatted physical lines):** facade **1646**; edit_profile_admin_actions.dart 124; edit_profile_avatar_picker.dart 87; edit_profile_grants.dart 86; edit_profile_save.dart 354; edit_profile_tv_navigation.dart 172.
+- **Verification:** wiring reviewed before pinning; compiling checkpoint,
+  real 90-leaf checker/reader, occurrence bindings/substitutions and callback
+  identities pass. All **17** manifests/self-tests pass with isolated parsers
+  (Debrify TV: 265 leaves / 236 callback negatives). Architecture, sizes,
+  storage, shape (**13**, global floor unchanged), theme exclusion, CI format
+  and scoped analyzer/allowlist pass. Strict comparison: **8** diagnostics,
+  **zero additions**. Focused/characterization identities match base2:
+  **177 success / 1 unchanged known source-guard failure**, zero missing or
+  newly skipped; all **4 macOS** originals pass strictly. All **103** original
+  comments, core services and dependency files stay byte-identical.
+- **Evidence:** `step3-*` under `refactor-evidence/edit_profile/`; commands,
+  wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
+  comparisons included. No behavior fix, seam, borrowed State action or
+  size exception; Found-not-fixed items remain.

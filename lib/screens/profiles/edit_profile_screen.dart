@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:typed_data';
-import 'package:debrify/features/edit_profile/models/edit_profile_snapshot.dart';
 import 'package:debrify/features/edit_profile/models/edit_profile_tv_section.dart';
 import 'package:debrify/features/edit_profile/presentation/edit_profile_tv_surfaces.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_dependencies.dart';
@@ -10,26 +7,16 @@ import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
-import 'package:debrify/services/cache_scratch_cleanup.dart';
-import 'package:debrify/services/main_page_bridge.dart';
-import 'package:debrify/services/profiles/connection_resource_service.dart';
-import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
-import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
-import 'package:debrify/services/profiles/profile_avatar_mutation.dart';
 import 'package:debrify/services/profiles/profile_avatar_policy.dart';
-import 'package:debrify/services/profiles/profile_creation_service.dart';
-import 'package:debrify/services/profiles/profile_diagnostics_service.dart';
 import 'package:debrify/services/profiles/profile_engine_assignment_service.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
-import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/profiles/profile_art.dart';
 import 'package:debrify/widgets/profiles/profile_avatar_view.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -151,60 +138,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _sections.setup.loadSetupOptions();
   }
 
-  Future<void> _transferOwnership(ConnectionResource resource) async {
-    final target = widget.profile;
-    if (target == null || target.id == resource.ownerProfileId) return;
-    final operationActor = _authorization;
-    await _sections.admin.validateManagingAdmin(operationActor);
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Transfer connection ownership?'),
-        content: Text(
-          '${target.name} will become the owner of ${resource.label}. '
-          'Existing profiles keep their current grants, and the previous '
-          'owner becomes a borrower.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Transfer'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await _sections.admin.validateManagingAdmin(operationActor);
-      await ConnectionResourceService(
-        registry: widget.registry,
-        cipher: DeviceKeyProvider.cipher,
-      ).transferOwnership(
-        actor: operationActor,
-        resourceId: resource.id,
-        newOwnerProfileId: target.id,
-      );
-      _authorization = await _sections.admin.refreshSameManagingAdmin(
-        operationActor.profileId,
-      );
-      await _sections.setup.loadResources();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connection ownership transferred')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connection could not be transferred')),
-      );
-    }
-  }
-
   @override
   void dispose() {
     for (final node in _owners.tv.tvTabFocusNodes) {
@@ -217,525 +150,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ..clear()
       ..dispose();
     super.dispose();
-  }
-
-  Future<void> _pickAvatarImage() async {
-    if (_owners.form.saving) return;
-    String? pickerCopy;
-    try {
-      // Android document providers commonly reject custom MIME/extension
-      // filters. Pick any file, then trust magic-byte validation below.
-      final pick = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Choose an avatar image or GIF',
-        type: FileType.any,
-        withData: false,
-      );
-      if (pick == null || pick.files.isEmpty) return;
-      final file = pick.files.single;
-      pickerCopy = file.path;
-      if (file.size > ProfileAvatarIngest.maxInputBytes) {
-        throw const ProfileAvatarRejected(
-          'That image is too large to open. Choose one under 12 MB.',
-        );
-      }
-      final bytes = await _readPickedBytes(file);
-      final prepared = await ProfileAvatarIngest.prepare(bytes);
-      if (!mounted || _owners.form.saving) return;
-      setState(() => _owners.form.pendingAvatarBytes = prepared.bytes);
-    } on ProfileAvatarRejected catch (rejected) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(rejected.message)));
-    } on PlatformException {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The image picker is not available.')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That image could not be opened.')),
-      );
-    } finally {
-      await CacheScratchCleanup.releasePickerCopy(pickerCopy);
-    }
-  }
-
-  Future<Uint8List> _readPickedBytes(PlatformFile picked) async {
-    final inline = picked.bytes;
-    if (inline != null) {
-      if (inline.length > ProfileAvatarIngest.maxInputBytes) {
-        throw const ProfileAvatarRejected(
-          'That image is too large to open. Choose one under 12 MB.',
-        );
-      }
-      return inline;
-    }
-    final path = picked.path;
-    if (path == null || path.isEmpty) {
-      throw const ProfileAvatarRejected('That file could not be read.');
-    }
-    final builder = BytesBuilder(copy: false);
-    var length = 0;
-    await for (final chunk in File(path).openRead()) {
-      if (length > ProfileAvatarIngest.maxInputBytes - chunk.length) {
-        throw const ProfileAvatarRejected(
-          'That image is too large to open. Choose one under 12 MB.',
-        );
-      }
-      builder.add(chunk);
-      length += chunk.length;
-    }
-    return builder.takeBytes();
-  }
-
-  /// Shown exactly once, right after a PIN is set: the code exists only in
-  /// this dialog — the app stores a hash. Every PIN change mints a new one.
-  Future<void> _showRecoveryCode(String profileName, String code) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Save this recovery code'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'If the PIN for $profileName is ever forgotten, this code '
-              'removes it from the profile screen. It is shown only this '
-              'once — write it down or save it in a password manager.',
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: SelectableText(
-                code,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('I saved it'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _save() async {
-    if (_owners.form.saving || _owners.form.name.text.trim().isEmpty) return;
-    if (_owners.access.resources == null ||
-        _owners.access.engines == null ||
-        _owners.access.setupLoadError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _owners.access.setupLoadError ??
-                'Profile options are still loading',
-          ),
-        ),
-      );
-      return;
-    }
-    if (_owners.form.pin.text.isNotEmpty &&
-        !RegExp(r'^\d{4,8}$').hasMatch(_owners.form.pin.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN must contain 4–8 digits')),
-      );
-      return;
-    }
-    // The paired features follow their toggle only when the answer moved
-    // from where this session started (the ProfileSetupFlow rule).
-    final effectiveFeatures = Set<ProfileFeature>.from(_owners.form.features);
-    void follow(bool moved, bool on, ProfileFeature paired) {
-      if (!moved) return;
-      on ? effectiveFeatures.add(paired) : effectiveFeatures.remove(paired);
-    }
-
-    final downloadsOn = _owners.form.features.contains(
-      ProfileFeature.downloads,
-    );
-    final remoteOn = _owners.form.features.contains(
-      ProfileFeature.remoteControl,
-    );
-    follow(
-      downloadsOn != _owners.form.seedDownloads,
-      downloadsOn,
-      ProfileFeature.recordings,
-    );
-    follow(
-      remoteOn != _owners.form.seedRemote,
-      remoteOn,
-      ProfileFeature.remoteTransfer,
-    );
-    // Clamp through the role ceiling BEFORE encoding: decode strips
-    // ceiling-denied bits, so a raw set carrying one (e.g. remoteTransfer
-    // paired onto a Kid) would never round-trip — and _save's persisted
-    // encode comparison would misreport a committed save as failed.
-    final ceilingLens = ProfilePolicy(enabled: effectiveFeatures);
-    final clampedFeatures = <ProfileFeature>{
-      for (final feature in effectiveFeatures)
-        if (ceilingLens.allows(_owners.form.role, feature)) feature,
-    };
-    final snapshot = EditProfileSnapshot(
-      name: _owners.form.name.text,
-      pin: _owners.form.pin.text,
-      role: _owners.form.role,
-      features: Set<ProfileFeature>.unmodifiable(clampedFeatures),
-      copyDefaults: _owners.form.copyDefaults,
-      lockOnResume: _owners.form.lockOnResume,
-      inactivityMinutes: _owners.form.inactivityMinutes,
-      avatarKey: _owners.form.avatarKey,
-      pendingAvatarBytes: _owners.form.pendingAvatarBytes,
-      resources: List<ConnectionResource>.unmodifiable(
-        _owners.access.resources!,
-      ),
-      selectedResources: Set<String>.unmodifiable(
-        _owners.access.selectedResources,
-      ),
-      resourcePermissions: Map<String, Set<ResourcePermission>>.unmodifiable({
-        for (final entry in _owners.access.resourcePermissions.entries)
-          entry.key: Set<ResourcePermission>.unmodifiable(entry.value),
-      }),
-      selectedEngines: Set<String>.unmodifiable(_owners.access.selectedEngines),
-    );
-    setState(() => _owners.form.saving = true);
-    PreparedProfileAvatar? preparedAvatar;
-    String? mintedRecoveryCode;
-    try {
-      if (snapshot.pendingAvatarBytes != null) {
-        preparedAvatar = await ProfileAvatarIngest.prepare(
-          snapshot.pendingAvatarBytes!,
-        );
-      }
-      final savedAvatarKey =
-          preparedAvatar?.avatar.format() ?? snapshot.avatarKey;
-      var operationActor = _authorization;
-      await _sections.admin.validateManagingAdmin(operationActor);
-      final policy = EditProfileScreen.policyFor(
-        role: snapshot.role,
-        selected: snapshot.features,
-        existing: widget.profile?.policy,
-        // A role change is authorship too: the Pages pane reseeded to the
-        // new role's policy, and the save must write what it displayed.
-        controlsShown:
-            EditProfileScreen.showFeaturePolicyControls ||
-            _owners.form.policyTouched ||
-            (widget.profile != null && widget.profile!.role != snapshot.role),
-      );
-      final existing = widget.profile;
-      late final String savedProfileId;
-      if (existing == null) {
-        final creation = ProfileCreationService(widget.registry);
-        final staged = await creation.createStaged(
-          actor: operationActor,
-          name: snapshot.name,
-          role: snapshot.role,
-          policy: policy,
-          copyDefaultsFromActive: snapshot.copyDefaults,
-          // A picked file is not authoritative until its bytes have been
-          // durably staged below. Keep the pre-pick selection during staging.
-          avatarKey: snapshot.avatarKey,
-        );
-        savedProfileId = staged.id;
-        var stagedPublished = false;
-        try {
-          await ProfileAvatarMutation.runExclusive(staged.id, () async {
-            await ProfileAvatarMutation.begin(staged.id, savedAvatarKey);
-            if (preparedAvatar != null) {
-              await ProfileAvatarIngest.writeCandidate(
-                profileId: staged.id,
-                prepared: preparedAvatar,
-              );
-            }
-            if (snapshot.pin.isNotEmpty) {
-              mintedRecoveryCode = await widget.pins.setPinAsAdmin(
-                actor: operationActor,
-                targetProfileId: staged.id,
-                pin: snapshot.pin,
-              );
-            }
-            await widget.registry.updateProfile(
-              id: staged.id,
-              avatarKey: savedAvatarKey,
-              lockOnResume: snapshot.lockOnResume,
-              inactivityTimeoutMinutes: snapshot.inactivityMinutes == 0
-                  ? null
-                  : snapshot.inactivityMinutes,
-              clearInactivityTimeout: snapshot.inactivityMinutes == 0,
-              actingProfileId: operationActor.profileId,
-              actingAuthorizationRevision: operationActor.authorizationRevision,
-              actingSessionEpoch: operationActor.sessionEpoch,
-            );
-            operationActor = await _sections.admin.refreshSameManagingAdmin(
-              operationActor.profileId,
-            );
-            operationActor = await _applyResourceGrants(
-              staged.id,
-              snapshot,
-              operationActor,
-            );
-            await _applyEngineAssignments(
-              staged.id,
-              snapshot.selectedEngines,
-              operationActor,
-            );
-            // Visibility is the last registry step. Completion reconciles a
-            // recovery-checkpoint exception against the committed row.
-            await creation.completeStaged(
-              profileId: staged.id,
-              actor: operationActor,
-            );
-            stagedPublished = true;
-            try {
-              await ProfileAvatarIngest.commit(
-                profileId: staged.id,
-                avatarKey: savedAvatarKey,
-              );
-              await ProfileAvatarMutation.complete(staged.id);
-            } catch (_) {
-              // The profile is already visible and its selected file exists.
-              // Keep the intent so bootstrap can finish cleanup idempotently.
-            }
-          });
-        } catch (error, stackTrace) {
-          final persisted = await widget.registry.getProfile(staged.id);
-          if (!stagedPublished &&
-              persisted?.lifecycle != UserProfileLifecycle.active) {
-            await creation.rollbackStaged(staged.id);
-            await ProfileAvatarMutation.complete(staged.id);
-          }
-          // An active projection whose recovery checkpoint still fails is not
-          // safe to finalize: retain its avatar intent so bootstrap can either
-          // roll forward the durable active row or remove the durable staging
-          // row. `completeStaged` is the only path that may set published=true.
-          Error.throwWithStackTrace(error, stackTrace);
-        }
-      } else {
-        savedProfileId = existing.id;
-        final expectedTimeout = snapshot.inactivityMinutes == 0
-            ? null
-            : snapshot.inactivityMinutes;
-        await ProfileAvatarIngest.publish(
-          registry: widget.registry,
-          profileId: existing.id,
-          avatarKey: savedAvatarKey,
-          prepared: preparedAvatar,
-          persist: () async {
-            await widget.registry.updateProfile(
-              id: existing.id,
-              name: snapshot.name,
-              avatarKey: savedAvatarKey,
-              role: snapshot.role,
-              policy: policy,
-              lockOnResume: snapshot.lockOnResume,
-              inactivityTimeoutMinutes: expectedTimeout,
-              clearInactivityTimeout: expectedTimeout == null,
-              actingProfileId: operationActor.profileId,
-              actingAuthorizationRevision: operationActor.authorizationRevision,
-              actingSessionEpoch: operationActor.sessionEpoch,
-            );
-          },
-          wasPersisted: () async {
-            final persisted = await widget.registry.getProfile(existing.id);
-            return persisted?.name == snapshot.name.trim() &&
-                persisted?.avatarKey == savedAvatarKey &&
-                persisted?.role == snapshot.role &&
-                persisted?.policy.encode() == policy.encode() &&
-                persisted?.lockOnResume == snapshot.lockOnResume &&
-                persisted?.inactivityTimeoutMinutes == expectedTimeout;
-          },
-        );
-        operationActor = await _sections.admin.refreshSameManagingAdmin(
-          operationActor.profileId,
-        );
-        if (snapshot.pin.isNotEmpty) {
-          mintedRecoveryCode = await widget.pins.setPinAsAdmin(
-            actor: operationActor,
-            targetProfileId: existing.id,
-            pin: snapshot.pin,
-          );
-          operationActor = await _sections.admin.refreshSameManagingAdmin(
-            operationActor.profileId,
-          );
-        }
-        operationActor = await _applyResourceGrants(
-          savedProfileId,
-          snapshot,
-          operationActor,
-        );
-        await _applyEngineAssignments(
-          savedProfileId,
-          snapshot.selectedEngines,
-          operationActor,
-        );
-      }
-      _authorization = operationActor;
-      if (!mounted) return;
-      _owners.form.avatarKey = savedAvatarKey;
-      _owners.form.features = Set<ProfileFeature>.from(policy.enabled);
-      _owners.form.seedDownloads = _owners.form.features.contains(
-        ProfileFeature.downloads,
-      );
-      _owners.form.seedRemote = _owners.form.features.contains(
-        ProfileFeature.remoteControl,
-      );
-      _owners.form.policyTouched = false;
-      _owners.form.pendingAvatarBytes = null;
-      _owners.form.pin.clear();
-      // Saving the SIGNED-IN profile never crosses the gate, so the policy
-      // mirrors (MainPage tab gating + ProfilePolicyGuard) must be told.
-      if (ProfileRuntime.isProfileCommitted &&
-          widget.profile?.id == ProfileRuntime.capture().profileId) {
-        MainPageBridge.reloadProfilePolicy?.call();
-      }
-      final recoveryCode = mintedRecoveryCode;
-      if (recoveryCode != null) {
-        await _showRecoveryCode(snapshot.name, recoveryCode);
-        if (!mounted) return;
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on ProfileAvatarRejected catch (rejected) {
-      if (!mounted) return;
-      setState(() => _owners.form.saving = false);
-      _restoreTvSaveFocus();
-      // The one failure with a user-actionable cause: name it instead of the
-      // generic message.
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(rejected.message)));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _owners.form.saving = false);
-      _restoreTvSaveFocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save this profile')),
-      );
-    }
-  }
-
-  void _restoreTvSaveFocus() {
-    if (!PlatformUtil.isTelevision) return;
-    // Saving temporarily disables every form focus node. Re-enable them in
-    // layout before restoring the remote's position after an error.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          !_owners.form.saving &&
-          ModalRoute.of(context)?.isCurrent == true) {
-        _owners.tv.tvTabFocusNodes.last.requestFocus();
-      }
-    });
-  }
-
-  Future<ProfileAuthorizationContext> _applyResourceGrants(
-    String targetProfileId,
-    EditProfileSnapshot snapshot,
-    ProfileAuthorizationContext operationActor,
-  ) async {
-    final resources = snapshot.resources;
-    final service = ConnectionResourceService(
-      registry: widget.registry,
-      cipher: DeviceKeyProvider.cipher,
-    );
-    for (final resource in resources) {
-      final existing = await widget.registry.getGrant(
-        targetProfileId,
-        resource.id,
-      );
-      final selected = snapshot.selectedResources.contains(resource.id);
-      final desired =
-          snapshot.resourcePermissions[resource.id] ??
-          _sections.selection.defaultResourcePermissions(
-            snapshot.role,
-            snapshot.features,
-          );
-      final desiredMask = desired.fold<int>(
-        0,
-        (mask, permission) => mask | permission.bit,
-      );
-      final bindingSlot = resource.type.singletonCredentialBindingSlot;
-      final bindingMatches =
-          bindingSlot == null ||
-          await widget.registry.getBoundResourceId(
-                targetProfileId,
-                bindingSlot,
-              ) ==
-              resource.id;
-      if (selected &&
-          (existing == null ||
-              existing.permissions != desiredMask ||
-              !bindingMatches)) {
-        await service.grant(
-          actor: operationActor,
-          targetProfileId: targetProfileId,
-          resourceId: resource.id,
-          permissions: desired,
-        );
-        operationActor = await _sections.admin.refreshSameManagingAdmin(
-          operationActor.profileId,
-        );
-      } else if (!selected &&
-          existing != null &&
-          resource.ownerProfileId != targetProfileId) {
-        await service.revokeGrant(
-          actor: operationActor,
-          targetProfileId: targetProfileId,
-          resourceId: resource.id,
-        );
-        operationActor = await _sections.admin.refreshSameManagingAdmin(
-          operationActor.profileId,
-        );
-      }
-    }
-    return operationActor;
-  }
-
-  Future<void> _applyEngineAssignments(
-    String targetProfileId,
-    Set<String> selectedEngineIds,
-    ProfileAuthorizationContext operationActor,
-  ) => ProfileEngineAssignmentService(widget.registry).apply(
-    actor: operationActor,
-    targetProfileId: targetProfileId,
-    selectedEngineIds: selectedEngineIds,
-  );
-
-  Future<void> _showDiagnostics() async {
-    final report = await ProfileDiagnosticsService.collectJson(widget.registry);
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Profile diagnostics'),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(child: SelectableText(report)),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: report));
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: const Text('Copy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ── build ─────────────────────────────────────────────────────────────────
@@ -769,7 +183,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: _owners.form.saving ? null : _save,
+              onPressed: _owners.form.saving ? null : _sections.save.save,
               child: const Text('Save'),
             ),
           ],
@@ -847,7 +261,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: _owners.form.saving ? null : _removePinAsAdmin,
+                      onPressed: _owners.form.saving
+                          ? null
+                          : _sections.adminActions.removePinAsAdmin,
                       icon: const Icon(Icons.lock_open_rounded),
                       label: const Text('Admin reset: remove PIN'),
                     ),
@@ -902,7 +318,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     subtitle: const Text(
                       'Registry, generation and lease state',
                     ),
-                    onTap: _showDiagnostics,
+                    onTap: _sections.adminActions.showDiagnostics,
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -925,7 +341,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ? Focus(
                   canRequestFocus: false,
                   onKeyEvent: (_, event) {
-                    final direction = _tvDirection(event);
+                    final direction = _sections.tvNav.tvDirection(event);
                     if (direction == null) return KeyEventResult.ignored;
                     if (direction == TraversalDirection.down ||
                         direction == TraversalDirection.right) {
@@ -984,11 +400,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     null) {
                                   return KeyEventResult.ignored;
                                 }
-                                final direction = _tvDirection(event);
+                                final direction = _sections.tvNav.tvDirection(
+                                  event,
+                                );
                                 if (direction == null) {
                                   return KeyEventResult.ignored;
                                 }
-                                _moveTvContent(direction);
+                                _sections.tvNav.moveTvContent(direction);
                                 return KeyEventResult.handled;
                               },
                               // OK enters the pane on key-down; its remaining
@@ -1047,7 +465,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         selected: selected,
         autofocus: index == 0,
         focusNode: _owners.tv.tvTabFocusNodes[index],
-        onKeyEvent: (_, event) => _handleTvRailKey(index, event),
+        onKeyEvent: (_, event) => _sections.tvNav.handleTvRailKey(index, event),
         onPressed: onPressed,
         child: child,
       ),
@@ -1090,9 +508,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       selected: _owners.tv.tvSection == tabs[index].$1,
                       // Up/down previews sections; OK or a click enters the pane.
                       onPressed: () {
-                        _selectTvSection(tabs[index].$1);
+                        _sections.tvNav.selectTvSection(tabs[index].$1);
                         _owners.tv.tvTabFocusNodes[index].requestFocus();
-                        _focusTvContent();
+                        _sections.tvNav.focusTvContent();
                       },
                       child: railLabel(tabs[index].$2, tabs[index].$3),
                     ),
@@ -1102,7 +520,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   railItem(
                     index: saveIndex,
                     key: const ValueKey('tv-profile-save'),
-                    onPressed: _owners.form.saving ? null : _save,
+                    onPressed: _owners.form.saving ? null : _sections.save.save,
                     child: railLabel(
                       Icons.check_rounded,
                       _owners.form.saving ? 'SAVING…' : 'SAVE',
@@ -1115,151 +533,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     );
-  }
-
-  TraversalDirection? _tvDirection(KeyEvent event) {
-    if (event is KeyUpEvent) return null;
-    return switch (event.logicalKey) {
-      LogicalKeyboardKey.arrowUp => TraversalDirection.up,
-      LogicalKeyboardKey.arrowDown => TraversalDirection.down,
-      LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
-      LogicalKeyboardKey.arrowRight => TraversalDirection.right,
-      _ => null,
-    };
-  }
-
-  KeyEventResult _handleTvRailKey(int index, KeyEvent event) {
-    final direction = _tvDirection(event);
-    if (direction == null) return KeyEventResult.ignored;
-    switch (direction) {
-      case TraversalDirection.left:
-        _owners.tv.tvFocusRequest++;
-        break;
-      case TraversalDirection.right:
-        if (index < EditProfileTvSection.values.length) {
-          _selectTvSection(EditProfileTvSection.values[index]);
-        }
-        _focusTvContent();
-      case TraversalDirection.up:
-      case TraversalDirection.down:
-        _owners.tv.tvFocusRequest++;
-        final delta = direction == TraversalDirection.up ? -1 : 1;
-        final target = (index + delta).clamp(
-          0,
-          _owners.tv.tvTabFocusNodes.length - 1,
-        );
-        if (index == 0 && delta < 0 && Navigator.of(context).canPop()) {
-          _owners.tv.tvBackFocus.requestFocus();
-        } else {
-          // Select synchronously: a quick RIGHT must never enter the old pane.
-          if (target < EditProfileTvSection.values.length) {
-            _selectTvSection(EditProfileTvSection.values[target]);
-          }
-          _owners.tv.tvTabFocusNodes[target].requestFocus();
-        }
-    }
-    return KeyEventResult.handled;
-  }
-
-  void _selectTvSection(EditProfileTvSection section) {
-    if (_owners.tv.tvSection == section) return;
-    _owners.tv.tvLastContentFocus = null;
-    _owners.tv.tvFocusRequest++;
-    setState(() => _owners.tv.tvSection = section);
-  }
-
-  List<FocusNode> get _tvContentStops => _owners
-      .tv
-      .tvContentFocus
-      .traversalDescendants
-      .where((node) => node is! FocusScopeNode && !node.rect.size.isEmpty)
-      .toList();
-
-  void _requestTvContentFocus(FocusNode node) {
-    _owners.tv.tvLastContentFocus = node;
-    FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
-      node,
-      alignment: .35,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  void _focusTvContent() {
-    if (_owners.form.saving) return;
-    final section = _owners.tv.tvSection;
-    final request = ++_owners.tv.tvFocusRequest;
-    // Section changes rebuild the pane. Resolve its live controls after layout,
-    // including conditional controls and async Access rows.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _owners.form.saving ||
-          _owners.tv.tvSection != section ||
-          request != _owners.tv.tvFocusRequest ||
-          ModalRoute.of(context)?.isCurrent == false) {
-        return;
-      }
-      final stops = _tvContentStops;
-      if (stops.isEmpty) return; // Empty/loading panes leave focus on the rail.
-      if (stops.contains(_owners.tv.tvLastContentFocus)) {
-        _requestTvContentFocus(_owners.tv.tvLastContentFocus!);
-        return;
-      }
-      stops.sort((a, b) {
-        final vertical = a.rect.top.compareTo(b.rect.top);
-        return vertical == 0 ? a.rect.left.compareTo(b.rect.left) : vertical;
-      });
-      _requestTvContentFocus(stops.first);
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  void _returnToTvRail() {
-    _owners.tv.tvFocusRequest++;
-    final focused = FocusManager.instance.primaryFocus;
-    if (_tvContentStops.contains(focused))
-      _owners.tv.tvLastContentFocus = focused;
-    _owners.tv.tvTabFocusNodes[_owners.tv.tvSection.index].requestFocus();
-  }
-
-  void _moveTvContent(TraversalDirection direction) {
-    final current = FocusManager.instance.primaryFocus;
-    if (current == null || !_owners.tv.tvContentFocus.hasFocus) return;
-    final rect = current.rect;
-    final horizontal =
-        direction == TraversalDirection.left ||
-        direction == TraversalDirection.right;
-    final forward =
-        direction == TraversalDirection.right ||
-        direction == TraversalDirection.down;
-    final candidates = _tvContentStops.where((node) {
-      if (node == current) return false;
-      final other = node.rect;
-      // Horizontal movement belongs to the current visual row. Default
-      // traversal can otherwise jump diagonally into a distant form field.
-      final sameRow =
-          (other.center.dy - rect.center.dy).abs() <
-          (other.height < rect.height ? other.height : rect.height) / 2;
-      if (horizontal != sameRow) return false;
-      final delta = horizontal
-          ? other.center.dx - rect.center.dx
-          : other.center.dy - rect.center.dy;
-      return forward ? delta > 1 : delta < -1;
-    }).toList();
-    candidates.sort((a, b) {
-      final aDelta = a.rect.center - rect.center;
-      final bDelta = b.rect.center - rect.center;
-      final main = horizontal
-          ? aDelta.dx.abs().compareTo(bDelta.dx.abs())
-          : aDelta.dy.abs().compareTo(bDelta.dy.abs());
-      return main != 0 ? main : aDelta.dx.abs().compareTo(bDelta.dx.abs());
-    });
-    if (candidates.isNotEmpty) {
-      _requestTvContentFocus(candidates.first);
-    } else if (direction == TraversalDirection.left) {
-      _returnToTvRail();
-    }
-    // Other outer edges stay put rather than wrapping to the rail or AppBar.
   }
 
   Widget _buildTvPagesSection() {
@@ -1434,7 +707,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: OutlinedButton.icon(
                             onPressed: _owners.form.saving
                                 ? null
-                                : _pickAvatarImage,
+                                : _sections.avatar.pickAvatarImage,
                             icon: const Icon(Icons.image_outlined),
                             label: const Text(
                               'Choose image or GIF (this device only)',
@@ -1477,11 +750,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   TvTextField(
                     key: const ValueKey('tv-profile-name'),
                     controller: _owners.form.name,
-                    onLeftArrow: _returnToTvRail,
+                    onLeftArrow: _sections.tvNav.returnToTvRail,
                     onRightArrow: () =>
-                        _moveTvContent(TraversalDirection.right),
-                    onUpArrow: () => _moveTvContent(TraversalDirection.up),
-                    onDownArrow: () => _moveTvContent(TraversalDirection.down),
+                        _sections.tvNav.moveTvContent(TraversalDirection.right),
+                    onUpArrow: () =>
+                        _sections.tvNav.moveTvContent(TraversalDirection.up),
+                    onDownArrow: () =>
+                        _sections.tvNav.moveTvContent(TraversalDirection.down),
                     onChanged: (_) => setState(() {}),
                     inputFormatters: <TextInputFormatter>[
                       LengthLimitingTextInputFormatter(40),
@@ -1717,10 +992,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TvTextField(
                 key: const ValueKey('tv-profile-pin'),
                 controller: _owners.form.pin,
-                onLeftArrow: _returnToTvRail,
-                onRightArrow: () => _moveTvContent(TraversalDirection.right),
-                onUpArrow: () => _moveTvContent(TraversalDirection.up),
-                onDownArrow: () => _moveTvContent(TraversalDirection.down),
+                onLeftArrow: _sections.tvNav.returnToTvRail,
+                onRightArrow: () =>
+                    _sections.tvNav.moveTvContent(TraversalDirection.right),
+                onUpArrow: () =>
+                    _sections.tvNav.moveTvContent(TraversalDirection.up),
+                onDownArrow: () =>
+                    _sections.tvNav.moveTvContent(TraversalDirection.down),
                 keyboardType: TextInputType.number,
                 obscureText: true,
                 inputFormatters: <TextInputFormatter>[
@@ -1738,7 +1016,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: _owners.form.saving ? null : _removePinAsAdmin,
+                    onPressed: _owners.form.saving
+                        ? null
+                        : _sections.adminActions.removePinAsAdmin,
                     icon: const Icon(Icons.lock_open_rounded),
                     label: const Text('Admin reset: remove PIN'),
                   ),
@@ -1848,7 +1128,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 SizedBox(
                   height: 92,
                   child: editProfileTvActionSurface(
-                    onPressed: _showDiagnostics,
+                    onPressed: _sections.adminActions.showDiagnostics,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 22),
                       child: Row(
@@ -1897,33 +1177,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     child: child,
   );
 
-  Future<void> _removePinAsAdmin() async {
-    await _removePinAsAdminLocally();
-  }
-
-  Future<void> _removePinAsAdminLocally() async {
-    try {
-      final operationActor = _authorization;
-      await _sections.admin.validateManagingAdmin(operationActor);
-      await widget.pins.removePinAsAdmin(
-        actor: operationActor,
-        targetProfileId: widget.profile!.id,
-      );
-      _authorization = await _sections.admin.refreshSameManagingAdmin(
-        operationActor.profileId,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('PIN protection removed')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN protection was not changed')),
-      );
-    }
-  }
-
   Widget _buildAvatarSection() {
     final pending = _owners.form.pendingAvatarBytes;
     final userImages = ProfileAvatarPolicy.userImagesSupported;
@@ -1970,7 +1223,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 children: [
                   if (userImages)
                     OutlinedButton.icon(
-                      onPressed: _owners.form.saving ? null : _pickAvatarImage,
+                      onPressed: _owners.form.saving
+                          ? null
+                          : _sections.avatar.pickAvatarImage,
                       icon: const Icon(Icons.image_outlined, size: 18),
                       label: const Text(
                         'Choose image or GIF (this device only)',
@@ -2357,7 +1612,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   )
               ? IconButton(
                   tooltip: 'Transfer ownership to this profile',
-                  onPressed: () => _transferOwnership(resource),
+                  onPressed: () =>
+                      _sections.adminActions.transferOwnership(resource),
                   icon: const Icon(Icons.swap_horiz_rounded),
                 )
               : const Icon(Icons.key_rounded),

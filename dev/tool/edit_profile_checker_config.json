@@ -448,14 +448,34 @@
       "owner": "EditProfileAdminGuard"
     },
     {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart",
+      "owner": "EditProfileAdminActions"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart",
+      "owner": "EditProfileAvatarPicker"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart",
+      "owner": "EditProfileSave"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart",
+      "owner": "EditProfileGrants"
+    },
+    {
       "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
       "owner": "EditProfileSelection"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
+      "owner": "EditProfileTvNavigation"
     }
   ],
   "test_accessors": [],
   "required_nodes": [],
   "scaffolds": [],
-  "completed_step": 2,
+  "completed_step": 3,
   "original_static_receivers": {},
   "additional_owners": [],
   "occurrence_layout_bodies": [

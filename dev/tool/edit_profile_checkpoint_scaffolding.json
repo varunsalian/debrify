@@ -1,68 +1,169 @@
 {
   "scaffolds": [
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
-      "owner": "EditProfileSections",
-      "name": "setup",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
+      "owner": "EditProfileSelection",
+      "name": "_deps",
       "tokens": [
         "final",
-        "EditProfileSetupOptions",
-        "setup",
+        "EditProfileDependencies",
+        "_deps",
         ";"
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
-      "owner": "EditProfileSections",
-      "name": "admin",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
+      "owner": "EditProfileSelection",
+      "name": "EditProfileSelection",
       "tokens": [
-        "final",
-        "EditProfileAdminGuard",
-        "admin",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
-      "owner": "EditProfileSections",
-      "name": "selection",
-      "tokens": [
-        "final",
         "EditProfileSelection",
-        "selection",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
         ";"
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
-      "owner": "EditProfileSections",
-      "name": "EditProfileSections",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
+      "owner": "EditProfileSelection",
+      "name": "_owners",
+      "tokens": [
+        "EditProfileOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
+      "owner": "EditProfileSelection",
+      "name": "_sections",
       "tokens": [
         "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
         "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
+      "owner": "EditProfileAdminGuard",
+      "name": "_deps",
+      "tokens": [
+        "final",
         "EditProfileDependencies",
-        "deps",
-        ")",
-        ":",
-        "setup",
-        "=",
-        "EditProfileSetupOptions",
-        "(",
-        "deps",
-        ")",
-        ",",
-        "admin",
-        "=",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
+      "owner": "EditProfileAdminGuard",
+      "name": "EditProfileAdminGuard",
+      "tokens": [
         "EditProfileAdminGuard",
         "(",
-        "deps",
+        "this",
+        ".",
+        "_deps",
         ")",
-        ",",
-        "selection",
-        "=",
-        "EditProfileSelection",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
+      "owner": "EditProfileAdminGuard",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
         "(",
-        "deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/models/edit_profile_snapshot.dart",
+      "owner": "",
+      "name": "EditProfileSnapshot",
+      "tokens": [
+        "typedef",
+        "EditProfileSnapshot",
+        "=",
+        "_ProfileEditSnapshot",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
+      "owner": "EditProfileSetupOptions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EditProfileDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
+      "owner": "EditProfileSetupOptions",
+      "name": "EditProfileSetupOptions",
+      "tokens": [
+        "EditProfileSetupOptions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
+      "owner": "EditProfileSetupOptions",
+      "name": "_owners",
+      "tokens": [
+        "EditProfileOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
+      "owner": "EditProfileSetupOptions",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
         ")",
         ";"
       ]
@@ -256,6 +357,159 @@
         "onKeyEvent",
         ":",
         "onKeyEvent",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart",
+      "owner": "EditProfileAdminActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EditProfileDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart",
+      "owner": "EditProfileAdminActions",
+      "name": "EditProfileAdminActions",
+      "tokens": [
+        "EditProfileAdminActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart",
+      "owner": "EditProfileAdminActions",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/models/edit_profile_tv_section.dart",
+      "owner": "",
+      "name": "EditProfileTvSection",
+      "tokens": [
+        "typedef",
+        "EditProfileTvSection",
+        "=",
+        "_TvProfileSection",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart",
+      "owner": "EditProfileSave",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EditProfileDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart",
+      "owner": "EditProfileSave",
+      "name": "EditProfileSave",
+      "tokens": [
+        "EditProfileSave",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart",
+      "owner": "EditProfileSave",
+      "name": "_owners",
+      "tokens": [
+        "EditProfileOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart",
+      "owner": "EditProfileSave",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart",
+      "owner": "EditProfileGrants",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EditProfileDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart",
+      "owner": "EditProfileGrants",
+      "name": "EditProfileGrants",
+      "tokens": [
+        "EditProfileGrants",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart",
+      "owner": "EditProfileGrants",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
         ")",
         ";"
       ]
@@ -605,50 +859,165 @@
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
-      "owner": "EditProfileAdminGuard",
-      "name": "_deps",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "setup",
       "tokens": [
         "final",
-        "EditProfileDependencies",
-        "_deps",
+        "EditProfileSetupOptions",
+        "setup",
         ";"
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
-      "owner": "EditProfileAdminGuard",
-      "name": "EditProfileAdminGuard",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "admin",
       "tokens": [
+        "final",
         "EditProfileAdminGuard",
-        "(",
-        "this",
-        ".",
-        "_deps",
-        ")",
+        "admin",
         ";"
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
-      "owner": "EditProfileAdminGuard",
-      "name": "_sections",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "adminActions",
+      "tokens": [
+        "final",
+        "EditProfileAdminActions",
+        "adminActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "avatar",
+      "tokens": [
+        "final",
+        "EditProfileAvatarPicker",
+        "avatar",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "save",
+      "tokens": [
+        "final",
+        "EditProfileSave",
+        "save",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "grants",
+      "tokens": [
+        "final",
+        "EditProfileGrants",
+        "grants",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "selection",
+      "tokens": [
+        "final",
+        "EditProfileSelection",
+        "selection",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "tvNav",
+      "tokens": [
+        "final",
+        "EditProfileTvNavigation",
+        "tvNav",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart",
+      "owner": "EditProfileSections",
+      "name": "EditProfileSections",
       "tokens": [
         "EditProfileSections",
-        "get",
-        "_sections",
-        "=>",
-        "_deps",
-        ".",
-        "sections",
         "(",
+        "EditProfileDependencies",
+        "deps",
+        ")",
+        ":",
+        "setup",
+        "=",
+        "EditProfileSetupOptions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "admin",
+        "=",
+        "EditProfileAdminGuard",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "adminActions",
+        "=",
+        "EditProfileAdminActions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "avatar",
+        "=",
+        "EditProfileAvatarPicker",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "save",
+        "=",
+        "EditProfileSave",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "grants",
+        "=",
+        "EditProfileGrants",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "selection",
+        "=",
+        "EditProfileSelection",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "tvNav",
+        "=",
+        "EditProfileTvNavigation",
+        "(",
+        "deps",
         ")",
         ";"
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
-      "owner": "EditProfileSelection",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart",
+      "owner": "EditProfileAvatarPicker",
       "name": "_deps",
       "tokens": [
         "final",
@@ -658,11 +1027,11 @@
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
-      "owner": "EditProfileSelection",
-      "name": "EditProfileSelection",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart",
+      "owner": "EditProfileAvatarPicker",
+      "name": "EditProfileAvatarPicker",
       "tokens": [
-        "EditProfileSelection",
+        "EditProfileAvatarPicker",
         "(",
         "this",
         ".",
@@ -672,8 +1041,8 @@
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
-      "owner": "EditProfileSelection",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart",
+      "owner": "EditProfileAvatarPicker",
       "name": "_owners",
       "tokens": [
         "EditProfileOwners",
@@ -687,8 +1056,8 @@
       ]
     },
     {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
-      "owner": "EditProfileSelection",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart",
+      "owner": "EditProfileAvatarPicker",
       "name": "_sections",
       "tokens": [
         "EditProfileSections",
@@ -704,14 +1073,59 @@
       ]
     },
     {
-      "file": "lib/features/edit_profile/models/edit_profile_snapshot.dart",
-      "owner": "",
-      "name": "EditProfileSnapshot",
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
+      "owner": "EditProfileTvNavigation",
+      "name": "_deps",
       "tokens": [
-        "typedef",
-        "EditProfileSnapshot",
-        "=",
-        "_ProfileEditSnapshot",
+        "final",
+        "EditProfileDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
+      "owner": "EditProfileTvNavigation",
+      "name": "EditProfileTvNavigation",
+      "tokens": [
+        "EditProfileTvNavigation",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
+      "owner": "EditProfileTvNavigation",
+      "name": "_owners",
+      "tokens": [
+        "EditProfileOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
+      "owner": "EditProfileTvNavigation",
+      "name": "_sections",
+      "tokens": [
+        "EditProfileSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
         ";"
       ]
     },
@@ -755,75 +1169,6 @@
         "access",
         "=",
         "EditProfileAccessState",
-        "(",
-        ")",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/models/edit_profile_tv_section.dart",
-      "owner": "",
-      "name": "EditProfileTvSection",
-      "tokens": [
-        "typedef",
-        "EditProfileTvSection",
-        "=",
-        "_TvProfileSection",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
-      "owner": "EditProfileSetupOptions",
-      "name": "_deps",
-      "tokens": [
-        "final",
-        "EditProfileDependencies",
-        "_deps",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
-      "owner": "EditProfileSetupOptions",
-      "name": "EditProfileSetupOptions",
-      "tokens": [
-        "EditProfileSetupOptions",
-        "(",
-        "this",
-        ".",
-        "_deps",
-        ")",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
-      "owner": "EditProfileSetupOptions",
-      "name": "_owners",
-      "tokens": [
-        "EditProfileOwners",
-        "get",
-        "_owners",
-        "=>",
-        "_deps",
-        ".",
-        "owners",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
-      "owner": "EditProfileSetupOptions",
-      "name": "_sections",
-      "tokens": [
-        "EditProfileSections",
-        "get",
-        "_sections",
-        "=>",
-        "_deps",
-        ".",
-        "sections",
         "(",
         ")",
         ";"
@@ -1260,8 +1605,28 @@
         "admin",
         ";",
         "final",
+        "EditProfileAdminActions",
+        "adminActions",
+        ";",
+        "final",
+        "EditProfileAvatarPicker",
+        "avatar",
+        ";",
+        "final",
+        "EditProfileSave",
+        "save",
+        ";",
+        "final",
+        "EditProfileGrants",
+        "grants",
+        ";",
+        "final",
         "EditProfileSelection",
         "selection",
+        ";",
+        "final",
+        "EditProfileTvNavigation",
+        "tvNav",
         ";",
         "EditProfileSections",
         "(",
@@ -1283,9 +1648,44 @@
         "deps",
         ")",
         ",",
+        "adminActions",
+        "=",
+        "EditProfileAdminActions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "avatar",
+        "=",
+        "EditProfileAvatarPicker",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "save",
+        "=",
+        "EditProfileSave",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "grants",
+        "=",
+        "EditProfileGrants",
+        "(",
+        "deps",
+        ")",
+        ",",
         "selection",
         "=",
         "EditProfileSelection",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "tvNav",
+        "=",
+        "EditProfileTvNavigation",
         "(",
         "deps",
         ")",
@@ -1294,6 +1694,6 @@
       ]
     }
   ],
-  "step": 2,
+  "step": 3,
   "R": "f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8"
 }

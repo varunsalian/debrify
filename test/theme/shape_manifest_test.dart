@@ -252,13 +252,21 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart': 3,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_state.dart':
       0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart':
+      0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_dependencies.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_form_state.dart':
       0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart':
+      0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_owners.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart':
       0,
@@ -267,6 +275,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_focus_state.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart':
       0,
   'lib/screens/profiles/edit_profile_screen.dart': 10,
   // End edit profile.
