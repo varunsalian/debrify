@@ -1005,9 +1005,9 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
 
 ### Step 6 — enforce completed facade, 2026-10-06
 
-- **Commit:** `refactor(edit-profile): step 6 enforce completed facade`. Previous checkpoint
+- **Commit:** `747669aed` (`refactor(edit-profile): step 6 enforce completed facade`). Previous checkpoint
   `61b6b8d7e`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
-- **Files (formatted physical lines):** facade **150**; No application move; source hashes unchanged from step 5..
+- **Files (formatted physical lines):** facade **150**; no application move; source hashes unchanged from step 5.
 - **Verification:** wiring reviewed before pinning; compiling checkpoint,
   real 90-leaf checker/reader, occurrence bindings/substitutions and callback
   identities pass. All **17** manifests/self-tests pass with isolated parsers
@@ -1035,3 +1035,19 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   edit-profile’s `required_facade_source_step: 6`; other configs retain the
   existing path. All **17** self-tests rerun fresh after the change; original
   assertions preserved (`step6-source-presence-gap.json`, completion probe).
+
+### Full-suite gate 2 — 2026-10-06
+
+- **Commit:** `test(edit-profile): full-suite gate 2 evidence`; tested clean
+  committed step 6 `747669aed0ea6533d4ac767c8891e12d8b6434d9` (Flutter 3.44.8 / Dart 3.12.2).
+- **Command/result:** `python3 dev/tool/suite_evidence.py run
+  edit_profile/gate2 --no-pub --concurrency=1` → **11731 success / 13 failure / 28 error / 20 skipped**.
+  Identity comparison against **base2** and **gate1** passes: **zero new failures, zero
+  missing, zero newly skipped**. Source stayed unchanged throughout the run.
+- **Evidence:** `gate2-*`, `.jsonl`, `.env.json` and `-verification.json`
+  under `refactor-evidence/edit_profile/`. Four macOS originals pass strictly;
+  Linux replay is assigned to Claude in Docker at this tested source SHA.
+- **Pending external verification:** Claude-owned Linux replays at
+  gate 1 source `35c0cc4b4` and gate 2 source `747669aed` have no returned
+  result yet. No Docker, device or emulator was used here. All 24 application
+  files still match step 6 measurements; gate 2 adds only this Progress entry.
