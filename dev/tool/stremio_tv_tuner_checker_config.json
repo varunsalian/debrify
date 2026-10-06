@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv_tuner",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 3,
+  "completed_step": 4,
   "allowed_edits": [
     "receiver",
     "rename",

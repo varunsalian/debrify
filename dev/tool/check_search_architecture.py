@@ -14,10 +14,10 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launc
 FEATURES += ("debrify_tv",)
 # Completion alone activates the facade cap; feature scans are unconditional.
 # Pure UI tuner extraction. All feature guards apply before completion.
-STREMIO_TV_TUNER_COMPLETE = False
+STREMIO_TV_TUNER_COMPLETE = True
 STREMIO_TV_TUNER_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart"
 STREMIO_TV_TUNER_BRIDGE = "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/"
-STREMIO_TV_TUNER_FACADE_CAP = 400
+STREMIO_TV_TUNER_FACADE_CAP = 299
 STREMIO_TV_TUNER_SIZE_EXCEPTIONS = {}
 
 DEBRIFY_TV_COMPLETE = True
@@ -160,6 +160,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Tuner facade wires its live widget view, owners and legacy sections.
+    STREMIO_TV_TUNER_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,
