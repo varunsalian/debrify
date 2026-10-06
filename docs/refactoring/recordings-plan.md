@@ -53,7 +53,7 @@ a finished recording, and delete with confirmation.
 It holds one public widget (`RecordingsPage`), its 928-line State
 `_RecordingsPageState with WidgetsBindingObserver` (12 instance fields, two
 statics, five getters, 23 methods, a 210-line `build`), six private top-level
-constants and 13 private widget classes (seven with States).
+constants and 14 private widget classes (seven with States).
 
 Split it **move-only** into a new feature `lib/features/recordings/` behind a
 facade at the original path. Unchanged: the element tree, widget runtime types,
@@ -80,7 +80,7 @@ needs). They keep importing the facade path. No test imports the file today.
 | `recordings_hub_schedule_row.dart` lives in the bridge because its widget field is typed `ScheduledRecording` (declared in `lib/services/live_recording_service.dart`) | `ScheduledRecording` moves to `models/` in a separately reviewed change |
 | Direct `Platform.isAndroid` / `Platform.isMacOS` reads | A platform-capability adapter |
 | Legacy English text (every label, dialog, snackbar) | Localization migration |
-| Pinned aliases for 12 private widgets and three colour tokens | Public widget names in a later, separately reviewed rename |
+| Pinned typedef aliases for 12 private widgets | Public widget names in a later, separately reviewed rename |
 
 ## Public surface (unchanged)
 
@@ -228,15 +228,28 @@ hosts, so the desktop paths are **B**.
    with its Settings action (S on desktop if unreachable); reload. Every
    `mounted` check after each await is kept (S where no test can unmount at that
    point).
-8. **Playback handoff (one site).** `VideoPlayerLauncher.push(context,
+8. **Playback handoff (one site; round 1 P1-3).** `VideoPlayerLauncher.push(context,
    VideoPlayerLaunchArgs(videoUrl: entry.uri, title: display.title,
    showVideoTitle: true, disableExternalPlayer: isAndroid))` with the State's
    context, the original argument set and order, nothing else supplied. A
-   ledger `dev/tool/recordings_handoff_ledger.json` lists the site and its four
-   arguments; a test captures the pushed route on desktop (no player engine
-   started: the test observes the pushed widget's launch args through a
-   `NavigatorObserver` and pops it) and compares every supplied argument and
-   every default against the ledger. The Android `true` value is S.
+   ledger `dev/tool/recordings_handoff_ledger.json` lists the site, its four
+   supplied arguments and every `VideoPlayerLaunchArgs` default, each classified
+   **observable** (transferred to `VideoPlayerScreen` by
+   `video_player_launch_widget.dart`'s `toWidget`, e.g. `videoUrl`, `title`,
+   `showVideoTitle`) or **launcher-only** (e.g. `disableExternalPlayer`).
+   - Observable fields are compared behaviourally: on desktop with the default
+     in-app player, an engine-free observer (the `StremioTvObserver` pattern in
+     `test/support/stremio_tv_fixture.dart`: unwrap the boundary/`Builder`,
+     remove the route in a microtask before its first frame) captures the pushed
+     `VideoPlayerScreen` and compares each observable supplied field and every
+     observable default with the ledger.
+   - `disableExternalPlayer: false` on desktop is proven behaviourally by a
+     macOS external-default case: with the external player selected, the push
+     reaches the mocked URL-launcher transport (the
+     `test/macos_infuse_launch_test.dart` pattern) instead of an in-app route.
+     The Android `true` value is S.
+   - The complete push envelope (receiver, argument names, order, values, no
+     extra arguments) is pinned structurally by the source validator.
 9. **Widgets.**
    - Focusable rows, buttons and banners: Select/Enter/Space (KeyDown only)
      activate; taps activate; `onFocusChange` repaints; focused visuals (gold
@@ -281,7 +294,7 @@ formatted lines; estimates are original lines plus imports/header plus about
 
 | File | Contents | Est. |
 | --- | --- | --- |
-| `recordings_hub_tokens.dart` | `_kRec`, `_kGold`, `_kAccent` + aliases `kRecordingsHubRec`, `kRecordingsHubGold`, `kRecordingsHubAccent` | 20 |
+| `recordings_hub_tokens.dart` | `_kRec`, `_kGold`, `_kAccent` renamed `kRecordingsHubRec`, `kRecordingsHubGold`, `kRecordingsHubAccent` (registered manifest renames) | 15 |
 | `recordings_hub_buttons.dart` | Buttons banner, `_HubButton`+State, `_HubIconButton`+State, `_RowIconButton`+State + aliases | 300 |
 | `recordings_hub_chrome.dart` | Top bar banner, `_HubBar`, Sections banner, `_SectionHeader`, `_EmptyHint` + aliases | 150 |
 | `recordings_hub_live_card.dart` | Recording-now banner, `_kCard`, `_LiveCard`, `_RecDot`+State + alias | 160 |
@@ -326,9 +339,12 @@ facade `initState` (a registered static-receiver substitution; the Stremio TV
 **Private top-level constants.** `_kBg` (only `build`), `_kCard` (only
 `_LiveCard`) and `_kDialogRowPadding` (only `_askRecordingLength`) move whole
 with their sole user and keep their names. `_kRec`, `_kGold` and `_kAccent` are
-used in several destinations, so they move to the tokens file and gain value
-aliases there (`const kRecordingsHubRec = _kRec;` …). Every use outside the
-tokens file is spelled through the alias; the tokens file never uses an alias.
+used in several destinations, so they move to the tokens file **renamed** to
+`kRecordingsHubRec`, `kRecordingsHubGold`, `kRecordingsHubAccent` (manifest
+rows with `new_name`; round 1 P1-1: a value alias is not canonicalized by the
+occurrence binder, while a manifest rename already is). Every use site is the
+new name. A constant has no runtime type name, so the widget-alias rationale
+does not apply; the values are identical canonical consts.
 
 **Private widgets cross files through pinned aliases, never renames** (the
 catalogs/detail-showcase precedent, keeping runtime type names and avoiding
@@ -447,19 +463,44 @@ As in the Stremio TV, tuner and Debrify TV plans, plus:
    getter reads `DesktopScheduleService.instance.isSupported` live on every call,
    as today). Constructing the composition in `initState` (its first consumer)
    creates no resource.
-6. **Callback identity.** The `torbox_callback_identity.py` mechanism (receiver
-   path + member, wrapper and receiver-swap negatives) covers: `addObserver`/
-   `removeObserver(this)`; both `addListener`/`removeListener(_onRevision)`
-   pairs (the facade State's own tear-off, unchanged); `onDismiss:
-   _dismissBatteryNudge` → `_sections.data.dismissBatteryNudge`; `fmtBytes:
-   _fmtBytes` (×2), `fmtElapsed: _fmtElapsed` (×2), `fmtCountdown:
-   _fmtCountdown` → `_sections.format.*`; and the single-call closures
-   (`onStop`, `onCancel`, `onPlay`, `onDelete`, `onSchedule`, `onPressed`,
-   `onFix`, `onTap`, `onOpenAlarmSettings`, `onDown`/`onScheduleDown`
-   requesting `_owners.firstLibraryFocus`). Block closures (the two
-   `Timer.periodic` bodies, the `DevicePreferences.then` bodies, the `Builder`
-   body) are covered by the whole-body comparison, the binder and the context
-   guard, with receiver-swap negatives inside each.
+6. **Callback identity, split by shape (round 1 P1-2).**
+   - **Direct tear-offs** use the `torbox_callback_identity.py` mechanism
+     (receiver path + member; wrapper, receiver-swap, member-swap and
+     cached-field negatives): `addObserver`/`removeObserver(this)`; both
+     `addListener`/`removeListener(_onRevision)` pairs (the facade State's own
+     tear-off, unchanged); `onDismiss: _dismissBatteryNudge` →
+     `_sections.data.dismissBatteryNudge`; `fmtBytes: _fmtBytes` (×2),
+     `fmtElapsed: _fmtElapsed` (×2), `fmtCountdown: _fmtCountdown` →
+     `_sections.format.*`; and inside the moved widgets `onTap:
+     widget.onCancel/onPlay/onTap/onPressed`, `onPressed: onBack/onSchedule/
+     onDismiss/widget.onDelete`, `onTap: onFix`.
+   - **Wrapped and conditional closures** are outside that helper's direct-call
+     shape (it resolves `unawaited`, not the inner call). They are pinned by a
+     recordings-specific validator registered through the existing
+     `source_validator_module` hook (the tuner precedent), which parses each
+     site, checks the exact envelope (`() => unawaited(<receiver>.<member>(<args>))`,
+     the `onScheduleDown` conditional with its five-term guard and
+     `() => _owners.firstLibraryFocus.requestFocus()`, the folder button's
+     `onDown` conditional, `() => Navigator.of(context).maybePop()` with the
+     lexical build `context`, the dialogs' `() =>
+     Navigator.of(dialogContext).pop(<literal>)`, `bytesOf: () => capture.bytes`
+     and `bytesOf: () => rec.bytes`), and validates the inner receiver path and
+     member **before** normalization, plus the occurrence binder on every
+     identifier inside. Sites (facts): `onBack` 777, `onSchedule` 778/798,
+     `onScheduleDown` 782–789, `onOpenAlarmSettings` 800, `onTap` 809, `onFix`
+     817, `onStop` 839/857, `bytesOf` 835/850, `onCancel` 889, `onPressed` 903,
+     `onDown` 904–906, `onPlay` 946, `onDelete` 947, the dialog pops 315/320/364/
+     368/583/592/651/655, the snackbar action 513. Negatives per envelope: a
+     different member (`stopAndroid` for `stopDesktop`), a different section
+     receiver, the wrapper dropped (`() => _sections.actions.play(entry)`
+     returning a Future to a `VoidCallback` is a compile error, so the negative
+     is `unawaited` replaced by a cached tear-off), a conditional term removed
+     or reordered, `context` replaced by `_deps.context()`, `capture.bytes`
+     replaced by a captured local.
+   - **Block closures** (the two `Timer.periodic` bodies, the
+     `DevicePreferences.then` bodies, the `Builder` body, the `onKeyEvent`
+     handlers) are covered by the whole-body comparison, the binder and the
+     context guard, with receiver-swap negatives inside each.
 7. **Verbatim comments.** The checker compares comments; never reword, move or
    drop one, including the banners (`// ── Actions ──…`, `// ── Formatting ──…`,
    `// ── Build ──…`, the widget banners), which travel with the first member
@@ -467,25 +508,77 @@ As in the Stremio TV, tuner and Debrify TV plans, plus:
    (Found, not fixed: the path is now a facade). The file header comment stays in
    the facade.
 8. **Shape.** The file is unswept: it is in neither `kShapeResidue` nor
-   `kExtractedShapeResidue` and has no `app.shape.` call. Destinations are not
-   registered either (registering them would invent a sweep). Step 0 records
-   the bare-radius count over the original (verify: 12) and the 488-token floor;
-   each checkpoint proves the aggregate bare-radius count over facade +
-   destinations is unchanged and the floor test passes.
-9. **Theme.** `theme_surface_manifest.txt:6` (`settings = …
-   lib/screens/settings/*.dart …`) covers this file today. At step 1 append
-   exactly `lib/features/recordings/presentation/*.dart
+   `kExtractedShapeResidue`; the verified inventory is **12 bare radii and zero
+   `app.shape.` calls**. Accepted decision: destinations are not registered in
+   the shape manifest (an extracted-residue entry would be allowed, but this
+   branch keeps the shared manifest untouched to stay merge-disjoint).
+   Instead a named guard, `test/features/recordings/recordings_shape_inventory_test.dart`
+   (in the CI behaviour list), counts the radius regex used by
+   `shape_manifest_test.dart` over the facade plus every recordings feature
+   file and requires exactly 12 and zero `app.shape.` calls; it passes on R
+   (the facade alone) and at every checkpoint, and the 488-token floor test
+   passes unchanged.
+9. **Theme and audits (round 1 P2-10).** `theme_surface_manifest.txt:6`
+   (`settings = … lib/screens/settings/*.dart …`) covers this file today. At
+   step 1 append exactly `lib/features/recordings/presentation/*.dart
    lib/features/recordings/presentation/legacy_recordings/*.dart` to that line
    (additive tokens; `edit_profile` and others also append there). Step 0
    measures the surface's site count with `measure_theme_surface.sh`; it must
-   stay equal at every step. `theme_rendered_set.py` keeps its root (verify the
-   import walk reaches the feature); `light_ink_inventory.py` and
-   `text_white_sweep.py`: verify no change or register additively.
+   stay equal at every step. `light_ink_inventory.py`: extend `PRIMARY` with the
+   recordings feature paths at step 1 so every moved site keeps its primary
+   classification (before/after inventory output identical by site).
+   `text_white_sweep.py`: keep the original's classification (today it is
+   excluded as `settings`) by adding the recordings feature to the same
+   exclusion at step 1 (before/after output identical). `theme_rendered_set.py`
+   keeps its root (verify the import walk reaches the feature).
 10. **Imports in new files.** Sorted `package:debrify/…` URIs, only what each
     file uses (relative imports in the original become package imports); no
     `unused_import`/`unnecessary_import`. `lib/widgets/recording_limit_dialogs.dart`
     is imported by the scheduling section (the cycle with the facade is
     pre-existing and unchanged in kind).
+11. **Build forwarder and reader ownership (round 1 P1-4).** The facade's
+    `build` is a registered retained forwarder: `forwarders` holds its exact
+    text (`@override Widget build(BuildContext context) =>
+    _sections.layout.build(context);`), the manifest row for
+    `_RecordingsPageState.build` carries `retained_forwarder,layout_body`
+    edits, and `forwarded_annotation_occurrences:
+    {"_RecordingsPageState.build": ["override"]}` lets the moved body drop only
+    the leading `@override` (the Stremio TV precedent; no new mechanism). The
+    reader (Technique 13) validates the exact forwarder before excluding it from
+    implementation ownership, so the moved body is the single implementation.
+    `completion_step` is **4**. Positives/negatives through checker and reader:
+    build retained in the facade (before step 3); exact forwarder plus moved
+    body; both a full facade `build` and the moved body (duplicate
+    implementation); an altered forwarder (extra statement, different receiver,
+    cached section); a missing forwarder; the moved body still carrying
+    `@override`.
+12. **Composition, frozen per step (round 1 P2-5).** `RecordingsHubDependencies`
+    takes `owners`, `context`, `mounted`, `setState` and `sections`; the facade
+    supplies `sections: () => _sections`. Step 2's composition constructs
+    exactly `data` and `format`; step 3's adds `actions`, `scheduling` and
+    `layout` in the frozen order (`data`, `actions`, `scheduling`, `format`,
+    `layout`). Both shapes are registered as scaffolds for their step
+    (constructor and dependency tokens, plain section headers, eager owners
+    construction, required files, each section's exact getter set) using the
+    existing `scaffolds`/`required_scaffolds_step`/`scaffold_file_steps` and
+    `plain_sections` keys. Mutations (checker and validator): sections rebuilt
+    per `build`, a cached `context`/`mounted` value, `setState` wrapped in a
+    closure, a section wired to the wrong class, a section constructor that
+    creates a resource or reads `_deps`, owners created lazily.
+13. **Source reader and proof media (round 1 P2-9).** The reader is a Python
+    AST reader `dev/tool/recordings_source_reader.py` (on the shared
+    `verbatim_ast` parser, `parser_lock`, isolated parser package) with a thin
+    Dart wrapper `test/support/recordings_source.dart`. It reads verified raw
+    ORIGINAL text (`git show <R>:…` with a hash check), the current physical
+    sources, and enumerates owner files deterministically from the manifest;
+    fixtures cover ORIGINAL, partial (after steps 1 and 2), mixed (a declaration
+    in both places), scaffold-only and completed trees. Mutation media:
+    behavioural (B) mutants run whole behavioural test files without name
+    filtering, with test and harness hashes frozen, and each B mutant must fail
+    a named behavioural assertion; S mutants run the source-contract test and
+    are reported apart; simulated-move checker/reader rejections are a third
+    report naming the guard that rejected and covering every section kind. A
+    reader exception is never counted as B evidence.
 
 ## Steps
 
@@ -536,23 +629,37 @@ scratch tree, runs the real checker and measures the facade.
    - A fake `PathProviderPlatform` pointing downloads at a per-test temporary
      directory so `recordingsDir()`/`listLibrary()` read real files (sizes and
      mtimes set explicitly); deleted in teardown.
-   - `ProfileRuntime` set up through the existing profile fixtures
-     (`test/support/profile_fixture.dart`) for the two-profile contract.
+   - `ProfileRuntime`: every test initializes the legacy runtime (captures'
+     `start` and `captures` read `ProfileRuntime.isProfileCommitted`, which
+     throws uninitialized); the ownership tests use the committed two-profile
+     fixture (`test/support/profile_fixture.dart`).
    - A recording `NavigatorObserver`; dialogs driven by tapping and by keys.
-   - Desktop captures (Recording now, Stop) only if a capture can be started
-     against a local `HttpServer` inside `runAsync` without production seams;
-     otherwise those rows are S with the reason.
-   - `DesktopScheduleService.instance.shutdown()` and listener checks in
-     teardown; bounded pumps (the `_RecDot` animation repeats, so no
-     `pumpAndSettle` while it is on screen); no pending timers at the end.
+   - Desktop captures are **B** (round 1 P2-7): the public
+     `DesktopRecordingService.instance.start(...)` against a local `HttpServer`
+     (inside `runAsync`) writing into the fake downloads directory produces a
+     real capture; the fixture owns every capture it starts and **awaits their
+     `stop()`** before resetting profiles or deleting directories (scheduler
+     `shutdown()` does not stop captures). Required B coverage: nonzero and zero
+     Stop outcomes, live-card focus and tick text, the delete refusal of an
+     active capture's file. Only a concrete probe showing a genuine blocker may
+     turn a row S.
+   - Revision listeners are proven by presence and effect, not by private
+     listener counts: a bump of each notifier causes exactly one counted reload
+     (observed through the path-provider/shared-preferences boundary call
+     counts) while mounted and none after dispose.
+   - Time: tests do not advance `DateTime.now()` by pumping. Elapsed/countdown
+     boundaries are driven through the public `ValueListenableBuilder<DateTime>`
+     `valueListenable` found in the tree (setting its value) and observed in the
+     rendered text.
+   - `DesktopScheduleService.instance.shutdown()` in teardown; bounded pumps
+     (the `_RecDot` animation repeats, so no `pumpAndSettle` while it is on
+     screen); no pending timers at the end.
 5. **Characterization tests** under `test/features/recordings/presentation/`
    (mirroring destinations): `recordings_lifecycle_test`,
    `recordings_load_and_timers_test`, `recordings_layout_test`,
    `recordings_actions_test`, `recordings_manual_schedule_test`,
    `recordings_handoff_test`, `recordings_widgets_focus_test`,
-   `recordings_profile_ownership_test`, `recordings_goldens_test` (empty state,
-   populated desktop list, TV focus on a library row; macOS goldens captured
-   twice in reversed order, byte-identical) and
+   `recordings_profile_ownership_test`, `recordings_goldens_test` and
    `recordings_source_contract_test` (S guards for the Android-only branches,
    the poll cadences and membership comparison, `Process.run` arguments and the
    folder fallback text, the `exact_alarms_required` snackbar, every `mounted`
@@ -561,6 +668,26 @@ scratch tree, runs the real checker and measures the facade.
    that picks each declaration from the original or its created destination and
    fails when neither or both hold it. Final-topology checks are dormant until
    `RECORDINGS_COMPLETE`. All pass on (b).
+   **Explicit S rows (round 1 P2-6), each with its reason:** supplied desktop
+   channel metadata and store-duration precedence (`listLibrary` always yields
+   `channelName: null`, `durationMs: null`); the page's private dismissal value
+   and the battery banner (Android-only); `engineRecordableUrl == null` after
+   `isSchedulableUrl == true` (dormant: `isSchedulableUrl` already requires a
+   non-null recordable URL). A separate service-level test pins
+   `DevicePreferences` round-tripping `recording_battery_nudge_dismissed_at`
+   across a profile switch; it is not evidence for the page's private state.
+   **Goldens (round 1 P2-8)** follow the reference protocol: the app theme and
+   look used by the settings goldens, the bundled test fonts loaded once,
+   `en_US` locale, text scale 1.0, DPR 1, pinned sizes, disabled animations
+   where the framework allows and TV mode where `_RecDot` is static; time-free
+   content only — library files with fixed old dates (`2024-03-0x` stamps) whose
+   labels do not depend on today, schedules already started so the chip renders
+   `due` with the scheduler unarmed (`shutdown()`), no live card in a golden
+   unless the notifier value is set explicitly; readiness asserted before each
+   capture (expected rows present, intended focus owner). Scenes: empty state
+   (TV), populated desktop list, TV focus on a library row. Reversed-order
+   captures run in **independent processes** and must be byte-identical;
+   later comparisons are strict.
 6. **Mutation proofs (ORIGINAL).** `dev/tool/recordings_original_mutations.py`
    applies each mutation to a scratch copy of (b) and requires a **named
    assertion failure** (not a compile error, not a timeout); B and S mutants
@@ -584,8 +711,18 @@ scratch tree, runs the real checker and measures the facade.
    autofocus moved to the second schedule row; `onDown` repeat not swallowed;
    activate on KeyUp; `_RecDot` animating on TV; focus derived from a cached
    field. Results recorded with counts; **every B mutant must fail**.
-7. **CI list.** Every new test in `dev/tool/ci_behavior_tests.txt`; no known
-   failures expected.
+7. **CI list and workflow (round 1 P2-10).** Every new Dart test (including
+   `recordings_shape_inventory_test.dart`) goes into
+   `dev/tool/ci_behavior_tests.txt`. `.github/workflows/checks.yml`: step 1
+   adds `- run: python3 dev/tool/recordings_architecture_test.py` after
+   `check_search_architecture.py` in the architecture job (it uses only the
+   working tree; no history or parser package needed); step 4 appends
+   `lib/screens/settings/recordings_page.dart test/support/recordings_*.dart`
+   to the `dart format` command and `lib/screens/settings/recordings_page.dart`
+   to the `flutter analyze` command, both **inside** the command, never after
+   `| tee` (`lib/features` already covers the feature). Manifest self-tests and
+   the reader self-test are not CI steps (the series' convention); they run at
+   every step and gate locally. No known failures expected.
 8. **Inventory.** Bare-radius count (Technique 8), theme surface count
    (Technique 9), the source-text guards list and the strict-lint baseline.
 9. **Linux capture script** for the Docker image `debrify-flutter:3.44.8`
@@ -680,8 +817,9 @@ the private widgets; registering the file in the shape sweep.
 1. **New feature `recordings`**, not `iptv`/`iptv_settings` (completed
    migrations other forks may touch).
 2. **R = base**: the file is formatter-clean; no format commit.
-3. **Aliases, never renames, for private widgets and shared tokens**;
-   single-user constants move whole with their user.
+3. **Typedef aliases, never renames, for private widgets**; the three shared
+   colour constants are renamed (round 1 P1-1); single-user constants move
+   whole with their user.
 4. **State split with an eager owners record, live dependencies and five frozen
    sections**; the facade keeps the lifecycle, `_onRevision` and a one-line
    `build` forwarder. No size exception expected.
@@ -690,6 +828,22 @@ the private widgets; registering the file in the shape sweep.
    seam is added to reach them.
 6. **Not registered in the shape sweep**; theme surface extended additively.
 7. **Goldens**: macOS and Linux for three scenes (Step L before step 1).
+
+## Round 1 review resolution (Codex `rec-design`, at `d29a5e14`)
+
+| Finding | Resolution |
+| --- | --- |
+| P1-1 value aliases not canonicalized by the occurrence binder | The three shared colour constants are **renamed** through manifest rows (already canonicalized); widget typedef aliases stay (`type_aliases` is canonicalized). No value alias remains; no new mechanism. Fixtures exercise all three renamed tokens in State members and in whole widget declarations through checker and reader. |
+| P1-2 identity helper cannot see wrapped/conditional closures | Technique 6 split by shape: direct tear-offs keep the identity helper; wrapped, conditional and chained closures (all sites listed, both `bytesOf` closures included) are pinned by a recordings validator via `source_validator_module` that checks the envelope and inner receiver before normalization, plus the binder. |
+| P1-3 pushed widget does not carry every launch argument | Contract 8: ledger classifies observable vs launcher-only fields; observable fields compared on the engine-free observed `VideoPlayerScreen`; desktop `disableExternalPlayer: false` proven by a macOS external-default case through the mocked URL-launcher transport; full envelope pinned by the validator. |
+| P1-4 reader ownership vs the permanent forwarder | Technique 11: registered `forwarders` text, `retained_forwarder,layout_body` edits, `forwarded_annotation_occurrences`, reader validates the forwarder first; `completion_step` 4; listed positives/negatives. |
+| P2-5 composition wiring | Technique 12: `sections: () => _sections`; step-2 and step-3 scaffold shapes frozen and registered; listed mutations. |
+| P2-6 overpromised B rows | Explicit S rows with reasons (desktop metadata/duration, dismissal value, dormant null URL); separate `DevicePreferences` test; time boundaries driven through the public notifier. |
+| P2-7 capture coverage | Captures are B via public `start` + local `HttpServer`; legacy runtime initialized in every test; fixture awaits capture `stop()`; listener presence via counted reloads. |
+| P2-8 golden determinism | Full protocol in step 0.5: theme, fonts, locale, text scale, time-free content (old dates, `due` chips, scheduler unarmed), readiness assertions, independent-process reversed captures, strict later comparisons. |
+| P2-9 reader and mutation media | Technique 13: Python AST reader + Dart wrapper, verified ORIGINAL, deterministic owner enumeration, five fixture topologies; three separate proof reports; reader exceptions never count as B. |
+| P2-10 CI and audits | Step 0.7: exact `checks.yml` commands and activation steps; Technique 9: `light_ink_inventory.PRIMARY` extended, `text_white_sweep` exclusion preserved; Technique 8: named shape inventory test. |
+| P3-11 counts | 14 private widgets (seven with States); 12 bare radii, zero shape calls; shape rationale corrected. |
 
 ## Progress
 
