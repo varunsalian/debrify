@@ -10,7 +10,6 @@ import '../../../../support/alldebrid_files_fixture.dart';
 
 const captureLinux = bool.fromEnvironment('ALLDEBRID_CAPTURE_ORIGINAL_LINUX');
 const captureMac = bool.fromEnvironment('ALLDEBRID_CAPTURE_ORIGINAL_MACOS');
-const requireLinux = bool.fromEnvironment('ALLDEBRID_REQUIRE_ORIGINAL_LINUX');
 const reverseGoldens = bool.fromEnvironment('ALLDEBRID_GOLDEN_REVERSE');
 void main() {
   testWidgets(
@@ -315,13 +314,6 @@ void main() {
           if (view == 'web_downloads') adLinks(),
           if (view == 'magnet_files') adFiles('z9'),
         ]);
-        if (Platform.isLinux &&
-            !captureLinux &&
-            !requireLinux &&
-            !File(path).existsSync()) {
-          debugPrint('PENDING Claude Step L original Linux golden $path');
-          return;
-        }
         if (!captureLinux && !captureMac) {
           expect(
             File(path).existsSync(),

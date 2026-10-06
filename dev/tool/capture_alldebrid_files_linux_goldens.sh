@@ -16,7 +16,7 @@ printf '%s\n' "$original_revision" > "$evidence/linux-original-revision.txt"
 # Mount the git directory rather than the worktree's .git pointer. The normal
 # clone lives below the container HOME, has its own .git directory and resolves
 # its application packages with flutter pub get inside the container.
-docker run --rm --platform linux/amd64 \
+docker run -i --rm --platform linux/amd64 \
   -v "$common:/source.git:ro" -v "$evidence:/evidence" \
   -e ORIGINAL_REVISION="$original_revision" \
   debrify-flutter:3.44.8 bash -s <<'CONTAINER'
