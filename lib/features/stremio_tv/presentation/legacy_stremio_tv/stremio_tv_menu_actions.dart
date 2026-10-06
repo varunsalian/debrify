@@ -1,17 +1,11 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/screens/stremio_tv/stremio_tv_filter_page.dart';
-
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart';
-
 import 'package:debrify/services/storage/stremio_tv_storage.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvMenuActions {

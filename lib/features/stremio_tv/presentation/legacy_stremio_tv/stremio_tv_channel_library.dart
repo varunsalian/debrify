@@ -1,15 +1,10 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
-
 import 'package:debrify/services/main_page_bridge.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvChannelLibrary {

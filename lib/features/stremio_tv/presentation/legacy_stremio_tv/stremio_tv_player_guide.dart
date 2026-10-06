@@ -1,18 +1,14 @@
 import 'dart:async';
-import 'package:collection/collection.dart';
 
+import 'package:collection/collection.dart';
 import 'package:debrify/features/stremio_tv/models/stremio_tv_playback_records.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
 import 'package:debrify/models/stremio_tv/stremio_tv_now_playing.dart';
 import 'package:debrify/models/torrent.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvPlayerGuide {

@@ -251,10 +251,10 @@ tests. Guards compare whole bodies, comments included, through
       every argument (poster/title, provider info from `_tvProviderInfo()`,
       the theme tokens, the Play Loader style ternary,
       `PlayLoaderArt.fromMeta(item)`, inks) and the `onCancel` closure (bump
-      `_playGeneration`, then notify failed `'Playback canceled'`). Its 19
-      `overlay.` calls keep their order and stages (`searching` with
-      `sourceCount`, `cacheCheck` with and without `cachedCount`,
-      `preparing`, `starting`) and every `dismiss()` before each return.
+      `_playGeneration`, then notify failed `'Playback canceled'`). Its 18
+      `overlay.` calls (seven stage calls, eleven dismissals) keep their order
+      and stages (`searching` with `sourceCount`, `cacheCheck` with and without
+      `cachedCount`, `preparing`, `starting`) and every `dismiss()` before each return.
    4. **Stream search.** Both `TorrentService.searchByImdbWithStremio(` calls
       keep their arguments: `_playChannel` passes `includeMediaServers:
       false`, `isMovie`, `season`, `episode`, `contentType`, `stremioTimeout:
@@ -270,7 +270,7 @@ tests. Guards compare whole bodies, comments included, through
       924 (`_playGeneration++` in `onCancel`), 942, 981, 1165 (`==`), 1216;
       `_resolveChannelPlayback` 1424 (`final gen = _playGeneration;`); and
       the comment at 923. Every occurrence stays at its site with
-      `!mounted ||` / `mounted &&` exactly as written. `isCancelled` (18
+      `!mounted ||` / `mounted &&` exactly as written. `isCancelled` (20
       occurrences in `_resolveTorrentUrl`, `_loadTorboxCachedHashes`,
       `_resolveViaTorbox`, `_resolveViaPikPak`) is unchanged. Which awaits
       honour cancellation is characterized as-is (Step 0, C3 cancel).
@@ -311,10 +311,10 @@ tests. Guards compare whole bodies, comments included, through
       (`stremio_tv_play_channel.dart`, `stremio_tv_player_guide.dart`), and
       any new `VideoPlayerLauncher.push(` or `VideoPlayerScreen(` in this
       feature beyond the two ledger sites.
-4. **Settings and persistence.** `_loadSettings` keeps its read order (13
-   awaits including the five-provider probe), the conditional
-   `setStremioTvDebridProvider('auto')` reset, and **no `setState`** (callers
-   rebuild: `_openStremioTvSettings`, `_refresh`, discovery). Provider menu
+4. **Settings and persistence.** `_loadSettings` keeps its read order (12
+   await expressions: ten settings reads, the five-provider probe and the
+   conditional `setStremioTvDebridProvider('auto')` reset), and **no `setState`**
+   (callers rebuild: `_openStremioTvSettings`, `_refresh`, discovery). Provider menu
    writes through `setStremioTvDebridProvider`; favourites through
    `setStremioTvChannelFavorited`; filter page and local-catalog dialogs own
    their writes.
@@ -2027,3 +2027,63 @@ existing branch switch, emulator/device run or Flutter run was performed.
 application, test or tool input. Material adjustments are explicitly recorded:
 D2's two reason/exit lines (713 → 715), rejection/rerun of the Step 6
 changed-tree run, and reuse of already-correct CI path registrations.
+
+
+### Final review P3 cleanup — complete (2026-10-06)
+
+Claude and independent Codex review `stv-rev` accepted the completed extraction
+with **no P1/P2**. This final checkpoint addresses only the two P3 cleanups,
+with subject `style(stremio-tv): tidy import blocks and correct inventory counts`.
+Its commit SHA is recorded in E/`p3-cleanup-commit.json` after creation.
+
+**Inventory corrections, verified before editing:** isolated analyzer/scanner
+parsing of both R and the accepted split gives **18 `overlay.` method calls**
+(seven `setStage`, eleven `dismiss`), **20 `isCancelled` tokens** in the four
+resolver methods (9/4/4/3), and **12 `_loadSettings` await expressions** (ten
+settings reads, the provider probe and conditional reset). Contract 3.3/3.5/4
+and the dependency inventory now state these counts; the dependency report's
+nine settings reads becomes ten. Both implementations already matched; no
+application behavior changed. E/`p3-cleanup-count-proof.json` records the
+per-method counts, ordered awaited calls, source hashes and parser provenance.
+
+**Import whitespace:** checked all 24 new feature files against catalog-detail
+and Debrify TV conventions: contiguous sorted imports within each URI group,
+one blank line between `dart:` and `package:`. Of the 20 files with separators,
+19 had stray blanks; `stremio_tv_playback_records.dart` already had only the
+correct group separator and remains unchanged. Net **114 blank lines removed**;
+the actions/guide separators move from between package imports to the standard
+dart/package boundary. Import directives, comments and every byte after the
+last import remain unchanged. E/`p3-cleanup-import-proof.json` documents this
+count clarification and per-file before/after hashes and measurements.
+
+Re-measured facade **115 / cap 115** (unchanged), layout **707 / cap 707**
+(ratcheted down from 715), play **482**, debrid resolvers **318**, composition
+**46**, bindings **19**. All 22 destinations other than layout/play are at most
+**320** lines. D2 layout remains the sole exception with both required comments.
+No owned file has a `file_size_baseline.txt` entry; existing sibling entries
+and the baseline are unchanged. E/`p3-cleanup-measurement.json` records all 25
+owned file sizes, facade spans and source hashes.
+
+**Verification:** format check passes with zero changed files; actual CI scoped
+analyzer/allowlist and relocation comparison pass. The owned slice retains
+only its seven accepted info diagnostics, zero warnings/errors and zero
+`directives_ordering` diagnostics. Architecture/size checks and real-checker
+positive/negative tests pass; shape **13**, theme **30 owned / 79 full surface**,
+light ink **3 non-primary / 0 primary** remain unchanged. All **17 manifest
+CLI/self-tests** pass using explicit isolated parser packages with every
+`*.dill` deleted before use; the other **16 stdout files are byte-identical**
+to Step 0b, and frozen shared adapter/config inputs and D4/map pins match.
+All **63 characterizations** pass, including strict macOS **6/6**; calibrated
+Linux strict **6/6** also passes, with unchanged PNGs and lockfile. The serialized
+focused replay (`--no-pub --concurrency=1`) is **178 success / one unchanged
+known profile source-guard failure**, matching base2 with no new failures,
+missing identities or new skips. No flakes or regression acceptance updates.
+
+Per the user's instruction and AGENTS.md mechanical-change guidance, **no full
+suite rerun is needed for this import-whitespace-only application change**.
+Gate 2's accepted comparison remains applicable; docs and the measured cap
+ratchet are the only other changes. Commands, logs, compatibility proofs and
+test identities are E/`p3-cleanup-*`. Tests/goldens, tooling fixtures/reader/
+capture script, CI, sibling widgets, players, launcher, services and dependencies
+remain unchanged. Only the layout cap changes in shared tooling. No behavior
+change, seam, device run, push, merge or branch switch. **STOP after cleanup.**

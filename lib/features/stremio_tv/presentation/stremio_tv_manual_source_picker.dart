@@ -1,17 +1,11 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/models/stremio_tv_playback_records.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart';
-
 import 'package:debrify/models/torrent.dart';
-
 import 'package:debrify/theme/app_theme_scope.dart';
-
 import 'package:debrify/utils/formatters.dart';
-
 import 'package:debrify/utils/source_quality.dart';
-
 import 'package:flutter/material.dart';
 
 // ─── Manual Source Picker (shown when auto-play fails) ────────────────────

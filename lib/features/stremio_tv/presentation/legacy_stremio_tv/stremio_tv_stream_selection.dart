@@ -1,26 +1,16 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/application/stremio_tv_stream_quality.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/models/stremio_addon.dart';
-
 import 'package:debrify/models/torrent.dart';
-
 import 'package:debrify/services/stream_url_validator.dart';
-
 import 'package:debrify/utils/series_parser.dart';
-
 import 'package:debrify/utils/stremio_tv_debrid_fallback.dart';
 import 'package:debrify/utils/torrent_coverage_detector.dart';
-
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvStreamSelection {

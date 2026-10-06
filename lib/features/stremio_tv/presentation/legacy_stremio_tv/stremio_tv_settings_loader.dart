@@ -1,20 +1,15 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/screens/settings/stremio_tv_settings_page.dart';
-
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvSettingsLoader {

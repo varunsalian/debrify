@@ -1,35 +1,22 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/models/stremio_addon.dart';
-
 import 'package:debrify/models/torrent.dart';
-
 import 'package:debrify/services/alldebrid_service.dart';
-
 import 'package:debrify/services/debrid_service.dart';
-
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
-
 import 'package:debrify/services/storage/torbox_storage.dart';
-
 import 'package:debrify/services/torbox_service.dart';
-
 import 'package:debrify/utils/file_utils.dart';
-
 import 'package:debrify/utils/rd_blocked_filter.dart';
-
 import 'package:debrify/utils/stremio_episode_selector.dart';
 import 'package:debrify/utils/stremio_tv_debrid_fallback.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvDebridResolvers {

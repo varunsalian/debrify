@@ -1,7 +1,5 @@
 import 'package:debrify/theme/app_theme_scope.dart';
-
 import 'package:debrify/utils/tv_keys.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

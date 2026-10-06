@@ -1,7 +1,5 @@
 import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
-
 import 'package:debrify/screens/stremio_tv/stremio_tv_service.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvLibraryState {

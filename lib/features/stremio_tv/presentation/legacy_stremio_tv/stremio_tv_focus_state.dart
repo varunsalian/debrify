@@ -1,5 +1,4 @@
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_tuner.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvFocusState {

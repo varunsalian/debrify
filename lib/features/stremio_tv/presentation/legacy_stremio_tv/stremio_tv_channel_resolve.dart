@@ -3,28 +3,17 @@ import 'dart:async';
 import 'package:debrify/features/stremio_tv/application/stremio_tv_stream_quality.dart';
 import 'package:debrify/features/stremio_tv/models/stremio_tv_playback_records.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart';
-
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
-
 import 'package:debrify/models/torrent.dart';
-
 import 'package:debrify/services/premiumize_service.dart';
-
 import 'package:debrify/services/storage/premiumize_storage.dart';
-
 import 'package:debrify/services/storage/torbox_storage.dart';
-
 import 'package:debrify/services/torbox_service.dart';
-
 import 'package:debrify/services/torrent_service.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvChannelResolve {

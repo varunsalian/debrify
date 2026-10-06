@@ -33,7 +33,7 @@ STREMIO_TV_PREEXISTING = {
 # D2: one original build body cannot be split by a move. Measure at creation.
 # Exit: separately characterized header/channel paint decomposition with goldens.
 STREMIO_TV_SIZE_EXCEPTIONS = {
-    STREMIO_TV_BRIDGE + "stremio_tv_layout.dart": 715,
+    STREMIO_TV_BRIDGE + "stremio_tv_layout.dart": 707,
 }
 STREMIO_TV_HANDOFF_FILES = {
     STREMIO_TV_BRIDGE + "stremio_tv_play_channel.dart",

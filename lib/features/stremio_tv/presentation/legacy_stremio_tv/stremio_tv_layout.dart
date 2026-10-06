@@ -1,20 +1,12 @@
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_empty_state.dart';
-
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_tuner.dart';
-
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
-
 import 'package:debrify/theme/app_theme_scope.dart';
-
 import 'package:debrify/utils/tv_keys.dart';
-
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

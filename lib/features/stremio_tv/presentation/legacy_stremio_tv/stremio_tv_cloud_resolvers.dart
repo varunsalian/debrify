@@ -1,27 +1,18 @@
 import 'dart:async';
 
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart';
-
 import 'package:debrify/models/premiumize_file.dart';
 import 'package:debrify/models/stremio_addon.dart';
-
 import 'package:debrify/models/torrent.dart';
-
 import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/pikpak_tv_service.dart';
-
 import 'package:debrify/services/premiumize_service.dart';
-
 import 'package:debrify/services/torbox_service.dart';
 import 'package:debrify/services/torbox_torrent_control_service.dart';
-
 import 'package:debrify/utils/file_utils.dart';
-
 import 'package:debrify/utils/stremio_episode_selector.dart';
 import 'package:debrify/utils/stremio_tv_debrid_fallback.dart';
-
 import 'package:flutter/material.dart';
 
 class StremioTvCloudResolvers {

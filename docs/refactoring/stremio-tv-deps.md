@@ -257,9 +257,9 @@ Getter: 2587 `List<StremioTvChannel> get _filteredChannels` (under `// Search` b
   subscription, `RouteAware` or mixin.
 
 ## Methods (State) with ranges
-213 `_loadSettings` (9 awaited reads + available providers + conditional
-  `setStremioTvDebridProvider('auto')`; writes fields WITHOUT setState; local
-  `debridProvider`)
+213 `_loadSettings` (12 await expressions: 10 settings reads + available
+  providers + conditional `setStremioTvDebridProvider('auto')`; writes fields
+  WITHOUT setState; local `debridProvider`)
 237 `_loadAvailableProviders` (5 provider checks, locals rdKey/tbKey/…)
 264 `_discoverAndLoad` (setState loading=true WITHOUT mounted check; await
   discoverChannels; disposes/recreates row nodes with no mounted check; mounted
@@ -390,7 +390,7 @@ Other player-facing contracts: `_playbackResultToMap` keys (`channelId`, `url`,
 89 decl; 638, 640 (`_tryDirectStreams`); 675, 680, 688 (`_tryTorrentsViaDebrid`);
 848 `final myGeneration = ++_playGeneration;`; 853; 923 (comment); 924
 `_playGeneration++` in onCancel; 942, 981, 1165 (`==`), 1216; 1424 `final gen =
-_playGeneration;` (`_resolveChannelPlayback`). `isCancelled` 18 occurrences in
+_playGeneration;` (`_resolveChannelPlayback`). `isCancelled` 20 occurrences in
 resolvers. Not checked: after TorBox/Premiumize cache awaits in `_playChannel`
 (only `mounted` before them), after `_showManualSourcePicker`, anywhere in
 `_resolveChannelPlayback` after the snapshot except through the try* helpers.

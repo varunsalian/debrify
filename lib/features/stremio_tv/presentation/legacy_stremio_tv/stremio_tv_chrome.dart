@@ -1,9 +1,6 @@
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart';
-
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart';
-
 import 'package:debrify/theme/app_theme_scope.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
