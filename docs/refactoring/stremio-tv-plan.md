@@ -1128,4 +1128,178 @@ mutants.
 
 ## Progress
 
-(Execution appends here.)
+### Step 0 — original-code characterization (2026-10-06)
+
+Execution is limited to step 0 on `refactor/stremio-tv`. No extraction,
+production seam, sibling-widget/player/launcher/service edit, device run,
+push, merge or branch switch. Step 0b and all construction/extraction work
+remain for Claude's review. Found-not-fixed entries above remain unchanged.
+
+Evidence root **E** is the absolute Git-common-dir path
+`/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/stremio_tv/`.
+All run logs, JSON provenance, mutation results and repeatability proofs
+below are under E, outside the committed tree.
+
+- **Execution base:** `e1ea293faebf44f3842b61a2a7d9e322fa113762`.
+  Flutter 3.44.8 (`058e0af2c2`), Dart 3.12.2, macOS; dependency resolution
+  leaves `pubspec.lock` unchanged. `python3 dev/tool/suite_evidence.py run
+  stremio_tv/base --no-pub --concurrency=4` observes **11,654 passes,
+  13 failures, 28 errors, 20 skips, 1,138 suites**. `base.jsonl`,
+  `base.env.json`, `base-summary.json` record every identity and SDK/tree
+  provenance; the tested tree was stable. Historical failure identities
+  agree with the observed run. No load-sensitive flake was allowlisted;
+  no failure baseline was recorded or updated.
+- **Format-only commit (a), R:**
+  `c7a3d156d260e08421043a5430c6242124ba8e1b`, subject
+  `style(stremio-tv): format the original Stremio TV screen`.
+  Exactly the facade and its hand-raised size ratchet change (3,957 →
+  **3,958** physical lines). `format-token-proof.json` and
+  `format-proof.py` prove comments/literals/required commas unchanged,
+  enumerate nine removed and five inserted AST-owned optional formatter
+  commas, reject edited comments/literals/required singleton-record commas,
+  and prove formatter idempotence.
+- **Analyzer base-fmt:** raw `base-analyze.txt` has 1,689 diagnostics;
+  `base-fmt-analyze.txt` has 1,698. The raw comparison fails on **nine
+  duplicate occurrences of existing diagnostics outside this screen**:
+  generated build/pubspec paths (2), patched-package removed lints (2),
+  dock-metrics alpha infos (5). Fresh detached base/R worktrees with matching
+  pub-get/generated state have **1,687 each**, exactly equal diagnostic
+  identity counters (`base-control-analyze.txt`,
+  `base-fmt-control-analyze.txt`, `base-fmt-control-compare.txt`,
+  `base-fmt-diagnostics.json`). The facade's diagnostic identities are
+  unchanged. This artifact difference is documented, not accepted with an
+  allowance or source fix; no second whole-suite formatter run is needed.
+- **Strict/rename probes:** detached R under the feature analysis config,
+  imports qualified only. Original and typed receiver/rename/typedef probe
+  each have **13 directive-ordering infos, zero warnings/errors**, no
+  appeared/disappeared identities; maximum per identity is 13.
+  The probe compiles in its one-test check. A separate original private
+  picker/public-typedef probe has two infos and zero warnings/errors.
+  `strict-inventory.json`, `strict-original.txt`,
+  `strict-rename-probe.txt`, `strict-probe-compile.txt`,
+  `strict-picker-probe-final.txt`, the three hashed probe sources and
+  `strict-probe.py` preserve the evidence. These typed copies are not a
+  split-construction proof: full composition and D4 activation remain 0b.
+- **Inventory and pins:** `stremio-tv-deps.md` reviews **119 declaration
+  leaves** (retained widget, 40 State fields, 69 State methods/getter/static,
+  nine other top-level declarations), original scopes/read-write roles,
+  same-name locals, destinations, callback lifetimes, delays/timeouts and
+  the copied facts inventory. The LF-only manifest/config pin those leaves;
+  the ledger pins all **19 ordered arguments at each P1/P2** and defaults
+  of unlisted host parameters. The callback sidecar pins **259 outgoing
+  callback expressions**; 35 free comment leaves retain assigned owners and
+  total occurrences. The three native-only rotation/mix-salt push arguments
+  remain S; guide/Next/metadata supply their separate O behavior coverage.
+  Scaffolding is conditional and pinned; eager owners and once-per-State
+  sections/live callbacks are future composition pins, not production code.
+- **Authorized tooling opt-ins:** pre-parse `excluded_feature_files`
+  (exactly the seven existing catalog-picker files); binder State owners and
+  record paths; implemented `mandatory_qualification`; `live_widget_getters`
+  alignment; declaration-specific `forwarded_annotation_occurrences`; exact
+  explicitly pinned build-forwarder tokens and reader ownership validation;
+  feature contracts/callbacks. Other configurations retain their defaults.
+  The forwarder negative discovered that ordinary formatter-token comparison
+  permits an optional comma: the explicit-text opt-in now compares every raw
+  token, and rejects that comma too. A picker own-State negative also exposed
+  screen-callback normalization there: the feature-only contracts now reject
+  dependency receivers in the six picker widget/State declarations. The other
+  16 configs have no explicit forwarder-text pin, and do not run these feature
+  contracts. The adapter itself is unchanged.
+- **Checker/reader verification:** ORIGINAL, excluded pre-existing
+  multi-variable fields, scaffold-only, partial records/methods, mixed
+  ownership, step-6 exact forwarder and simulated completed-step-7 positives;
+  negatives pin every P1/P2 argument/value/drop/adjacent ordering/addition,
+  lifecycle/callback order, timeouts/generations, snapshots, bare/misbound
+  fields, live getters, lexical context, caching/composition, annotation
+  exception limits, ownership, comments and premature completion.
+  Moved media-server true/extra/dropped calls also fail the unchanged
+  source-test predicates independently of reader rejection. The original
+  has unused nested builder-context formals; fixtures preserve those exact
+  bindings and exercise real lexical build-context reads, while shared
+  context fixtures cover used builder reads. Syntax layouts here are not
+  claimed to compile; the compiling composition is reserved for 0b.
+  `step0-final-manifest-stremio_tv.txt` enumerates the real-config results.
+- **Compatibility:** all **16 existing manifests plus Stremio TV** pass
+  their real CLI/self-tests against their own config/baseline with explicit,
+  isolated `--parser-package` copies and all `*.dill` deleted before each run.
+  `step0-before-manifests.json`, `step0-after-manifests.json`,
+  `step0-final-manifest-stremio_tv.json` and
+  `manifest-compatibility.json` preserve commands and byte-for-byte equality
+  of every other manifest's self-test output. `adapter-before.json`,
+  `adapter-after.json`, `adapter-compatibility.json` prove all 16 raw adapter
+  inputs and outputs byte-identical too. Reproduction scripts are stored in E.
+- **Harness and characterization:** ten new test files, **48 cases**:
+  **37 R/O behavioral cases, four S source cases, one crop-helper case,
+  six goldens**, covering C1–C9 including all Round 1–3 additions.
+  Test-owned profiles/preferences/storage, recording MockClient transports,
+  held responses, Clipboard/bridge probes, fonts/theme/DPR/locale and bounded
+  pumps reach original production callers. The route observer unwraps the
+  theme boundary with a live context, captures the player fields with the
+  existing typed accessor, removes the route before the player mounts, and
+  lets the launch await finish. No application seam or `pumpAndSettle`.
+  The committed-profile real media-server request proxy is in its own test
+  file/VM to avoid legacy profile-service cache contamination between cases;
+  initial combined-fixture readiness failures were corrected in test setup,
+  with application behavior unchanged. PikPak is observable via MockClient.
+- **Original behavioral mutations:** `original-mutations.json` and
+  `original-mutations-coverage.json` record **43/43 assertion rejections**,
+  covering **all 37 behavioral identities**, with commands, original/mutated
+  hashes, assertion names and individual JSON logs. Mutations run only in
+  detached R, whose source is restored afterward. Required P1/P2, provider
+  snapshot, cursor reset, startup flag, overlay, combined generation/cancel,
+  real media request, episode/480p filters, TorBox cleanup, three independent
+  salt paths, favorites, max-start, stale provider, detail/focus and hook/tab
+  mutations are all proved. Test hashes match the frozen checkpoint files.
+  This is step-0 original-code evidence; **no step0b proxy/guard review or
+  composition probe has begun**.
+- **macOS goldens:** all six tuner-free scenes captured in independent
+  processes, second order reversed: **all PNG bytes identical**.
+  `macos-original-first/`, both SHA-256 lists,
+  `macos-original-repeatability.json`,
+  `macos-original-capture-reverse.txt`, and
+  `mac-goldens-strict-readiness.txt` preserve capture and strict-replay proof.
+  The picker capture uses the nearest modal repaint boundary, asserts no
+  tuner in its subtree, transforms and crops to the sheet's own bounds; its
+  independent known-subrectangle test passes. No tuner pixel seam is added.
+- **Final Step 0 replay:** `suite_evidence.py run
+  stremio_tv/step0-characterization` with the new directory, media-server,
+  profile-source/stale-runtime and theme pins/shape/source tests,
+  `--no-pub --concurrency=1`: **163 pass, one baseline-known profile source
+  failure**, including all 48 new cases passing. Comparison against observed
+  `base` passes: no new failure, missing identity or new skip; tree stable
+  (`step0-characterization.{jsonl,env.json}` and
+  `step0-characterization-compare.txt`). Suite-evidence runs were serialized.
+  The frozen checkpoint is also replayed in its detached worktree:
+  `checkpoint-replay.{jsonl,env.json}`, `checkpoint-replay-compare.txt`.
+  `checkpoint-proof.json` pins the actual checkpoint SHA, frozen tree and
+  **equal `lib`, `pubspec.yaml`, `pubspec.lock` objects with R**.
+  The shallow-clone reader proof fails for missing R at depth 1, then passes
+  after `git fetch --unshallow` (`shallow-reader-proof.json` and logs).
+- **Other Step 0 checks:** architecture **1,448 files**; sizes **2,454
+  files/154 existing ratchets** (five unrelated baseline files were already
+  smaller, no `--update`); storage keys **300 pairs/14 retired**,
+  reference self-tests, member map **1,081 rows**, bodies **1,036/44 retired**
+  with exact reset ordering. Shape remains **488 globally/13 in the facade,
+  zero bare radii**; residue/theme manifests unchanged. Theme audit remains
+  30 sites; light-ink three non-primary sites, zero primary. Exact CI format
+  command: **1,964 files, zero changes**; scoped CI analyzer/allowlist:
+  **25 pre-existing warnings, nothing new**; new tests/support analyze with
+  no issues. Final syntax, local documentation-link, staged diff and scope
+  checks pass. `step0-*.txt`, `step0-shape-theme-proof.json`,
+  `step0-inputs.json` and `step0-final-review.json` preserve results.
+- **CI/capture delivery:** all ten new files are listed in
+  `ci_behavior_tests.txt`; failure/analyzer allowlists unchanged.
+  Format/analyze add the original facade and test support; analyze paths
+  precede `| tee`; existing behavior checkout has `fetch-depth: 0`.
+  `capture_stremio_tv_linux_goldens.sh` passes shell syntax validation and
+  requires calibrated Linux/SDK, the exact checkpoint subject and R,
+  equal application/dependency objects, detached checkpoint tests, independent
+  first/reversed captures, byte equality and strict verification.
+  **Linux execution/capture remains pending with Claude**, as planned.
+- **Checkpoint (b):** exact subject
+  `test(stremio-tv): step 0 original-code characterization checkpoint`;
+  resolved SHA and equality/replay proof are in `checkpoint-proof.json`.
+  Committed files are tests, support, six macOS PNGs, inventory/checker/reader,
+  opt-in tooling, Linux script, CI wiring and this progress/dependency report.
+  Application source and dependencies equal R. Stop here for Claude's
+  Step 0 review; step 0b and steps 1–7 remain unstarted.

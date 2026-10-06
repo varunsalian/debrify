@@ -1,0 +1,1164 @@
+{
+  "scaffolds": [
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart",
+      "owner": "",
+      "name": "StremioTvDependencies",
+      "tokens": [
+        "class",
+        "StremioTvDependencies",
+        "{",
+        "final",
+        "StremioTvOwners",
+        "owners",
+        ";",
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";",
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";",
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";",
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "isTelevision",
+        ";",
+        "late",
+        "final",
+        "StremioTvSections",
+        "sections",
+        ";",
+        "StremioTvDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "owners",
+        ",",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        ",",
+        "required",
+        "this",
+        ".",
+        "isTelevision",
+        "}",
+        ")",
+        ";",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart",
+      "owner": "",
+      "name": "StremioTvOwners",
+      "tokens": [
+        "class",
+        "StremioTvOwners",
+        "{",
+        "final",
+        "StremioTvLibraryState",
+        "library",
+        "=",
+        "StremioTvLibraryState",
+        "(",
+        ")",
+        ";",
+        "final",
+        "StremioTvSettingsState",
+        "settings",
+        "=",
+        "StremioTvSettingsState",
+        "(",
+        ")",
+        ";",
+        "final",
+        "StremioTvPlaybackState",
+        "playback",
+        "=",
+        "StremioTvPlaybackState",
+        "(",
+        ")",
+        ";",
+        "final",
+        "StremioTvFocusState",
+        "focus",
+        "=",
+        "StremioTvFocusState",
+        "(",
+        ")",
+        ";",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart",
+      "owner": "",
+      "name": "StremioTvSections",
+      "tokens": [
+        "class",
+        "StremioTvSections",
+        "{",
+        "final",
+        "StremioTvSettingsLoader",
+        "settings",
+        ";",
+        "final",
+        "StremioTvChannelLibrary",
+        "library",
+        ";",
+        "final",
+        "StremioTvMenuActions",
+        "menuActions",
+        ";",
+        "final",
+        "StremioTvChrome",
+        "chrome",
+        ";",
+        "final",
+        "StremioTvStreamSelection",
+        "streams",
+        ";",
+        "final",
+        "StremioTvPlayChannel",
+        "play",
+        ";",
+        "final",
+        "StremioTvChannelResolve",
+        "resolve",
+        ";",
+        "final",
+        "StremioTvPlayerGuide",
+        "guide",
+        ";",
+        "final",
+        "StremioTvDebridResolvers",
+        "debrid",
+        ";",
+        "final",
+        "StremioTvCloudResolvers",
+        "cloud",
+        ";",
+        "final",
+        "StremioTvChannelActions",
+        "actions",
+        ";",
+        "final",
+        "StremioTvNavigation",
+        "navigation",
+        ";",
+        "final",
+        "StremioTvLayout",
+        "layout",
+        ";",
+        "StremioTvSections",
+        "(",
+        "StremioTvDependencies",
+        "deps",
+        ")",
+        ":",
+        "settings",
+        "=",
+        "StremioTvSettingsLoader",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "library",
+        "=",
+        "StremioTvChannelLibrary",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "menuActions",
+        "=",
+        "StremioTvMenuActions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "chrome",
+        "=",
+        "StremioTvChrome",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "streams",
+        "=",
+        "StremioTvStreamSelection",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "play",
+        "=",
+        "StremioTvPlayChannel",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "resolve",
+        "=",
+        "StremioTvChannelResolve",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "guide",
+        "=",
+        "StremioTvPlayerGuide",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "debrid",
+        "=",
+        "StremioTvDebridResolvers",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "cloud",
+        "=",
+        "StremioTvCloudResolvers",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "actions",
+        "=",
+        "StremioTvChannelActions",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "navigation",
+        "=",
+        "StremioTvNavigation",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "layout",
+        "=",
+        "StremioTvLayout",
+        "(",
+        "deps",
+        ")",
+        "{",
+        "deps",
+        ".",
+        "sections",
+        "=",
+        "this",
+        ";",
+        "}",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart",
+      "owner": "",
+      "name": "StremioTvManualSourcePickerSheet",
+      "tokens": [
+        "typedef",
+        "StremioTvManualSourcePickerSheet",
+        "=",
+        "_ManualSourcePickerSheet",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart",
+      "owner": "",
+      "name": "StremioTvSourcePickerTab",
+      "tokens": [
+        "typedef",
+        "StremioTvSourcePickerTab",
+        "=",
+        "_SourcePickerTab",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart",
+      "owner": "",
+      "name": "StremioTvSourcePickerItem",
+      "tokens": [
+        "typedef",
+        "StremioTvSourcePickerItem",
+        "=",
+        "_SourcePickerItem",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
+      "owner": "StremioTvSettingsLoader",
+      "name": "StremioTvSettingsLoader",
+      "tokens": [
+        "StremioTvSettingsLoader",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
+      "owner": "StremioTvSettingsLoader",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
+      "owner": "StremioTvSettingsLoader",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
+      "owner": "StremioTvSettingsLoader",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart",
+      "owner": "StremioTvChannelLibrary",
+      "name": "StremioTvChannelLibrary",
+      "tokens": [
+        "StremioTvChannelLibrary",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart",
+      "owner": "StremioTvChannelLibrary",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart",
+      "owner": "StremioTvChannelLibrary",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart",
+      "owner": "StremioTvChannelLibrary",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart",
+      "owner": "StremioTvMenuActions",
+      "name": "StremioTvMenuActions",
+      "tokens": [
+        "StremioTvMenuActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart",
+      "owner": "StremioTvMenuActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart",
+      "owner": "StremioTvMenuActions",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart",
+      "owner": "StremioTvMenuActions",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
+      "owner": "StremioTvChrome",
+      "name": "StremioTvChrome",
+      "tokens": [
+        "StremioTvChrome",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
+      "owner": "StremioTvChrome",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
+      "owner": "StremioTvChrome",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
+      "owner": "StremioTvChrome",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart",
+      "owner": "StremioTvStreamSelection",
+      "name": "StremioTvStreamSelection",
+      "tokens": [
+        "StremioTvStreamSelection",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart",
+      "owner": "StremioTvStreamSelection",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart",
+      "owner": "StremioTvStreamSelection",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart",
+      "owner": "StremioTvStreamSelection",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart",
+      "owner": "StremioTvPlayChannel",
+      "name": "StremioTvPlayChannel",
+      "tokens": [
+        "StremioTvPlayChannel",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart",
+      "owner": "StremioTvPlayChannel",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart",
+      "owner": "StremioTvPlayChannel",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart",
+      "owner": "StremioTvPlayChannel",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
+      "owner": "StremioTvChannelResolve",
+      "name": "StremioTvChannelResolve",
+      "tokens": [
+        "StremioTvChannelResolve",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
+      "owner": "StremioTvChannelResolve",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
+      "owner": "StremioTvChannelResolve",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
+      "owner": "StremioTvChannelResolve",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart",
+      "owner": "StremioTvPlayerGuide",
+      "name": "StremioTvPlayerGuide",
+      "tokens": [
+        "StremioTvPlayerGuide",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart",
+      "owner": "StremioTvPlayerGuide",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart",
+      "owner": "StremioTvPlayerGuide",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart",
+      "owner": "StremioTvPlayerGuide",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart",
+      "owner": "StremioTvDebridResolvers",
+      "name": "StremioTvDebridResolvers",
+      "tokens": [
+        "StremioTvDebridResolvers",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart",
+      "owner": "StremioTvDebridResolvers",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart",
+      "owner": "StremioTvDebridResolvers",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart",
+      "owner": "StremioTvDebridResolvers",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
+      "owner": "StremioTvCloudResolvers",
+      "name": "StremioTvCloudResolvers",
+      "tokens": [
+        "StremioTvCloudResolvers",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
+      "owner": "StremioTvCloudResolvers",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
+      "owner": "StremioTvCloudResolvers",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
+      "owner": "StremioTvCloudResolvers",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart",
+      "owner": "StremioTvChannelActions",
+      "name": "StremioTvChannelActions",
+      "tokens": [
+        "StremioTvChannelActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart",
+      "owner": "StremioTvChannelActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart",
+      "owner": "StremioTvChannelActions",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart",
+      "owner": "StremioTvChannelActions",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
+      "owner": "StremioTvNavigation",
+      "name": "StremioTvNavigation",
+      "tokens": [
+        "StremioTvNavigation",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
+      "owner": "StremioTvNavigation",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
+      "owner": "StremioTvNavigation",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
+      "owner": "StremioTvNavigation",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart",
+      "owner": "StremioTvLayout",
+      "name": "StremioTvLayout",
+      "tokens": [
+        "StremioTvLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart",
+      "owner": "StremioTvLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "StremioTvDependencies",
+        "_deps",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart",
+      "owner": "StremioTvLayout",
+      "name": "_owners",
+      "tokens": [
+        "StremioTvOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart",
+      "owner": "StremioTvLayout",
+      "name": "_sections",
+      "tokens": [
+        "StremioTvSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ],
+      "when_file_present": true
+    }
+  ],
+  "facade_composition": [
+    {
+      "name": "_owners",
+      "tokens": [
+        "final",
+        "StremioTvOwners",
+        "_owners",
+        "=",
+        "StremioTvOwners",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "name": "_sections",
+      "tokens": [
+        "late",
+        "final",
+        "StremioTvSections",
+        "_sections",
+        "=",
+        "StremioTvSections",
+        "(",
+        "StremioTvDependencies",
+        "(",
+        "owners",
+        ":",
+        "_owners",
+        ",",
+        "context",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "context",
+        ",",
+        "mounted",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "mounted",
+        ",",
+        "setState",
+        ":",
+        "setState",
+        ",",
+        "isTelevision",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "isTelevision",
+        ")",
+        ")",
+        ";"
+      ]
+    }
+  ]
+}
