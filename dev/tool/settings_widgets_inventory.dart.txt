@@ -1,0 +1,30 @@
+// Tool-only syntax inventory: import directives resolved by the Python driver.
+import 'dart:convert';
+import 'dart:io';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+
+class Names extends RecursiveAstVisitor<void> {
+  final names = <String>{};
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    names.add(node.name);
+    super.visitSimpleIdentifier(node);
+  }
+}
+
+void main() {
+  final sources = jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>;
+  final result = <String, Object>{};
+  for (final entry in sources.entries) {
+    final unit = parseString(content: entry.value as String).unit;
+    final names = Names();
+    unit.accept(names);
+    result[entry.key] = {
+      'directives': [for (final d in unit.directives) d.toSource()],
+      'identifiers': names.names.toList(),
+    };
+  }
+  stdout.write(jsonEncode(result));
+}
