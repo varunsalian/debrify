@@ -450,6 +450,7 @@ As in the Debrify TV plan, plus:
 | 3 | `tvNav`, `save`, `grants`, `avatar`, `adminActions` sections. **Full-suite gate 1** | 3, 4, 5, 6, 7, 8 |
 | 4 | `tvEditor`, `tvProfile`, `tvPanes`, `access` | 8, 9, 10 |
 | 5 | `phone`, `phoneParts`; the facade keeps only lifecycle, `build` forwarder and composition | 9, 10 |
+| 6 | Completion: facade registration, cap, `TEMP`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
 
 **Checkpoint wiring (no borrowed State members).** The order above is chosen
 so that at every checkpoint a moved section calls only owners, `_deps` and
@@ -459,7 +460,7 @@ Calls per step: step 2 — `setup` → `admin`; `selection` → none. Step 3 —
 own `_showRecoveryCode`; `grants` → `selection` (`defaultResourcePermissions`),
 `admin`; `avatar` → none; `adminActions` → `setup` (`loadResources`),
 `admin`. Step 4 — `tvEditor` → `tvNav`, `save`, `tvProfile`, `tvPanes`;
-`tvProfile` → `avatar`, `selection`, `tvNav`; `tvPanes` → `adminActions`,
+`tvProfile` → `avatar`, `selection`, `tvNav`, `tvPanes` (`tvPanel`, public rename, registered receiver); `tvPanes` → `adminActions`,
 `setup`, `access`, `tvNav`, the TV surfaces; `access` → `selection`,
 `adminActions`. Step 5 — `phone` → `tvEditor`, `phoneParts`, `access`,
 `save`, `adminActions`, `setup`; `phoneParts` → `avatar`, `selection`. The
@@ -467,7 +468,6 @@ dependency report confirms this graph from source; if it finds a call not
 listed, the member moves earlier (a plan amendment), never a borrowed State
 tear-off. Each step runs a compiling + real-checker probe of its own
 checkpoint before commit.
-| 6 | Completion: facade registration, cap, `TEMP`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
 
 ### Step 0
 
@@ -514,7 +514,7 @@ checkpoint before commit.
    | 1 Surface | Existing `policyFor` units; byte guard on lines 35–88. |
    | 2 Lifecycle | Create seeds (role member, defaults, `'person'`), edit seeds (stored policy, lock, timeout, avatar); child → `'child'`; dispose with a pending held load publishes nothing and throws nothing (R); stale authorization (the passed context invalid by the first load) surfaces the load-error tile (R, stale-rejection only). The retained lazy `late` declaration, its single first read and the exact deps getter/setter wiring are **S** evidence (checker + source guard); no R/O claim about evaluation timing or count is made. Order/structure of `initState`/`dispose` (S). |
    | 3 Ownership | **Edit another profile while admin**: every persisted change (name, role, policy, lock, timeout, grants, engines) lands on the target and nothing on the admin (O: registry re-read). Engine ownership is read from each profile's engine metadata under its current generation (target, managing admin, and any incoming profile checked). **Session change mid-save**: the PIN fake holds after its real write; the active profile switches; release → the editor's refresh throws → `'Could not save this profile'`, `_saving` cleared, grants/engines after the hold not written, writes before the hold persisted (R+O). Non-admin actor → load error / save refused (R). Policy reload called once when editing the active profile, never for another (O). Transfer: confirm → owner changed + snackbar; cancel → unchanged; session changed between confirm and write → failure snackbar, unchanged (R+O). |
-   | 4 Save | Empty name no-op; loading/error snackbars; PIN validation; create (all fields, `completeStaged` visible, pop `true`); create with PIN → recovery dialog then pop; create failure (PIN fake throws) → rolled back: `getProfile(staged)` null and `listProfiles(includeStaging: true)` without it, owned avatar files cleaned, snackbar; **failure immediately before completion** (`authorityWillChangeCallback` throwing on the `completeStaged` write) → rolled back the same way, which is what kills the early-`stagedPublished` mutation; **failure after the active row is committed** (the registry's recovery-checkpoint step throwing after `completeStaged` made the row active, injected through an existing registry hook if one reaches it, else classified S) → no rollback, the active profile and its avatar mutation intent retained, `'Could not save this profile'`; and separately the swallowed avatar `commit`/`complete` failure after publication → save succeeds and pops `true`, intent retained; edit identity-only keeps stored policy; role change writes role defaults; TV Pages toggle writes the selection; pair-follow (downloads moved → recordings follows; unmoved → split policy preserved); Kid clamp drops `remoteTransfer`; double-tap Save saves once (O); `PopScope` blocks pop while held (R). |
+   | 4 Save | Empty name no-op; loading/error snackbars; PIN validation; create (all fields, `completeStaged` visible, pop `true`); create with PIN → recovery dialog then pop; create failure (PIN fake throws) → rolled back: `getProfile(staged)` null and `listProfiles(includeStaging: true)` without it, owned avatar files cleaned, snackbar; **failure immediately before completion** (`authorityWillChangeCallback` throwing on the `completeStaged` write) → rolled back the same way, which is what kills the early-`stagedPublished` mutation; **failure after the active row is committed** (the registry's existing `authorityChangedCallback`, called by `checkpointTvOsRecovery` on every platform, armed to throw on **both** checkpoint attempts once the staged target is active — `completeStaged` retries once at `profile_creation_service.dart:162`) → two attempts recorded, no rollback, the active/setup-complete row and its avatar mutation intent retained, `'Could not save this profile'`; **single checkpoint failure** (throws once) → the retry succeeds and the save completes, pops `true`; and separately the **swallowed avatar finalization** failure after publication (both ledger temporary paths obstructed with directories so `complete()` fails) → save succeeds and pops `true`, intent slots intact; edit identity-only keeps stored policy; role change writes role defaults; TV Pages toggle writes the selection; pair-follow (downloads moved → recordings follows; unmoved → split policy preserved); Kid clamp drops `remoteTransfer`; double-tap Save saves once (O); `PopScope` blocks pop while held (R). |
    | 5 Grants | Select → grant with derived mask (use/download/writeRemote by features and role); existing grant with a stored mask unchanged on an unrelated save (O: no churn); deselect → revoke; owned row never revoked and not editable; singleton rivals deselected; All/None per group; engines All/None and own-editor read-only. |
    | 6 Avatar | Picker fake: too large (declared), too large (streamed), unreadable path, `PlatformException`, valid PNG → preview + Discard; picked during a held save is dropped; save with picked image publishes `file:`-format key (edit) and stages then commits (create); scratch copy released in every path (O: recorder on `CacheScratchCleanup` if observable, else S). |
    | 7 PIN | Admin reset success/failure snackbars and persisted state; reset visible only with a PIN or reset-required. |
@@ -659,6 +659,13 @@ Never `--record` or `--update` to accept a regression.
 6. P2 hazards: `_loadResources`, `_validateManagingAdmin(context)`, and the
    `build`/`_buildTvEditor` `context` parameters added.
 7. P2 laziness: reclassified as S evidence; stale-authorization stays as R.
+
+## Round 2 review resolution
+
+No P1s. P2: post-commit failure recipe made explicit (`authorityChangedCallback`
+throwing on both checkpoint attempts; single-failure recovery and swallowed
+avatar finalization as distinct cases). P2: `tvProfile → tvPanes` edge
+(`tvPanel`) added. P3: step 6 row moved into the table.
 
 ## Progress
 
