@@ -246,6 +246,8 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/stremio_tv_catalogs/data/local_catalog_importer.dart': 0,
+  'lib/features/stremio_tv_catalogs/data/local_catalog_export.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,

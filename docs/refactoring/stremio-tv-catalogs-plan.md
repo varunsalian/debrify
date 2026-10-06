@@ -664,3 +664,46 @@ was retried before test execution; no failed result was recorded (`run-notes-0b.
 both pubspec files are unchanged. No production move or Step 1 work, and no
 push/merge/branch switch/device/emulator/run/install. No requested Step 0b check
 remains pending. Stop after the 0b commit.
+
+### Step 1 — data moves (2026-10-06)
+
+Parent `103b570a1f225824658420b7704b1ed4705d89ca`; tested/proof commit `387bdbc8ba570b535d0cf49959c376316fc8aa71`,
+tree `4d019b4460400d0b0395af2b1e269bb2cb72f753`. Final amendment adds only this Progress entry.
+Evidence names below are relative to the common Git directory’s
+`refactor-evidence/stremio_tv_catalogs/`.
+
+Measured physical lines: `local_catalog_export.dart` 38, `local_catalog_importer.dart` 347, `stremio_tv_local_catalogs_dialog.dart` 2482.
+Registered the feature, legacy bridge, exact URL-dialog/http pair and empty
+size-exception table; moved both data owners, preserving their public exports.
+Aliases remain unstaged. The existing ORIGINAL extension parser opt-in remains
+necessary until its Trakt destination is created in Step 2.
+
+All 19 whole declarations and seven section dividers are byte-identical to R
+except the 0 registered alias-use substitutions
+(`step1-byte-audit.json`). All 119 characterizations and both support
+files are unchanged from 0b; 119/119 pass, paths
+`[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s`. Shape/theme 13/13 pass, paths
+`[test/theme/shape_manifest_test.dart, test/theme/source_guard_test.dart]`,
+same flags (`step1-{characterization,shape-theme}.jsonl` / `.env.json`).
+
+17/17 integrated manifests + self-tests pass with fresh isolated
+`.dart_tool/stremio_tv_catalogs_step1_parsers/` packages and copied
+`*.dill` deleted (`step1-integrated-checkers.json`). Architecture/sizes,
+29 architecture probes (21 rejections), CI format, scoped
+analyzer/allowlist, storage and diff checks pass (`step1-quality.json`).
+CI identities 325→325, zero additions after exact source relocation;
+strict identities retain both dropdown deprecations, only ORIGINAL directive
+ordering disappears (`step1-strict-identities.json`).
+
+Exact shape floor 488, catalogs radii 4 and token calls 6. Original budget
+4; original remains in `kShapeResidue`.
+Every created destination has its measured budget; theme surface metrics
+remain unchanged/uncovered and text-white exclusion remains effective
+(`step1-inventory.json`). Suite runs serialized; no allowlist changes,
+no re-record, no application-body edits beyond the registered aliases.
+
+The prior turn was externally terminated during the checker sweep. Retained
+only 13 completed exit-0 records and reran all four unfinished manifests in
+fresh `.dart_tool/stremio_tv_catalogs_step1_restart_parsers/` packages; no
+partial result accepted (`step1-restart-note.json`). No check remains pending.
