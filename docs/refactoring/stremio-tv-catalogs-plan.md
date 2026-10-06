@@ -267,7 +267,10 @@ assertion-failing ORIGINAL mutation proof.
    (comments included), single ownership and duplicate detection. Self-test
    positives: ORIGINAL and the complete split pass; negatives: changed
    extension target type (`on _MdblistListCategory`), renamed extension,
-   changed header (`extension type`/added `implements`), member body edit,
+   parser-rejection cases (`extension type`, added `implements`), a
+   parseable header mutation `extension _TraktListSourceExt<T> on
+   _TraktListSource` that must fail the header/token comparison, member body
+   edit,
    extension duplicated in two destinations, extension missing. Every other
    manifest's self-tests pass unchanged.
 4. **Probes.** Strict-lint baseline of R under
@@ -294,8 +297,10 @@ assertion-failing ORIGINAL mutation proof.
    keeps the `http.Client()` created at singleton initialization
    (mdblist_service.dart:63), so the suite initializes the singleton **once
    inside a suite-owned routing-client zone** before any fixture touches it;
-   tests swap the routing handler (recording requests) and reset the service
-   / `MdblistListSource` caches in setUp/tearDown, so no test inherits an
+   tests swap the routing handler (recording requests) and call
+   `MdblistService.instance.resetProfileScope()` in setUp/tearDown
+   (`MdblistListSource` is stateless); the routing client is closed only in
+   suite teardown, so no test inherits an
    earlier fixture. The `forceRefresh: true` contract is proven by **warming
    the items cache, changing the response, and asserting refresh issues a new
    request and persists the new items** (a cold cache cannot distinguish
@@ -487,6 +492,10 @@ localization, and every bug fix below.
    warm-cache `forceRefresh` proof; Trakt auth via storage setters (item 5).
 7. P2 feature-wide http prohibition with four layer negatives (Guard rules).
 8. P3 16 imports; integrator handoff below.
+
+Round 2: all resolved, "No P1s — executable"; its two P3s folded in
+(parseable extension-header negative; `resetProfileScope()` as the MDBList
+cache owner).
 
 **Integrator handoff (shared files needing union merge + merged-tree
 revalidation):** `dev/tool/check_search_architecture.py` (FEATURES via a
