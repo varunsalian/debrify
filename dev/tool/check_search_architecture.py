@@ -10,9 +10,16 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail", "stremio_tv_tuner")
 FEATURES += ("debrify_tv",)
 # Completion alone activates the facade cap; feature scans are unconditional.
+# Pure UI tuner extraction. All feature guards apply before completion.
+STREMIO_TV_TUNER_COMPLETE = False
+STREMIO_TV_TUNER_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart"
+STREMIO_TV_TUNER_BRIDGE = "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/"
+STREMIO_TV_TUNER_FACADE_CAP = 400
+STREMIO_TV_TUNER_SIZE_EXCEPTIONS = {}
+
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
 DEBRIFY_TV_BRIDGE = "lib/features/debrify_tv/presentation/legacy_debrify_tv/"
@@ -402,6 +409,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     EPISODES_PANEL_BRIDGE,
     CATALOG_DETAIL_BRIDGE,
     DEBRIFY_TV_BRIDGE,
+    STREMIO_TV_TUNER_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -432,6 +440,20 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/stremio_tv_tuner/"):
+        limit = max(500, STREMIO_TV_TUNER_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line Stremio TV tuner extraction limit")
+        if "TEMP(stremio_tv_tuner)" in source and (STREMIO_TV_TUNER_COMPLETE or not relative.startswith(STREMIO_TV_TUNER_BRIDGE)):
+            problems.append("Stremio TV tuner temporary cross-call outside its exact legacy bridge")
+    if relative.startswith("lib/features/stremio_tv_tuner/") or relative == STREMIO_TV_TUNER_FACADE:
+        if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin|IndexedStack)\b|package:media_kit|hero_trailer_backdrop|video_player_launcher|features/player_launch", source):
+            problems.append("Stremio TV tuner adds keep-alive or playback engine ownership")
+    if STREMIO_TV_TUNER_COMPLETE and relative == STREMIO_TV_TUNER_FACADE:
+        if lines > STREMIO_TV_TUNER_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {STREMIO_TV_TUNER_FACADE_CAP}-line Stremio TV tuner facade limit")
+        if "TEMP(stremio_tv_tuner)" in source:
+            problems.append("Stremio TV tuner temporary cross-call remains in the facade")
     if relative.startswith("lib/features/debrify_tv/"):
         limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -677,6 +699,18 @@ def violations(path: Path) -> list[str]:
                     problems.append("spotlight board feature imports its facade")
                 if not relative.startswith(SPOTLIGHT_BOARD_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("spotlight board service import outside the exact legacy bridge")
+            if relative.startswith("lib/features/stremio_tv_tuner/"):
+                if target == STREMIO_TV_TUNER_FACADE:
+                    problems.append("Stremio TV tuner feature imports its facade")
+                if not relative.startswith(STREMIO_TV_TUNER_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("Stremio TV tuner service import outside its exact legacy bridge")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_tuner_feature = relative.split("/")[2]
+                other_tuner_feature = target.split("/")[2]
+                if ((own_tuner_feature == "stremio_tv_tuner" and other_tuner_feature in ("stremio_tv", "stremio_tv_catalogs"))
+                        or (other_tuner_feature == "stremio_tv_tuner" and own_tuner_feature in ("stremio_tv", "stremio_tv_catalogs"))):
+                    if not target.startswith(f"lib/features/{other_tuner_feature}/models/"):
+                        problems.append("Stremio TV tuner/TV/catalogs implementation cross-import")
             if relative.startswith("lib/features/debrify_tv/"):
                 if target == DEBRIFY_TV_FACADE:
                     problems.append("Debrify TV feature imports its facade")
@@ -821,6 +855,8 @@ def main() -> int:
         for p in (ROOT / "lib/features" / feature).rglob("*.dart")
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
+    # Scan the catalog peer even before its independent feature registration.
+    paths.update((ROOT / "lib/features/stremio_tv_catalogs").rglob("*.dart"))
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
     if PLAYBACK_SETTINGS_COMPLETE:
         paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
@@ -842,6 +878,8 @@ def main() -> int:
         paths.add(ROOT / ADDON_HUB_FACADE)
     if DEBRIFY_TV_COMPLETE:
         paths.add(ROOT / DEBRIFY_TV_FACADE)
+    if STREMIO_TV_TUNER_COMPLETE:
+        paths.add(ROOT / STREMIO_TV_TUNER_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

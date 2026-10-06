@@ -35,6 +35,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
+  'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_dial_card.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_parts.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
@@ -202,7 +206,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/stremio_tv/widgets/stremio_tv_empty_state.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 4,
   'lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart': 3,
-  'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
   'lib/screens/trakt_calendar_screen.dart': 2,
   'lib/screens/webdav/webdav_files_screen.dart': 0,
   'lib/widgets/adaptive_playlist_section.dart': 0,
