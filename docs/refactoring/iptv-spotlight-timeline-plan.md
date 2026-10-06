@@ -1015,3 +1015,121 @@ Stop after committing (b), before 0b. Independent review, original-only
 mutation ledger, compiling-composition probe, `base2`, Linux originals,
 steps 1–3 and both full-suite gates remain pending. Device checks, remote CI
 and cross-worktree integration remain pending; nothing is pushed.
+
+### Integrator note: binder qualification
+
+Step 0b pins `occurrence_field_bindings.mandatory_qualification: true`
+explicitly in this feature's config. This base defaults to false;
+`refactor/codebase` at `9f3755b9b` defaults to true. The explicit value makes
+the feature's behavior identical across the integrator's merge. Real
+S=2/S=3 fixtures leave `pendingLoads.remove` bare in the moved loading
+section and require `Bare owner field reference` from both the complete
+checker/reader and the independent binder. Results are recorded with the
+completed 0b evidence below.
+
+No rebase or binder-default change is made here. The integrator must union
+this feature's named opt-in `retained_field_live_getters` blocks with
+edit_profile's `state_classes` / `field_classes`,
+`registered_occurrence_substitutions` and `require_live_state_callbacks`
+blocks. Those newer keys are not used on this branch's base.
+
+### Step 0b review and composition decisions
+
+Claude's independent ORIGINAL sample was read in full: 50 exact one-line
+mutations, 40 behavioral kills and ten survivors. Seven reachable gaps
+now have named behavioral assertions against checkpoint (b), including a
+failed completion after disposal (a successful completion's thrown
+`setState` error is swallowed by the original loader's catch/pending-token
+guard). The Now/Down proof checks both restored focus and exactly one
+programme announcement; fallback focus traversal alone would mask that
+mutant. The lazy-list focus proof asserts `returnsNormally` before checking
+the false result, so an offscreen read fails a named matcher. Existing tests
+and assertions are retained unchanged.
+
+The complete ledger contains 70 exact edits: 53 behavioral proofs and 17
+named source-only scenarios, with masking reasons in the dependency report
+and JSON ledger. Two source/context scenarios additionally have independent
+behavioral proofs for their generation/pending-token clauses. The redundant
+outside-lane announcement guard is justified by the enumerated null-start
+invariant; eviction's token cleanup is masked by the prior generation bump.
+All original guards remain pinned. The mutation driver runs only behavioral
+tests for behavioral cases and only the named whole-body assertion for a
+source-only case; compilation errors never count as kills. Resume requires
+identical fixture and mutation hashes and a completed positive run.
+
+The full step-2 scratch composition validates the intended public controller
+delegates and static `SpotlightTimelineTrack.formatTime` receiver. The
+manifest/config now use public `focusFirstChannel`, `focusChannelAt` and
+`focusChannel` destination names. The fixture generator selects the static
+track receiver for `_formatTime`. These correct the proposed wiring before
+any application move; method bodies and behavior are unchanged.
+
+Measured composition: facade 332 physical lines = controller 37 + widget 84 +
+State 182 + imports/exports/gaps/trailing 29. All 15 destinations are at
+most 500 lines: entry 88, track 444, guide models 64, palette 10, owners 49,
+window 162, selection 205, guide loading 241, cursor 297, frame 336, rows
+260, parts 134, widget view 28, dependencies 24 and sections 27. Strict
+analysis has ten infos and zero warnings/errors. The original/rename
+inventory grows to 11 exact maxima to include seven original-symbol
+`curly_braces_in_flow_control_structures` infos caused by receiver formatting
+and the planned cached `_sections` getter's `recursive_getters` info. No
+braces, suppressions or getter behavior are changed to hide these infos.
+The probe checks nine identical host objects before/after host replacement,
+compiling wrapped/cached negatives, and real CLI header/re-export/stored-view
+negatives, including a genuinely unrestricted export.
+
+Accepted ORIGINAL evidence: `step0b-original-positive.jsonl` has 207
+passing selected assertions; `step0b-original-mutations.json` records all
+70 named failures and fixture/mutation hashes. The first 50 edits match
+Claude's exact text, verified in `step0b-claude-exact-mutations.json`. One
+owned run was interrupted while improving suite selection; its incomplete
+case was rerun and never accepted as a proof. The driver now selects the
+named test's suite from the positive run instead of compiling unrelated
+filtered suites. Inputs remained frozen across the resumed ledger.
+
+The complete real manifest self-test passes, including mandatory
+qualification at S=2 and S=3 through checker/reader and independent binder
+(`step0b-checker-frozen.txt`). A fresh normal clone, after its own pub get,
+passes all 106 source-contract/checker tests and the final 11 review tests.
+The full composition probe and inventory also pass there, with identical
+source hashes/measurements; the mutation driver passes its positive run and
+mounted/error-fallback negatives there. Fresh-clone evidence is prefixed
+`fresh-clone-step0b-*` or `step0b-fresh-clone-*`. The probes are discarded.
+
+Changed tests are formatter-clean and analyzer-clean. Size, architecture
+and storage checks pass. Shared helper bytes remain identical to (b), so
+the 40 existing-manifest self-tests and 40 raw adapter comparisons recorded
+above remain valid. Whole analysis adds no identity: 1,709 emissions versus
+1,730 in `base-analyze.txt`. The difference is exactly 21 identical
+diagnostic lines emitted twice in the baseline and once now; their tracked
+sources remain byte-identical and every unique identity is still present.
+The duplicate count evidence and removed emission list are recorded in
+`step0b-whole-analyze.env.json` and
+`step0b-whole-analyze-removed-identities.json`. Found-not-fixed 1–6,
+production library, pubspec objects and app assets are unchanged.
+
+`base2` runs at detached checkpoint (b) with final owned test/tool additions
+staged: paths `[]`, flags `--no-pub --concurrency=2`, tested tree
+`ba2335e6064bb0c3c09870909824d18ba049e48e`. Its input hashes are in
+`base2-input-files.json`; no mutation or application edit runs in that
+checkout during the suite. Accepted comparison and the 0b commit follow.
+
+Accepted `base2` (`base2-vs-base.txt`, `base2-summary.json`): 12,197 success,
+13 failure, 28 error and 20 skipped outcomes across 1,183 suites. All
+12,093 old identities and outcomes are identical; exactly 165 added
+identities pass (48 checkpoint behavior/golden tests, 106 source-contract
+tests and 11 review tests). No new failure, missing identity, new skip or
+allowlist change. Start/end HEAD and tested tree remain stable; SDK matches
+`base`. This is the latest baseline for both extraction gates. No
+load-sensitive failure or runner timeout required acceptance or an exception.
+
+Fresh complete rerun of all 20 other manifests' self-tests passes with
+explicit isolated parser packages. Every stdout and occurrence-adapter
+digest is byte-identical to the step-0 pre-opt-in proof
+(`step0b-all-manifests-compatibility.json`). This feature's complete
+self-tests and original-body reader also pass within `base2`. Exact CI
+format scope plus the facade/support files passes (`step0b-ci-format.txt`).
+Step 0b is complete; no production code moved. Linux originals are present
+but deliberately unstaged here; their hash verification, strict tests and
+separate commit are step L. Device checks, remote CI and integration remain
+pending. No push or branch switch.

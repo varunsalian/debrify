@@ -83,9 +83,9 @@
       "buildRow"
     ],
     "SpotlightTimelineSelectionActions": [
-      "_focusChannel",
-      "_focusChannelAt",
-      "_focusFirstChannel",
+      "focusChannel",
+      "focusChannelAt",
+      "focusFirstChannel",
       "announceSelection",
       "armPointerSelection",
       "cancelPointerSelection",
@@ -159,6 +159,7 @@
   },
   "occurrence_type_renames": true,
   "occurrence_field_bindings": {
+    "mandatory_qualification": true,
     "owners": [
       "_SpotlightLiveTimelineState"
     ]

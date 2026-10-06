@@ -42,6 +42,19 @@ def self_test(package):
     for label,body in [('missing',''),('altered',node['text'].replace('_sections.', '_wrongSections.').replace('_owners.','_wrongOwners.'))]:
      changed=dict(sources);changed[SOURCE]=changed[SOURCE][:node['start']]+body+changed[SOURCE][node['end']:]
      reject('S='+str(step)+' '+label+' '+name+' forwarder',changed,cfg)
+ # Pin qualification explicitly so the integrator's new default is irrelevant.
+ assert config['occurrence_field_bindings']['mandatory_qualification'] is True
+ for step in [2,3]:
+  cfg={**config,'completed_step':step};sources=layouts[step]
+  row=next(r for r in rows if r['original_name']==STATE+'._loadSchedule')
+  key=(row['destination_file'],row['destination_class'],row['new_name'])
+  lookup=all_nodes(parse(sources,package,occurrence_bindings=True));node=lookup[key]
+  changed=dict(sources);changed[key[0]]=changed[key[0]][:node['start']]+node['text'].replace('_owners.pendingLoads.remove','pendingLoads.remove',1)+changed[key[0]][node['end']:]
+  reject('mandatory qualification S='+str(step),changed,cfg,'Bare owner field reference')
+  mutated=all_nodes(parse(changed,package,occurrence_bindings=True))
+  with configured(cfg):errors=occurrence_failures(leaves,mutated,rows,SOURCE,cfg,members={STATE+'._loadSchedule'},package=package)
+  assert any('Bare owner field reference' in e for e in errors),errors
+  print('mandatory qualification binder alone S='+str(step)+': rejected',flush=True)
  cfg={**config,'completed_step':2};sources=layouts[2];lookup=all_nodes(parse(sources,package,occurrence_bindings=True))
  def locate(identity):
   row=next(r for r in rows if r['original_name']==identity)

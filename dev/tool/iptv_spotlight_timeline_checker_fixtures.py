@@ -88,7 +88,8 @@ def moved_body(node,row,rows,config,step):
    value=target['new_name']
    if target['destination_class']!=dest:
     paths=[p for p,c in config['receiver_owners'].items() if c==target['destination_class']]
-    value=paths[0]+'.'+value
+    path=next(p for p in paths if p=='SpotlightTimelineTrack') if name=='_formatTime' else paths[0]
+    value=path+'.'+value
   elif owner==STATE and moved(row) and name in ['context','mounted','setState']:
    value='_deps.'+name+('()' if name!='setState' else '')
   elif owner==STATE and moved(row) and name=='_holdOk':value='_deps.holdOk()'

@@ -90,9 +90,9 @@ Each row is an extraction checklist entry: retain/move the whole declaration and
 | `_SpotlightLiveTimelineState._restoreFocus` 1048–1065 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.restoreFocus` | channels | mounted, setState | _cursorLane, _cursorRow, _selectedProgrammeStartMs | _ensureProgrammeVisible, _programmesForRow, _revealRow | inventoried; original caller retained |
 | `_SpotlightLiveTimelineState._tapIdentity` 1067–1072 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.tapIdentity` | selectBeforeActivate |  | _lastTappedCell | _entryAt | inventoried; original caller retained |
 | `_SpotlightLiveTimelineState._tapProgramme` 1074–1082 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.tapProgramme` | selectBeforeActivate |  | _lastTappedCell | _entryAt | inventoried; original caller retained |
-| `_SpotlightLiveTimelineState._focusFirstChannel` 1084–1088 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions._focusFirstChannel` | channels | mounted |  |  | inventoried; original caller retained |
-| `_SpotlightLiveTimelineState._focusChannelAt` 1090–1094 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions._focusChannelAt` | channels | mounted |  |  | inventoried; original caller retained |
-| `_SpotlightLiveTimelineState._focusChannel` 1096–1115 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions._focusChannel` | channels | mounted | _cursorRow | _entryAt, _visibleRange | inventoried; original caller retained |
+| `_SpotlightLiveTimelineState._focusFirstChannel` 1084–1088 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.focusFirstChannel` | channels | mounted |  |  | inventoried; original caller retained |
+| `_SpotlightLiveTimelineState._focusChannelAt` 1090–1094 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.focusChannelAt` | channels | mounted |  |  | inventoried; original caller retained |
+| `_SpotlightLiveTimelineState._focusChannel` 1096–1115 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.focusChannel` | channels | mounted | _cursorRow | _entryAt, _visibleRange | inventoried; original caller retained |
 | `_SpotlightLiveTimelineState._selectIdentity` 1117–1140 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.selectIdentity` |  | setState | _cursorLane, _cursorRow, _lastTappedCell, _selectedProgrammeStartMs | _activateIdentity, _entryAt, _revealRow | inventoried; original caller retained |
 | `_SpotlightLiveTimelineState._selectProgramme` 1142–1165 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.selectProgramme` | onProgrammeActivate | setState | _cursorLane, _cursorRow, _lastTappedCell | _entryAt, _revealRow, _selectProgrammeValue | inventoried; original caller retained |
 | `_SpotlightLiveTimelineState._announceSelection` 1167–1188 | 2 `legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart` / `SpotlightTimelineSelectionActions.announceSelection` | onSelectionChanged |  | _cursorLane, _cursorRow, _selectedProgrammeStartMs | _entryAt, _programmesForRow | inventoried; original caller retained |
@@ -322,3 +322,51 @@ These exact names passed in the untouched full-suite baseline. They supply the e
 ## Source-text inventory at step 0
 
 `file_size_baseline.txt` retains the facade’s 2,304-line entry. Both shape manifests leave the facade unregistered (six bare radii); future destinations are also unregistered. The measured theme surfaces are unchanged, and the light-ink inventory remains 774 sites / 240 primary. Hashes of the source guards and storage-member map are in `base-source-text-hashes.json`; whole-suite outcomes record their observed status. The profile guard already fails on two unrelated storage opens, as recorded in `base-summary.json`. No guard or assertion is removed. Architecture/size registration and CI format/analyzer inputs remain scheduled for step 1.
+
+
+## Step 0b invariant and named source-only ledger
+
+The only non-null assignment to `_selectedProgrammeStartMs` is in
+`_selectProgrammeValue` (original line 938). Its five callers (814, 852,
+903, 993, 1160) either enter the programme lane immediately beforehand or
+are guarded by that lane. Initial identity has a null start. Every exit
+from programme to identity/retry clears it (461–462, 539–540, 679–680,
+729–730, 803–811, 840–841, 862–863, 872–873, 893–894, 975–976,
+1134–1135, 1281–1282). The retry-to-identity transition at 819 inherits
+retry's already-null start. Therefore `_announceSelection` cannot match an
+integer programme start outside the programme lane, even if its lane
+condition is removed. The original condition remains pinned and unchanged.
+
+`_evictDistantRows` has exactly one production caller: `_loadVisibleRows`.
+That runs from the viewport settle timer after `_armViewportLoad` increments
+generation. An evicted pending completion belongs to the older generation
+and is rejected even if token eviction is disabled. The independent
+retained-offscreen-row test isolates that generation check; token eviction
+itself stays source-guard-only.
+
+The ledger below is backed by exact ORIGINAL edits and named whole-body
+assertion failures in
+[iptv_spotlight_timeline_original_mutations.json](../../dev/tool/iptv_spotlight_timeline_original_mutations.json).
+The two source/context variants also retain independent behavioral proofs
+for their globally observable guards; their masking reasons apply only to
+that scenario. No original assertion is weakened.
+
+| Mutant / scenario | Whole-body assertion member | Masking reason |
+| --- | --- | --- |
+| `programme announced outside lane` | `_SpotlightLiveTimelineState._announceSelection` | Only _selectProgrammeValue writes a non-null selected start, called solely while entering/remaining in the programme lane. Every transition to identity or retry clears the start; retry-to-identity vertical movement retains its already-null start. Therefore outside that lane no programme start can equal the null selected start. Enumerated assignments are recorded in the dependency report. |
+| `eviction keeps pending` | `_SpotlightLiveTimelineState._evictDistantRows` | Eviction is called only by _loadVisibleRows inside a settled load. Re-arming increments the generation before that load; retained old completions are rejected by _accepts generation even if an evicted pending token remains. No public path evicts without re-arming. |
+| `settle generation guard (ledger)` | `_SpotlightLiveTimelineState._armViewportLoad` | Every re-arm cancels the previous timer before incrementing the generation, so an older timer cannot reach this generation check. |
+| `accepts context version removed` | `_SpotlightLiveTimelineState._accepts` | A context-version widget update clears pending loads and re-arms/increments generation before completion, so generation rejects first. |
+| `accepts source id removed` | `_SpotlightLiveTimelineState._accepts` | Changing source id through the host clears pending loads and re-arms/increments generation, so generation rejects first. |
+| `accepts load generation removed` | `_SpotlightLiveTimelineState._accepts` | Changing loadGeneration clears pending loads and re-arms/increments generation, so generation rejects first. |
+| `accepts negative index removed` | `_SpotlightLiveTimelineState._accepts` | Only bounded _loadVisibleRows indices and valid _retry entry ordinals construct tokens; a negative sourceIndex cannot originate. |
+| `accepts ordinal mismatch removed` | `_SpotlightLiveTimelineState._accepts` | Both token constructors use the same entry ordinal for sourceIndex and entryKey; mismatched ordinals cannot originate. |
+| `dwell source id removed` | `_SpotlightLiveTimelineState._armPointerSelection` | didUpdateWidget cancels the dwell when sourceId changes, before this timer can run. |
+| `dwell load generation removed` | `_SpotlightLiveTimelineState._armPointerSelection` | didUpdateWidget cancels the dwell when loadGeneration changes, before this timer can run. |
+| `dwell context version removed` | `_SpotlightLiveTimelineState._armPointerSelection` | didUpdateWidget cancels the dwell when contextVersion changes, before this timer can run. |
+| `dwell channel list identity removed` | `_SpotlightLiveTimelineState._armPointerSelection` | didUpdateWidget cancels the dwell when the list object changes, before this timer can run. |
+| `dwell negative row removed` | `_SpotlightLiveTimelineState._armPointerSelection` | Dwell entries originate from rendered rows, which always use valid non-negative source ordinals. |
+| `dwell mounted removed` | `_SpotlightLiveTimelineState._armPointerSelection` | dispose cancels the pointer timer, so an unmounted dwell never fires. |
+| `dispose listener not removed` | `_SpotlightLiveTimelineState.dispose` | The same dispose synchronously disposes the owned ScrollController, clearing its listeners. No public event can arrive between these steps. |
+| `accepts generation under source-context change` | `_SpotlightLiveTimelineState._accepts` | This ledger row is only the source/context-change scenario: didUpdateWidget clears pending loads and re-arms/increments generation together, so the other clause rejects first. The same mutant also has an independently observable behavioural proof in accepts generation independently removed. |
+| `accepts pending token under source-context change` | `_SpotlightLiveTimelineState._accepts` | This ledger row is only the source/context-change scenario: didUpdateWidget clears pending loads and re-arms/increments generation together, so the other clause rejects first. The same mutant also has an independently observable behavioural proof in accepts pending token removed. |
