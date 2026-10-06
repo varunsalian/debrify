@@ -50,7 +50,7 @@ class StremioTvChannelLibrary {
       _owners.playback.pendingChannelId = null;
       _owners.playback.startupAutoPlayActive = true;
       await _sections.library._ensureChannelLoaded(id);
-      if (_deps.mounted()) _sections.legacy.playChannelById(id);
+      if (_deps.mounted()) _sections.actions.playChannelById(id);
     }
   }
 

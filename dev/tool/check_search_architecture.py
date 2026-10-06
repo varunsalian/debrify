@@ -15,6 +15,8 @@ FEATURES += ("debrify_tv",)
 STREMIO_TV_COMPLETE = False
 STREMIO_TV_FACADE = "lib/screens/stremio_tv/stremio_tv_screen.dart"
 STREMIO_TV_BRIDGE = "lib/features/stremio_tv/presentation/legacy_stremio_tv/"
+# The original screen's catalog-detail caller moves unchanged to this file.
+STREMIO_TV_CATALOG_DETAIL_CALLER = STREMIO_TV_BRIDGE + "stremio_tv_channel_actions.dart"
 # Final cap is activated only at completion and measured over every line.
 STREMIO_TV_FACADE_CAP = 0
 STREMIO_TV_PREEXISTING = {
@@ -840,7 +842,9 @@ def violations(path: Path) -> list[str]:
                         problems.append("playlist content/cloud cross-feature import")
                 if own == "playlist_content" and target == PLAYLIST_CONTENT_FACADE:
                     problems.append("playlist content feature imports its facade")
-                if target == CATALOG_DETAIL_FACADE and relative != "lib/features/home/presentation/home_detail_presentation.dart":
+                if (target == CATALOG_DETAIL_FACADE and
+                        relative != "lib/features/home/presentation/home_detail_presentation.dart" and
+                        relative != STREMIO_TV_CATALOG_DETAIL_CALLER):
                     problems.append("feature imports the catalog-detail facade outside the existing Home caller")
                 if own == "catalog_detail" and not relative.startswith(CATALOG_DETAIL_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("catalog-detail service/storage import outside the legacy bridge")

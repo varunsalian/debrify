@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 4,
+  "completed_step": 5,
   "completion_step": 7,
   "required_scaffolds_step": 7,
   "receivers": [
@@ -30,8 +30,7 @@
     "_owners.settings": "StremioTvSettingsState",
     "_owners.playback": "StremioTvPlaybackState",
     "_owners.focus": "StremioTvFocusState",
-    "StremioTvStreamQuality": "StremioTvStreamQuality",
-    "_sections.legacy": "_StremioTvScreenState"
+    "StremioTvStreamQuality": "StremioTvStreamQuality"
   },
   "receiver_owners": {
     "_sections.settings": "StremioTvSettingsLoader",
@@ -51,8 +50,7 @@
     "_owners.settings": "StremioTvSettingsState",
     "_owners.playback": "StremioTvPlaybackState",
     "_owners.focus": "StremioTvFocusState",
-    "StremioTvStreamQuality": "StremioTvStreamQuality",
-    "_sections.legacy": "_StremioTvScreenState"
+    "StremioTvStreamQuality": "StremioTvStreamQuality"
   },
   "receiver_members": {
     "StremioTvSettingsLoader": [
@@ -197,9 +195,6 @@
     ],
     "StremioTvStreamQuality": [
       "extractQuality"
-    ],
-    "_StremioTvScreenState": [
-      "playChannelById"
     ]
   },
   "live_getter_callbacks": [
@@ -1114,6 +1109,10 @@
       "owner": "StremioTvStreamSelection"
     },
     {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart",
+      "owner": "StremioTvPlayChannel"
+    },
+    {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
       "owner": "StremioTvChannelResolve"
     },
@@ -1128,6 +1127,10 @@
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
       "owner": "StremioTvCloudResolvers"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart",
+      "owner": "StremioTvChannelActions"
     },
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
@@ -1572,8 +1575,5 @@
       "anchor": "_ManualSourcePickerSheet",
       "destination_file": "lib/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart"
     }
-  ],
-  "callback_member_aliases": {
-    "_sections.legacy.playChannelById": "_StremioTvScreenState._playChannelById"
-  }
+  ]
 }

@@ -1676,3 +1676,37 @@ with exits in Steps 5–6.
 E/`step4-*` contains commands, hashes, spans and comparisons. No protected
 sibling widget, player, launcher, service or dependency changes, production
 seam, device run, push, merge or branch switch.
+
+
+### Step 5 — play flow and channel actions — gate 1 checkpoint (2026-10-06)
+
+Previous checkpoint: **`7464ad3a2`**. The original play flow moves alone into its 495-line section; channel actions move with their callers. Loader callbacks, generation checks, overlay closure, selection/fallback, series titles/start progress and both player handoffs retain original behavior. All borrowed State slots and both temporary wiring comments are removed; the composition now creates twelve real sections. The retained layout/build stays in the facade for Step 6. Full-suite gate 1 runs next, on this committed tree, serialized after this worktree’s AST jobs stop. The first architecture run rejected the original catalog-detail facade import after its caller moved into the feature. An opt-in constant registers only `stremio_tv_channel_actions.dart`, preserving that original import/caller; real-copy positives and negatives reject it from another Stremio TV file and another Home file. The old global diagnostic text and every other rule remain unchanged. The rejected run is preserved as `step5-architecture-rejected-registration.txt`; the full static checks then pass. This is a late registration correction to the Step 1 guard work, with no application-body change.
+Per-entry wiring review is E/`step5-wiring-review.json`; bodies derive from
+R and the accepted compiling probe, with only registered substitutions.
+
+All **17 manifests** pass real CLI/self-tests with isolated parser packages
+and copied kernels deleted. The other **16 stdout files are byte-identical**
+to Step 0b; shared adapter/config/source hashes remain unchanged. All 119
+leaves, field binding, callback identity, contracts and the reader pass.
+Architecture, sizes, storage keys/references/member map/bodies, CI format
+(zero changes), scoped analyzer/allowlist (same 25 warnings), LF, protected
+scope and staged diff pass. Per-symbol inventory has **7 probe-inventoried
+infos, zero warnings/errors and zero additions** beyond R/probe maxima;
+the explicit relocation comparison passes. No suppression is added.
+
+The serialized focused run uses `--no-pub --concurrency=1`: **178 successes
+and the same one known profile source-guard failure**, with no new failure,
+missing identity or skip against base2. All **63 characterizations** pass,
+including strict macOS **6/6**; calibrated Linux strict is **6/6** with unchanged
+lockfile and PNG bytes. Shape remains **13**, floor **488**, bare-radius
+residue zero; owned/full theme sites **30/79**, light ink **three non-primary /
+zero primary**. Original behavioral tests and goldens retain their bytes.
+
+Formatted facade **806**: imports 13 + widget 16 + State header/close 2 + owners/composition 11 + lifecycle 72 + retained build 683 + remaining blanks/comments 9
+= 806. The ratchet is lowered by hand. New files: **play_channel 495**, **channel_actions 269**.
+All new files are below 500; no layout exception is activated. The oversized
+facade temporarily retains layout/build,
+with exits in Step 6.
+E/`step5-*` contains commands, hashes, spans and comparisons. No protected
+sibling widget, player, launcher, service or dependency changes, production
+seam, device run, push, merge or branch switch.

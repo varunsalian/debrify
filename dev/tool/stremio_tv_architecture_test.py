@@ -60,6 +60,12 @@ def self_test():
               'models imports/exports UI')
         probe(bridge + 'service.dart',
               "import 'package:debrify/services/stremio_tv_service.dart';\n")
+        detail_import = "import 'package:debrify/screens/catalog_item_detail_screen.dart';\n"
+        probe(checker.STREMIO_TV_CATALOG_DETAIL_CALLER, detail_import)
+        for path in [bridge + 'other_catalog_detail.dart',
+                     'lib/features/home/presentation/other_catalog_detail.dart']:
+            probe(path, detail_import,
+                  'feature imports the catalog-detail facade outside the existing Home caller')
         for uri in ['package:shared_preferences/shared_preferences.dart',
                     'package:sqflite/sqflite.dart']:
             probe(bridge + 'storage.dart', "import '" + uri + "';\n",

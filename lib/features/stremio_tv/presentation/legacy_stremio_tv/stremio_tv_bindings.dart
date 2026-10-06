@@ -11,14 +11,11 @@ class StremioTvDependencies {
   final void Function(VoidCallback) setState;
   final bool Function() isTelevision;
   late final StremioTvSections sections;
-  // TEMP(stremio_tv): borrowed State tear-offs; removed with their scheduled moves.
-  final void Function(String channelId) playChannelById;
   StremioTvDependencies({
     required this.owners,
     required this.context,
     required this.mounted,
     required this.setState,
     required this.isTelevision,
-    required this.playChannelById,
   });
 }
