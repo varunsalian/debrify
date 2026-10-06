@@ -415,16 +415,41 @@ As in the tuner plan (Techniques 2–8 there), with these differences:
    `context`, `mounted`, `setState` and `_holdOk` only through
    `_deps.context()`, `_deps.mounted()`, `_deps.setState(...)` and
    `_deps.holdOk()`, evaluated at the original site, never cached. The one
-   State-context site is `_rowHeight` (396); every other `context` is
-   lexical (build parameter and the three builders) and stays lexical; the
-   context guard's negatives replace a lexical `context` with
-   `_deps.context()` and the reverse. `holdOk` uses the existing
-   `live_getter_aliases` mechanism (iptv_settings precedent) so `_deps.holdOk()`
-   normalizes to the retained `_holdOk`; if the occurrence binder needs an
-   opt-in key to accept that selector for the retained State member, it is
-   added additively (absent = today's behaviour), with negatives: a cached
-   hold in a section, a second `TvHoldOk`, an eager creation in `initState`
-   or composition, and `_deps.holdOk` passed as a tear-off and invoked later.
+   State-context site is `_rowHeight` (396). Every builder `context`
+   parameter (build 1288, LayoutBuilders 1305/1328, `itemBuilder` 1348) is
+   **declared but never read**, so the file has no production lexical
+   context read to substitute: the source contract pins those unused
+   parameters (names and positions), the real-body proofs include
+   `_rowHeight`'s one State read becoming `_deps.context()`, and any
+   lexical-read fixture is a synthetic checker fixture, classified as such
+   (round 1 P2-3).
+   **The hold (round 1 P1-1).** No existing mechanism expresses a section
+   reading a *retained State field* through a `_deps` call:
+   `live_getter_aliases` requires a retained facade getter with a body
+   (`check_settings_moves.py:1090`) and the binder counts the call as extra
+   occurrences. The plan therefore adds one **opt-in** key, used only by this
+   manifest (absent = today's behaviour, every other manifest's adapter
+   output and self-tests byte-identical):
+   `retained_field_live_getters: {"holdOk": "_SpotlightLiveTimelineState._holdOk"}`.
+   - Checker (`normalize`): exactly the token sequence `_deps . holdOk ( )`
+     normalizes to the original field token `_holdOk`; nothing else does
+     (`_deps.holdOk` without the call, `(_deps.holdOk)()`, `deps.holdOk()`,
+     `_owners.holdOk`, a local bound to the call). The retained field row
+     stays in the facade with its initializer compared verbatim modulo the
+     registered receivers.
+   - Binder: an original `_holdOk` occurrence (lexical, unbound) aligns with
+     the destination `_deps.holdOk()` selector+invocation as **one**
+     occurrence, keeping the original role (the field read that is then
+     dereferenced); occurrence counts stay equal.
+   - Negatives (each must fail through the real checker and binder): a
+     section caching the hold in a local or field and reusing it; a
+     wrapper (`final h = _deps.holdOk; … h()`); a delayed invocation (the
+     tear-off passed to a callback); a second `TvHoldOk` constructed in a
+     section; `_owners.holdOk` (replacement ownership); the facade making
+     `_holdOk` eager (non-`late`, or assigned in `initState`/composition);
+     the composition passing `holdOk: () => TvHoldOk(...)`.
+   - The composition passes exactly `holdOk: () => _holdOk` (pinned by the
+     source contract), so each call reads the State's single lazy field.
 4. **Owner fields and the occurrence binder** (opt-in reuse; tuner keys
    `record_owners: ["_SpotlightLiveTimelineState"]` and `record_fields`
    listing exactly the 19 instance fields, so the statics
@@ -438,18 +463,26 @@ As in the tuner plan (Techniques 2–8 there), with these differences:
    proofs before extraction (step 0b, through checker and reader, on a
    scratch tree built from R by the actual manifest moves of
    `_loadSchedule`, `_moveVertical`, `_buildRuler`, `_buildIdentity` and
-   `_armPointerSelection`): positives as planned; negatives — a field read
-   left bare, a field replaced by a captured local, `_deps.context()` for
-   the lexical build `context`, a wrong section receiver for a cross-section
+   `_armPointerSelection`, `_rowHeight`): positives as planned; negatives — a field read
+   left bare, a field replaced by a captured local, `_rowHeight`'s
+   `_deps.context()` replaced by a cached context, a wrong section receiver for a cross-section
    call, `SpotlightTimelinePalette.identityBackground` swapped for
    `.timelineBackground`, the hold read cached.
 5. **Typed widget view** (tuner Technique 5): header addition `implements
    SpotlightTimelineWidgetView` registered for `_SpotlightLiveTimelineState`
    only; each view getter exactly `@override T get p => widget.p;`;
-   function-typed properties return the host's function object (an identity
-   test compares `onExitUp`/`onChannelActions`/`scheduleLoader`/`now` with
-   the host's closures); `now` is read through the view, so the moved code
-   never names the `@visibleForTesting` widget field outside the facade's
+   function-typed properties return the host's function object. R has no
+   view, so **identity is proved in the step 0b compiling-composition probe**
+   (direct assertions that each view getter returns the identical
+   `widget.<p>` object for `onExitUp`, `onExitLeft`, `onChannelActions`,
+   `onChannelActivate`, `onProgrammeActivate`, `onSelectionChanged`,
+   `scheduleLoader`, `now`, `channels`, with wrapped-getter, cached-snapshot
+   and stored-widget negatives) and pinned afterwards by the source contract's
+   exact one-line getter scaffolds; ORIGINAL behaviour tests (frozen in (b))
+   prove the observable side: replacing the host's callbacks, clock and
+   loader on rebuild with the **same channel list** takes effect at the next
+   use (round 1 P2-5). `now` is read through the view, so the moved code
+never names the `@visibleForTesting` widget field outside the facade's
    library. Each section exposes `SpotlightTimelineWidgetView get widget =>
    _deps.view;`, so every moved `widget.<p>` site stays token-identical.
 6. **Callback identity, split by shape** (tuner Technique 7). Direct
@@ -530,8 +563,18 @@ then discarded.
    `dev/tool/iptv_spotlight_timeline_contracts.py`; add a shared-checker key
    only if none fits, opt-in and keyed by this feature, with every other
    manifest's self-test byte-identical. Rows: **retained** (controller,
-   widget, State lifecycle, `_holdOk`, `build` → forwarder), **moved**,
-   **registered forwarders** (the five controller forwarders, `build`).
+   widget, State lifecycle, `_holdOk`), **moved** (every other leaf,
+   including the original `State.build`, which moves at step 2 to
+   `SpotlightTimelineFrame.build`), **registered forwarders** (the five
+   controller forwarders and the exact `build` forwarder
+   `@override Widget build(BuildContext context) => _sections.frame.build(context);`).
+   Because the moved `build` loses its `@override` on the plain frame class
+   (keeping it would be a new warning), the config registers the existing
+   `retained_override_bodies` mechanism (`check_settings_moves.py:438`) for
+   the forwarder and `forwarded_annotation_occurrences`
+   (`occurrence_field_bindings.py:80`, Stremio TV precedent) so the binder
+   drops exactly the original leading `@override` occurrence; the complete
+   schedule is proven at S = 0–3 (round 1 P1-2).
    Fixtures at S = 0…3 (steps 0, 1, 2, 3) run the complete checker and reader in one process:
    deleting an activated destination fails; restoring a moved leaf to the
    facade fails; a missing or altered forwarder fails; a retained row moved
@@ -590,6 +633,20 @@ then discarded.
    (positive control: a deliberately broken fixture fails the Dart test).
    Add to `ci_behavior_known_failures.txt` only failures `base` actually
    observes for newly listed tests, by identity (none expected).
+   **Diagnostic inventory in CI (round 1 P2-4).** `check_analyzer_allowlist.py`
+   ignores infos and the tuner's inventory checker is hard-coded to its own
+   source and feature, so this plan adds
+   `dev/tool/iptv_spotlight_timeline_analyzer_inventory.json` (every info
+   identity — rule, enclosing member, message — allowed in the facade and the
+   feature, with maxima from the step 0 baseline + probe, by maximum per
+   identity) and `dev/tool/check_iptv_spotlight_timeline_analyzer.py`
+   (strict rule/symbol/message maxima, zero additions; reuses the tuner
+   checker's parsing by import only if that leaves the tuner script
+   byte-identical, otherwise a standalone copy). It runs in `checks.yml`
+   **after** the general allowlist on the same `analyze.txt`, with its own
+   isolated parser package. Proofs: a fresh-clone positive and an
+   added-info negative (one extra `prefer_const_constructors` in a
+   destination fails), both run at every step from step 1.
 8. **Source-text inventory.** `file_size_baseline.txt:26` (lowered from
    step 1, removed at step 2 once the facade is under 500); shape (Technique 8); theme and light-ink
    (Technique 8); verify unaffected: `test/theme/source_guard_test.dart`
@@ -630,7 +687,16 @@ range; announcement `fromPointer` always false; programme announced outside
 the programme lane; identity width clamp 45 % → 50 %; row-height scaler
 term dropped; NOW badge threshold 25 → 20 min; playhead shown outside the
 window; dispose not removing the listener; `didUpdateWidget` not re-arming
-on `rowHeight`; controller not rebound. It also runs the
+on `rowHeight`; controller not rebound. **Source-guard-only mutants (round
+1 P3-6), named in the mutation ledger with their reason:** the `_accepts`
+generation and pending-token clauses under a source/context change (that
+change also clears `_pendingLoads` and re-arms, so the result is rejected
+by the pending-token clause either way — the stale-result behaviour test is
+kept, but it does not isolate each redundant clause); the negative-index
+and ordinal-mismatch clauses (`_loadVisibleRows` never constructs such a
+token); the explicit `removeListener` in `dispose` (masked by the
+controller's own disposal). Every other listed mutant must fail a named
+behavioural assertion. It also runs the
 compiling-composition probe (the full step-2 shape with real bodies, under
 the strict config, through the real checker CLI with header and re-export
 negatives) and records the facade measurement. `base2` at (b) must pass
@@ -719,8 +785,7 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
    timeline is offstage or nothing changed.
 2. `itemCanFitBadge` is a public-named member on a private State (naming
    only).
-3. `_dayHeading` allocates its month list on every build.
-4. The guide refresh is checked only on clock ticks, so it can run up to
+3. The guide refresh is checked only on clock ticks, so it can run up to
    30 s after the 30 min interval.
 
 (Step 0 adds any further quirks it observes; none are fixed.)
@@ -766,6 +831,31 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
   `SpotlightProgrammeActivate` name `EpgProgramme`, which is declared in a
   service file, so the entry file imports a service and lives in the
   bridge; exit with the EPG model extraction.
+
+
+## Round 1 review resolution
+
+1. **P1 — retained hold through `_deps`.** A new opt-in key
+   `retained_field_live_getters` in the checker and binder recognises exactly
+   `_deps.holdOk()` as the original `_holdOk` read (one occurrence, original
+   role); caching, wrapping, delayed invocation, a second hold, replacement
+   ownership and eager creation are negatives (Technique 3).
+2. **P1 — `build` ownership.** The original `State.build` is a moved row
+   (step 2 → `SpotlightTimelineFrame.build`) with an exact registered facade
+   forwarder; `retained_override_bodies` and
+   `forwarded_annotation_occurrences` handle the dropped `@override`; S = 0–3
+   proven (Step 0.3).
+3. **P2 — lexical context.** The builder `context` parameters are unused;
+   they are pinned, `_rowHeight` joins the real-body proofs, and no
+   production lexical-read substitution is claimed (Technique 3).
+4. **P2 — info inventory in CI.** A timeline inventory and checker run after
+   the general allowlist, with fresh-clone positive and added-info negative
+   (Step 0.7).
+5. **P2 — view identity.** Proved in the step 0b composition probe with
+   wrapped/cached negatives and pinned by exact getter scaffolds; ORIGINAL
+   tests cover live callback/clock/loader replacement (Technique 5).
+6. **P3 — guard-only mutants** named with reasons (Step 0b).
+7. **P3 — month list** quirk removed (it is a `const` list).
 
 ## Progress
 
