@@ -644,9 +644,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         );
         return (url: stream.directUrl!, index: index < 0 ? 0 : index);
       }
-      debugPrint(
-        'StremioTV: Skipping invalid direct stream: ${stream.source}',
-      );
+      debugPrint('StremioTV: Skipping invalid direct stream: ${stream.source}');
     }
     return null;
   }
@@ -659,22 +657,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     int? episode,
   }) async {
     final torrentStreams = _sortStreamsByQuality(
-      playableSources
-          .where((t) => t.streamType == StreamType.torrent)
-          .toList(),
+      playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
     );
     final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
-    final attemptedTorrents = torrentStreams
-        .take(maxTorrentAttempts)
-        .toList();
+    final attemptedTorrents = torrentStreams.take(maxTorrentAttempts).toList();
     final loadAutoTorboxCachedHashes =
         StremioTvDebridFallback.memoizeAsync<Set<String>>(
-      () => _loadTorboxCachedHashes(
-        attemptedTorrents,
-        isCancelled: () =>
-            !mounted || _playGeneration != myGeneration,
-      ),
-    );
+          () => _loadTorboxCachedHashes(
+            attemptedTorrents,
+            isCancelled: () => !mounted || _playGeneration != myGeneration,
+          ),
+        );
 
     for (int i = 0; i < maxTorrentAttempts; i++) {
       if (!mounted || _playGeneration != myGeneration) return null;
@@ -684,8 +677,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _debridProvider,
         season: season,
         episode: episode,
-        isCancelled: () =>
-            !mounted || _playGeneration != myGeneration,
+        isCancelled: () => !mounted || _playGeneration != myGeneration,
         loadAutoTorboxCachedHashes: _debridProvider == 'auto'
             ? loadAutoTorboxCachedHashes
             : null,
@@ -757,7 +749,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           // season and episode parsed and at least one differs. Ambiguous /
           // unparseable names are kept (could be the right episode with odd
           // naming, or a pack we failed to classify).
-          final confidentMismatch = info.season != null &&
+          final confidentMismatch =
+              info.season != null &&
               info.episode != null &&
               (info.season != season || info.episode != episode);
           if (!confidentMismatch) {
@@ -797,7 +790,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   /// Maps the active debrid provider to the Pipeline loader's chip label,
   /// two-letter code, accent colour, and whether it runs a cache-check stage.
   /// Colours mirror the Home/Search play loader (torrent_playback_service).
-  ({String label, String code, Color color, bool cacheCheck}) _tvProviderInfo() {
+  ({String label, String code, Color color, bool cacheCheck})
+  _tvProviderInfo() {
     switch (_debridProvider) {
       case 'realdebrid':
         return (
@@ -911,8 +905,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       railFar: app.stremioTv.loaderRailFar,
       // Settings → Appearance → Play Loader: the same look the Home/detail
       // play path uses, so a Debrify TV launch doesn't contradict the choice.
-      style: PlayLoaderStyleController.cached ==
-              PlayLoaderStyleController.classic
+      style:
+          PlayLoaderStyleController.cached == PlayLoaderStyleController.classic
           ? PlayLoaderStyle.classic
           : PlayLoaderStyle.marquee,
       art: PlayLoaderArt.fromMeta(item),
@@ -1144,13 +1138,21 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       ({String url, int index})? resolved;
       if (_torrentsFirst) {
         resolved = await _tryTorrentsViaDebrid(
-          playableSources, item, myGeneration, season: season, episode: episode,
+          playableSources,
+          item,
+          myGeneration,
+          season: season,
+          episode: episode,
         );
         resolved ??= await _tryDirectStreams(playableSources, myGeneration);
       } else {
         resolved = await _tryDirectStreams(playableSources, myGeneration);
         resolved ??= await _tryTorrentsViaDebrid(
-          playableSources, item, myGeneration, season: season, episode: episode,
+          playableSources,
+          item,
+          myGeneration,
+          season: season,
+          episode: episode,
         );
       }
       if (resolved != null) {
@@ -1425,13 +1427,21 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     ({String url, int index})? resolved;
     if (_torrentsFirst) {
       resolved = await _tryTorrentsViaDebrid(
-        playableSources, item, gen, season: season, episode: episode,
+        playableSources,
+        item,
+        gen,
+        season: season,
+        episode: episode,
       );
       resolved ??= await _tryDirectStreams(playableSources, gen);
     } else {
       resolved = await _tryDirectStreams(playableSources, gen);
       resolved ??= await _tryTorrentsViaDebrid(
-        playableSources, item, gen, season: season, episode: episode,
+        playableSources,
+        item,
+        gen,
+        season: season,
+        episode: episode,
       );
     }
 
@@ -1717,10 +1727,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (ch == null) return null;
 
       final slotOffset = _nextSlotOffsetFor(ch);
-      final result = await _resolveChannelPlayback(
-        ch,
-        slotOffset: slotOffset,
-      );
+      final result = await _resolveChannelPlayback(ch, slotOffset: slotOffset);
       if (result != null) {
         _rememberPlaybackCursor(
           channelId,
@@ -1765,19 +1772,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     canAttempt: (provider) async {
       switch (provider) {
         case 'realdebrid':
-          return !_rdSkipBlockedTorrents ||
-              !isRdBlockedTorrent(torrent.name);
+          return !_rdSkipBlockedTorrents || !isRdBlockedTorrent(torrent.name);
         case 'torbox':
           if (debridProvider != 'auto') return true;
           final cachedHashes = loadAutoTorboxCachedHashes != null
               ? await loadAutoTorboxCachedHashes()
-              : await _loadTorboxCachedHashes(
-                  <Torrent>[torrent],
-                  isCancelled: isCancelled,
-                );
-          return cachedHashes.contains(
-            torrent.infohash.trim().toLowerCase(),
-          );
+              : await _loadTorboxCachedHashes(<Torrent>[
+                  torrent,
+                ], isCancelled: isCancelled);
+          return cachedHashes.contains(torrent.infohash.trim().toLowerCase());
         case 'premiumize':
           return PremiumizeStorage.getPremiumizeIntegrationEnabled();
         case 'alldebrid':
@@ -1850,9 +1853,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (isCancelled?.call() ?? false) return const <String>{};
 
     final apiKey = await TorboxStorage.getTorboxApiKey();
-    if (apiKey == null ||
-        apiKey.isEmpty ||
-        (isCancelled?.call() ?? false)) {
+    if (apiKey == null || apiKey.isEmpty || (isCancelled?.call() ?? false)) {
       return const <String>{};
     }
 
@@ -1929,13 +1930,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         final candidateNames = selectedVideoFiles.map((file) {
           return (file['path'] as String?) ?? (file['name'] as String?) ?? '';
         }).toList();
-        final targetIndex = StremioEpisodeSelector
-            .findEpisodeFileIndexWithSingleFileFallback(
-          candidateNames,
-          sourceName: torrent.name,
-          season: season,
-          episode: episode,
-        );
+        final targetIndex =
+            StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+              candidateNames,
+              sourceName: torrent.name,
+              season: season,
+              episode: episode,
+            );
         if (targetIndex == null || targetIndex >= selectedVideoLinks.length) {
           debugPrint(
             'StremioTV: RD could not match S${season}E$episode in ${torrent.name}, '
@@ -1989,7 +1990,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
       AllDebridAddResult result;
       try {
-        result = await AllDebridService.addMagnetAndResolveFiles(apiKey, magnet);
+        result = await AllDebridService.addMagnetAndResolveFiles(
+          apiKey,
+          magnet,
+        );
       } on AllDebridTorrentNotReadyException catch (e) {
         // Not cached/ready — don't leave it downloading on the account.
         await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
@@ -2006,13 +2010,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final isSeries = item.type.toLowerCase() == 'series';
       if (isSeries && season != null && episode != null) {
         final candidateNames = videoFiles.map((f) => f.path).toList();
-        final targetIndex = StremioEpisodeSelector
-            .findEpisodeFileIndexWithSingleFileFallback(
-          candidateNames,
-          sourceName: torrent.name,
-          season: season,
-          episode: episode,
-        );
+        final targetIndex =
+            StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+              candidateNames,
+              sourceName: torrent.name,
+              season: season,
+              episode: episode,
+            );
         if (targetIndex == null || targetIndex >= videoFiles.length) {
           debugPrint(
             'StremioTV: AllDebrid could not match S${season}E$episode in '
@@ -2100,13 +2104,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         final candidateNames = files
             .map((f) => f.absolutePath ?? f.name)
             .toList();
-        final targetIndex = StremioEpisodeSelector
-            .findEpisodeFileIndexWithSingleFileFallback(
-          candidateNames,
-          sourceName: torrent.name,
-          season: season,
-          episode: episode,
-        );
+        final targetIndex =
+            StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+              candidateNames,
+              sourceName: torrent.name,
+              season: season,
+              episode: episode,
+            );
         if (targetIndex == null || targetIndex >= files.length) {
           debugPrint(
             'StremioTV: Torbox could not match S${season}E$episode in ${torrent.name}, '
@@ -2212,13 +2216,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 (file['name'] as String?) ??
                 '';
           }).toList();
-          final targetIndex = StremioEpisodeSelector
-              .findEpisodeFileIndexWithSingleFileFallback(
-            candidateNames,
-            sourceName: torrent.name,
-            season: season,
-            episode: episode,
-          );
+          final targetIndex =
+              StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+                candidateNames,
+                sourceName: torrent.name,
+                season: season,
+                episode: episode,
+              );
           if (targetIndex == null || targetIndex >= allVideoFiles.length) {
             debugPrint(
               'StremioTV: PikPak could not match S${season}E$episode in ${torrent.name}, '
@@ -2276,9 +2280,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<void> _trashRejectedPikPakItem(
-    Map<String, dynamic> prepared,
-  ) async {
+  Future<void> _trashRejectedPikPakItem(Map<String, dynamic> prepared) async {
     final rootId = StremioTvDebridFallback.pikPakCleanupRootId(prepared);
     if (rootId == null) return;
 
@@ -2287,9 +2289,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           .batchTrashFiles(<String>[rootId])
           .timeout(const Duration(seconds: 10));
     } catch (e) {
-      debugPrint(
-        'StremioTV: Failed to trash rejected PikPak item $rootId: $e',
-      );
+      debugPrint('StremioTV: Failed to trash rejected PikPak item $rootId: $e');
     }
   }
 
@@ -2316,13 +2316,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final isSeries = item.type.toLowerCase() == 'series';
       if (isSeries && season != null && episode != null) {
         final candidateNames = candidates.map((f) => f.path).toList();
-        final targetIndex = StremioEpisodeSelector
-            .findEpisodeFileIndexWithSingleFileFallback(
-          candidateNames,
-          sourceName: torrent.name,
-          season: season,
-          episode: episode,
-        );
+        final targetIndex =
+            StremioEpisodeSelector.findEpisodeFileIndexWithSingleFileFallback(
+              candidateNames,
+              sourceName: torrent.name,
+              season: season,
+              episode: episode,
+            );
         if (targetIndex != null && targetIndex < candidates.length) {
           targetFile = candidates[targetIndex];
         } else {
@@ -2406,9 +2406,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (nowPlaying == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No items available for this channel'),
-          ),
+          const SnackBar(content: Text('No items available for this channel')),
         );
       }
       return;
@@ -2706,376 +2704,215 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       body: Container(
         decoration: BoxDecoration(gradient: app.home.wash),
         child: _loading
-          ? _buildLoadingSkeleton()
-          : Column(
-              children: [
-                // Premium header bar
-                Container(
-                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        app.home.bg,
-                        app.home.bg.withValues(alpha: 0.0),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Collapsible search field
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOut,
-                        alignment: Alignment.topCenter,
-                        child: _showSearchField
-                            ? Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Focus(
-                                  canRequestFocus: false,
-                                  skipTraversal: true,
-                                  onKeyEvent: _handleSearchBarBack,
-                                  child: TvTextField(
-                                  controller: _searchController,
-                                  focusNode: _searchFocusNode,
-                                  style: TextStyle(color: app.core.tx),
-                                  accent: app.youtube.focus,
-                                  keyboardGround: app.youtube.keyboardPanel,
-                                  keyboardInk: app.core.tx,
-                                  keyboardInkOnAccent:
-                                      app.inkOn(app.youtube.focus),
-                                  onSubmitted: (_) =>
-                                      _searchBtnFocusNode.requestFocus(),
-                                  onDownArrow: () =>
-                                      _searchBtnFocusNode.requestFocus(),
-                                  onUpArrow: () {
-                                    // Search bar is at the top — nothing above
-                                  },
-                                  onLeftArrow: () =>
-                                      MainPageBridge.focusTvSidebar?.call(),
-                                  onRightArrow: () {
-                                    // Nothing to the right — consume
-                                  },
-                                  decoration: InputDecoration(
-                                    hintText: 'Search channels...',
-                                    hintStyle: TextStyle(
-                                      color: app.core.tx.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.search_rounded,
-                                      color: app.core.tx.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                    ),
-                                    suffixIcon: _searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: Icon(
-                                              Icons.close_rounded,
-                                              color: app.core.tx.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              setState(() {
-                                                _showSearchField = false;
-                                              });
-                                            },
-                                          )
-                                        : null,
-                                    border: OutlineInputBorder(
-                                      borderRadius: app.shape.br(14),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: app.shape.br(14),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: app.shape.br(14),
-                                      borderSide: BorderSide(
-                                        color: app.core.tx.withValues(
-                                          alpha: 0.15,
-                                        ),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: app.core.tx.withValues(
-                                      alpha: 0.07,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                  textInputAction: TextInputAction.search,
-                                  ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
+            ? _buildLoadingSkeleton()
+            : Column(
+                children: [
+                  // Premium header bar
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          app.home.bg,
+                          app.home.bg.withValues(alpha: 0.0),
+                        ],
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Search toggle button
-                          Focus(
-                            focusNode: _searchBtnFocusNode,
-                            onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent) {
-                                return KeyEventResult.ignored;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowRight) {
-                                _menuFocusNode.requestFocus();
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowLeft) {
-                                MainPageBridge.focusTvSidebar?.call();
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowUp) {
-                                if (_showSearchField) {
-                                  _searchFocusNode.requestFocus();
-                                }
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowDown) {
-                                _focusDialFromHeader();
-                                return KeyEventResult.handled;
-                              }
-                              if (isActivateKey(event.logicalKey)) {
-                                setState(() {
-                                  _showSearchField = !_showSearchField;
-                                });
-                                if (_showSearchField) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    _searchFocusNode.requestFocus();
-                                  });
-                                }
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _showSearchField = !_showSearchField;
-                                });
-                                if (_showSearchField) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    _searchFocusNode.requestFocus();
-                                  });
-                                }
-                              },
-                              child: ListenableBuilder(
-                                listenable: _searchBtnFocusNode,
-                                builder: (context, _) => _headerButton(
-                                  focused: _searchBtnFocusNode.hasFocus,
-                                  active: _showSearchField || _searchQuery.isNotEmpty,
-                                  child: Icon(
-                                    Icons.search_rounded,
-                                    size: 20,
-                                    color: (_searchBtnFocusNode.hasFocus ||
-                                            _showSearchField ||
-                                            _searchQuery.isNotEmpty)
-                                        ? app.core.tx
-                                        : app.core.tx.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          // Options button
-                          Focus(
-                            focusNode: _menuFocusNode,
-                            onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent) {
-                                return KeyEventResult.ignored;
-                              }
-                              if (_menuController.isOpen) {
-                                if (event.logicalKey ==
-                                        LogicalKeyboardKey.escape ||
-                                    event.logicalKey ==
-                                        LogicalKeyboardKey.goBack) {
-                                  _menuController.close();
-                                  _menuFocusNode.requestFocus();
-                                  return KeyEventResult.handled;
-                                }
-                                return KeyEventResult.ignored;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowUp) {
-                                if (_showSearchField) {
-                                  _searchFocusNode.requestFocus();
-                                }
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowRight) {
-                                if (_availableProviders.isNotEmpty) {
-                                  _providerFocusNode.requestFocus();
-                                }
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowLeft) {
-                                _searchBtnFocusNode.requestFocus();
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowDown) {
-                                _focusDialFromHeader();
-                                return KeyEventResult.handled;
-                              }
-                              if (isActivateKey(event.logicalKey)) {
-                                _menuController.open();
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                            child: ListenableBuilder(
-                              listenable: _menuFocusNode,
-                              builder: (context, child) => MenuAnchor(
-                                controller: _menuController,
-                                menuChildren: [
-                                  _topMenuItem(
-                                    autofocus: true,
-                                    leadingIcon: const Icon(
-                                      Icons.shuffle_rounded,
-                                    ),
-                                    controller: _menuController,
-                                    anchorFocusNode: _menuFocusNode,
-                                    closeOnArrowUp: true,
-                                    onPressed: () {
-                                      setState(
-                                        () => _mixSalt = (_mixSalt + 1) % 10,
-                                      );
-                                    },
-                                    label: 'Shuffle (Mix ${_mixSalt + 1})',
-                                  ),
-                                  MenuItemButton(
-                                    leadingIcon: const Icon(
-                                      Icons.refresh_rounded,
-                                    ),
-                                    onPressed: _refreshing
-                                        ? null
-                                        : () => _refresh(),
-                                    child: const Text('Refresh'),
-                                  ),
-                                  MenuItemButton(
-                                    leadingIcon: const Icon(Icons.tune_rounded),
-                                    onPressed: () => _openChannelFilter(),
-                                    child: const Text('Filter channels'),
-                                  ),
-                                  MenuItemButton(
-                                    leadingIcon: const Icon(
-                                      Icons.settings_rounded,
-                                    ),
-                                    onPressed: _openStremioTvSettings,
-                                    child: const Text('Stremio TV Settings'),
-                                  ),
-                                  SubmenuButton(
-                                    focusNode: _submenuFocusNode,
-                                    leadingIcon: const Icon(
-                                      Icons.playlist_add_rounded,
-                                    ),
-                                    menuChildren: [
-                                      _submenuItem(
-                                        autofocus: true,
-                                        icon: Icons.list_rounded,
-                                        label: 'Manage',
-                                        onPressed: _openLocalCatalogs,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Collapsible search field
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          alignment: Alignment.topCenter,
+                          child: _showSearchField
+                              ? Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: Focus(
+                                    canRequestFocus: false,
+                                    skipTraversal: true,
+                                    onKeyEvent: _handleSearchBarBack,
+                                    child: TvTextField(
+                                      controller: _searchController,
+                                      focusNode: _searchFocusNode,
+                                      style: TextStyle(color: app.core.tx),
+                                      accent: app.youtube.focus,
+                                      keyboardGround: app.youtube.keyboardPanel,
+                                      keyboardInk: app.core.tx,
+                                      keyboardInkOnAccent: app.inkOn(
+                                        app.youtube.focus,
                                       ),
-                                      _submenuItem(
-                                        icon: Icons.file_upload_outlined,
-                                        label: 'From File',
-                                        onPressed: _importFromFile,
-                                      ),
-                                      _submenuItem(
-                                        icon: Icons.link_rounded,
-                                        label: 'From URL',
-                                        onPressed: _importFromUrl,
-                                      ),
-                                      _submenuItem(
-                                        icon: Icons.data_object_rounded,
-                                        label: 'Paste JSON',
-                                        onPressed: _importFromJson,
-                                      ),
-                                      _submenuItem(
-                                        icon: Icons.source_rounded,
-                                        label: 'From Repository',
-                                        onPressed: _importFromRepo,
-                                      ),
-                                      _submenuItem(
-                                        icon: Icons.movie_filter_rounded,
-                                        label: 'From Trakt',
-                                        onPressed: _importFromTrakt,
-                                      ),
-                                      // Hidden for the alpha (kMdblistEnabled)
-                                      // and only when connected — no dead import.
-                                      if (kMdblistEnabled && _mdblistConnected)
-                                        _submenuItem(
-                                          icon: Icons
-                                              .playlist_add_check_circle_outlined,
-                                          label: 'From MDBList',
-                                          onPressed: _importFromMdblist,
-                                        ),
-                                    ],
-                                    child: const Text('Import'),
-                                  ),
-                                ],
-                                builder: (context, controller, child) =>
-                                    _headerButton(
-                                      focused: _menuFocusNode.hasFocus,
-                                      child: Icon(
-                                        Icons.more_vert_rounded,
-                                        size: 20,
-                                        color: _menuFocusNode.hasFocus
-                                            ? app.core.tx
-                                            : app.core.tx.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                      ),
-                                      onTap: () {
-                                        if (controller.isOpen) {
-                                          controller.close();
-                                        } else {
-                                          controller.open();
-                                        }
+                                      onSubmitted: (_) =>
+                                          _searchBtnFocusNode.requestFocus(),
+                                      onDownArrow: () =>
+                                          _searchBtnFocusNode.requestFocus(),
+                                      onUpArrow: () {
+                                        // Search bar is at the top — nothing above
                                       },
+                                      onLeftArrow: () =>
+                                          MainPageBridge.focusTvSidebar?.call(),
+                                      onRightArrow: () {
+                                        // Nothing to the right — consume
+                                      },
+                                      decoration: InputDecoration(
+                                        hintText: 'Search channels...',
+                                        hintStyle: TextStyle(
+                                          color: app.core.tx.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.search_rounded,
+                                          color: app.core.tx.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                        ),
+                                        suffixIcon: _searchQuery.isNotEmpty
+                                            ? IconButton(
+                                                icon: Icon(
+                                                  Icons.close_rounded,
+                                                  color: app.core.tx.withValues(
+                                                    alpha: 0.5,
+                                                  ),
+                                                ),
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() {
+                                                    _showSearchField = false;
+                                                  });
+                                                },
+                                              )
+                                            : null,
+                                        border: OutlineInputBorder(
+                                          borderRadius: app.shape.br(14),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: app.shape.br(14),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: app.shape.br(14),
+                                          borderSide: BorderSide(
+                                            color: app.core.tx.withValues(
+                                              alpha: 0.15,
+                                            ),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        filled: true,
+                                        fillColor: app.core.tx.withValues(
+                                          alpha: 0.07,
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 14,
+                                            ),
+                                      ),
+                                      textInputAction: TextInputAction.search,
                                     ),
-                              ),
-                            ),
-                          ),
-                          if (_availableProviders.isNotEmpty) ...[
-                            const SizedBox(width: 10),
-                            // Provider selector
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Search toggle button
                             Focus(
-                              focusNode: _providerFocusNode,
+                              focusNode: _searchBtnFocusNode,
                               onKeyEvent: (node, event) {
                                 if (event is! KeyDownEvent) {
                                   return KeyEventResult.ignored;
                                 }
-                                if (_providerMenuController.isOpen) {
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowRight) {
+                                  _menuFocusNode.requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowLeft) {
+                                  MainPageBridge.focusTvSidebar?.call();
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowUp) {
+                                  if (_showSearchField) {
+                                    _searchFocusNode.requestFocus();
+                                  }
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowDown) {
+                                  _focusDialFromHeader();
+                                  return KeyEventResult.handled;
+                                }
+                                if (isActivateKey(event.logicalKey)) {
+                                  setState(() {
+                                    _showSearchField = !_showSearchField;
+                                  });
+                                  if (_showSearchField) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          _searchFocusNode.requestFocus();
+                                        });
+                                  }
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _showSearchField = !_showSearchField;
+                                  });
+                                  if (_showSearchField) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          _searchFocusNode.requestFocus();
+                                        });
+                                  }
+                                },
+                                child: ListenableBuilder(
+                                  listenable: _searchBtnFocusNode,
+                                  builder: (context, _) => _headerButton(
+                                    focused: _searchBtnFocusNode.hasFocus,
+                                    active:
+                                        _showSearchField ||
+                                        _searchQuery.isNotEmpty,
+                                    child: Icon(
+                                      Icons.search_rounded,
+                                      size: 20,
+                                      color:
+                                          (_searchBtnFocusNode.hasFocus ||
+                                              _showSearchField ||
+                                              _searchQuery.isNotEmpty)
+                                          ? app.core.tx
+                                          : app.core.tx.withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Options button
+                            Focus(
+                              focusNode: _menuFocusNode,
+                              onKeyEvent: (node, event) {
+                                if (event is! KeyDownEvent) {
+                                  return KeyEventResult.ignored;
+                                }
+                                if (_menuController.isOpen) {
                                   if (event.logicalKey ==
                                           LogicalKeyboardKey.escape ||
                                       event.logicalKey ==
                                           LogicalKeyboardKey.goBack) {
-                                    _providerMenuController.close();
-                                    _providerFocusNode.requestFocus();
+                                    _menuController.close();
+                                    _menuFocusNode.requestFocus();
                                     return KeyEventResult.handled;
                                   }
                                   return KeyEventResult.ignored;
@@ -3088,12 +2925,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey ==
-                                    LogicalKeyboardKey.arrowLeft) {
-                                  _menuFocusNode.requestFocus();
+                                    LogicalKeyboardKey.arrowRight) {
+                                  if (_availableProviders.isNotEmpty) {
+                                    _providerFocusNode.requestFocus();
+                                  }
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey ==
-                                    LogicalKeyboardKey.arrowRight) {
+                                    LogicalKeyboardKey.arrowLeft) {
+                                  _searchBtnFocusNode.requestFocus();
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey ==
@@ -3102,45 +2942,117 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   return KeyEventResult.handled;
                                 }
                                 if (isActivateKey(event.logicalKey)) {
-                                  _providerMenuController.open();
+                                  _menuController.open();
                                   return KeyEventResult.handled;
                                 }
                                 return KeyEventResult.ignored;
                               },
                               child: ListenableBuilder(
-                                listenable: _providerFocusNode,
+                                listenable: _menuFocusNode,
                                 builder: (context, child) => MenuAnchor(
-                                  controller: _providerMenuController,
+                                  controller: _menuController,
                                   menuChildren: [
                                     _topMenuItem(
                                       autofocus: true,
-                                      leadingIcon: Icon(
-                                        _debridProvider == 'auto'
-                                            ? Icons.check_rounded
-                                            : Icons.circle_outlined,
+                                      leadingIcon: const Icon(
+                                        Icons.shuffle_rounded,
                                       ),
-                                      label: _providerFullLabel('auto'),
-                                      onPressed: () =>
-                                          _setDebridProvider('auto'),
-                                      controller: _providerMenuController,
-                                      anchorFocusNode: _providerFocusNode,
+                                      controller: _menuController,
+                                      anchorFocusNode: _menuFocusNode,
                                       closeOnArrowUp: true,
+                                      onPressed: () {
+                                        setState(
+                                          () => _mixSalt = (_mixSalt + 1) % 10,
+                                        );
+                                      },
+                                      label: 'Shuffle (Mix ${_mixSalt + 1})',
                                     ),
-                                    ..._availableProviders.map(
-                                      (provider) => MenuItemButton(
-                                        leadingIcon: Icon(
-                                          _debridProvider == provider.key
-                                              ? Icons.check_rounded
-                                              : Icons.circle_outlined,
-                                        ),
-                                        onPressed: () =>
-                                            _setDebridProvider(provider.key),
-                                        child: Text(provider.value),
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(
+                                        Icons.refresh_rounded,
                                       ),
+                                      onPressed: _refreshing
+                                          ? null
+                                          : () => _refresh(),
+                                      child: const Text('Refresh'),
+                                    ),
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(
+                                        Icons.tune_rounded,
+                                      ),
+                                      onPressed: () => _openChannelFilter(),
+                                      child: const Text('Filter channels'),
+                                    ),
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(
+                                        Icons.settings_rounded,
+                                      ),
+                                      onPressed: _openStremioTvSettings,
+                                      child: const Text('Stremio TV Settings'),
+                                    ),
+                                    SubmenuButton(
+                                      focusNode: _submenuFocusNode,
+                                      leadingIcon: const Icon(
+                                        Icons.playlist_add_rounded,
+                                      ),
+                                      menuChildren: [
+                                        _submenuItem(
+                                          autofocus: true,
+                                          icon: Icons.list_rounded,
+                                          label: 'Manage',
+                                          onPressed: _openLocalCatalogs,
+                                        ),
+                                        _submenuItem(
+                                          icon: Icons.file_upload_outlined,
+                                          label: 'From File',
+                                          onPressed: _importFromFile,
+                                        ),
+                                        _submenuItem(
+                                          icon: Icons.link_rounded,
+                                          label: 'From URL',
+                                          onPressed: _importFromUrl,
+                                        ),
+                                        _submenuItem(
+                                          icon: Icons.data_object_rounded,
+                                          label: 'Paste JSON',
+                                          onPressed: _importFromJson,
+                                        ),
+                                        _submenuItem(
+                                          icon: Icons.source_rounded,
+                                          label: 'From Repository',
+                                          onPressed: _importFromRepo,
+                                        ),
+                                        _submenuItem(
+                                          icon: Icons.movie_filter_rounded,
+                                          label: 'From Trakt',
+                                          onPressed: _importFromTrakt,
+                                        ),
+                                        // Hidden for the alpha (kMdblistEnabled)
+                                        // and only when connected — no dead import.
+                                        if (kMdblistEnabled &&
+                                            _mdblistConnected)
+                                          _submenuItem(
+                                            icon: Icons
+                                                .playlist_add_check_circle_outlined,
+                                            label: 'From MDBList',
+                                            onPressed: _importFromMdblist,
+                                          ),
+                                      ],
+                                      child: const Text('Import'),
                                     ),
                                   ],
                                   builder: (context, controller, child) =>
-                                      GestureDetector(
+                                      _headerButton(
+                                        focused: _menuFocusNode.hasFocus,
+                                        child: Icon(
+                                          Icons.more_vert_rounded,
+                                          size: 20,
+                                          color: _menuFocusNode.hasFocus
+                                              ? app.core.tx
+                                              : app.core.tx.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                        ),
                                         onTap: () {
                                           if (controller.isOpen) {
                                             controller.close();
@@ -3148,113 +3060,207 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                             controller.open();
                                           }
                                         },
-                                        child: _headerButton(
-                                          focused: _providerFocusNode.hasFocus,
-                                          wide: true,
-                                          child: Text(
-                                            _providerShortLabel(
-                                              _debridProvider,
-                                            ),
-                                            style: TextStyle(
-                                              color: _providerFocusNode.hasFocus
-                                                  ? app.core.tx
-                                                  : app.core.tx.withValues(
-                                                      alpha: 0.68,
-                                                    ),
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
                                       ),
                                 ),
                               ),
                             ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Channel list
-                Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      if (_channels.isEmpty) {
-                        return const StremioTvEmptyState();
-                      }
-                      return ValueListenableBuilder<int>(
-                        valueListenable: _contentRevision,
-                        builder: (context, _, __) {
-                          // Computed inside the builder so a revision bump
-                          // hands the tuner a fresh snapshot consistent with
-                          // the live _channels/_rowFocusNodes it also gets.
-                          final filtered = _filteredChannels;
-                          if (filtered.isEmpty && _searchQuery.isNotEmpty) {
-                            return Center(
-                              child: Text(
-                                'No channels match "$_searchQuery"',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                            if (_availableProviders.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              // Provider selector
+                              Focus(
+                                focusNode: _providerFocusNode,
+                                onKeyEvent: (node, event) {
+                                  if (event is! KeyDownEvent) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  if (_providerMenuController.isOpen) {
+                                    if (event.logicalKey ==
+                                            LogicalKeyboardKey.escape ||
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.goBack) {
+                                      _providerMenuController.close();
+                                      _providerFocusNode.requestFocus();
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  }
+                                  if (event.logicalKey ==
+                                      LogicalKeyboardKey.arrowUp) {
+                                    if (_showSearchField) {
+                                      _searchFocusNode.requestFocus();
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                      LogicalKeyboardKey.arrowLeft) {
+                                    _menuFocusNode.requestFocus();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                      LogicalKeyboardKey.arrowRight) {
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey ==
+                                      LogicalKeyboardKey.arrowDown) {
+                                    _focusDialFromHeader();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (isActivateKey(event.logicalKey)) {
+                                    _providerMenuController.open();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: ListenableBuilder(
+                                  listenable: _providerFocusNode,
+                                  builder: (context, child) => MenuAnchor(
+                                    controller: _providerMenuController,
+                                    menuChildren: [
+                                      _topMenuItem(
+                                        autofocus: true,
+                                        leadingIcon: Icon(
+                                          _debridProvider == 'auto'
+                                              ? Icons.check_rounded
+                                              : Icons.circle_outlined,
+                                        ),
+                                        label: _providerFullLabel('auto'),
+                                        onPressed: () =>
+                                            _setDebridProvider('auto'),
+                                        controller: _providerMenuController,
+                                        anchorFocusNode: _providerFocusNode,
+                                        closeOnArrowUp: true,
+                                      ),
+                                      ..._availableProviders.map(
+                                        (provider) => MenuItemButton(
+                                          leadingIcon: Icon(
+                                            _debridProvider == provider.key
+                                                ? Icons.check_rounded
+                                                : Icons.circle_outlined,
+                                          ),
+                                          onPressed: () =>
+                                              _setDebridProvider(provider.key),
+                                          child: Text(provider.value),
+                                        ),
+                                      ),
+                                    ],
+                                    builder: (context, controller, child) =>
+                                        GestureDetector(
+                                          onTap: () {
+                                            if (controller.isOpen) {
+                                              controller.close();
+                                            } else {
+                                              controller.open();
+                                            }
+                                          },
+                                          child: _headerButton(
+                                            focused:
+                                                _providerFocusNode.hasFocus,
+                                            wide: true,
+                                            child: Text(
+                                              _providerShortLabel(
+                                                _debridProvider,
+                                              ),
+                                              style: TextStyle(
+                                                color:
+                                                    _providerFocusNode.hasFocus
+                                                    ? app.core.tx
+                                                    : app.core.tx.withValues(
+                                                        alpha: 0.68,
+                                                      ),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                  ),
                                 ),
                               ),
-                            );
-                          }
-                          return StremioTvTuner(
-                            controller: _tunerController,
-                            channels: filtered,
-                            allChannels: _channels,
-                            rowFocusNodes: _rowFocusNodes,
-                            service: _service,
-                            rotationFor: _rotationFor,
-                            mixSalt: _mixSalt,
-                            hideNowPlaying: _hideNowPlaying,
-                            autoRefresh: _autoRefresh,
-                            isTelevision: widget.isTelevision,
-                            loadingChannelIds: _loadingChannelIds,
-                            ensureLoaded: (channel) {
-                              if (!channel.hasItems &&
-                                  !_loadingChannelIds.contains(channel.id)) {
-                                _ensureChannelItemsLoaded(channel);
-                              }
-                            },
-                            onOpenDetail: _openChannelDetail,
-                            onPlay: _playChannel,
-                            // Restore the "max start %" cap on the *displayed*
-                            // progress so the bar matches where playback will
-                            // actually join (matches the old row's
-                            // displayProgress semantics exactly).
-                            displayProgress: (channel, rawProgress) {
-                              if (_maxStartPercent == 0) return 0.0;
-                              return _computeStartProgress(
-                                    channel.id,
-                                    rawProgress,
-                                  ) ??
-                                  rawProgress;
-                            },
-                            onToggleFavorite: _toggleFavorite,
-                            onShowGuide: _showGuide,
-                            onEditLocal: _editLocalCatalog,
-                            onExportLocal: _copyLocalCatalogJson,
-                            onFocusSidebar: () =>
-                                MainPageBridge.focusTvSidebar?.call(),
-                            onFocusHeader: () =>
-                                _searchBtnFocusNode.requestFocus(),
-                            onFocusedIndexChanged: (realIndex) {
-                              // Bookkeeping only — never read in build(), so
-                              // no setState (keeps surfing lag-free) and it
-                              // stays current for header↕ navigation even
-                              // mid-surf.
-                              _focusedIndex = realIndex;
-                            },
-                          );
-                        },
-                      );
-                    },
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  // Channel list
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        if (_channels.isEmpty) {
+                          return const StremioTvEmptyState();
+                        }
+                        return ValueListenableBuilder<int>(
+                          valueListenable: _contentRevision,
+                          builder: (context, _, __) {
+                            // Computed inside the builder so a revision bump
+                            // hands the tuner a fresh snapshot consistent with
+                            // the live _channels/_rowFocusNodes it also gets.
+                            final filtered = _filteredChannels;
+                            if (filtered.isEmpty && _searchQuery.isNotEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No channels match "$_searchQuery"',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              );
+                            }
+                            return StremioTvTuner(
+                              controller: _tunerController,
+                              channels: filtered,
+                              allChannels: _channels,
+                              rowFocusNodes: _rowFocusNodes,
+                              service: _service,
+                              rotationFor: _rotationFor,
+                              mixSalt: _mixSalt,
+                              hideNowPlaying: _hideNowPlaying,
+                              autoRefresh: _autoRefresh,
+                              isTelevision: widget.isTelevision,
+                              loadingChannelIds: _loadingChannelIds,
+                              ensureLoaded: (channel) {
+                                if (!channel.hasItems &&
+                                    !_loadingChannelIds.contains(channel.id)) {
+                                  _ensureChannelItemsLoaded(channel);
+                                }
+                              },
+                              onOpenDetail: _openChannelDetail,
+                              onPlay: _playChannel,
+                              // Restore the "max start %" cap on the *displayed*
+                              // progress so the bar matches where playback will
+                              // actually join (matches the old row's
+                              // displayProgress semantics exactly).
+                              displayProgress: (channel, rawProgress) {
+                                if (_maxStartPercent == 0) return 0.0;
+                                return _computeStartProgress(
+                                      channel.id,
+                                      rawProgress,
+                                    ) ??
+                                    rawProgress;
+                              },
+                              onToggleFavorite: _toggleFavorite,
+                              onShowGuide: _showGuide,
+                              onEditLocal: _editLocalCatalog,
+                              onExportLocal: _copyLocalCatalogJson,
+                              onFocusSidebar: () =>
+                                  MainPageBridge.focusTvSidebar?.call(),
+                              onFocusHeader: () =>
+                                  _searchBtnFocusNode.requestFocus(),
+                              onFocusedIndexChanged: (realIndex) {
+                                // Bookkeeping only — never read in build(), so
+                                // no setState (keeps surfing lag-free) and it
+                                // stays current for header↕ navigation even
+                                // mid-surf.
+                                _focusedIndex = realIndex;
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -3278,14 +3284,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         // active control fills with the purple accent; focus is a white ring
         // that shows even on the active one, since DPAD focus lands there first
         // and the fill alone wouldn't signal the remote moved.
-        color: active
-            ? app.home.chromeAccent
-            : app.stremioTv.surfaceFill,
+        color: active ? app.home.chromeAccent : app.stremioTv.surfaceFill,
         borderRadius: app.shape.br(12),
         border: Border.all(
-          color: focused
-              ? app.stremioTv.focusRing
-              : app.stremioTv.hairline,
+          color: focused ? app.stremioTv.focusRing : app.stremioTv.hairline,
           width: focused ? 2 : 0.5,
         ),
       ),
@@ -3378,7 +3380,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       ],
     );
   }
-
 }
 
 // ─── Manual Source Picker (shown when auto-play fails) ────────────────────
@@ -3607,7 +3608,9 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
                       child: Text(
                         'No sources in this category',
                         style: TextStyle(
-                            color: app.core.tx.withAlpha(0x62), fontSize: 14),
+                          color: app.core.tx.withAlpha(0x62),
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   )
@@ -3707,16 +3710,14 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
           decoration: BoxDecoration(
             // Active = purple fill, focus = white ring (Home mode-toggle
             // pattern); the ring shows even on the active pill.
-            color: widget.isActive
-                ? app.home.chromeAccent
-                : Colors.transparent,
+            color: widget.isActive ? app.home.chromeAccent : Colors.transparent,
             borderRadius: app.shape.br(20),
             border: Border.all(
               color: _focused
                   ? app.stremioTv.focusRing
                   : widget.isActive
-                      ? Colors.transparent
-                      : app.core.tx.withAlpha(0x1F),
+                  ? Colors.transparent
+                  : app.core.tx.withAlpha(0x1F),
               width: _focused ? 2 : 1,
             ),
           ),
