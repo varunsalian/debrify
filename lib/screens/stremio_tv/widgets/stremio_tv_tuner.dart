@@ -101,7 +101,7 @@ class StremioTvTuner extends StatefulWidget {
   /// host caps/jitters this per the "max start %" setting so every progress
   /// bar matches where playback will actually join.
   final double Function(StremioTvChannel channel, double rawProgress)
-      displayProgress;
+  displayProgress;
 
   final void Function(StremioTvChannel channel) onToggleFavorite;
   final void Function(StremioTvChannel channel) onShowGuide;
@@ -206,8 +206,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     super.initState();
     widget.controller?._bind(this);
     _rebuildIndex();
-    _activeId.value =
-        widget.channels.isNotEmpty ? widget.channels.first.id : null;
+    _activeId.value = widget.channels.isNotEmpty
+        ? widget.channels.first.id
+        : null;
     _centredId.value = _activeId.value;
     _dialScroll.addListener(_onDialScroll);
     _syncTick();
@@ -220,9 +221,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     if (!_touchDial || !_dialScroll.hasClients) return;
     final channels = widget.channels;
     if (channels.isEmpty) return;
-    final i = (_dialScroll.offset / _dialItemExtent)
-        .round()
-        .clamp(0, channels.length - 1);
+    final i = (_dialScroll.offset / _dialItemExtent).round().clamp(
+      0,
+      channels.length - 1,
+    );
     final c = channels[i];
     // The ring follows immediately; the Stage swap stays debounced (and
     // neighbour backdrops pre-warmed) by _setActive's settle timer.
@@ -286,8 +288,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     _syncTick();
     if (_activeId.value == null ||
         !widget.channels.any((c) => c.id == _activeId.value)) {
-      _activeId.value =
-          widget.channels.isNotEmpty ? widget.channels.first.id : null;
+      _activeId.value = widget.channels.isNotEmpty
+          ? widget.channels.first.id
+          : null;
       _pendingId = _activeId.value;
       _centredId.value = _activeId.value;
       _settle?.cancel();
@@ -336,11 +339,19 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     return idents[c.id.hashCode.abs() % idents.length];
   }
 
-  StremioTvNowPlaying? _nowPlaying(StremioTvChannel c) => widget.service
-      .getNowPlaying(c, rotationMinutes: widget.rotationFor(c), salt: widget.mixSalt);
+  StremioTvNowPlaying? _nowPlaying(StremioTvChannel c) =>
+      widget.service.getNowPlaying(
+        c,
+        rotationMinutes: widget.rotationFor(c),
+        salt: widget.mixSalt,
+      );
 
-  StremioTvNowPlaying? _nextPlaying(StremioTvChannel c) => widget.service
-      .getNextPlaying(c, rotationMinutes: widget.rotationFor(c), salt: widget.mixSalt);
+  StremioTvNowPlaying? _nextPlaying(StremioTvChannel c) =>
+      widget.service.getNextPlaying(
+        c,
+        rotationMinutes: widget.rotationFor(c),
+        salt: widget.mixSalt,
+      );
 
   double _displayProgress(StremioTvChannel c, StremioTvNowPlaying? np) =>
       np == null ? 0.0 : widget.displayProgress(c, np.progress);
@@ -409,22 +420,28 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         // no-gaussian tiny decode) or the warm-up decodes a second copy.
         ? (widget.isTelevision ? 96 : 480)
         : (widget.isTelevision
-            ? HomeTheme.heroBackdropCacheWidthTv
-            : HomeTheme.heroBackdropCacheWidth);
+              ? HomeTheme.heroBackdropCacheWidthTv
+              : HomeTheme.heroBackdropCacheWidth);
     for (final n in [idx - 1, idx + 1]) {
       if (n < 0 || n >= channels.length) continue;
       final item = _nowPlaying(channels[n])?.item;
       final bg = item?.background ?? item?.poster;
       if (bg == null || bg.isEmpty) continue;
-      unawaited(precacheImage(
-        ResizeImage.resizeIfNeeded(
-          width,
-          null,
-          CachedNetworkImageProvider(bg),
+      unawaited(
+        precacheImage(
+          ResizeImage.resizeIfNeeded(
+            width,
+            null,
+            CachedNetworkImageProvider(bg),
+          ),
+          context,
+          onError:
+              (
+                _,
+                __,
+              ) {}, // best-effort warm-up; the Stage has its own error path
         ),
-        context,
-        onError: (_, __) {}, // best-effort warm-up; the Stage has its own error path
-      ));
+      );
     }
   }
 
@@ -443,7 +460,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   /// refreshes the captured closures. O(1) in the common (unchanged) case.
   void _surf(StremioTvChannel channel, int buildIndex, int delta) {
     final live = widget.channels;
-    final cur = (buildIndex >= 0 &&
+    final cur =
+        (buildIndex >= 0 &&
             buildIndex < live.length &&
             live[buildIndex].id == channel.id)
         ? buildIndex
@@ -522,11 +540,12 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     if (!_dialScroll.hasClients) return;
     final pos = _dialScroll.position;
     final viewport = pos.viewportDimension;
-    final target = (_dialLeadingPadFor(viewport) +
-            dialIndex * _dialItemExtent +
-            _dialItemExtent / 2 -
-            viewport / 2)
-        .clamp(0.0, pos.maxScrollExtent);
+    final target =
+        (_dialLeadingPadFor(viewport) +
+                dialIndex * _dialItemExtent +
+                _dialItemExtent / 2 -
+                viewport / 2)
+            .clamp(0.0, pos.maxScrollExtent);
     _dialScroll.jumpTo(target);
   }
 
@@ -564,13 +583,18 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
-        Widget tile(IconData icon, String label, VoidCallback onTap,
-            {Color? tint}) {
+        Widget tile(
+          IconData icon,
+          String label,
+          VoidCallback onTap, {
+          Color? tint,
+        }) {
           return ListTile(
             leading: Icon(icon, color: tint ?? app.core.tx.withAlpha(0xB3)),
-            title: Text(label,
-                style: TextStyle(
-                    color: app.core.tx, fontWeight: FontWeight.w600)),
+            title: Text(
+              label,
+              style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w600),
+            ),
             onTap: () {
               Navigator.of(ctx).pop();
               onTap();
@@ -593,44 +617,72 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                child: Row(children: [
-                  Container(width: 4, height: 26,
-                    decoration: BoxDecoration(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 26,
+                      decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: app.shape.br(2)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(channel.displayName,
+                        borderRadius: app.shape.br(2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        channel.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: app.core.tx,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ]),
+                          color: app.core.tx,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              tile(Icons.play_arrow_rounded, 'Play this channel now',
-                  () => widget.onPlay(channel), tint: ident),
-              if (!widget.hideNowPlaying)
-                tile(Icons.info_outline_rounded, 'View details',
-                    () => widget.onOpenDetail(channel)),
-              if (!widget.hideNowPlaying)
-                tile(Icons.live_tv_rounded, 'Channel guide',
-                    () => widget.onShowGuide(channel)),
               tile(
-                channel.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
-                channel.isFavorite ? 'Remove from favorites' : 'Add to favorites',
+                Icons.play_arrow_rounded,
+                'Play this channel now',
+                () => widget.onPlay(channel),
+                tint: ident,
+              ),
+              if (!widget.hideNowPlaying)
+                tile(
+                  Icons.info_outline_rounded,
+                  'View details',
+                  () => widget.onOpenDetail(channel),
+                ),
+              if (!widget.hideNowPlaying)
+                tile(
+                  Icons.live_tv_rounded,
+                  'Channel guide',
+                  () => widget.onShowGuide(channel),
+                ),
+              tile(
+                channel.isFavorite
+                    ? Icons.star_rounded
+                    : Icons.star_border_rounded,
+                channel.isFavorite
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
                 () => widget.onToggleFavorite(channel),
                 tint: channel.isFavorite ? app.stremioTv.starAccent : null,
               ),
               if (channel.isLocal && widget.onEditLocal != null)
-                tile(Icons.edit_rounded, 'Edit local catalog',
-                    () => widget.onEditLocal!(channel)),
+                tile(
+                  Icons.edit_rounded,
+                  'Edit local catalog',
+                  () => widget.onEditLocal!(channel),
+                ),
               if (channel.isLocal && widget.onExportLocal != null)
-                tile(Icons.copy_all_rounded, 'Copy catalog JSON',
-                    () => widget.onExportLocal!(channel)),
+                tile(
+                  Icons.copy_all_rounded,
+                  'Copy catalog JSON',
+                  () => widget.onExportLocal!(channel),
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -676,11 +728,14 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('All channels',
-                        style: TextStyle(
-                            color: app.core.tx,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800)),
+                    child: Text(
+                      'All channels',
+                      style: TextStyle(
+                        color: app.core.tx,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
                 Expanded(
@@ -710,8 +765,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
       color: active ? ident.withValues(alpha: 0.16) : Colors.transparent,
       child: InkWell(
         onTap: () {
-          final idx =
-              widget.channels.indexWhere((c) => c.id == channel.id);
+          final idx = widget.channels.indexWhere((c) => c.id == channel.id);
           Navigator.of(ctx).pop();
           if (idx >= 0 && _pageController.hasClients) {
             _pageController.jumpToPage(idx);
@@ -724,8 +778,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
             children: [
               Container(
                 width: 42,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: ident,
                   borderRadius: app.shape.br(6),
@@ -778,9 +831,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       widget.hideNowPlaying
                           ? 'Now playing hidden'
                           : (np?.item.name ??
-                              (widget.loadingChannelIds.contains(channel.id)
-                                  ? 'Tuning in…'
-                                  : 'No broadcast')),
+                                (widget.loadingChannelIds.contains(channel.id)
+                                    ? 'Tuning in…'
+                                    : 'No broadcast')),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -793,11 +846,11 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       ClipRRect(
                         borderRadius: app.shape.br(2),
                         child: LinearProgressIndicator(
-                          value: widget.displayProgress(channel, np.progress)
+                          value: widget
+                              .displayProgress(channel, np.progress)
                               .clamp(0.0, 1.0),
                           minHeight: 3,
-                          backgroundColor:
-                              app.core.tx.withValues(alpha: 0.14),
+                          backgroundColor: app.core.tx.withValues(alpha: 0.14),
                           valueColor: AlwaysStoppedAnimation(ident),
                         ),
                       ),
@@ -808,8 +861,11 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               if (channel.isFavorite)
                 Padding(
                   padding: const EdgeInsets.only(left: 10),
-                  child: Icon(Icons.star_rounded,
-                      size: 16, color: app.stremioTv.starAccent),
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 16,
+                    color: app.stremioTv.starAccent,
+                  ),
                 ),
             ],
           ),
@@ -829,9 +885,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         ),
       ),
       child: Icon(
-        channel.type == 'series'
-            ? Icons.live_tv_rounded
-            : Icons.movie_rounded,
+        channel.type == 'series' ? Icons.live_tv_rounded : Icons.movie_rounded,
         size: 18,
         color: app.core.tx.withValues(alpha: 0.3),
       ),
@@ -919,10 +973,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               ],
             ),
             border: Border(
-              top: BorderSide(
-                color: app.stremioTv.hairline,
-                width: 0.5,
-              ),
+              top: BorderSide(color: app.stremioTv.hairline, width: 0.5),
             ),
           ),
           child: Padding(
@@ -971,7 +1022,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       controller: _dialScroll,
                       scrollDirection: Axis.horizontal,
                       padding: EdgeInsets.symmetric(
-                        horizontal: _dialLeadingPadFor(dialConstraints.maxWidth),
+                        horizontal: _dialLeadingPadFor(
+                          dialConstraints.maxWidth,
+                        ),
                       ),
                       itemCount: dial.length,
                       itemBuilder: (context, i) {
@@ -987,7 +1040,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                           nowPlaying: np,
                           displayProgress: _displayProgress(channel, np),
                           hideNowPlaying: widget.hideNowPlaying,
-                          loading: widget.loadingChannelIds.contains(channel.id),
+                          loading: widget.loadingChannelIds.contains(
+                            channel.id,
+                          ),
                           isTelevision: widget.isTelevision,
                           // Touch only: the centred card wears the gold ring so
                           // the selection is visible before you scroll. Null on
@@ -1145,7 +1200,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
     _syncKen();
     final itemChanged =
         old.nowPlaying?.item.id != widget.nowPlaying?.item.id ||
-            old.channel.id != widget.channel.id;
+        old.channel.id != widget.channel.id;
     if (itemChanged && _motionOk) {
       _textFx.forward(from: 0);
     }
@@ -1214,8 +1269,8 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                   memCacheWidth: blurArt
                       ? (widget.isTelevision ? 96 : 480)
                       : (widget.isTelevision
-                          ? HomeTheme.heroBackdropCacheWidthTv
-                          : HomeTheme.heroBackdropCacheWidth),
+                            ? HomeTheme.heroBackdropCacheWidthTv
+                            : HomeTheme.heroBackdropCacheWidth),
                   // On TV, snap the swap instead of a fade — deliberately NOT
                   // the shared HomeTheme token (which now fades 150ms on TV
                   // for the small board posters): the Stage swaps to a FRESH
@@ -1425,9 +1480,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                 height: 1.05,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.8,
-                shadows: const [
-                  Shadow(blurRadius: 16, color: Colors.black),
-                ],
+                shadows: const [Shadow(blurRadius: 16, color: Colors.black)],
               ),
             ),
             0.08,
@@ -1472,16 +1525,22 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
           width: 0.5,
         ),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 15, color: app.onGlass.withValues(alpha: 0.85)),
-        const SizedBox(width: 7),
-        Text(label,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: app.onGlass.withValues(alpha: 0.85)),
+          const SizedBox(width: 7),
+          Text(
+            label,
             style: TextStyle(
-                color: app.onGlass.withValues(alpha: 0.85),
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3)),
-      ]),
+              color: app.onGlass.withValues(alpha: 0.85),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1566,45 +1625,52 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
       add(Text(item.year!, style: _metaStyle));
     }
     if (item.imdbRating != null) {
-      add(Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.star_rounded, size: 16, color: app.stremioTv.starAccent),
-        const SizedBox(width: 4),
-        Text(item.imdbRating!.toStringAsFixed(1), style: _metaStyle),
-      ]));
+      add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.star_rounded, size: 16, color: app.stremioTv.starAccent),
+            const SizedBox(width: 4),
+            Text(item.imdbRating!.toStringAsFixed(1), style: _metaStyle),
+          ],
+        ),
+      );
     }
     if (item.genres != null && item.genres!.isNotEmpty) {
-      add(Flexible(
-        child: Text(
-          item.genres!.take(3).join(' · '),
-          style: _metaStyle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
+      add(
+        Flexible(
+          child: Text(
+            item.genres!.take(3).join(' · '),
+            style: _metaStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
         ),
-      ));
+      );
     }
     if (bits.isEmpty) return const SizedBox.shrink();
     return Row(children: bits);
   }
 
   TextStyle get _metaStyle => TextStyle(
-        color: AppThemeScope.of(context).core.tx,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        shadows: const [Shadow(blurRadius: 12, color: Colors.black)],
-      );
+    color: AppThemeScope.of(context).core.tx,
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    shadows: const [Shadow(blurRadius: 12, color: Colors.black)],
+  );
 
   Widget _dot() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Container(
-          width: 4,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.40),
-            shape: BoxShape.circle,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: Container(
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.40),
+        shape: BoxShape.circle,
+      ),
+    ),
+  );
 
   Widget _liveBar() {
     final app = AppThemeScope.of(context);
@@ -1617,13 +1683,15 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         // blue identity colour for both).
         _LivePip(color: app.home.highlight),
         const SizedBox(width: 9),
-        Text('LIVE',
-            style: TextStyle(
-              color: app.home.highlight,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.5,
-            )),
+        Text(
+          'LIVE',
+          style: TextStyle(
+            color: app.home.highlight,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.5,
+          ),
+        ),
         const SizedBox(width: 16),
         Expanded(
           child: ClipRRect(
@@ -1676,10 +1744,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         color: app.stremioTv.surfaceFill,
         borderRadius: app.shape.br(12),
-        border: Border.all(
-          color: app.stremioTv.hairline,
-          width: 0.5,
-        ),
+        border: Border.all(color: app.stremioTv.hairline, width: 0.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1740,8 +1805,11 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
     final app = AppThemeScope.of(context);
     return Row(
       children: [
-        Icon(Icons.visibility_off_rounded,
-            size: 28, color: app.core.tx.withValues(alpha: 0.5)),
+        Icon(
+          Icons.visibility_off_rounded,
+          size: 28,
+          color: app.core.tx.withValues(alpha: 0.5),
+        ),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
@@ -1776,11 +1844,11 @@ class _StageDescription extends StatelessWidget {
   });
 
   TextStyle _styleOf(AppTheme app) => TextStyle(
-        color: app.core.tx.withAlpha(0xC8),
-        fontSize: 17,
-        height: 1.5,
-        shadows: const [Shadow(blurRadius: 8, color: Colors.black)],
-      );
+    color: app.core.tx.withAlpha(0xC8),
+    fontSize: 17,
+    height: 1.5,
+    shadows: const [Shadow(blurRadius: 8, color: Colors.black)],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1830,9 +1898,11 @@ class _StageDescription extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 3),
-                    Icon(Icons.expand_more_rounded,
-                        size: 18,
-                        color: app.core.tx.withValues(alpha: 0.95)),
+                    Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: app.core.tx.withValues(alpha: 0.95),
+                    ),
                   ],
                 ),
               ),
@@ -1872,29 +1942,31 @@ class _StageDescription extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-              child: Row(children: [
-                Container(
-                  width: 4,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: ident,
-                    borderRadius: app.shape.br(2),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.core.tx,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: ident,
+                      borderRadius: app.shape.br(2),
                     ),
                   ),
-                ),
-              ]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: app.core.tx,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             Expanded(
               child: SingleChildScrollView(
@@ -2172,10 +2244,12 @@ class _DialCardState extends State<_DialCard> {
                       imageUrl: poster,
                       fit: BoxFit.cover,
                       memCacheWidth: 280,
-                      fadeInDuration:
-                          HomeTheme.imageFadeIn(widget.isTelevision),
-                      fadeOutDuration:
-                          HomeTheme.imageFadeOut(widget.isTelevision),
+                      fadeInDuration: HomeTheme.imageFadeIn(
+                        widget.isTelevision,
+                      ),
+                      fadeOutDuration: HomeTheme.imageFadeOut(
+                        widget.isTelevision,
+                      ),
                       placeholder: (_, __) => _placeholder(ident),
                       errorWidget: (_, __, ___) => _placeholder(ident),
                     )
@@ -2189,16 +2263,17 @@ class _DialCardState extends State<_DialCard> {
                       imageUrl: poster,
                       fit: BoxFit.cover,
                       memCacheWidth: 16,
-                      fadeInDuration:
-                          HomeTheme.imageFadeIn(widget.isTelevision),
-                      fadeOutDuration:
-                          HomeTheme.imageFadeOut(widget.isTelevision),
+                      fadeInDuration: HomeTheme.imageFadeIn(
+                        widget.isTelevision,
+                      ),
+                      fadeOutDuration: HomeTheme.imageFadeOut(
+                        widget.isTelevision,
+                      ),
                       errorWidget: (_, __, ___) => _placeholder(ident),
                     )
                   else if (poster != null && widget.hideNowPlaying)
                     ImageFiltered(
-                      imageFilter:
-                          ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                       child: CachedNetworkImage(
                         imageUrl: poster,
                         fit: BoxFit.cover,
@@ -2240,7 +2315,9 @@ class _DialCardState extends State<_DialCard> {
                     left: 9,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: ident,
                         borderRadius: app.shape.br(8),
@@ -2266,8 +2343,11 @@ class _DialCardState extends State<_DialCard> {
                           color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.star_rounded,
-                            size: 14, color: app.stremioTv.starAccent),
+                        child: Icon(
+                          Icons.star_rounded,
+                          size: 14,
+                          color: app.stremioTv.starAccent,
+                        ),
                       ),
                     ),
                   // "How to open options" affordance — TV on the focused card
@@ -2319,8 +2399,7 @@ class _DialCardState extends State<_DialCard> {
                           Text(
                             widget.hideNowPlaying
                                 ? widget.channel.catalog.name
-                                : (item?.name ??
-                                    widget.channel.catalog.name),
+                                : (item?.name ?? widget.channel.catalog.name),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -2338,20 +2417,21 @@ class _DialCardState extends State<_DialCard> {
                               child: Stack(
                                 children: [
                                   Container(
-                                    color: app.onGlass
-                                        .withValues(alpha: 0.15),
+                                    color: app.onGlass.withValues(alpha: 0.15),
                                   ),
                                   FractionallySizedBox(
-                                    widthFactor: widget.displayProgress
-                                        .clamp(0.0, 1.0),
+                                    widthFactor: widget.displayProgress.clamp(
+                                      0.0,
+                                      1.0,
+                                    ),
                                     child: Container(
                                       // White progress fill to match Home (the
                                       // CH badge keeps the per-channel colour).
                                       decoration: BoxDecoration(
-                                        color: app.onGlass
-                                            .withValues(alpha: 0.9),
-                                        borderRadius:
-                                            app.shape.br(3),
+                                        color: app.onGlass.withValues(
+                                          alpha: 0.9,
+                                        ),
+                                        borderRadius: app.shape.br(3),
                                       ),
                                     ),
                                   ),
