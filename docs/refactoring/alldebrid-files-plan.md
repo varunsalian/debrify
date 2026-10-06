@@ -455,11 +455,11 @@ must also pass from a fresh normal `git clone` (`.git` a directory) after
 6. `_focusWebDownloads` makes no explicit scroll jump (the reload's
    skeleton resets the offset as a side effect) and does not reset the file
    search, unlike the view selector.
-8. `_refresh`'s open-magnet branch is unreachable from the UI: the files view
-   has no toolbar or pull-to-refresh.
 7. System Back can pop the "loading" dialog while `_loadingDialogOpen` stays
    true; the later `_dismissLoading` then pops the route underneath (the
    pushed screen itself).
+8. `_refresh`'s open-magnet branch is unreachable from the UI: the files view
+   has no toolbar or pull-to-refresh.
 
 ## Decisions taken before design review
 
@@ -523,4 +523,9 @@ Codex round 2: one P1, one P2, one P3; round-1 items confirmed resolved.
    is scoped to the torrents root (rows 6 and 9, Found-not-fixed 8).
 3. **P3:** the search-button condition includes the non-empty backing list
    (contract 2).
+
+## Round 3 review resolution
+
+Codex round 3: all round-2 findings resolved, no P1 or P2 — "No P1s —
+executable". Its one P3 (Found-not-fixed numbering) is fixed.
 
