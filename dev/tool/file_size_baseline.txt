@@ -19,7 +19,7 @@
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2852 lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart
-2847 lib/screens/settings/widgets/settings_widgets.dart
+1837 lib/screens/settings/widgets/settings_widgets.dart
 2800 lib/screens/downloads_screen.dart
 2764 lib/screens/profiles/edit_profile_screen.dart
 2608 lib/screens/settings/stremio_addons_page.dart

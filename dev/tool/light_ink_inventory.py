@@ -60,6 +60,7 @@ EXCLUDE = ('lib/screens/deprecated/', 'lib/screens/video_player',
 PRIMARY = (
     'lib/screens/search_screen.dart',
     'lib/screens/settings',
+    'lib/features/settings_widgets/presentation/',  # settings_widgets moved vocabulary
     'lib/screens/cloud_screen.dart',
     'lib/screens/debrid_downloads_screen.dart',
     'lib/features/debrid_downloads',

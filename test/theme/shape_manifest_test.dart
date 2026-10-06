@@ -35,6 +35,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  // settings_widgets step 1: measured radius ceilings; token ownership retained.
+  'lib/features/settings_widgets/presentation/settings_page_theme.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_page_chrome.dart': 1,
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
@@ -194,7 +197,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/settings/simkl_settings_page.dart': 1,
   'lib/screens/settings/trakt_settings_page.dart': 1,
   'lib/screens/settings/widgets/dynamic_settings_builder.dart': 7,
-  'lib/screens/settings/widgets/settings_widgets.dart': 10,
+  'lib/screens/settings/widgets/settings_widgets.dart': 6,
   'lib/features/settings/presentation/legacy_settings/settings_release_details.dart':
       0,
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
@@ -246,6 +249,12 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // settings_widgets step 1: measured radius ceilings; token ownership retained.
+  'lib/features/settings_widgets/presentation/settings_tokens.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_pending_badge.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_rows.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_links.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_root_chrome.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,

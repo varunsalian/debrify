@@ -708,6 +708,10 @@ below.
    Broadsheet's motion scale is 1; the reveal test uses the public
    `AppTheme.fromDetail` motion override and `AppThemeScope` at scale 1.15.
 
+10. The pre-existing `dev/tool/torbox_manifest.tsv` uses CRLF. Its bytes are
+    unchanged from 0b; this refactor keeps its own manifest LF and does not
+    rewrite another feature's proof inputs.
+
 ## Round 1 review resolution (Codex design review at `8ccf2d8a`)
 
 1. P1 shape registration → token-bearing destinations in `kShapeResidue`,
@@ -1175,3 +1179,51 @@ The incomplete superseded run and rejected partial mutation run have NOTE
 files; neither is accepted baseline/proof evidence. Linux capture uses the
 exact 0b subject and retains R equality checks. It was syntax-checked only.
 **STOP: Step 0b closed; Step L and Step 1 have not started.**
+
+
+### Step L and Step 1 — verified originals and first moves
+
+- Step L `43b845651`: only the five Linux PNGs. SHA-256 matches both forward
+  and independent reverse-order captures; dimensions match the five scenes.
+  Provenance pins 0b `65d7fd80`, R `0eadeb8c`, equal lib/pubspec hashes,
+  Flutter 3.44.8 / Dart 3.12.2, linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`.
+  Verification is `stepL-verification.json` beside the supplied evidence.
+- `flutter pub get` reran in this worktree; no dependency changes. Step 1
+  moves tokens, pending badge, rows, links, page theme, page chrome and root
+  chrome verbatim from R. Importers remain unchanged. The original ratchets
+  to 1837 lines; seven destinations are below 500. Service allowances,
+  screen/facade back-import bans, settings-family implementation bans,
+  URL confinement and the 500-line limit are keyed by settings_widgets.
+- Shape entries are added with their files: 26 tokens and seven bare radii
+  over the slice, global floor exactly 488. The alternate
+  `BorderRadius.all(Radius.circular(...))` spelling is included in measurement;
+  initial ceiling undercount corrected before committing. Profile redaction
+  and light-ink PRIMARY scopes now include the feature. Theme classification
+  retains the existing explicit settings_widgets pattern.
+- Decision: preserve all twenty frozen 0b test/helper/fixture/macOS-PNG
+  hashes. Linux is mandatory in CI via the frozen test's existing
+  `SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true` define; existing PNGs replay
+  strictly on ordinary Linux runs too. No golden is regenerated. The Linux
+  completion replay is Claude's gate-2 handoff.
+- Per-step evidence is `step1/` plus `step1-focused-stable.*`. Checks and
+  diagnostics are completed before starting the dependent batch; exact
+  outcomes and committed revisions are recorded in the completion entry.
+  Existing profile SharedPreferences guard failure stays unfixed and is
+  compared by identity against base3b. No allowlist addition.
+
+- Step 1 verification complete: all 17 integrated manifests and self-tests
+  pass with separate parser copies; own real-config fixtures preserve all 60
+  declarations/comments. Architecture real-main positives/negatives pass;
+  CI format, scoped analyze/25-warning allowlist and size ratchet pass. Whole
+  analyzer retains exactly 1689 reports with zero additions/removals by
+  relocation. Strict per-owner comparison has four original const infos,
+  zero additions; its fixtures pass. Shape is 26/7/488; settings theme is
+  226 files / 657 sites (same classification/site count); light-ink remains
+  774 sites / 198 files, PRIMARY 240 / 67. Stable focused comparison: 295
+  success / one unchanged baseline failure, zero missing/new-skipped/added
+  identities. All twenty frozen inputs remain hash-equal. Superseded focused
+  runs and checker scheduling have NOTE files; neither partial evidence nor
+  changed-tree evidence is accepted. Parser scheduling increases to four
+  independent workers on the 18-core/128-GB host; suite runs/commits stay
+  serialized. The unchanged legacy TorBox CRLF input is Found 10.

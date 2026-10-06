@@ -12,6 +12,12 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
+# settings_widgets: feature checks apply from the first move; facade completes at step 4.
+FEATURES += ("settings_widgets",)
+SETTINGS_WIDGETS_COMPLETE = False
+SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"
+SETTINGS_WIDGETS_FACADE_CAP = 0  # Measured and activated at step 4.
+SETTINGS_WIDGETS_PUBLIC_NAMES = frozenset(['ConnectionCard', 'ConnectionInfo', 'ConnectionsSummary', 'SettingsBackground', 'SettingsBannerTone', 'SettingsHeader', 'SettingsInfoBanner', 'SettingsInfoTile', 'SettingsLookHero', 'SettingsPageHeader', 'SettingsPageScaffold', 'SettingsRowContent', 'SettingsRows', 'SettingsSection', 'SettingsSectionLabel', 'SettingsSelectDropdown', 'SettingsSelectOption', 'SettingsSkeleton', 'SettingsTile', 'SettingsToggleTile', 'TvRenderQualityChoice', 'TvUiScaleChoice', 'WebDavSyncPendingBadge', 'kSettingsAccent', 'kSettingsAccent2', 'kSettingsAmber', 'kSettingsBg', 'kSettingsDim', 'kSettingsDim2', 'kSettingsGreen', 'kSettingsLine', 'kSettingsMaxWidth', 'kSettingsPanel', 'kSettingsPanel2', 'kSettingsRed', 'kTvRenderQualityChoices', 'kTvUiScaleChoices', 'launchSettingsUrl', 'pushSettingsPage', 'settingsConnectionIsReady', 'settingsConnectionNeedsAttention', 'settingsInitialsFor', 'settingsPageTheme', 'showLegacyModeInfoDialog', 'showSettingsDialog', 'tvRenderQualityLabel', 'tvUiScaleLabel'])
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
@@ -252,6 +258,13 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # settings_widgets: exact legacy type/static imports; exits recorded in its plan.
+    'lib/features/settings_widgets/presentation/settings_connection_card.dart': {
+        'lib/services/main_page_bridge.dart': {'MainPageBridge'},
+    },
+    'lib/features/settings_widgets/presentation/settings_legacy_mode_dialog.dart': {
+        'lib/services/profiles/profile_bootstrap.dart': {'ProfileBootstrap'},
+    },
     # Detail showcase exact type/cache imports. No service logic.
     'lib/features/detail_showcase/presentation/showcase_cast.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
@@ -509,6 +522,27 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    # settings_widgets: no feature size exceptions; completion adds the pure facade.
+    if relative.startswith("lib/features/settings_widgets/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line settings widgets limit")
+    if relative.startswith("lib/features/settings_widgets/") or relative == SETTINGS_WIDGETS_FACADE:
+        if "TEMP(settings_widgets)" in source:
+            problems.append("temporary settings widgets cross-call remains")
+    if SETTINGS_WIDGETS_COMPLETE and relative == SETTINGS_WIDGETS_FACADE:
+        if lines > SETTINGS_WIDGETS_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {SETTINGS_WIDGETS_FACADE_CAP}-line settings widgets facade limit")
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+        exports = re.compile(r"export\s+['\"]([^'\"]+)['\"]\s+show\s+([\w,\s]+);", re.MULTILINE)
+        names = [name.strip() for match in exports.finditer(without_comments)
+                 for name in match.group(2).split(",")]
+        if exports.sub("", without_comments).strip():
+            problems.append("settings widgets facade must contain only export directives and comments")
+        if len(names) != 47 or set(names) != SETTINGS_WIDGETS_PUBLIC_NAMES:
+            problems.append("settings widgets facade must export exactly the original 47 names")
+        if any(not match.group(1).startswith("package:debrify/features/settings_widgets/presentation/")
+               for match in exports.finditer(without_comments)):
+            problems.append("settings widgets facade must export its feature destinations")
     if DETAIL_SHOWCASE_COMPLETE and relative == DETAIL_SHOWCASE_FACADE:
         if lines > DETAIL_SHOWCASE_FACADE_LIMIT:
             problems.append(f"{lines} lines exceeds the {DETAIL_SHOWCASE_FACADE_LIMIT}-line detail showcase facade limit")
@@ -657,6 +691,26 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            # settings_widgets: physical directive targets, never facade resolution.
+            if relative.startswith("lib/features/settings_widgets/"):
+                if target == SETTINGS_WIDGETS_FACADE:
+                    problems.append("settings widgets feature imports its facade")
+                if target.startswith("lib/screens/"):
+                    problems.append("settings widgets feature imports a screen")
+                if target.startswith("lib/services/") and target not in PRESENTATION_BRIDGE_IMPORTS.get(relative, {}):
+                    problems.append("settings widgets service import outside its exact registered show entry")
+                if "url_launcher" in target and relative != "lib/features/settings_widgets/presentation/settings_links.dart":
+                    problems.append("settings widgets URL launcher import outside its links file")
+                if (target.startswith(("package:http/", "package:shared_preferences/", "package:sqflite", "lib/services/storage/"))
+                        or any(name in target for name in ("media_kit", "video_player", "player_launch", "torrent_playback", "trailer_engine"))):
+                    problems.append("settings widgets imports a playback/storage/http implementation")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_widgets_feature, other_widgets_feature = relative.split("/")[2], target.split("/")[2]
+                widgets_peers = {"settings", "playback_settings", "iptv_settings"}
+                if ((own_widgets_feature == "settings_widgets" and other_widgets_feature in widgets_peers)
+                        or (other_widgets_feature == "settings_widgets" and own_widgets_feature in widgets_peers)):
+                    if not target.startswith(f"lib/features/{other_widgets_feature}/models/"):
+                        problems.append("settings widgets/settings-family implementation cross-import")
             if relative.startswith("lib/features/addon_hub/"):
                 if target in (ADDON_HUB_FACADE, "lib/screens/addons_screen.dart", "lib/screens/settings/stremio_addons_page.dart"):
                     problems.append("addon hub feature imports a legacy addon screen")
@@ -743,6 +797,8 @@ def violations(path: Path) -> list[str]:
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
                 if relative.startswith("lib/features/detail_showcase/") and names != bridge[target]:
                     problems.append(f"detail showcase service import must show the exact registered declarations: {uri}")
+                if relative.startswith("lib/features/settings_widgets/") and names != bridge[target]:
+                    problems.append(f"settings widgets service import must show the exact registered declarations: {uri}")
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)
@@ -830,6 +886,8 @@ def main() -> int:
         paths.add(ROOT / SPOTLIGHT_BOARD_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if SETTINGS_WIDGETS_COMPLETE:
+        paths.add(ROOT / SETTINGS_WIDGETS_FACADE)
     if DETAIL_SHOWCASE_COMPLETE:
         paths.add(ROOT / DETAIL_SHOWCASE_FACADE)
     if EPISODES_PANEL_COMPLETE:

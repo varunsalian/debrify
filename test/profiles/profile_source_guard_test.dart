@@ -341,6 +341,11 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart')),
+      // settings_widgets: preserve the settings log-redaction scan after moves.
+      ...Directory('lib/features/settings_widgets')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/screens/settings')
           .listSync(recursive: true)
           .whereType<File>()
