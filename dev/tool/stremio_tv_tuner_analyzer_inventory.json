@@ -1,0 +1,97 @@
+{
+  "baseline": "2d3ef03404b62a6a61116d9e7636c43dba7349c2",
+  "sdk": "Flutter 3.44.8 / Dart 3.12.2",
+  "combination": "maximum per severity, rule, original symbol and message; never sum",
+  "entries": [
+    {
+      "severity": "info",
+      "rule": "avoid_renaming_method_parameters",
+      "symbol": "_DialCardState.didUpdateWidget",
+      "message": "The parameter name 'old' doesn't match the name 'oldWidget' in the overridden method. Try changing the name to 'oldWidget'",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "avoid_renaming_method_parameters",
+      "symbol": "_StageState.didUpdateWidget",
+      "message": "The parameter name 'old' doesn't match the name 'oldWidget' in the overridden method. Try changing the name to 'oldWidget'",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_StremioTvTunerState._buildWide",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@imports",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 3,
+      "original_count": 3,
+      "rename_probe_count": 0
+    },
+    {
+      "severity": "info",
+      "rule": "recursive_getters",
+      "symbol": "_StremioTvTunerState._sections",
+      "message": "The getter '_sections' recursively returns itself. Try changing the value being returned",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_DialHintChip",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_LivePip",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_Marquee",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_Stage",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_StageDescription",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1,
+      "original_count": 0,
+      "rename_probe_count": 1
+    }
+  ]
+}

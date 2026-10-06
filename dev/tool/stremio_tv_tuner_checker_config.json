@@ -1,0 +1,526 @@
+{
+  "baseline": "2d3ef03404b62a6a61116d9e7636c43dba7349c2",
+  "source": "lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart",
+  "feature": "lib/features/stremio_tv_tuner",
+  "engine": "sections",
+  "context_guard": true,
+  "completed_step": 0,
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "live_getter_callback",
+    "retained_forwarder"
+  ],
+  "receivers": [
+    "_deps",
+    "_owners",
+    "_sections",
+    "stageState",
+    "_content"
+  ],
+  "live_getter_callbacks": [
+    "context",
+    "mounted"
+  ],
+  "receiver_paths": {
+    "_owners": "StremioTvTunerOwners",
+    "_sections.channels": "StremioTvTunerChannels",
+    "_sections.dial": "StremioTvTunerDial",
+    "_sections.sheets": "StremioTvTunerSheets",
+    "_sections.layout": "StremioTvTunerLayout",
+    "stageState": "StremioTvTunerStageState",
+    "_content": "StremioTvTunerStageContent"
+  },
+  "receiver_owners": {
+    "_owners": "StremioTvTunerOwners",
+    "_sections.channels": "StremioTvTunerChannels",
+    "_sections.dial": "StremioTvTunerDial",
+    "_sections.sheets": "StremioTvTunerSheets",
+    "_sections.layout": "StremioTvTunerLayout",
+    "stageState": "StremioTvTunerStageState",
+    "_content": "StremioTvTunerStageContent"
+  },
+  "receiver_members": {
+    "StremioTvTunerOwners": [
+      "tick",
+      "activeId",
+      "centredId",
+      "pendingId",
+      "settle",
+      "indexById",
+      "pageController",
+      "dialScroll"
+    ],
+    "StremioTvTunerChannels": [
+      "syncTick",
+      "rebuildIndex",
+      "identFor",
+      "nowPlaying",
+      "nextPlaying",
+      "displayProgress",
+      "_realIndex",
+      "nodeFor",
+      "setActive",
+      "_precacheNeighborBackdrops",
+      "channelById",
+      "surf"
+    ],
+    "StremioTvTunerDial": [
+      "touchDial",
+      "onDialScroll",
+      "snapDial",
+      "_dialItemExtent",
+      "_dialLeadingPad",
+      "dialLeadingPadFor",
+      "focusRealIndex",
+      "_scrollDialToIndex",
+      "_focusWhenAttached"
+    ],
+    "StremioTvTunerSheets": [
+      "openActions",
+      "openChannelList",
+      "_channelListRow",
+      "_listThumbFallback"
+    ],
+    "StremioTvTunerLayout": [
+      "buildWide",
+      "buildNarrow"
+    ],
+    "StremioTvTunerStageState": [
+      "_ken",
+      "_textFx",
+      "_motionOk",
+      "didChangeDependencies",
+      "_syncKen",
+      "didUpdateWidget",
+      "dispose",
+      "cascade",
+      "build"
+    ],
+    "StremioTvTunerStageContent": [
+      "buildContent",
+      "glassPill",
+      "_channelTag",
+      "_metaRow",
+      "_metaStyle",
+      "_dot",
+      "_liveBar",
+      "_upNext",
+      "_tuningState",
+      "_hiddenState"
+    ]
+  },
+  "type_renames": {
+    "_Stage": "StremioTvTunerStage",
+    "_StageState": "StremioTvTunerStageState",
+    "_StageDescription": "StremioTvTunerStageDescription",
+    "_LivePip": "StremioTvTunerLivePip",
+    "_Marquee": "StremioTvTunerMarquee",
+    "_DialCard": "StremioTvTunerDialCard",
+    "_DialCardState": "StremioTvTunerDialCardState",
+    "_DialHintChip": "StremioTvTunerDialHintChip"
+  },
+  "occurrence_type_renames": true,
+  "occurrence_field_bindings": {
+    "owners": [
+      "_StremioTvTunerState",
+      "_StageState"
+    ]
+  },
+  "record_owners": [
+    "_StremioTvTunerState"
+  ],
+  "record_fields": {
+    "_StremioTvTunerState": [
+      "_tick",
+      "_activeId",
+      "_centredId",
+      "_pendingId",
+      "_settle",
+      "_indexById",
+      "_pageController",
+      "_dialScroll"
+    ]
+  },
+  "lexical_state_setters": {
+    "_StremioTvTunerState._openChannelList": [
+      "setSheet"
+    ]
+  },
+  "lifecycle": [
+    "_StremioTvTunerState.initState",
+    "_StremioTvTunerState.didUpdateWidget",
+    "_StremioTvTunerState.dispose"
+  ],
+  "verbatim_comment_bytes": true,
+  "class_header_additions": {
+    "_StremioTvTunerState": {
+      "activation_file": "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_widget_view.dart",
+      "tokens": [
+        "implements",
+        "StremioTvTunerWidgetView"
+      ]
+    }
+  },
+  "forwarders": {
+    "_StremioTvTunerState._focusRealIndex": {
+      "receiver": "_sections.dial"
+    }
+  },
+  "source_validator_module": "stremio_tv_tuner_contracts",
+  "self_test_module": "stremio_tv_tuner_checker_test",
+  "sidecars": {
+    "scaffolding": "dev/tool/stremio_tv_tuner_scaffolding.json",
+    "callbacks": "dev/tool/stremio_tv_tuner_callback_sites.json"
+  },
+  "scaffold_file_steps": {
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_widget_view.dart": 3,
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_dependencies.dart": 3,
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_sections.dart": 3
+  },
+  "plain_owner_files": {
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_channels.dart": "StremioTvTunerChannels",
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_dial.dart": "StremioTvTunerDial",
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_sheets.dart": "StremioTvTunerSheets",
+    "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_layout.dart": "StremioTvTunerLayout",
+    "lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage_content.dart": "StremioTvTunerStageContent"
+  },
+  "callback_whole_class_members": true,
+  "callback_closure_binding": true,
+  "callback_instances": {
+    "StremioTvTunerChannels": "$State._sections.channels",
+    "StremioTvTunerDial": "$State._sections.dial",
+    "StremioTvTunerSheets": "$State._sections.sheets",
+    "StremioTvTunerLayout": "$State._sections.layout",
+    "_StageState": "$StageState",
+    "StremioTvTunerStageState": "$StageState",
+    "_DialCardState": "$DialCardState",
+    "StremioTvTunerDialCardState": "$DialCardState"
+  },
+  "callback_call_aliases": {
+    "_Stage": "StremioTvTunerStage",
+    "_StageState": "StremioTvTunerStageState",
+    "_StageDescription": "StremioTvTunerStageDescription",
+    "_LivePip": "StremioTvTunerLivePip",
+    "_Marquee": "StremioTvTunerMarquee",
+    "_DialCard": "StremioTvTunerDialCard",
+    "_DialCardState": "StremioTvTunerDialCardState",
+    "_DialHintChip": "StremioTvTunerDialHintChip"
+  },
+  "callback_identities": [
+    {
+      "name": "dial listener identity",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState.initState",
+          "call": "addListener",
+          "argument": 0
+        },
+        {
+          "member": "_StremioTvTunerState.dispose",
+          "call": "removeListener",
+          "argument": 0
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._onDialScroll"
+    },
+    {
+      "name": "centred listener identity",
+      "sites": [
+        {
+          "member": "_DialCardState.initState",
+          "call": "addListener",
+          "argument": 0
+        },
+        {
+          "member": "_DialCardState.didUpdateWidget",
+          "call": "removeListener",
+          "argument": 0
+        },
+        {
+          "member": "_DialCardState.didUpdateWidget",
+          "call": "addListener",
+          "argument": 0
+        },
+        {
+          "member": "_DialCardState.dispose",
+          "call": "removeListener",
+          "argument": 0
+        }
+      ],
+      "callback_member": "_DialCardState._onCentredChanged"
+    },
+    {
+      "name": "card key identity",
+      "sites": [
+        {
+          "member": "_DialCardState.build",
+          "call": "Focus",
+          "named_argument": "onKeyEvent"
+        }
+      ],
+      "callback_member": "_DialCardState._onKey"
+    },
+    {
+      "name": "host Up function object",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onUp"
+        }
+      ],
+      "expected_identity": "widget.onFocusHeader"
+    },
+    {
+      "name": "list tear-off",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildNarrow",
+          "call": "_Stage",
+          "named_argument": "onOpenList"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._openChannelList"
+    },
+    {
+      "name": "dial onFocused",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onFocused"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._setActive",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "dial onLongPress",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onLongPress"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._openActions",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "dial onLeft",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onLeft"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._surf",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ],
+          [
+            "i"
+          ],
+          [
+            "-",
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "dial onRight",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onRight"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._surf",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ],
+          [
+            "i"
+          ],
+          [
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "dial onSelect",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "_DialCard",
+          "named_argument": "onSelect"
+        }
+      ],
+      "expected_identity": "widget.onPlay",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Wide Stage onTap",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "GestureDetector",
+          "named_argument": "onTap"
+        }
+      ],
+      "expected_identity": "widget.onPlay",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "active"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Wide Stage onLongPress",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildWide",
+          "call": "GestureDetector",
+          "named_argument": "onLongPress"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._openActions",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "active"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Narrow Stage onTap",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildNarrow",
+          "call": "GestureDetector",
+          "named_argument": "onTap"
+        }
+      ],
+      "expected_identity": "widget.onPlay",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "Narrow Stage onLongPress",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildNarrow",
+          "call": "GestureDetector",
+          "named_argument": "onLongPress"
+        }
+      ],
+      "callback_member": "_StremioTvTunerState._openActions",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "phone Stage detail",
+      "sites": [
+        {
+          "member": "_StremioTvTunerState._buildNarrow",
+          "call": "_Stage",
+          "named_argument": "onOpenDetail"
+        }
+      ],
+      "expected_identity": "widget.onOpenDetail",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "channel"
+          ]
+        ]
+      }
+    }
+  ],
+  "byte_identical_declarations": {
+    "StremioTvTunerController": "dev/tool/stremio_tv_tuner_controller_original.txt",
+    "StremioTvTuner": "dev/tool/stremio_tv_tuner_widget_original.txt"
+  }
+}

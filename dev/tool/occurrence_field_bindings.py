@@ -39,6 +39,8 @@ def _canonical_name(name, rows, config):
     aliases.update({f['call']: f['original_name'] for f in config.get('constructor_forwarders', [])})
     name = aliases.get(name, name)
     mapping = {r['original_name'].split('.')[-1]: r['new_name'] for r in rows}
+    if config.get('occurrence_type_renames'):
+        mapping.update(config.get('type_renames', {}))
     return mapping.get(name, name)
 
 
@@ -49,7 +51,12 @@ def failures(original, lookup, rows, source, config, *, members=None):
     owners = config['occurrence_field_bindings']['owners']
     by_old = {r['original_name'].split('.')[-1]: r for r in rows if r['original_name'].rpartition('.')[0] in owners}
     fields = {name: r for name, r in by_old.items() if original[r['original_name']].get('variables')}
-    record_fields = {r['new_name'] for r in fields.values() if r['original_name'].rpartition('.')[0] == '_DebrifyTVScreenState'}
+    record_owners = config.get('record_owners', ['_DebrifyTVScreenState'])
+    def is_record_field(row):
+        owner, _, name = row['original_name'].rpartition('.')
+        selected = config.get('record_fields', {}).get(owner)
+        return owner in record_owners and (selected is None or name in selected)
+    record_fields = {r['new_name'] for r in fields.values() if is_record_field(r)}
     errors = []
     for row in rows:
         identity = row['original_name']
@@ -80,7 +87,7 @@ def failures(original, lookup, rows, source, config, *, members=None):
             if registered:
                 target = registered['destination_class']
                 paths = [p for p, owner in config.get('receiver_owners', {}).items() if owner == target]
-                moved_field = field and field['original_name'].rpartition('.')[0] == '_DebrifyTVScreenState' and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
+                moved_field = field and is_record_field(field) and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
                 if b['kind'] == 'selector':
                     if b['qualifierTokens'] not in [_parts(p) for p in paths] or b['name'] != registered['new_name']:
                         errors.append('Occurrence field/member receiver changed: '+label)

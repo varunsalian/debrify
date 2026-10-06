@@ -1056,6 +1056,8 @@ def _check(original_source, sources, rows, source_path, package=None,
         import importlib
         validator = importlib.import_module(CONFIG['source_validator_module'])
         errors.extend(validator.validate_sources(sources))
+        if hasattr(validator, 'validate_with_context'):
+            errors.extend(validator.validate_with_context(sources, CONFIG, rows))
     if CONFIG.get('spotlight_state_field_bindings'):
         from spotlight_board_field_bindings import failures as field_binding_failures
         errors.extend(field_binding_failures(original, all_nodes(parsed), rows,
@@ -1139,6 +1141,9 @@ def _check(original_source, sources, rows, source_path, package=None,
         errors.extend(check_contracts(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
+    scaffolds = [s for s in scaffolds
+                 if 'scaffold_activation_step' not in s
+                 or s['scaffold_activation_step'] <= CONFIG.get('completed_step', 0)]
     required_step = CONFIG.get('required_scaffolds_step')
     require_scaffolds = (required_step is not None
                          and CONFIG.get('completed_step', 0) >= required_step)
