@@ -620,6 +620,17 @@ Never `--record` or `--update` to accept a regression.
 2. `_deselectResource` keeps the stored mask, so re-selecting restores the
    old mask rather than the current derived one (may be intended: "explicit
    grants never churn").
+3. `_transferOwnership` performs its first `_validateManagingAdmin` before
+   the `try`; a failure there escapes the later failure-snackbar handler.
+   Source observation at R; the characterized session-change case exercises
+   the second validation, after confirmation.
+4. Successful admin PIN removal does not replace `widget.profile` or rebuild
+   its PIN flags. The reset action can remain visible until the route reloads
+   that immutable profile. Persistence and success/failure feedback are
+   characterized; this refresh behavior is unchanged.
+5. The original `assets/fonts/Roboto-Regular.ttf` and
+   `Merriweather-Regular.ttf` contain HTML, not font data (`file` verified).
+   The fixed golden theme loads the valid Inter asset; no asset was repaired.
 
 ## Decisions taken before design review (Claude, 2026-10-06)
 
@@ -669,4 +680,111 @@ avatar finalization as distinct cases). P2: `tvProfile → tvPanes` edge
 
 ## Progress
 
-(Empty until step 0.)
+### Step 0 — ORIGINAL characterization, 2026-10-06
+
+- **Execution base R:** `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8` on
+  `refactor/edit-profile`. Flutter **3.44.8**, Dart **3.12.2**;
+  `flutter pub get` left the lockfile unchanged. No format commit: the
+  original editor is formatter-idempotent. Checkpoint (b) preserves R's
+  `lib/`, `pubspec.yaml` and `pubspec.lock` objects. No production seam or
+  profile-service edit. The sole detached ORIGINAL copy is inside this
+  worktree at `.dart_tool/edit_profile_original/`.
+- **Evidence root E:** `<git-common-dir>/refactor-evidence/edit_profile/`
+  (`/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/edit_profile/`).
+  Evidence names below are relative to E. Inputs/commands, SDK and tree
+  provenance accompany the logs; no evidence is committed into application
+  paths.
+- **Baseline:** `python3 dev/tool/suite_evidence.py run edit_profile/base
+  --no-pub --concurrency=2`, serial under concurrent sibling load, Flutter exit 1:
+  `{'success': 11654, 'failure': 13, 'error': 28, 'skipped': 20}`.
+  `base.env.json` records an unchanged tested tree; `base.jsonl`,
+  `base.stderr`, and `step0-test-identities.json` preserve observed identities.
+  The WebDAV appearance failure repeats in isolation with the same assertion
+  (`webdav-hot-merge-isolation.jsonl`, `load-sensitive-note.txt`); no PIN-settle
+  failure or allowlist/failure-list update. `flutter analyze --no-pub` found 1,689
+  diagnostics (`base-analyze.txt`); final analysis has the same identities,
+  zero additions/removals (`step0-analyze-final.txt`,
+  `analyzer-comparison.json`).
+- **Inventory and checker:** 2,764 lines, **28 import declarations**, nine
+  classes plus the enum, **90 manifest leaves**, 81 State members and 26
+  State fields. Twenty-five fields are assigned to the three frozen owners;
+  the lazy `_authorization` stays on State. The dependency report records
+  each destination, occurrence binding/read/write, live dependency site,
+  lexical hazard, comments and wiring checklist. Facts were remeasured,
+  not copied from the scratch inventory (`facts-verification.json`,
+  `original-ast.json`, `dependency-call-graph.json`).
+- **Strict probes (Technique 2):** ORIGINAL imports: three infos;
+  partial compiling same-State owner/live-dependency receiver probe: six
+  infos; whole-leaf cross-library typedef/constructor-forwarder probe:
+  five enum-field warnings and eight infos, no errors. The per-identity
+  maximum inventory has 16 diagnostic occurrences
+  (`dev/tool/edit_profile_analyzer_inventory.json`,
+  `strict-*-probe-provenance.json`). Three exact constructor forwarders
+  remove the six optional-parameter warnings without modifying original
+  constructors/defaults/keys. Their syntax is frozen in the sidecar; no
+  current analyzer allowlist addition. Full compiling section composition
+  remains **0b**, unstarted.
+- **Harness and cases:** real registry/runtime/SQLite, installed engine
+  metadata and YAML under each profile's visible generation, test cipher,
+  PIN hold after `super` write, registry authority callbacks, scripted
+  picker and policy-reload recorder. Added **50 behavioral cases + four
+  goldens = 54 identities** across four concrete test files, all passing on
+  ORIGINAL (`original-final-all2.jsonl`, final strengthened preview replay
+  `original-preview-final.jsonl`). Every identity is covered by a named
+  original-code assertion failure: **54/54 behavioral mutants proved**,
+  plus **8/8 separately classified S mutants** through checker, reader and
+  the retained source-guard test (`original-mutations.json`,
+  `step0-case-coverage.json`, `mutations/`). Reproduce with
+  `python3 dev/tool/edit_profile_original_mutations.py --original-root
+  .dart_tool/edit_profile_original --parser-package
+  .dart_tool/edit_profile_parser/inventory/.dart_tool/package_config.json`
+  and the equivalent `edit_profile_source_proofs.py` command. Initial
+  survivors/rejected proof attempts are retained in `audit_attempts`;
+  registry-decoded clamp omission and core-protected active rollback are
+  **S only**, not behavioral kills. The direct disposed-load mutant fails
+  Flutter's explicit State lifecycle assertion, with its editor stack frame
+  recorded; it is separate from the loader-invocation proof. No compile/setup
+  failure is accepted.
+- **Source reader / sweeps / CI:** the original source-guard expectation
+  strings and comments are unchanged; only the reader/import changed.
+  Removed/duplicated hidden controls, ceiling seed and changed default fail
+  through the reader on ORIGINAL. Global storage/profile/cache/player
+  forbidden-pattern counts are zero across the actual syntax destinations
+  (`source-text-and-surface-inventory.json`, `final-evidence-audit.txt`).
+  Shape regex: **13**, broader circular search: **14** (one conditional
+  radius); editor outside shape/theme manifests and PRIMARY light-ink set.
+  Existing editor test plus all four new files appended to CI; both support
+  files appended to its format command. Focused existing editor, profile,
+  isolation, shape and theme checks: **72 visible passes / one failure**
+  (82 success events including loading, one failure), the same baseline
+  raw-preferences guard violation; existing editor's 22 cases pass
+  (`step0-focused.jsonl`).
+- **macOS goldens:** four readable Inter scenes captured on R twice in
+  separate processes, first PNGs removed before reverse-order capture;
+  hashes identical, then all four strict replays pass. Phone 390×844 create,
+  phone 1100×1600 edit with real connections/engines, TV Profile 1280×720,
+  TV Access 1920×1080; all four visually inspected. Commands/hashes in
+  `macos-original-provenance.json`, logs `macos-original-{first,reverse,strict}.jsonl`.
+  Linux script prepared and `bash -n` passes; **L unstarted** as requested.
+- **Step 0 checks:** edit-profile's real-config ORIGINAL and syntax-move
+  positives plus reader pass; **169 negative proofs**, including **17**
+  independent same-class callback identity checks. All manifest runs use
+  their own config/baseline and isolated `--parser-package` below
+  `.dart_tool/edit_profile_parser/`, deleting copied `*.dill`.
+  Shared edits are opt-in/config scoped. **All 17 manifests pass with
+  self-tests: 16 existing (Debrify TV included) plus edit-profile**, each
+  against its own baseline (`all-checkers.json`, `checker-*.txt`).
+  Architecture, size, storage map/bodies/keys/references
+  (with available self-tests), Linux script syntax and actual CI formatting
+  pass (`static-checks.json`). Scoped CI analyzer: 323 diagnostics;
+  allowlist check: 25 existing warnings, nothing new
+  (`step0-scoped-analyze.txt`, `step0-analyzer-allowlist.txt`).
+- **Checkpoint (b):** `test(edit-profile): step 0 original-code characterization checkpoint`.
+  The 31-path staged diff was reviewed; LF, document links, public-widget
+  bytes, unchanged original source assertions/comments, and golden hashes
+  pass (`staged-review.json`, `step0-staged-diff.txt`). Commit SHA and R/b
+  application-object equality are recorded in `checkpoint-provenance.json`.
+- **Found-not-fixed additions:** initial transfer validation outside its
+  feedback handler, unchanged PIN flags after reset, invalid original font
+  assets (items 3–5 above). No bug fix, device/emulator run, Linux capture,
+  independent 0b review, base2, or extraction has been performed.

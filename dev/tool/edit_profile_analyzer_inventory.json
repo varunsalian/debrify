@@ -1,0 +1,302 @@
+{
+  "R": "f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8",
+  "scope": "ORIGINAL strict imports, partial compiling same-State owner/live-dependency receiver probe, and whole-leaf cross-library typedef construction with exact constructor forwarders. Complete section composition is reserved for 0b.",
+  "inventories": {
+    "original": {
+      "evidence": "strict-original.txt",
+      "diagnostics": [
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 10,
+          "column": 1,
+          "source": "original"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 13,
+          "column": 1,
+          "source": "original"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 25,
+          "column": 1,
+          "source": "original"
+        }
+      ],
+      "count": 3
+    },
+    "receiver": {
+      "evidence": "strict-receiver-probe.txt",
+      "diagnostics": [
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 10,
+          "column": 1,
+          "source": "receiver"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 13,
+          "column": 1,
+          "source": "receiver"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 25,
+          "column": 1,
+          "source": "receiver"
+        },
+        {
+          "severity": "INFO",
+          "rule": "curly_braces_in_flow_control_structures",
+          "member": "_EditProfileScreenState._returnToTvRail",
+          "message": "Statements in an if should be enclosed in a block.",
+          "line": 1648,
+          "column": 7,
+          "source": "receiver"
+        },
+        {
+          "severity": "INFO",
+          "rule": "curly_braces_in_flow_control_structures",
+          "member": "_EditProfileScreenState._buildTvPagesSection",
+          "message": "Statements in an if should be enclosed in a block.",
+          "line": 1701,
+          "column": 11,
+          "source": "receiver"
+        },
+        {
+          "severity": "INFO",
+          "rule": "library_private_types_in_public_api",
+          "member": "_EditProfileScreenState._tvSection",
+          "message": "Invalid use of a private type in a public API.",
+          "line": 2845,
+          "column": 3,
+          "source": "receiver"
+        }
+      ],
+      "count": 6
+    },
+    "typedef": {
+      "evidence": "strict-typedef-probe.txt",
+      "diagnostics": [
+        {
+          "severity": "WARNING",
+          "rule": "unused_field",
+          "member": "_TvProfileSection",
+          "message": "The value of the field 'profile' isn't used.",
+          "line": 8,
+          "column": 26,
+          "source": "types.dart"
+        },
+        {
+          "severity": "WARNING",
+          "rule": "unused_field",
+          "member": "_TvProfileSection",
+          "message": "The value of the field 'pages' isn't used.",
+          "line": 8,
+          "column": 35,
+          "source": "types.dart"
+        },
+        {
+          "severity": "WARNING",
+          "rule": "unused_field",
+          "member": "_TvProfileSection",
+          "message": "The value of the field 'access' isn't used.",
+          "line": 8,
+          "column": 42,
+          "source": "types.dart"
+        },
+        {
+          "severity": "WARNING",
+          "rule": "unused_field",
+          "member": "_TvProfileSection",
+          "message": "The value of the field 'lock' isn't used.",
+          "line": 8,
+          "column": 50,
+          "source": "types.dart"
+        },
+        {
+          "severity": "WARNING",
+          "rule": "unused_field",
+          "member": "_TvProfileSection",
+          "message": "The value of the field 'data' isn't used.",
+          "line": 8,
+          "column": 56,
+          "source": "types.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 8,
+          "column": 1,
+          "source": "caller.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 10,
+          "column": 1,
+          "source": "caller.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 13,
+          "column": 1,
+          "source": "caller.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 25,
+          "column": 1,
+          "source": "caller.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "unnecessary_import",
+          "member": "<imports>",
+          "message": "The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'.",
+          "line": 1,
+          "column": 8,
+          "source": "types.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 4,
+          "column": 1,
+          "source": "types.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "directives_ordering",
+          "member": "<imports>",
+          "message": "Sort directive sections alphabetically.",
+          "line": 5,
+          "column": 1,
+          "source": "types.dart"
+        },
+        {
+          "severity": "INFO",
+          "rule": "sort_child_properties_last",
+          "member": "editProfileTvActionSurface",
+          "message": "The 'child' argument should be last in widget constructor invocations.",
+          "line": 304,
+          "column": 3,
+          "source": "types.dart"
+        }
+      ],
+      "count": 13
+    }
+  },
+  "max_per_identity": [
+    {
+      "severity": "INFO",
+      "rule": "curly_braces_in_flow_control_structures",
+      "member": "_EditProfileScreenState._buildTvPagesSection",
+      "message": "Statements in an if should be enclosed in a block.",
+      "count": 1
+    },
+    {
+      "severity": "INFO",
+      "rule": "curly_braces_in_flow_control_structures",
+      "member": "_EditProfileScreenState._returnToTvRail",
+      "message": "Statements in an if should be enclosed in a block.",
+      "count": 1
+    },
+    {
+      "severity": "INFO",
+      "rule": "directives_ordering",
+      "member": "<imports>",
+      "message": "Sort directive sections alphabetically.",
+      "count": 6
+    },
+    {
+      "severity": "INFO",
+      "rule": "library_private_types_in_public_api",
+      "member": "_EditProfileScreenState._tvSection",
+      "message": "Invalid use of a private type in a public API.",
+      "count": 1
+    },
+    {
+      "severity": "INFO",
+      "rule": "sort_child_properties_last",
+      "member": "editProfileTvActionSurface",
+      "message": "The 'child' argument should be last in widget constructor invocations.",
+      "count": 1
+    },
+    {
+      "severity": "INFO",
+      "rule": "unnecessary_import",
+      "member": "<imports>",
+      "message": "The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'.",
+      "count": 1
+    },
+    {
+      "severity": "WARNING",
+      "rule": "unused_field",
+      "member": "_TvProfileSection",
+      "message": "The value of the field 'access' isn't used.",
+      "count": 1
+    },
+    {
+      "severity": "WARNING",
+      "rule": "unused_field",
+      "member": "_TvProfileSection",
+      "message": "The value of the field 'data' isn't used.",
+      "count": 1
+    },
+    {
+      "severity": "WARNING",
+      "rule": "unused_field",
+      "member": "_TvProfileSection",
+      "message": "The value of the field 'lock' isn't used.",
+      "count": 1
+    },
+    {
+      "severity": "WARNING",
+      "rule": "unused_field",
+      "member": "_TvProfileSection",
+      "message": "The value of the field 'pages' isn't used.",
+      "count": 1
+    },
+    {
+      "severity": "WARNING",
+      "rule": "unused_field",
+      "member": "_TvProfileSection",
+      "message": "The value of the field 'profile' isn't used.",
+      "count": 1
+    }
+  ],
+  "constructor_forwarder_result": "Six optional-parameter warnings eliminated by the three exact constructor forwarders; five enum field warnings remain for destination-scoped recording at creation; no current allowlist change."
+}

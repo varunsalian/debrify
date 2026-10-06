@@ -300,3 +300,10 @@ test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_lifecycle_tes
 test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_boundaries_test.dart
 test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_test.dart
 test/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_review_test.dart
+
+# Edit profile ORIGINAL characterization (step 0).
+test/profiles/edit_profile_screen_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_goldens_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save_test.dart

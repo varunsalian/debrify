@@ -13,6 +13,8 @@ def aligned(node, config):
     paths = [(_parts(path), set(config.get('receiver_members', {}).get(owner, [])))
              for path, owner in config.get('receiver_paths', {}).items()]
     paths += [(['_deps'], {'context', 'mounted', 'setState'})]
+    paths += [(['_deps'], {s['after'][2] for s in config.get('registered_occurrence_substitutions', [])
+                          if s['after'][:2] == ['_deps', '.']})]
     by_first = {}
     for path, members in paths:
         by_first.setdefault(path[0], []).append((path, members))
@@ -42,14 +44,23 @@ def _canonical_name(name, rows, config):
     return mapping.get(name, name)
 
 
-def failures(original, lookup, rows, source, config, *, members=None):
+def failures(original, lookup, rows, source, config, *, members=None, package=None):
     if not config.get('occurrence_field_bindings'):
         return []
     from check_settings_moves import normalize
     owners = config['occurrence_field_bindings']['owners']
     by_old = {r['original_name'].split('.')[-1]: r for r in rows if r['original_name'].rpartition('.')[0] in owners}
     fields = {name: r for name, r in by_old.items() if original[r['original_name']].get('variables')}
-    record_fields = {r['new_name'] for r in fields.values() if r['original_name'].rpartition('.')[0] == '_DebrifyTVScreenState'}
+    state_classes = set(config['occurrence_field_bindings'].get('state_classes', ['_DebrifyTVScreenState']))
+    field_classes = config['occurrence_field_bindings'].get('field_classes')
+    record_fields = {r['new_name'] for r in fields.values()
+                     if r['original_name'].rpartition('.')[0] in state_classes
+                     and (field_classes is None or r['destination_class'] in field_classes)}
+    if config.get('registered_occurrence_substitutions'):
+        from registered_occurrence_substitutions import project
+        moved = {r['original_name'] for r in rows if r['destination_file'] != source
+                 and (r['destination_file'], r['destination_class'], r['new_name']) in lookup}
+        original = project(original, config, package, moved)
     errors = []
     for row in rows:
         identity = row['original_name']
@@ -80,7 +91,7 @@ def failures(original, lookup, rows, source, config, *, members=None):
             if registered:
                 target = registered['destination_class']
                 paths = [p for p, owner in config.get('receiver_owners', {}).items() if owner == target]
-                moved_field = field and field['original_name'].rpartition('.')[0] == '_DebrifyTVScreenState' and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
+                moved_field = field and field['original_name'].rpartition('.')[0] in state_classes and (field_classes is None or field['destination_class'] in field_classes) and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
                 if b['kind'] == 'selector':
                     if b['qualifierTokens'] not in [_parts(p) for p in paths] or b['name'] != registered['new_name']:
                         errors.append('Occurrence field/member receiver changed: '+label)
@@ -97,6 +108,12 @@ def failures(original, lookup, rows, source, config, *, members=None):
             elif a['kind'] == 'selector':
                 if b['kind'] != 'selector' or normalize(a['qualifierTokens'], rows, row) != normalize(b['qualifierTokens'], rows, row) or a['role'] != b['role']:
                     errors.append('Occurrence selector chain changed: '+label)
+            elif (config.get('require_live_state_callbacks') and a['name'] in ['context', 'mounted', 'setState']
+                  and a['binding'] == 'unbound' and before['owner'] in state_classes
+                  and row['destination_file'] != source
+                  and (row['destination_file'], row['destination_class'], row['new_name']) in lookup
+                  and b['kind'] != 'selector'):
+                errors.append('Occurrence live State callback qualification lost: '+label)
             elif a['name'] in ['context', 'mounted', 'setState'] and a['binding'] == 'unbound' and b['kind'] == 'selector':
                 expected_role = 'invocation' if a['name'] in config.get('live_getter_callbacks', []) else a['role']
                 if b['qualifierTokens'] != ['_deps'] or b['role'] != expected_role:

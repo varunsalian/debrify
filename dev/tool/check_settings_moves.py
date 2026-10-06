@@ -264,6 +264,9 @@ def receiver_path_match(values, index):
 
 
 def normalize(values, rows, row=None):
+    if CONFIG.get('registered_occurrence_substitutions'):
+        from registered_occurrence_substitutions import canonical_tokens
+        values = canonical_tokens(values, CONFIG['registered_occurrence_substitutions'])
     mapping = names(rows, row['original_name'].rsplit('.', 1)[0] if row else None)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
     if row:
@@ -1063,7 +1066,7 @@ def _check(original_source, sources, rows, source_path, package=None,
     if CONFIG.get('occurrence_field_bindings'):
         from occurrence_field_bindings import failures as occurrence_failures
         errors.extend(occurrence_failures(original, all_nodes(parsed), rows,
-                                           source_path, CONFIG))
+                                           source_path, CONFIG, package=package))
     if CONFIG.get('lexical_state_setters'):
         from occurrence_field_bindings import lexical_setter_failures
         errors.extend(lexical_setter_failures(original, all_nodes(parsed), rows,
