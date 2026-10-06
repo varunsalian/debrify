@@ -1,0 +1,5812 @@
+{
+  "sites": [
+    {
+      "member": "_RecordingsPageState.initState",
+      "call": "then",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "{",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "return",
+            ";",
+            "final",
+            "at",
+            "=",
+            "prefs",
+            ".",
+            "getInt",
+            "(",
+            "_batteryNudgeDismissedPref",
+            ")",
+            "??",
+            "0",
+            ";",
+            "if",
+            "(",
+            "at",
+            "!=",
+            "0",
+            ")",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "=>",
+            "_batteryNudgeDismissedAtMs",
+            "=",
+            "at",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "{",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "return",
+            ";",
+            "final",
+            "at",
+            "=",
+            "prefs",
+            ".",
+            "getInt",
+            "(",
+            "_batteryNudgeDismissedPref",
+            ")",
+            "??",
+            "0",
+            ";",
+            "if",
+            "(",
+            "at",
+            "!=",
+            "0",
+            ")",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "=>",
+            "_batteryNudgeDismissedAtMs",
+            "=",
+            "at",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "{",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "return",
+            ";",
+            "final",
+            "at",
+            "=",
+            "prefs",
+            ".",
+            "getInt",
+            "(",
+            "RecordingsHubData",
+            ".",
+            "batteryNudgeDismissedPref",
+            ")",
+            "??",
+            "0",
+            ";",
+            "if",
+            "(",
+            "at",
+            "!=",
+            "0",
+            ")",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "batteryNudgeDismissedAtMs",
+            "=",
+            "at",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "{",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "return",
+            ";",
+            "final",
+            "at",
+            "=",
+            "prefs",
+            ".",
+            "getInt",
+            "(",
+            "RecordingsHubData",
+            ".",
+            "batteryNudgeDismissedPref",
+            ")",
+            "??",
+            "0",
+            ";",
+            "if",
+            "(",
+            "at",
+            "!=",
+            "0",
+            ")",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "batteryNudgeDismissedAtMs",
+            "=",
+            "at",
+            ")",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.initState",
+      "call": "addListener",
+      "occurrence": 0,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "1": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "2": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "3": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.initState",
+      "call": "addListener",
+      "occurrence": 1,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "1": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "2": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "3": {
+          "call": "addListener",
+          "expression": [
+            "_onRevision"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.initState",
+      "call": "addObserver",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "addObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "1": {
+          "call": "addObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "2": {
+          "call": "addObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "3": {
+          "call": "addObserver",
+          "expression": [
+            "this"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.dispose",
+      "call": "removeListener",
+      "occurrence": 0,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "1": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "2": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "3": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.dispose",
+      "call": "removeListener",
+      "occurrence": 1,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "1": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "2": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        },
+        "3": {
+          "call": "removeListener",
+          "expression": [
+            "_onRevision"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.dispose",
+      "call": "removeObserver",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "removeObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "1": {
+          "call": "removeObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "2": {
+          "call": "removeObserver",
+          "expression": [
+            "this"
+          ]
+        },
+        "3": {
+          "call": "removeObserver",
+          "expression": [
+            "this"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._dismissBatteryNudge",
+      "call": "then",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "=>",
+            "prefs",
+            ".",
+            "setInt",
+            "(",
+            "_batteryNudgeDismissedPref",
+            ",",
+            "now",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "=>",
+            "prefs",
+            ".",
+            "setInt",
+            "(",
+            "_batteryNudgeDismissedPref",
+            ",",
+            "now",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "=>",
+            "prefs",
+            ".",
+            "setInt",
+            "(",
+            "batteryNudgeDismissedPref",
+            ",",
+            "now",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "then",
+          "expression": [
+            "(",
+            "prefs",
+            ")",
+            "=>",
+            "prefs",
+            ".",
+            "setInt",
+            "(",
+            "batteryNudgeDismissedPref",
+            ",",
+            "now",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._loadAll",
+      "call": "then",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "then",
+          "expression": [
+            "(",
+            "list",
+            ")",
+            "=>",
+            "list",
+            ".",
+            "map",
+            "(",
+            "(",
+            "s",
+            ")",
+            "=>",
+            "s",
+            ".",
+            "toScheduledRecording",
+            "(",
+            ")",
+            ")",
+            ".",
+            "toList",
+            "(",
+            "growable",
+            ":",
+            "false",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "then",
+          "expression": [
+            "(",
+            "list",
+            ")",
+            "=>",
+            "list",
+            ".",
+            "map",
+            "(",
+            "(",
+            "s",
+            ")",
+            "=>",
+            "s",
+            ".",
+            "toScheduledRecording",
+            "(",
+            ")",
+            ")",
+            ".",
+            "toList",
+            "(",
+            "growable",
+            ":",
+            "false",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "then",
+          "expression": [
+            "(",
+            "list",
+            ")",
+            "=>",
+            "list",
+            ".",
+            "map",
+            "(",
+            "(",
+            "s",
+            ")",
+            "=>",
+            "s",
+            ".",
+            "toScheduledRecording",
+            "(",
+            ")",
+            ")",
+            ".",
+            "toList",
+            "(",
+            "growable",
+            ":",
+            "false",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "then",
+          "expression": [
+            "(",
+            "list",
+            ")",
+            "=>",
+            "list",
+            ".",
+            "map",
+            "(",
+            "(",
+            "s",
+            ")",
+            "=>",
+            "s",
+            ".",
+            "toScheduledRecording",
+            "(",
+            ")",
+            ")",
+            ".",
+            "toList",
+            "(",
+            "growable",
+            ":",
+            "false",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._syncTimers",
+      "call": "periodic",
+      "occurrence": 0,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "periodic",
+          "expression": [
+            "const",
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "1",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "periodic",
+          "expression": [
+            "const",
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "1",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "periodic",
+          "expression": [
+            "const",
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "1",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "periodic",
+          "expression": [
+            "const",
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "1",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._syncTimers",
+      "call": "periodic",
+      "occurrence": 0,
+      "count": 2,
+      "argument": 1,
+      "stages": {
+        "0": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "{",
+            "_now",
+            ".",
+            "value",
+            "=",
+            "DateTime",
+            ".",
+            "now",
+            "(",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "{",
+            "_now",
+            ".",
+            "value",
+            "=",
+            "DateTime",
+            ".",
+            "now",
+            "(",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "{",
+            "_owners",
+            ".",
+            "now",
+            ".",
+            "value",
+            "=",
+            "DateTime",
+            ".",
+            "now",
+            "(",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "{",
+            "_owners",
+            ".",
+            "now",
+            ".",
+            "value",
+            "=",
+            "DateTime",
+            ".",
+            "now",
+            "(",
+            ")",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._syncTimers",
+      "call": "periodic",
+      "occurrence": 1,
+      "count": 2,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "periodic",
+          "expression": [
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "_live",
+            ".",
+            "isNotEmpty",
+            "?",
+            "3",
+            ":",
+            "15",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "periodic",
+          "expression": [
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "_live",
+            ".",
+            "isNotEmpty",
+            "?",
+            "3",
+            ":",
+            "15",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "periodic",
+          "expression": [
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "_owners",
+            ".",
+            "live",
+            ".",
+            "isNotEmpty",
+            "?",
+            "3",
+            ":",
+            "15",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "periodic",
+          "expression": [
+            "Duration",
+            "(",
+            "seconds",
+            ":",
+            "_owners",
+            ".",
+            "live",
+            ".",
+            "isNotEmpty",
+            "?",
+            "3",
+            ":",
+            "15",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._syncTimers",
+      "call": "periodic",
+      "occurrence": 1,
+      "count": 2,
+      "argument": 1,
+      "stages": {
+        "0": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_pollLive",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_pollLive",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_pollLive",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "periodic",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_pollLive",
+            "(",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._cancelSchedule",
+      "call": "TextButton",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._cancelSchedule",
+      "call": "TextButton",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._play",
+      "call": "push",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 0,
+      "stages": {
+        "0": {
+          "call": "push",
+          "expression": [
+            "context"
+          ]
+        },
+        "1": {
+          "call": "push",
+          "expression": [
+            "context"
+          ]
+        },
+        "2": {
+          "call": "push",
+          "expression": [
+            "context"
+          ]
+        },
+        "3": {
+          "call": "push",
+          "expression": [
+            "_deps",
+            ".",
+            "context",
+            "(",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._play",
+      "call": "push",
+      "occurrence": 0,
+      "count": 1,
+      "argument": 1,
+      "stages": {
+        "0": {
+          "call": "push",
+          "expression": [
+            "VideoPlayerLaunchArgs",
+            "(",
+            "videoUrl",
+            ":",
+            "entry",
+            ".",
+            "uri",
+            ",",
+            "title",
+            ":",
+            "display",
+            ".",
+            "title",
+            ",",
+            "showVideoTitle",
+            ":",
+            "true",
+            ",",
+            "disableExternalPlayer",
+            ":",
+            "_isAndroid",
+            ",",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "push",
+          "expression": [
+            "VideoPlayerLaunchArgs",
+            "(",
+            "videoUrl",
+            ":",
+            "entry",
+            ".",
+            "uri",
+            ",",
+            "title",
+            ":",
+            "display",
+            ".",
+            "title",
+            ",",
+            "showVideoTitle",
+            ":",
+            "true",
+            ",",
+            "disableExternalPlayer",
+            ":",
+            "_isAndroid",
+            ",",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "push",
+          "expression": [
+            "VideoPlayerLaunchArgs",
+            "(",
+            "videoUrl",
+            ":",
+            "entry",
+            ".",
+            "uri",
+            ",",
+            "title",
+            ":",
+            "display",
+            ".",
+            "title",
+            ",",
+            "showVideoTitle",
+            ":",
+            "true",
+            ",",
+            "disableExternalPlayer",
+            ":",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "isAndroid",
+            ",",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "push",
+          "expression": [
+            "VideoPlayerLaunchArgs",
+            "(",
+            "videoUrl",
+            ":",
+            "entry",
+            ".",
+            "uri",
+            ",",
+            "title",
+            ":",
+            "display",
+            ".",
+            "title",
+            ",",
+            "showVideoTitle",
+            ":",
+            "true",
+            ",",
+            "disableExternalPlayer",
+            ":",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "isAndroid",
+            ",",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._delete",
+      "call": "TextButton",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._delete",
+      "call": "TextButton",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._askRecordingLength",
+      "call": "TextButton",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "false",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._askRecordingLength",
+      "call": "TextButton",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "TextButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._askRecordingLength",
+      "call": "ListTile",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "d",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "d",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "d",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "d",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState._askRecordingLength",
+      "call": "ListTile",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "ListTile",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "dialogContext",
+            ")",
+            ".",
+            "pop",
+            "(",
+            "true",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_HubBar",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onBack",
+      "stages": {
+        "0": {
+          "call": "_HubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "context",
+            ")",
+            ".",
+            "maybePop",
+            "(",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "context",
+            ")",
+            ".",
+            "maybePop",
+            "(",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "context",
+            ")",
+            ".",
+            "maybePop",
+            "(",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "Navigator",
+            ".",
+            "of",
+            "(",
+            "context",
+            ")",
+            ".",
+            "maybePop",
+            "(",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_HubBar",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onSchedule",
+      "stages": {
+        "0": {
+          "call": "_HubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "scheduling",
+            ".",
+            "createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_HubBar",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onScheduleDown",
+      "stages": {
+        "0": {
+          "call": "_HubBar",
+          "expression": [
+            "(",
+            "!",
+            "_desktop",
+            "&&",
+            "!",
+            "(",
+            "_isAndroid",
+            "&&",
+            "!",
+            "_exactAlarms",
+            ")",
+            "&&",
+            "liveCount",
+            "==",
+            "0",
+            "&&",
+            "_schedules",
+            ".",
+            "isEmpty",
+            "&&",
+            "_library",
+            ".",
+            "isNotEmpty",
+            ")",
+            "?",
+            "(",
+            ")",
+            "=>",
+            "_firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")",
+            ":",
+            "null"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            "!",
+            "_desktop",
+            "&&",
+            "!",
+            "(",
+            "_isAndroid",
+            "&&",
+            "!",
+            "_exactAlarms",
+            ")",
+            "&&",
+            "liveCount",
+            "==",
+            "0",
+            "&&",
+            "_schedules",
+            ".",
+            "isEmpty",
+            "&&",
+            "_library",
+            ".",
+            "isNotEmpty",
+            ")",
+            "?",
+            "(",
+            ")",
+            "=>",
+            "_firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")",
+            ":",
+            "null"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            "!",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "desktop",
+            "&&",
+            "!",
+            "(",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "isAndroid",
+            "&&",
+            "!",
+            "_owners",
+            ".",
+            "exactAlarms",
+            ")",
+            "&&",
+            "liveCount",
+            "==",
+            "0",
+            "&&",
+            "_owners",
+            ".",
+            "schedules",
+            ".",
+            "isEmpty",
+            "&&",
+            "_owners",
+            ".",
+            "library",
+            ".",
+            "isNotEmpty",
+            ")",
+            "?",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")",
+            ":",
+            "null"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubBar",
+          "expression": [
+            "(",
+            "!",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "desktop",
+            "&&",
+            "!",
+            "(",
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "isAndroid",
+            "&&",
+            "!",
+            "_owners",
+            ".",
+            "exactAlarms",
+            ")",
+            "&&",
+            "liveCount",
+            "==",
+            "0",
+            "&&",
+            "_owners",
+            ".",
+            "schedules",
+            ".",
+            "isEmpty",
+            "&&",
+            "_owners",
+            ".",
+            "library",
+            ".",
+            "isNotEmpty",
+            ")",
+            "?",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")",
+            ":",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_EmptyDvr",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onSchedule",
+      "stages": {
+        "0": {
+          "call": "_EmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "scheduling",
+            ".",
+            "createManualSchedule",
+            "(",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_EmptyDvr",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onOpenAlarmSettings",
+      "stages": {
+        "0": {
+          "call": "_EmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubEmptyDvr",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_AlarmBanner",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "_AlarmBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubAlarmBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubAlarmBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubAlarmBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "openExactAlarmSettings",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_BatteryBanner",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFix",
+      "stages": {
+        "0": {
+          "call": "_BatteryBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "requestIgnoreBatteryOptimizations",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "requestIgnoreBatteryOptimizations",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "requestIgnoreBatteryOptimizations",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "LiveRecordingService",
+            ".",
+            "requestIgnoreBatteryOptimizations",
+            "(",
+            ")",
+            ",",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_BatteryBanner",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onDismiss",
+      "stages": {
+        "0": {
+          "call": "_BatteryBanner",
+          "expression": [
+            "_dismissBatteryNudge"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "_dismissBatteryNudge"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "dismissBatteryNudge"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubBatteryBanner",
+          "expression": [
+            "_sections",
+            ".",
+            "data",
+            ".",
+            "dismissBatteryNudge"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "bytesOf",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "capture",
+            ".",
+            "bytes"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "capture",
+            ".",
+            "bytes"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "capture",
+            ".",
+            "bytes"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "capture",
+            ".",
+            "bytes"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "fmtBytes",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "_fmtBytes"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_fmtBytes"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtBytes"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtBytes"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "fmtElapsed",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "_fmtElapsed"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_fmtElapsed"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtElapsed"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtElapsed"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 0,
+      "count": 2,
+      "argument": "onStop",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopDesktop",
+            "(",
+            "capture",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopDesktop",
+            "(",
+            "capture",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopDesktop",
+            "(",
+            "capture",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "stopDesktop",
+            "(",
+            "capture",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "bytesOf",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "rec",
+            ".",
+            "bytes"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "rec",
+            ".",
+            "bytes"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "rec",
+            ".",
+            "bytes"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "rec",
+            ".",
+            "bytes"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "fmtBytes",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "_fmtBytes"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_fmtBytes"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtBytes"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtBytes"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "fmtElapsed",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "_fmtElapsed"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_fmtElapsed"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtElapsed"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtElapsed"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LiveCard",
+      "occurrence": 1,
+      "count": 2,
+      "argument": "onStop",
+      "stages": {
+        "0": {
+          "call": "_LiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopAndroid",
+            "(",
+            "rec",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopAndroid",
+            "(",
+            "rec",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_stopAndroid",
+            "(",
+            "rec",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLiveCard",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "stopAndroid",
+            "(",
+            "rec",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_ScheduleRow",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "fmtCountdown",
+      "stages": {
+        "0": {
+          "call": "_ScheduleRow",
+          "expression": [
+            "_fmtCountdown"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "_fmtCountdown"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtCountdown"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "_sections",
+            ".",
+            "format",
+            ".",
+            "fmtCountdown"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_ScheduleRow",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onCancel",
+      "stages": {
+        "0": {
+          "call": "_ScheduleRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_cancelSchedule",
+            "(",
+            "schedule",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_cancelSchedule",
+            "(",
+            "schedule",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_cancelSchedule",
+            "(",
+            "schedule",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubScheduleRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "cancelSchedule",
+            "(",
+            "schedule",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LibraryRow",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPlay",
+      "stages": {
+        "0": {
+          "call": "_LibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_play",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_play",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_play",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "play",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_LibraryRow",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onDelete",
+      "stages": {
+        "0": {
+          "call": "_LibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_delete",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_delete",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_delete",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubLibraryRow",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "delete",
+            "(",
+            "entry",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_HubIconButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_HubIconButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_openFolder",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_openFolder",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_openFolder",
+            "(",
+            ")",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "(",
+            ")",
+            "=>",
+            "unawaited",
+            "(",
+            "_sections",
+            ".",
+            "actions",
+            ".",
+            "openFolder",
+            "(",
+            ")",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RecordingsPageState.build",
+      "call": "_HubIconButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onDown",
+      "stages": {
+        "0": {
+          "call": "_HubIconButton",
+          "expression": [
+            "_library",
+            ".",
+            "isEmpty",
+            "?",
+            "null",
+            ":",
+            "(",
+            ")",
+            "=>",
+            "_firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "_library",
+            ".",
+            "isEmpty",
+            "?",
+            "null",
+            ":",
+            "(",
+            ")",
+            "=>",
+            "_firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "_owners",
+            ".",
+            "library",
+            ".",
+            "isEmpty",
+            "?",
+            "null",
+            ":",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "_owners",
+            ".",
+            "library",
+            ".",
+            "isEmpty",
+            "?",
+            "null",
+            ":",
+            "(",
+            ")",
+            "=>",
+            "_owners",
+            ".",
+            "firstLibraryFocus",
+            ".",
+            "requestFocus",
+            "(",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubBar.build",
+      "call": "_HubIconButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_HubIconButton",
+          "expression": [
+            "onBack"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "onBack"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "onBack"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubIconButton",
+          "expression": [
+            "onBack"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubBar.build",
+      "call": "_HubButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_HubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubBar.build",
+      "call": "_HubButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onDown",
+      "stages": {
+        "0": {
+          "call": "_HubButton",
+          "expression": [
+            "onScheduleDown"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onScheduleDown"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onScheduleDown"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onScheduleDown"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_LiveCard.build",
+      "call": "_HubButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_HubButton",
+          "expression": [
+            "onStop"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onStop"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onStop"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onStop"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_ScheduleRowState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_ScheduleRowState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onCancel",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onCancel",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onCancel",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onCancel",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_ScheduleRowState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onCancel"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onCancel"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onCancel"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onCancel"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_LibraryRowState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_LibraryRowState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPlay",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPlay",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPlay",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPlay",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_LibraryRowState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPlay"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPlay"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPlay"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPlay"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_LibraryRowState.build",
+      "call": "_RowIconButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_RowIconButton",
+          "expression": [
+            "widget",
+            ".",
+            "onDelete"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubRowIconButton",
+          "expression": [
+            "widget",
+            ".",
+            "onDelete"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubRowIconButton",
+          "expression": [
+            "widget",
+            ".",
+            "onDelete"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubRowIconButton",
+          "expression": [
+            "widget",
+            ".",
+            "onDelete"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_EmptyDvr.build",
+      "call": "_AlarmBanner",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "_AlarmBanner",
+          "expression": [
+            "onOpenAlarmSettings"
+          ]
+        },
+        "1": {
+          "call": "_AlarmBanner",
+          "expression": [
+            "onOpenAlarmSettings"
+          ]
+        },
+        "2": {
+          "call": "_AlarmBanner",
+          "expression": [
+            "onOpenAlarmSettings"
+          ]
+        },
+        "3": {
+          "call": "_AlarmBanner",
+          "expression": [
+            "onOpenAlarmSettings"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_EmptyDvr.build",
+      "call": "_HubButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "_HubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "1": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "2": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        },
+        "3": {
+          "call": "RecordingsHubHubButton",
+          "expression": [
+            "onSchedule"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_BatteryBanner.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "onFix"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "onFix"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "onFix"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "onFix"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_BatteryBanner.build",
+      "call": "IconButton",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onPressed",
+      "stages": {
+        "0": {
+          "call": "IconButton",
+          "expression": [
+            "onDismiss"
+          ]
+        },
+        "1": {
+          "call": "IconButton",
+          "expression": [
+            "onDismiss"
+          ]
+        },
+        "2": {
+          "call": "IconButton",
+          "expression": [
+            "onDismiss"
+          ]
+        },
+        "3": {
+          "call": "IconButton",
+          "expression": [
+            "onDismiss"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_AlarmBannerState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_AlarmBannerState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onTap",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onTap",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onTap",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onTap",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_AlarmBannerState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onTap"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onTap"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onTap"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onTap"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubButtonState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubIconButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubIconButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onDown",
+            "!",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "if",
+            "(",
+            "widget",
+            ".",
+            "onDown",
+            "!=",
+            "null",
+            "&&",
+            "event",
+            ".",
+            "logicalKey",
+            "==",
+            "LogicalKeyboardKey",
+            ".",
+            "arrowDown",
+            ")",
+            "{",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_HubIconButtonState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RowIconButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onFocusChange",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "_",
+            ")",
+            "=>",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "}",
+            ")"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RowIconButtonState.build",
+      "call": "Focus",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onKeyEvent",
+      "stages": {
+        "0": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "1": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "2": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        },
+        "3": {
+          "call": "Focus",
+          "expression": [
+            "(",
+            "node",
+            ",",
+            "event",
+            ")",
+            "{",
+            "if",
+            "(",
+            "event",
+            "is",
+            "KeyDownEvent",
+            "&&",
+            "isActivateOrSpaceKey",
+            "(",
+            "event",
+            ".",
+            "logicalKey",
+            ")",
+            ")",
+            "{",
+            "widget",
+            ".",
+            "onPressed",
+            "(",
+            ")",
+            ";",
+            "return",
+            "KeyEventResult",
+            ".",
+            "handled",
+            ";",
+            "}",
+            "return",
+            "KeyEventResult",
+            ".",
+            "ignored",
+            ";",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "member": "_RowIconButtonState.build",
+      "call": "GestureDetector",
+      "occurrence": 0,
+      "count": 1,
+      "argument": "onTap",
+      "stages": {
+        "0": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "1": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "2": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        },
+        "3": {
+          "call": "GestureDetector",
+          "expression": [
+            "widget",
+            ".",
+            "onPressed"
+          ]
+        }
+      }
+    }
+  ]
+}

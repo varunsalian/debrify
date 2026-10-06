@@ -1,0 +1,1660 @@
+[
+  {
+    "label": "schedule-sort",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "schedules ascend"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._loadAll",
+        "before": "a.startMs.compareTo(b.startMs)",
+        "after": "b.startMs.compareTo(a.startMs)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "schedule order is ascending"
+    ]
+  },
+  {
+    "label": "library-sort",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "schedules ascend"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._loadAll",
+        "before": "_displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt)",
+        "after": "_displayFor(a).recordedAt.compareTo(_displayFor(b).recordedAt)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "library order uses embedded stamp descending"
+    ]
+  },
+  {
+    "label": "gb-threshold",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtBytes",
+        "before": "bytes >= 1024 * 1024 * 1024",
+        "after": "bytes > 1024 * 1024 * 1024",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "exact GB threshold uses GB"
+    ]
+  },
+  {
+    "label": "mb-precision",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtBytes",
+        "before": "(bytes / (1024 * 1024)).toStringAsFixed(0)",
+        "after": "(bytes / (1024 * 1024)).toStringAsFixed(1)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "MB has zero decimal places"
+    ]
+  },
+  {
+    "label": "elapsed-hour",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "live TV card"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtElapsed",
+        "before": "return h > 0 ? '$h:$m:$s' : '$m:$s';",
+        "after": "return '$m:$s';",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "elapsed hour keeps h:mm:ss"
+    ]
+  },
+  {
+    "label": "countdown-sixty",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "countdown renders"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtCountdown",
+        "before": "untilStart.inSeconds <= 60",
+        "after": "untilStart.inSeconds < 60",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "countdown boundary"
+    ]
+  },
+  {
+    "label": "countdown-day-hours",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "countdown renders"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtCountdown",
+        "before": "return 'in ${untilStart.inDays}d ${h.remainder(24)}h';",
+        "after": "return 'in ${untilStart.inDays}d';",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "countdown boundary"
+    ]
+  },
+  {
+    "label": "duration-minute",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtDuration",
+        "before": "d.inMinutes < 1",
+        "after": "d.inMinutes <= 1",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "exact minute uses minute form"
+    ]
+  },
+  {
+    "label": "day-labels",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "relative day labels"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._dayLabel",
+        "before": "String _dayLabel(DateTime day) {\n    final now = DateTime.now();\n    final today = DateTime(now.year, now.month, now.day);\n    final d = DateTime(day.year, day.month, day.day);\n    if (d == today) return 'Today';\n    if (d == today.add(const Duration(days: 1))) return 'Tomorrow';\n    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';\n    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];\n    return '${weekdays[d.weekday - 1]} ${d.day}/${d.month}';\n  }",
+        "after": "String _dayLabel(DateTime day) {\n    final now = DateTime.now();\n    final today = DateTime(now.year, now.month, now.day);\n    final d = DateTime(day.year, day.month, day.day);\n    if (d == today) return 'Today';\n    if (d == today.add(const Duration(days: 1))) return 'Yesterday';\n    if (d == today.subtract(const Duration(days: 1))) return 'Tomorrow';\n    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];\n    return '${weekdays[d.weekday - 1]} ${d.day}/${d.month}';\n  }"
+      }
+    ],
+    "assertion_reasons": [
+      "tomorrow schedule label"
+    ]
+  },
+  {
+    "label": "stamp-collision",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "schedules ascend"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._stampSuffix",
+        "before": "(?:_\\d+)?$",
+        "after": "$",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "library order uses embedded stamp descending"
+    ]
+  },
+  {
+    "label": "duration-max",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "gap < 12 * 60 * 60 * 1000",
+        "after": "gap < 24 * 60 * 60 * 1000",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "twelve hours is outside plausible duration window"
+    ]
+  },
+  {
+    "label": "duration-min",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "gap > 1000",
+        "after": "gap >= 1000",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "one second is outside plausible duration window"
+    ]
+  },
+  {
+    "label": "extension-dot-zero",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "if (dot > 0)",
+        "after": "if (dot >= 0)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "dot-zero extension remains the title"
+    ]
+  },
+  {
+    "label": "empty-title",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "library formats"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "title.isEmpty ? 'Recording' : title",
+        "after": "title.isEmpty ? 'Untitled' : title",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "empty title falls back to Recording"
+    ]
+  },
+  {
+    "label": "idle-ticker",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "last schedule cancels"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "final needTick = _anythingLive || _schedules.isNotEmpty;",
+        "after": "final needTick = true;",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "last schedule cancels ticker"
+    ]
+  },
+  {
+    "label": "ticker-last-schedule",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "last schedule cancels"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "_ticker?.cancel();",
+        "after": "// cancellation removed",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "last schedule cancels ticker"
+    ]
+  },
+  {
+    "label": "hidden-revision-arms",
+    "kind": "B",
+    "tests": [
+      "recordings_lifecycle"
+    ],
+    "must_fail": [
+      "pause cancels ticker"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "if (!_appVisible) return;",
+        "after": "",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "hidden revision cannot rearm ticker"
+    ]
+  },
+  {
+    "label": "paused-keeps-ticker",
+    "kind": "B",
+    "tests": [
+      "recordings_lifecycle"
+    ],
+    "must_fail": [
+      "pause cancels ticker"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.didChangeAppLifecycleState",
+        "before": "_ticker?.cancel();",
+        "after": "// cancellation removed",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "paused cancels ticker"
+    ]
+  },
+  {
+    "label": "resume-no-load",
+    "kind": "B",
+    "tests": [
+      "recordings_lifecycle"
+    ],
+    "must_fail": [
+      "pause cancels ticker"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.didChangeAppLifecycleState",
+        "before": "unawaited(_loadAll());",
+        "after": "// reload removed",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "resume reloads recordings"
+    ]
+  },
+  {
+    "label": "borrowed-focus-disposed",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "folder DOWN"
+    ],
+    "edits": [
+      {
+        "member": "_LibraryRowState.dispose",
+        "before": "@override\n  void dispose() {\n    _ownFocusNode?.dispose();\n    super.dispose();\n  }",
+        "after": "@override\n  void dispose() {\n    _focusNode.dispose();\n    super.dispose();\n  }",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "row disposal keeps borrowed first-library focus usable"
+    ]
+  },
+  {
+    "label": "stop-messages",
+    "kind": "B",
+    "tests": [
+      "recordings_actions"
+    ],
+    "must_fail": [
+      "desktop Stop outcome"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._stopDesktop",
+        "before": "bytes > 0",
+        "after": "bytes == 0",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "cancel-autofocus",
+    "kind": "B",
+    "tests": [
+      "recordings_actions"
+    ],
+    "must_fail": [
+      "cancel dialog focuses"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._cancelSchedule",
+        "before": "autofocus: true,",
+        "after": "autofocus: false,",
+        "count": 1
+      },
+      {
+        "member": "_RecordingsPageState._cancelSchedule",
+        "before": "TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(false),",
+        "after": "TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(false),"
+      }
+    ],
+    "assertion_reasons": [
+      "cancel dialog autofocus belongs to Cancel"
+    ]
+  },
+  {
+    "label": "delete-autofocus",
+    "kind": "B",
+    "tests": [
+      "recordings_actions"
+    ],
+    "must_fail": [
+      "delete safe"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "autofocus: true,",
+        "after": "autofocus: false,",
+        "count": 1
+      },
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(true),",
+        "after": "TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(true),"
+      }
+    ],
+    "assertion_reasons": [
+      "delete dialog autofocus belongs to Keep"
+    ]
+  },
+  {
+    "label": "delete-failure-no-reload",
+    "kind": "B",
+    "tests": [
+      "recordings_actions"
+    ],
+    "must_fail": [
+      "active capture refuses"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "await _loadAll();",
+        "after": "if (ok) await _loadAll();",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "failed delete still reloads library"
+    ]
+  },
+  {
+    "label": "handoff-show-title",
+    "kind": "B",
+    "tests": [
+      "recordings_handoff"
+    ],
+    "must_fail": [
+      "library play observes"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._play",
+        "before": "showVideoTitle: true",
+        "after": "showVideoTitle: false",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "recordings handoff shows video title"
+    ]
+  },
+  {
+    "label": "handoff-title",
+    "kind": "B",
+    "tests": [
+      "recordings_handoff"
+    ],
+    "must_fail": [
+      "library play observes"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._play",
+        "before": "title: display.title",
+        "after": "title: entry.uri",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "recordings handoff uses display title"
+    ]
+  },
+  {
+    "label": "past-start-no-clamp",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "past start clamps"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "if (startsImmediately) start = now;",
+        "after": "",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "past start is clamped to originating now"
+    ]
+  },
+  {
+    "label": "date-six-days",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "manual preset"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "Duration(days: 7)",
+        "after": "Duration(days: 6)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "presets-reordered",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "manual preset"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),",
+        "after": "('30 minutes', Duration(minutes: 30)),\n            ('5 minutes (test)', Duration(minutes: 5)),",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "six-hours-confirm",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "exact six hours"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "length > const Duration(hours: 6)",
+        "after": "length >= const Duration(hours: 6)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "exact six-hour duration needs no confirmation"
+    ]
+  },
+  {
+    "label": "capacity-manage",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "capacity conflict"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "offerManage: false",
+        "after": "offerManage: true",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "manual conflict has no Manage action"
+    ]
+  },
+  {
+    "label": "programme-title",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "manual preset"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "programmeTitle: ''",
+        "after": "programmeTitle: 'Manual'",
+        "count": 2
+      }
+    ],
+    "assertion_reasons": [
+      "manual programme title stays empty"
+    ]
+  },
+  {
+    "label": "overlap-message",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "hidden owner capacity"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "'Would exceed the simultaneous-recordings limit \u2014 raise it '",
+        "after": "'Changed overlap \u2014 raise it '",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "backend overlap retains original result message"
+    ]
+  },
+  {
+    "label": "schedule-second-autofocus",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "TV first schedule"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "liveCount == 0 &&\n                                  i == 0",
+        "after": "liveCount == 0 &&\n                                  i == 1",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "first TV schedule has autofocus"
+    ]
+  },
+  {
+    "label": "down-repeat",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "folder DOWN"
+    ],
+    "edits": [
+      {
+        "member": "_HubIconButtonState.build",
+        "before": "// Swallow DOWN repeats while redirecting, so a held key can't slip\n        // one event through geometric traversal mid-move.\n        if (widget.onDown != null &&\n            event.logicalKey == LogicalKeyboardKey.arrowDown) {\n          return KeyEventResult.handled;\n        }",
+        "after": "",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "DOWN repeat is swallowed"
+    ]
+  },
+  {
+    "label": "activate-keyup",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "TV first schedule"
+    ],
+    "edits": [
+      {
+        "member": "_ScheduleRowState.build",
+        "before": "event is KeyDownEvent",
+        "after": "event is KeyUpEvent",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "schedule ignores activation KeyUp"
+    ]
+  },
+  {
+    "label": "rec-dot-tv-animation",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "live TV card"
+    ],
+    "edits": [
+      {
+        "member": "_RecDotState.initState",
+        "before": "if (!PlatformUtil.isTelevision)",
+        "after": "if (true)",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "TV recording dot is static"
+    ]
+  },
+  {
+    "label": "cached-focus",
+    "kind": "B",
+    "tests": [
+      "recordings_widgets_focus"
+    ],
+    "must_fail": [
+      "folder DOWN"
+    ],
+    "edits": [
+      {
+        "member": "_LibraryRowState._focused",
+        "before": "bool get _focused => _focusNode.hasFocus;",
+        "after": "bool get _focused => false;",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "focused library row paints live gold border"
+    ]
+  },
+  {
+    "label": "revision-listeners-retained",
+    "kind": "probe",
+    "tests": [
+      "recordings_lifecycle"
+    ],
+    "must_fail": [
+      "each revision"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "LiveRecordingService.schedulesRevision.removeListener(_onRevision);",
+        "after": ""
+      },
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "DesktopRecordingService.instance.revision.removeListener(_onRevision);",
+        "after": ""
+      }
+    ],
+    "reason": "Mounted guard makes retained callback inert; no public reload effect after disposal"
+  },
+  {
+    "label": "android-predicate",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._isAndroid",
+        "before": "Platform.isAndroid",
+        "after": "Platform.isIOS",
+        "count": 1
+      }
+    ],
+    "reason": "dart:io native platform cannot be overridden on macOS/Linux"
+  },
+  {
+    "label": "poll-live-cadence",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "? 3 : 15",
+        "after": "? 4 : 15",
+        "count": 1
+      }
+    ],
+    "reason": "Android-only native poll"
+  },
+  {
+    "label": "poll-schedule-cadence",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "? 3 : 15",
+        "after": "? 3 : 16",
+        "count": 1
+      }
+    ],
+    "reason": "Android-only native poll"
+  },
+  {
+    "label": "poll-membership",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._pollLive",
+        "before": "if (!sameSets)",
+        "after": "if (sameSets)",
+        "count": 1
+      }
+    ],
+    "reason": "Android-only native task membership"
+  },
+  {
+    "label": "poll-rearms",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._pollLive",
+        "before": "// Same membership: bytes/elapsed only",
+        "after": "_syncTimers();\n    // Same membership: bytes/elapsed only",
+        "count": 1
+      }
+    ],
+    "reason": "Android-only native poll must not rearm on unchanged membership"
+  },
+  {
+    "label": "folder-open",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._openFolder",
+        "before": "Process.run('open', [dir.path])",
+        "after": "Process.run('open', [])",
+        "count": 1
+      }
+    ],
+    "reason": "Process.run cannot be faked without a production seam"
+  },
+  {
+    "label": "folder-explorer",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._openFolder",
+        "before": "Process.run('explorer', [dir.path])",
+        "after": "Process.run('explorer', [])",
+        "count": 1
+      }
+    ],
+    "reason": "Process.run cannot be faked without a production seam"
+  },
+  {
+    "label": "folder-xdg-open",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._openFolder",
+        "before": "Process.run('xdg-open', [dir.path])",
+        "after": "Process.run('xdg-open', [])",
+        "count": 1
+      }
+    ],
+    "reason": "Process.run cannot be faked without a production seam"
+  },
+  {
+    "label": "folder-fallback",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._openFolder",
+        "before": "Recordings folder:",
+        "after": "DVR folder:",
+        "count": 1
+      }
+    ],
+    "reason": "Cannot safely induce real desktop process failure"
+  },
+  {
+    "label": "exact-alarm-result",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "result.errorCode == 'exact_alarms_required'",
+        "after": "result.errorCode == 'permission_required'",
+        "count": 1
+      }
+    ],
+    "reason": "Desktop add cannot return Android exact-alarm error"
+  },
+  {
+    "label": "battery-private",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._dismissBatteryNudge",
+        "before": "_batteryNudgeDismissedAtMs = now",
+        "after": "_batteryNudgeDismissedAtMs = 0",
+        "count": 1
+      }
+    ],
+    "reason": "Page battery banner is Android-only; preferences are covered separately"
+  },
+  {
+    "label": "channel-metadata",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "channel: entry.channelName",
+        "after": "channel: null",
+        "count": 1
+      }
+    ],
+    "reason": "Desktop listLibrary always returns channelName null"
+  },
+  {
+    "label": "duration-store",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "var durationMs = entry.durationMs;",
+        "after": "int? durationMs;",
+        "count": 1
+      }
+    ],
+    "reason": "Desktop listLibrary always returns durationMs null"
+  },
+  {
+    "label": "dormant-null-url",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "if (recordUrl == null) return;",
+        "after": "if (recordUrl == null) throw StateError('null');",
+        "count": 1
+      }
+    ],
+    "reason": "isSchedulableUrl already rejects null recordable URLs"
+  },
+  {
+    "label": "listener-removal",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "removeListener(_onRevision)",
+        "after": "addListener(_onRevision)",
+        "count": 2
+      }
+    ],
+    "reason": "Retained callback is inert after disposal; probe separately records survival"
+  },
+  {
+    "label": "dispose-order",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "_now.dispose();\n    _firstLibraryFocus.dispose();",
+        "after": "_firstLibraryFocus.dispose();\n    _now.dispose();",
+        "count": 1
+      }
+    ],
+    "reason": "Public boundaries cannot distinguish full resource teardown ordering"
+  },
+  {
+    "label": "dot-controller-duration",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecDotState.initState",
+        "before": "milliseconds: 900",
+        "after": "milliseconds: 901",
+        "count": 1
+      }
+    ],
+    "reason": "Numeric controller parameters are structural"
+  },
+  {
+    "label": "dot-controller-bounds",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecDotState.initState",
+        "before": "lowerBound: 0.35",
+        "after": "lowerBound: 0.36",
+        "count": 1
+      }
+    ],
+    "reason": "Numeric controller parameters are structural"
+  },
+  {
+    "label": "focus-label",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._firstLibraryFocus",
+        "before": "recordings_first_library_row",
+        "after": "recordings_changed",
+        "count": 1
+      }
+    ],
+    "reason": "Diagnostic-only metadata"
+  },
+  {
+    "label": "handoff-android",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._play",
+        "before": "disableExternalPlayer: _isAndroid",
+        "after": "disableExternalPlayer: false",
+        "count": 1
+      }
+    ],
+    "reason": "Android true cannot be reached on desktop"
+  },
+  {
+    "label": "calendar-not-24-hours",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );",
+        "after": "end = end.add(const Duration(hours: 24));",
+        "count": 1
+      }
+    ],
+    "reason": "Pinned host timezone has no DST transition; calendar-vs-24h is indistinguishable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-initState-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.initState",
+        "before": "@override\n  void initState() {\n    super.initState();\n    WidgetsBinding.instance.addObserver(this);\n    LiveRecordingService.schedulesRevision.addListener(_onRevision);\n    if (_desktop) {\n      DesktopRecordingService.instance.revision.addListener(_onRevision);\n    }\n    unawaited(_loadAll());\n    unawaited(\n      DevicePreferences.instance().then((prefs) {\n        if (!mounted) return;\n        final at = prefs.getInt(_batteryNudgeDismissedPref) ?? 0;\n        if (at != 0) setState(() => _batteryNudgeDismissedAtMs = at);\n      }),\n    );\n  }",
+        "after": "@override\n  void initState() {\n    super.initState();\n    WidgetsBinding.instance.addObserver(this);\n    LiveRecordingService.schedulesRevision.addListener(_onRevision);\n    if (_desktop) {\n      DesktopRecordingService.instance.revision.addListener(_onRevision);\n    }\n    unawaited(_loadAll());\n    unawaited(\n      DevicePreferences.instance().then((prefs) {\n        if (!true) return;\n        final at = prefs.getInt(_batteryNudgeDismissedPref) ?? 0;\n        if (at != 0) setState(() => _batteryNudgeDismissedAtMs = at);\n      }),\n    );\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-onRevision-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._onRevision",
+        "before": "void _onRevision() {\n    if (mounted) unawaited(_loadAll());\n  }",
+        "after": "void _onRevision() {\n    if (true) unawaited(_loadAll());\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-loadAll-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._loadAll",
+        "before": "Future<void> _loadAll() async {\n    final results = await Future.wait<Object>([\n      _isAndroid\n          ? LiveRecordingService.query()\n          : Future.value(const <LiveRecordingStatus>[]),\n      _desktop\n          ? DesktopScheduleService.instance.list().then(\n              (list) => list\n                  .map((s) => s.toScheduledRecording())\n                  .toList(growable: false),\n            )\n          : (_isAndroid\n                ? LiveRecordingService.listSchedules()\n                : Future.value(const <ScheduledRecording>[])),\n      _isAndroid\n          ? LiveRecordingService.queryLibrary()\n          : DesktopRecordingService.listLibrary(),\n      _isAndroid\n          ? LiveRecordingService.exactAlarmsGranted()\n          : Future.value(true),\n      _isAndroid\n          ? LiveRecordingService.isIgnoringBatteryOptimizations()\n          : Future.value(true),\n    ]);\n    if (!mounted) return;\n    final live = (results[0] as List<LiveRecordingStatus>)\n        .where((r) => r.isRecording)\n        .toList(growable: false);\n    final schedules = (results[1] as List<ScheduledRecording>).toList()\n      ..sort((a, b) => a.startMs.compareTo(b.startMs));\n    final library = (results[2] as List<RecordingLibraryEntry>).toList()\n      ..sort(\n        (a, b) =>\n            _displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt),\n      );\n    setState(() {\n      _live = live;\n      _schedules = schedules;\n      _library = library;\n      _exactAlarms = results[3] as bool;\n      _batteryExempt = results[4] as bool;\n      _loading = false;\n    });\n    _syncTimers();\n  }",
+        "after": "Future<void> _loadAll() async {\n    final results = await Future.wait<Object>([\n      _isAndroid\n          ? LiveRecordingService.query()\n          : Future.value(const <LiveRecordingStatus>[]),\n      _desktop\n          ? DesktopScheduleService.instance.list().then(\n              (list) => list\n                  .map((s) => s.toScheduledRecording())\n                  .toList(growable: false),\n            )\n          : (_isAndroid\n                ? LiveRecordingService.listSchedules()\n                : Future.value(const <ScheduledRecording>[])),\n      _isAndroid\n          ? LiveRecordingService.queryLibrary()\n          : DesktopRecordingService.listLibrary(),\n      _isAndroid\n          ? LiveRecordingService.exactAlarmsGranted()\n          : Future.value(true),\n      _isAndroid\n          ? LiveRecordingService.isIgnoringBatteryOptimizations()\n          : Future.value(true),\n    ]);\n    if (!true) return;\n    final live = (results[0] as List<LiveRecordingStatus>)\n        .where((r) => r.isRecording)\n        .toList(growable: false);\n    final schedules = (results[1] as List<ScheduledRecording>).toList()\n      ..sort((a, b) => a.startMs.compareTo(b.startMs));\n    final library = (results[2] as List<RecordingLibraryEntry>).toList()\n      ..sort(\n        (a, b) =>\n            _displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt),\n      );\n    setState(() {\n      _live = live;\n      _schedules = schedules;\n      _library = library;\n      _exactAlarms = results[3] as bool;\n      _batteryExempt = results[4] as bool;\n      _loading = false;\n    });\n    _syncTimers();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-pollLive-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._pollLive",
+        "before": "/// The poll body: refresh live captures + schedules only. A membership\n  /// change (a capture started or finished, a schedule fired) escalates to a\n  /// full [_loadAll] so the library picks up the new file too.\n  Future<void> _pollLive() async {\n    if (!_isAndroid) return;\n    final results = await Future.wait<Object>([\n      LiveRecordingService.query(),\n      LiveRecordingService.listSchedules(),\n    ]);\n    if (!mounted) return;\n    final live = (results[0] as List<LiveRecordingStatus>)\n        .where((r) => r.isRecording)\n        .toList(growable: false);\n    final schedules = (results[1] as List<ScheduledRecording>).toList()\n      ..sort((a, b) => a.startMs.compareTo(b.startMs));\n    final sameSets =\n        live.map((r) => r.taskId).toSet().length == _live.length &&\n        _live.every((old) => live.any((r) => r.taskId == old.taskId)) &&\n        schedules.length == _schedules.length &&\n        _schedules.every((old) => schedules.any((s) => s.id == old.id));\n    if (!sameSets) {\n      await _loadAll();\n      return;\n    }\n    // Same membership: bytes/elapsed only \u2014 no timer re-arm (the cadence is\n    // a function of membership, which didn't change).\n    setState(() {\n      _live = live;\n      _schedules = schedules;\n    });\n  }",
+        "after": "/// The poll body: refresh live captures + schedules only. A membership\n  /// change (a capture started or finished, a schedule fired) escalates to a\n  /// full [_loadAll] so the library picks up the new file too.\n  Future<void> _pollLive() async {\n    if (!_isAndroid) return;\n    final results = await Future.wait<Object>([\n      LiveRecordingService.query(),\n      LiveRecordingService.listSchedules(),\n    ]);\n    if (!true) return;\n    final live = (results[0] as List<LiveRecordingStatus>)\n        .where((r) => r.isRecording)\n        .toList(growable: false);\n    final schedules = (results[1] as List<ScheduledRecording>).toList()\n      ..sort((a, b) => a.startMs.compareTo(b.startMs));\n    final sameSets =\n        live.map((r) => r.taskId).toSet().length == _live.length &&\n        _live.every((old) => live.any((r) => r.taskId == old.taskId)) &&\n        schedules.length == _schedules.length &&\n        _schedules.every((old) => schedules.any((s) => s.id == old.id));\n    if (!sameSets) {\n      await _loadAll();\n      return;\n    }\n    // Same membership: bytes/elapsed only \u2014 no timer re-arm (the cadence is\n    // a function of membership, which didn't change).\n    setState(() {\n      _live = live;\n      _schedules = schedules;\n    });\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-stopAndroid-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._stopAndroid",
+        "before": "Future<void> _stopAndroid(LiveRecordingStatus rec) async {\n    await LiveRecordingService.stop(rec.taskId);\n    if (!mounted) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      const SnackBar(content: Text('Stopping \u2014 saving recording\u2026')),\n    );\n    // The engine finalizes and publishes off-process; give it a beat, then\n    // let the regular poll settle whatever this misses.\n    await Future<void>.delayed(const Duration(milliseconds: 1200));\n    if (mounted) await _loadAll();\n  }",
+        "after": "Future<void> _stopAndroid(LiveRecordingStatus rec) async {\n    await LiveRecordingService.stop(rec.taskId);\n    if (!true) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      const SnackBar(content: Text('Stopping \u2014 saving recording\u2026')),\n    );\n    // The engine finalizes and publishes off-process; give it a beat, then\n    // let the regular poll settle whatever this misses.\n    await Future<void>.delayed(const Duration(milliseconds: 1200));\n    if (mounted) await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-stopAndroid-1",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._stopAndroid",
+        "before": "Future<void> _stopAndroid(LiveRecordingStatus rec) async {\n    await LiveRecordingService.stop(rec.taskId);\n    if (!mounted) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      const SnackBar(content: Text('Stopping \u2014 saving recording\u2026')),\n    );\n    // The engine finalizes and publishes off-process; give it a beat, then\n    // let the regular poll settle whatever this misses.\n    await Future<void>.delayed(const Duration(milliseconds: 1200));\n    if (mounted) await _loadAll();\n  }",
+        "after": "Future<void> _stopAndroid(LiveRecordingStatus rec) async {\n    await LiveRecordingService.stop(rec.taskId);\n    if (!mounted) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      const SnackBar(content: Text('Stopping \u2014 saving recording\u2026')),\n    );\n    // The engine finalizes and publishes off-process; give it a beat, then\n    // let the regular poll settle whatever this misses.\n    await Future<void>.delayed(const Duration(milliseconds: 1200));\n    if (true) await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-stopDesktop-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._stopDesktop",
+        "before": "Future<void> _stopDesktop(DesktopRecordingCapture capture) async {\n    final bytes = await capture.stop();\n    if (!mounted) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      SnackBar(\n        content: Text(\n          bytes > 0\n              ? 'Recording saved (${_fmtBytes(bytes)})'\n              : 'Recording stopped \u2014 nothing was captured',\n        ),\n      ),\n    );\n    await _loadAll();\n  }",
+        "after": "Future<void> _stopDesktop(DesktopRecordingCapture capture) async {\n    final bytes = await capture.stop();\n    if (!true) return;\n    ScaffoldMessenger.of(context).showSnackBar(\n      SnackBar(\n        content: Text(\n          bytes > 0\n              ? 'Recording saved (${_fmtBytes(bytes)})'\n              : 'Recording stopped \u2014 nothing was captured',\n        ),\n      ),\n    );\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-cancelSchedule-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._cancelSchedule",
+        "before": "Future<void> _cancelSchedule(ScheduledRecording schedule) async {\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Cancel recording?'),\n        content: Text(\n          schedule.programmeTitle.isEmpty\n              ? schedule.channelName\n              : '${schedule.programmeTitle} \u2014 ${schedule.channelName}',\n        ),\n        actions: [\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Cancel recording'),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !mounted) return;\n    if (_desktop) {\n      await DesktopScheduleService.instance.cancel(schedule.id);\n    } else {\n      await LiveRecordingService.cancelSchedule(schedule.id);\n    }\n    // Both cancel paths bump schedulesRevision, whose listener reloads.\n  }",
+        "after": "Future<void> _cancelSchedule(ScheduledRecording schedule) async {\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Cancel recording?'),\n        content: Text(\n          schedule.programmeTitle.isEmpty\n              ? schedule.channelName\n              : '${schedule.programmeTitle} \u2014 ${schedule.channelName}',\n        ),\n        actions: [\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Cancel recording'),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !true) return;\n    if (_desktop) {\n      await DesktopScheduleService.instance.cancel(schedule.id);\n    } else {\n      await LiveRecordingService.cancelSchedule(schedule.id);\n    }\n    // Both cancel paths bump schedulesRevision, whose listener reloads.\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-delete-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "Future<void> _delete(RecordingLibraryEntry entry) async {\n    final display = _displayFor(entry);\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Delete recording?'),\n        content: Text(\n          '${display.title} (${_fmtBytes(entry.bytes)}) will be removed '\n          'from this device.',\n        ),\n        actions: [\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Delete', style: TextStyle(color: _kRec)),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !mounted) return;\n    final ok = _isAndroid\n        ? await LiveRecordingService.deleteRecordingFile(entry.uri)\n        : await DesktopRecordingService.deleteRecordingFile(entry.uri);\n    if (!mounted) return;\n    if (!ok) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(content: Text(\"Couldn't delete the recording\")),\n      );\n    }\n    await _loadAll();\n  }",
+        "after": "Future<void> _delete(RecordingLibraryEntry entry) async {\n    final display = _displayFor(entry);\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Delete recording?'),\n        content: Text(\n          '${display.title} (${_fmtBytes(entry.bytes)}) will be removed '\n          'from this device.',\n        ),\n        actions: [\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Delete', style: TextStyle(color: _kRec)),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !true) return;\n    final ok = _isAndroid\n        ? await LiveRecordingService.deleteRecordingFile(entry.uri)\n        : await DesktopRecordingService.deleteRecordingFile(entry.uri);\n    if (!mounted) return;\n    if (!ok) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(content: Text(\"Couldn't delete the recording\")),\n      );\n    }\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-delete-1",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "Future<void> _delete(RecordingLibraryEntry entry) async {\n    final display = _displayFor(entry);\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Delete recording?'),\n        content: Text(\n          '${display.title} (${_fmtBytes(entry.bytes)}) will be removed '\n          'from this device.',\n        ),\n        actions: [\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Delete', style: TextStyle(color: _kRec)),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !mounted) return;\n    final ok = _isAndroid\n        ? await LiveRecordingService.deleteRecordingFile(entry.uri)\n        : await DesktopRecordingService.deleteRecordingFile(entry.uri);\n    if (!mounted) return;\n    if (!ok) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(content: Text(\"Couldn't delete the recording\")),\n      );\n    }\n    await _loadAll();\n  }",
+        "after": "Future<void> _delete(RecordingLibraryEntry entry) async {\n    final display = _displayFor(entry);\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        title: const Text('Delete recording?'),\n        content: Text(\n          '${display.title} (${_fmtBytes(entry.bytes)}) will be removed '\n          'from this device.',\n        ),\n        actions: [\n          TextButton(\n            autofocus: true,\n            onPressed: () => Navigator.of(dialogContext).pop(false),\n            child: const Text('Keep'),\n          ),\n          TextButton(\n            onPressed: () => Navigator.of(dialogContext).pop(true),\n            child: const Text('Delete', style: TextStyle(color: _kRec)),\n          ),\n        ],\n      ),\n    );\n    if (confirmed != true || !mounted) return;\n    final ok = _isAndroid\n        ? await LiveRecordingService.deleteRecordingFile(entry.uri)\n        : await DesktopRecordingService.deleteRecordingFile(entry.uri);\n    if (!true) return;\n    if (!ok) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(content: Text(\"Couldn't delete the recording\")),\n      );\n    }\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-openFolder-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._openFolder",
+        "before": "Future<void> _openFolder() async {\n    final dir = await DesktopRecordingService.recordingsDir();\n    try {\n      await dir.create(recursive: true);\n      if (Platform.isMacOS) {\n        await Process.run('open', [dir.path]);\n      } else if (Platform.isWindows) {\n        await Process.run('explorer', [dir.path]);\n      } else {\n        await Process.run('xdg-open', [dir.path]);\n      }\n    } catch (_) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(\n        context,\n      ).showSnackBar(SnackBar(content: Text('Recordings folder: ${dir.path}')));\n    }\n  }",
+        "after": "Future<void> _openFolder() async {\n    final dir = await DesktopRecordingService.recordingsDir();\n    try {\n      await dir.create(recursive: true);\n      if (Platform.isMacOS) {\n        await Process.run('open', [dir.path]);\n      } else if (Platform.isWindows) {\n        await Process.run('explorer', [dir.path]);\n      } else {\n        await Process.run('xdg-open', [dir.path]);\n      }\n    } catch (_) {\n      if (!true) return;\n      ScaffoldMessenger.of(\n        context,\n      ).showSnackBar(SnackBar(content: Text('Recordings folder: ${dir.path}')));\n    }\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!true) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-1",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!true) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-2",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !true) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-3",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !true) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-4",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !true) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-5",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !true) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-6",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!true) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-createManualSchedule-7",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!mounted) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "after": "/// Manual timer recording \u2014 ported from the original Scheduled page: pick a\n  /// saved channel, a start time and a duration; a start in the past (or\n  /// \"now\") late-joins within seconds.\n  Future<void> _createManualSchedule() async {\n    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text('Storage access is needed to save recordings'),\n        ),\n      );\n      return;\n    }\n    if (!mounted) return;\n    final choice = await showIptvStartupChannelPicker(\n      context,\n      title: 'Record which channel?',\n    );\n    if (choice == null || !mounted) return;\n\n    if (!LiveRecordingService.isSchedulableUrl(choice.url)) {\n      ScaffoldMessenger.of(context).showSnackBar(\n        const SnackBar(\n          content: Text(\n            \"This channel can't be scheduled \u2014 recording needs a direct \"\n            'TS or Xtream stream',\n          ),\n        ),\n      );\n      return;\n    }\n    final recordUrl = LiveRecordingService.engineRecordableUrl(choice.url);\n    if (recordUrl == null) return;\n\n    final now = DateTime.now();\n    final date = await showDatePicker(\n      context: context,\n      initialDate: now,\n      firstDate: now,\n      lastDate: now.add(const Duration(days: 7)),\n      helpText: 'Recording date',\n    );\n    if (date == null || !mounted) return;\n\n    final time = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 2))),\n      helpText: 'Start time',\n    );\n    if (time == null || !mounted) return;\n\n    var start = DateTime(\n      date.year,\n      date.month,\n      date.day,\n      time.hour,\n      time.minute,\n    );\n    final startsImmediately = !start.isAfter(now);\n    if (startsImmediately) start = now;\n\n    final duration = await _askRecordingLength(start);\n    if (duration == null || !mounted) return;\n    final end = start.add(duration);\n\n    // Conflict gate \u2014 no Manage button here: the rows to stop or cancel are\n    // right behind the dialog.\n    if (!await ensureRecordingCapacity(\n      context,\n      startMs: start.millisecondsSinceEpoch,\n      endMs: end.millisecondsSinceEpoch,\n      candidateUrl: recordUrl,\n      offerManage: false,\n    )) {\n      return;\n    }\n    if (!mounted) return;\n\n    final result = _desktop\n        ? await DesktopScheduleService.instance.add(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          )\n        : await LiveRecordingService.schedule(\n            url: recordUrl,\n            channelName: choice.name,\n            programmeTitle: '',\n            startMs: start.millisecondsSinceEpoch,\n            endMs: end.millisecondsSinceEpoch,\n            headers: choice.httpHeaders,\n            connectionResourceId: choice.connectionResourceId,\n            resourceAuthorizationRevision: choice.connectionResourceRevision,\n          );\n    if (!true) return;\n    if (result.errorCode == 'exact_alarms_required') {\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: const Text(\n            'Allow \"Alarms & reminders\" for Debrify to schedule recordings',\n          ),\n          action: SnackBarAction(\n            label: 'Settings',\n            onPressed: () =>\n                unawaited(LiveRecordingService.openExactAlarmSettings()),\n          ),\n        ),\n      );\n      return;\n    }\n    final message = result.ok\n        ? (startsImmediately\n              ? 'Recording starts in a few seconds'\n              : 'Recording scheduled')\n        : switch (result.errorCode) {\n            'duplicate' => 'Already scheduled at that time',\n            'overlap' =>\n              'Would exceed the simultaneous-recordings limit \u2014 raise it '\n                  'in IPTV settings or pick another slot',\n            'bad_time' => 'That time has already passed',\n            _ => \"Couldn't schedule recording\",\n          };\n    ScaffoldMessenger.of(\n      context,\n    ).showSnackBar(SnackBar(content: Text(message)));\n    await _loadAll();\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-askRecordingLength-0",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !mounted) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !mounted) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !mounted) return null;\n    }\n    return length;\n  }",
+        "after": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !true) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !mounted) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !mounted) return null;\n    }\n    return length;\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-askRecordingLength-1",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !mounted) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !mounted) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !mounted) return null;\n    }\n    return length;\n  }",
+        "after": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !mounted) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !true) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !mounted) return null;\n    }\n    return length;\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "mounted-RecordingsPageState-askRecordingLength-2",
+    "kind": "S",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !mounted) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !mounted) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !mounted) return null;\n    }\n    return length;\n  }",
+        "after": "/// How long to record, asked as a length. The presets cover the common cases\n  /// in one tap; \"Pick end time\u2026\" opens the same clock the start time uses, for\n  /// when the programme's END is the thing you actually know. Returns null if\n  /// either step is dismissed.\n  Future<Duration?> _askRecordingLength(DateTime start) async {\n    // Pops either a Duration (preset) or true (go to the clock).\n    final choice = await showDialog<Object>(\n      context: context,\n      builder: (dialogContext) => SimpleDialog(\n        title: const Text('Record for how long?'),\n        children: [\n          // ListTile, not SimpleDialogOption: the latter can't autofocus, so on\n          // TV the remote had no landing spot in this dialog at all.\n          for (final (i, (label, d)) in const [\n            ('5 minutes (test)', Duration(minutes: 5)),\n            ('30 minutes', Duration(minutes: 30)),\n            ('1 hour', Duration(hours: 1)),\n            ('2 hours', Duration(hours: 2)),\n            ('3 hours', Duration(hours: 3)),\n          ].indexed)\n            ListTile(\n              autofocus: PlatformUtil.isAndroidTvCached && i == 0,\n              contentPadding: _kDialogRowPadding,\n              title: Text(label),\n              onTap: () => Navigator.of(dialogContext).pop(d),\n            ),\n          const Divider(height: 12),\n          ListTile(\n            contentPadding: _kDialogRowPadding,\n            leading: const Icon(Icons.schedule_outlined, size: 20),\n            horizontalTitleGap: 10,\n            minLeadingWidth: 0,\n            title: const Text('Pick end time\u2026'),\n            onTap: () => Navigator.of(dialogContext).pop(true),\n          ),\n        ],\n      ),\n    );\n    if (choice == null || !mounted) return null;\n    if (choice is Duration) return choice;\n\n    final endTime = await _pickTime(\n      initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),\n      helpText: 'End time',\n    );\n    if (endTime == null || !mounted) return null;\n\n    var end = DateTime(\n      start.year,\n      start.month,\n      start.day,\n      endTime.hour,\n      endTime.minute,\n    );\n    // An end at or before the start reads as tomorrow \u2014 the late-night\n    // programme that runs past midnight, which is exactly when someone wants\n    // to name the end instead of counting hours. Roll the calendar day rather\n    // than adding 24h so the clock still reads what was picked across a DST\n    // change.\n    if (!end.isAfter(start)) {\n      end = DateTime(\n        start.year,\n        start.month,\n        start.day + 1,\n        endTime.hour,\n        endTime.minute,\n      );\n    }\n    final length = end.difference(start);\n\n    // The presets top out at 3h, so an all-day recording can only come from\n    // here \u2014 usually a mis-set clock that rolled a few minutes into tomorrow.\n    // Long recordings are legitimate (sport, overnight), so confirm, don't cap.\n    if (length > const Duration(hours: 6)) {\n      final hours = length.inHours;\n      final minutes = length.inMinutes.remainder(60);\n      final confirmed = await showDialog<bool>(\n        context: context,\n        builder: (dialogContext) => AlertDialog(\n          title: const Text(\"That's a long recording\"),\n          content: Text(\n            'Recording would run ${hours}h'\n            '${minutes > 0 ? ' ${minutes}m' : ''}, '\n            'ending ${TimeOfDay.fromDateTime(end).format(dialogContext)}'\n            '${end.day != start.day ? ' the next day' : ''}.',\n          ),\n          actions: [\n            // Safe choice holds focus, like the delete dialog above: on TV\n            // this guard exists to catch a mis-set clock, so confirming\n            // should take a deliberate move rather than a reflex OK.\n            TextButton(\n              autofocus: true,\n              onPressed: () => Navigator.of(dialogContext).pop(false),\n              child: const Text('Cancel'),\n            ),\n            TextButton(\n              onPressed: () => Navigator.of(dialogContext).pop(true),\n              child: const Text('Record'),\n            ),\n          ],\n        ),\n      );\n      if (confirmed != true || !true) return null;\n    }\n    return length;\n  }",
+        "count": 1
+      }
+    ],
+    "reason": "Each asynchronous mounted check is pinned; unmounting at every await is not publicly controllable"
+  },
+  {
+    "label": "ticker-scope",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "ticker rebuilds clock scope"
+    ],
+    "assertion_reasons": [
+      "ticker keeps page clean"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "_now.value = DateTime.now();",
+        "after": "setState(() => _now.value = DateTime.now());"
+      }
+    ]
+  }
+]
