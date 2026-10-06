@@ -67,6 +67,3 @@ tvos/build/
 # Local Apple TV deploy runbook — machine-specific device UDIDs, signing
 # identity and 7-day profile expiry dates that would go stale in the repo.
 TVOS_INSTALL.md
-
-# Worktree-local Stremio TV catalogs verification artifacts.
-refactor-evidence/stremio_tv_catalogs/

@@ -29,7 +29,9 @@ def assertions(path):
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--parser-package',type=Path,required=True);p.add_argument('--kind',choices=['B','S'],required=True);p.add_argument('--original-worktree',type=Path,required=True);p.add_argument('--positive',default='stremio_tv_catalogs/characterization');p.add_argument('--only');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--parser-package',type=Path,required=True);p.add_argument('--kind',choices=['B','S'],required=True);p.add_argument('--original-worktree',type=Path,required=True);p.add_argument('--positive',default='stremio_tv_catalogs/characterization');p.add_argument('--only');p.add_argument('--cases',type=Path,default=ROOT/'dev/tool/stremio_tv_catalogs_original_mutations.json');p.add_argument('--label',default='original');a=p.parse_args()
+    assert a.label in ('original','review-0b')
+    assert a.cases.resolve().is_relative_to(ROOT/'dev/tool')
     scratch=a.original_worktree.resolve();assert scratch==ROOT/'.dart_tool/stremio_tv_catalogs_original'
     package=a.parser_package.resolve();assert package.is_relative_to(ROOT/'.dart_tool')
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=scratch,text=True).strip()
@@ -40,8 +42,8 @@ def main():
     for d in parse({SOURCE:pristine},package)[SOURCE]['declarations']:
         nodes[d['name']]=d
         for m in d['members']:nodes[d['name']+'.'+m['name']]=m
-    cases=json.loads((ROOT/'dev/tool/stremio_tv_catalogs_original_mutations.json').read_text());cases=[c for c in cases if c['kind']==a.kind]
-    out=EVIDENCE/f'stremio_tv_catalogs/original-{a.kind}-mutations.json';results=json.loads(out.read_text())['results'] if a.only and out.exists() else []
+    cases=json.loads(a.cases.read_text());cases=[c for c in cases if c['kind']==a.kind]
+    out=EVIDENCE/f'stremio_tv_catalogs/{a.label}-{a.kind}-mutations.json';results=json.loads(out.read_text())['results'] if a.only and out.exists() else []
     for c in cases:
         if a.only and c['id']!=a.only:continue
         changed=pristine;versions={}
@@ -51,7 +53,7 @@ def main():
             replacement=text.replace(edit['before'],edit['after'])
             if member:assert changed.count(text)==1;changed=changed.replace(text,replacement,1);versions[member]=replacement
             else:changed=replacement
-        name=f'stremio_tv_catalogs/original-{a.kind}-{c["id"]}'
+        name=f'stremio_tv_catalogs/{a.label}-{a.kind}-{c["id"]}'
         try:
             (scratch/SOURCE).write_text(changed)
             for attempt in range(3):
@@ -68,7 +70,7 @@ def main():
             assert allowed and failed and failed<=allowed,(c['id'],'compile/load or unexpected failure',failed,allowed)
             assert any(c['assertion'] in name for name in rejected),(c['id'],'no named assertion failure',rejected)
             env=json.loads(path.with_suffix('.env.json').read_text());assert not env['tree_changed_during_run']
-            record=dict(id=c['id'],kind=a.kind,assertion=c['assertion'],failed=sorted(failed),assertion_failures=sorted(rejected),revision=revision,tested_tree=env['tested_tree'],production_sha256=hashlib.sha256(changed.encode()).hexdigest(),evidence=str(path.relative_to(ROOT)))
+            record=dict(id=c['id'],kind=a.kind,assertion=c['assertion'],failed=sorted(failed),assertion_failures=sorted(rejected),revision=revision,tested_tree=env['tested_tree'],production_sha256=hashlib.sha256(changed.encode()).hexdigest(),evidence=str(path))
             results=[r for r in results if r['id']!=c['id']]+[record]
             out.write_text(json.dumps(dict(kind=a.kind,original=revision,positive=a.positive,positive_tree=positive_env['tested_tree'],results=results),indent=2)+'\n')
             print('ASSERTION KILL '+a.kind+' '+c['id'],flush=True)

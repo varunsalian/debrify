@@ -16,7 +16,7 @@ procedure and integration rules, and states only what differs.
 `/Users/varunbsalian/Documents/Projects/debrify-wt/stremio-tv-catalogs` on
 `refactor/stremio-tv-catalogs`. Commit after every step; never push, never
 merge; gate commits contain `gate`. Evidence only under
-`refactor-evidence/stremio_tv_catalogs/`. **Every manifest run passes an
+`$(git rev-parse --path-format=absolute --git-common-dir)/refactor-evidence/stremio_tv_catalogs/`. **Every manifest run passes an
 isolated `--parser-package`** inside this worktree's ignored `.dart_tool/`
 (delete any `*.dill` in a copied parser package). `suite_evidence.py` runs
 are serialized within the worktree. Four sibling refactors run concurrently
@@ -512,8 +512,9 @@ facade 8.
 ### Step 0 — ORIGINAL characterization checkpoint (2026-10-06)
 
 Execution started at `8316eaefb2268c0e5bb44f824d487643b68ab808`; R/base is
-`0cb50df7e767485c6a3f9febd3dec7fb97df1239`. Evidence is local to
-`refactor-evidence/stremio_tv_catalogs/`. The checkpoint keeps all `lib/`
+`0cb50df7e767485c6a3f9febd3dec7fb97df1239`. Evidence now resides in
+`$(git rev-parse --path-format=absolute --git-common-dir)/refactor-evidence/stremio_tv_catalogs/`
+(moved from the worktree-local location during Step 0b). The checkpoint keeps all `lib/`
 bytes and both pubspec files identical to R. No Step 1 registration or move.
 
 Base: `base.jsonl` / `base.env.json`, paths `[]`, flags
@@ -595,6 +596,71 @@ Final `lib` tree remains `c529a99209dc591d0a99917b1db90d534e8a4265`, equal to
 R; both pubspec blobs are unchanged. Device/emulator/run/install and remote
 CI/push/merge were not run, as scoped. FilePicker restores an existing platform
 instance; its API cannot restore an initially unset late singleton, so that case
-resets to a fresh empty picker (documented in the deps inventory). Step 0b and
-all production moves remain unstarted. No Step 0 check remains pending; stop
-after (b).
+resets to a fresh empty picker (documented in the deps inventory). At (b), Step 0b and
+all production moves remained unstarted. No Step 0 check remained pending.
+
+
+### Step 0b — review closure on ORIGINAL (2026-10-06)
+
+Reviewed (b): `953718d34ef744ccae69f6a691832a5c9c6b9f8a`; proof snapshot:
+`0817c27c2af393385c168055cad3c7a5a7cb0c23`, tree
+`f6b9eac1212d762a11111241fee4ca08389f864a`. The final amendment adds only
+this entry; application code remains original R (`0cb50df7`).
+
+Moved all 349 evidence files, verifying byte hashes before path updates, to
+`$(git rev-parse --path-format=absolute --git-common-dir)/refactor-evidence/stremio_tv_catalogs/`.
+Artifact names below are relative to that directory. Scripts now resolve/store
+common-directory evidence paths, including scratch runs. `.gitignore` matches R;
+no worktree-local evidence remains (`evidence-relocation-0b.json`).
+
+`base-additions-0b.jsonl` / `.env.json`: exactly 25 added passing identities,
+paths `[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s --plain-name=review `,
+Flutter 3.44.8 / Dart 3.12.2. `base-additions-compare-0b.txt` confirms no new
+failures/skips; the full baseline is preserved without a re-record or allowlist
+change. `characterization-0b.jsonl` / `.env.json`: same paths/flags without the
+name filter, 119/119 pass, all 94 prior identities preserved
+(`characterization-compare-0b.txt`). The 25 additions stay in the eight CI-listed
+files; existing assertions, harness and manifest-driven reader remain intact.
+
+Review coverage: exact entry targets/results, repo/Center, editor navigation,
+confirm identity/ordered writes/focus/dismissal, manage selected deletion and
+Found-not-fixed #1, URL/JSON key maps/loading, and Trakt/MDBList routing/texts.
+The deps inventory maps these boundaries to the new executable cases.
+Aliases remain `LcUrlDialog`, `LcJsonDialog`, `LcTraktDialog`, `LcMdblistDialog`,
+`lcBackHop`.
+
+| Kind | New cases | Named assertion kills | Survivors | Compile/timeout kills accepted |
+| --- | ---: | ---: | ---: | ---: |
+| B | 40 | 40 | 0 | 0 |
+| S | 1 | 1 | 0 | 0 |
+
+B and S ran separately from the clean `.dart_tool/stremio_tv_catalogs_original`
+proof copy using `stremio_tv_catalogs_review_mutations.json`, `--label review-0b
+--positive stremio_tv_catalogs/characterization-0b`, and isolated
+`.dart_tool/stremio_tv_catalogs_0b_mutation_parser/.dart_tool/package_config.json`.
+`review-0b-{B,S}-mutations.json`, per-case logs and `mutation-audit-0b.json`
+record paths/name filters, serialized `--no-pub --concurrency=1 --timeout=120s`,
+SDK/trees/hashes/assertions: all 41 trees change only the original dialog file,
+every failed identity passes on ORIGINAL, and scratch is restored clean. Prior
+77 B / 10 S evidence is retained.
+
+The sole new S is `_onSourceChanged`'s list reset: direct-source UI hides
+`_lists`; picker transitions synchronously clear it again in `_fetchLists`,
+so dropping that assignment alone is behavior-equivalent through public seams.
+Error reset, repo delegation and Center are B.
+
+Format, focused analysis (zero issues), CI analysis/allowlist, architecture,
+sizes, Python and diff checks pass (`quality-0b.json`). CI identities remain
+325/325 with zero additions/removals; unchanged application/dependencies retain
+the recorded 1,687 whole-repo baseline identities. Shape/theme guards pass 13/13.
+All 17 integrated manifest self-tests pass, including the feature negatives
+(`integrated-checkers-0b.json`); each uses a separate
+`.dart_tool/stremio_tv_catalogs_0b_parsers/` copy with copied `*.dill` removed before use.
+Suite evidence stayed serialized. An initial shape/theme Git metadata snapshot
+was retried before test execution; no failed result was recorded (`run-notes-0b.json`).
+
+`lib` remains `c529a99209dc591d0a99917b1db90d534e8a4265`, identical to R;
+both pubspec files are unchanged. No production move or Step 1 work, and no
+push/merge/branch switch/device/emulator/run/install. No requested Step 0b check
+remains pending. Stop after the 0b commit.

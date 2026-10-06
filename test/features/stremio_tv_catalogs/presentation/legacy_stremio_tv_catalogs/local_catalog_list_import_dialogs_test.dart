@@ -408,4 +408,123 @@ void main() {
       }),
     );
   }
+
+  testWidgets(
+    'review Trakt custom and liked fetch distinct directories and owner subtitles',
+    (t) => net.run(
+      () => catalogCase(t, (f) async {
+        await t.runAsync(f.auth);
+        net.handler = (request) async => request.url.path == '/users/me/lists'
+            ? response([
+                {...list(), 'name': 'Custom Only'},
+              ])
+            : response([
+                {
+                  'list': {...list(), 'name': 'Liked Only'},
+                },
+              ]);
+        await f.mount(t);
+        await f.dialog(t, StremioTvLocalCatalogsDialog.importFromTrakt);
+        await choose(t, 'Watchlist', 'Custom Lists');
+        expect(net.requests.last.url.path, '/users/me/lists');
+        expect(find.text('Custom Only'), findsOneWidget);
+        expect(
+          (t
+                      .widget<ListTile>(
+                        find.widgetWithText(ListTile, 'Custom Only'),
+                      )
+                      .subtitle!
+                  as Text)
+              .data,
+          '2 items',
+        );
+        await choose(t, 'Custom Lists', 'Liked Lists');
+        expect(net.requests.last.url.path, '/users/me/likes/lists');
+        expect(find.text('Liked Only'), findsOneWidget);
+        expect(find.text('Custom Only'), findsNothing);
+        expect(
+          (t
+                      .widget<ListTile>(
+                        find.widgetWithText(ListTile, 'Liked Only'),
+                      )
+                      .subtitle!
+                  as Text)
+              .data,
+          'by owner · 2 items',
+        );
+      }),
+    ),
+  );
+  testWidgets(
+    'review Trakt source change clears a duplicate error on a direct source',
+    (t) => net.run(
+      () => catalogCase(t, (f) async {
+        await t.runAsync(f.auth);
+        await t.runAsync(() => f.seed([catalog(name: 'My List')]));
+        net.handler = (request) async => response([list()]);
+        await f.mount(t);
+        await f.dialog(t, StremioTvLocalCatalogsDialog.importFromTrakt);
+        await choose(t, 'Watchlist', 'Custom Lists');
+        await t.tap(find.text('My List'));
+        await pumpCatalog(t);
+        expect(find.text('"My List" already imported'), findsOneWidget);
+        await choose(t, 'Custom Lists', 'Watchlist');
+        expect(find.text('"My List" already imported'), findsNothing);
+        expect(find.text('Import Watchlist'), findsOneWidget);
+        expect(
+          net.requests,
+          hasLength(1),
+          reason: 'direct source change does not fetch a picker',
+        );
+      }),
+    ),
+  );
+  testWidgets(
+    'review MDBList categories load distinct mine liked top directories',
+    (t) => catalogCase(t, (f) async {
+      await t.runAsync(f.auth);
+      final directories = {
+        '/lists/user': 'Mine Only',
+        '/lists/liked': 'Liked Only',
+        '/lists/top': 'Top Only',
+      };
+      net.handler = (request) async => response([
+        {'id': 42, 'name': directories[request.url.path], 'items': 2},
+      ]);
+      await f.mount(t);
+      await f.dialog(t, StremioTvLocalCatalogsDialog.importFromMdblist);
+      expect(net.requests.last.url.path, '/lists/user');
+      expect(find.text('Mine Only'), findsOneWidget);
+      await choose(t, 'My Lists', 'Liked Lists');
+      expect(net.requests.last.url.path, '/lists/liked');
+      expect(find.text('Liked Only'), findsOneWidget);
+      await choose(t, 'Liked Lists', 'Top Lists');
+      expect(net.requests.last.url.path, '/lists/top');
+      expect(find.text('Top Only'), findsOneWidget);
+    }),
+  );
+  testWidgets(
+    'review MDBList empty messages distinguish top from mine and liked',
+    (t) => catalogCase(t, (f) async {
+      await t.runAsync(f.auth);
+      net.handler = (request) async => response([]);
+      await f.mount(t);
+      await f.dialog(t, StremioTvLocalCatalogsDialog.importFromMdblist);
+      expect(
+        find.text('No lists found. Create some on mdblist.com.'),
+        findsOneWidget,
+      );
+      await choose(t, 'My Lists', 'Liked Lists');
+      expect(
+        find.text('No lists found. Create some on mdblist.com.'),
+        findsOneWidget,
+      );
+      await choose(t, 'Liked Lists', 'Top Lists');
+      expect(find.text('No top lists found.'), findsOneWidget);
+      expect(
+        find.text('No lists found. Create some on mdblist.com.'),
+        findsNothing,
+      );
+    }),
+  );
 }

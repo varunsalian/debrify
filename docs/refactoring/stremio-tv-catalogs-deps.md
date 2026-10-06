@@ -163,3 +163,34 @@ changes only in Step 4. All eight new test files are appended to
 Remote CI and device/emulator/build/install checks are outside Step 0 and are
 not run. Existing tests/checks are unchanged, except the explicit opt-in
 extension support in the shared checker.
+
+## Step 0b review coverage on ORIGINAL
+
+`dev/tool/stremio_tv_catalogs_review_mutations.json` adds 40 B cases and one
+S case without replacing any Step 0 assertion or mutation. The 25 additional
+`review ` test identities remain in the existing eight CI-listed test files.
+The original manifest reader and harness remain frozen.
+
+| Review boundary | Classification | New mutants |
+| --- | --- | ---: |
+| Four alias targets and true/false/null mappings; repo delegation and mapping; centered manage dialog | B: actual dialog widgets, Navigator results and geometry | 11 |
+| Editor Close/row D-pad chain and consumed keys; selected confirm; changed barrier and system Back; exact ordered persistence and last-row focus | B: real key events, confirm text, storage and route results | 8 |
+| Manage selected catalog and delete flag; Close true; barrier/system Back null after delete (Found-not-fixed #1) | B: exact remaining catalogs and route results | 5 |
+| URL Cancel Up, both left/right transitions, Select/space null dismissal and queued loading suppression | B: focus, route payload and recorded HTTP request count | 7 |
+| JSON Down/activate at nonempty end and Escape | B: focus targets | 3 |
+| Trakt custom/liked directory calls, custom versus owner subtitle, direct-source error reset | B: distinct HTTP endpoints/payloads and visible state | 3 |
+| MDBList mine/liked/top loaders and category-specific empty text | B: distinct HTTP endpoints/payloads and visible text | 3 |
+| Trakt `_onSourceChanged` list reset | S: direct-source UI hides `_lists`; picker transitions synchronously reset it again in `_fetchLists` before displaying/loading. Dropping this assignment alone is behavior-equivalent through existing public seams. | 1 |
+
+The editor key test records results from the existing public FocusNode handlers
+while dispatching actual key events; framework traversal cannot mask removal
+of the custom arrowUp handler. The URL test queues two Select events before
+the disabled button rebuilds, so dropping `_loading` exposes a second request.
+Repo delegation and `Center` are observable and require no S exception.
+All B cases run without the source-guard suite; S runs separately.
+
+Evidence is owned by Git's common directory at
+`$(git rev-parse --path-format=absolute --git-common-dir)/refactor-evidence/stremio_tv_catalogs/`.
+The evidence wrapper resolves that path before switching its suite root to an
+owned scratch copy. No evidence belongs in the worktree, and the Step 0
+`.gitignore` addition is reverted to its pre-Step-0 bytes.

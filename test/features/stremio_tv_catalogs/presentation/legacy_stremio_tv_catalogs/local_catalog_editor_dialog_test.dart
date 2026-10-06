@@ -161,4 +161,117 @@ void main() {
       expect(f.result, isFalse);
     }),
   );
+
+  testWidgets(
+    'review editor D-pad chain Close row0 row1 and back consumes every key',
+    (t) => catalogCase(t, (f) async {
+      await t.runAsync(() => f.seed([catalog()]));
+      await f.mount(t);
+      await f.editor(t);
+      final handled = <KeyEventResult>[];
+      for (final label in [
+        'localCatalogEditorClose',
+        'localCatalogEditorRemove0',
+        'localCatalogEditorRemove1',
+      ]) {
+        final node = catalogFocus(label);
+        final original = node.onKeyEvent!;
+        node.onKeyEvent = (n, event) {
+          final result = original(n, event);
+          if (event is KeyDownEvent) handled.add(result);
+          return result;
+        };
+      }
+      for (final step in [
+        (LogicalKeyboardKey.arrowDown, 'localCatalogEditorRemove0'),
+        (LogicalKeyboardKey.arrowDown, 'localCatalogEditorRemove1'),
+        (LogicalKeyboardKey.arrowUp, 'localCatalogEditorRemove0'),
+        (LogicalKeyboardKey.arrowUp, 'localCatalogEditorClose'),
+      ]) {
+        await keyCatalog(t, step.$1);
+        expect(handled, isNotEmpty);
+        expect(
+          handled.last,
+          KeyEventResult.handled,
+          reason: 'the custom D-pad handler consumes ${step.$1.keyLabel}',
+        );
+        expect(catalogFocus(step.$2).hasPrimaryFocus, isTrue);
+      }
+    }),
+  );
+  testWidgets(
+    'review editor activates the selected row item in its confirm',
+    (t) => catalogCase(t, (f) async {
+      final before = catalog();
+      await t.runAsync(() => f.seed([before]));
+      await f.mount(t);
+      await f.editor(t);
+      await focusCatalog(t, 'localCatalogEditorRemove1');
+      await keyCatalog(t, LogicalKeyboardKey.select);
+      expect(
+        find.text('Remove "Item 1" from this local channel?'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Remove "Item 2" from this local channel?'),
+        findsNothing,
+      );
+      await t.tap(find.text('Cancel'));
+      await pumpCatalog(t);
+      expect(await t.runAsync(f.rows), [before]);
+    }),
+  );
+  testWidgets(
+    'review editor persists exact order and last-row removal focuses new last',
+    (t) => catalogCase(t, (f) async {
+      final before = catalog(count: 4, meta: {'marker': 'preserved'});
+      final items = before['items'] as List;
+      await t.runAsync(() => f.seed([before]));
+      await f.mount(t);
+      await f.editor(t);
+      await removeCatalogItem(t, 1);
+      expect(await t.runAsync(f.rows), [
+        {
+          ...before,
+          'items': [items[0], items[2], items[3]],
+        },
+      ]);
+      await removeCatalogItem(t, 2);
+      expect(await t.runAsync(f.rows), [
+        {
+          ...before,
+          'items': [items[0], items[2]],
+        },
+      ]);
+      expect(
+        catalogFocus('localCatalogEditorRemove1').hasPrimaryFocus,
+        isTrue,
+        reason: 'removed index equals new length; focus the new last row',
+      );
+    }),
+  );
+  for (final changed in [false, true]) {
+    testWidgets(
+      'review editor system Back returns changed=$changed',
+      (t) => catalogCase(t, (f) async {
+        final before = catalog();
+        await t.runAsync(() => f.seed([before]));
+        await f.mount(t);
+        await f.editor(t);
+        if (changed) {
+          await removeCatalogItem(t, 1);
+          final items = before['items'] as List;
+          expect(await t.runAsync(f.rows), [
+            {
+              ...before,
+              'items': [items[0], items[2]],
+            },
+          ]);
+        }
+        await t.binding.handlePopRoute();
+        await pumpCatalog(t);
+        expect(f.result, changed);
+      }),
+    );
+  }
 }

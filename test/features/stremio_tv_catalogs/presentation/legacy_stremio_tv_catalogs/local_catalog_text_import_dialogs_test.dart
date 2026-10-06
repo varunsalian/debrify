@@ -289,4 +289,100 @@ void main() {
       );
     }),
   );
+
+  testWidgets(
+    'review URL Cancel and Import left right and Cancel up key targets',
+    (t) => catalogCase(t, (f) async {
+      f.tv(true);
+      await f.mount(t);
+      await f.dialog(t, StremioTvLocalCatalogsDialog.importFromUrl);
+      for (final key in [
+        LogicalKeyboardKey.arrowLeft,
+        LogicalKeyboardKey.arrowRight,
+      ]) {
+        await focusCatalog(t, 'stremio-import-url-cancel');
+        await keyCatalog(t, key);
+        expect(
+          catalogFocus('stremio-import-url-import').hasPrimaryFocus,
+          isTrue,
+        );
+        await focusCatalog(t, 'stremio-import-url-import');
+        await keyCatalog(t, key);
+        expect(
+          catalogFocus('stremio-import-url-cancel').hasPrimaryFocus,
+          isTrue,
+        );
+      }
+      await keyCatalog(t, LogicalKeyboardKey.arrowUp);
+      expect(catalogFocus('stremio-import-url-url').hasFocus, isTrue);
+      expect(catalogFocus('stremio-import-url-name').hasFocus, isFalse);
+    }),
+  );
+  for (final key in [LogicalKeyboardKey.select, LogicalKeyboardKey.space]) {
+    testWidgets(
+      'review URL Cancel ${key.keyLabel} pops without a result',
+      (t) => catalogCase(t, (f) async {
+        await f.mount(t);
+        await f.dialog(t, StremioTvLocalCatalogsDialog.importFromUrl);
+        await focusCatalog(t, 'stremio-import-url-cancel');
+        await keyCatalog(t, key);
+        expect(f.result, isFalse);
+        expect(f.observer.popped, hasLength(1));
+        expect(await f.observer.popped.single.popped, isNull);
+      }),
+    );
+  }
+  testWidgets(
+    'review URL queued Import activation while loading issues one request',
+    (t) => net.run(
+      () => catalogCase(t, (f) async {
+        final held = Completer<http.Response>();
+        net.handler = (request) => held.future;
+        try {
+          await f.mount(t);
+          await f.dialog(t, StremioTvLocalCatalogsDialog.importFromUrl);
+          await input(t, 1, 'https://catalog.test/queued');
+          await focusCatalog(t, 'stremio-import-url-import');
+          // Two queued key events before rebuilding the disabled button: the
+          // application guard owns the second event, rather than disabled focus.
+          await t.sendKeyEvent(LogicalKeyboardKey.select, platform: 'android');
+          await t.sendKeyEvent(LogicalKeyboardKey.select, platform: 'android');
+          await pumpCatalog(t, rounds: 2);
+          expect(
+            net.requests,
+            hasLength(1),
+            reason: 'loading suppresses queued activation',
+          );
+        } finally {
+          held.complete(response(catalog()));
+          await pumpCatalog(t);
+        }
+      }),
+    ),
+  );
+  for (final key in [LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.select]) {
+    testWidgets(
+      'review JSON ${key.keyLabel} at nonempty end reaches Import and Esc Cancel',
+      (t) => catalogCase(t, (f) async {
+        await f.mount(t);
+        await f.dialog(t, StremioTvLocalCatalogsDialog.importFromJson);
+        await input(t, 1, '{}');
+        field(t, 1).controller!.selection = const TextSelection.collapsed(
+          offset: 2,
+        );
+        await focusCatalog(t, 'stremio-import-json-content');
+        await keyCatalog(t, key);
+        expect(
+          catalogFocus('stremio-import-json-import').hasPrimaryFocus,
+          isTrue,
+        );
+        await focusCatalog(t, 'stremio-import-json-content');
+        await keyCatalog(t, LogicalKeyboardKey.escape);
+        expect(
+          catalogFocus('stremio-import-json-cancel').hasPrimaryFocus,
+          isTrue,
+        );
+      }),
+    );
+  }
 }

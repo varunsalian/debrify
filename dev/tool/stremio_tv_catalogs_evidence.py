@@ -1,4 +1,4 @@
-"""Worktree-local, serialized suite_evidence entry point for this Step 0."""
+"""Shared Git evidence with worktree-serialized suite_evidence runs."""
 import argparse
 import fcntl
 import sys
@@ -6,7 +6,8 @@ from pathlib import Path
 import suite_evidence
 
 ROOT=Path(__file__).resolve().parents[2]
-EVIDENCE=ROOT/'refactor-evidence'
+# Resolve the owning worktree's common directory before selecting scratch roots.
+EVIDENCE=suite_evidence.evidence_dir().resolve()
 
 
 def run(name, paths, root=ROOT):

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -279,6 +280,108 @@ void main() {
           expect(find.byType(SnackBar), findsNothing);
         }
         expect(await t.runAsync(f.rows), isEmpty);
+      }),
+    );
+  }
+
+  for (final entry in [
+    ('URL', StremioTvLocalCatalogsDialog.importFromUrl, '_ImportUrlDialog'),
+    ('JSON', StremioTvLocalCatalogsDialog.importFromJson, '_ImportJsonDialog'),
+    (
+      'Trakt',
+      StremioTvLocalCatalogsDialog.importFromTrakt,
+      '_ImportTraktDialog',
+    ),
+    (
+      'MDBList',
+      StremioTvLocalCatalogsDialog.importFromMdblist,
+      '_ImportMdblistDialog',
+    ),
+  ]) {
+    testWidgets(
+      'review ${entry.$1} entry opens its exact dialog and maps true false null',
+      (t) => catalogCase(t, (f) async {
+        await f.mount(t);
+        for (final result in [true, false, null]) {
+          f.result = 'pending';
+          await f.dialog(t, entry.$2);
+          final dialog = find.byWidgetPredicate(
+            (w) => w.runtimeType.toString() == entry.$3,
+          );
+          expect(dialog, findsOneWidget, reason: '${entry.$1} owns its dialog');
+          Navigator.of(t.element(dialog)).pop(result);
+          await pumpCatalog(t);
+          expect(f.result, result == true, reason: 'dismissal is false');
+        }
+      }),
+    );
+  }
+  testWidgets(
+    'review repo entry delegates browser and maps true false null',
+    (t) => catalogCase(t, (f) async {
+      await f.mount(t);
+      for (final result in [true, false, null]) {
+        f.result = 'pending';
+        await f.dialog(t, StremioTvLocalCatalogsDialog.importFromRepo);
+        final dialog = find.byType(StremioTvRepoBrowserDialog);
+        expect(dialog, findsOneWidget);
+        Navigator.of(t.element(dialog)).pop(result);
+        await pumpCatalog(t);
+        expect(f.result, result == true);
+      }
+    }),
+  );
+  testWidgets(
+    'review manage show centers its bounded dialog',
+    (t) => catalogCase(t, (f) async {
+      await f.mount(t);
+      await f.manage(t);
+      final dialog = find.byType(StremioTvLocalCatalogsDialog);
+      expect(
+        find.ancestor(of: dialog, matching: find.byType(Center)),
+        findsOneWidget,
+      );
+      expect(t.getSize(dialog).width, 500);
+      expect(t.getCenter(dialog), const Offset(640, 400));
+    }),
+  );
+  for (final dismissal in ['barrier', 'system Back', 'Close']) {
+    testWidgets(
+      'review manage delete $dismissal preserves null versus changed result',
+      (t) => catalogCase(t, (f) async {
+        final before = [
+          catalog(id: 'a', name: 'First'),
+          catalog(id: 'b', name: 'Second'),
+          catalog(id: 'c', name: 'Third'),
+        ];
+        await t.runAsync(() => f.seed(before));
+        await f.mount(t);
+        await f.manage(t);
+        await focusCatalog(t, 'close');
+        await keyCatalog(t, LogicalKeyboardKey.arrowDown);
+        await keyCatalog(t, LogicalKeyboardKey.arrowDown);
+        expect(catalogFocus('del1').hasPrimaryFocus, isTrue);
+        await keyCatalog(t, LogicalKeyboardKey.select);
+        expect(find.text('Remove "Second" and all its items?'), findsOneWidget);
+        await t.tap(find.text('Delete'));
+        await pumpCatalog(t);
+        expect(await t.runAsync(f.rows), [
+          before[0],
+          before[2],
+        ], reason: 'only the selected catalog is deleted');
+        if (dismissal == 'barrier') {
+          await t.tapAt(const Offset(8, 8));
+        } else if (dismissal == 'system Back') {
+          await t.binding.handlePopRoute();
+        } else {
+          await t.tap(find.byTooltip('Close'));
+        }
+        await pumpCatalog(t);
+        expect(
+          f.result,
+          dismissal == 'Close' ? true : null,
+          reason: 'Found-not-fixed #1: barrier/Back discard the changed flag',
+        );
       }),
     );
   }

@@ -233,4 +233,15 @@ void main() {
       );
     }
   });
+
+  test('review source guard preserves the masked Trakt source-list reset', () {
+    // S: direct-source UI hides _lists; picker sources synchronously clear it
+    // again in _fetchLists. Removing this one assignment is behavior-equivalent.
+    final source = catalogsDeclaration('_ImportTraktDialogState');
+    final start = source.indexOf('Future<void> _onSourceChanged(');
+    final end = source.indexOf('Future<void> _fetchLists()', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    expect(source.substring(start, end), contains('_lists = [];'));
+  });
 }
