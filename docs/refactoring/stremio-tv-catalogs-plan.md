@@ -35,7 +35,7 @@ extension and one private top-level function):
 
 | Lines | Declaration |
 | --- | --- |
-| 1–18 | 17 import directives |
+| 1–18 | 16 import directives |
 | 20–53 | `LocalCatalogExportPayload`, `LocalCatalogExporter` |
 | 55–393 | section comment; `LocalCatalogImporter` (+ privates `_portableTraktSources`, `_portableImportMetadata`) |
 | 395–1020 | section comment; `StremioTvLocalCatalogEditorDialog` + `_StremioTvLocalCatalogEditorDialogState` (626 lines) |
@@ -253,6 +253,23 @@ assertion-failing ORIGINAL mutation proof.
    rejected (staging required). Any shared-tool change is opt-in and keyed by
    this feature; every integrated manifest's self-tests stay passing
    unchanged.
+   **Alias owners.** Every typedef/value alias (and any constructor tear-off
+   the probe requires) is also staged in `additional_owners` in the step that
+   creates its owner file; `type_aliases`/`file_aliases` pin target and
+   spelling, `additional_owners` authorizes the new declaration (round-1
+   probe: five `Unregistered settings destination owner` errors without it).
+   **Extension support (round-1 P1).** The sections header pass only finds
+   `ClassDeclarationImpl`, so `_TraktListSourceExt` fails as "Widget class
+   missing or duplicated" even on untouched ORIGINAL. Add an **opt-in**
+   config key (`extension_declarations`, absent from every other config)
+   that makes the header/ownership pass accept an `ExtensionDeclarationImpl`
+   of exactly the listed names, keeping whole-declaration token comparison
+   (comments included), single ownership and duplicate detection. Self-test
+   positives: ORIGINAL and the complete split pass; negatives: changed
+   extension target type (`on _MdblistListCategory`), renamed extension,
+   changed header (`extension type`/added `implements`), member body edit,
+   extension duplicated in two destinations, extension missing. Every other
+   manifest's self-tests pass unchanged.
 4. **Probes.** Strict-lint baseline of R under
    `lib/features/analysis_options.yaml` (detached copy in `.dart_tool/`), by
    identity; a throwaway alias probe applying exactly the manifest split,
@@ -262,12 +279,29 @@ assertion-failing ORIGINAL mutation proof.
    Alias names fixed here.
 5. **Harness** `test/support/stremio_tv_catalogs_fixture.dart`: profile
    preferences fixture (`test/support/profile_fixture.dart` pattern) seeded
-   with catalogs; `AppThemeScope` look; pinned view size (wide 1280×800 and
-   compact 600×900), DPR 1.0; recording `NavigatorObserver` / result
-   capture; fake `FilePicker` platform restored in teardown;
-   `http.runWithClient` `MockClient` for URL, Trakt and MDBList traffic;
-   Trakt/MDBList auth seeded through their existing stored-credential paths
-   (else S with reason); bounded pumps; teardown disposes everything.
+   with catalogs; `AppThemeScope` look; pinned view sizes, DPR 1.0: wide
+   1280×800 (editor content 880), compact 600×900 (content 536) **and 714×900
+   (editor content 650)**, which separates the `< 700` threshold from a
+   `< 600` mutant; recording `NavigatorObserver` / result capture; fake
+   `FilePicker` platform restored in teardown.
+   **TV configuration.** `TvTextField`'s shell needs TV capability **and**
+   `tvKeyboardEnabledCached` (tv_text_field.dart:551): the harness pins and
+   restores the existing TV debug overrides and keyboard setting per test;
+   Back is tested separately while editing (TvTextField consumes it) and
+   while shell-focused (`_backHopsTo` → Cancel), and on non-TV (no shell).
+   **HTTP.** URL dialog and Trakt use top-level `package:http` →
+   per-test `http.runWithClient(MockClient)`. `MdblistService.instance`
+   keeps the `http.Client()` created at singleton initialization
+   (mdblist_service.dart:63), so the suite initializes the singleton **once
+   inside a suite-owned routing-client zone** before any fixture touches it;
+   tests swap the routing handler (recording requests) and reset the service
+   / `MdblistListSource` caches in setUp/tearDown, so no test inherits an
+   earlier fixture. The `forceRefresh: true` contract is proven by **warming
+   the items cache, changing the response, and asserting refresh issues a new
+   request and persists the new items** (a cold cache cannot distinguish
+   `false`). Trakt/MDBList auth is seeded through the existing storage setters
+   with non-expired Trakt credentials; anything still unreachable is S with a
+   reason. Bounded pumps; teardown disposes everything.
 6. **Characterization tests** under
    `test/features/stremio_tv_catalogs/` (mirroring destinations):
    `local_catalog_importer_test`, `local_catalog_export_test`,
@@ -290,8 +324,11 @@ assertion-failing ORIGINAL mutation proof.
    minimum: validate message order swapped; `transformTrakt` majority `>=`;
    mixed split not skipping existing; portable metadata keeping `watchlist`;
    `liked` without owner kept; exporter type default changed; editor compact
-   threshold 700→600; editor initial focus on the first row; remove focusing
-   `index+1`; last-item path popping `_changed` instead of `true`; barrier
+   threshold 700→600 (killed by the 714-px viewport); editor initial focus on
+   the first row; remove focusing `index+1`; last-item path popping `false`
+   (and separately `null`) instead of `true`, asserting both the catalog's
+   deletion and the returned `true` (a `_changed` mutant is equivalent:
+   `_changed = true` precedes the pop); barrier
    pop `true`; manage `_scrollToNode` 56→48; refresh enabled during another
    refresh; Trakt/MDBList subtitle swapped; 20 MiB cap off-by-one
    (`>=`); `.json` strip case-sensitive; snackbar durations swapped; URL
@@ -302,11 +339,18 @@ assertion-failing ORIGINAL mutation proof.
    must fail**.
 8. **CI list.** Add every new test to `dev/tool/ci_behavior_tests.txt`; no
    known failures expected.
-9. **Inventory.** Shape: `shape_manifest_test.dart:203` stays 4 for the
-   original until it empties; each destination joins
-   `kExtractedShapeResidue` in its creation commit (zero-count files
-   included); every checkpoint asserts the slice total = 4 and the facade
-   ends at 0; the 488 floor is unaffected. Theme: `theme_surface_manifest.txt`
+9. **Inventory.** Shape (round-1 P1): the original is in `kShapeResidue`
+   with budget 4 and its `app.shape.br*` calls count toward the **exactly
+   488** floor. Destinations that contain `app.shape.` calls — URL (2),
+   JSON (2), editor (2) — go into **`kShapeResidue`** (so the floor still
+   counts them: 488 at every checkpoint); token-free destinations — manage,
+   Trakt, MDBList (1 bare radius each), the two `data/` files (0) — go into
+   `kExtractedShapeResidue`; each in its creation commit, zero budgets
+   included. The original's budget is lowered **4 → 1 (step 2) → 0**, and at
+   step 3, when it becomes the export-only facade (no `app.shape.`), its
+   entry moves from `kShapeResidue` to `kExtractedShapeResidue` with 0. Each
+   checkpoint asserts the aggregate bare-radius count over the original +
+   destinations is exactly 4 and the floor count is exactly 488. Theme: `theme_surface_manifest.txt`
    does not cover `lib/screens/stremio_tv/widgets/`; record that the new
    feature is likewise uncovered (no new theme registration, measured
    unchanged). `text_white_sweep.py` excludes `stremio_tv` path parts; the new
@@ -342,14 +386,19 @@ on its own line, the Debrify TV pattern, to keep the merge additive);
 `_SIZE_EXCEPTIONS = {}` (entries added at measured values in steps 2–3),
 `_URL_IMPORT_HTTP_IMPORT`; 500-line limit for the feature except the table;
 no facade back-import; no service import outside the bridge except `data/`;
-`TEMP(stremio_tv_catalogs)` only inside the bridge before completion; no
+`TEMP(stremio_tv_catalogs)` only inside the bridge before completion;
+**feature-wide `package:http/` prohibition** (every layer: data,
+application, models, presentation, bridge) except the exact registered
+file/URI pair — the generic presentation rule alone lets a `data/` file
+import http; no
 import of `lib/features/stremio_tv/` (and vice versa) except `models/`. At
 step 4: facade in `main()`, `COMPOSITION_ROOTS` comment (pure export surface),
 pure-export rule with exactly the five names, measured cap, TEMP rejected
 everywhere. A `stremio_tv_catalogs_architecture_test.py` runs the real
 `main()` on a temp tree copy and must reject: missing facade; a facade
 declaration/import; facade over cap; a sixth exported name; a back-import;
-an unregistered `package:http` import elsewhere in the feature; a bridge file
+an unregistered `package:http` import in a `data/`, `application/`,
+`models/` and another bridge file (four negatives); a bridge file
 over its exception; a `TEMP` marker. The unmodified tree passes.
 
 **checks.yml** (step 4): facade path and `test/support/stremio_tv_catalogs_*.dart`
@@ -421,6 +470,33 @@ localization, and every bug fix below.
 - Android file picker import (`.json`, large file rejection).
 - Live Trakt (direct, custom, liked) and MDBList imports and refreshes.
 - Phone: compact editor layout, snackbars.
+
+## Round 1 review resolution (Codex, session stvcat-design)
+
+1. P1 extension unsupported by the sections header pass → opt-in
+   `extension_declarations` key with positives/negatives (Step 0 item 3).
+2. P1 shape floor/residue → token-bearing destinations in `kShapeResidue`,
+   token-free in `kExtractedShapeResidue`, original 4 → 1 → 0 then moved;
+   floor exactly 488 and radii exactly 4 asserted per checkpoint (item 9).
+3. P1 equivalent mutant → last-item pop mutated to `false`/`null`, asserting
+   deletion and `true` (item 7).
+4. P2 `additional_owners` staging for every alias (item 3).
+5. P2 714-px viewport; TV capability + keyboard overrides; Back while
+   editing vs shell-focused vs non-TV (item 5).
+6. P2 MDBList singleton client in a suite-owned routing zone; cache resets;
+   warm-cache `forceRefresh` proof; Trakt auth via storage setters (item 5).
+7. P2 feature-wide http prohibition with four layer negatives (Guard rules).
+8. P3 16 imports; integrator handoff below.
+
+**Integrator handoff (shared files needing union merge + merged-tree
+revalidation):** `dev/tool/check_search_architecture.py` (FEATURES via a
+separate `+=` line, new constants, `LEGACY_PLAYBACK_BRIDGES`,
+`COMPOSITION_ROOTS`, `main()`), `dev/tool/check_settings_moves.py`
+(opt-in `extension_declarations`), `test/theme/shape_manifest_test.dart`,
+`dev/tool/ci_behavior_tests.txt`, `dev/tool/file_size_baseline.txt`,
+`.github/workflows/checks.yml`, `dev/tool/analyzer_allowlist.txt` (if
+touched). Round-1 scratch measurements: editor 632, Trakt 554, manage 487,
+facade 8.
 
 ## Progress
 
