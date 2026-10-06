@@ -18,7 +18,7 @@ it is then frozen.
 | `_MethodCard`, `_MethodCardState` (2121–2231) | `presentation/iptv_two_pane_method_card.dart` | `IptvTwoPaneMethodCard`, `IptvTwoPaneMethodCardState` |
 | `IptvSettingsTwoPane` (60–254, doc from 60) | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` | unchanged |
 | State lifecycle, `focusRail`, `focusAddPane`, `build` | same file, `IptvSettingsTwoPaneState` | unchanged |
-| `_panePoolSize`, `_app`, `_dest`, `_railNodes`, `_paneNodes`, `_railScroll`, `_stats`, `_statsSignature` | `legacy_…/iptv_settings_two_pane_owners.dart` | `_panePoolSize` (static, private), `app`, `dest`, `railNodes`, `paneNodes`, `railScroll`, `stats`, `statsSignature` |
+| `_panePoolSize`, `_app`, `_dest`, `_railNodes`, `_paneNodes`, `_railScroll`, `_stats`, `_statsSignature` | `legacy_…/iptv_settings_two_pane_owners.dart` | `_panePoolSize` (static, private), `app`, `dest`, `railNodes`, `paneNodes`, `railScroll`, `sourceStats`, `statsSignature` |
 | `_initialDest`, `_railCount`, index getters, `_syncRailNodes`, `_syncStats`, `_paneNode`, `_focusRail`, `_selectedRailIndex`, `_destForRail`, `_enterPane`, `_returnToRail` | `legacy_…/iptv_settings_two_pane_navigation.dart` | `initialDest`, `_railCount`, `channelPreviewIndex`…`autoRefreshIndex`, `syncRailNodes`, `syncStats`, `paneNode`, `focusRailAt`, `selectedRailIndex`, `destForRail`, `enterPane`, `returnToRail` |
 | `_buildRail`, `_listsSubtitle`, `_iconFor`, `_railSubtitle` | `legacy_…/iptv_settings_two_pane_rail.dart` | `buildRail`, `_listsSubtitle`, `iconFor`, `_railSubtitle` |
 | `_buildPane`, `_buildSourcePane`, `_sourceMeta`, `_buildAddPane`, `_chevron` | `legacy_…/iptv_settings_two_pane_panes.dart` | `buildPane`, `_buildSourcePane`, `_sourceMeta`, `_buildAddPane`, `chevron` |
@@ -74,7 +74,7 @@ lexical context and both VLB parameter declarations stay unchanged.
 | `IptvSettingsTwoPaneState._railNodes` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `railNodes` | — | — | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._paneNodes` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `paneNodes` | — | `_panePoolSize` | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._railScroll` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `railScroll` | — | — | — | 2 / pending move; original verified |
-| `IptvSettingsTwoPaneState._stats` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `stats` | — | — | — | 2 / pending move; original verified |
+| `IptvSettingsTwoPaneState._stats` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `sourceStats` | — | — | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._statsSignature` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `statsSignature` | — | — | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState.initState` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` / `IptvSettingsTwoPaneState` / `initState` | `openAddSource` | `_dest` | calls/tear-offs: _initialDest, _syncRailNodes, _syncStats | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState.didUpdateWidget` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` / `IptvSettingsTwoPaneState` / `didUpdateWidget` | `playlists` | `_dest` | dest:decl:member/block0#dest#0; calls/tear-offs: _initialDest, _syncRailNodes, _syncStats | 2 / pending move; original verified |
@@ -122,8 +122,8 @@ lexical context and both VLB parameter declarations stay unchanged.
 | `_StatStrip` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneStatStrip` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
 | `_QuietBanner` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneQuietBanner` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
 | `_RowGroup` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneRowGroup` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_PaneRow` | `iptv_two_pane_row.dart` / `IptvTwoPanePaneRow` | — | — | — | 1 / pending move; original verified |
-| `_PaneRowState` | `iptv_two_pane_row.dart` / `IptvTwoPanePaneRowState` | `danger`, `focusNode`, `icon`, `onLeft`, `onTap`, `subtitle`, `title`, `trailing` | — | context:decl:member/method3#context#0; mounted:unbound | 1 / pending move; original verified |
+| `_PaneRow` | `iptv_two_pane_row.dart` / `IptvTwoPaneRow` | — | — | — | 1 / pending move; original verified |
+| `_PaneRowState` | `iptv_two_pane_row.dart` / `IptvTwoPaneRowState` | `danger`, `focusNode`, `icon`, `onLeft`, `onTap`, `subtitle`, `title`, `trailing` | — | context:decl:member/method3#context#0; mounted:unbound | 1 / pending move; original verified |
 | `_MethodCard` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCard` | — | — | — | 1 / pending move; original verified |
 | `_MethodCardState` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCardState` | `focusNode`, `hint`, `icon`, `label`, `onDown`, `onLeft`, `onRight`, `onTap`, `selected` | — | context:decl:member/method1#context#0; mounted:unbound | 1 / pending move; original verified |
 
@@ -167,3 +167,9 @@ unchanged. Step-0 checker fixtures introduce no shared-tool keys or edits.
 All exceptions and exits remain those in the plan. Every found-not-fixed item
 is preserved, including the misplaced fallback-node doc, unused `isLast`,
 synchronous stats reads, null auto-refresh action and fallback pointer focus.
+
+Step-0b review correction: the `_stats` record member is named `sourceStats`
+to avoid collision with the stat-strip widget's own `stats` field under explicit
+mandatory qualification. Initializers and reads remain verbatim with the
+manifest-listed rename. The row/State names now match the plan's `IptvTwoPaneRow`
+and `IptvTwoPaneRowState`. See the plan's step-0b Progress evidence.

@@ -152,12 +152,40 @@ def self_test(package):
   changed=all_nodes(parse(src,package,occurrence_bindings=True))
   with configured(cfg):errors=binding_failures(leaves,changed,rows,SOURCE,cfg,package=package)
   assert errors,(label,'binder accepted');print('occurrence utility alone '+label+': rejected')
+  if label=='record field qualification':qualification_defaults(leaves,lookup,changed,rows,cfg,package)
+
  live={SOURCE:(ROOT/SOURCE).read_text(),**{p.relative_to(ROOT).as_posix():p.read_text() for p in (ROOT/config['feature']).rglob('*.dart')}}
  accept('live sources',live,config)
  print('All IPTV two-pane real-config fixtures PASS')
 
+def qualification_defaults(leaves,lookup,changed,rows,cfg,package):
+ # The integrator may use either default. No shared file is changed.
+ import types,re
+ module_text=(ROOT/'dev/tool/occurrence_field_bindings.py').read_text()
+ marker=re.compile(r"binding_config.get\('mandatory_qualification', (?:False|True)\)")
+ assert len(marker.findall(module_text))==1
+ for default in [False,True]:
+  module=types.ModuleType('iptv_occurrence_default_'+str(default))
+  source=marker.sub("binding_config.get('mandatory_qualification', "+str(default)+")",module_text)
+  exec(compile(source,str(ROOT/'dev/tool/occurrence_field_bindings.py'),'exec'),module.__dict__)
+  with configured(cfg):
+   assert not module.failures(leaves,lookup,rows,SOURCE,cfg,package=package)
+   errors=module.failures(leaves,changed,rows,SOURCE,cfg,package=package)
+  assert any('Bare owner field reference:' in error for error in errors),(default,errors)
+  print('explicit qualification rejects bare owner field with shared default '+str(default))
+
+def qualification_probe(package):
+ original,rows,cfg,parsed,leaves=inputs(package)
+ cfg={**cfg,'completed_step':2};src=layout(original,rows,cfg,parsed,leaves,2)
+ lookup=all_nodes(parse(src,package,occurrence_bindings=True))
+ path=BRIDGE+'iptv_settings_two_pane_rail.dart'
+ assert 'valueListenable: _owners.dest' in src[path]
+ src[path]=src[path].replace('valueListenable: _owners.dest','valueListenable: dest',1)
+ changed=all_nodes(parse(src,package,occurrence_bindings=True))
+ qualification_defaults(leaves,lookup,changed,rows,cfg,package)
+
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--parser-package',type=Path,required=True);p.add_argument('--broken-fixture',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--parser-package',type=Path,required=True);p.add_argument('--broken-fixture',action='store_true');p.add_argument('--qualification-defaults-only',action='store_true');a=p.parse_args()
  if a.broken_fixture:raise AssertionError('deliberately broken checker fixture positive control')
- package=a.parser_package.resolve();ensure_parser_package(package.parent.parent,package);self_test(package)
+ package=a.parser_package.resolve();ensure_parser_package(package.parent.parent,package);(qualification_probe if a.qualification_defaults_only else self_test)(package)
 if __name__=='__main__':main()

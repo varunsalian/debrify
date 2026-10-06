@@ -834,3 +834,89 @@ mutation proofs, real-checker compiling-composition/facade measurement and
 Device remote repeat/hold, weak-box stats performance, tvOS focus, remote CI
 and merged integration remain pending. STOP POINT 1 applies after the committed
 and verified checkpoint; resume only after Claude's review/findings.
+
+### Step 0b — independent review follow-through (2026-10-07)
+
+Claude's original-code review rejected 34 of 42 sampled mutants through named
+assertions, two through goldens only, and identified six survivors. The added
+review file closes the observable gaps on the ORIGINAL application: all 12
+source-count/appearance/recording combinations check every focused entry's pane
+header and ListView key; retained production source-focus callbacks after a
+source-list shrink also exercise `_destForRail`'s settings branches (ordinary
+settings entries use direct destination callbacks). Hidden-category counts
+0/1/2 pin exact wording. Uncached URL/Xtream/local sources pin their exact rail
+subtitles, while the existing seeded cache test pins 1/many channel counts.
+Rail and tall-pane focus tests pin the centred scroll offset through the
+viewport, with entries away from either clamp boundary.
+
+- `step0b-original-positive.jsonl`: 90/90 behavior identities pass, stable
+  ORIGINAL checkpoint `7e7006062094559cdf0f33c64216066c8c5dfaf1`, with only test
+  and tooling additions. The three unchanged compatibility suites also passed
+  (29/29); the initial combined run is preliminary because mutation metadata
+  changed during it. No passing assertion was removed. The final frozen
+  behavior subset was rerun with stable input evidence.
+- `iptv_settings_two_pane_original_mutations.py` follows the tuner's owned
+  detached-worktree/evidence procedure. All 39 mutations are rejected: 35 by
+  named assertions, four by source guards. The same 90 positive identities
+  and all 39 negative cases pass their proof checks from a fresh normal clone
+  after `flutter pub get`; `.git` is a directory. Evidence includes actual
+  failed assertion identities, reasons, mutated source hashes and tested
+  trees. Every mutation restores the original source and preserves pixels.
+- Source-only limits, deliberately preserved: Auto-refresh's distinct LEFT
+  closure is equivalent to `returnToRail` while its pane is selected; the
+  exact-expression sidecar **and** callback-identity utility reject the swap.
+  Scroll-controller/notifier disposal order has no observable UI result and
+  is pinned by the lifecycle body. The empty-source guard is unreachable in
+  a normal frame because `didUpdateWidget` re-homes before pane rebuilding.
+  No current pane has an attached-but-unfocusable pool node before a
+  focusable one (Favorites has no pool slot; the nullable Auto-refresh action
+  is the only row in that pane, and requesting an unfocusable node is a
+  no-op). Its eligibility check remains source-guard-only. These are coverage
+  limits, not behavior fixes or weakened assertions.
+- `mandatory_qualification: true` is explicit inside the existing
+  `occurrence_field_bindings` configuration. Its negative produces the
+  **Bare owner field reference** diagnostic under both False/True defaults,
+  flipped in in-memory module fixtures; positives pass under both defaults.
+  The helper recognizes either literal default after integration. The shared
+  binder and AST adapter remain unchanged; none of edit_profile's additional
+  opt-in keys is used or reimplemented.
+- Conservative naming exception to Technique 5: the extracted `_stats` field
+  is `sourceStats`, instead of `stats`. Mandatory qualification reserves record
+  member names across the feature and otherwise falsely flags the stat-strip
+  widget's own, verbatim `stats` field. A unique manifest-listed record name
+  preserves both initializers and every read without a shared-tool mechanism
+  or an edit to the piece. The accidental generated `IptvTwoPanePaneRow`
+  spelling was also aligned with the plan's `IptvTwoPaneRow` before extraction.
+  Other record fields keep their planned names. This is an internal rename,
+  not a persisted format or public-facade change.
+- Full step-2 compiling composition: real CLI accepts all 73 leaves; strict
+  analyzer has 19 inventoried infos, zero errors/warnings/additions; runtime
+  and strict macOS golden checks pass 128/128. Probe facade is seven physical
+  lines, 14 destinations are at most 351 lines. Source hashes, measurements
+  and commands are in `step0b-composition-verification.json` and companion
+  logs. Original widget bytes, lifecycle, comments, constructors, consts,
+  inherited/lexical contexts and live callbacks remain pinned.
+- All 19 pre-existing manifests have byte-identical actual adapter output
+  against R for their full CLI source sets (748 file inputs), checked by two
+  parses and recorded SHA-256 pairs in `other-manifests-adapter-proof.json`.
+  All 295 pre-existing shared tool/config files remain byte-identical except
+  the additive CI behavior list.
+- Root/normal-clone full real-config fixtures pass S=0…3. The final changed
+  default-switch helper was additionally rerun in both environments; the
+  original full-suite source-contract runner exercises the final whole CLI
+  again in `base2`. New test analyzer: zero issues. No shared failure list or
+  analyzer allowlist changed. All five found-not-fixed items remain untouched.
+
+`base2` completed at (b) with final strengthened tests/tooling and unchanged
+`lib`/pubspec objects: tested tree `2b584de6f6b9bd64ac65ec164b5fc5e4c70bec74`,
+paths `[]`, flags `--no-pub --concurrency=2 --timeout=3m`, stable HEAD/tree.
+Comparison with `base` passes: 12,206 successes, 13 pre-existing failures,
+28 pre-existing errors and 20 unchanged skips; 174 added passing identities,
+zero new failures, zero missing identities/suites and zero new skips. Xtream
+50k ingest and MDBList category refresh pass in this full run; their previous
+load-sensitive errors remain notes and are not accepted failures. This is the
+latest original-code base for both extraction gates. The same flags will be
+used for both gates; any load-sensitive failure requires an unchanged-assertion
+isolated rerun and a NOTE, never an allowlist entry. Whole-repo analyzer
+comparison with step 0 also passes with zero added or removed diagnostics.
+Step L and application extraction have not begun.

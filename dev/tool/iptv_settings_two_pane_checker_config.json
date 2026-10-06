@@ -43,7 +43,7 @@
       "railNodes",
       "paneNodes",
       "railScroll",
-      "stats",
+      "sourceStats",
       "statsSignature"
     ],
     "IptvSettingsTwoPaneNavigation": [
@@ -109,8 +109,8 @@
     "_StatStrip": "IptvTwoPaneStatStrip",
     "_QuietBanner": "IptvTwoPaneQuietBanner",
     "_RowGroup": "IptvTwoPaneRowGroup",
-    "_PaneRow": "IptvTwoPanePaneRow",
-    "_PaneRowState": "IptvTwoPanePaneRowState",
+    "_PaneRow": "IptvTwoPaneRow",
+    "_PaneRowState": "IptvTwoPaneRowState",
     "_MethodCard": "IptvTwoPaneMethodCard",
     "_MethodCardState": "IptvTwoPaneMethodCardState"
   },
@@ -118,7 +118,8 @@
   "occurrence_field_bindings": {
     "owners": [
       "IptvSettingsTwoPaneState"
-    ]
+    ],
+    "mandatory_qualification": true
   },
   "record_owners": [
     "IptvSettingsTwoPaneState"
@@ -181,8 +182,8 @@
     "_StatStrip": "IptvTwoPaneStatStrip",
     "_QuietBanner": "IptvTwoPaneQuietBanner",
     "_RowGroup": "IptvTwoPaneRowGroup",
-    "_PaneRow": "IptvTwoPanePaneRow",
-    "_PaneRowState": "IptvTwoPanePaneRowState",
+    "_PaneRow": "IptvTwoPaneRow",
+    "_PaneRowState": "IptvTwoPaneRowState",
     "_MethodCard": "IptvTwoPaneMethodCard",
     "_MethodCardState": "IptvTwoPaneMethodCardState"
   },
