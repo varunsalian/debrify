@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 5,
+  "completed_step": 6,
   "completion_step": 7,
   "required_scaffolds_step": 7,
   "receivers": [
@@ -1135,6 +1135,10 @@
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
       "owner": "StremioTvNavigation"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart",
+      "owner": "StremioTvLayout"
     }
   ],
   "planned_plain_sections": [

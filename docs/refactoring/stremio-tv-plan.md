@@ -1789,3 +1789,54 @@ cap remains zero, and completion enforcement remains inactive until Step 7.
 Claude reviews gate 1 before further extraction. Remote CI and the
 end-of-series device checklist remain pending; no device/emulator/Flutter run,
 push, merge or branch switch was performed.
+
+
+### Step 6 — layout and forwarder (2026-10-06)
+
+Previous checkpoint: **`9820ac27734cb6bb0710031630ae2209eb05cfb4`**. Claude accepted Steps L–5 and gate 1. The last original build body moves to
+`StremioTvLayout`, preserving all lexical contexts, callback identities,
+keys/consts, builder boundaries and paint. The facade keeps the exact annotated
+forwarder; its moved implementation loses only that leading `@override`, under
+the frozen declaration-specific `forwarded_annotation_occurrences` exception.
+All 13 frozen sections are now constructed once. No `legacy` section, borrowed
+`playChannelById` dependency or `TEMP(stremio_tv)` remains; the watch hook calls
+`_sections.actions.playChannelById(channelId)`. The facade moves to
+`kExtractedShapeResidue` at zero and its obsolete oversized ratchet is removed.
+
+**Creation measurement adjustment:** layout is **715**, versus the accepted
+713-line probe, solely because the plan requires comments stating the D2 reason
+and exit. Those two new lines sit outside every original declaration. Removing
+them produces the accepted layout source byte-for-byte. Its measured exception
+is **715**, with no headroom; exit is a separately reviewed header/channel paint
+decomposition with goldens. Play stays **495**, requiring no D3 exception.
+
+The first focused run was invalidated while these two required comments were
+added: the helper correctly rejected changed input provenance. It is preserved
+as `step6-characterization-rejected-comment-change*`; the stable full-file rerun
+passes. No failed assertion, golden or allowlist was changed.
+
+All **17 manifests** pass real CLI/self-tests with explicit isolated parser
+packages and every copied `*.dill` deleted. All **16 other stdout files remain
+byte-identical** to Step 0b; unchanged adapter/config inputs retain the earlier
+raw-adapter equality proof. All 119 declaration leaves, mandatory field binding,
+callback identities, contracts, annotation-forwarder and reader checks pass.
+Architecture, sizes, storage keys/references/member map/bodies, exact CI format
+(zero changes), scoped analyze/allowlist (same 25 known warnings), LF, protected
+scope and staged diff pass. Per-symbol inventory has **seven accepted-probe
+infos, zero new warnings/errors/infos**, with 13 original directive infos
+removed. Explicit relocation comparison is PASS; no suppression is added.
+
+Serialized focused evidence uses `--no-pub --concurrency=1`: **178 success /
+one unchanged known profile source-guard failure**; base2 comparison PASS with
+no new failure, missing identity or new skip. All **63 characterizations** pass,
+including strict macOS **6/6**; calibrated Linux strict **6/6**, unchanged PNGs
+and lockfile. Shape **13**, global floor **488**, bare-radius residue zero;
+owned/full theme **30/79**, light ink **three non-primary / zero primary**.
+
+Facade **115**: imports 7 + widget 16 + State header/close 2 + owners/composition 11 + lifecycle 72 + build forwarder 2 + remaining blanks/comments 5 = 115.
+Layout **715** is the sole size exception; all other 23 destination files are
+at most **495**. Composition is **46**, bindings **21**. Per-entry review,
+measurements/spans/source hashes, frozen D4 and map pins, commands and results
+are E/`step6-*`. Protected sibling widgets, player/launcher/services/main and
+dependencies remain byte-identical to R; original tests/goldens unchanged since
+Step L. No behavior change, seam, device run, push, merge or branch switch.

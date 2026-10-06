@@ -5,6 +5,7 @@ import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/strem
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart';
+import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart';
 import 'package:debrify/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart';
@@ -25,6 +26,7 @@ class StremioTvSections {
   final StremioTvCloudResolvers cloud;
   final StremioTvChannelActions actions;
   final StremioTvNavigation navigation;
+  final StremioTvLayout layout;
   StremioTvSections(StremioTvDependencies deps)
     : settings = StremioTvSettingsLoader(deps),
       library = StremioTvChannelLibrary(deps),
@@ -37,7 +39,8 @@ class StremioTvSections {
       debrid = StremioTvDebridResolvers(deps),
       cloud = StremioTvCloudResolvers(deps),
       actions = StremioTvChannelActions(deps),
-      navigation = StremioTvNavigation(deps) {
+      navigation = StremioTvNavigation(deps),
+      layout = StremioTvLayout(deps) {
     deps.sections = this;
   }
 }
