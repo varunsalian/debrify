@@ -455,7 +455,7 @@ Profiles remain owned by existing services: schedules/captures are profile-owned
 | Focusable row/button/banner own node | Lazy per widget State | Dispose only owned node before super |
 | Fixture capture/server | Public desktop start, real HttpServer | Await stop and artifact drain, then server close, DB/registry reset and directory deletion |
 
-Facade dispose order is binding observer → schedule listener → desktop listener → ticker → poll → notifier → borrowed first-library focus → super. This order is pinned as one AST leaf. Revision listener registration is B (exactly one counted reload); removal is S because the retained callback becomes inert at the mounted guard. Its separate concrete behavioural survival probe is recorded, not counted as a B rejection.
+Facade dispose order is binding observer → schedule listener → desktop listener → ticker → poll → notifier → borrowed first-library focus → super. This order is pinned as one AST leaf. Revision listener registration and removal are B: counted reloads prove effect, and protected `ChangeNotifier.hasListeners` observations prove presence while mounted and restoration to each notifier's pre-mount baseline after disposal. Each unregister call has its own ORIGINAL mutation proof. The Step 0 inert-callback probe was insufficient and is superseded by Step 0b.
 
 ## B/S proof inventory and source exceptions
 
@@ -474,7 +474,7 @@ Every mutation is named in `dev/tool/recordings_original_mutations.json`; B runs
 | `stored_duration` | desktop listLibrary always supplies null durationMs |
 | `dormant_record_url` | isSchedulableUrl already requires a non-null engineRecordableUrl |
 | `dispose_order` | resource and listener teardown order cannot be observed at all public boundaries; verbatim AST leaf pins ordering |
-| `listener_removal` | retained callback is inert after disposal because _onRevision checks mounted; behavioural reload counts cannot distinguish removal |
+| `android_live_autofocus` | Android live entries never load on macOS/Linux; the desktop-first Stop rule is B, and the Android fallback additionally requires no desktop captures |
 | `rec_dot_parameters` | controller numeric parameters are pinned structurally; TV static-vs-animation is separately behavioural |
 | `focus_debug` | debug label is diagnostic metadata, not user-observable rendering |
 | `handoff_android` | Android true is unreachable on desktop; desktop false is proven through external transport |
@@ -556,3 +556,8 @@ file_size_baseline.txt:36 `2129 lib/screens/settings/recordings_page.dart`. Not 
 None found by reading (every private is referenced). Verify with analyzer.
 
 ```
+
+
+Step 0b closes the independent ORIGINAL review with 13 additional behavioural identities. `recordings_review_closure_test.dart` pins both notifier registrations/disposals; ignored inactive lifecycle; live-only ticker and negative elapsed; focused/unfocused Stop fill and the live-card background/border; exact scheduled-empty, cancel and delete text; date initial/first/last/help values; Material and remote TV start/end pickers; one-hour end default; TV-only length autofocus; and live/schedule/library autofocus precedence. Two captures prove first-desktop-only Stop autofocus. The Android live Stop fallback is S because `_loadAll` never loads native entries on either host; its distinct mutation removes `desktopCaptures.isEmpty` and is reported separately.
+
+`occurrence_field_bindings.mandatory_qualification` is explicitly `true`. Its opt-in `mandatory_qualification_classes` lists the owners and all five frozen section classes: the unchanged private `_LiveCard` owns a different field named `now`, and the shared unbound-name scan otherwise falsely rejects this original widget. Original-to-destination occurrence alignment and the recordings validator still cover every State field reference, including the facade. The real-config negative makes the renamed section read `now.value` bare, and requires the shared `Bare owner field reference` guard in addition to checker/reader rejection. No new state/field-class or occurrence-substitution mechanisms are used.

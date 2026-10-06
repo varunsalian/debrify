@@ -107,7 +107,15 @@
       "_owners": "RecordingsHubOwners",
       "RecordingsHubData": "RecordingsHubData"
     },
-    "mandatory_qualification": false
+    "mandatory_qualification": true,
+    "mandatory_qualification_classes": [
+      "RecordingsHubOwners",
+      "RecordingsHubData",
+      "RecordingsHubActions",
+      "RecordingsHubScheduling",
+      "RecordingsHubFormat",
+      "RecordingsHubLayout"
+    ]
   },
   "record_owners": [
     "_RecordingsPageState"

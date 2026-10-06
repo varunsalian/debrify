@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Whole-file assertion proofs on the owned untouched-R scratch worktree.
 
-Test/fixture bytes are frozen for each run. B, S and the inert-listener probe
-have separate reports; a parser, compile, timeout or load failure is never B.
+Test/fixture bytes are frozen for each run. B and S have separate reports; a parser, compile, timeout or load failure is never B.
 """
 import argparse
 import hashlib
@@ -80,6 +79,15 @@ def main():
     nodes.update({d['name']+'.'+m['name']: m for d in unit['declarations'] for m in d['members']})
     cases = json.loads((ROOT/'dev/tool/recordings_original_mutations.json').read_text())
     cases = [c for c in cases if c['kind'] == a.kind]
+    if a.kind == 'B':
+        for case in cases:
+            assert case.get('assertion_reasons'), 'B requires a named behavioural reason'
+            for test in case['tests']:
+                assert test not in ['recordings_source_contract', 'recordings_shape_inventory']
+                text = (root/(TESTS+test+'_test.dart')).read_text()
+                assert 'recordings_source.dart' not in text and 'RecordingsSource' not in text
+                assert all(reason in text or reason in (root/'test/support/recordings_manual_driver.dart').read_text()
+                           for reason in case['assertion_reasons']), case['label']
     e = evidence_dir(); positive = outcomes(e/(a.positive+'.jsonl'))[0]
     positive_env = json.loads((e/(a.positive+'.env.json')).read_text())
     assert not positive_env['tree_changed_during_run']

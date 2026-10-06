@@ -434,6 +434,9 @@
         "after": "bytes == 0",
         "count": 1
       }
+    ],
+    "assertion_reasons": [
+      "Stop snackbar matches captured byte outcome"
     ]
   },
   {
@@ -588,6 +591,9 @@
         "after": "Duration(days: 6)",
         "count": 1
       }
+    ],
+    "assertion_reasons": [
+      "manual date picker includes seventh day"
     ]
   },
   {
@@ -606,6 +612,9 @@
         "after": "('30 minutes', Duration(minutes: 30)),\n            ('5 minutes (test)', Duration(minutes: 5)),",
         "count": 1
       }
+    ],
+    "assertion_reasons": [
+      "duration presets retain order"
     ]
   },
   {
@@ -796,29 +805,6 @@
     "assertion_reasons": [
       "focused library row paints live gold border"
     ]
-  },
-  {
-    "label": "revision-listeners-retained",
-    "kind": "probe",
-    "tests": [
-      "recordings_lifecycle"
-    ],
-    "must_fail": [
-      "each revision"
-    ],
-    "edits": [
-      {
-        "member": "_RecordingsPageState.dispose",
-        "before": "LiveRecordingService.schedulesRevision.removeListener(_onRevision);",
-        "after": ""
-      },
-      {
-        "member": "_RecordingsPageState.dispose",
-        "before": "DesktopRecordingService.instance.revision.removeListener(_onRevision);",
-        "after": ""
-      }
-    ],
-    "reason": "Mounted guard makes retained callback inert; no public reload effect after disposal"
   },
   {
     "label": "android-predicate",
@@ -1085,25 +1071,6 @@
       }
     ],
     "reason": "isSchedulableUrl already rejects null recordable URLs"
-  },
-  {
-    "label": "listener-removal",
-    "kind": "S",
-    "tests": [
-      "recordings_source_contract"
-    ],
-    "must_fail": [
-      "recordings AST"
-    ],
-    "edits": [
-      {
-        "member": "_RecordingsPageState.dispose",
-        "before": "removeListener(_onRevision)",
-        "after": "addListener(_onRevision)",
-        "count": 2
-      }
-    ],
-    "reason": "Retained callback is inert after disposal; probe separately records survival"
   },
   {
     "label": "dispose-order",
@@ -1654,6 +1621,364 @@
         "member": "_RecordingsPageState._syncTimers",
         "before": "_now.value = DateTime.now();",
         "after": "setState(() => _now.value = DateTime.now());"
+      }
+    ]
+  },
+  {
+    "label": "danger-fill-alpha",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "live Stop fill"
+    ],
+    "assertion_reasons": [
+      "unfocused live Stop fill is 0.16"
+    ],
+    "edits": [
+      {
+        "member": "_HubButtonState.build",
+        "before": "fill = _kRec.withValues(alpha: _focused ? 0.32 : 0.16);",
+        "after": "fill = _kRec.withValues(alpha: _focused ? 0.32 : 0.20);"
+      }
+    ]
+  },
+  {
+    "label": "end-time-initial-2h",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "desktop manual pickers"
+    ],
+    "assertion_reasons": [
+      "end picker starts one hour after chosen start"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 1))),",
+        "after": "initialTime: TimeOfDay.fromDateTime(start.add(const Duration(hours: 2))),"
+      }
+    ]
+  },
+  {
+    "label": "empty-hint-text",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "scheduled empty hint"
+    ],
+    "assertion_reasons": [
+      "scheduled empty hint keeps original punctuation and wording"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "'Nothing scheduled \u2014 pick an upcoming '",
+        "after": "'Nothing scheduled - pick an upcoming '"
+      }
+    ]
+  },
+  {
+    "label": "pick-time-tv-branch",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "Android TV cached flag"
+    ],
+    "assertion_reasons": [
+      "Android TV start uses remote time spinner"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._pickTime",
+        "before": "    if (PlatformUtil.isAndroidTvCached) {\n      return showTvTimePicker(",
+        "after": "    if (false) {\n      return showTvTimePicker("
+      }
+    ]
+  },
+  {
+    "label": "ticker-schedules-only",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "live capture without schedules"
+    ],
+    "assertion_reasons": [
+      "live capture alone arms one-second ticker"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._syncTimers",
+        "before": "final needTick = _anythingLive || _schedules.isNotEmpty;",
+        "after": "final needTick = _schedules.isNotEmpty;"
+      }
+    ]
+  },
+  {
+    "label": "delete-content-text",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "delete dialog content"
+    ],
+    "assertion_reasons": [
+      "delete content names title size and this device"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "'from this device.',",
+        "after": "'from this computer.',"
+      }
+    ]
+  },
+  {
+    "label": "date-help",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "desktop manual pickers"
+    ],
+    "assertion_reasons": [
+      "date picker help text is Recording date"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "helpText: 'Recording date',",
+        "after": "helpText: 'Date',"
+      }
+    ]
+  },
+  {
+    "label": "length-autofocus-any",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "desktop manual pickers"
+    ],
+    "assertion_reasons": [
+      "first length preset has no non-TV autofocus"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "autofocus: PlatformUtil.isAndroidTvCached && i == 0,",
+        "after": "autofocus: i == 0,"
+      }
+    ]
+  },
+  {
+    "label": "inactive-cancels",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "inactive lifecycle"
+    ],
+    "assertion_reasons": [
+      "inactive is ignored and ticker keeps running"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.didChangeAppLifecycleState",
+        "before": "} else if (state == AppLifecycleState.paused ||",
+        "after": "} else if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused ||"
+      }
+    ]
+  },
+  {
+    "label": "schedule-autofocus-ignore-live",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "TV autofocus precedence live=true scheduled=true"
+    ],
+    "assertion_reasons": [
+      "first schedule autofocus requires no live capture"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "                                  PlatformUtil.isTelevision &&\n                                  liveCount == 0 &&\n                                  i == 0,",
+        "after": "                                  PlatformUtil.isTelevision &&\n                                  i == 0,"
+      }
+    ]
+  },
+  {
+    "label": "cancel-dialog-content-dash",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "cancel dialog content"
+    ],
+    "assertion_reasons": [
+      "cancel content uses title em dash channel"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._cancelSchedule",
+        "before": "'${schedule.programmeTitle} \u2014 ${schedule.channelName}'",
+        "after": "'${schedule.programmeTitle} - ${schedule.channelName}'"
+      }
+    ]
+  },
+  {
+    "label": "live-elapsed-neg",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "live capture without schedules"
+    ],
+    "assertion_reasons": [
+      "negative live elapsed is clamped to zero"
+    ],
+    "edits": [
+      {
+        "member": "_LiveCard.build",
+        "before": "fmtElapsed(elapsed.isNegative ? Duration.zero : elapsed)",
+        "after": "fmtElapsed(elapsed)"
+      }
+    ]
+  },
+  {
+    "label": "schedules-listener-removal",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "revision listeners exist"
+    ],
+    "assertion_reasons": [
+      "disposed schedules listener returns to baseline"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "LiveRecordingService.schedulesRevision.removeListener(_onRevision);",
+        "after": ""
+      }
+    ]
+  },
+  {
+    "label": "desktop-listener-removal",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "revision listeners exist"
+    ],
+    "assertion_reasons": [
+      "disposed desktop listener returns to baseline"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.dispose",
+        "before": "DesktopRecordingService.instance.revision.removeListener(_onRevision);",
+        "after": ""
+      }
+    ]
+  },
+  {
+    "label": "library-autofocus-ignore-live",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "TV autofocus precedence live=true scheduled=false"
+    ],
+    "assertion_reasons": [
+      "first library autofocus requires no live captures and no schedules"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "liveCount == 0 &&\n                                      _schedules.isEmpty &&",
+        "after": "_schedules.isEmpty &&"
+      }
+    ]
+  },
+  {
+    "label": "library-autofocus-ignore-schedules",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "TV autofocus precedence live=false scheduled=true"
+    ],
+    "assertion_reasons": [
+      "first library autofocus requires no live captures and no schedules"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "liveCount == 0 &&\n                                      _schedules.isEmpty &&",
+        "after": "liveCount == 0 &&"
+      }
+    ]
+  },
+  {
+    "label": "desktop-stop-second-autofocus",
+    "kind": "B",
+    "tests": [
+      "recordings_review_closure"
+    ],
+    "must_fail": [
+      "TV autofocus precedence live=true scheduled=false"
+    ],
+    "assertion_reasons": [
+      "first desktop Stop has TV autofocus"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "autofocus: PlatformUtil.isTelevision && i == 0,",
+        "after": "autofocus: PlatformUtil.isTelevision && i == 1,"
+      }
+    ]
+  },
+  {
+    "label": "android-live-autofocus-desktop-precedence",
+    "kind": "S",
+    "reason": "dart:io host never loads Android live entries; desktop-first autofocus is B and this Android fallback is structurally pinned",
+    "tests": [
+      "recordings_source_contract"
+    ],
+    "must_fail": [
+      "recordings AST"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "i == 0 &&\n                                  desktopCaptures.isEmpty",
+        "after": "i == 0"
       }
     ]
   }

@@ -7,6 +7,13 @@ from check_settings_moves import all_nodes, tokens
 from torbox_callback_identity import arguments, callback_argument
 
 
+def code_tokens(node):
+    # Shared AST marks optional formatter punctuation; positional record commas
+    # remain semantic. Receiver/member/argument envelopes are otherwise exact.
+    punctuation = set(node.get('formatCommas', []))
+    return [t for t in node['tokens'] if not t['comment'] and t['offset'] not in punctuation]
+
+
 def validate_sources(sources):
     return []
 
@@ -99,7 +106,7 @@ def validate_with_context(sources, config, rows):
             node = lookup.get(target) if 0 < int(row['step']) <= step else lookup.get((source, owner, name))
             if node is None: raise KeyError(original)
             frozen = spec['stages'][str(min(step, 3))]
-            values = [t['text'] for t in node['tokens'] if not t['comment']]
+            values = [t['text'] for t in code_tokens(node)]
             calls = arguments(values, frozen['call'])
             expression = callback_argument(calls[spec['occurrence']], spec)
             if len(calls) != spec['count'] or expression != frozen['expression']:

@@ -1139,7 +1139,6 @@
             "disableExternalPlayer",
             ":",
             "_isAndroid",
-            ",",
             ")"
           ]
         },
@@ -1167,7 +1166,6 @@
             "disableExternalPlayer",
             ":",
             "_isAndroid",
-            ",",
             ")"
           ]
         },
@@ -1199,7 +1197,6 @@
             "data",
             ".",
             "isAndroid",
-            ",",
             ")"
           ]
         },
@@ -1231,7 +1228,6 @@
             "data",
             ".",
             "isAndroid",
-            ",",
             ")"
           ]
         }
@@ -2187,7 +2183,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2204,7 +2199,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2221,7 +2215,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2238,7 +2231,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         }
@@ -2264,7 +2256,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2281,7 +2272,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2298,7 +2288,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2315,7 +2304,6 @@
             "openExactAlarmSettings",
             "(",
             ")",
-            ",",
             ")"
           ]
         }
@@ -2341,7 +2329,6 @@
             "requestIgnoreBatteryOptimizations",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2358,7 +2345,6 @@
             "requestIgnoreBatteryOptimizations",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2375,7 +2361,6 @@
             "requestIgnoreBatteryOptimizations",
             "(",
             ")",
-            ",",
             ")"
           ]
         },
@@ -2392,7 +2377,6 @@
             "requestIgnoreBatteryOptimizations",
             "(",
             ")",
-            ",",
             ")"
           ]
         }

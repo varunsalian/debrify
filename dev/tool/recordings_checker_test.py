@@ -4,6 +4,8 @@ import copy
 import json
 import hashlib
 import functools
+import subprocess
+import tempfile
 from collections import OrderedDict
 from pathlib import Path
 
@@ -105,6 +107,16 @@ def self_test(package, *, reader_only=False):
         sources = layout(original, rows, config, leaves, step)
         positive('step '+str(step), sources, config)
         stages[step] = (sources, config)
+    # Real dart format inserts optional commas in long wrapped callbacks.
+    # Exercise this physical tree, not just the unformatted fixture generator.
+    with tempfile.TemporaryDirectory(dir=package.parent.parent) as directory:
+        directory = Path(directory)
+        formatted = {}
+        for index, (path, text) in enumerate(stages[3][0].items()):
+            file = directory / (str(index)+'.dart'); file.write_text(text)
+            formatted[path] = file
+        subprocess.run(['dart', 'format', str(directory)], check=True, capture_output=True)
+        positive('formatted step 3', {p:f.read_text() for p,f in formatted.items()}, stages[3][1])
     scaffolding = json.loads((Path(__file__).resolve().parent.parent.parent/base['sidecars']['scaffolding']).read_text())
     retained, zero = stages[0]
     positive('scaffold-only dependencies preserve ORIGINAL ownership', {**retained, scaffolding['dependencies_file']: scaffolding['dependencies_text']}, zero)
@@ -129,6 +141,9 @@ def self_test(package, *, reader_only=False):
     two, two_config = stages[2]; three, three_config = stages[3]
     negative('step 2 tree under step 3 specification', two, three_config)
     negative('step 3 tree under step 2 specification', three, two_config)
+    bare = changed(three, '_owners.now.value = DateTime.now()', 'now.value = DateTime.now()')
+    negative('bare renamed owner field in data section', bare, three_config)
+    assert any('Bare owner field reference:' in guard for guard in reports[-1]['checker_guards'])
     negative('bare owner assignment', changed(two, '_owners.live = live;', 'live = live;'), two_config)
     negative('bare facade owner read', changed(two, '_owners.library.isEmpty', '_library.isEmpty', path=source), two_config)
     negative('bare facade moved method', changed(two, '_sections.data.loadAll()', 'loadAll()', path=source), two_config)
