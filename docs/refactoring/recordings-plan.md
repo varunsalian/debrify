@@ -145,10 +145,10 @@ hosts, so the desktop paths are **B**.
    poll cancel → `now` dispose → `firstLibraryFocus` dispose →
    `super.dispose()`. `didChangeAppLifecycleState`: `resumed` → visible + reload;
    `paused`/`hidden` → invisible, cancel and null both timers; other states
-   ignored. `_onRevision`: `if (mounted) unawaited(loadAll())`. Tests: listener
-   counts on both notifiers before/after dispose; a bump of either reloads (a
-   seeded schedule appears); a bump after dispose does nothing; disposal leaves
-   no pending timers.
+   ignored. `_onRevision`: `if (mounted) unawaited(loadAll())`. Tests: a bump of
+   either notifier causes exactly one counted reload while mounted (a seeded
+   schedule appears) and none after dispose (listener presence proven by effect,
+   not by private listener counts); disposal leaves no pending timers.
 2. **Load.** One `Future.wait` of five futures in fixed order; desktop: live =
    empty, schedules = `DesktopScheduleService.instance.list()` mapped with
    `toScheduledRecording()`, library = `DesktopRecordingService.listLibrary()`,
@@ -167,7 +167,8 @@ hosts, so the desktop paths are **B**.
    (`syncTimers` returns early); `resumed` re-arms through the reload. Android
    poll cadence (3 s live / 15 s scheduled / off), the light poll and its
    membership comparison escalating to a full reload are **S**.
-4. **Formatting and display (B, through rendered text).** `fmtBytes` (GB 2 dp,
+4. **Formatting and display (B through rendered text, except the explicit S
+   rows in step 0.5: supplied channel metadata and store-duration precedence).** `fmtBytes` (GB 2 dp,
    MB/KB 0 dp, B; thresholds at 1024ⁿ), `fmtElapsed` (`h:mm:ss` from one hour,
    else `mm:ss`), `fmtCountdown` (≤ 60 s `starting…`, < 60 min, < 24 h with and
    without minutes, days + hours), `fmtDuration` (s / min / h / h m), `clock`
@@ -247,7 +248,12 @@ hosts, so the desktop paths are **B**.
      macOS external-default case: with the external player selected, the push
      reaches the mocked URL-launcher transport (the
      `test/macos_infuse_launch_test.dart` pattern) instead of an in-app route.
-     The Android `true` value is S.
+     The Android `true` value is S. **Cleanup (round 2 P2-3):** a successful
+     external launch arms a return observer and a 30 s timer
+     (`launch_router.dart:509`, `external_activity_lifecycle.dart:74`); the case
+     disposes the page, delivers the cover/resume lifecycle pair, drains the
+     30 s fake timer and restores the lifecycle/bridge state before teardown,
+     with no pending timers.
    - The complete push envelope (receiver, argument names, order, values, no
      extra arguments) is pinned structurally by the source validator.
 9. **Widgets.**
@@ -268,9 +274,9 @@ hosts, so the desktop paths are **B**.
 10. **Device and profile ownership.**
     - The page captures no profile. The battery-dismissal value is read and
       written through `DevicePreferences` (device-wide) under
-      `recording_battery_nudge_dismissed_at`; a profile switch does not change
-      it (test: seed the device pref, switch the active profile, the State's
-      read is unchanged).
+      `recording_battery_nudge_dismissed_at`. The page's use of the value is S
+      (Android-only banner); a separate service-level test pins that the
+      `DevicePreferences` value survives a profile switch.
     - Desktop schedules and captures shown are exactly what the services return
       for the active profile at load time: with schedules owned by two profiles
       seeded, only the active profile's appear; after a profile switch and a
@@ -366,7 +372,7 @@ RecordingsHubOwners();` (same construction timing as today's field
 initializers), a nullable cached composition (`RecordingsHubSections?
 _composition;` and a getter building it once with
 `RecordingsHubDependencies(owners: _owners, context: () => context, mounted:
-() => mounted, setState: setState)`; never `late`, never per build), the
+() => mounted, setState: setState, sections: () => _sections)`; never `late`, never per build), the
 verbatim lifecycle and `_onRevision`, and exactly `@override Widget
 build(BuildContext context) => _sections.layout.build(context);` (the layout
 section's `build` keeps its lexical `context` parameter, so `Navigator.of(context)`
@@ -482,8 +488,10 @@ As in the Stremio TV, tuner and Debrify TV plans, plus:
      the `onScheduleDown` conditional with its five-term guard and
      `() => _owners.firstLibraryFocus.requestFocus()`, the folder button's
      `onDown` conditional, `() => Navigator.of(context).maybePop()` with the
-     lexical build `context`, the dialogs' `() =>
-     Navigator.of(dialogContext).pop(<literal>)`, `bytesOf: () => capture.bytes`
+     lexical build `context`, each dialog pop with its exact argument
+     (`pop(false)`/`pop(true)` at 315/320/364/368/592/651/655, and `pop(d)` at
+     583 where `d` must stay the lexical loop-pattern variable of the preset
+     `for`), `bytesOf: () => capture.bytes`
      and `bytesOf: () => rec.bytes`), and validates the inner receiver path and
      member **before** normalization, plus the occurrence binder on every
      identifier inside. Sites (facts): `onBack` 777, `onSchedule` 778/798,
@@ -493,8 +501,9 @@ As in the Stremio TV, tuner and Debrify TV plans, plus:
      368/583/592/651/655, the snackbar action 513. Negatives per envelope: a
      different member (`stopAndroid` for `stopDesktop`), a different section
      receiver, the wrapper dropped (`() => _sections.actions.play(entry)`
-     returning a Future to a `VoidCallback` is a compile error, so the negative
-     is `unawaited` replaced by a cached tear-off), a conditional term removed
+     compiles as a `VoidCallback`, so it is a required checker/reader
+     negative), `unawaited` replaced by a cached tear-off, `pop(d)` bound to
+     anything but the loop variable, a conditional term removed
      or reordered, `context` replaced by `_deps.context()`, `capture.bytes`
      replaced by a captured local.
    - **Block closures** (the two `Timer.periodic` bodies, the
@@ -557,11 +566,17 @@ As in the Stremio TV, tuner and Debrify TV plans, plus:
     supplies `sections: () => _sections`. Step 2's composition constructs
     exactly `data` and `format`; step 3's adds `actions`, `scheduling` and
     `layout` in the frozen order (`data`, `actions`, `scheduling`, `format`,
-    `layout`). Both shapes are registered as scaffolds for their step
+    `layout`). Because `scaffold_activation_step` only activates entries (an
+    earlier constructor version would stay active and reject the step-3
+    constructor), the two composition versions are **frozen step-specific
+    specifications selected by the recordings validator**
+    (`source_validator_module`, the tuner's `stremio_tv_tuner_contracts.py`
+    precedent, which also enforces `scaffold_file_steps`): it reads
+    `completed_step` and applies exactly the step-2 or step-3 specification
     (constructor and dependency tokens, plain section headers, eager owners
-    construction, required files, each section's exact getter set) using the
-    existing `scaffolds`/`required_scaffolds_step`/`scaffold_file_steps` and
-    `plain_sections` keys. Mutations (checker and validator): sections rebuilt
+    construction, required files, each section's exact getter set). Both stages
+    are tested with the final tooling: the step-2 tree passes under the step-2
+    specification and fails under step 3, and the reverse. Mutations (checker and validator): sections rebuilt
     per `build`, a cached `context`/`mounted` value, `setState` wrapped in a
     closure, a section wired to the wrong class, a section constructor that
     creates a resource or reads `_deps`, owners created lazily.
@@ -629,9 +644,9 @@ scratch tree, runs the real checker and measures the facade.
    - A fake `PathProviderPlatform` pointing downloads at a per-test temporary
      directory so `recordingsDir()`/`listLibrary()` read real files (sizes and
      mtimes set explicitly); deleted in teardown.
-   - `ProfileRuntime`: every test initializes the legacy runtime (captures'
-     `start` and `captures` read `ProfileRuntime.isProfileCommitted`, which
-     throws uninitialized); the ownership tests use the committed two-profile
+   - `ProfileRuntime`: every test initializes the legacy runtime
+     (`DesktopRecordingService.start` reads `ProfileRuntime.isProfileCommitted`,
+     which throws uninitialized; `captures` already guards that case); the ownership tests use the committed two-profile
      fixture (`test/support/profile_fixture.dart`).
    - A recording `NavigatorObserver`; dialogs driven by tapping and by keys.
    - Desktop captures are **B** (round 1 P2-7): the public
@@ -844,6 +859,15 @@ the private widgets; registering the file in the shape sweep.
 | P2-9 reader and mutation media | Technique 13: Python AST reader + Dart wrapper, verified ORIGINAL, deterministic owner enumeration, five fixture topologies; three separate proof reports; reader exceptions never count as B. |
 | P2-10 CI and audits | Step 0.7: exact `checks.yml` commands and activation steps; Technique 9: `light_ink_inventory.PRIMARY` extended, `text_white_sweep` exclusion preserved; Technique 8: named shape inventory test. |
 | P3-11 counts | 14 private widgets (seven with States); 12 bare radii, zero shape calls; shape rationale corrected. |
+
+## Round 2 review resolution (Codex `rec-design`, at `e38b5122`; "No P1s — executable")
+
+| Finding | Resolution |
+| --- | --- |
+| P2-1 scaffold version selection | Technique 12: the recordings validator selects the frozen step-2 or step-3 composition specification from `completed_step` (tuner contracts precedent); both stages tested both ways. Facade constructor example now passes `sections: () => _sections`. |
+| P2-2 callback envelopes | Technique 6: each pop's exact argument pinned, including `pop(d)` bound to the lexical loop variable; the wrapper-dropped arrow is a compile-valid required negative. |
+| P2-3 external launcher cleanup | Contract 8: dispose, cover/resume pair, drain the 30 s timer, restore lifecycle/bridge state, no pending timers. |
+| P3-4 superseded wording | Contracts 1, 4 and 10 aligned with counted reloads and the explicit S rows; harness note narrowed (`start` needs the runtime; `captures` guards it). |
 
 ## Progress
 
