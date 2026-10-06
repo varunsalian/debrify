@@ -1554,3 +1554,57 @@ source hashes, measurements, comparisons and input compatibility.
 No protected sibling widget, player, launcher, service or dependency change;
 no production seam, device run, push, merge or branch switch. Steps 6–7 remain
 outside this execution authorization.
+
+
+### Step 2 — eager owners and live composition (2026-10-06)
+
+Previous checkpoint: **`d65736b93`** (Step 1). All 40 original fields move
+verbatim into four eager records; `StremioTvOwners` constructs those records
+before the lifecycle runs. The bindings borrow live context/mounted/isTelevision
+getters and the original State `setState` tear-off. Lifecycle is the first
+composition consumer, with original timing, initialization and disposal order.
+The field-binding guard now requires the four qualified owner paths.
+
+The written plan requires a nullable cached composition. The accepted probe
+used `late final`; this checkpoint instead pins `_composition` plus the nullable
+cached `_sections` getter, as specified by the plan. It remains lazy until the
+same first lifecycle call. Three typed, direct borrowed State tear-offs
+(`loadSettings`, `discoverAndLoad`, `playChannelById`) connect this intermediate
+checkpoint, following the template's staged-composition procedure. The first
+two disappear in Step 3 and the last in Step 5. Their declarations and the
+composition are pinned, their callback aliases retain original identity, and
+`TEMP(stremio_tv)` records their exits. This is production wiring, with no
+harness seam or duplicate implementation.
+
+The first checker preflight rejected ownership metadata that treated retained
+`build` as an already moved declaration and stripped its annotation. Restoring
+that row's frozen future layout destination fixes the metadata; no application
+body or assertion changed. The rejected and corrected runs are preserved in
+E/`step2-preflight-manifest*.txt`. All 119 leaves then pass the real CLI.
+
+All **17 manifests** pass isolated CLI/self-tests, copied kernels deleted;
+**the other 16 stdout files remain byte-identical**. Their configurations and
+shared adapter inputs also retain their hashes. Field/callback/contracts,
+architecture, size, storage keys/references/member map/bodies, CI format,
+scoped analyzer/allowlist, LF and staged diff pass. Per-symbol comparison finds
+**six probe-inventoried infos, zero warnings/errors and zero additions**; the
+explicit relocation comparison passes. Shape remains **13**, floor **488**,
+bare-radius residue zero; owned/full theme sites **30/79** and light ink
+**three non-primary / zero primary** remain unchanged.
+
+All **63 characterization cases** pass, including strict macOS **6/6**.
+The serialized focused run (`--no-pub --concurrency=1`) has **178 successes and
+the same one known profile source-guard failure**; comparison against base2
+passes with no new failure, missing identity or skip. Linux strict is **6/6**
+in the calibrated image, with unchanged lockfile and PNG bytes.
+
+Formatted facade **3,428**: imports 53 + widget 16 + State header/close 2 +
+owners/composition 14 + retained bodies 2,523 + lifecycle 72 + retained build
+646 + blanks/comments 102 = 3,428. Its ratchet is hand-raised **3,365 → 3,428**
+for qualified receivers. New files are bindings **28**, focus **37**, library
+**26**, owners **14**, playback **17**, composition **9**, settings **27**.
+The facade's temporary remaining responsibilities are settings/library/menu/
+navigation/chrome, play/resolvers/guide/channel actions and layout, with exits
+in Steps 3–6. E/`step2-*` records wiring, source hashes, commands, span inventory
+and comparisons. Protected sibling widgets, players, launcher, services and
+dependencies remain byte-identical to R.
