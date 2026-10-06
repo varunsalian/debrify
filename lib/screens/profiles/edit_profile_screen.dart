@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:debrify/features/edit_profile/models/edit_profile_snapshot.dart';
 import 'package:debrify/features/edit_profile/models/edit_profile_tv_section.dart';
 import 'package:debrify/features/edit_profile/presentation/edit_profile_tv_surfaces.dart';
+import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_dependencies.dart';
+import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_owners.dart';
+import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -86,159 +89,73 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  late final TextEditingController _name;
-  final TextEditingController _pin = TextEditingController();
-  late UserProfileRole _role;
-  late Set<ProfileFeature> _features;
-  bool _saving = false;
-  bool _copyDefaults = true;
-  late bool _lockOnResume;
-  late int _inactivityMinutes;
-  late String _avatarKey;
-  EditProfileTvSection _tvSection = EditProfileTvSection.profile;
   // One node per rail section, plus the rail's Save item at the end.
-  late final List<FocusNode> _tvTabFocusNodes;
-
-  /// Set on the first Pages toggle — until then a save preserves the stored
-  /// policy (edit) or the role defaults (create), same as when no feature
-  /// control existed at all.
-  bool _policyTouched = false;
-
-  final _tvContentFocus = FocusNode(
-    debugLabel: 'Edit profile content',
-    canRequestFocus: false,
-    skipTraversal: true,
-  );
-  final _tvBackFocus = FocusNode(debugLabel: 'Edit profile back');
-  FocusNode? _tvLastContentFocus;
-  int _tvFocusRequest = 0;
 
   // Where downloads/remote started, so their paired features (recordings,
   // remoteTransfer) follow the toggle only when the answer actually MOVED —
   // an untouched save must not re-couple a policy the old feature matrix
   // split (mirrors ProfileSetupFlow._seedDownloads/_seedRemote).
-  late bool _seedDownloads;
-  late bool _seedRemote;
 
-  /// A picked-but-not-saved image. Held in memory and ingested at save time,
-  /// once the target profile's id exists (a created profile has none until
-  /// `createStaged`). Nothing touches disk if the user backs out.
-  Uint8List? _pendingAvatarBytes;
-
-  List<ConnectionResource>? _resources;
-  List<ProfileEngineAssignment>? _engines;
-  final Set<String> _selectedResources = <String>{};
-  final Set<String> _selectedEngines = <String>{};
-  final Map<String, Set<ResourcePermission>> _resourcePermissions =
-      <String, Set<ResourcePermission>>{};
-  String? _setupLoadError;
+  final EditProfileOwners _owners = EditProfileOwners();
+  EditProfileSections? _composition;
+  EditProfileSections get _sections => _composition ??= EditProfileSections(
+    EditProfileDependencies(
+      owners: _owners,
+      sections: () => _composition!,
+      registry: () => widget.registry,
+      pins: () => widget.pins,
+      profile: () => widget.profile,
+      setupOptionsLoader: () => widget.setupOptionsLoader,
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      readAuthorization: () => _authorization,
+      writeAuthorization: (value) => _authorization = value,
+      readShowFeaturePolicyControls: () =>
+          EditProfileScreen.showFeaturePolicyControls,
+      policyFor: EditProfileScreen.policyFor,
+    ),
+  );
   late ProfileAuthorizationContext _authorization = widget.authorization;
 
   @override
   void initState() {
     super.initState();
-    _tvTabFocusNodes = [
+    _owners.tv.tvTabFocusNodes = [
       for (final section in EditProfileTvSection.values)
         FocusNode(debugLabel: 'Edit profile ${section.name} tab'),
       FocusNode(debugLabel: 'Edit profile save'),
     ];
     final profile = widget.profile;
-    _name = TextEditingController(text: profile?.name ?? '');
-    _role = profile?.role ?? UserProfileRole.member;
+    _owners.form.name = TextEditingController(text: profile?.name ?? '');
+    _owners.form.role = profile?.role ?? UserProfileRole.member;
     // Always the policy this screen will WRITE (policyFor: stored policy on
     // edit, role defaults on create) — grant masks derive from _features, so
     // seeding it from the role CEILING would hand every newly ticked
     // resource writeRemote regardless of the profile's remote answer.
-    _features = Set<ProfileFeature>.from(
-      profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled,
+    _owners.form.features = Set<ProfileFeature>.from(
+      profile?.policy.enabled ??
+          ProfilePolicy.defaultsFor(_owners.form.role).enabled,
     );
-    _seedDownloads = _features.contains(ProfileFeature.downloads);
-    _seedRemote = _features.contains(ProfileFeature.remoteControl);
-    _lockOnResume = profile?.lockOnResume ?? false;
-    _inactivityMinutes = profile?.inactivityTimeoutMinutes ?? 0;
-    _avatarKey =
+    _owners.form.seedDownloads = _owners.form.features.contains(
+      ProfileFeature.downloads,
+    );
+    _owners.form.seedRemote = _owners.form.features.contains(
+      ProfileFeature.remoteControl,
+    );
+    _owners.form.lockOnResume = profile?.lockOnResume ?? false;
+    _owners.form.inactivityMinutes = profile?.inactivityTimeoutMinutes ?? 0;
+    _owners.form.avatarKey =
         profile?.avatarKey ??
         (profile?.role == UserProfileRole.child ? 'child' : 'person');
-    _loadSetupOptions();
-  }
-
-  Future<void> _loadSetupOptions() async {
-    try {
-      final actor = await _authorization.validate(widget.registry);
-      final (resources, engines) = widget.setupOptionsLoader != null
-          ? await widget.setupOptionsLoader!()
-          : (
-              await widget.registry.listGrantedResources(actor.id),
-              await ProfileEngineAssignmentService(
-                widget.registry,
-              ).listForTarget(
-                actor: _authorization,
-                targetProfileId: widget.profile?.id,
-              ),
-            );
-      final selectedResources = <String>{};
-      final resourcePermissions = <String, Set<ResourcePermission>>{};
-      final targetId = widget.profile?.id;
-      if (targetId != null) {
-        for (final resource in resources) {
-          final grant = await widget.registry.getGrant(targetId, resource.id);
-          if (grant != null) {
-            selectedResources.add(resource.id);
-            resourcePermissions[resource.id] = {
-              for (final permission in ResourcePermission.values)
-                if (grant.allows(permission)) permission,
-            }..add(ResourcePermission.use);
-          }
-        }
-      }
-      await _validateManagingAdmin(_authorization);
-      if (!mounted) return;
-      setState(() {
-        _resources = resources;
-        _engines = engines;
-        _selectedResources
-          ..clear()
-          ..addAll(selectedResources);
-        _resourcePermissions
-          ..clear()
-          ..addAll(resourcePermissions);
-        _selectedEngines
-          ..clear()
-          ..addAll(
-            widget.profile == null
-                ? engines.map((engine) => engine.id)
-                : engines
-                      .where((engine) => engine.assignedToTarget)
-                      .map((engine) => engine.id),
-          );
-        _setupLoadError = null;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _setupLoadError = 'Profile options could not be loaded');
-    }
-  }
-
-  Future<void> _loadResources() async {
-    try {
-      final actor = await _authorization.validate(widget.registry);
-      final resources = await widget.registry.listGrantedResources(actor.id);
-      if (!mounted) return;
-      setState(() {
-        _resources = resources;
-        _setupLoadError = null;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _setupLoadError = 'Connections could not be reloaded');
-    }
+    _sections.setup.loadSetupOptions();
   }
 
   Future<void> _transferOwnership(ConnectionResource resource) async {
     final target = widget.profile;
     if (target == null || target.id == resource.ownerProfileId) return;
     final operationActor = _authorization;
-    await _validateManagingAdmin(operationActor);
+    await _sections.admin.validateManagingAdmin(operationActor);
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -263,7 +180,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (confirmed != true) return;
     try {
-      await _validateManagingAdmin(operationActor);
+      await _sections.admin.validateManagingAdmin(operationActor);
       await ConnectionResourceService(
         registry: widget.registry,
         cipher: DeviceKeyProvider.cipher,
@@ -272,10 +189,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         resourceId: resource.id,
         newOwnerProfileId: target.id,
       );
-      _authorization = await _refreshSameManagingAdmin(
+      _authorization = await _sections.admin.refreshSameManagingAdmin(
         operationActor.profileId,
       );
-      await _loadResources();
+      await _sections.setup.loadResources();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Connection ownership transferred')),
@@ -290,41 +207,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
-    for (final node in _tvTabFocusNodes) {
+    for (final node in _owners.tv.tvTabFocusNodes) {
       node.dispose();
     }
-    _tvContentFocus.dispose();
-    _tvBackFocus.dispose();
-    _name.dispose();
-    _pin
+    _owners.tv.tvContentFocus.dispose();
+    _owners.tv.tvBackFocus.dispose();
+    _owners.form.name.dispose();
+    _owners.form.pin
       ..clear()
       ..dispose();
     super.dispose();
   }
 
-  void _setRole(UserProfileRole role) {
-    if (_saving) return;
-    setState(() {
-      _role = role;
-      // The ProfileSetupFlow rule: a role CHANGE is a re-preset (the new
-      // role's defaults), while returning to the stored role restores the
-      // stored policy — so what the Pages pane displays is always exactly
-      // what a save would write.
-      final existing = widget.profile;
-      _features = Set<ProfileFeature>.from(
-        existing != null && existing.role == role
-            ? existing.policy.enabled
-            : ProfilePolicy.defaultsFor(role).enabled,
-      );
-      // The pairs are re-coupled by the reseed above, so the
-      // follow-only-when-moved baselines reset too.
-      _seedDownloads = _features.contains(ProfileFeature.downloads);
-      _seedRemote = _features.contains(ProfileFeature.remoteControl);
-    });
-  }
-
   Future<void> _pickAvatarImage() async {
-    if (_saving) return;
+    if (_owners.form.saving) return;
     String? pickerCopy;
     try {
       // Android document providers commonly reject custom MIME/extension
@@ -344,8 +240,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
       final bytes = await _readPickedBytes(file);
       final prepared = await ProfileAvatarIngest.prepare(bytes);
-      if (!mounted || _saving) return;
-      setState(() => _pendingAvatarBytes = prepared.bytes);
+      if (!mounted || _owners.form.saving) return;
+      setState(() => _owners.form.pendingAvatarBytes = prepared.bytes);
     } on ProfileAvatarRejected catch (rejected) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -436,16 +332,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
-    if (_saving || _name.text.trim().isEmpty) return;
-    if (_resources == null || _engines == null || _setupLoadError != null) {
+    if (_owners.form.saving || _owners.form.name.text.trim().isEmpty) return;
+    if (_owners.access.resources == null ||
+        _owners.access.engines == null ||
+        _owners.access.setupLoadError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_setupLoadError ?? 'Profile options are still loading'),
+          content: Text(
+            _owners.access.setupLoadError ??
+                'Profile options are still loading',
+          ),
         ),
       );
       return;
     }
-    if (_pin.text.isNotEmpty && !RegExp(r'^\d{4,8}$').hasMatch(_pin.text)) {
+    if (_owners.form.pin.text.isNotEmpty &&
+        !RegExp(r'^\d{4,8}$').hasMatch(_owners.form.pin.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PIN must contain 4–8 digits')),
       );
@@ -453,20 +355,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
     // The paired features follow their toggle only when the answer moved
     // from where this session started (the ProfileSetupFlow rule).
-    final effectiveFeatures = Set<ProfileFeature>.from(_features);
+    final effectiveFeatures = Set<ProfileFeature>.from(_owners.form.features);
     void follow(bool moved, bool on, ProfileFeature paired) {
       if (!moved) return;
       on ? effectiveFeatures.add(paired) : effectiveFeatures.remove(paired);
     }
 
-    final downloadsOn = _features.contains(ProfileFeature.downloads);
-    final remoteOn = _features.contains(ProfileFeature.remoteControl);
+    final downloadsOn = _owners.form.features.contains(
+      ProfileFeature.downloads,
+    );
+    final remoteOn = _owners.form.features.contains(
+      ProfileFeature.remoteControl,
+    );
     follow(
-      downloadsOn != _seedDownloads,
+      downloadsOn != _owners.form.seedDownloads,
       downloadsOn,
       ProfileFeature.recordings,
     );
-    follow(remoteOn != _seedRemote, remoteOn, ProfileFeature.remoteTransfer);
+    follow(
+      remoteOn != _owners.form.seedRemote,
+      remoteOn,
+      ProfileFeature.remoteTransfer,
+    );
     // Clamp through the role ceiling BEFORE encoding: decode strips
     // ceiling-denied bits, so a raw set carrying one (e.g. remoteTransfer
     // paired onto a Kid) would never round-trip — and _save's persisted
@@ -474,27 +384,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final ceilingLens = ProfilePolicy(enabled: effectiveFeatures);
     final clampedFeatures = <ProfileFeature>{
       for (final feature in effectiveFeatures)
-        if (ceilingLens.allows(_role, feature)) feature,
+        if (ceilingLens.allows(_owners.form.role, feature)) feature,
     };
     final snapshot = EditProfileSnapshot(
-      name: _name.text,
-      pin: _pin.text,
-      role: _role,
+      name: _owners.form.name.text,
+      pin: _owners.form.pin.text,
+      role: _owners.form.role,
       features: Set<ProfileFeature>.unmodifiable(clampedFeatures),
-      copyDefaults: _copyDefaults,
-      lockOnResume: _lockOnResume,
-      inactivityMinutes: _inactivityMinutes,
-      avatarKey: _avatarKey,
-      pendingAvatarBytes: _pendingAvatarBytes,
-      resources: List<ConnectionResource>.unmodifiable(_resources!),
-      selectedResources: Set<String>.unmodifiable(_selectedResources),
+      copyDefaults: _owners.form.copyDefaults,
+      lockOnResume: _owners.form.lockOnResume,
+      inactivityMinutes: _owners.form.inactivityMinutes,
+      avatarKey: _owners.form.avatarKey,
+      pendingAvatarBytes: _owners.form.pendingAvatarBytes,
+      resources: List<ConnectionResource>.unmodifiable(
+        _owners.access.resources!,
+      ),
+      selectedResources: Set<String>.unmodifiable(
+        _owners.access.selectedResources,
+      ),
       resourcePermissions: Map<String, Set<ResourcePermission>>.unmodifiable({
-        for (final entry in _resourcePermissions.entries)
+        for (final entry in _owners.access.resourcePermissions.entries)
           entry.key: Set<ResourcePermission>.unmodifiable(entry.value),
       }),
-      selectedEngines: Set<String>.unmodifiable(_selectedEngines),
+      selectedEngines: Set<String>.unmodifiable(_owners.access.selectedEngines),
     );
-    setState(() => _saving = true);
+    setState(() => _owners.form.saving = true);
     PreparedProfileAvatar? preparedAvatar;
     String? mintedRecoveryCode;
     try {
@@ -506,7 +420,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final savedAvatarKey =
           preparedAvatar?.avatar.format() ?? snapshot.avatarKey;
       var operationActor = _authorization;
-      await _validateManagingAdmin(operationActor);
+      await _sections.admin.validateManagingAdmin(operationActor);
       final policy = EditProfileScreen.policyFor(
         role: snapshot.role,
         selected: snapshot.features,
@@ -515,7 +429,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         // new role's policy, and the save must write what it displayed.
         controlsShown:
             EditProfileScreen.showFeaturePolicyControls ||
-            _policyTouched ||
+            _owners.form.policyTouched ||
             (widget.profile != null && widget.profile!.role != snapshot.role),
       );
       final existing = widget.profile;
@@ -562,7 +476,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               actingAuthorizationRevision: operationActor.authorizationRevision,
               actingSessionEpoch: operationActor.sessionEpoch,
             );
-            operationActor = await _refreshSameManagingAdmin(
+            operationActor = await _sections.admin.refreshSameManagingAdmin(
               operationActor.profileId,
             );
             operationActor = await _applyResourceGrants(
@@ -641,7 +555,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 persisted?.inactivityTimeoutMinutes == expectedTimeout;
           },
         );
-        operationActor = await _refreshSameManagingAdmin(
+        operationActor = await _sections.admin.refreshSameManagingAdmin(
           operationActor.profileId,
         );
         if (snapshot.pin.isNotEmpty) {
@@ -650,7 +564,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             targetProfileId: existing.id,
             pin: snapshot.pin,
           );
-          operationActor = await _refreshSameManagingAdmin(
+          operationActor = await _sections.admin.refreshSameManagingAdmin(
             operationActor.profileId,
           );
         }
@@ -667,13 +581,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
       _authorization = operationActor;
       if (!mounted) return;
-      _avatarKey = savedAvatarKey;
-      _features = Set<ProfileFeature>.from(policy.enabled);
-      _seedDownloads = _features.contains(ProfileFeature.downloads);
-      _seedRemote = _features.contains(ProfileFeature.remoteControl);
-      _policyTouched = false;
-      _pendingAvatarBytes = null;
-      _pin.clear();
+      _owners.form.avatarKey = savedAvatarKey;
+      _owners.form.features = Set<ProfileFeature>.from(policy.enabled);
+      _owners.form.seedDownloads = _owners.form.features.contains(
+        ProfileFeature.downloads,
+      );
+      _owners.form.seedRemote = _owners.form.features.contains(
+        ProfileFeature.remoteControl,
+      );
+      _owners.form.policyTouched = false;
+      _owners.form.pendingAvatarBytes = null;
+      _owners.form.pin.clear();
       // Saving the SIGNED-IN profile never crosses the gate, so the policy
       // mirrors (MainPage tab gating + ProfilePolicyGuard) must be told.
       if (ProfileRuntime.isProfileCommitted &&
@@ -689,7 +607,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       Navigator.of(context).pop(true);
     } on ProfileAvatarRejected catch (rejected) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() => _owners.form.saving = false);
       _restoreTvSaveFocus();
       // The one failure with a user-actionable cause: name it instead of the
       // generic message.
@@ -698,7 +616,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ).showSnackBar(SnackBar(content: Text(rejected.message)));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() => _owners.form.saving = false);
       _restoreTvSaveFocus();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not save this profile')),
@@ -711,8 +629,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Saving temporarily disables every form focus node. Re-enable them in
     // layout before restoring the remote's position after an error.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_saving && ModalRoute.of(context)?.isCurrent == true) {
-        _tvTabFocusNodes.last.requestFocus();
+      if (mounted &&
+          !_owners.form.saving &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        _owners.tv.tvTabFocusNodes.last.requestFocus();
       }
     });
   }
@@ -735,7 +655,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final selected = snapshot.selectedResources.contains(resource.id);
       final desired =
           snapshot.resourcePermissions[resource.id] ??
-          _defaultResourcePermissions(snapshot.role, snapshot.features);
+          _sections.selection.defaultResourcePermissions(
+            snapshot.role,
+            snapshot.features,
+          );
       final desiredMask = desired.fold<int>(
         0,
         (mask, permission) => mask | permission.bit,
@@ -758,7 +681,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           resourceId: resource.id,
           permissions: desired,
         );
-        operationActor = await _refreshSameManagingAdmin(
+        operationActor = await _sections.admin.refreshSameManagingAdmin(
           operationActor.profileId,
         );
       } else if (!selected &&
@@ -769,7 +692,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           targetProfileId: targetProfileId,
           resourceId: resource.id,
         );
-        operationActor = await _refreshSameManagingAdmin(
+        operationActor = await _sections.admin.refreshSameManagingAdmin(
           operationActor.profileId,
         );
       }
@@ -786,72 +709,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     targetProfileId: targetProfileId,
     selectedEngineIds: selectedEngineIds,
   );
-
-  Set<ResourcePermission> _defaultResourcePermissions(
-    UserProfileRole role, [
-    Set<ProfileFeature>? features,
-  ]) => <ResourcePermission>{
-    ResourcePermission.use,
-    if ((features ?? _features).contains(ProfileFeature.downloads) ||
-        (features ?? _features).contains(ProfileFeature.recordings))
-      ResourcePermission.download,
-    if (role != UserProfileRole.child &&
-        (features ?? _features).contains(ProfileFeature.remoteTransfer))
-      ResourcePermission.writeRemote,
-  };
-
-  Future<void> _validateManagingAdmin(
-    ProfileAuthorizationContext context,
-  ) async {
-    final actor = await context.validate(widget.registry);
-    if (actor.role != UserProfileRole.admin ||
-        !actor.allows(ProfileFeature.manageProfiles)) {
-      throw StateError('Profile management is not authorized');
-    }
-  }
-
-  Future<ProfileAuthorizationContext> _refreshSameManagingAdmin(
-    String initiatingProfileId,
-  ) async {
-    final refreshed = await ProfileAuthorizationContext.capture(
-      widget.registry,
-    );
-    if (refreshed.profileId != initiatingProfileId) {
-      throw StateError('Managing profile session changed');
-    }
-    await _validateManagingAdmin(refreshed);
-    return refreshed;
-  }
-
-  /// The single toggle-on path for a connection row, shared by the row itself
-  /// and the group's "All" action so the singleton-slot rule cannot diverge:
-  /// selecting one credential of a singleton kind deselects its rivals.
-  void _selectResource(ConnectionResource resource) {
-    final singletonSlot = resource.type.singletonCredentialBindingSlot;
-    if (singletonSlot != null) {
-      for (final other in _resources!) {
-        if (other.id != resource.id &&
-            other.type.singletonCredentialBindingSlot == singletonSlot) {
-          _selectedResources.remove(other.id);
-          _resourcePermissions.remove(other.id);
-        }
-      }
-    }
-    _selectedResources.add(resource.id);
-    _resourcePermissions.putIfAbsent(
-      resource.id,
-      () => _defaultResourcePermissions(_role),
-    );
-  }
-
-  void _deselectResource(ConnectionResource resource) {
-    _selectedResources.remove(resource.id);
-  }
-
-  /// Rows the target profile does not own — the only ones whose grant is
-  /// editable here. Owned rows are always granted.
-  Iterable<ConnectionResource> _editableIn(List<ConnectionResource> group) =>
-      group.where((resource) => resource.ownerProfileId != widget.profile?.id);
 
   Future<void> _showDiagnostics() async {
     final report = await ProfileDiagnosticsService.collectJson(widget.registry);
@@ -901,10 +758,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final editableFeatures = ProfileFeature.values.where(
       (feature) =>
           feature != ProfileFeature.manageProfiles ||
-          _role == UserProfileRole.admin,
+          _owners.form.role == UserProfileRole.admin,
     );
     return PopScope(
-      canPop: !_saving,
+      canPop: !_owners.form.saving,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -912,25 +769,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _owners.form.saving ? null : _save,
               child: const Text('Save'),
             ),
           ],
         ),
         body: Focus(
-          descendantsAreFocusable: !_saving,
-          descendantsAreTraversable: !_saving,
+          descendantsAreFocusable: !_owners.form.saving,
+          descendantsAreTraversable: !_owners.form.saving,
           child: AbsorbPointer(
-            absorbing: _saving,
+            absorbing: _owners.form.saving,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (_saving) const LinearProgressIndicator(),
+                if (_owners.form.saving) const LinearProgressIndicator(),
                 _sectionLabel('Avatar'),
                 _buildAvatarSection(),
                 _sectionLabel('Identity'),
                 TvTextField(
-                  controller: _name,
+                  controller: _owners.form.name,
                   autofocus: true,
                   inputFormatters: <TextInputFormatter>[
                     LengthLimitingTextInputFormatter(40),
@@ -939,12 +796,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 if (widget.profile == null)
                   SwitchListTile(
-                    value: _copyDefaults,
+                    value: _owners.form.copyDefaults,
                     title: const Text('Copy appearance and playback defaults'),
                     subtitle: const Text(
                       'Does not copy accounts, history, downloads, paths, or IDs.',
                     ),
-                    onChanged: (value) => setState(() => _copyDefaults = value),
+                    onChanged: (value) =>
+                        setState(() => _owners.form.copyDefaults = value),
                   ),
                 _sectionLabel('Role'),
                 _buildRoleCards(),
@@ -953,17 +811,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   for (final feature in editableFeatures)
                     CheckboxListTile(
                       value:
-                          _features.contains(feature) &&
+                          _owners.form.features.contains(feature) &&
                           ProfilePolicy(
-                            enabled: _features,
-                          ).allows(_role, feature),
+                            enabled: _owners.form.features,
+                          ).allows(_owners.form.role, feature),
                       title: Text(_featureLabel(feature)),
                       onChanged: (enabled) {
                         setState(() {
                           if (enabled == true) {
-                            _features.add(feature);
+                            _owners.form.features.add(feature);
                           } else {
-                            _features.remove(feature);
+                            _owners.form.features.remove(feature);
                           }
                         });
                       },
@@ -971,7 +829,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ],
                 _sectionLabel('Lock'),
                 TvTextField(
-                  controller: _pin,
+                  controller: _owners.form.pin,
                   keyboardType: TextInputType.number,
                   obscureText: true,
                   inputFormatters: <TextInputFormatter>[
@@ -989,18 +847,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: _saving ? null : _removePinAsAdmin,
+                      onPressed: _owners.form.saving ? null : _removePinAsAdmin,
                       icon: const Icon(Icons.lock_open_rounded),
                       label: const Text('Admin reset: remove PIN'),
                     ),
                   ),
                 SwitchListTile(
-                  value: _lockOnResume,
+                  value: _owners.form.lockOnResume,
                   title: const Text('Lock when the app resumes'),
-                  onChanged: (value) => setState(() => _lockOnResume = value),
+                  onChanged: (value) =>
+                      setState(() => _owners.form.lockOnResume = value),
                 ),
                 DropdownButtonFormField<int>(
-                  initialValue: _inactivityMinutes,
+                  initialValue: _owners.form.inactivityMinutes,
                   decoration: const InputDecoration(labelText: 'Auto-lock'),
                   items: const <DropdownMenuItem<int>>[
                     DropdownMenuItem(value: 0, child: Text('Never')),
@@ -1015,20 +874,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     DropdownMenuItem(value: 60, child: Text('After 1 hour')),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _inactivityMinutes = value ?? 0),
+                  onChanged: (value) => setState(
+                    () => _owners.form.inactivityMinutes = value ?? 0,
+                  ),
                 ),
                 _sectionLabel('Access'),
-                if (_setupLoadError != null)
+                if (_owners.access.setupLoadError != null)
                   ListTile(
                     leading: const Icon(Icons.error_outline_rounded),
-                    title: Text(_setupLoadError!),
+                    title: Text(_owners.access.setupLoadError!),
                     trailing: TextButton(
-                      onPressed: _loadSetupOptions,
+                      onPressed: _sections.setup.loadSetupOptions,
                       child: const Text('Retry'),
                     ),
                   )
-                else if (_engines == null)
+                else if (_owners.access.engines == null)
                   const LinearProgressIndicator()
                 else ...[
                   _buildEngineGroup(),
@@ -1057,7 +917,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _buildTvEditor(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return PopScope(
-      canPop: !_saving,
+      canPop: !_owners.form.saving,
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: 64,
@@ -1069,16 +929,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     if (direction == null) return KeyEventResult.ignored;
                     if (direction == TraversalDirection.down ||
                         direction == TraversalDirection.right) {
-                      _tvTabFocusNodes[_tvSection.index].requestFocus();
+                      _owners.tv.tvTabFocusNodes[_owners.tv.tvSection.index]
+                          .requestFocus();
                     }
                     return KeyEventResult.handled;
                   },
                   child: IconButton(
-                    focusNode: _tvBackFocus,
+                    focusNode: _owners.tv.tvBackFocus,
                     tooltip: MaterialLocalizations.of(
                       context,
                     ).backButtonTooltip,
-                    onPressed: _saving
+                    onPressed: _owners.form.saving
                         ? null
                         : () => Navigator.maybePop(context),
                     icon: const BackButtonIcon(),
@@ -1095,15 +956,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         body: FocusTraversalGroup(
           policy: OrderedTraversalPolicy(),
           child: Focus(
-            descendantsAreFocusable: !_saving,
-            descendantsAreTraversable: !_saving,
+            descendantsAreFocusable: !_owners.form.saving,
+            descendantsAreTraversable: !_owners.form.saving,
             child: AbsorbPointer(
-              absorbing: _saving,
+              absorbing: _owners.form.saving,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(28, 8, 32, 24),
                 child: Column(
                   children: [
-                    if (_saving) const LinearProgressIndicator(),
+                    if (_owners.form.saving) const LinearProgressIndicator(),
                     Expanded(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1112,7 +973,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           const SizedBox(width: 18),
                           Expanded(
                             child: Focus(
-                              focusNode: _tvContentFocus,
+                              focusNode: _owners.tv.tvContentFocus,
                               onKeyEvent: (_, event) {
                                 // Let text editing and the TV keyboard consume
                                 // caret keys; field edge callbacks own exits.
@@ -1134,8 +995,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               // repeats must not activate a stock form control.
                               child: TvHeldKeyGuard(
                                 child: KeyedSubtree(
-                                  key: ValueKey(_tvSection),
-                                  child: switch (_tvSection) {
+                                  key: ValueKey(_owners.tv.tvSection),
+                                  child: switch (_owners.tv.tvSection) {
                                     EditProfileTvSection.profile =>
                                       _buildTvProfileSection(),
                                     EditProfileTvSection.pages =>
@@ -1185,7 +1046,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         key: key,
         selected: selected,
         autofocus: index == 0,
-        focusNode: _tvTabFocusNodes[index],
+        focusNode: _owners.tv.tvTabFocusNodes[index],
         onKeyEvent: (_, event) => _handleTvRailKey(index, event),
         onPressed: onPressed,
         child: child,
@@ -1226,11 +1087,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     railItem(
                       index: index,
                       key: ValueKey('tv-profile-tab-${tabs[index].$1.name}'),
-                      selected: _tvSection == tabs[index].$1,
+                      selected: _owners.tv.tvSection == tabs[index].$1,
                       // Up/down previews sections; OK or a click enters the pane.
                       onPressed: () {
                         _selectTvSection(tabs[index].$1);
-                        _tvTabFocusNodes[index].requestFocus();
+                        _owners.tv.tvTabFocusNodes[index].requestFocus();
                         _focusTvContent();
                       },
                       child: railLabel(tabs[index].$2, tabs[index].$3),
@@ -1241,10 +1102,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   railItem(
                     index: saveIndex,
                     key: const ValueKey('tv-profile-save'),
-                    onPressed: _saving ? null : _save,
+                    onPressed: _owners.form.saving ? null : _save,
                     child: railLabel(
                       Icons.check_rounded,
-                      _saving ? 'SAVING…' : 'SAVE',
+                      _owners.form.saving ? 'SAVING…' : 'SAVE',
                     ),
                   ),
                 ],
@@ -1272,7 +1133,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (direction == null) return KeyEventResult.ignored;
     switch (direction) {
       case TraversalDirection.left:
-        _tvFocusRequest++;
+        _owners.tv.tvFocusRequest++;
         break;
       case TraversalDirection.right:
         if (index < EditProfileTvSection.values.length) {
@@ -1281,35 +1142,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _focusTvContent();
       case TraversalDirection.up:
       case TraversalDirection.down:
-        _tvFocusRequest++;
+        _owners.tv.tvFocusRequest++;
         final delta = direction == TraversalDirection.up ? -1 : 1;
-        final target = (index + delta).clamp(0, _tvTabFocusNodes.length - 1);
+        final target = (index + delta).clamp(
+          0,
+          _owners.tv.tvTabFocusNodes.length - 1,
+        );
         if (index == 0 && delta < 0 && Navigator.of(context).canPop()) {
-          _tvBackFocus.requestFocus();
+          _owners.tv.tvBackFocus.requestFocus();
         } else {
           // Select synchronously: a quick RIGHT must never enter the old pane.
           if (target < EditProfileTvSection.values.length) {
             _selectTvSection(EditProfileTvSection.values[target]);
           }
-          _tvTabFocusNodes[target].requestFocus();
+          _owners.tv.tvTabFocusNodes[target].requestFocus();
         }
     }
     return KeyEventResult.handled;
   }
 
   void _selectTvSection(EditProfileTvSection section) {
-    if (_tvSection == section) return;
-    _tvLastContentFocus = null;
-    _tvFocusRequest++;
-    setState(() => _tvSection = section);
+    if (_owners.tv.tvSection == section) return;
+    _owners.tv.tvLastContentFocus = null;
+    _owners.tv.tvFocusRequest++;
+    setState(() => _owners.tv.tvSection = section);
   }
 
-  List<FocusNode> get _tvContentStops => _tvContentFocus.traversalDescendants
+  List<FocusNode> get _tvContentStops => _owners
+      .tv
+      .tvContentFocus
+      .traversalDescendants
       .where((node) => node is! FocusScopeNode && !node.rect.size.isEmpty)
       .toList();
 
   void _requestTvContentFocus(FocusNode node) {
-    _tvLastContentFocus = node;
+    _owners.tv.tvLastContentFocus = node;
     FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
       node,
       alignment: .35,
@@ -1319,23 +1186,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _focusTvContent() {
-    if (_saving) return;
-    final section = _tvSection;
-    final request = ++_tvFocusRequest;
+    if (_owners.form.saving) return;
+    final section = _owners.tv.tvSection;
+    final request = ++_owners.tv.tvFocusRequest;
     // Section changes rebuild the pane. Resolve its live controls after layout,
     // including conditional controls and async Access rows.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
-          _saving ||
-          _tvSection != section ||
-          request != _tvFocusRequest ||
+          _owners.form.saving ||
+          _owners.tv.tvSection != section ||
+          request != _owners.tv.tvFocusRequest ||
           ModalRoute.of(context)?.isCurrent == false) {
         return;
       }
       final stops = _tvContentStops;
       if (stops.isEmpty) return; // Empty/loading panes leave focus on the rail.
-      if (stops.contains(_tvLastContentFocus)) {
-        _requestTvContentFocus(_tvLastContentFocus!);
+      if (stops.contains(_owners.tv.tvLastContentFocus)) {
+        _requestTvContentFocus(_owners.tv.tvLastContentFocus!);
         return;
       }
       stops.sort((a, b) {
@@ -1348,15 +1215,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _returnToTvRail() {
-    _tvFocusRequest++;
+    _owners.tv.tvFocusRequest++;
     final focused = FocusManager.instance.primaryFocus;
-    if (_tvContentStops.contains(focused)) _tvLastContentFocus = focused;
-    _tvTabFocusNodes[_tvSection.index].requestFocus();
+    if (_tvContentStops.contains(focused))
+      _owners.tv.tvLastContentFocus = focused;
+    _owners.tv.tvTabFocusNodes[_owners.tv.tvSection.index].requestFocus();
   }
 
   void _moveTvContent(TraversalDirection direction) {
     final current = FocusManager.instance.primaryFocus;
-    if (current == null || !_tvContentFocus.hasFocus) return;
+    if (current == null || !_owners.tv.tvContentFocus.hasFocus) return;
     final rect = current.rect;
     final horizontal =
         direction == TraversalDirection.left ||
@@ -1395,13 +1263,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildTvPagesSection() {
-    bool on(ProfileFeature feature) =>
-        ProfilePolicy(enabled: _features).allows(_role, feature);
+    bool on(ProfileFeature feature) => ProfilePolicy(
+      enabled: _owners.form.features,
+    ).allows(_owners.form.role, feature);
     void toggle(ProfileFeature feature) {
-      if (_saving) return;
+      if (_owners.form.saving) return;
       setState(() {
-        _policyTouched = true;
-        if (!_features.remove(feature)) _features.add(feature);
+        _owners.form.policyTouched = true;
+        if (!_owners.form.features.remove(feature))
+          _owners.form.features.add(feature);
       });
     }
 
@@ -1562,7 +1432,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       if (ProfileAvatarPolicy.userImagesSupported)
                         editProfileEnsureVisibleOnFocus(
                           child: OutlinedButton.icon(
-                            onPressed: _saving ? null : _pickAvatarImage,
+                            onPressed: _owners.form.saving
+                                ? null
+                                : _pickAvatarImage,
                             icon: const Icon(Icons.image_outlined),
                             label: const Text(
                               'Choose image or GIF (this device only)',
@@ -1571,14 +1443,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                     ],
                   ),
-                  if (_pendingAvatarBytes != null &&
+                  if (_owners.form.pendingAvatarBytes != null &&
                       ProfileAvatarPolicy.userImagesSupported)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        onPressed: _saving
+                        onPressed: _owners.form.saving
                             ? null
-                            : () => setState(() => _pendingAvatarBytes = null),
+                            : () => setState(
+                                () => _owners.form.pendingAvatarBytes = null,
+                              ),
                         icon: const Icon(Icons.undo_rounded),
                         label: const Text('Discard picked image'),
                       ),
@@ -1602,7 +1476,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   const SizedBox(height: 8),
                   TvTextField(
                     key: const ValueKey('tv-profile-name'),
-                    controller: _name,
+                    controller: _owners.form.name,
                     onLeftArrow: _returnToTvRail,
                     onRightArrow: () =>
                         _moveTvContent(TraversalDirection.right),
@@ -1622,12 +1496,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 14),
                     editProfileEnsureVisibleOnFocus(
                       child: SwitchListTile(
-                        value: _copyDefaults,
+                        value: _owners.form.copyDefaults,
                         title: const Text(
                           'Copy appearance and playback defaults',
                         ),
                         onChanged: (value) =>
-                            setState(() => _copyDefaults = value),
+                            setState(() => _owners.form.copyDefaults = value),
                       ),
                     ),
                   ],
@@ -1655,20 +1529,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: SizedBox(
                   width: avatarSize,
                   height: avatarSize,
-                  child: _pendingAvatarBytes != null
-                      ? Image.memory(_pendingAvatarBytes!, fit: BoxFit.cover)
+                  child: _owners.form.pendingAvatarBytes != null
+                      ? Image.memory(
+                          _owners.form.pendingAvatarBytes!,
+                          fit: BoxFit.cover,
+                        )
                       : ProfileAvatarView(
                           profileId: widget.profile?.id ?? 'staging-preview',
-                          avatarKey: _avatarKey,
-                          role: _role,
-                          name: _name.text.isEmpty ? '?' : _name.text,
+                          avatarKey: _owners.form.avatarKey,
+                          role: _owners.form.role,
+                          name: _owners.form.name.text.isEmpty
+                              ? '?'
+                              : _owners.form.name.text,
                           focused: true,
                         ),
                 ),
               ),
               SizedBox(height: compact ? 12 : 24),
               Text(
-                _name.text.trim().isEmpty ? 'New profile' : _name.text.trim(),
+                _owners.form.name.text.trim().isEmpty
+                    ? 'New profile'
+                    : _owners.form.name.text.trim(),
                 key: const Key('tv-profile-name-preview'),
                 textAlign: TextAlign.center,
                 maxLines: compact ? 1 : 2,
@@ -1690,9 +1571,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     vertical: compact ? 6 : 8,
                   ),
                   child: Text(
-                    _role == UserProfileRole.child
+                    _owners.form.role == UserProfileRole.child
                         ? 'Kid'
-                        : _role.name[0].toUpperCase() + _role.name.substring(1),
+                        : _owners.form.role.name[0].toUpperCase() +
+                              _owners.form.role.name.substring(1),
                     style: TextStyle(
                       color: colors.primary,
                       fontWeight: FontWeight.w700,
@@ -1708,7 +1590,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   );
 
   Widget _tvAvatarTile({required String keyName, required String label}) {
-    final selected = _pendingAvatarBytes == null && _avatarKey == keyName;
+    final selected =
+        _owners.form.pendingAvatarBytes == null &&
+        _owners.form.avatarKey == keyName;
     return SizedBox(
       width: 78,
       height: 78,
@@ -1718,15 +1602,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           key: ValueKey('tv-profile-avatar-$keyName'),
           selected: selected,
           onPressed: () => setState(() {
-            _avatarKey = keyName;
-            _pendingAvatarBytes = null;
+            _owners.form.avatarKey = keyName;
+            _owners.form.pendingAvatarBytes = null;
           }),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: ProfileAvatarView(
               profileId: widget.profile?.id ?? 'staging-preview',
               avatarKey: keyName,
-              role: _role,
+              role: _owners.form.role,
               name: label,
             ),
           ),
@@ -1747,8 +1631,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     };
     Widget card(UserProfileRole role) => editProfileTvActionSurface(
       key: ValueKey('tv-profile-role-${role.name}'),
-      selected: _role == role,
-      onPressed: () => _setRole(role),
+      selected: _owners.form.role == role,
+      onPressed: () => _sections.selection.setRole(role),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Row(
@@ -1832,7 +1716,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               const SizedBox(height: 24),
               TvTextField(
                 key: const ValueKey('tv-profile-pin'),
-                controller: _pin,
+                controller: _owners.form.pin,
                 onLeftArrow: _returnToTvRail,
                 onRightArrow: () => _moveTvContent(TraversalDirection.right),
                 onUpArrow: () => _moveTvContent(TraversalDirection.up),
@@ -1854,7 +1738,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: _saving ? null : _removePinAsAdmin,
+                    onPressed: _owners.form.saving ? null : _removePinAsAdmin,
                     icon: const Icon(Icons.lock_open_rounded),
                     label: const Text('Admin reset: remove PIN'),
                   ),
@@ -1866,10 +1750,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     horizontal: 18,
                     vertical: 8,
                   ),
-                  value: _lockOnResume,
+                  value: _owners.form.lockOnResume,
                   title: const Text('Lock when the app resumes'),
                   subtitle: const Text('Require the PIN after leaving Debrify'),
-                  onChanged: (value) => setState(() => _lockOnResume = value),
+                  onChanged: (value) =>
+                      setState(() => _owners.form.lockOnResume = value),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -1880,9 +1765,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
               EditProfileTvAutoLockField(
-                value: _inactivityMinutes,
+                value: _owners.form.inactivityMinutes,
                 onChanged: (value) =>
-                    setState(() => _inactivityMinutes = value),
+                    setState(() => _owners.form.inactivityMinutes = value),
               ),
             ],
           ),
@@ -1912,18 +1797,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 14),
-              if (_setupLoadError != null)
+              if (_owners.access.setupLoadError != null)
                 editProfileEnsureVisibleOnFocus(
                   child: ListTile(
                     leading: const Icon(Icons.error_outline_rounded),
-                    title: Text(_setupLoadError!),
+                    title: Text(_owners.access.setupLoadError!),
                     trailing: TextButton(
-                      onPressed: _loadSetupOptions,
+                      onPressed: _sections.setup.loadSetupOptions,
                       child: const Text('Retry'),
                     ),
                   ),
                 )
-              else if (_engines == null)
+              else if (_owners.access.engines == null)
                 const LinearProgressIndicator()
               else ...[
                 _buildEngineGroup(),
@@ -2019,12 +1904,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _removePinAsAdminLocally() async {
     try {
       final operationActor = _authorization;
-      await _validateManagingAdmin(operationActor);
+      await _sections.admin.validateManagingAdmin(operationActor);
       await widget.pins.removePinAsAdmin(
         actor: operationActor,
         targetProfileId: widget.profile!.id,
       );
-      _authorization = await _refreshSameManagingAdmin(
+      _authorization = await _sections.admin.refreshSameManagingAdmin(
         operationActor.profileId,
       );
       if (!mounted) return;
@@ -2040,7 +1925,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildAvatarSection() {
-    final pending = _pendingAvatarBytes;
+    final pending = _owners.form.pendingAvatarBytes;
     final userImages = ProfileAvatarPolicy.userImagesSupported;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2068,9 +1953,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         // A brand-new profile has no id yet; any safe id maps
                         // to a nonexistent directory and the view falls back.
                         profileId: widget.profile?.id ?? 'staging-preview',
-                        avatarKey: _avatarKey,
-                        role: _role,
-                        name: _name.text.isEmpty ? '?' : _name.text,
+                        avatarKey: _owners.form.avatarKey,
+                        role: _owners.form.role,
+                        name: _owners.form.name.text.isEmpty
+                            ? '?'
+                            : _owners.form.name.text,
                         focused: true,
                       ),
               ),
@@ -2083,7 +1970,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 children: [
                   if (userImages)
                     OutlinedButton.icon(
-                      onPressed: _saving ? null : _pickAvatarImage,
+                      onPressed: _owners.form.saving ? null : _pickAvatarImage,
                       icon: const Icon(Icons.image_outlined, size: 18),
                       label: const Text(
                         'Choose image or GIF (this device only)',
@@ -2091,9 +1978,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   if (pending != null)
                     TextButton.icon(
-                      onPressed: _saving
+                      onPressed: _owners.form.saving
                           ? null
-                          : () => setState(() => _pendingAvatarBytes = null),
+                          : () => setState(
+                              () => _owners.form.pendingAvatarBytes = null,
+                            ),
                       icon: const Icon(Icons.undo_rounded, size: 18),
                       label: const Text('Discard picked image'),
                     ),
@@ -2114,7 +2003,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: ProfileAvatarView(
                   profileId: widget.profile?.id ?? 'staging-preview',
                   avatarKey: 'art:${art.id}',
-                  role: _role,
+                  role: _owners.form.role,
                   name: art.label,
                 ),
               ),
@@ -2125,7 +2014,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: ProfileAvatarView(
                   profileId: widget.profile?.id ?? 'staging-preview',
                   avatarKey: iconKey,
-                  role: _role,
+                  role: _owners.form.role,
                   name: iconKey,
                 ),
               ),
@@ -2140,16 +2029,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     required String tooltip,
     required Widget child,
   }) {
-    final selected = _pendingAvatarBytes == null && _avatarKey == key;
+    final selected =
+        _owners.form.pendingAvatarBytes == null &&
+        _owners.form.avatarKey == key;
     return Tooltip(
       message: tooltip,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: _saving
+        onTap: _owners.form.saving
             ? null
             : () => setState(() {
-                _avatarKey = key;
-                _pendingAvatarBytes = null;
+                _owners.form.avatarKey = key;
+                _owners.form.pendingAvatarBytes = null;
               }),
         child: Container(
           width: 52,
@@ -2204,7 +2095,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     String description,
     bool horizontal,
   ) {
-    final selected = _role == role;
+    final selected = _owners.form.role == role;
     final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
@@ -2213,7 +2104,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: _saving ? null : () => _setRole(role),
+        onTap: _owners.form.saving
+            ? null
+            : () => _sections.selection.setRole(role),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -2247,25 +2140,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildEngineGroup() {
-    final engines = _engines!;
+    final engines = _owners.access.engines!;
     final ownEditor = widget.profile?.id == _authorization.profileId;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _groupHeader(
           'Torrent engines',
-          selected: _selectedEngines.length,
+          selected: _owners.access.selectedEngines.length,
           total: engines.length,
           onAll: engines.isEmpty || ownEditor
               ? null
               : () => setState(
-                  () => _selectedEngines.addAll(
+                  () => _owners.access.selectedEngines.addAll(
                     engines.map((engine) => engine.id),
                   ),
                 ),
           onNone: engines.isEmpty || ownEditor
               ? null
-              : () => setState(_selectedEngines.clear),
+              : () => setState(_owners.access.selectedEngines.clear),
         ),
         Text(
           ownEditor
@@ -2287,7 +2180,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               key: ValueKey('tv-profile-engine-${engine.id}'),
               interactive: !ownEditor,
               child: CheckboxListTile(
-                value: _selectedEngines.contains(engine.id),
+                value: _owners.access.selectedEngines.contains(engine.id),
                 title: Text(engine.displayName),
                 subtitle: !engine.availableFromManager
                     ? Text(
@@ -2299,9 +2192,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ? null
                     : (selected) => setState(() {
                         if (selected == true) {
-                          _selectedEngines.add(engine.id);
+                          _owners.access.selectedEngines.add(engine.id);
                         } else {
-                          _selectedEngines.remove(engine.id);
+                          _owners.access.selectedEngines.remove(engine.id);
                         }
                       }),
               ),
@@ -2357,7 +2250,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   ];
 
   List<Widget> _buildConnectionGroups() {
-    final resources = _resources;
+    final resources = _owners.access.resources;
     if (resources == null || resources.isEmpty) return const <Widget>[];
     final grouped = <String, List<ConnectionResource>>{};
     for (final resource in resources) {
@@ -2389,9 +2282,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   List<Widget> _connectionGroup(String label, List<ConnectionResource> group) {
     final selected = group
-        .where((resource) => _selectedResources.contains(resource.id))
+        .where(
+          (resource) => _owners.access.selectedResources.contains(resource.id),
+        )
         .length;
-    final editable = _editableIn(group).toList();
+    final editable = _sections.selection.editableIn(group).toList();
     return [
       _groupHeader(
         label,
@@ -2399,10 +2294,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         total: group.length,
         onAll: editable.isEmpty
             ? null
-            : () => setState(() => editable.forEach(_selectResource)),
+            : () => setState(
+                () => editable.forEach(_sections.selection.selectResource),
+              ),
         onNone: editable.isEmpty
             ? null
-            : () => setState(() => editable.forEach(_deselectResource)),
+            : () => setState(
+                () => editable.forEach(_sections.selection.deselectResource),
+              ),
       ),
       for (final resource in group) ..._connectionRow(resource),
     ];
@@ -2444,7 +2343,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         key: ValueKey('tv-profile-connection-${resource.id}'),
         interactive: interactive,
         child: CheckboxListTile(
-          value: _selectedResources.contains(resource.id),
+          value: _owners.access.selectedResources.contains(resource.id),
           title: Text(resource.label),
           subtitle: Text(
             resource.needsReconnect ? 'Reconnect required' : resource.type.name,
@@ -2452,8 +2351,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           secondary:
               widget.profile != null &&
                   resource.ownerProfileId != widget.profile!.id &&
-                  _role != UserProfileRole.child &&
-                  _features.contains(ProfileFeature.manageConnections)
+                  _owners.form.role != UserProfileRole.child &&
+                  _owners.form.features.contains(
+                    ProfileFeature.manageConnections,
+                  )
               ? IconButton(
                   tooltip: 'Transfer ownership to this profile',
                   onPressed: () => _transferOwnership(resource),
@@ -2463,9 +2364,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           onChanged: interactive
               ? (selected) => setState(() {
                   if (selected == true) {
-                    _selectResource(resource);
+                    _sections.selection.selectResource(resource);
                   } else {
-                    _deselectResource(resource);
+                    _sections.selection.deselectResource(resource);
                   }
                 })
               : null,

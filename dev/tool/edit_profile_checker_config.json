@@ -438,11 +438,24 @@
   "sidecars": {
     "scaffolding": "dev/tool/edit_profile_checkpoint_scaffolding.json"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart",
+      "owner": "EditProfileSetupOptions"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart",
+      "owner": "EditProfileAdminGuard"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart",
+      "owner": "EditProfileSelection"
+    }
+  ],
   "test_accessors": [],
   "required_nodes": [],
   "scaffolds": [],
-  "completed_step": 1,
+  "completed_step": 2,
   "original_static_receivers": {},
   "additional_owners": [],
   "occurrence_layout_bodies": [
