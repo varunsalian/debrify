@@ -124,6 +124,8 @@ void main() {
       await t.pump();
       await f.until(t, () => f.member('loadingFiles') == false);
       expect(f.scroll.hasClients, isFalse);
+      // The explicit navigate-up jump is dormant here; root offset 0 below
+      // comes from list reattachment. Its original statement is source-guarded.
       await f.search(t, 's01', file: true);
       await f.tap(t, find.byTooltip('Back'));
       await t.pump();

@@ -367,3 +367,4 @@ test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_d
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart
+test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart

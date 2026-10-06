@@ -57,6 +57,7 @@ def self_test(package):
     from torbox_callback_identity import argument_ranges, check_callback_identities
     from occurrence_field_bindings import failures
     config = json.loads((ROOT / 'dev/tool/alldebrid_files_checker_config.json').read_text())
+    assert config['occurrence_field_bindings']['mandatory_qualification'] is True, 'Explicit qualification pin required independently of the integrator default'
     rows = list(csv.DictReader((ROOT / 'dev/tool/alldebrid_files_manifest.tsv').open(), delimiter='\t'))
     source = config['source']
     original = subprocess.run(['git','show',config['baseline']+':'+source],cwd=ROOT,capture_output=True,text=True,check=True).stdout

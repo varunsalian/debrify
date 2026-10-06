@@ -461,7 +461,11 @@ must also pass from a fresh normal `git clone` (`.git` a directory) after
 8. `_refresh`'s open-magnet branch is unreachable from the UI: the files view
    has no toolbar or pull-to-refresh.
 
-## Decisions taken before design review
+9. `_navigateUp`'s explicit guarded `jumpTo(0)` is dormant while the files view is rendered: its list has no shared scroll controller, so `hasClients` is false. The root's observed offset 0 after Back comes from reattachment, not an executed jump. The original statement remains protected by the verbatim source guard; no accessor or UI control is added to activate it.
+
+## Decisions
+
+Items 1–5 were taken before design review; item 6 records Step 0b integration.
 
 1. **Feature name** `alldebrid_files`, bridge `presentation/legacy_alldebrid/`.
 2. **No format commit:** the original is format-clean (to verify in step 0).
@@ -471,6 +475,8 @@ must also pass from a fresh normal `git clone` (`.git` a directory) after
    proven by the token-exact argument ledger plus behaviour up to the push.
 5. **No size exceptions** are planned; any need found in step 0 is recorded
    with an exit milestone before the move.
+
+6. **Step 0b integrator pin:** `occurrence_field_bindings.mandatory_qualification` is explicitly `true` in the AllDebrid config (already pinned at Step 0, retained and now asserted by the real-config self-test). The integrator's unconditional default is not relied on. `state_classes` / `field_classes`, `registered_occurrence_substitutions` and `require_live_state_callbacks` are not present on this branch and are not reimplemented here; any later need for those opt-ins must stop for integration.
 
 ## End-of-series device checklist
 
@@ -676,3 +682,34 @@ Final full-suite, whole-analyzer, shared-tool and fresh-clone evidence follows i
 - Final **fresh normal clone** of this branch at `225cdc521` (`/tmp/debrify-ad-step0-reader-fixed-fresh`, `.git` directory), after `flutter pub get`: extended checker and every new real-config fixture PASS using an isolated `--parser-package` copy with copied `*.dill` deleted; **107/107 tests PASS**, stable tree; mutation driver proves a named assertion kill of original code; Linux script **syntax only** PASS; clone clean. `fresh-reader-result.json`, `fresh-reader-checker.txt`, `fresh-reader-characterization.*` and `fresh-reader-mutations/` retain the records. The implementation inputs match the tested clone; this last commit changes documentation only.
 - Load-sensitive reruns and failed/incomplete attempts remain preserved with NOTE, including the failed isolated UDP rerun (`base3-udp-isolated.*`); both final full suites pass their comparisons, including the now-observed-passing Xtream 50k identity. The final base3 required no isolated rescue or accepted regression.
 - Six macOS originals are committed and matched across two independent captures in reversed order. **Linux Step L remains Claude-owned:** `capture_alldebrid_files_linux_goldens.sh` was not run. Its verified original PNGs and strict default must be committed before extraction. Per Step 0 rows 3/4, the three native player handoffs and successful/mixed enqueue messages remain pending: launcher fakes are prohibited and no isolated successful native enqueue fixture was established. Exact source guards cover those arguments/branches; behavioral coverage reaches unlock/failure and the real selection-dialog callback. Physical focus/device verification and remote CI remain pending under the no-device/no-push scope. No other Step 0 deliverable is outstanding.
+
+### Step 0b — independent review closure (original code; no extraction)
+
+- Claude's independent sample at `50efffabb`: 40 one-line original mutations, behavioral suites plus provider picker and no source-contract suite; 29 caught / 11 survived. Six survivors identify behavioral gaps closed below. Five are accepted source-only boundaries: `fallback-idx` (fallback `startIndex = i`), `relpath` (`firstSlash > 0`), `multi-size` (positive-size ternary), `playfile-mode` (`PlaylistViewMode.sorted`) follow the no-launcher-seam / token-exact playback ledger decision; `navup-jump` is dormant (`hasClients == false` in the rendered files view). Its source guard remains retained. Root reattachment reaching offset 0 is not proof that the jump executed.
+- New `alldebrid_review_closure_test.dart` has six real-entry behavior tests: live deep-link reset reads the retained controller and reopens the field; TV content focus requested inside a magnet leaves Back focused and defers first-row focus; snackbar visible at 2,999 ms and gone after 3,001 ms plus the exit animation; AppBar files-search opens and focuses the field without `enterText`; clear-button Left consumes the hardware event and returns to the field even when host directional traversal is disabled; search Down on an empty initial library unfocuses the field with the first-row node never attached. Exact ordered requests remain asserted. No production method or frozen accessor changed.
+- The mutation fixture edits are copied from Claude's actual review script, not substitute mutations; all eleven full mutant sources are asserted byte-identical to that script's replacements. Six behavioral variants run separately from five accepted source-only probes in an original-code scratch clone. Per-variant patches, JSONL, stderr and named assertion evidence live under `step0b-mutations-behavioral/` and `step0b-mutations-source/`; `step0b-review-mutations.json` records the independent input script hash. Initial fixture-only setup errors remain as `step0b-original-first.*` / `step0b-original-six.*`; the corrected original six-case run passes 6/6 (`step0b-original-six-final.*`).
+
+| Review mutant | Boundary | New characterization / retained guard | Result |
+| --- | --- | --- | --- |
+| `fwd-searchctl` | behavioral | retained root-search controller cleared by live handler | PASS: named assertion failure |
+| `focus-atroot` | behavioral | TV content focus while a magnet is open | PASS: named assertion failure |
+| `snack-dur` | behavioral | three-second visibility deadline | PASS: named assertion failure |
+| `filesearch-focus` | behavioral | AppBar post-frame field focus without text entry | PASS: named assertion failure |
+| `clear-left` | behavioral | real Left consumed before framework traversal | PASS: named assertion failure |
+| `movefocus-ctx` | behavioral | unattached target releases field | PASS: named assertion failure |
+| `navup-jump` | dormant source-only | retained navigate-up body | PASS: named assertion failure |
+| `fallback-idx` | launch source-only | retained series playlist body / ledger | PASS: named assertion failure |
+| `relpath` | launch source-only | retained series playlist body / ledger | PASS: named assertion failure |
+| `multi-size` | launch source-only | retained series playlist body / ledger | PASS: named assertion failure |
+| `playfile-mode` | launch source-only | retained single-file body / ledger | PASS: named assertion failure |
+
+- CI gains the concrete new review-closure test path. The explicit qualification pin is retained and asserted by the changed self-test; no shared occurrence-binder change or forthcoming edit-profile opt-in key is introduced. Full `base3b`, comparison to final `base3`, focused analyzer and fresh normal-clone changed-self-test results follow. Linux capture remains unrun and Claude-owned; Step 1 is not started.
+
+- Mutation/checker verification checkpoint: **6/6 exact behavioral mutants killed + 5/5 accepted source-only probes killed; zero survivors / invalid proofs**. Every recorded mutant SHA equals Claude’s full replacement SHA. Scratch original source restored to frozen seam SHA `e35a1af1…`. Extended real-config checker PASS (`step0b-checker.txt`), including the explicit qualification pin; focused analyzer has no issues (`step0b-focused-analyze.txt`). The sole new test file is format-clean. `step0b-mutation-table.json` records final results; the original Step 0 mutation table is preserved. Full-suite and fresh-clone evidence follows after this implementation checkpoint.
+
+### Step 0b — complete; stop before Step L / Step 1
+
+- Final full `suite_evidence.py run alldebrid_files/base3b --no-pub --concurrency=2`, Flutter 3.44.8 / Dart 3.12.2: **12,145 success / 13 baseline failure / 28 baseline error / 20 baseline skipped**. `suite_evidence.py compare --against base3.jsonl base3b.jsonl`: **PASS**, exactly **six added identities, all passing**, zero new failures, missing identities or new skips. Stable full tested tree `65642fa8998befa313f73a6110eae66c353d2510` at implementation checkpoint `0eae99e8a`; no scoped paths or tracked edits during the run. `base3b.*` and `base3b-compare.txt` preserve raw outcomes/provenance. No load-sensitive regression needed rescue, no allowlist/`--record` acceptance and no result overlay.
+- A fresh normal `git clone` of the branch's implementation checkpoint, `.git` directory, after `flutter pub get`, passes the changed real-config checker/self-test with a private parser copy and copied `*.dill` deleted. **113/113 AllDebrid identities pass**, stable tested tree; clone clean. The unchanged mutation driver also demonstrates an original-code assertion kill from that clone. Evidence: `step0b-fresh-result.json`, `step0b-fresh-checker.txt`, `step0b-fresh-characterization.*`, `step0b-fresh-mutations/`. Every production/test/helper/checker/config/CI input byte-matches the final implementation; only this completion documentation is added afterward.
+- Closure totals: **six new behavioral tests in one new file**, CI path registered; original characterization now **113 tests in eleven files** (100 behavioral including six macOS pixels / 13 source-only). **Six exact behavioral mutants + five exact accepted source-only probes fail named assertions, zero survivors / invalid proofs.** Existing guards were retained; all final characterization identities equal the union of original and Step 0b named mutation kills. `step0b-mutation-table.json` and `step0b-final-result.json` record the complete result. The independent 40-case script is preserved as `step0b-independent-review-mutants.py`; this closure reran its eleven surviving edits exactly, not the whole independent sample.
+- The qualification config was already explicitly pinned `true` and remains byte-identical; its changed self-test now requires that pin. No forthcoming `edit_profile` occurrence opt-in was implemented, no shared tool change, and no production/accessor change. The original-with-seam facade SHA remains `e35a1af1e91b8b997f03106da3a617827749ce740723e2e2ace5629d5fb5b7a0`. Focused analyzer: no issues; both changed Dart files format-clean; diff checks pass. Linux capture is **not run**, Claude owns Step L; no extraction, push, device/emulator run or Premiumize edit.

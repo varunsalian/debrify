@@ -1234,5 +1234,170 @@
     "tests": [
       "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::clipboard auto-paste and original input link-save contract remain verbatim"
     ]
+  },
+  {
+    "name": "step0b-fwd-searchctl",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusWebDownloads",
+        "before": "      _searchQuery = '';\n      _searchController.clear();\n    });\n    await _loadLinks();",
+        "after": "      _searchQuery = '';\n    });\n    await _loadLinks();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review live web notification clears the retained root search controller"
+    ],
+    "independent_review_mutant_sha256": "f4e76f97864fb38136c3fb980ee709d351b343f750869d5fd886a07e9681ae5a"
+  },
+  {
+    "name": "step0b-focus-atroot",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusFirstItem",
+        "before": "      if (_isAtRoot && hasItems) {",
+        "after": "      if (hasItems) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review TV content focus inside a magnet keeps Back focused and defers row focus"
+    ],
+    "independent_review_mutant_sha256": "827b25f3ea4730e3da8a49b4ce24494e300189d6a2beef789fded859bd7d759c"
+  },
+  {
+    "name": "step0b-snack-dur",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_snack",
+        "before": "        duration: const Duration(seconds: 3),",
+        "after": "        duration: const Duration(seconds: 4),"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review snackbar stays visible before three seconds and expires after its exit animation"
+    ],
+    "independent_review_mutant_sha256": "fd6dc295c8eea97cb040929fbf051611bc04639d5a3a9cb56ce5d07df2c41ce3"
+  },
+  {
+    "name": "step0b-filesearch-focus",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "build",
+        "before": "                            if (mounted) _fileSearchFocusNode.requestFocus();",
+        "after": "                            if (mounted) {}"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review AppBar search-files tap focuses the new field without entering text"
+    ],
+    "independent_review_mutant_sha256": "50fceeea47cf6f75379427bf805aa52d13a7ccb8181aa4b12b093264ba2dc70a"
+  },
+  {
+    "name": "step0b-clear-left",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildSearchBar",
+        "before": "                  if (key == LogicalKeyboardKey.arrowLeft) {\n                    _searchFocusNode.requestFocus();\n                    return KeyEventResult.handled;",
+        "after": "                  if (key == LogicalKeyboardKey.arrowLeft) {\n                    return KeyEventResult.ignored;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review clear Left returns focus through the screen handler before directional traversal"
+    ],
+    "independent_review_mutant_sha256": "3ae7930d3b9746e756d20e13724d60c99c703aed29f19d35719a93722988ef3b"
+  },
+  {
+    "name": "step0b-movefocus-ctx",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_moveFocusTo",
+        "before": "    if (target != null && target.context != null) {",
+        "after": "    if (target != null) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review search Down releases the field when no first-row target is attached"
+    ],
+    "independent_review_mutant_sha256": "8aa38bb250e0bfb62e150044b1b02186b22fdde05a56ae48e876e663b22763b0"
+  },
+  {
+    "name": "step0b-source-navup-jump",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_navigateUp",
+        "before": "    _shouldFocusOnLoad = true;\n    if (_scrollController.hasClients) _scrollController.jumpTo(0);",
+        "after": "    _shouldFocusOnLoad = true;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::navigate-up attached-scroll reset and focus protocol remain verbatim"
+    ],
+    "independent_review_mutant_sha256": "30ab73b1f8187dfb28d13d0f816317c77c67963648837bfce034f0d38e1d9692"
+  },
+  {
+    "name": "step0b-source-fallback-idx",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "          startUrl = u;\n          startIndex = i;",
+        "after": "          startUrl = u;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "60dbea6532f554cbb781aedec606ea04245e30f208040f5502ec12bf0754b9f0"
+  },
+  {
+    "name": "step0b-source-relpath",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "      if (firstSlash > 0) {",
+        "after": "      if (firstSlash > 999999) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "09e631bf69f37fd1f2f49752df044a54d5ef617f41eb3521bbe3ebc5de6de316"
+  },
+  {
+    "name": "step0b-source-multi-size",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "          sizeBytes: v.size > 0 ? v.size : null,",
+        "after": "          sizeBytes: v.size,"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "6b6642eebaa2331d4546297d3b88db001a8f7fa562b191e473e5aa1d3370fa67"
+  },
+  {
+    "name": "step0b-source-playfile-mode",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "viewMode: PlaylistViewMode.sorted,",
+        "after": "viewMode: PlaylistViewMode.series,"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact file launcher arguments and mounted handoff"
+    ],
+    "independent_review_mutant_sha256": "8532199e8f8017e7bee0498358a2c7d362a93c866e7ac9dead16e3bdf11eca52"
   }
 ]
