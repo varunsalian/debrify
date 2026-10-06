@@ -35,7 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_sheets.dart':
+      0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_dial_card.dart':
       0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_parts.dart': 0,
@@ -251,6 +252,21 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_channels.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_dependencies.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_dial.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_layout.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_owners.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_sections.dart':
+      0,
+  'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_widget_view.dart':
+      0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
