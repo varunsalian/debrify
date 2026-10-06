@@ -1,0 +1,662 @@
+[
+  {
+    "label": "settle-zero",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "milliseconds: 180",
+        "after": "milliseconds: 0"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "180ms settle"
+    ],
+    "assertion_reason": null,
+    "expectation": "After focus changes, the Stage still renders Broadcast channel-0 before the 180ms settle boundary."
+  },
+  {
+    "label": "immediate-index-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "if (ri >= 0) widget.onFocusedIndexChanged(ri);",
+        "after": "if (ri >= 0) {}"
+      },
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "_settle = Timer(const Duration(milliseconds: 180), () {",
+        "after": "_settle = Timer(const Duration(milliseconds: 180), () {\n      if (ri >= 0) widget.onFocusedIndexChanged(ri);"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "180ms settle"
+    ],
+    "assertion_reason": "focused index is reported immediately"
+  },
+  {
+    "label": "tick-one-second",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._syncTick",
+        "before": "seconds: 15",
+        "after": "seconds: 1"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "15 second tick"
+    ],
+    "assertion_reason": "no broadcast rebuild before 15 seconds"
+  },
+  {
+    "label": "route-current-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._syncTick",
+        "before": "if (route != null && !route.isCurrent) return;",
+        "after": "if (route != null && !route.isCurrent) {}"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "15 second tick"
+    ],
+    "assertion_reason": "covered route suppresses broadcast tick"
+  },
+  {
+    "label": "settle-set-state-unconditional",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "if (!widget.autoRefresh) setState(() {});",
+        "after": "setState(() {});"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "180ms settle scopes Stage rebuild with autoRefresh=true"
+    ],
+    "assertion_reason": "settle rebuilds tuner only with auto-refresh off"
+  },
+  {
+    "label": "settle-set-state-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "if (!widget.autoRefresh) setState(() {});",
+        "after": "if (!widget.autoRefresh) {}"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "180ms settle scopes Stage rebuild with autoRefresh=false"
+    ],
+    "assertion_reason": "settle rebuilds tuner only with auto-refresh off"
+  },
+  {
+    "label": "hidden-tv-warmup-width",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._precacheNeighborBackdrops",
+        "before": "widget.isTelevision ? 96 : 480",
+        "after": "widget.isTelevision ? 480 : 480"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv=true hidden=true"
+    ],
+    "assertion_reason": "both adjacent warm-ups match Stage decode keys"
+  },
+  {
+    "label": "warmup-distance-two",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._precacheNeighborBackdrops",
+        "before": "[idx - 1, idx + 1]",
+        "after": "[idx - 2, idx + 2]"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv="
+    ],
+    "assertion_reason": "both adjacent warm-ups match Stage decode keys"
+  },
+  {
+    "label": "duplicate-last-wins",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._rebuildIndex",
+        "before": "map.putIfAbsent(widget.allChannels[i].id, () => i);",
+        "after": "map[widget.allChannels[i].id] = i;"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "first duplicate wins"
+    ],
+    "assertion_reason": "earlier duplicate wins over displayed copy"
+  },
+  {
+    "label": "identical-list-update-skipped",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState.didUpdateWidget",
+        "before": "_rebuildIndex();",
+        "after": "if (!identical(old.allChannels, widget.allChannels)) _rebuildIndex();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "first duplicate wins"
+    ],
+    "assertion_reason": "in-place update rebuilds cache even when old index is still valid"
+  },
+  {
+    "label": "first-left-handoff-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._surf",
+        "before": "widget.onFocusSidebar();",
+        "after": "widget.onFocusHeader();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "Left and Right repeat"
+    ],
+    "assertion_reason": "first Left hands focus to sidebar"
+  },
+  {
+    "label": "vanished-channel-press-retained",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._surf",
+        "before": "if (cur < 0) return;",
+        "after": "if (cur < 0) { widget.onFocusSidebar(); return; }"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "vanished card drops"
+    ],
+    "assertion_reason": "vanished channel press does not hand off"
+  },
+  {
+    "label": "attachment-retries-zero",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._focusWhenAttached",
+        "before": "attempt < 3",
+        "after": "attempt < 0"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "200-channel controller"
+    ],
+    "assertion_reason": "later retry focuses delayed target"
+  },
+  {
+    "label": "removed-focus-node-guard",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._focusWhenAttached",
+        "before": "if (!widget.rowFocusNodes.contains(node)) return;",
+        "after": "if (!widget.rowFocusNodes.contains(node)) {}"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "focus retry rejects"
+    ],
+    "assertion_reason": "removed host node never receives deferred focus"
+  },
+  {
+    "label": "narrow-focus-rejected",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._focusRealIndex",
+        "before": "if (!_dialScroll.hasClients) {\n      node.requestFocus();\n      return true;\n    }",
+        "after": "if (!_dialScroll.hasClients) {\n      node.requestFocus();\n      return false;\n    }"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "phone controller"
+    ],
+    "assertion_reason": "narrow controller accepts a live channel"
+  },
+  {
+    "label": "extent-138",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._dialItemExtent",
+        "before": "138.0 + 16.0",
+        "after": "138.0"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "touch dial centre"
+    ],
+    "assertion_reason": null
+  },
+  {
+    "label": "wheel-dx",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._buildWide",
+        "before": "final dy = signal.scrollDelta.dy;",
+        "after": "final dy = signal.scrollDelta.dy + signal.scrollDelta.dx;"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "desktop dial"
+    ],
+    "assertion_reason": "horizontal wheel is left to Scrollable"
+  },
+  {
+    "label": "key-repeat-removed",
+    "edits": [
+      {
+        "member": "_DialCardState._onKey",
+        "before": "e is KeyDownEvent || e is KeyRepeatEvent",
+        "after": "e is KeyDownEvent"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "Left and Right repeat"
+    ],
+    "assertion_reason": "Right repeat surfs to neighbor"
+  },
+  {
+    "label": "down-actions-removed",
+    "edits": [
+      {
+        "member": "_DialCardState._onKey",
+        "before": "widget.onLongPress();",
+        "after": "widget.onUp();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "Down opens quick actions"
+    ],
+    "assertion_reason": "Down opens actions"
+  },
+  {
+    "label": "details-shown-hidden",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._openActions",
+        "before": "if (!widget.hideNowPlaying)",
+        "after": "if (true)",
+        "count": 2
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "Down opens quick actions"
+    ],
+    "assertion_reason": "hidden mode omits Details tile"
+  },
+  {
+    "label": "sheet-timer-cleanup-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._openChannelList",
+        "before": ").whenComplete(() => sheetTick?.cancel());",
+        "after": ");"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "channel list ticks"
+    ],
+    "assertion_reason": "no active periodic Timer after channel-list close"
+  },
+  {
+    "label": "wide-threshold-1000",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState.build",
+        "before": "constraints.maxWidth >= 900",
+        "after": "constraints.maxWidth >= 1000"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "layout tv=false width=900.0"
+    ],
+    "assertion_reason": "wide threshold and TV override stay exact"
+  },
+  {
+    "label": "tv-no-wide-override",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState.build",
+        "before": "widget.isTelevision || constraints.maxWidth >= 900",
+        "after": "constraints.maxWidth >= 900"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "layout tv=true width=700.0"
+    ],
+    "assertion_reason": "wide threshold and TV override stay exact"
+  },
+  {
+    "label": "pager-no-preload",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._buildNarrow",
+        "before": "widget.ensureLoaded(widget.channels[i + 1]);",
+        "after": "// mutation: next preload removed"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "layout tv=false width=899.0"
+    ],
+    "assertion_reason": "pager preloads current then next"
+  },
+  {
+    "label": "ken-on-tv",
+    "edits": [
+      {
+        "member": "_StageState._syncKen",
+        "before": "hasArt && !widget.isTelevision",
+        "after": "hasArt"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv=true hidden=false"
+    ],
+    "assertion_reason": "Ken Burns never runs on TV"
+  },
+  {
+    "label": "text-not-forwarded",
+    "edits": [
+      {
+        "member": "_StageState.didUpdateWidget",
+        "before": "_textFx.forward(from: 0);",
+        "after": "_textFx.value = 1;"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "text starts settled"
+    ],
+    "assertion_reason": "channel change forwards text from zero"
+  },
+  {
+    "label": "tv-color-filtered",
+    "edits": [
+      {
+        "member": "_StageState.build",
+        "before": "if (widget.isTelevision) {",
+        "after": "if (false) {"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv=true hidden="
+    ],
+    "assertion_reason": "TV uses plain overlay instead of darken filter"
+  },
+  {
+    "label": "tv-dial-bloom",
+    "edits": [
+      {
+        "member": "_DialCardState.build",
+        "before": "active && !widget.isTelevision",
+        "after": "active"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv=true hidden="
+    ],
+    "assertion_reason": "TV focused card omits blurred bloom"
+  },
+  {
+    "label": "touch-hover-lights",
+    "edits": [
+      {
+        "member": "_DialCardState.build",
+        "before": "if (widget.touchSelect) return;",
+        "after": "if (false) return;"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "touch tap plays"
+    ],
+    "assertion_reason": "touch hover never shows desktop hint"
+  },
+  {
+    "label": "touch-tap-focus",
+    "edits": [
+      {
+        "member": "_DialCardState.build",
+        "before": "if (!widget.touchSelect) widget.focusNode.requestFocus();",
+        "after": "widget.focusNode.requestFocus();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "touch tap plays"
+    ],
+    "assertion_reason": "touch tap does not request focus"
+  },
+  {
+    "label": "vlb-replaced-whole-tuner",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._buildWide",
+        "before": "child: ValueListenableBuilder<String?>(\n            valueListenable: _activeId,\n            builder: (context, activeId, _) {",
+        "after": "child: Builder(\n            builder: (context) {\n              final activeId = _activeId.value;"
+      },
+      {
+        "member": "_StremioTvTunerState._setActive",
+        "before": "_activeId.value = id;",
+        "after": "setState(() { _activeId.value = id; });"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "180ms settle scopes Stage rebuild with autoRefresh=true"
+    ],
+    "assertion_reason": "settle rebuilds tuner only with auto-refresh off"
+  },
+  {
+    "label": "controller-not-rebound",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState.didUpdateWidget",
+        "before": "widget.controller?._bind(this);",
+        "after": "// mutation: new controller not bound"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_lifecycle"
+    ],
+    "must_fail": [
+      "controller rebinds"
+    ],
+    "assertion_reason": "new controller is bound"
+  },
+  {
+    "label": "focus-left-alignment",
+    "edits": [
+      {
+        "member": "_DialCardState.build",
+        "before": "alignment: 0.5",
+        "after": "alignment: 0.0"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "D-pad focus centres"
+    ],
+    "assertion_reason": "D-pad focus centres the card instead of left-aligning it"
+  },
+  {
+    "label": "ken-no-reverse",
+    "edits": [
+      {
+        "member": "_StageState._syncKen",
+        "before": "_ken.repeat(reverse: true);",
+        "after": "_ken.repeat();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "Ken Burns reverses"
+    ],
+    "assertion_reason": "Ken Burns reverses at the peak instead of wrapping to 1.0"
+  },
+  {
+    "label": "dial-depth-guard-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._buildWide",
+        "before": "n.depth == 0 && n is ScrollEndNotification",
+        "after": "n is ScrollEndNotification"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_source_contracts"
+    ],
+    "must_fail": [
+      "dial ignores nested scroll-end notifications"
+    ],
+    "assertion_reason": "dial scroll-end handling keeps its depth-zero source guard",
+    "source_guard_only": "No descendant of the dial ListView is a nested scrollable. Its dial cards render images, text and focus/gesture wrappers; the Stage and modal sheets are outside this notification subtree. Genuine dial notifications therefore have depth zero.",
+    "plain_name": "dial ignores nested scroll-end notifications"
+  },
+  {
+    "label": "up-not-dispatched",
+    "edits": [
+      {
+        "member": "_DialCardState._onKey",
+        "before": "widget.onUp();",
+        "after": "widget.onLeft();"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_controls"
+    ],
+    "must_fail": [
+      "Left and Right repeat"
+    ],
+    "assertion_reason": "Up dispatches host focus"
+  },
+  {
+    "label": "haptic-removed",
+    "edits": [
+      {
+        "member": "_StremioTvTunerState._openActions",
+        "before": "HapticFeedback.mediumImpact();",
+        "after": "// mutation: haptic removed"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_layout_sheets"
+    ],
+    "must_fail": [
+      "Down opens quick actions"
+    ],
+    "assertion_reason": null
+  },
+  {
+    "label": "hidden-tv-stage-decode",
+    "edits": [
+      {
+        "member": "_StageState.build",
+        "before": "widget.isTelevision ? 96 : 480",
+        "after": "widget.isTelevision ? 480 : 480"
+      }
+    ],
+    "tests": [
+      "stremio_tv_tuner_artwork"
+    ],
+    "must_fail": [
+      "artwork tv=true hidden=true"
+    ],
+    "assertion_reason": "Stage decode width"
+  }
+]

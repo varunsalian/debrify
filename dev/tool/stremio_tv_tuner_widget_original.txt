@@ -1,0 +1,106 @@
+/// "The Tuner" — a cinematic channel-surfing experience for Stremio TV.
+///
+/// On wide screens (TV / laptop, width >= 900) it renders a full-bleed
+/// [_Stage] of the focused channel's now-playing title above a horizontal
+/// [_Dial] of channel cards you surf with the D-pad. On narrow screens
+/// (phone portrait) it becomes a full-screen vertical channel pager.
+///
+/// The wall is *alive*: progress bars tick in real time and a channel's
+/// card/stage flips itself the moment its time slot rolls over — you watch
+/// the broadcast change while you sit there.
+///
+/// Focus is intentionally unchanged from the old list: [rowFocusNodes] stays
+/// one-node-per-channel in [allChannels] order, so the screen header's
+/// existing down-arrow handoff keeps working untouched.
+class StremioTvTuner extends StatefulWidget {
+  /// Channels in display order (already search-filtered by the screen).
+  final List<StremioTvChannel> channels;
+
+  /// The screen's full channel list — focus nodes are indexed by this.
+  final List<StremioTvChannel> allChannels;
+
+  /// One focus node per channel in [allChannels] order (owned by the screen).
+  final List<FocusNode> rowFocusNodes;
+
+  final StremioTvService service;
+  final int Function(StremioTvChannel channel) rotationFor;
+  final int mixSalt;
+  final bool hideNowPlaying;
+
+  /// The user's "Auto-refresh" setting: when true the tuner ticks every 15s
+  /// so progress bars sweep and slot rollovers flip live; when false the
+  /// broadcast only re-evaluates on interaction (this is the setting's sole
+  /// consumer, so turning it off must visibly stop the live updates).
+  final bool autoRefresh;
+
+  /// Resolved native Android-TV flag. Forces the wide Stage+Dial layout (with
+  /// D-pad channel switching) regardless of the constrained width — inside the
+  /// app shell the sidebar rail trims the tuner slot below the 900px wide
+  /// threshold, so a width-only check drops a real TV to the tap-only narrow
+  /// pager and the remote can no longer change channels.
+  final bool isTelevision;
+
+  final Set<String> loadingChannelIds;
+
+  /// Kick off a lazy item load for [channel] (no-op if already loaded).
+  final void Function(StremioTvChannel channel) ensureLoaded;
+
+  /// Tune in: open the cinematic detail screen for the channel's now-playing.
+  final void Function(StremioTvChannel channel) onOpenDetail;
+
+  /// Play the channel's now-playing item immediately ("Just Watch").
+  final void Function(StremioTvChannel channel) onPlay;
+
+  /// Maps a channel's raw slot progress to the progress to *display*. The
+  /// host caps/jitters this per the "max start %" setting so every progress
+  /// bar matches where playback will actually join.
+  final double Function(StremioTvChannel channel, double rawProgress)
+  displayProgress;
+
+  final void Function(StremioTvChannel channel) onToggleFavorite;
+  final void Function(StremioTvChannel channel) onShowGuide;
+  final void Function(StremioTvChannel channel)? onEditLocal;
+  final void Function(StremioTvChannel channel)? onExportLocal;
+
+  /// D-pad left at the first card → hand focus to the app sidebar.
+  final VoidCallback onFocusSidebar;
+
+  /// D-pad up from a card → hand focus back to the screen header.
+  final VoidCallback onFocusHeader;
+
+  /// Reports the focused channel's index within [allChannels].
+  final void Function(int realIndex) onFocusedIndexChanged;
+
+  /// Optional imperative handle so the screen can reliably move focus onto a
+  /// dial card (scrolling it into view first). See [StremioTvTunerController].
+  final StremioTvTunerController? controller;
+
+  const StremioTvTuner({
+    super.key,
+    required this.channels,
+    required this.allChannels,
+    required this.rowFocusNodes,
+    required this.service,
+    required this.rotationFor,
+    required this.mixSalt,
+    required this.hideNowPlaying,
+    required this.autoRefresh,
+    required this.isTelevision,
+    required this.loadingChannelIds,
+    required this.ensureLoaded,
+    required this.onOpenDetail,
+    required this.onPlay,
+    required this.displayProgress,
+    required this.onToggleFavorite,
+    required this.onShowGuide,
+    required this.onFocusSidebar,
+    required this.onFocusHeader,
+    required this.onFocusedIndexChanged,
+    this.onEditLocal,
+    this.onExportLocal,
+    this.controller,
+  });
+
+  @override
+  State<StremioTvTuner> createState() => _StremioTvTunerState();
+}

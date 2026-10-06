@@ -333,3 +333,11 @@ test/features/settings_widgets/presentation/settings_widgets_render_test.dart
 # settings_widgets step 0b: close original-only behavioural review gaps.
 test/features/settings_widgets/presentation/settings_widgets_review_render_test.dart
 test/features/settings_widgets/presentation/settings_widgets_theme_table_test.dart
+
+# Stremio TV tuner ORIGINAL characterization (2026-10-06)
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_artwork_test.dart
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_controls_test.dart
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_goldens_test.dart
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_layout_sheets_test.dart
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_lifecycle_test.dart
+test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_source_contracts_test.dart
