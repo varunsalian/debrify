@@ -539,12 +539,20 @@ discarded.
    (round 1 P2-3).** The shared checker has one global scaffold threshold and
    a destination-or-facade fallback (`check_settings_moves.py:1142`, `:1269`),
    so the tuner adds its own validator through the existing opt-in
-   `source_validator_module` key (`dev/tool/stremio_tv_tuner_contracts.py`,
-   no shared-checker change): given the config's `completed_step` S, every
-   manifest row with step ≤ S must exist **only** at its destination (absent
-   from the facade), every destination file and scaffold registered for steps
-   ≤ S must exist, and every row with step > S must still be in the facade
-   (future files may be absent). Rows fall into three kinds, read from the
+   `source_validator_module` key (`dev/tool/stremio_tv_tuner_contracts.py`)
+   plus the additive context hook below. Given the config's `completed_step`
+   S, every destination file and scaffold registered for steps ≤ S must
+   exist, and future files may be absent. **Scaffold activation:** the shared
+   scaffold check (`check_settings_moves.py:1149`) validates declarations of
+   every registered scaffold whose file exists, and the facade exists from
+   step 0, so registering completed facade scaffolds early would fail the
+   original (25 errors in the round-3 probe). The shared checker therefore
+   gains an **opt-in** `scaffold_activation_step` filter (per scaffold; absent
+   = always active, today's behaviour): scaffolds whose step > S are dropped
+   before scaffold validation and ownership registration. The complete
+   schedule is frozen in the scaffolding sidecar; only its active subset is
+   checked at each checkpoint. The S = 0…4 fixtures run the **complete
+   checker and the source reader**, not the validator alone. Rows fall into three kinds, read from the
    manifest: **retained** rows (destination = facade: the controller, the
    widget, the State's lifecycle and `build`) must be in the facade at every
    step; **moved** rows with step ≤ S must exist only at their destination;
@@ -827,3 +835,16 @@ adapter; behaviour fixes (below) and the dial-card decomposition.
    obtained from expected providers (Step 0.4).
 6. **P3 — checker entry point.** `__main__` with parser arguments and a
    broken-fixture positive control (Step 0.7).
+
+## Round 3 review resolution
+
+1. **P2 — scaffold activation.** Opt-in per-scaffold
+   `scaffold_activation_step` filter before scaffold validation and ownership
+   registration; full schedule frozen, active subset checked; S = 0…4
+   fixtures run the complete checker and reader (Step 0.3).
+2. **P3 — wording.** The validator introduction now describes the three row
+   kinds and the additive hooks (Step 0.3). The probe inventory records the
+   `recursive_getters` and public-State parameter-name infos observed in the
+   round-3 prototype (Technique 2).
+
+Round 3 verdict: **No P1s — executable.** Execution may start.
