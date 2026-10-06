@@ -707,3 +707,55 @@ The prior turn was externally terminated during the checker sweep. Retained
 only 13 completed exit-0 records and reran all four unfinished manifests in
 fresh `.dart_tool/stremio_tv_catalogs_step1_restart_parsers/` packages; no
 partial result accepted (`step1-restart-note.json`). No check remains pending.
+
+### Step 2 — dialogs and gate 1 (2026-10-06)
+
+Parent `7e42a14a6bab7a0cfc85ef42d0dee80cde93c81e`; tested/proof commit `576f71a6dce305bd9e6892bf0180aae56f278205`,
+tree `506d70586c6e2bb9bdff3802618d3af8dcc19500`. Final amendment adds only this Progress entry.
+Evidence names below are relative to the common Git directory’s
+`refactor-evidence/stremio_tv_catalogs/`.
+
+Measured physical lines: `local_catalog_export.dart` 38, `local_catalog_importer.dart` 347, `local_catalog_json_import_dialog.dart` 230, `local_catalog_mdblist_import_dialog.dart` 346, `local_catalog_trakt_import_dialog.dart` 554, `local_catalog_url_import_dialog.dart` 264, `local_catalogs_manage_dialog.dart` 488, `stremio_tv_local_catalogs_dialog.dart` 639.
+Moved manage/URL/JSON/Trakt/MDBList together. Staged all four type aliases,
+five file aliases and five additional names in four owner records; the Trakt
+extension now has its destination owner. Only the five registered code sites
+change: `LcUrlDialog`, `LcJsonDialog`, `LcTraktDialog`, `LcMdblistDialog`,
+`lcBackHop`. Registered Trakt’s exact 554-line exception (exit: separately
+characterized public list-source model extraction).
+The frozen checker self-test is unchanged: a new staged wrapper runs its
+ORIGINAL fixtures with creation-stage registrations, then checks actual
+production with the active registrations. All original negatives still run.
+
+All 19 whole declarations and seven section dividers are byte-identical to R
+except the 5 registered alias-use substitutions
+(`step2-byte-audit.json`). All 119 characterizations and both support
+files are unchanged from 0b; 119/119 pass, paths
+`[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s`. Shape/theme 13/13 pass, paths
+`[test/theme/shape_manifest_test.dart, test/theme/source_guard_test.dart]`,
+same flags (`step2-{characterization,shape-theme}.jsonl` / `.env.json`).
+
+17/17 integrated manifests + self-tests pass with fresh isolated
+`.dart_tool/stremio_tv_catalogs_step2_parsers/` packages and copied
+`*.dill` deleted (`step2-integrated-checkers.json`). Architecture/sizes,
+30 architecture probes (22 rejections), CI format, scoped
+analyzer/allowlist, storage and diff checks pass (`step2-quality.json`).
+CI identities 325→325, zero additions after exact source relocation;
+strict identities retain both dropdown deprecations, only ORIGINAL directive
+ordering disappears (`step2-strict-identities.json`).
+
+Exact shape floor 488, catalogs radii 4 and token calls 6. Original budget
+1; original remains in `kShapeResidue`.
+Every created destination has its measured budget; theme surface metrics
+remain unchanged/uncovered and text-white exclusion remains effective
+(`step2-inventory.json`). Suite runs serialized; no allowlist changes,
+no re-record, no application-body edits beyond the registered aliases.
+
+Gate 1: 11773 success / 13 failure /
+28 error / 20 skipped; 1146 suites.
+Paths `[]`; flags `--no-pub --concurrency=2 --timeout=120s`; Flutter 3.44.8 / Dart 3.12.2.
+`gate1.jsonl` / `.env.json` runs on the clean proof commit above.
+Compared against base: PASS, zero new failures/missing/new skips;
+exactly 119 added passing identities vs base, all frozen characterizations
+(`gate1-vs-*.txt`, `gate1-summary.json`).
+Gate 1 is complete; Step 3 may proceed.

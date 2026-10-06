@@ -24,7 +24,9 @@ STREMIO_TV_CATALOGS_PUBLIC_NAMES = frozenset([
 ])
 # Creation commits register exact measurements. Exit: separately characterized
 # item-card extraction (editor) and public list-source model extraction (Trakt).
-STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS = {}
+STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS = {
+    STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_trakt_import_dialog.dart": 554,
+}
 # Exit: inject an import data contract instead of HTTP in this legacy dialog.
 STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT = (
     STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_url_import_dialog.dart", "package:http/http.dart",
