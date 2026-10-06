@@ -1893,3 +1893,137 @@ measurements/spans/source hashes, frozen D4 and map pins, commands and results
 are E/`step7-*`. Protected sibling widgets, player/launcher/services/main and
 dependencies remain byte-identical to R; original tests/goldens unchanged since
 Step L. No behavior change, seam, device run, push, merge or branch switch.
+
+
+### Regular MAIN checkout proof and full-suite gate 2 — complete (2026-10-06)
+
+| Checkpoint | Commit | Outcome |
+| --- | --- | --- |
+| Step 6 | `61ef01524751cb0db88d4c4f3fad29e7e7a5b22f` | Layout + exact forwarder; all per-step checks pass |
+| Step 7 / gate checkpoint | `74beeeedb63d6433c9cddbb0cefee2c5243a3d56` | Completion, measured caps and real-checker negatives pass |
+
+**MAIN checkout / CI integration proof:** an independent, regular
+`git clone --no-local --branch refactor/stremio-tv` lives under the ignored
+`.dart_tool/stremio_tv_main_clone_final/`, at the final checkpoint above.
+`git rev-parse --absolute-git-dir` and `--git-common-dir` resolve its own Git
+directory; it is not a worktree and has no alternate object database. Pub get
+passes; checkout and lockfile remain clean. All **17 manifest CLI/self-tests**
+pass with explicit clone-local isolated parser packages and every copied
+`*.dill` deleted; **all 16 other stdout files are byte-identical** to Step 0b.
+Standalone `stremio_tv_architecture_test.py` and `check_search_architecture.py`
+pass there, including measured caps and all real-copy negatives. The complete
+reader validates the exact current ownership and returns raw R; the whole
+characterization/reader/media-server/profile/theme replay has **178 success /
+one unchanged known failure**, all **63 Stremio TV cases** passing, strict
+macOS **6/6**, no missing identity/new failure/new skip against base2 and Step 7.
+
+The capture script is byte-identical to the script Claude successfully ran
+from a regular Linux clone at ORIGINAL. In the final regular clone, shell
+syntax and all Git subject/object provenance checks pass; on macOS it correctly
+rejects the uncalibrated host before writing any PNG/evidence. No moved-code
+golden is generated. The fixtures need no copied Git metadata and the reader
+uses Git commands; no `.git` file/directory assumption is introduced. All
+clone evidence stays solely under E, including `main-clone-verification.json`,
+`main-clone-manifests.json`, byte-compatibility, architecture, reader, capture
+checks and characterization run/env/comparisons. The clone remains clean.
+
+**Full-suite gate 2:** serialized after all owned AST and clone suites finish,
+on committed **`74beeeedb63d6433c9cddbb0cefee2c5243a3d56`**, tree **`60b18ff043211b1c385deb1ae8037ae6a44c010d`**, with
+`--no-pub --concurrency=4`. SDK matches base2/gate 1: Flutter **3.44.8**,
+Dart **3.12.2**, framework `058e0af2c2b57e369d905a03ac9748b0ebf543c6`.
+**11,717 success / 13 known failure / 28 known error / 20 skip / 1,150 suites**.
+Comparisons against latest **base2** and accepted **gate1-retry2** both **PASS**:
+zero new failures, missing tests, new skips, additions or fixed identities.
+Raw runner exit is nonzero only for unchanged known outcomes. Inputs remain
+stable and clean throughout. E/`gate2.jsonl`, `.env.json`, `-run.txt`,
+`-vs-base2.txt`, `-vs-gate1.txt`, `-summary.json` and `gate2-preflight.json`
+record provenance, commands and identities. No failure baseline, allowlist,
+test assertion, wait or golden was recorded/updated to accept a regression.
+
+**Final sizes:** facade **115 / cap 115** (imports 7 + widget 16 + State
+header/close 2 + owners/composition 11 + lifecycle 72 + forwarder 2 + remaining
+blanks/comments 5). Public widget and original lifecycle/callbacks retain their
+verified contracts. The 13-section composition has no `legacy` member or
+borrowed `playChannelById` dependency; watch uses the frozen
+`_sections.actions.playChannelById`. The exact build forwarder, annotation
+exception, D4 constructors and every callback identity remain frozen.
+
+| Destination under `lib/features/stremio_tv/` | Physical lines |
+| --- | ---: |
+| `application/stremio_tv_stream_quality.dart` | 20 |
+| `models/stremio_tv_playback_records.dart` | 58 |
+| `presentation/legacy_stremio_tv/stremio_tv_bindings.dart` | 21 |
+| `presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart` | 269 |
+| `presentation/legacy_stremio_tv/stremio_tv_channel_library.dart` | 184 |
+| `presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart` | 289 |
+| `presentation/legacy_stremio_tv/stremio_tv_chrome.dart` | 199 |
+| `presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart` | 329 |
+| `presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart` | 331 |
+| `presentation/legacy_stremio_tv/stremio_tv_focus_state.dart` | 37 |
+| `presentation/legacy_stremio_tv/stremio_tv_layout.dart` | 715 |
+| `presentation/legacy_stremio_tv/stremio_tv_library_state.dart` | 26 |
+| `presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart` | 96 |
+| `presentation/legacy_stremio_tv/stremio_tv_navigation.dart` | 132 |
+| `presentation/legacy_stremio_tv/stremio_tv_owners.dart` | 14 |
+| `presentation/legacy_stremio_tv/stremio_tv_play_channel.dart` | 495 |
+| `presentation/legacy_stremio_tv/stremio_tv_playback_state.dart` | 17 |
+| `presentation/legacy_stremio_tv/stremio_tv_player_guide.dart` | 270 |
+| `presentation/legacy_stremio_tv/stremio_tv_sections.dart` | 46 |
+| `presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart` | 135 |
+| `presentation/legacy_stremio_tv/stremio_tv_settings_state.dart` | 27 |
+| `presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart` | 254 |
+| `presentation/stremio_tv_manual_source_picker.dart` | 292 |
+| `presentation/stremio_tv_source_picker_controls.dart` | 294 |
+
+D2 layout **715 / cap 715** is the sole size exception, including its two
+required reason/exit comments; original method byte-equivalence is proved in
+`step6-final-composition-proof.json`. No D3 exception (play **495**). Other
+architectural exceptions remain as approved: State-owned sections, the exact
+legacy bridge's existing service/storage/launcher calls, and unchanged legacy
+text, with the exits listed above. No `TEMP(stremio_tv)` remains. Shape **13 /
+global floor 488**, theme **30 owned / 79 complete surface**, light ink **3
+non-primary / 0 primary**; no new warnings or suppressions.
+
+**Shared files touched across this branch (relative to R):**
+
+- `.github/workflows/checks.yml`
+- `dev/tool/check_search_architecture.py`
+- `dev/tool/check_settings_moves.py`
+- `dev/tool/check_verbatim_moves.py`
+- `dev/tool/ci_behavior_tests.txt`
+- `dev/tool/file_size_baseline.txt`
+- `dev/tool/occurrence_field_bindings.py`
+- `dev/tool/theme_surface_manifest.txt`
+- `test/media_server_service_test.dart`
+- `test/theme/shape_manifest_test.dart`
+
+This continuation touches only architecture registration, the size ratchet and
+shape registration among those shared files. All opt-ins remain keyed to this
+feature. Adapter/callback helper/analyzer allowlist and the 16 other manifests
+retain their frozen bytes. Protected sibling widgets, player, launcher,
+services, main.dart and dependency files remain unchanged from R.
+
+**Found, not fixed:** all ten original findings listed above remain: unmounted
+discovery/refresh work, non-identity hook cleanup, undisposed tuner/menu
+controllers, no post-picker generation recheck, mounted-only cache awaits,
+the resolver's missing engine timeout, misplaced sorting doc, settings writes
+without setState, uncaptured profile across writes, and unlocalized/semantics
+gaps. No new application defect is accepted by this extraction. The observed
+13 failures/28 errors also remain recorded, rather than concealed.
+
+**Device checklist — pending, not a merge gate (D6):**
+
+- [ ] Android TV: RD/TorBox/PikPak/Premiumize/AllDebrid/Auto native handoffs,
+  in-player guide, channel switch and Next.
+- [ ] Flutter player phone/desktop: same handoffs and manual all-fail picker.
+- [ ] Remote D-pad: header/search/menu/Import/provider, Back/sidebar, long-surf
+  tuner-to-header focus and favourite focus restoration.
+- [ ] Home saved-channel auto-play, mounted and unmounted.
+- [ ] Loader Cancel during every stage.
+
+Remote CI and semantic-union integration remain with Claude; no push, merge,
+existing branch switch, emulator/device run or Flutter run was performed.
+**STOP after gate 2.** This final documentation commit changes no tested
+application, test or tool input. Material adjustments are explicitly recorded:
+D2's two reason/exit lines (713 → 715), rejection/rerun of the Step 6
+changed-tree run, and reuse of already-correct CI path registrations.
