@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 0,
+  "completed_step": 1,
   "completion_step": 7,
   "required_scaffolds_step": 7,
   "receivers": [
@@ -1053,7 +1053,23 @@
     "_ResolvedSourceChoice": "StremioTvResolvedSourceChoice",
     "_StremioTvPlaybackCursor": "StremioTvPlaybackCursor"
   },
-  "type_aliases": [],
+  "type_aliases": [
+    {
+      "original_name": "_ManualSourcePickerSheet",
+      "alias": "StremioTvManualSourcePickerSheet",
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart"
+    },
+    {
+      "original_name": "_SourcePickerTab",
+      "alias": "StremioTvSourcePickerTab",
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart"
+    },
+    {
+      "original_name": "_SourcePickerItem",
+      "alias": "StremioTvSourcePickerItem",
+      "file": "lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart"
+    }
+  ],
   "planned_type_aliases": [
     {
       "original_name": "_ManualSourcePickerSheet",

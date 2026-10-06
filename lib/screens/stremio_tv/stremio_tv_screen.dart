@@ -1,55 +1,54 @@
 import 'dart:async';
-
 import 'package:collection/collection.dart';
+import 'package:debrify/features/stremio_tv/application/stremio_tv_stream_quality.dart';
+import 'package:debrify/features/stremio_tv/models/stremio_tv_playback_records.dart';
+import 'package:debrify/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart';
+import 'package:debrify/models/play_loader_art.dart';
+import 'package:debrify/models/premiumize_file.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
+import 'package:debrify/models/stremio_tv/stremio_tv_now_playing.dart';
+import 'package:debrify/models/torrent.dart';
+import 'package:debrify/screens/catalog_item_detail_screen.dart';
+import 'package:debrify/screens/settings/stremio_tv_settings_page.dart';
+import 'package:debrify/screens/stremio_tv/stremio_tv_filter_page.dart';
+import 'package:debrify/screens/stremio_tv/stremio_tv_service.dart';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_empty_state.dart';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_guide_sheet.dart';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_tuner.dart';
+import 'package:debrify/services/alldebrid_service.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/debrid_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/pikpak_api_service.dart';
+import 'package:debrify/services/pikpak_tv_service.dart';
+import 'package:debrify/services/play_loader_style.dart';
+import 'package:debrify/services/premiumize_service.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/stream_url_validator.dart';
+import 'package:debrify/services/torbox_service.dart';
+import 'package:debrify/services/torbox_torrent_control_service.dart';
+import 'package:debrify/services/torrent_service.dart';
+import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/file_utils.dart';
+import 'package:debrify/utils/rd_blocked_filter.dart';
+import 'package:debrify/utils/series_parser.dart';
+import 'package:debrify/utils/stremio_episode_selector.dart';
+import 'package:debrify/utils/stremio_tv_debrid_fallback.dart';
+import 'package:debrify/utils/torrent_coverage_detector.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/pipeline_loading_overlay.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../../theme/app_theme_scope.dart';
-import '../../widgets/pipeline_loading_overlay.dart';
-import '../../models/play_loader_art.dart';
-import '../../models/stremio_addon.dart';
-import '../../models/stremio_tv/stremio_tv_channel.dart';
-import '../../models/stremio_tv/stremio_tv_now_playing.dart';
-import '../../models/torrent.dart';
-import '../../services/play_loader_style.dart';
-import '../../services/analytics_service.dart';
-import '../../services/mdblist/mdblist_service.dart';
-import '../../services/debrid_service.dart';
-import '../../services/stream_url_validator.dart';
-import '../../services/main_page_bridge.dart';
-import '../../services/video_player_launcher.dart';
-import '../../services/torbox_service.dart';
-import '../../services/torbox_torrent_control_service.dart';
-import '../../services/pikpak_api_service.dart';
-import '../../services/pikpak_tv_service.dart';
-import '../../services/premiumize_service.dart';
-import '../../models/premiumize_file.dart';
-import '../../services/alldebrid_service.dart';
-import '../../utils/file_utils.dart';
-import '../../utils/rd_blocked_filter.dart';
-import '../../utils/formatters.dart';
-import '../../utils/stremio_episode_selector.dart';
-import '../../utils/stremio_tv_debrid_fallback.dart';
-import '../../utils/series_parser.dart';
-import '../../utils/source_quality.dart';
-import '../../utils/torrent_coverage_detector.dart';
-import '../../services/torrent_service.dart';
-import '../catalog_item_detail_screen.dart';
-import '../settings/stremio_tv_settings_page.dart';
-import 'stremio_tv_filter_page.dart';
-import 'stremio_tv_service.dart';
-import 'widgets/stremio_tv_tuner.dart';
-import 'widgets/stremio_tv_empty_state.dart';
-import 'widgets/stremio_tv_guide_sheet.dart';
-import 'widgets/stremio_tv_local_catalogs_dialog.dart';
-import '../../utils/tv_keys.dart';
-import '../../widgets/tv_text_field.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -88,7 +87,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   double? _currentSlotProgress;
   int _playGeneration = 0;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
-  final Map<String, _StremioTvPlaybackCursor> _playbackCursors = {};
+  final Map<String, StremioTvPlaybackCursor> _playbackCursors = {};
 
   /// Get the rotation duration for a channel based on its content type.
   int _rotationFor(StremioTvChannel channel) =>
@@ -605,23 +604,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Playback
   // ============================================================================
 
-  /// Extract normalized quality from a stream/torrent name.
-  /// Returns '2160p', '1080p', '720p', '480p', or null.
-  static String? _extractQuality(String name) {
-    switch (sourceQualityForName(name)) {
-      case SourceQuality.ultraHd:
-        return '2160p';
-      case SourceQuality.fullHd:
-        return '1080p';
-      case SourceQuality.hd:
-        return '720p';
-      case SourceQuality.sd:
-        return '480p';
-      case null:
-        return null;
-    }
-  }
-
   /// Sort streams so those matching [_preferredQuality] come first.
   /// Within same-quality group, preserves original order.
   Future<({String url, int index})?> _tryDirectStreams(
@@ -773,8 +755,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (_preferredQuality == 'auto') return streams;
     final sorted = List<Torrent>.from(streams);
     sorted.sort((a, b) {
-      final qa = _extractQuality(a.name);
-      final qb = _extractQuality(b.name);
+      final qa = StremioTvStreamQuality.extractQuality(a.name);
+      final qb = StremioTvStreamQuality.extractQuality(b.name);
       final aMatch = qa == _preferredQuality ? 0 : 1;
       final bMatch = qb == _preferredQuality ? 0 : 1;
       return aMatch.compareTo(bMatch);
@@ -1007,7 +989,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           .where(
             (t) =>
                 t.streamType != StreamType.torrent ||
-                _extractQuality(t.name) != '480p',
+                StremioTvStreamQuality.extractQuality(t.name) != '480p',
           )
           .toList();
 
@@ -1271,7 +1253,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Resolves a channel to a playable URL without any UI interactions.
   /// Used by the in-player channel guide for background channel switching.
-  Future<_ChannelPlaybackResult?> _resolveChannelPlayback(
+  Future<StremioTvChannelPlaybackResult?> _resolveChannelPlayback(
     StremioTvChannel channel, {
     int slotOffset = 0,
   }) async {
@@ -1342,7 +1324,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         .where(
           (t) =>
               t.streamType != StreamType.torrent ||
-              _extractQuality(t.name) != '480p',
+              StremioTvStreamQuality.extractQuality(t.name) != '480p',
         )
         .toList();
 
@@ -1454,7 +1436,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ? '${item.name} (S${season}E$episode)'
         : playTitle;
 
-    return _ChannelPlaybackResult(
+    return StremioTvChannelPlaybackResult(
       url: firstPlayableUrl,
       title: title,
       contentType: item.type,
@@ -1478,7 +1460,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Show a bottom sheet with all available sources so the user can pick one manually.
   /// Returns (resolvedUrl, sourceIndex) or null if dismissed.
-  Future<_ResolvedSourceChoice?> _showManualSourcePicker(
+  Future<StremioTvResolvedSourceChoice?> _showManualSourcePicker(
     List<Torrent> sources,
     StremioMeta item, {
     int? season,
@@ -1489,11 +1471,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       season: season,
       episode: episode,
     );
-    return showModalBottomSheet<_ResolvedSourceChoice?>(
+    return showModalBottomSheet<StremioTvResolvedSourceChoice?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _ManualSourcePickerSheet(
+      builder: (ctx) => StremioTvManualSourcePickerSheet(
         sources: sources,
         resolver: resolver,
         validateDirectUrl: _isValidStreamUrl,
@@ -1519,7 +1501,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     required int baseSlotStartMs,
     required int slotOffset,
   }) {
-    _playbackCursors[channelId] = _StremioTvPlaybackCursor(
+    _playbackCursors[channelId] = StremioTvPlaybackCursor(
       baseSlotStartMs: baseSlotStartMs,
       slotOffset: slotOffset,
     );
@@ -1555,7 +1537,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Map<String, dynamic> _playbackResultToMap(
     String channelId,
-    _ChannelPlaybackResult result,
+    StremioTvChannelPlaybackResult result,
   ) {
     return {
       'channelId': channelId,
@@ -3380,579 +3362,4 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       ],
     );
   }
-}
-
-// ─── Manual Source Picker (shown when auto-play fails) ────────────────────
-
-class _ManualSourcePickerSheet extends StatefulWidget {
-  final List<Torrent> sources;
-  final Future<String?> Function(Torrent) resolver;
-  final Future<bool> Function(String url) validateDirectUrl;
-
-  const _ManualSourcePickerSheet({
-    required this.sources,
-    required this.resolver,
-    required this.validateDirectUrl,
-  });
-
-  @override
-  State<_ManualSourcePickerSheet> createState() =>
-      _ManualSourcePickerSheetState();
-}
-
-class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
-  int? _resolvingIndex; // index in widget.sources (original)
-  int? _failedIndex; // index of last failed source
-  final _firstItemFocusNode = FocusNode();
-  final _firstTabFocusNode = FocusNode();
-  int _activeTab = 0; // 0 = All, 1 = Direct, 2 = Torrent
-
-  late List<Torrent> _directSources;
-  late List<Torrent> _torrentSources;
-
-  @override
-  void initState() {
-    super.initState();
-    _directSources = widget.sources.where((t) => t.isDirectStream).toList();
-    _torrentSources = widget.sources
-        .where((t) => t.streamType == StreamType.torrent)
-        .toList();
-    // Auto-focus first item after build (for DPAD)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _firstItemFocusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _firstItemFocusNode.dispose();
-    _firstTabFocusNode.dispose();
-    super.dispose();
-  }
-
-  List<Torrent> get _filteredSources {
-    switch (_activeTab) {
-      case 1:
-        return _directSources;
-      case 2:
-        return _torrentSources;
-      default:
-        return widget.sources;
-    }
-  }
-
-  String _parseQuality(String name) {
-    return sourceQualityBadgeForName(name) ?? 'HD';
-  }
-
-  Color _qualityColor(String quality) {
-    // Ordered most-capable-first, indexed by tier — the list's ORDER is the
-    // contract, so this switch maps position, not hue.
-    final tiers = AppThemeScope.of(context).stremioTv.qualityTier;
-    switch (quality) {
-      case '4K':
-        return tiers[0];
-      case '1080p':
-        return tiers[1];
-      case '720p':
-        return tiers[2];
-      case '480p':
-        return tiers[3];
-      default:
-        return tiers[4];
-    }
-  }
-
-  Future<void> _onSourceTap(Torrent source) async {
-    if (_resolvingIndex != null) return;
-    final originalIndex = widget.sources.indexOf(source);
-    setState(() {
-      _resolvingIndex = originalIndex;
-      _failedIndex = null;
-    });
-
-    try {
-      final url = await widget.resolver(source);
-      if (!mounted) return;
-      if (url != null && url.isNotEmpty) {
-        // Validate direct URLs with HEAD check (size >= 50MB)
-        if (source.isDirectStream) {
-          final valid = await widget.validateDirectUrl(url);
-          if (!mounted) return;
-          if (!valid) {
-            setState(() {
-              _resolvingIndex = null;
-              _failedIndex = originalIndex;
-            });
-            return;
-          }
-        }
-        Navigator.of(
-          context,
-        ).pop(_ResolvedSourceChoice(url: url, sourceIndex: originalIndex));
-      } else {
-        setState(() {
-          _resolvingIndex = null;
-          _failedIndex = originalIndex;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _resolvingIndex = null;
-        _failedIndex = originalIndex;
-      });
-    }
-  }
-
-  Widget _buildTab(
-    String label,
-    int count,
-    int tabIndex, {
-    FocusNode? focusNode,
-  }) {
-    final isActive = _activeTab == tabIndex;
-    return _SourcePickerTab(
-      focusNode: focusNode,
-      label: '$label ($count)',
-      isActive: isActive,
-      onTap: () {
-        setState(() => _activeTab = tabIndex);
-        // Re-focus first item in the new tab's list
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _firstItemFocusNode.requestFocus();
-        });
-      },
-      onDownPress: () => _firstItemFocusNode.requestFocus(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final filtered = _filteredSources;
-
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.7,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101016),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: app.core.tx.withAlpha(0x3D),
-              borderRadius: app.shape.br(2),
-            ),
-          ),
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: Color(0xFFFFB74D),
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Auto-play failed — select a source',
-                    style: TextStyle(
-                      color: app.core.tx,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Tabs
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-            child: Row(
-              children: [
-                _buildTab(
-                  'All',
-                  widget.sources.length,
-                  0,
-                  focusNode: _firstTabFocusNode,
-                ),
-                const SizedBox(width: 8),
-                if (_directSources.isNotEmpty) ...[
-                  _buildTab('Direct', _directSources.length, 1),
-                  const SizedBox(width: 8),
-                ],
-                if (_torrentSources.isNotEmpty)
-                  _buildTab('Torrent', _torrentSources.length, 2),
-              ],
-            ),
-          ),
-          Divider(color: app.core.tx.withAlpha(0x1F), height: 1),
-          // Source list
-          Flexible(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        'No sources in this category',
-                        style: TextStyle(
-                          color: app.core.tx.withAlpha(0x62),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: filtered.length,
-                    itemBuilder: (ctx, i) {
-                      final source = filtered[i];
-                      final quality = _parseQuality(source.displayTitle);
-                      final qColor = _qualityColor(quality);
-                      final originalIndex = widget.sources.indexOf(source);
-                      final isResolving = _resolvingIndex == originalIndex;
-                      final size = source.sizeBytes > 0
-                          ? Formatters.formatFileSize(source.sizeBytes)
-                          : null;
-                      final isDirect = source.isDirectStream;
-
-                      final isFailed = _failedIndex == originalIndex;
-
-                      return _SourcePickerItem(
-                        focusNode: i == 0 ? _firstItemFocusNode : null,
-                        isFirst: i == 0,
-                        onUpToTabs: () => _firstTabFocusNode.requestFocus(),
-                        quality: quality,
-                        qualityColor: qColor,
-                        title: source.displayTitle,
-                        meta: [
-                          if (isDirect) 'Direct' else 'Torrent',
-                          if (size != null) size,
-                          if (!isDirect && source.seeders > 0)
-                            '${source.seeders} seeders',
-                          if (source.source.isNotEmpty) source.source,
-                        ].join(' · '),
-                        isResolving: isResolving,
-                        isFailed: isFailed,
-                        onTap: isResolving ? null : () => _onSourceTap(source),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Tab button with DPAD focus support.
-class _SourcePickerTab extends StatefulWidget {
-  final FocusNode? focusNode;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-  final VoidCallback? onDownPress;
-
-  const _SourcePickerTab({
-    this.focusNode,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-    this.onDownPress,
-  });
-
-  @override
-  State<_SourcePickerTab> createState() => _SourcePickerTabState();
-}
-
-class _SourcePickerTabState extends State<_SourcePickerTab> {
-  bool _focused = false;
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (isActivateKey(event.logicalKey)) {
-      widget.onTap();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      widget.onDownPress?.call();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      return KeyEventResult.handled; // consume — nothing above tabs
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: _handleKey,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            // Active = purple fill, focus = white ring (Home mode-toggle
-            // pattern); the ring shows even on the active pill.
-            color: widget.isActive ? app.home.chromeAccent : Colors.transparent,
-            borderRadius: app.shape.br(20),
-            border: Border.all(
-              color: _focused
-                  ? app.stremioTv.focusRing
-                  : widget.isActive
-                  ? Colors.transparent
-                  : app.core.tx.withAlpha(0x1F),
-              width: _focused ? 2 : 1,
-            ),
-          ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              color: widget.isActive
-                  ? app.inkOn(app.home.chromeAccent)
-                  : app.core.tx.withAlpha(0x8A),
-              fontSize: 13,
-              fontWeight: widget.isActive ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Individual source item with DPAD focus support.
-class _SourcePickerItem extends StatefulWidget {
-  final FocusNode? focusNode;
-  final String quality;
-  final Color qualityColor;
-  final String title;
-  final String meta;
-  final bool isResolving;
-  final bool isFailed;
-  final VoidCallback? onTap;
-  final bool isFirst; // first item in list — up arrow goes to tabs
-  final VoidCallback? onUpToTabs;
-
-  const _SourcePickerItem({
-    this.focusNode,
-    required this.quality,
-    required this.qualityColor,
-    required this.title,
-    required this.meta,
-    required this.isResolving,
-    this.isFailed = false,
-    this.onTap,
-    this.isFirst = false,
-    this.onUpToTabs,
-  });
-
-  @override
-  State<_SourcePickerItem> createState() => _SourcePickerItemState();
-}
-
-class _SourcePickerItemState extends State<_SourcePickerItem> {
-  late final FocusNode _focusNode;
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode = widget.focusNode ?? FocusNode();
-  }
-
-  @override
-  void dispose() {
-    if (widget.focusNode == null) _focusNode.dispose();
-    super.dispose();
-  }
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (isActivateKey(event.logicalKey)) {
-      widget.onTap?.call();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.isFirst) {
-      widget.onUpToTabs?.call();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack) {
-      Navigator.of(context).pop();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final qColor = widget.qualityColor;
-    return Focus(
-      focusNode: _focusNode,
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: _handleKey,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _focused
-                ? app.home.chromeAccent.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: app.shape.br(10),
-            border: Border.all(
-              // Chrome focus ring (width 2), matching the reskinned toggles /
-              // header buttons so every DPAD-focusable control reads the same.
-              color: _focused ? app.stremioTv.focusRing : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: Row(
-            children: [
-              // Quality badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: qColor.withValues(alpha: 0.15),
-                  borderRadius: app.shape.br(6),
-                  border: Border.all(color: qColor.withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  widget.quality,
-                  style: TextStyle(
-                    color: qColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Title + meta
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: _focused
-                            ? app.core.tx
-                            : app.core.tx.withAlpha(0xB3),
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.meta,
-                      style: TextStyle(
-                        color: app.core.tx.withAlpha(0x62),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Loading, failed, or play icon
-              if (widget.isResolving)
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: app.home.chromeAccent,
-                  ),
-                )
-              else if (widget.isFailed)
-                const Icon(
-                  Icons.error_outline,
-                  color: Color(0xFFEF5350),
-                  size: 22,
-                )
-              else
-                Icon(
-                  Icons.play_circle_outline,
-                  color: _focused
-                      ? app.core.tx.withAlpha(0x8A)
-                      : app.core.tx.withAlpha(0x3D),
-                  size: 22,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Result from resolving a channel to a playable stream (no UI).
-class _ChannelPlaybackResult {
-  final String url;
-  final String title;
-  final String contentType;
-  final String? contentImdbId;
-  final int? contentSeason;
-  final int? contentEpisode;
-  final double? startAtPercent;
-  final List<Torrent> playableSources;
-  final int sourceIndex;
-  final Future<String?> Function(Torrent) sourceResolver;
-  final Map<String, dynamic> nowPlayingGuideData;
-  final Map<String, dynamic>? nextUpGuideData;
-  final int baseSlotStartMs;
-  final int slotOffset;
-
-  const _ChannelPlaybackResult({
-    required this.url,
-    required this.title,
-    required this.contentType,
-    this.contentImdbId,
-    this.contentSeason,
-    this.contentEpisode,
-    this.startAtPercent,
-    required this.playableSources,
-    required this.sourceIndex,
-    required this.sourceResolver,
-    required this.nowPlayingGuideData,
-    this.nextUpGuideData,
-    required this.baseSlotStartMs,
-    required this.slotOffset,
-  });
-}
-
-class _ResolvedSourceChoice {
-  final String url;
-  final int sourceIndex;
-
-  const _ResolvedSourceChoice({required this.url, required this.sourceIndex});
-}
-
-class _StremioTvPlaybackCursor {
-  final int baseSlotStartMs;
-  final int slotOffset;
-
-  const _StremioTvPlaybackCursor({
-    required this.baseSlotStartMs,
-    required this.slotOffset,
-  });
 }

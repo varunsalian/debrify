@@ -12,6 +12,31 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
+STREMIO_TV_COMPLETE = False
+STREMIO_TV_FACADE = "lib/screens/stremio_tv/stremio_tv_screen.dart"
+STREMIO_TV_BRIDGE = "lib/features/stremio_tv/presentation/legacy_stremio_tv/"
+# Final cap is activated only at completion and measured over every line.
+STREMIO_TV_FACADE_CAP = 0
+STREMIO_TV_PREEXISTING = {
+    "lib/features/stremio_tv/" + path for path in (
+        "application/stremio_tv_providers.dart",
+        "data/stremio_tv_catalog_editor.dart",
+        "models/stremio_tv_catalog_option.dart",
+        "models/stremio_tv_catalog_picker_result.dart",
+        "presentation/stremio_tv_catalog_picker_dialog.dart",
+        "presentation/stremio_tv_catalog_picker_views.dart",
+        "presentation/stremio_tv_focus_frame.dart",
+    )
+}
+# D2: one original build body cannot be split by a move. Measure at creation.
+# Exit: separately characterized header/channel paint decomposition with goldens.
+STREMIO_TV_SIZE_EXCEPTIONS = {
+    STREMIO_TV_BRIDGE + "stremio_tv_layout.dart": 0,
+}
+STREMIO_TV_HANDOFF_FILES = {
+    STREMIO_TV_BRIDGE + "stremio_tv_play_channel.dart",
+    STREMIO_TV_BRIDGE + "stremio_tv_player_guide.dart",
+}
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
@@ -402,6 +427,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     EPISODES_PANEL_BRIDGE,
     CATALOG_DETAIL_BRIDGE,
     DEBRIFY_TV_BRIDGE,
+    # Move-only State bridge; exit: Stremio TV data contracts/Riverpod.
+    STREMIO_TV_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -432,6 +459,20 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    stremio_tv = relative.startswith("lib/features/stremio_tv/")
+    if stremio_tv and relative not in STREMIO_TV_PREEXISTING:
+        limit = max(500, STREMIO_TV_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line Stremio TV extraction limit")
+        if "TEMP(stremio_tv)" in source and (STREMIO_TV_COMPLETE or not relative.startswith(STREMIO_TV_BRIDGE)):
+            problems.append("Stremio TV temporary cross-call outside its exact legacy bridge")
+        if relative not in STREMIO_TV_HANDOFF_FILES and re.search(r"\b(?:VideoPlayerLauncher\s*\.\s*push|VideoPlayerScreen)\s*\(", source):
+            problems.append("Stremio TV playback entry outside its registered handoff files")
+    if STREMIO_TV_COMPLETE and relative == STREMIO_TV_FACADE:
+        if lines > STREMIO_TV_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {STREMIO_TV_FACADE_CAP}-line Stremio TV facade limit")
+        if "TEMP(stremio_tv)" in source:
+            problems.append("Stremio TV temporary cross-call remains in the facade")
     if relative.startswith("lib/features/debrify_tv/"):
         limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -657,6 +698,15 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if stremio_tv:
+                if target == STREMIO_TV_FACADE:
+                    problems.append("Stremio TV feature imports its facade")
+                if relative not in STREMIO_TV_PREEXISTING:
+                    if not relative.startswith(STREMIO_TV_BRIDGE) and target.startswith("lib/services/"):
+                        problems.append("Stremio TV service import outside its exact legacy bridge")
+                    if relative not in STREMIO_TV_HANDOFF_FILES and any(name in target for name in (
+                            "video_player_launcher", "player_launch", "media_kit", "lib/screens/video_player/")):
+                        problems.append("Stremio TV playback import outside its registered handoff files")
             if relative.startswith("lib/features/addon_hub/"):
                 if target in (ADDON_HUB_FACADE, "lib/screens/addons_screen.dart", "lib/screens/settings/stremio_addons_page.dart"):
                     problems.append("addon hub feature imports a legacy addon screen")
@@ -842,6 +892,8 @@ def main() -> int:
         paths.add(ROOT / ADDON_HUB_FACADE)
     if DEBRIFY_TV_COMPLETE:
         paths.add(ROOT / DEBRIFY_TV_FACADE)
+    if STREMIO_TV_COMPLETE:
+        paths.add(ROOT / STREMIO_TV_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
@@ -864,6 +916,8 @@ def main() -> int:
     ]
     if not (ROOT / "lib/features/spotlight_board").is_dir():
         problems.append("Registered spotlight board directory is missing")
+    if STREMIO_TV_COMPLETE and not (ROOT / STREMIO_TV_FACADE).is_file():
+        problems.append("Stremio TV facade is missing")
     if not (ROOT / STORAGE_SOURCE_DIR).is_dir():
         problems.append(f'Registered storage directory is missing: {STORAGE_SOURCE_DIR}')
     if not paths:

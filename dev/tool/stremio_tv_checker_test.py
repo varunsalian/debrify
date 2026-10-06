@@ -5,11 +5,13 @@ from pathlib import Path
 
 
 def self_test(package, *, fixture_filter=None):
+    from stremio_tv_architecture_test import self_test as architecture_tests
+    architecture_tests()
     import check_verbatim_moves as verbatim
     from check_settings_moves import check
     from stremio_tv_checker_fixtures import inputs, layout
     from stremio_tv_source_reader import validate
-    original, rows, base, leaves = inputs(package)
+    original, rows, base, leaves = inputs(package, original_fixture=True)
     source = base['source']
     from collections import OrderedDict
     memo = OrderedDict()

@@ -12,7 +12,7 @@
 365 lib/screens/settings/external_player_settings_page.dart
 4182 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
-3958 lib/screens/stremio_tv/stremio_tv_screen.dart
+3365 lib/screens/stremio_tv/stremio_tv_screen.dart
 3858 lib/services/stremio_service.dart
 3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 269 lib/screens/pikpak/pikpak_files_screen.dart

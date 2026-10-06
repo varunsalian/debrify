@@ -1491,3 +1491,66 @@ or updated. Lockfile and all golden bytes remain unchanged. Evidence:
 E/`stepL-macos-strict.txt`, `stepL-linux-strict.txt`, `stepL-linux-replay.json`.
 Application source still equals R. Step L is committed separately; execution
 is now authorized through Step 5 / full-suite gate 1 only.
+
+
+### Step 1 — guards, models, quality and private picker widgets (2026-10-06)
+
+Previous checkpoint: **`d96c4ae2b`** (Step L). Ten original declarations move
+to four files, using the accepted compiling probe's exact bodies, private
+widget runtime types, three typedefs and two frozen D4 forwarders. Production
+callers use the new names; their original implementations are removed.
+Per-entry wiring review is E/`step1-wiring-review.json`.
+
+The additive architecture rules register the exact bridge, the seven untouched
+catalog-picker exclusions, all other new/future files' 500-line limit, the
+pending D2 cap (zero until creation), service/facade/playback bans and completion
+rules. Real-copy negatives pass, including both unregistered 501-line paths,
+service imports, playback entry/import, exception growth and final facade/TEMP
+checks. The final completion flag/cap stay inactive. The historical ORIGINAL,
+partial and completed checker fixtures explicitly read the accepted checkpoint;
+the CLI checks the live configuration. Other feature tools/configs retain their
+bytes and behavior.
+
+All **17 manifests** pass CLI/self-tests using isolated parser packages with
+copied kernels deleted; **all 16 other stdout files are byte-identical** to
+Step 0b. Shared adapter/config/source inputs are unchanged, validating reuse of
+its 16 raw-adapter byte-equality proofs. Stremio TV's binding, callback,
+contract and reader guards pass. Architecture, sizes (**2,458 files**), storage
+keys/references/member map/bodies, exact CI format (**zero changes**), CI
+analyzer/allowlist (**same 25 warnings**), LF and diff checks pass. The explicit
+`--relocate` analyzer comparison is PASS; per-symbol comparison has **zero
+slice diagnostics and zero additions** beyond R/probe maxima.
+
+All **63 characterization cases** pass, including six strict macOS goldens;
+the broader focused comparison observes **178 successes and the same one known
+profile source-guard failure**, with no new failure, missing identity or skip.
+The calibrated Linux strict replay passes **6/6**, with unchanged lockfile and
+PNG bytes. Suite-evidence runs use `--no-pub --concurrency=1`, serialized.
+The first focused command used a nonexistent stale-runtime path: that rejected
+run is preserved under `step1-characterization-rejected-path*`; the corrected
+whole-file run uses `test/profiles/isolation_suite/stale_runtime_guard_test.dart`
+and passes comparison. It is a command error, not a behavior regression or
+allowlisted flake.
+
+Owned shape tokens remain **13**, global floor **488**, bare-radius residue
+zero; newly moved token files are registered and zero-token files go in the
+extracted residue map. The owned slice's theme sites remain **30**, light ink
+**three non-primary / zero primary**. Measurement scope correction: Step 0's
+30-site audit was the owned screen slice; the complete `p2_stremio_tv` surface
+also includes 49 sites in untouched neighboring screen files. Its ORIGINAL
+and current counts are both **79**. Explicit new patterns include only this
+split. The initial check-run assertion used the narrower count for the full
+surface; that rejected measurement is preserved, then both scopes are checked.
+
+Formatted facade **3,365** lines: imports 51 + widget 16 + State header/close 2
++ retained original bodies 2,534 + lifecycle 67 + retained build 573 + remaining
+blanks/comments 122 = 3,365. Its ratchet is lowered by hand. New files:
+models **58**, quality **20**, picker sheet **292**, controls **294**; no size
+exception is activated. The oversized facade remains temporarily for its
+40 fields and settings/library/menu/navigation/chrome/playback/resolver/action/
+layout responsibilities, removed in Steps 2–6. E/`step1-*` records commands,
+source hashes, measurements, comparisons and input compatibility.
+
+No protected sibling widget, player, launcher, service or dependency change;
+no production seam, device run, push, merge or branch switch. Steps 6–7 remain
+outside this execution authorization.

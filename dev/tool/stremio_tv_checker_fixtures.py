@@ -1,12 +1,25 @@
 """Test-only syntax layouts; compilation/composition proof belongs to step 0b."""
-import csv,json,subprocess
+import csv,io,json,subprocess
 from collections import defaultdict
 from pathlib import Path
 
-def inputs(package):
+def inputs(package, *, original_fixture=False):
     from check_verbatim_moves import ROOT,parse,original_leaves,split_names
     config=json.loads((ROOT/'dev/tool/stremio_tv_checker_config.json').read_text())
     rows=list(csv.DictReader((ROOT/'dev/tool/stremio_tv_manifest.tsv').open(),delimiter='\t'))
+    if original_fixture:
+        # Keep the reviewed ORIGINAL/partial/completed fixtures frozen while
+        # the real CLI validates each live intermediate ownership map.
+        checkpoint='e1d4fe1f2b0462826de0a591ef7371a84200d85d'
+        def frozen(path):
+            return subprocess.check_output(['git','show',checkpoint+':'+path],cwd=ROOT,text=True)
+        config=json.loads(frozen('dev/tool/stremio_tv_checker_config.json'))
+        rows=list(csv.DictReader(io.StringIO(frozen('dev/tool/stremio_tv_manifest.tsv')),delimiter='\t'))
+        sidecar=ROOT/'.dart_tool/stremio_tv_parser/frozen_fixture_scaffolding.json'
+        sidecar.parent.mkdir(parents=True,exist_ok=True)
+        text=frozen('dev/tool/stremio_tv_scaffolding.json')
+        if not sidecar.exists() or sidecar.read_text()!=text:sidecar.write_text(text)
+        config['sidecars']['scaffolding']=str(sidecar)
     original=subprocess.check_output(['git','show',config['baseline']+':'+config['source']],cwd=ROOT,text=True)
     leaves=original_leaves(parse({'<original>':original},package,occurrence_bindings=True)['<original>']['declarations'],split_names(rows))
     return original,rows,config,leaves
