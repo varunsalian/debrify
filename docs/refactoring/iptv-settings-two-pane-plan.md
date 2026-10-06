@@ -298,8 +298,11 @@ bridge may import only `lib/services/iptv_source_stats.dart`,
 `lib/services/storage/startup_iptv_storage.dart` and
 `lib/services/storage/iptv_appearance_storage.dart` (each with its exact
 registered `show` list), and `lib/screens/settings/iptv_style_page.dart`
-(`show iptvStyleLabel, kIptvStyleChoices`, as actually
-used); any other service, screen, player, `player_launch`, native bridge,
+; **each `show` list is registered per destination file and URI with
+exactly the names that file uses** (round 2 P2-3): for example the rail shows
+`iptvStyleLabel` only and the preference panes `kIptvStyleChoices` only; the
+same per-file rule applies to every service import, never a bridge-wide union
+(a wider list is an `unused_shown_name` warning). Any other service, screen, player, `player_launch`, native bridge,
 `media_kit` or profile import fails. The service-free files must not import
 `lib/services/` or `lib/screens/`; no facade back-import; the named cross-feature ban
 above; at completion the facade in the pure-export facade list (the
@@ -371,12 +374,23 @@ As in the tuner and Debrify TV plans, plus:
    The `torbox_callback_identity.py` mechanism covers only **genuine
    tear-offs and single-call arrow closures** whose body invokes a dotted
    member: `onSelect`/`onRight: _enterPane` (rail), `onLeft: _returnToRail`
-   (every pane row and the URL method card), the rail `onUp`/`onDown` closures
-   (`() => _focusRail(...)`), Auto-refresh's **distinct** `onLeft: () =>
-   _focusRail(_autoRefreshIndex)` (847, not `_returnToRail`), and every
-   pass-through of a host function object (contract 8). The rail's
-   **assignment closures** (`onFocused: () => _dest.value =
-   _destForRail(i)` and the ten `() => _dest.value = const _XDest()` forms)
+   (every pane row and the URL method card), the **standalone** rail
+   `onUp`/`onDown` closures (`() => _focusRail(...)`), Auto-refresh's
+   **distinct** `onLeft: () => _focusRail(_autoRefreshIndex)` (845, not
+   `_returnToRail`), and every pass-through of a host function object
+   (contract 8). **Conditional callback arguments (round 2 P1)** — the source
+   entry `onUp: i == 0 ? null : () => _focusRail(i - 1)`, Add's
+   `onUp: widget.playlists.isEmpty ? null : () => _focusRail(...)`, Player
+   guide's two-closure `onDown: widget.showRecordingSection ? () => … : () =>
+   …`, and every other conditional `onUp`/`onDown` (the dependency report
+   lists them all) — are outside that checker (its `conditional_member`
+   supports direct tear-offs only, `torbox_callback_identity.py:269`); their
+   **complete conditional expressions** go into the exact-expression sidecar
+   with whole-body and binder coverage and **branch-specific** receiver-swap
+   negatives. Both categories are proven at S = 0…3. The rail's
+   **assignment closures** (ten sites: the source loop's `onFocused: () =>
+   _dest.value = _destForRail(i)` and nine `() => _dest.value = const
+   _XDest()` forms)
    are not representable by that checker (an invoked dotted member is
    required); they are covered by whole-body verbatim comparison, the
    occurrence binder (`_owners.dest` qualification) and an **exact
@@ -407,9 +421,11 @@ As in the tuner and Debrify TV plans, plus:
    covers `lib/screens/settings/*.dart` today; from step 1 add
    `lib/features/iptv_settings_two_pane/presentation/*.dart` and
    `…/legacy_iptv_settings_two_pane/*.dart` so the measured surface keeps
-   **the same theme sites and expressions** (file and physical-line totals
-   necessarily change; before/after `measure_theme_surface.sh` output is
-   compared site by site, round 1 P3).
+   the same theme sites: `measure_theme_surface.sh` prints aggregate file,
+   line and regex-hit counts, so parity is **equal regex-hit counts per
+   pattern** before/after (file and line totals necessarily change), and
+   **expression** parity comes from the per-declaration verbatim/relocation
+   proof (round 2 P2-4).
    `light_ink_inventory.py` gets the feature directories next to
    `lib/screens/settings` (the settings_widgets precedent); verify the
    inventory output is identical. `theme_rendered_set.py` keeps its root.
@@ -437,7 +453,7 @@ As in the tuner and Debrify TV plans, plus:
 | L | **Before anything moves:** Linux originals hash-verified, committed separately, Linux golden test made strict | Goldens |
 | 1 | Guard registration and architecture test (quick-job CI step plus the behaviour-job source-contract runner); dialog, destination family and the four piece files; the facade (still holding widget and State) imports them; shape/theme/ink registrations and the format/analyze CI paths. **Full-suite gate 1** | 4–9 (pieces), 10 |
 | 2 | The widget and the whole State in one step: owners, dependencies, sections composition, navigation, rail and the three pane sections; verbatim lifecycle, `focusRail`, `focusAddPane` and `build` with receivers; the facade becomes the pure export file. Nothing is left half-moved, so no temporary forwarder exists | 1–9 |
-| 3 | Completion: `IPTV_SETTINGS_TWO_PANE_COMPLETE = True`, measured facade cap, pure-export facade checks, `main()` path, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
+| 3 | Completion: `IPTV_SETTINGS_TWO_PANE_COMPLETE = True`, measured facade cap, pure-export facade checks, `main()` path, real-checker negatives, verification of the step-1 CI paths, final evidence. **Full-suite gate 2** | All |
 
 **Why step 2 moves the whole State at once.** The State's methods call each
 other across every planned section (`_buildRail` → `_focusRail`,
@@ -466,9 +482,12 @@ a scratch tree first.
    `--parser-package`. **Row model (round 1 P1-2).** The manifest has
    **one whole-class row** for `IptvSettingsTwoPane` (byte-identical,
    destination the widget file) and **member rows** for
-   `IptvSettingsTwoPaneState` (fields, `initState`, `didUpdateWidget`,
-   `dispose`, `focusRail`, `focusAddPane`, `build` → the widget file; the
-   rest → their sections), never a whole-State row combined with member rows;
+   `IptvSettingsTwoPaneState`: the **eight field rows** (seven instance fields
+   and the static) → `IptvSettingsTwoPaneOwners`; `initState`,
+   `didUpdateWidget`, `dispose`, `focusRail`, `focusAddPane`, `build` → the
+   widget file's State; every other member → its section. The State's new
+   owners field and sections cache are **registered scaffolds** (round 2
+   P2-2). Never a whole-State row combined with member rows;
    the State **header** (`class IptvSettingsTwoPaneState extends
    State<IptvSettingsTwoPane>`) is checked separately by the validator.
    Whole-class rows for the dialog, the `_Dest` family and each piece. At
@@ -690,6 +709,21 @@ integrating shared files **semantically, by union**:
    imports with `show` lists and real-checker negatives.
 8. **P3** → counts (10 imports, 54 fields, nine private widgets), line spans
    (dialog 13–58, widget doc from 60) and theme parity by site.
+
+## Round 2 review resolution
+
+1. **P1 conditional callbacks** → Technique 6: complete conditional
+   `onUp`/`onDown` expressions in the exact-expression sidecar with
+   branch-specific negatives; standalone call closures stay in the identity
+   checker; both proven at S = 0…3.
+2. **P2 field rows** → Step 0 item 3: eight field rows to the owners record;
+   lifecycle/focus/build rows to the widget file; owners field and sections
+   cache registered as scaffolds.
+3. **P2 `show` lists** → guard registration: per destination file and URI.
+4. **P2 theme evidence** → Technique 9: regex-hit parity per pattern plus the
+   verbatim proof for expressions.
+5. **P3** → Auto-refresh `onLeft` at 845; ten assignment sites (one loop, nine
+   constant); step 3 only verifies CI paths.
 
 ## Progress
 
