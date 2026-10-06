@@ -83,8 +83,16 @@ def layout(original,rows,config,leaves,selected=None):
     for (path,owner),bodies in destinations.items():
         body='\n'.join(bodies)
         if any(spec['owner']==owner for spec in config.get('planned_plain_sections',[])):
-            body=owner+'(this._deps);\n final StremioTvDependencies _deps;\n StremioTvOwners get _owners => _deps.owners;\n StremioTvSections get _sections => _deps.sections;\n'+body
+            body='\n'.join(' '.join(spec['tokens']) for spec in scaffold_data['scaffolds'] if spec['file']==path and spec['owner']==owner)+'\n'+body
         sources[path]=sources.get(path,'')+('class '+owner+' {\n'+body+'\n}\n' if owner else body+'\n')
     for alias in config.get('type_aliases',[]):
         if alias['original_name'] in selected:sources[alias['file']]+='typedef '+alias['alias']+' = '+alias['original_name']+';\n'
+    # D4: the compiling probe alone authorizes exact typed constructor
+    # forwarders. Keep ORIGINAL untouched; add only the frozen declarations
+    # when their private widget file is in this simulated layout.
+    for spec in scaffold_data['scaffolds']:
+        if (spec['owner']=='' and spec['file'] in sources
+                and spec['file'] not in config['scaffolds']
+                and spec['tokens'][:1]!=['typedef']):
+            sources[spec['file']]+=' '.join(spec['tokens'])+'\n'
     return sources

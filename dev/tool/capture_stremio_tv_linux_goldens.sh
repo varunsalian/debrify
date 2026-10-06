@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Run from a clone under $HOME in calibrated debrify-flutter:3.44.8 linux/amd64.
-# Only checkpoint (b)'s tests may produce these ORIGINAL PNGs.
+# Only the Step 0b ORIGINAL review checkpoint may produce these PNGs.
 set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
 reference_revision=c7a3d156d260e08421043a5430c6242124ba8e1b
-checkpoint_subject='test(stremio-tv): step 0 original-code characterization checkpoint'
+checkpoint_subject='test(stremio-tv): step 0b review closure checkpoint'
 revision_log="$(git log --format='%H %s' HEAD)"
 checkpoint_revision="$(python3 -c 'import sys; subject=sys.argv[1]; rows=sys.stdin.read().splitlines(); matches=[r[:40] for r in rows if r[41:]==subject]; assert len(matches)==1, (subject,matches); print(matches[0])' "$checkpoint_subject" <<< "$revision_log")"
 for input in lib pubspec.yaml pubspec.lock; do

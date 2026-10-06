@@ -312,3 +312,5 @@ test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_playback_test
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_provider_test.dart
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_rotation_test.dart
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_source_guard_test.dart
+test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_review_library_test.dart
+test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_review_playback_test.dart

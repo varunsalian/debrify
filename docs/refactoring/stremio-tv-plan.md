@@ -1303,3 +1303,84 @@ below are under E, outside the committed tree.
   opt-in tooling, Linux script, CI wiring and this progress/dependency report.
   Application source and dependencies equal R. Stop here for Claude's
   Step 0 review; step 0b and steps 1–7 remain unstarted.
+
+
+### Step 0b — ORIGINAL review closure (2026-10-06)
+
+Parent **(b) = `587ea94dfeb1eed38b39061e7a5dc00748deab55`**; R remains
+`c7a3d156d260e08421043a5430c6242124ba8e1b`. The exact review checkpoint
+subject is `test(stremio-tv): step 0b review closure checkpoint`. Its resolved
+SHA and application/dependency object equality are recorded in
+`step0b-checkpoint-provenance.json`. All evidence stays under the common Git
+directory's `refactor-evidence/stremio_tv/`; application code has not moved.
+
+Claude's independent run found 17 surviving mutations among 29 compilable
+mutations. Step 0's targeted mutation runs are historical evidence, not
+sufficient Step 0b whole-file evidence. Fifteen new ORIGINAL cases cover
+series P1 title/non-null start, a second valid direct candidate, TorBox and
+Premiumize cache stages plus RD's absent stage, series Next/switch map fields,
+the captured direct resolver, RD largest selected video, AllDebrid episode
+mismatch deletion, rejected PikPak prepared-root trash, favorite focus restoration, empty-library editor fallback,
+genre-only filtering, Escape refocus and stored disabled filters. The complete
+characterization set has **63 cases: 52 behavioral, four source guards, one
+crop test and six unchanged strict macOS golden scenes**. Whole-file ORIGINAL
+runs and named assertions are the acceptance criteria for every behavioral
+mutation; compile/fixture failures are rejected as proof.
+
+The focus cases hold the original asynchronous preference boundary and move
+focus to a competing node before the post-frame callback. The genre case uses
+the existing public mutable `allChannels` list and a valid public channel model
+with genre independent of its display name (production factories normally
+repeat the genre in the name). It asserts the matching channel remains visible
+before accessing the tuner. The initial genre mutant's fixture lookup failure
+is rejected as proof. No production seam or sibling widget edit is introduced.
+
+**`autoLabel` is proposed S, pending Claude's agreement:** R's only call to
+`_providerFullLabel` is the provider-menu build inside
+`_availableProviders.isNotEmpty`; therefore its empty-provider `return 'Auto'`
+branch has no UI-observable boundary. Its exact mutation remains guarded in
+the simulated moved layout and reader. No seam is added to expose it.
+
+The owned detached composition probe maps **all 119 manifest leaves** into
+the facade/owners/sections/models/private widgets; it compiles the unchanged
+`main.dart` entrypoint. Strict analysis has **zero warnings/errors and seven
+infos**, inventoried by original member/rule/message in
+`step0b-analyzer-inventory.json`. Mandatory receiver qualification wraps seven
+one-line statements; their braces are not changed. D4 is activated by the
+probe's seven new private optional-parameter warnings: exactly two typed
+constructor forwarding functions are frozen in the feature-only scaffolding
+sidecar. Private widget constructors and runtime types remain unchanged.
+Two unused scaffold getters (`Chrome._sections`, `CloudResolvers._owners`)
+are omitted from the pins and simulated layouts; no original leaf changes.
+
+The formatted probe facade is **119 lines**: imports 7, widget 16, State
+header/close 2, owners/composition 10, lifecycle 72, build 2, remaining
+blanks/comments 10 (sum 119). The only probe file above 500 is layout at
+**713** lines; play is below 500. Actual production creation caps remain
+inactive until extraction. Sources, AST spans, hashes and the real checker CLI
+command are in `step0b-compiling-sources/` and `step0b-composition-proof.json`.
+Nineteen simulated mutants are rejected by both checker and reader: all seven
+required section kinds, `autoLabel`, three composition mutations, two D4
+forwarder mutations and the three native-only values at both P1/P2 (`step0b-guard-mutants.json`).
+
+The Linux ORIGINAL capture script now selects this Step 0b checkpoint by its
+exact subject, verifies application objects against R and retains the same
+six original-only scenes. Two new characterization files are added to CI's
+behavior list; no golden, allowlist or shared checker implementation changes.
+The checkpoint records this completed test/probe work. The post-commit replay
+of Claude's unchanged 29 line mutations, whole-file replay of the original
+43 proxies plus the new RD cache control, real CLI/self-tests and all-manifest
+compatibility runs, and serialized full-suite `base2` are in progress; their
+accepted outcomes will be appended below after completion. **Stop before
+Step 1** for Claude's probe review, S agreement and Linux-original handoff.
+
+
+The first post-commit replay at `b3b7cd357` rejected 27/29 through named
+assertions, but `pikTrashSkip` passed (despite its earlier reviewed kill).
+That run is preserved under `step0b-initial-checkpoint-*` and
+`step0b-initial-claude-*`. The added fifteenth case prepares a mismatched
+PikPak episode and observes the exact root `files:batchTrash` payload and its
+ordering before retry. It passes on ORIGINAL. The unpublished checkpoint is
+amended to include it; all 29 line mutations will be replayed again at the
+resolved final checkpoint before accepting the result. The Linux script's
+exact subject still resolves one checkpoint in the final branch history.
