@@ -35,6 +35,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  // settings_widgets step 2: measured radius ceilings; token ownership retained.
+  'lib/features/settings_widgets/presentation/settings_connection_card.dart': 1,
+  'lib/features/settings_widgets/presentation/settings_section.dart': 1,
+  'lib/features/settings_widgets/presentation/settings_look_hero.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_tile.dart': 1,
+  'lib/features/settings_widgets/presentation/settings_toggle_tile.dart': 0,
   // settings_widgets step 1: measured radius ceilings; token ownership retained.
   'lib/features/settings_widgets/presentation/settings_page_theme.dart': 0,
   'lib/features/settings_widgets/presentation/settings_page_chrome.dart': 1,
@@ -197,7 +203,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/settings/simkl_settings_page.dart': 1,
   'lib/screens/settings/trakt_settings_page.dart': 1,
   'lib/screens/settings/widgets/dynamic_settings_builder.dart': 7,
-  'lib/screens/settings/widgets/settings_widgets.dart': 6,
+  'lib/screens/settings/widgets/settings_widgets.dart': 3,
   'lib/features/settings/presentation/legacy_settings/settings_release_details.dart':
       0,
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
@@ -249,6 +255,10 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // settings_widgets step 2: measured radius ceilings; token ownership retained.
+  'lib/features/settings_widgets/presentation/settings_connection_info.dart': 0,
+  'lib/features/settings_widgets/presentation/settings_connections_summary.dart':
+      0,
   // settings_widgets step 1: measured radius ceilings; token ownership retained.
   'lib/features/settings_widgets/presentation/settings_tokens.dart': 0,
   'lib/features/settings_widgets/presentation/settings_pending_badge.dart': 0,

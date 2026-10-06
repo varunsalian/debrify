@@ -1227,3 +1227,29 @@ exact 0b subject and retains R equality checks. It was syntax-checked only.
   changed-tree evidence is accepted. Parser scheduling increases to four
   independent workers on the 18-core/128-GB host; suite runs/commits stay
   serialized. The unchanged legacy TorBox CRLF input is Found 10.
+
+
+### Step 2 — connections and focusable rows (gate 1)
+
+- Step 1 commit: `181421578`. Step 2 moves ConnectionInfo/predicates,
+  ConnectionsSummary/State, ConnectionCard/State/initials, SettingsSection,
+  SettingsLookHero/State/swatches, SettingsTile/State and
+  SettingsToggleTile/State from R without edits to their bodies/comments.
+  Importers and all frozen tests/helpers/fixtures/goldens stay unchanged.
+  New shape entries are allocated at file creation; exact slice totals and
+  floor are checked before the committed-tree gate.
+- Per-step evidence: `step2/`, `step2-focused.*`; gate 1 records `gate1.*`
+  on the clean committed checkpoint and compares against `base3b.jsonl`.
+  Diagnostics snapshots preserve the staged application/test/config inputs;
+  committed lib/pubspec/test hashes are tied to those snapshots in evidence.
+
+- Step 2 verification: 17 manifests/self-tests and architecture fixtures pass;
+  CI format, analyze/unchanged 25-warning allowlist and sizes pass. Original
+  is 471 lines; largest destination 378. Shape remains exactly 26 tokens,
+  seven radii and 488 global calls; original residue is one token/three
+  radii. Settings theme retains 657 sites; light-ink site counts unchanged.
+  Whole analyzer relocation: no additions/removals (1689 reports). Strict
+  comparison: four original const infos, zero additions; fixtures pass.
+  Focused replay: 295 passing / one baseline failure, exact same identities
+  versus base3b, no skips/additions/missing tests; frozen twenty inputs equal.
+  The committed-tree full-suite gate follows before any Step 3 work.
