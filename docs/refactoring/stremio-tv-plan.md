@@ -761,7 +761,7 @@ As in the Debrify TV and Spotlight plans, plus:
    | C6 Menu and dialogs | Options menu items in order with Shuffle label `Mix n` advancing (R); Import submenu items, MDBList entry only when connected (R); filter page push returns `true` → refresh (O); local-catalog copy writes the JSON to the clipboard and snackbars (O/R); edit refocuses the edited channel (R). |
    | C7 Detail and guide | Detail opens `CatalogItemDetailScreen` with `isTelevision` and `enablePrimarySourcesHold: false` (O: route content); re-entrancy flag blocks a double open (O); still-loading channel waits on the 120 ms poll (O, fake time); guide sheet tap plays (O). |
    | C8 D-pad | Search button Left → sidebar probe, Right → menu, Down → tuner focus via the controller (R/O); search Escape ladder (clear, then close and refocus) (R); menu open by Select and closed by Escape with focus restored (R); submenu Left/Right returns to the Import item (R); provider menu Escape (R); picker: first item autofocus, Up → tabs, Escape pops (R). |
-   | C9 Field binding (behavioural proxies) | After load: rotation observable through guide/next slot boundaries (O; the three native-only push args are S); **mix salt** on a dedicated **two-item** channel: the guide/next item identity before and after Shuffle (`_mixSalt` 0 → 1) within the same base slot differ exactly as the original rotation selects (O; the fixture asserts the two salts select different items before relying on it); preferred quality, torrents-first and max-start reach request order and `startAtPercent` (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
+   | C9 Field binding (behavioural proxies) | After load: rotation observable through guide/next slot boundaries (O; the three native-only push args are S); **mix salt** on a dedicated **two-item** channel (the fixture first asserts the two salts select different items at the compared offsets), observed on three separate paths, each before and after Shuffle (`_mixSalt` 0 → 1) within the same base slot: **(i)** fresh launch metadata — the `stremioTvChannels` inline `nowPlaying` of a **new** P2 push after Shuffle (captured providers do not regenerate it); **(ii)** the guide data provider called before and after Shuffle; **(iii)** Next/channel-switch results compared **at the same cursor offset** — the cursor is reset (channel-switch, or a P2 retune of the same channel) before each compared Next call, the compared results' slot boundaries are asserted equal, then their item identities asserted different (O; successive Next calls alone advance the offset and can coincide, `A,B,A,B` vs `B,A,B,A`); preferred quality, torrents-first and max-start reach request order and `startAtPercent` (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
 
    **Mutation proofs** come in two kinds, recorded separately.
    - **Behavioural (ORIGINAL) proxies** (`original-mutations.json`):
@@ -783,9 +783,10 @@ As in the Debrify TV and Spotlight plans, plus:
      the `onCancel` bump removed; `includeMediaServers: false` flipped (the
      media-server test's regex and a request-observable proxy); the episode
      filter's `confidentMismatch` negated; the 480p torrent filter dropped;
-     the TorBox `finally` delete skipped; the `_mixSalt` read in
-     `_buildGuideChannelMetadata`/`_createGuideDataProvider` replaced by `0`
-     (C9 two-item case); favourite sort order inverted;
+     the TorBox `finally` delete skipped; three separate salt-to-zero
+     mutants, each rejected by its own C9 path: the `_mixSalt` reads in
+     `_buildGuideChannelMetadata` (path i), in `_createGuideDataProvider`
+     (path ii), and in `_resolveChannelPlayback`'s `getSchedule` (path iii); favourite sort order inverted;
      `_loadSettings` dropping the `_maxStartPercent` read; the stale-provider
      reset skipped; the detail re-entrancy flag never set; the focus rescue
      targeting `idx + 1` first; `watchStremioTvChannel` not nulled in
@@ -1117,6 +1118,13 @@ Codex design review round 1 (`~/.codex-runs/stv-design/last.txt`, at
 3. **P2 picker golden** — cropped region golden from the modal route's
    repaint boundary to the sheet's bounds via a tested test-side helper.
 4. **P3** — stale tuner-golden and "this file only" wording updated.
+
+## Round 3 review resolution
+
+Round 3: "No P1s — executable". Both P2s resolved: C9 observes salt on
+three paths (fresh launch metadata, guide provider, Next/switch at a reset
+cursor offset with equal slot boundaries) with three separate salt-to-zero
+mutants.
 
 ## Progress
 
