@@ -499,7 +499,8 @@ As in the Debrify TV and Spotlight plans, plus:
 
 1. **Two originals with a format commit (D1).**
    - **(a) Format-only commit** `style(stremio-tv): format the original
-     Stremio TV screen`: this file only; token equality with the original
+     Stremio TV screen`: this file plus the hand-raised `file_size_baseline.txt:15`
+     entry (3,958 lines after formatting), nothing else; token equality with the original
      except whitespace and AST-identified optional formatter commas (listed
      by node; negatives: an edited comment or literal, a non-optional comma,
      must fail); idempotence; `file_size_baseline.txt:15` raised by hand to
@@ -760,7 +761,7 @@ As in the Debrify TV and Spotlight plans, plus:
    | C6 Menu and dialogs | Options menu items in order with Shuffle label `Mix n` advancing (R); Import submenu items, MDBList entry only when connected (R); filter page push returns `true` → refresh (O); local-catalog copy writes the JSON to the clipboard and snackbars (O/R); edit refocuses the edited channel (R). |
    | C7 Detail and guide | Detail opens `CatalogItemDetailScreen` with `isTelevision` and `enablePrimarySourcesHold: false` (O: route content); re-entrancy flag blocks a double open (O); still-loading channel waits on the 120 ms poll (O, fake time); guide sheet tap plays (O). |
    | C8 D-pad | Search button Left → sidebar probe, Right → menu, Down → tuner focus via the controller (R/O); search Escape ladder (clear, then close and refocus) (R); menu open by Select and closed by Escape with focus restored (R); submenu Left/Right returns to the Import item (R); provider menu Escape (R); picker: first item autofocus, Up → tabs, Escape pops (R). |
-   | C9 Field binding (behavioural proxies) | After load: rotation and mix salt observable through guide/next results (O; the three native-only push args are S), preferred quality, torrents-first and max-start reach request order and `startAtPercent` (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
+   | C9 Field binding (behavioural proxies) | After load: rotation observable through guide/next slot boundaries (O; the three native-only push args are S); **mix salt** on a dedicated **two-item** channel: the guide/next item identity before and after Shuffle (`_mixSalt` 0 → 1) within the same base slot differ exactly as the original rotation selects (O; the fixture asserts the two salts select different items before relying on it); preferred quality, torrents-first and max-start reach request order and `startAtPercent` (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
 
    **Mutation proofs** come in two kinds, recorded separately.
    - **Behavioural (ORIGINAL) proxies** (`original-mutations.json`):
@@ -782,7 +783,9 @@ As in the Debrify TV and Spotlight plans, plus:
      the `onCancel` bump removed; `includeMediaServers: false` flipped (the
      media-server test's regex and a request-observable proxy); the episode
      filter's `confidentMismatch` negated; the 480p torrent filter dropped;
-     the TorBox `finally` delete skipped; favourite sort order inverted;
+     the TorBox `finally` delete skipped; the `_mixSalt` read in
+     `_buildGuideChannelMetadata`/`_createGuideDataProvider` replaced by `0`
+     (C9 two-item case); favourite sort order inverted;
      `_loadSettings` dropping the `_maxStartPercent` read; the stale-provider
      reset skipped; the detail re-entrancy flag never set; the focus rescue
      targeting `idx + 1` first; `watchStremioTvChannel` not nulled in
@@ -809,11 +812,17 @@ As in the Debrify TV and Spotlight plans, plus:
    empty state, desktop 1280×800, no providers; **(5)** options menu open
    with the Import submenu expanded (MDBList connected), over the empty
    state, TV; **(6)** the manual source picker sheet with one direct and two
-   torrent sources, one marked failed, TV — captured as a **region golden of
-   the sheet's own repaint boundary** (located by runtime type name
-   `_ManualSourcePickerSheet`), with an assertion that the captured
-   boundary has no tuner descendant (the tuner behind the modal is
-   excluded). Before each capture the test asserts its readiness markers
+   torrent sources, one marked failed, TV — captured as a **cropped region golden**:
+   locate the sheet element by runtime type name `_ManualSourcePickerSheet`
+   (its build returns a plain `Container`, so it owns no boundary), ascend to
+   the nearest `RenderRepaintBoundary` (the modal route's layer, which
+   excludes the tuner — asserted by checking the boundary's subtree has no
+   `StremioTvTuner`), render that boundary's layer to an image and **crop
+   it to the sheet's render box bounds transformed into the boundary's
+   coordinates** before comparing (a test-side helper in
+   `test/support/stremio_tv_goldens.dart`; no production wrapper). The
+   crop helper has its own test (a known sub-rectangle of a synthetic
+   boundary). Before each capture the test asserts its readiness markers
    (header rendered, intended focus owner, menu/sheet fully shown, no
    `StremioTvTuner` in the captured subtree). No network images. Fonts
    include JetBrainsMono; DPR 1.0; pinned theme; `en-US`; text scale 1.0;
@@ -852,7 +861,21 @@ As in the Debrify TV and Spotlight plans, plus:
      Fixtures: the original `build` body still in the facade with no
      forwarder (steps 0–5 shape), forwarder plus moved body (step 6 shape), a forwarder with any
      extra token, a moved body still annotated, and the body in both places
-     each rejected. Completion enforcement uses this plan's final step **7**.
+     each rejected. **Annotation occurrence exception:** the occurrence guard
+     runs before normalization and counts the `override` identifier of the
+     removed `@override` (scratch probe: 545 vs 544 occurrences), so the
+     binder gains a third opt-in, declaration-specific exception
+     (`forwarded_annotation_occurrences: {"_StremioTvScreenState.build":
+     ["override"]}`): exactly one leading `@override` annotation occurrence
+     of that declaration may be absent in the destination, and only while
+     the registered validated forwarder is present in the facade. Positives
+     (checker and reader): retained build with annotation (steps 0–5), moved
+     build without it plus the exact forwarder (step 6). Negatives: moved
+     build without annotation but no forwarder; an extra annotation removed
+     elsewhere in the body; the exception used for another declaration;
+     forwarder text changed. Manifests without the key behave
+     byte-identically. Completion enforcement uses this plan's final step
+     **7**.
      `stremioTvOriginalSource()` returns raw ORIGINAL (R) text only after the
      checker proves every current declaration equals its original under the
      registered substitutions. **`stremioTvCurrentSource()`** returns the
@@ -947,10 +970,11 @@ Two sibling refactors run concurrently on `stremio_tv_tuner.dart` (feature
 keeps importing `StremioTvTuner`/`StremioTvTunerController`,
 `StremioTvLocalCatalogsDialog`, `StremioTvLocalCatalogEditorDialog` and
 `LocalCatalogExporter` **from their original paths** (their facades keep
-those public names), so either merge order compiles. This screen's goldens
-render the tuner: the siblings are move-only, so the goldens must still
-match after integration (a mismatch is a sibling regression to report, not a
-golden update). Shared registration files they may also edit:
+those public names), so either merge order compiles. This screen's goldens do
+not render the tuner, but the behaviour cases drive it and the local-catalog
+dialogs: the siblings are move-only, so every characterization test and
+golden must still pass after integration (a failure is a sibling regression
+to report, never a test or golden update). Shared registration files they may also edit:
 `check_search_architecture.py`, `theme_surface_manifest.txt` (the
 `p2_stremio_tv` line), `shape_manifest_test.dart` (the
 `lib/screens/stremio_tv/…` entries), `file_size_baseline.txt`,
@@ -1081,6 +1105,18 @@ Codex design review round 1 (`~/.codex-runs/stv-design/last.txt`, at
 8. **P3** — format commit raises the size baseline (3,958); layout estimate
    about 700 (682 measured qualified); nine top-level declarations; step 7
    completion.
+
+## Round 2 review resolution
+
+1. **P1 `@override` occurrence** — third opt-in binder exception
+   `forwarded_annotation_occurrences` tied to the validated forwarder, with
+   retained/moved positives and four negatives through checker and reader.
+2. **P2 mix salt** — dedicated two-item channel for C9 with a precondition
+   that the two salts select different items; the salt-to-zero mutation is
+   rejected there.
+3. **P2 picker golden** — cropped region golden from the modal route's
+   repaint boundary to the sheet's bounds via a tested test-side helper.
+4. **P3** — stale tuner-golden and "this file only" wording updated.
 
 ## Progress
 
