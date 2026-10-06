@@ -811,7 +811,20 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
 3. The guide refresh is checked only on clock ticks, so it can run up to
    30 s after the 30 min interval.
 
-(Step 0 adds any further quirks it observes; none are fixed.)
+4. The cache constructor requests filesystem/cache-repository directories
+   before an image loader runs. The artwork fixture blocks those
+   construction-only futures; no production cache behavior is changed.
+5. Two retries accepted before the next frame can create equal
+   same-generation tokens. The first completion may win and remove the
+   equal pending token; the later completion is rejected. The ORIGINAL
+   loading test pins this behavior.
+
+6. The bundled `Roboto-Regular.ttf`/`Roboto-Bold.ttf` contain HTML rather
+   than TrueType data; `FontLoader` silently falls back to the test font.
+   The golden fixture uses the existing valid Inter asset under a unique
+   test family and checks its header. The application assets stay unchanged.
+
+All six items remain unchanged.
 
 ## Decisions taken before design review (Claude, 2026-10-06)
 
@@ -903,4 +916,102 @@ Round 3 verdict: **No P1s — executable.** Execution may start.
 
 ## Progress
 
-(none yet)
+### Step 0 — original characterization checkpoint (b)
+
+Execution stays on `refactor/iptv-spotlight-timeline` in the dedicated
+worktree. Read all three review-resolution sections. No format commit and
+no application move: R is `49c53e2e8081eb7e951c39bafedf90d678a92f55`;
+untouched execution HEAD is `cea18cef4e9c615330ab72acaee4a5202367a436`.
+`flutter pub get` ran first, without dependency/lockfile changes. SDK:
+Flutter 3.44.8, framework `058e0af2c2b57e369d905a03ac9748b0ebf543c6`,
+Dart 3.12.2. Evidence is confined to the git-common-directory namespace
+`refactor-evidence/iptv_spotlight_timeline/`.
+
+- Full untouched `base`: `python3 dev/tool/suite_evidence.py run
+  iptv_spotlight_timeline/base --no-pub --concurrency=2`; paths `[]`, flags
+  recorded separately. 12,093 outcomes: 12,032 success, 13 failure,
+  28 error, 20 skipped; 1,175 suites. `base.env.json` records unchanged
+  start/end HEAD/tree and no untracked inputs. Exact failed identities are
+  in `base-summary.json`; none is added to an allowlist. No runner timeout
+  occurred. The timeout messages belong to passing deadline/engine/resume
+  characterization scenarios; the named load-sensitive suites passed.
+- Whole `flutter analyze` baseline: 1,730 diagnostics, with tree/SDK
+  provenance in `base-analyze.env.json`; no facade diagnostic under the
+  original root options. Strict ORIGINAL/rename probes: zero warnings or
+  errors; maxima are one imports-order info and the two newly public,
+  unchanged keyless-widget constructor infos. The inventory records
+  rule/original-symbol/message maxima; no suppression/key/const change.
+- Complete AST-derived dependency/wiring report:
+  [iptv-spotlight-timeline-deps.md](iptv-spotlight-timeline-deps.md), 103
+  leaves, 19 owner fields, 21 live view properties, 22 callback sites and
+  seven independent callback identities. The separately mentioned facts
+  file was absent, so the source/AST and observed original test names are
+  the evidence. Builder contexts remain named and unused; only `_rowHeight`
+  reads State context. Leading ordinary comments are pinned too.
+- Original-code behavior/paint/artwork and six strict macOS scenes plus
+  existing timeline/results/unchanged IPTV results goldens: 112 tests PASS
+  (`step0-original-characterization.txt`). All nine new Dart files are
+  formatter-clean; scoped analysis is clean (`step0-tests-analyze-final.txt`).
+  The final harness re-run passes all 48 new behavior/golden tests
+  (`step0-final-harness-characterization.txt`). First/reversed captures
+  have identical six PNG SHA-256 values; strict replay passed. Dedicated
+  goldens use valid bundled Inter under a unique test family, check its
+  TrueType header and hide the fixture debug banner. Original app font
+  assets stay unchanged (found-not-fixed 6). No image-loader/storage work ran
+  in the artwork fixture. Construction-only directory futures are blocked
+  deliberately.
+- Real manifest/checker/reader fixtures and existing-manifest compatibility
+  proofs PASS. The timeline CLI `--self-test` passes all 103 leaves and the
+  complete real S = 0–3 checker/reader schedules, independent hold/label
+  occurrence negatives and seven callback-identity negatives
+  (`step0-manifest-self-test.txt`). All 20 other manifests’ complete
+  `--self-test` runs pass both before and after the shared changes: 40 test
+  runs, byte-identical stdout and occurrence AST digests. Forty separate
+  raw adapter comparisons (normal and occurrence mode for all 20) are
+  byte-identical, and the adapter source is unchanged
+  (`all-manifests-compatibility.json`, `all-manifests-adapter-raw.json`).
+  The before helpers are frozen exact HEAD bytes. All manifest invocations
+  pass an explicit `--parser-package`; parser packages/kernels are isolated
+  below this worktree’s `.dart_tool`, with stale copied kernels deleted.
+  `retained_field_live_getters` is the sole new opt-in key, in
+  `check_settings_moves.py` and `occurrence_field_bindings.py`; every
+  absent-key manifest retains its output. These two additive blocks and
+  the seven `ci_behavior_tests.txt` paths require union during integration.
+- Fresh normal clone (`.git` directory), after its own `flutter pub get`:
+  106 source-contract tests PASS, including the complete checker driver,
+  reader and every original body/comment (`fresh-clone-source-contracts.txt`);
+  six strict goldens PASS (`fresh-clone-macos-goldens.txt`) and the analyzer
+  inventory checker passes. The clone received the owned checkpoint files;
+  its `.git` was never copied. Replay from committed (b) remains before
+  extraction. The Dart driver’s deliberately
+  broken fixture fails its named exit-code assertion
+  (`checker-driver-positive-control.txt`), proving CI executes the checker.
+  Its 45-minute tooling timeout accommodates the loaded host; application
+  fake-time boundaries are unchanged.
+- Source-text inventory: unchanged guard/storage/size hashes; original
+  facade 2,304 physical lines = 2,272 AST top-level declaration lines + 32
+  imports/gaps/trailing lines. State 1,773, controller 37, widget 84. Shape
+  remains unregistered (six bare radii). Theme-surface outputs compare
+  byte-for-byte and light-ink remains 774 / 240 primary. Existing profile
+  source-guard failure is preserved. Size/architecture checks pass without
+  changing their registrations; final facade measurement belongs to 0b/2.
+- Seven new test paths join `ci_behavior_tests.txt`, including the real
+  checker driver; `ci_behavior_known_failures.txt` is unchanged. The CI
+  format/analyzer inputs, inventory execution and architecture registration
+  remain step 1 as resolved in round 3. The Linux ORIGINAL capture script
+  is committed here, resolves (b) by its exact subject, rejects lib/pubspec
+  object drift and requires two reversed-order equal captures plus strict
+  verification. Linux originals/strictness remain L.
+
+Discarded draft fixture/infra runs are labeled `discarded-*` and are not
+accepted evidence. An accidental initial `suite_evidence.py run --help`
+invocation was stopped and its exact artifacts moved into this feature’s
+namespace; it did not change application input. Characterization assertion
+expectations were established against ORIGINAL code before any move, and
+original tests/assertions remain untouched. Found-not-fixed items 1–6 are
+preserved.
+
+Stop after committing (b), before 0b. Independent review, original-only
+mutation ledger, compiling-composition probe, `base2`, Linux originals,
+steps 1–3 and both full-suite gates remain pending. Device checks, remote CI
+and cross-worktree integration remain pending; nothing is pushed.

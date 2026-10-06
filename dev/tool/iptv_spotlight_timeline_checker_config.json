@@ -1,0 +1,368 @@
+{
+  "baseline": "49c53e2e8081eb7e951c39bafedf90d678a92f55",
+  "source": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+  "feature": "lib/features/iptv_spotlight_timeline",
+  "engine": "sections",
+  "context_guard": true,
+  "completed_step": 0,
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "live_getter_callback",
+    "retained_forwarder"
+  ],
+  "receivers": [
+    "_deps",
+    "_owners",
+    "_sections",
+    "SpotlightTimelinePalette",
+    "SpotlightTimelineTrack"
+  ],
+  "live_getter_callbacks": [
+    "context",
+    "mounted"
+  ],
+  "receiver_paths": {
+    "_owners": "SpotlightTimelineOwners",
+    "_sections.loading": "SpotlightTimelineGuideLoading",
+    "_sections.window": "SpotlightTimelineWindow",
+    "_sections.cursor": "SpotlightTimelineCursor",
+    "_sections.selection": "SpotlightTimelineSelectionActions",
+    "_sections.frame": "SpotlightTimelineFrame",
+    "_sections.rows": "SpotlightTimelineRows",
+    "_sections.track": "SpotlightTimelineTrack",
+    "SpotlightTimelinePalette": "SpotlightTimelinePalette",
+    "SpotlightTimelineTrack": "SpotlightTimelineTrack"
+  },
+  "receiver_owners": {
+    "_owners": "SpotlightTimelineOwners",
+    "_sections.loading": "SpotlightTimelineGuideLoading",
+    "_sections.window": "SpotlightTimelineWindow",
+    "_sections.cursor": "SpotlightTimelineCursor",
+    "_sections.selection": "SpotlightTimelineSelectionActions",
+    "_sections.frame": "SpotlightTimelineFrame",
+    "_sections.rows": "SpotlightTimelineRows",
+    "_sections.track": "SpotlightTimelineTrack",
+    "SpotlightTimelinePalette": "SpotlightTimelinePalette",
+    "SpotlightTimelineTrack": "SpotlightTimelineTrack"
+  },
+  "receiver_members": {
+    "SpotlightTimelineOwners": [
+      "clockTick",
+      "cursorLane",
+      "cursorRow",
+      "cursorTimeMs",
+      "followNow",
+      "guides",
+      "hasFocus",
+      "lastGuideRefreshAt",
+      "lastTappedCell",
+      "nowFocusNode",
+      "ownedFocusNode",
+      "pendingLoads",
+      "pointerSettle",
+      "requestGeneration",
+      "selectedProgrammeStartMs",
+      "verticalController",
+      "viewportHeight",
+      "viewportSettle",
+      "windowStart"
+    ],
+    "SpotlightTimelineFrame": [
+      "_buildEmpty",
+      "_buildPlayhead",
+      "_buildRuler",
+      "_dayHeading",
+      "_weekday",
+      "build"
+    ],
+    "SpotlightTimelineRows": [
+      "_buildIdentity",
+      "buildRow"
+    ],
+    "SpotlightTimelineSelectionActions": [
+      "_focusChannel",
+      "_focusChannelAt",
+      "_focusFirstChannel",
+      "announceSelection",
+      "armPointerSelection",
+      "cancelPointerSelection",
+      "focusNode",
+      "restoreFocus",
+      "selectIdentity",
+      "selectProgramme",
+      "tapIdentity",
+      "tapProgramme"
+    ],
+    "SpotlightTimelineWindow": [
+      "_guideRefreshInterval",
+      "defaultWindowStart",
+      "ensureProgrammeVisible",
+      "handlePointerSignal",
+      "jumpToNow",
+      "onClockTick",
+      "onNowKeyEvent",
+      "panTimeline"
+    ],
+    "SpotlightTimelineGuideLoading": [
+      "_accepts",
+      "_evictDistantRows",
+      "_loadSchedule",
+      "_loadVisibleRows",
+      "_removePendingIfCurrent",
+      "armViewportLoad",
+      "entryAt",
+      "hasGuideError",
+      "onViewportMoved",
+      "programmesForRow",
+      "retry",
+      "rowHeight",
+      "visibleRange"
+    ],
+    "SpotlightTimelineTrack": [
+      "_buildProgrammeCell",
+      "buildProgrammeTrack",
+      "formatTime",
+      "itemCanFitBadge",
+      "rulerMarks",
+      "timeX"
+    ],
+    "SpotlightTimelinePalette": [
+      "background",
+      "identityBackground",
+      "timelineBackground"
+    ],
+    "SpotlightTimelineCursor": [
+      "_distanceToProgramme",
+      "_moveHorizontal",
+      "_moveVertical",
+      "_nearestProgramme",
+      "activateCursor",
+      "activateIdentity",
+      "onFocusChange",
+      "onKeyEvent",
+      "reconcileProgrammeCursor",
+      "revealRow",
+      "selectProgrammeValue"
+    ]
+  },
+  "type_renames": {
+    "_CursorLane": "SpotlightTimelineCursorLane",
+    "_GuideStatus": "SpotlightTimelineGuideStatus",
+    "_GuideSnapshot": "SpotlightTimelineGuideSnapshot",
+    "_LoadToken": "SpotlightTimelineLoadToken",
+    "_RulerMark": "SpotlightTimelineRulerMark",
+    "_GuideMessage": "SpotlightTimelineGuideMessage",
+    "_ChannelMark": "SpotlightTimelineChannelMark"
+  },
+  "occurrence_type_renames": true,
+  "occurrence_field_bindings": {
+    "owners": [
+      "_SpotlightLiveTimelineState"
+    ]
+  },
+  "record_owners": [
+    "_SpotlightLiveTimelineState"
+  ],
+  "record_fields": {
+    "_SpotlightLiveTimelineState": [
+      "_ownedFocusNode",
+      "_nowFocusNode",
+      "_verticalController",
+      "_guides",
+      "_pendingLoads",
+      "_windowStart",
+      "_followNow",
+      "_lastGuideRefreshAt",
+      "_viewportSettle",
+      "_clockTick",
+      "_pointerSettle",
+      "_requestGeneration",
+      "_viewportHeight",
+      "_cursorRow",
+      "_cursorLane",
+      "_selectedProgrammeStartMs",
+      "_cursorTimeMs",
+      "_hasFocus",
+      "_lastTappedCell"
+    ]
+  },
+  "retained_field_live_getters": {
+    "holdOk": "_SpotlightLiveTimelineState._holdOk"
+  },
+  "lifecycle": [
+    "_SpotlightLiveTimelineState.didChangeDependencies",
+    "_SpotlightLiveTimelineState.initState",
+    "_SpotlightLiveTimelineState.didUpdateWidget",
+    "_SpotlightLiveTimelineState.dispose"
+  ],
+  "verbatim_comment_bytes": true,
+  "class_header_additions": {
+    "_SpotlightLiveTimelineState": {
+      "activation_file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "tokens": [
+        "implements",
+        "SpotlightTimelineWidgetView"
+      ]
+    }
+  },
+  "forwarders": {
+    "_SpotlightLiveTimelineState._hasFocus": {
+      "receiver": "_owners",
+      "text": "bool get _hasFocus => _owners.hasFocus;"
+    },
+    "_SpotlightLiveTimelineState._restoreFocus": {
+      "receiver": "_sections.selection",
+      "text": "bool _restoreFocus() => _sections.selection.restoreFocus();"
+    },
+    "_SpotlightLiveTimelineState._focusFirstChannel": {
+      "receiver": "_sections.selection",
+      "text": "bool _focusFirstChannel() => _sections.selection.focusFirstChannel();"
+    },
+    "_SpotlightLiveTimelineState._focusChannelAt": {
+      "receiver": "_sections.selection",
+      "text": "bool _focusChannelAt(int index) => _sections.selection.focusChannelAt(index);"
+    },
+    "_SpotlightLiveTimelineState._focusChannel": {
+      "receiver": "_sections.selection",
+      "text": "bool _focusChannel(IptvChannel channel) => _sections.selection.focusChannel(channel);"
+    },
+    "_SpotlightLiveTimelineState.build": {
+      "receiver": "_sections.frame",
+      "text": "@override Widget build(BuildContext context) => _sections.frame.build(context);"
+    }
+  },
+  "retained_override_bodies": [
+    "_SpotlightLiveTimelineState.build"
+  ],
+  "forwarded_annotation_occurrences": {
+    "_SpotlightLiveTimelineState.build": [
+      "override"
+    ]
+  },
+  "source_validator_module": "iptv_spotlight_timeline_contracts",
+  "self_test_module": "iptv_spotlight_timeline_checker_test",
+  "sidecars": {
+    "scaffolding": "dev/tool/iptv_spotlight_timeline_scaffolding.json",
+    "callbacks": "dev/tool/iptv_spotlight_timeline_callback_sites.json"
+  },
+  "scaffold_file_steps": {
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart": 2,
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart": 2,
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart": 2
+  },
+  "plain_owner_files": {
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart": "SpotlightTimelineGuideLoading",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart": "SpotlightTimelineWindow",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart": "SpotlightTimelineCursor",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart": "SpotlightTimelineSelectionActions",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart": "SpotlightTimelineFrame",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart": "SpotlightTimelineRows",
+    "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart": "SpotlightTimelineTrack"
+  },
+  "callback_whole_class_members": true,
+  "callback_closure_binding": true,
+  "callback_instances": {
+    "SpotlightTimelineGuideLoading": "$State._sections.loading",
+    "SpotlightTimelineWindow": "$State._sections.window",
+    "SpotlightTimelineCursor": "$State._sections.cursor",
+    "SpotlightTimelineSelectionActions": "$State._sections.selection",
+    "SpotlightTimelineFrame": "$State._sections.frame",
+    "SpotlightTimelineRows": "$State._sections.rows",
+    "SpotlightTimelineTrack": "$State._sections.track"
+  },
+  "callback_call_aliases": {
+    "_CursorLane": "SpotlightTimelineCursorLane",
+    "_GuideStatus": "SpotlightTimelineGuideStatus",
+    "_GuideSnapshot": "SpotlightTimelineGuideSnapshot",
+    "_LoadToken": "SpotlightTimelineLoadToken",
+    "_RulerMark": "SpotlightTimelineRulerMark",
+    "_GuideMessage": "SpotlightTimelineGuideMessage",
+    "_ChannelMark": "SpotlightTimelineChannelMark"
+  },
+  "callback_identities": [
+    {
+      "name": "viewport listener",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState.initState",
+          "call": "addListener",
+          "argument": 0
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._onViewportMoved"
+    },
+    {
+      "name": "viewport listener removal",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState.dispose",
+          "call": "removeListener",
+          "argument": 0
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._onViewportMoved"
+    },
+    {
+      "name": "guide focus",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState.build",
+          "call": "Focus",
+          "named_argument": "onFocusChange"
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._onFocusChange"
+    },
+    {
+      "name": "guide keys",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState.build",
+          "call": "Focus",
+          "named_argument": "onKeyEvent"
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._onKeyEvent"
+    },
+    {
+      "name": "Now keys",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState._buildRuler",
+          "call": "Focus",
+          "named_argument": "onKeyEvent"
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._onNowKeyEvent"
+    },
+    {
+      "name": "Now press",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState._buildRuler",
+          "call": "TextButton",
+          "named_argument": "onPressed"
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._jumpToNow"
+    },
+    {
+      "name": "hold tap",
+      "sites": [
+        {
+          "member": "_SpotlightLiveTimelineState._holdOk",
+          "call": "TvHoldOk",
+          "named_argument": "onTap"
+        }
+      ],
+      "callback_member": "_SpotlightLiveTimelineState._activateCursor"
+    }
+  ],
+  "byte_identical_declarations": {
+    "IptvSpotlightTimelineController": "dev/tool/iptv_spotlight_timeline_controller_original.txt",
+    "SpotlightLiveTimeline": "dev/tool/iptv_spotlight_timeline_widget_original.txt"
+  }
+}

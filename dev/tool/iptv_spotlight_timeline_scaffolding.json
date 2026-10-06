@@ -1,0 +1,1898 @@
+{
+  "scaffolds": [
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "_owners",
+      "tokens": [
+        "final",
+        "_owners",
+        "=",
+        "SpotlightTimelineOwners",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "_sectionsCache",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "?",
+        "_sectionsCache",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_sectionsCache",
+        "??=",
+        "SpotlightTimelineSections",
+        "(",
+        "SpotlightTimelineDependencies",
+        "(",
+        "view",
+        ":",
+        "this",
+        ",",
+        "owners",
+        ":",
+        "_owners",
+        ",",
+        "context",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "context",
+        ",",
+        "mounted",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "mounted",
+        ",",
+        "setState",
+        ":",
+        "setState",
+        ",",
+        "holdOk",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_holdOk",
+        ",",
+        "sections",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_sections",
+        ")",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "channels",
+      "tokens": [
+        "@",
+        "override",
+        "List",
+        "<",
+        "IptvChannel",
+        ">",
+        "get",
+        "channels",
+        "=>",
+        "widget",
+        ".",
+        "channels",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "sourceId",
+      "tokens": [
+        "@",
+        "override",
+        "String",
+        "get",
+        "sourceId",
+        "=>",
+        "widget",
+        ".",
+        "sourceId",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "loadGeneration",
+      "tokens": [
+        "@",
+        "override",
+        "int",
+        "get",
+        "loadGeneration",
+        "=>",
+        "widget",
+        ".",
+        "loadGeneration",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "scheduleLoader",
+      "tokens": [
+        "@",
+        "override",
+        "SpotlightScheduleLoader",
+        "get",
+        "scheduleLoader",
+        "=>",
+        "widget",
+        ".",
+        "scheduleLoader",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onChannelActivate",
+      "tokens": [
+        "@",
+        "override",
+        "SpotlightChannelActivate",
+        "get",
+        "onChannelActivate",
+        "=>",
+        "widget",
+        ".",
+        "onChannelActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onProgrammeActivate",
+      "tokens": [
+        "@",
+        "override",
+        "SpotlightProgrammeActivate",
+        "get",
+        "onProgrammeActivate",
+        "=>",
+        "widget",
+        ".",
+        "onProgrammeActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "epgContextVersion",
+      "tokens": [
+        "@",
+        "override",
+        "int",
+        "get",
+        "epgContextVersion",
+        "=>",
+        "widget",
+        ".",
+        "epgContextVersion",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onSelectionChanged",
+      "tokens": [
+        "@",
+        "override",
+        "ValueChanged",
+        "<",
+        "SpotlightTimelineSelection",
+        ">",
+        "?",
+        "get",
+        "onSelectionChanged",
+        "=>",
+        "widget",
+        ".",
+        "onSelectionChanged",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "autofocus",
+      "tokens": [
+        "@",
+        "override",
+        "bool",
+        "get",
+        "autofocus",
+        "=>",
+        "widget",
+        ".",
+        "autofocus",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onExitUp",
+      "tokens": [
+        "@",
+        "override",
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitUp",
+        "=>",
+        "widget",
+        ".",
+        "onExitUp",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onExitLeft",
+      "tokens": [
+        "@",
+        "override",
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitLeft",
+        "=>",
+        "widget",
+        ".",
+        "onExitLeft",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "onChannelActions",
+      "tokens": [
+        "@",
+        "override",
+        "SpotlightChannelActivate",
+        "?",
+        "get",
+        "onChannelActions",
+        "=>",
+        "widget",
+        ".",
+        "onChannelActions",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "selectBeforeActivate",
+      "tokens": [
+        "@",
+        "override",
+        "bool",
+        "get",
+        "selectBeforeActivate",
+        "=>",
+        "widget",
+        ".",
+        "selectBeforeActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "now",
+      "tokens": [
+        "@",
+        "override",
+        "DateTime",
+        "Function",
+        "(",
+        ")",
+        "get",
+        "now",
+        "=>",
+        "widget",
+        ".",
+        "now",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "windowDuration",
+      "tokens": [
+        "@",
+        "override",
+        "Duration",
+        "get",
+        "windowDuration",
+        "=>",
+        "widget",
+        ".",
+        "windowDuration",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "viewportSettleDelay",
+      "tokens": [
+        "@",
+        "override",
+        "Duration",
+        "get",
+        "viewportSettleDelay",
+        "=>",
+        "widget",
+        ".",
+        "viewportSettleDelay",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "height",
+      "tokens": [
+        "@",
+        "override",
+        "double",
+        "get",
+        "height",
+        "=>",
+        "widget",
+        ".",
+        "height",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "dense",
+      "tokens": [
+        "@",
+        "override",
+        "bool",
+        "get",
+        "dense",
+        "=>",
+        "widget",
+        ".",
+        "dense",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "identityWidth",
+      "tokens": [
+        "@",
+        "override",
+        "double",
+        "get",
+        "identityWidth",
+        "=>",
+        "widget",
+        ".",
+        "identityWidth",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "rowHeight",
+      "tokens": [
+        "@",
+        "override",
+        "double",
+        "get",
+        "rowHeight",
+        "=>",
+        "widget",
+        ".",
+        "rowHeight",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart",
+      "owner": "_SpotlightLiveTimelineState",
+      "name": "rulerHeight",
+      "tokens": [
+        "@",
+        "override",
+        "double",
+        "get",
+        "rulerHeight",
+        "=>",
+        "widget",
+        ".",
+        "rulerHeight",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart",
+      "owner": "SpotlightTimelineTrack",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart",
+      "owner": "SpotlightTimelineTrack",
+      "name": "SpotlightTimelineTrack",
+      "tokens": [
+        "SpotlightTimelineTrack",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart",
+      "owner": "SpotlightTimelineTrack",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart",
+      "owner": "SpotlightTimelineTrack",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_track.dart",
+      "owner": "SpotlightTimelineTrack",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart",
+      "owner": "SpotlightTimelineWindow",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart",
+      "owner": "SpotlightTimelineWindow",
+      "name": "SpotlightTimelineWindow",
+      "tokens": [
+        "SpotlightTimelineWindow",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart",
+      "owner": "SpotlightTimelineWindow",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart",
+      "owner": "SpotlightTimelineWindow",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_window.dart",
+      "owner": "SpotlightTimelineWindow",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart",
+      "owner": "SpotlightTimelineSelectionActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart",
+      "owner": "SpotlightTimelineSelectionActions",
+      "name": "SpotlightTimelineSelectionActions",
+      "tokens": [
+        "SpotlightTimelineSelectionActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart",
+      "owner": "SpotlightTimelineSelectionActions",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart",
+      "owner": "SpotlightTimelineSelectionActions",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_selection.dart",
+      "owner": "SpotlightTimelineSelectionActions",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart",
+      "owner": "SpotlightTimelineGuideLoading",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart",
+      "owner": "SpotlightTimelineGuideLoading",
+      "name": "SpotlightTimelineGuideLoading",
+      "tokens": [
+        "SpotlightTimelineGuideLoading",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart",
+      "owner": "SpotlightTimelineGuideLoading",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart",
+      "owner": "SpotlightTimelineGuideLoading",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_loading.dart",
+      "owner": "SpotlightTimelineGuideLoading",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart",
+      "owner": "SpotlightTimelineCursor",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart",
+      "owner": "SpotlightTimelineCursor",
+      "name": "SpotlightTimelineCursor",
+      "tokens": [
+        "SpotlightTimelineCursor",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart",
+      "owner": "SpotlightTimelineCursor",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart",
+      "owner": "SpotlightTimelineCursor",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_cursor.dart",
+      "owner": "SpotlightTimelineCursor",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart",
+      "owner": "SpotlightTimelineFrame",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart",
+      "owner": "SpotlightTimelineFrame",
+      "name": "SpotlightTimelineFrame",
+      "tokens": [
+        "SpotlightTimelineFrame",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart",
+      "owner": "SpotlightTimelineFrame",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart",
+      "owner": "SpotlightTimelineFrame",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_frame.dart",
+      "owner": "SpotlightTimelineFrame",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart",
+      "owner": "SpotlightTimelineRows",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightTimelineDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart",
+      "owner": "SpotlightTimelineRows",
+      "name": "SpotlightTimelineRows",
+      "tokens": [
+        "SpotlightTimelineRows",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart",
+      "owner": "SpotlightTimelineRows",
+      "name": "widget",
+      "tokens": [
+        "SpotlightTimelineWidgetView",
+        "get",
+        "widget",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart",
+      "owner": "SpotlightTimelineRows",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightTimelineOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_rows.dart",
+      "owner": "SpotlightTimelineRows",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "",
+      "name": "SpotlightTimelineWidgetView",
+      "tokens": [
+        "abstract",
+        "class",
+        "SpotlightTimelineWidgetView",
+        "{",
+        "List",
+        "<",
+        "IptvChannel",
+        ">",
+        "get",
+        "channels",
+        ";",
+        "String",
+        "get",
+        "sourceId",
+        ";",
+        "int",
+        "get",
+        "loadGeneration",
+        ";",
+        "SpotlightScheduleLoader",
+        "get",
+        "scheduleLoader",
+        ";",
+        "SpotlightChannelActivate",
+        "get",
+        "onChannelActivate",
+        ";",
+        "SpotlightProgrammeActivate",
+        "get",
+        "onProgrammeActivate",
+        ";",
+        "int",
+        "get",
+        "epgContextVersion",
+        ";",
+        "ValueChanged",
+        "<",
+        "SpotlightTimelineSelection",
+        ">",
+        "?",
+        "get",
+        "onSelectionChanged",
+        ";",
+        "bool",
+        "get",
+        "autofocus",
+        ";",
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitUp",
+        ";",
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitLeft",
+        ";",
+        "SpotlightChannelActivate",
+        "?",
+        "get",
+        "onChannelActions",
+        ";",
+        "bool",
+        "get",
+        "selectBeforeActivate",
+        ";",
+        "DateTime",
+        "Function",
+        "(",
+        ")",
+        "get",
+        "now",
+        ";",
+        "Duration",
+        "get",
+        "windowDuration",
+        ";",
+        "Duration",
+        "get",
+        "viewportSettleDelay",
+        ";",
+        "double",
+        "get",
+        "height",
+        ";",
+        "bool",
+        "get",
+        "dense",
+        ";",
+        "double",
+        "get",
+        "identityWidth",
+        ";",
+        "double",
+        "get",
+        "rowHeight",
+        ";",
+        "double",
+        "get",
+        "rulerHeight",
+        ";",
+        "}"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "channels",
+      "tokens": [
+        "List",
+        "<",
+        "IptvChannel",
+        ">",
+        "get",
+        "channels",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "sourceId",
+      "tokens": [
+        "String",
+        "get",
+        "sourceId",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "loadGeneration",
+      "tokens": [
+        "int",
+        "get",
+        "loadGeneration",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "scheduleLoader",
+      "tokens": [
+        "SpotlightScheduleLoader",
+        "get",
+        "scheduleLoader",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onChannelActivate",
+      "tokens": [
+        "SpotlightChannelActivate",
+        "get",
+        "onChannelActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onProgrammeActivate",
+      "tokens": [
+        "SpotlightProgrammeActivate",
+        "get",
+        "onProgrammeActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "epgContextVersion",
+      "tokens": [
+        "int",
+        "get",
+        "epgContextVersion",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onSelectionChanged",
+      "tokens": [
+        "ValueChanged",
+        "<",
+        "SpotlightTimelineSelection",
+        ">",
+        "?",
+        "get",
+        "onSelectionChanged",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "autofocus",
+      "tokens": [
+        "bool",
+        "get",
+        "autofocus",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onExitUp",
+      "tokens": [
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitUp",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onExitLeft",
+      "tokens": [
+        "VoidCallback",
+        "?",
+        "get",
+        "onExitLeft",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "onChannelActions",
+      "tokens": [
+        "SpotlightChannelActivate",
+        "?",
+        "get",
+        "onChannelActions",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "selectBeforeActivate",
+      "tokens": [
+        "bool",
+        "get",
+        "selectBeforeActivate",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "now",
+      "tokens": [
+        "DateTime",
+        "Function",
+        "(",
+        ")",
+        "get",
+        "now",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "windowDuration",
+      "tokens": [
+        "Duration",
+        "get",
+        "windowDuration",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "viewportSettleDelay",
+      "tokens": [
+        "Duration",
+        "get",
+        "viewportSettleDelay",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "height",
+      "tokens": [
+        "double",
+        "get",
+        "height",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "dense",
+      "tokens": [
+        "bool",
+        "get",
+        "dense",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "identityWidth",
+      "tokens": [
+        "double",
+        "get",
+        "identityWidth",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "rowHeight",
+      "tokens": [
+        "double",
+        "get",
+        "rowHeight",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_widget_view.dart",
+      "owner": "SpotlightTimelineWidgetView",
+      "name": "rulerHeight",
+      "tokens": [
+        "double",
+        "get",
+        "rulerHeight",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "",
+      "name": "SpotlightTimelineDependencies",
+      "tokens": [
+        "class",
+        "SpotlightTimelineDependencies",
+        "{",
+        "final",
+        "SpotlightTimelineWidgetView",
+        "view",
+        ";",
+        "final",
+        "SpotlightTimelineOwners",
+        "owners",
+        ";",
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";",
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";",
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";",
+        "final",
+        "TvHoldOk",
+        "Function",
+        "(",
+        ")",
+        "holdOk",
+        ";",
+        "final",
+        "SpotlightTimelineSections",
+        "Function",
+        "(",
+        ")",
+        "sections",
+        ";",
+        "SpotlightTimelineDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "view",
+        ",",
+        "required",
+        "this",
+        ".",
+        "owners",
+        ",",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        ",",
+        "required",
+        "this",
+        ".",
+        "holdOk",
+        ",",
+        "required",
+        "this",
+        ".",
+        "sections",
+        "}",
+        ")",
+        ";",
+        "}"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "view",
+      "tokens": [
+        "final",
+        "SpotlightTimelineWidgetView",
+        "view",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "owners",
+      "tokens": [
+        "final",
+        "SpotlightTimelineOwners",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "context",
+      "tokens": [
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "mounted",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "setState",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "holdOk",
+      "tokens": [
+        "final",
+        "TvHoldOk",
+        "Function",
+        "(",
+        ")",
+        "holdOk",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "sections",
+      "tokens": [
+        "final",
+        "SpotlightTimelineSections",
+        "Function",
+        "(",
+        ")",
+        "sections",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_dependencies.dart",
+      "owner": "SpotlightTimelineDependencies",
+      "name": "SpotlightTimelineDependencies",
+      "tokens": [
+        "SpotlightTimelineDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "view",
+        ",",
+        "required",
+        "this",
+        ".",
+        "owners",
+        ",",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        ",",
+        "required",
+        "this",
+        ".",
+        "holdOk",
+        ",",
+        "required",
+        "this",
+        ".",
+        "sections",
+        "}",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "",
+      "name": "SpotlightTimelineSections",
+      "tokens": [
+        "class",
+        "SpotlightTimelineSections",
+        "{",
+        "late",
+        "final",
+        "SpotlightTimelineGuideLoading",
+        "loading",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineWindow",
+        "window",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineCursor",
+        "cursor",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineSelectionActions",
+        "selection",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineFrame",
+        "frame",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineRows",
+        "rows",
+        ";",
+        "late",
+        "final",
+        "SpotlightTimelineTrack",
+        "track",
+        ";",
+        "SpotlightTimelineSections",
+        "(",
+        "SpotlightTimelineDependencies",
+        "deps",
+        ")",
+        "{",
+        "loading",
+        "=",
+        "SpotlightTimelineGuideLoading",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "window",
+        "=",
+        "SpotlightTimelineWindow",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "cursor",
+        "=",
+        "SpotlightTimelineCursor",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "selection",
+        "=",
+        "SpotlightTimelineSelectionActions",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "frame",
+        "=",
+        "SpotlightTimelineFrame",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "rows",
+        "=",
+        "SpotlightTimelineRows",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "track",
+        "=",
+        "SpotlightTimelineTrack",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "}",
+        "}"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "loading",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineGuideLoading",
+        "loading",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "window",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineWindow",
+        "window",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "cursor",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineCursor",
+        "cursor",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "selection",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineSelectionActions",
+        "selection",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "frame",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineFrame",
+        "frame",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "rows",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineRows",
+        "rows",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "track",
+      "tokens": [
+        "late",
+        "final",
+        "SpotlightTimelineTrack",
+        "track",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_sections.dart",
+      "owner": "SpotlightTimelineSections",
+      "name": "SpotlightTimelineSections",
+      "tokens": [
+        "SpotlightTimelineSections",
+        "(",
+        "SpotlightTimelineDependencies",
+        "deps",
+        ")",
+        "{",
+        "loading",
+        "=",
+        "SpotlightTimelineGuideLoading",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "window",
+        "=",
+        "SpotlightTimelineWindow",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "cursor",
+        "=",
+        "SpotlightTimelineCursor",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "selection",
+        "=",
+        "SpotlightTimelineSelectionActions",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "frame",
+        "=",
+        "SpotlightTimelineFrame",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "rows",
+        "=",
+        "SpotlightTimelineRows",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "track",
+        "=",
+        "SpotlightTimelineTrack",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "}"
+      ],
+      "scaffold_activation_step": 2
+    }
+  ]
+}

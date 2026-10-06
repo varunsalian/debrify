@@ -1,0 +1,27 @@
+{
+  "reference": "49c53e2e8",
+  "description": "ORIGINAL strict copy/type-rename probe maxima; composition-specific infos inventoried at step 0b before extraction.",
+  "entries": [
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@imports",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_ChannelMark",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_RulerMark",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1
+    }
+  ]
+}
