@@ -310,3 +310,26 @@ test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_
 test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart
 test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart
 test/features/stremio_tv_catalogs/stremio_tv_catalogs_surface_test.dart
+
+# settings_widgets step 0: original-code characterizations and importing consumers (2026-10-06).
+test/webdav_sync_setup_page_test.dart
+test/webdav_sync_pending_badge_test.dart
+test/discover_settings_page_test.dart
+test/collection_gif_playback_test.dart
+test/theme/legacy_pins_test.dart
+test/profiles/legacy_mode_reason_test.dart
+test/theme/goldens_test.dart
+test/theme/contrast_audit_test.dart
+test/features/settings_widgets/presentation/settings_connections_dpad_test.dart
+test/features/settings_widgets/presentation/settings_widgets_surface_test.dart
+test/features/settings_widgets/presentation/settings_tiles_focus_test.dart
+test/features/settings_widgets/presentation/settings_widgets_goldens_test.dart
+test/features/settings_widgets/presentation/settings_widgets_source_contract_test.dart
+test/features/settings_widgets/presentation/settings_touchpoints_test.dart
+test/features/settings_widgets/presentation/settings_helpers_test.dart
+test/features/settings_widgets/presentation/settings_page_theme_test.dart
+test/features/settings_widgets/presentation/settings_widgets_render_test.dart
+
+# settings_widgets step 0b: close original-only behavioural review gaps.
+test/features/settings_widgets/presentation/settings_widgets_review_render_test.dart
+test/features/settings_widgets/presentation/settings_widgets_theme_table_test.dart

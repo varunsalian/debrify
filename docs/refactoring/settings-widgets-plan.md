@@ -1,0 +1,1549 @@
+# Settings widgets library refactor — plan
+
+Written 2026-10-06 on `refactor/settings-widgets`, cut from `refactor/codebase`
+at `0cb50df7`. Follow [AGENTS.md](../../AGENTS.md).
+
+Read first: `detail-showcase-plan.md` (closest template: a widget library behind
+a pure re-export facade, format-only original R, manifest-driven source reader,
+dormant completion guards), `spotlight-board-plan.md`, `catalog-detail-plan.md`
+and the Progress sections of those three. This plan reuses their technique,
+checker (`check_verbatim_moves.py` with a per-feature manifest/config),
+`suite_evidence.py`, gate procedure and Linux handoff, and states only what
+differs.
+
+**Execution.** Own git worktree
+`/Users/varunbsalian/Documents/Projects/debrify-wt/settings-widgets` on
+`refactor/settings-widgets`. Commit after every step; never push, merge or
+switch branches; gate commits contain `gate`. Evidence is written **only**
+under `refactor-evidence/settings_widgets/`. **Every manifest run passes an
+isolated `--parser-package`** inside this worktree's ignored `.dart_tool/`
+(copy, then delete any `*.dill` in the copy), including self-tests and every
+other feature's manifest. Four other refactors run in sibling worktrees at the
+same time (Stremio TV screen, its local-catalogs dialog and tuner, the edit
+profile screen): `suite_evidence.py` runs in this worktree are serialized with
+each other and with commits, a timeout under load is rerun, never recorded,
+and the known load-sensitive flakes (WebDAV shard tests, the self-profile PIN
+180 ms settle) are rerun in isolation with a NOTE, never allowlisted.
+
+## Goal
+
+`lib/screens/settings/widgets/settings_widgets.dart` is 2,835 lines
+(unformatted; 2,847 after `dart format`): 14 import directives, no `part`
+files or exports, **60 AST top-level declarations**: **47 public names**, 10
+private declarations (5 States, `_SettingsSwatches`, three skeleton widgets,
+`_buildSettingsPageTheme`) and 3 private top-level variables (the page-theme
+memo). It is the shared
+design vocabulary of every settings surface: tokens, row specs, the page theme
+and route/dialog wrappers, page chrome, the Connections grid, tiles, toggles,
+dropdowns, TV choice tables, the loading skeleton and the legacy-mode dialog.
+
+Split it **move-only** into a new feature, `lib/features/settings_widgets/`,
+and turn the original path into a **pure re-export facade** exporting exactly
+the 47 names. Unchanged: widget trees, runtime type names, keys, `const`
+placement, constructors, defaults, focus-node ownership, DPAD neighbour wiring,
+the theme memo, and every lifecycle method.
+
+**Callers stay unchanged.** Resolved import directives give **132 importing
+files: 117 under `lib/` and 15 under `test/`** (14 runnable test files plus the
+helper `test/theme/surface_gallery.dart`, consumed by
+`test/theme/goldens_test.dart` and `contrast_audit_test.dart`;
+`shape_manifest_test.dart` names the path without importing it). The `lib/`
+importers are the settings pages under `lib/screens/settings/`,
+`lib/screens/settings_screen.dart`, `lib/main.dart` (`show pushSettingsPage`),
+`app_theme_page.dart` (`show SettingsSectionLabel`),
+`collection_editor_screen.dart` and the completed features `settings`,
+`playback_settings` and `iptv_settings`. Step 0 regenerates this inventory
+from import directives (not grep of the file name) and records it in the deps
+report. No importer uses a prefix or `hide`. Because the
+facade re-exports every original public name and declares nothing, every
+importer compiles and resolves to the same declarations without edits.
+
+**Why a new feature behind a facade.**
+- `lib/features/settings/` is a **completed** migration (`SETTINGS_COMPLETE`,
+  its own manifest, size exceptions and facade rules keyed to
+  `settings_screen.dart`). Adding a second source there would reopen its
+  completed guard and couple two independently reviewed manifests; the three
+  settings features would also start importing a sibling feature's
+  presentation (`settings` ↔ `playback_settings`/`iptv_settings` cross-imports
+  are banned today).
+- `lib/ui/core/` is rejected: the library reads two legacy services
+  (`MainPageBridge`, `ProfileBootstrap`) and launches URLs, and `ui/core` must
+  not import services or features.
+- A feature folder gains the architecture checker, CI format and the analyzer
+  allowlist, none of which cover `lib/screens/settings/widgets` today.
+
+**Not a playback seam.** No player, launcher, http, storage, preference or
+database import. Platform/service touchpoints are exactly three and move
+verbatim behind exact `show` imports (Contract 6).
+
+| Temporary exception | Exit |
+| --- | --- |
+| `MainPageBridge` / `ProfileBootstrap` type-and-static imports via `PRESENTATION_BRIDGE_IMPORTS` `show` entries | A sidebar-focus callback and a legacy-reason value injected by the settings composition root |
+| `launchSettingsUrl` calls `url_launcher` from presentation (AGENTS: widgets must not invoke native services) | A link-launcher port wired at composition |
+| Legacy English text (row specs, headers, dialog) | Localization migration |
+| `kSettings*` legacy color constants kept for compatibility: `kSettingsAccent`/`kSettingsPanel2` still feed two top-level `final` focus styles (`indexer_managers_settings_page.dart:21,25,842`, `iptv_settings_dialog_button_style.dart:11`) and `legacy_pins_test` pins all of them | Those styles become functions of context (Found 1) |
+
+No size exception is needed: every destination is ≤ 500 lines.
+
+## Public surface (unchanged, importable from the facade)
+
+The 47 names, in original order:
+
+- Tokens (12): `kSettingsBg`, `kSettingsAccent`, `kSettingsAccent2`,
+  `kSettingsPanel`, `kSettingsPanel2`, `kSettingsGreen`, `kSettingsRed`,
+  `kSettingsAmber`, `kSettingsLine`, `kSettingsDim`, `kSettingsDim2` (the last
+  three are non-`const` `final`s) and `kSettingsMaxWidth`.
+- `WebDavSyncPendingBadge`, `settingsInitialsFor`, `SettingsRowContent`,
+  `SettingsRows`, `launchSettingsUrl`, `settingsPageTheme`,
+  `pushSettingsPage`, `showSettingsDialog`, `SettingsPageScaffold`,
+  `SettingsPageHeader`, `SettingsBannerTone`, `SettingsInfoBanner`,
+  `SettingsBackground`, `SettingsHeader`, `SettingsSectionLabel`,
+  `ConnectionInfo`, `settingsConnectionNeedsAttention`,
+  `settingsConnectionIsReady`, `ConnectionsSummary`, `ConnectionCard`,
+  `SettingsSection`, `SettingsLookHero`, `SettingsTile`, `SettingsToggleTile`,
+  `TvUiScaleChoice`, `kTvUiScaleChoices`, `tvUiScaleLabel`,
+  `TvRenderQualityChoice`, `kTvRenderQualityChoices`, `tvRenderQualityLabel`,
+  `SettingsSelectOption`, `SettingsSelectDropdown`, `SettingsInfoTile`,
+  `SettingsSkeleton`, `showLegacyModeInfoDialog`.
+
+The step 0 inventory confirms the count with the analyzer (every public
+top-level declaration of R) and fails if it is not 47. The facade holds only
+`export '…' show …` directives naming exactly these names, plus comments: no
+imports, declarations or aliases. A test pins the exported namespace to exactly
+the 47 names (the `detail_showcase_surface_test` pattern, with a declaration
+regex that also matches top-level functions, `final`/`const` variables, enums
+and `abstract final class`).
+
+## What it contains (original lines at `0cb50df7`; after the format commit the manifest is authoritative)
+
+| Orig | Area |
+| --- | --- |
+| 1–15 | imports |
+| 17–39 | token doc + 12 tokens |
+| 41–72 | `WebDavSyncPendingBadge`, `settingsInitialsFor` |
+| 74–454 | `SettingsRowContent`, `SettingsRows` (~60 specs), `launchSettingsUrl` |
+| 456–744 | `settingsPageTheme`, the three memo variables, `_buildSettingsPageTheme`, `pushSettingsPage`, `showSettingsDialog` |
+| 746–905 | `SettingsPageScaffold`, `SettingsPageHeader`, `SettingsBannerTone`, `SettingsInfoBanner` |
+| 907–1074 | `SettingsBackground`, `SettingsHeader`, `SettingsSectionLabel` |
+| 1076–1108 | `ConnectionInfo`, `settingsConnectionNeedsAttention`, `settingsConnectionIsReady` |
+| 1110–1430 | `ConnectionsSummary` + State (12 owned focus nodes, DPAD graph) |
+| 1432–1718 | `ConnectionCard` + State (key routing, sidebar hand-off, reveal) |
+| 1720–1800 | `SettingsSection` |
+| 1802–1984 | `SettingsLookHero` + State, `_SettingsSwatches` |
+| 1986–2250 | `SettingsTile` + State |
+| 2252–2420 | `SettingsToggleTile` + State |
+| 2422–2492 | TV screen-size and rendering choice tables and labels |
+| 2494–2613 | `SettingsSelectOption`, `SettingsSelectDropdown` |
+| 2615–2678 | `SettingsInfoTile` |
+| 2680–2777 | `SettingsSkeleton`, `_SkeletonHeader`, `_SkeletonSection`, `_SkeletonTile` |
+| 2779–2835 | `showLegacyModeInfoDialog` |
+
+**Resources.** Owned focus nodes: the 12 in `_ConnectionsSummaryState` (11
+`late final` created in `initState`, `_mediaServersFocusNode` field-initialized;
+`dispose` releases all 12 in a fixed order, then `super.dispose()`);
+`_ConnectionCardState._wrapNode`; and the lazily created `_ownNode` of
+`_SettingsLookHeroState`, `_SettingsTileState` and `_SettingsToggleTileState`
+(created only when the widget's `focusNode` is null; a supplied node is
+borrowed and never disposed). No timer, controller, ticker, subscription or
+`GlobalKey`. One post-frame callback (`ConnectionCard._focusAndScroll`). One
+process-wide mutable memo (`_settingsThemeBase`/`_settingsThemeApp`/
+`_settingsThemeCache`).
+
+## Contracts that must not change
+
+Pinned by behaviour tests and/or source guards. Guards read whole bodies,
+comments included, through `test/support/settings_widgets_source.dart`, a
+**manifest-driven** reader frozen at (b) (Step 0 item 5).
+
+1. **Public surface** as above; each name declared in exactly one destination
+   and re-exported once; importers unchanged.
+2. **Connections DPAD graph.** For both `wide` (`maxWidth > 520`) and narrow
+   layouts, and each combination of `mediaServers` and `mdblist` present or
+   absent, every card's `left/right/up/downNeighbor` and `isLeftColumn` is
+   exactly the original (including the un-parenthesised
+   `mediaServers != null ? … : wide ? … : …` tracking `upNeighbor`). The
+   twelve nodes keep their debug labels, creation points and dispose order;
+   `firstCardFocusNode` is borrowed (never disposed). Tests drive real arrow
+   keys through every edge of every variant and record the focused card.
+3. **ConnectionCard key routing.** Only `KeyDownEvent` is handled (repeat and
+   up events are ignored); an arrow with a neighbour requests focus on it and
+   schedules one post-frame `tvRevealMinimal(target.context!, duration:
+   _motion.scaled(200 ms))` guarded by `target.context != null`; left with no
+   neighbour in the left column calls `MainPageBridge.focusTvSidebar!()` only
+   when it is non-null, else is ignored; every other case returns `ignored`.
+   `_motion` is resolved in `didChangeDependencies`. `_focused` is read live
+   from `_wrapNode.hasFocus` (descendant-inclusive); `onFocusChange` and hover
+   only `setState`. `onTap` awaits `info.onTap()`.
+   **Observation, not geometry:** an ignored arrow still moves focus through
+   the app's default directional shortcuts, so focused-card identity alone
+   cannot prove handled vs ignored. The harness therefore (a) installs an
+   ancestor `Focus(onKeyEvent:)` recorder above the summary that sees exactly
+   the events the card did **not** handle, and asserts handled/ignored per
+   key and event kind (KeyDown, KeyRepeat, KeyUp); (b) pins each card's
+   `left/right/up/downNeighbor` identity and `isLeftColumn` by reading the
+   public `ConnectionCard` widget fields from the element tree, per variant,
+   independent of traversal; (c) records the reveal through a recording
+   `ScrollController` whose `ScrollPosition` subclass logs `animateTo`
+   (target, duration, curve) and the `SchedulerBinding` phase it ran in:
+   nothing is recorded synchronously with the key event, and the call happens
+   during `SchedulerPhase.postFrameCallbacks` with the tempo-scaled 200 ms
+   (`tvRevealMinimal` uses `animateTo` for a non-zero duration, `jumpTo` for
+   zero, and neither when no reveal is needed — the fixture places the target
+   so a reveal is needed);
+   (d) drives the sidebar case for callback present/absent ×
+   `isLeftColumn` true/false.
+4. **Tiles.** `SettingsTile`, `SettingsToggleTile`, `SettingsLookHero`: own
+   node only when none is supplied, disposed with the State; supplied nodes
+   stay usable after unmount. `SettingsTile(enabled: false)`:
+   `canRequestFocus: false` (DPAD traversal skips it), `onTap: null`,
+   `Opacity 0.45`, no hover light. Live `_focused` (the stale-focus contract of
+   `settings_single_focus_test`). Toggle: the row InkWell is the only focus
+   stop (`Switch` under `ExcludeFocus`), tap/OK calls `onChanged(!value)`.
+   `.spec` factories copy icon/title/subtitle with the documented subtitle
+   override. `SettingsLookHero` shows swatches only at `maxWidth >= 390`.
+   Under the Spotlight look with parallax focus expression, a lit row paints
+   the inverse plate (goldens).
+5. **Page theme and routes.** `settingsPageTheme` returns the **identical**
+   cached `ThemeData` while both `Theme.of(context)` and
+   `AppThemeScope.of(context)` are identical, and rebuilds when either changes;
+   `pushSettingsPage` wraps the **route builder** in
+   `Theme(data: settingsPageTheme(ctx))`, so a dialog opened from the pushed
+   page inherits the settings palette; `showSettingsDialog` applies the theme
+   to the dialog and forwards `barrierDismissible`. The memo stays one
+   process-wide library-private state in one file.
+6. **Service/platform touchpoints**, verbatim: `launchSettingsUrl` →
+   `launchUrl(Uri.parse(url))` (test through a fake `UrlLauncherPlatform`);
+   `showLegacyModeInfoDialog` reads `ProfileBootstrap.legacyReasonSummary` and
+   autofocuses OK, which pops; the sidebar hand-off above. A guard bans any
+   other `lib/services/`, `package:http`, `shared_preferences`, `sqflite`,
+   storage, player or launcher import in the feature and facade.
+7. **Pure helpers** (table tests): `settingsInitialsFor` (two words, `&`
+   separator, internal capitals, single short word, empty → `?`),
+   `settingsConnectionNeedsAttention` (each keyword, case-insensitive,
+   disconnected → false), `settingsConnectionIsReady`, `tvUiScaleLabel` and
+   `tvRenderQualityLabel` (each choice; table completeness against
+   `TvRenderQuality.values` and order — its `'Automatic'` fallback is
+   unreachable with a valid enum value, so it is pinned by the source guard,
+   class **S**), choice-table order.
+8. **Rendering.** Element tree, keys, `const`, private runtime type names,
+   `SettingsSection` rule model / dividers between children only / blurb,
+   `SettingsBackground` and `SettingsHeader` Spotlight vs other looks,
+   `SettingsInfoBanner` tones, `SettingsSelectDropdown` (stale value renders an
+   empty field without asserting; a `null` passed to the field's public
+   nullable `onChanged` is not forwarded and returns normally; the selected
+   subtitle echoes below), `SettingsSkeleton`. Goldens pin these.
+
+## Destination layout
+
+All under `lib/features/settings_widgets/presentation/`, flat (no
+`application/`, `data/` or bridge folder: there is no state, I/O or playback to
+separate). Sizes are estimates after formatting, with imports; each file is
+measured in its creation commit and must be ≤ 500 (checker-enforced). Within a
+file, declarations keep their original relative order.
+
+| File | Contents | ≈ |
+| --- | --- | --- |
+| `settings_tokens.dart` | token doc comment + 12 tokens | 30 |
+| `settings_pending_badge.dart` | `WebDavSyncPendingBadge` | 25 |
+| `settings_rows.dart` | `SettingsRowContent`, `SettingsRows` | 380 |
+| `settings_links.dart` | `launchSettingsUrl` (the only `url_launcher` import) | 10 |
+| `settings_page_theme.dart` | `settingsPageTheme`, memo variables, `_buildSettingsPageTheme`, `pushSettingsPage`, `showSettingsDialog` | 295 |
+| `settings_page_chrome.dart` | `SettingsPageScaffold`, `SettingsPageHeader`, `SettingsBannerTone`, `SettingsInfoBanner` | 165 |
+| `settings_root_chrome.dart` | `SettingsBackground`, `SettingsHeader`, `SettingsSectionLabel` | 175 |
+| `settings_connection_info.dart` | `ConnectionInfo`, the two predicates | 40 |
+| `settings_connections_summary.dart` | `ConnectionsSummary` + State | 345 |
+| `settings_connection_card.dart` | `settingsInitialsFor`, `ConnectionCard` + State | 310 |
+| `settings_section.dart` | `SettingsSection` | 85 |
+| `settings_look_hero.dart` | `SettingsLookHero` + State, `_SettingsSwatches` | 190 |
+| `settings_tile.dart` | `SettingsTile` + State | 270 |
+| `settings_toggle_tile.dart` | `SettingsToggleTile` + State | 175 |
+| `settings_tv_choices.dart` | screen-size and rendering choice tables and labels | 80 |
+| `settings_select_dropdown.dart` | `SettingsSelectOption`, `SettingsSelectDropdown` | 125 |
+| `settings_info_tile.dart` | `SettingsInfoTile` | 70 |
+| `settings_skeleton.dart` | `SettingsSkeleton` and its three private widgets | 105 |
+| `settings_legacy_mode_dialog.dart` | `showLegacyModeInfoDialog` | 65 |
+
+`settingsInitialsFor` moves to the card file, its only caller (still exported
+by the facade). `ConnectionInfo` and the predicates get their own file so the
+summary → card → info import graph is acyclic. The import graph inside the
+feature is a DAG (step 0 deps report draws it; the source guard rejects a
+cycle).
+
+**No aliases.** After the split no private declaration is referenced from
+another file: the memo variables and `_buildSettingsPageTheme` stay with
+`settingsPageTheme`, `_SettingsSwatches` with `SettingsLookHero`, the skeleton
+privates with `SettingsSkeleton`, every State with its widget. Comments that
+name another file's private (`_SettingsTileState._focused` in the card,
+look-hero and toggle docs) stay verbatim. The manifest therefore registers
+`unchanged` leaves only; `type_aliases` is empty and the step 0 probe proves
+there is no cross-file private reference (the analyzer reports none in the
+split probe).
+
+**Imports.** Each destination writes sorted `package:debrify/…` imports of
+only what it uses (plus `package:flutter/…`, `package:url_launcher/…` in the
+links file). Service imports are exact `show` lists registered per file in
+`PRESENTATION_BRIDGE_IMPORTS`: `settings_connection_card.dart` →
+`services/main_page_bridge.dart show MainPageBridge`;
+`settings_legacy_mode_dialog.dart` →
+`services/profiles/profile_bootstrap.dart show ProfileBootstrap`. Any
+`unused_import`/`unnecessary_import` is a new diagnostic and fails.
+
+**Guard rules** (step 1, `check_search_architecture.py`, additive and keyed by
+this feature): `settings_widgets` in `FEATURES`;
+`SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"`,
+`SETTINGS_WIDGETS_COMPLETE = False`; the feature never imports its facade or
+any `lib/screens/` file; no `lib/services/` import except the two registered
+`show` entries (exact names); no `url_launcher` import except in
+`settings_links.dart`; playback/storage/http bans (Contract 6); no import
+either way between `settings_widgets` and `settings`, `playback_settings`,
+`iptv_settings` (they keep importing the facade) except `<other>/models/`;
+500-line cap on every feature file, no exceptions.
+
+At step 4 (`SETTINGS_WIDGETS_COMPLETE = True`): `main()` adds the facade;
+`COMPOSITION_ROOTS` entry with comment; pure-export rule (only `export`
+directives and comments, exactly the 47 names, every target under
+`package:debrify/features/settings_widgets/presentation/`); the measured facade
+cap; `TEMP(settings_widgets)` rejected everywhere. The settings-family ban is a
+**direct implementation-import ban**: the checker examines physical directive
+targets (`check_search_architecture.py:757`), so `settings`,
+`playback_settings` and `iptv_settings` files that import the facade under
+`lib/screens/` stay allowed, while a direct import of
+`lib/features/settings_widgets/…` from them (or the reverse) is rejected; the
+negative tests prove both. Tests run the real `main()`
+on a temporary tree copy and must reject: missing facade; a facade declaration
+or import; facade over cap; a missing or extra exported name; a feature
+back-import of the facade; a `settings` feature import; an unshown or
+over-shown service import; a `url_launcher` import outside the links file; a
+`TEMP` marker. The unmodified tree passes.
+
+## Technique
+
+As in the detail-showcase plan, plus:
+
+1. **Two step 0 originals.**
+   - **(a) Format-only commit** (`style(settings-widgets): format the original
+     settings widgets`) is R: the manifest `--baseline`, relocation comparison
+     and hash rule. `dart format` makes 5 hunks, 2,835 → 2,847 lines,
+     idempotent. Tokens differ only by **exactly 2 AST-identified optional
+     trailing commas** (`FocusNode(debugLabel: 'settings-media-servers',)` in
+     `_ConnectionsSummaryState`, and the `mediaServers` `ConnectionCard(…)`
+     call). Add `dev/tool/settings_widgets_format_proof.py`, a wrapper over the
+     existing AST adapter used by `detail_showcase_format_proof.py` (do not
+     modify the other features' proof scripts). Inputs: `--original`,
+     `--formatted`, isolated `--parser-package`, per-run kernel path,
+     `--output`. It lists each comma by node and owner, **expects exactly 2**,
+     and asserts each mutation changes its input before requiring that
+     edited-comment, trailing-comment, edited-literal (`'settings-media-servers'`)
+     and non-optional-comma negatives reject. 0 format-induced diagnostics are
+     expected; any observed are recorded by identity, never fixed. The commit
+     raises `dev/tool/file_size_baseline.txt` 2835 → 2847 by hand and updates
+     nothing else; later steps only lower it and step 3 removes it.
+   - **(b) Characterization checkpoint** (`test(settings-widgets): step 0
+     original-code characterization checkpoint`): application files unchanged
+     from R (Progress proves `git rev-parse <b>:lib` = `<R>:lib`, likewise
+     `pubspec.yaml`/`pubspec.lock`); adds frozen tests, harness, source reader,
+     checker manifest/config, format proof and macOS goldens. No application
+     seam is expected; if one proves necessary, the spotlight seam-checkpoint
+     rule applies and R moves to it everywhere.
+2. **Strict-lint baseline by identity.** Analyze R under
+   `lib/features/analysis_options.yaml` in a detached worktree in ignored
+   `.dart_tool/`, qualifying import URIs only; record every diagnostic by
+   (rule, symbol, message), separating qualification-induced
+   `directives_ordering` infos. A throwaway **split probe** applies exactly the
+   manifest's split and imports and must report no new rule identity (no
+   `library_private_types_in_public_api`, no unused/unnecessary import, no
+   undefined name). Combine baseline and probe by maximum, never sum. No
+   suppression, `const`, key or constructor change. (Round 1 probe at
+   `8ccf2d8a`: zero errors/warnings, four pre-existing const infos.)
+   **Per-symbol comparison tool.** `suite_evidence.py` records only
+   (severity, file, rule, message) and relocates by file, so add
+   `dev/tool/settings_widgets_diagnostics.py`: `record --rev <R>` analyzes a
+   detached worktree of R (ignored `.dart_tool/`, strict options as above)
+   and maps each diagnostic to its **owning top-level declaration** via the
+   AST spans of the isolated parser package; `compare --rev <checkpoint>`
+   does the same on the checkpoint's original-plus-destinations and fails on
+   any (severity, rule, owner declaration, message) whose count exceeds the
+   baseline maximum, ignoring only the recorded qualification-induced
+   `directives_ordering` identities. File relocation for the whole-repo
+   analyzer and test identities stays with
+   `suite_evidence.py compare --relocate
+   lib/screens/settings/widgets/settings_widgets.dart=lib/features/settings_widgets/`,
+   run separately. Exact commands and outputs are recorded in Progress; the
+   tool has fixture tests (a moved diagnostic passes, an added or
+   re-owned one fails).
+3. **Whole declarations move verbatim** with docs and States. The verbatim
+   checker compares comments: **never reword one**, including the `[SettingsRows]`,
+   `[SettingsPageScaffold]`, `[SettingsBackground]`, `[SettingsTile]`,
+   `[SettingsSelectDropdown]`, `[SettingsRootHeader]` and
+   `_SettingsTileState._focused` references that now cross files. Nothing is
+   hoisted, reordered, wrapped, keyed or `Builder`-ed.
+4. **Intermediate original.** Until step 3 the original keeps the unmoved code,
+   imports the feature files it needs and `export … show`s each moved public
+   name, so importers compile at every checkpoint. It never declares a
+   forwarder. Its now-unused imports are removed in the same step that moves
+   their last user (no `unused_import` at any checkpoint).
+
+## Steps
+
+| # | Work | Contracts |
+| --- | --- | --- |
+| 0 | Baseline; (a) and `base-fmt`; deps report, manifest, config; lint/split probes; harness, characterization, macOS goldens, (b); CI list; inventory; Linux script; step 0b review | Nothing moves |
+| L | Linux originals in a separate commit (Claude captures; execution verifies and commits). **Blocking before step 1.** | — |
+| 1 | Guard registration; tokens, badge, rows, links, page theme, page chrome, root chrome; shape/theme registration begins | 1, 5, 6, 8 |
+| 2 | Connection info, summary, card; section; look hero; tile; toggle tile. **Full-suite gate 1.** | 2, 3, 4, 7, 8 |
+| 3 | TV choices, select dropdown, info tile, skeleton, legacy dialog; the original becomes the pure facade; size baseline entry removed | 6, 7, 8 |
+| 4 | `SETTINGS_WIDGETS_COMPLETE`, facade rules/cap, `checks.yml`, CI lists. **Full-suite gate 2.** | All |
+
+### Step 0
+
+1. **Baselines.** `settings_widgets/base` (`suite_evidence.py run`, full suite,
+   `paths` empty, flags recorded, plus whole-repo analyzer) on the untouched
+   head with tree/SDK provenance (Flutter 3.44.8 / Dart 3.12.2);
+   `settings_widgets/base-fmt` after (a), equal by identity.
+2. **Dependency report** (`docs/refactoring/settings-widgets-deps.md`): per leaf
+   (declaration, private top-level item, comment fragment) its destination,
+   each cross-file **public** reference, each service type and `show` entry,
+   State reads of `widget`/`context`/`mounted`, the feature import DAG, and a
+   wiring checklist; per importer (lib and test) the names it uses (proving
+   all 47 remain reachable through the facade).
+3. **Checker.** `dev/tool/settings_widgets_manifest.tsv` (LF only) and
+   `settings_widgets_checker_config.json` (sections engine, `unchanged` only,
+   empty `type_aliases`, `self_test_module` with real-config fixtures).
+   (`--relocate` belongs to `suite_evidence.py compare`, not to this
+   checker; see Per step.) Negatives: renamed private class; reworded comment; new `const` or key;
+   reordered `dispose` in `_ConnectionsSummaryState`; a swapped neighbour
+   argument; `canRequestFocus: widget.enabled` dropped; `ExcludeFocus` removed;
+   the memo keyed on `base` only; a declaration duplicated in two
+   destinations; a destination missing a manifest leaf. Shared checker
+   modules are edited only through opt-in config keys (none expected); every
+   other manifest's self-tests stay passing unchanged.
+4. **Harness** (`test/support/settings_widgets_fixture.dart`):
+   `AppThemeScope` with a named legacy look and the Spotlight look (parallax
+   focus expression), pinned `tester.view` size, DPR 1.0, `en-US`, text scale
+   1.0; host-owned focus nodes disposed in teardown; recording callbacks;
+   `MainPageBridge.focusTvSidebar` and platform flags saved/restored in
+   teardown; `ParallaxTravel.resetForTest()` in setUp/teardown where a
+   `ParallaxFocus` row is focused; a fake `UrlLauncherPlatform` restored in
+   teardown; bounded pumps (no `pumpAndSettle` where a post-frame reveal or
+   route animation is timed); braces in tests. Prove it on R first.
+5. **Characterization tests** under
+   `test/features/settings_widgets/presentation/`, frozen in (b), importing
+   **only the facade path** so they are unchanged at every checkpoint, each
+   passing in a detached worktree of (b) before any move:
+   `settings_connections_dpad_test` (2, 3), `settings_tiles_focus_test` (4),
+   `settings_page_theme_test` (5), `settings_touchpoints_test` (6),
+   `settings_helpers_test` (7), `settings_widgets_render_test` (8),
+   `settings_widgets_surface_test` (facade namespace = 47 names) and
+   `settings_widgets_source_contract_test`. The frozen reader is
+   **manifest-driven** and covers **all 60 AST declarations** by kind: classes
+   (incl. `abstract final class`), the enum, top-level functions (incl.
+   generic `pushSettingsPage<T>`/`showSettingsDialog<T>` and the arrow-bodied
+   predicate), `const`/`final` variables (incl. generic `const List<…>`
+   initializers) and the three uninitialized memo variables. For each
+   registered declaration it reads the original or the destination the
+   manifest names (if created) and fails when neither or both hold it.
+   Boundaries come from a comment- and string-aware scanner (raw strings,
+   interpolation, generics, `=>` bodies, `;`-terminated variables); a step 0
+   tool test (`dev/tool/settings_widgets_reader_check.py`, isolated parser
+   package) compares the reader's span for each of the 60 declarations with
+   the analyzer's span at (b), and proves deletion and duplication rejection
+   for one declaration of each kind, before the reader is frozen. Service
+   `show` assertions are **staged by destination creation**: the original's
+   imports (`settings_widgets.dart:6–7`) have no `show`, so the reader checks
+   a `show` list only in a destination that exists. Source guards cover what behaviour tests cannot observe:
+   the 12-node dispose order and debug labels, `_motion` resolved in
+   `didChangeDependencies`, borrowed nodes never disposed, the memo variables
+   private to one file, the service `show` lists. Final-topology requirements
+   (every destination exists, the original is a pure 47-name facade) are
+   **dormant until** `SETTINGS_WIDGETS_COMPLETE = True` (absent counts as
+   false). The step 0b review proves the guards pass on (b), fail on a
+   declaration deleted from the original, and that the final-topology checks
+   fire on a temporary copy of (b) with the flag set.
+6. **Goldens.** The five `settings_spotlight_*` goldens (macOS and `linux/`)
+   stay untouched and must keep passing. New deterministic scenes from (b),
+   `settings_widgets_goldens_test.dart` →
+   `test/goldens/settings_widgets/{macos,linux}/`, using a **direct widget
+   harness** (no settings screen, no services): `tv_legacy_gallery`
+   (1920×1080, legacy look: page header, info banners in all four tones,
+   section with tile/toggle/info tile/disabled tile, select dropdown with
+   subtitle, one tile focused); `tv_spotlight_gallery` (same content,
+   Spotlight look, a focused tile painting the inverse plate, look hero with
+   swatches); `wide_connections` (ConnectionsSummary at 1280×900 with
+   `mediaServers` and `mdblist`, one card focused); `phone_connections`
+   (narrow ConnectionsSummary without the optional cards, on a **390×1000**
+   surface — the summary alone measures ~953 px — so every card is inside
+   the capture); `phone_skeleton` (`SettingsSkeleton` alone, 390×844). That
+   is five scenes. Every golden asserts the rect of each promised widget
+   (each named card, tile, banner, the hero swatches, the skeleton header and
+   sections) overlaps the capture bounds before matching.
+   **Determinism:** the default `flutter_test` font only (no font loading; the
+   `JetBrainsMono` family falls back to it identically on both platforms) and
+   no change to typography globals (any global the harness touches is saved
+   and restored in teardown); fixed timeline per scene — build, one
+   `pump()`, focus request through the public node, `pump()` then
+   `pump(const Duration(milliseconds: 300))` as a deterministic **300 ms sample**
+   of the snap/parallax spring (not a claim of settlement; the fake clock makes
+   the sample identical on every run),
+   and for the skeleton a fixed `pump(const Duration(milliseconds: 400))` of
+   the `Shimmer` controller's fake clock; no `pumpAndSettle` (the shimmer
+   repeats forever); dropdowns captured closed only. Scene order is
+   controlled by `--dart-define=SETTINGS_WIDGETS_GOLDEN_ORDER=reverse`
+   (default forward) read by the golden test, so the Linux script can capture
+   in both orders and require identical hashes. Execution captures macOS
+   into (b).
+   **Claude captures Linux** from (b) in the calibrated `debrify-flutter:3.44.8`
+   linux/amd64 Docker image (clone under `$HOME`, `flutter pub get` in the
+   container, verify `HEAD` and hashes, double capture in reversed order with
+   identical hashes); execution verifies hashes and provenance and commits them
+   as step L; Linux is strict from L on.
+7. **CI list.** Add to `dev/tool/ci_behavior_tests.txt` every runnable
+   importing test not yet listed (six of the 14 are missing at `0cb50df7`;
+   step 0 computes the exact set from the directive inventory), the helper's
+   runnable consumers `test/theme/goldens_test.dart` and
+   `test/theme/contrast_audit_test.dart` if missing (never the helper
+   `surface_gallery.dart` itself), every new test and the golden test. Known failures only as observed in
+   `base`, by identity, under a dated `# settings_widgets step 0:` comment;
+   none are expected.
+8. **Source-text inventory.**
+   - **Shape.** The original is in `kShapeResidue`
+     (`shape_manifest_test.dart:197`) with a **ceiling** of 10; the guard is
+     `found > ceiling` (line 1413). Measured at `0cb50df7`: **7 bare radii**
+     (orig 821, 1554, 1781, 2193, 2542, 2741, 2769) and **26 `app.shape.br`
+     token calls**, which count toward the 488 floor (line 1448 counts tokens
+     only over `kShapeResidue`, and line 1432 requires every `kShapeResidue`
+     file to contain `app.shape.`). Allocation by destination (tokens / bare
+     radii): `settings_page_theme` 15/0, `settings_page_chrome` 1/1,
+     `settings_connection_card` 2/1, `settings_section` 1/1,
+     `settings_look_hero` 2/0, `settings_tile` 2/1, `settings_toggle_tile` 2/0,
+     `settings_info_tile` 1/0 — these eight go in **`kShapeResidue`** with
+     their measured radius count as ceiling; `settings_select_dropdown` 0/1,
+     `settings_skeleton` 0/2 and the other nine (0/0) go in
+     **`kExtractedShapeResidue`**. Each entry is added in the commit that
+     creates its file. The facade stays in `kShapeResidue` while it still
+     contains a token call, its ceiling lowered at each step to its measured
+     residue; in step 3, when `SettingsInfoTile` takes the last token call,
+     it moves to `kExtractedShapeResidue` at 0. Every checkpoint measures and
+     asserts: the token total over the slice is exactly 26 and the global
+     floor count is unchanged (488 at the base, zero slack); the bare-radius
+     total over the slice is exactly 7. Ceilings and measured counts are
+     reported separately; the historical ceiling 10 is not an inventory.
+   - **Theme:** `theme_surface_manifest.txt` `settings` surface gains an
+     explicit `lib/features/settings_widgets/presentation/*.dart` pattern (no
+     globstar); `lib/screens/settings/widgets/*.dart` still covers the facade.
+     Measure before and after: unchanged classification.
+   - **Scan scopes that would lose this code** (added in step 1, when the
+     first file moves, purpose preserved): the log-redaction scan in
+     `test/profiles/profile_source_guard_test.dart:344` (`print(` ban over
+     `lib/screens/settings`) gains `lib/features/settings_widgets`;
+     `dev/tool/light_ink_inventory.py` `PRIMARY` (line 62) gains
+     `'lib/features/settings_widgets/presentation/'`, with before/after
+     inventory output recorded. Step 0 greps every other test and tool that
+     globs `lib/screens/settings`, `lib/screens/**` or names this file and
+     records the result.
+   - Verify unaffected (they scan all of `lib`): `theme/source_guard_test`,
+     `stale_runtime_guard_test`; and `storage_member_map.tsv`,
+     `theme/legacy_pins_test` (still imports the facade). Historical design
+     docs naming the path stay as they are.
+9. **Linux capture script** (`dev/tool/capture_settings_widgets_linux_goldens.sh`,
+   modelled on the detail-showcase script): `set -euo pipefail`; resolves (b)
+   and R by **exact subject** over all of `git log --format='%H %s'` (awk
+   prints every match, no early exit) and requires exactly one; requires (b)'s
+   `lib`/`pubspec.yaml`/`pubspec.lock` hash-equal to R's; uses only (b)'s
+   tests; checks Flutter 3.44.8 on Linux; captures twice in reversed order,
+   requires identical hashes, verifies strictly, writes hash and revision
+   evidence.
+
+**Step 0b review** (on (b), before any move). Each ORIGINAL-only mutation must
+be rejected by a real **assertion failure** (not a compile error), run one at a
+time on a scratch copy of (b) and recorded with the failing test name:
+a swapped wide/narrow neighbour (one per variant: plain, `mediaServers`,
+`mdblist`, both); the tracking `upNeighbor` parenthesised differently; sidebar
+hand-off removed / called when null; `KeyRepeatEvent` handled; reveal not
+scheduled; `canRequestFocus: true` on a disabled tile; `onTap` kept on a
+disabled tile; `ExcludeFocus` removed; toggle `onChanged(widget.value)`; own
+node used even when one is supplied; look-hero swatch threshold 390 → 380;
+memo keyed on `base` only; `pushSettingsPage` theming the page instead of the
+route builder; `barrierDismissible` dropped; a needs-attention keyword
+removed; `settingsInitialsFor` capital rule removed; the screen-size label
+fallback changed (the rendering fallback is unreachable, class S); the
+dropdown's `if (v != null) onChanged(v);` replaced by the **compilable**
+mutant `onChanged(v!);`, rejected by a `returnsNormally` assertion that
+invokes the field's public nullable `onChanged` with `null` (deleting the
+guard outright is a compile error and never counts as a proof); a
+golden-visible radius change. Mutations that can
+only be caught by a source guard (dispose order, debug label, `_motion` hook)
+are classified **S** and proven against the guard separately. Any surviving
+mutation gets a 0b test before extraction. Record `base3` at (b): only added,
+passing identities.
+
+### Per step and gates
+
+The detail-showcase procedure with `--baseline <R>`. Every step runs: every
+integrated manifest plus this one, with self-tests and an isolated
+`--parser-package`; the per-symbol relocation comparison (zero additions);
+architecture and sizes (lowering the ratchet); shape (7 radii / 26 tokens /
+488 floor) and theme; CI format
+and scoped analyzer with `check_analyzer_allowlist.py` (no new entry is
+expected); the strict comparison by identity; LF manifests and staged diff;
+the focused characterization set plus the 14 runnable importing tests,
+`theme/goldens_test`, `theme/contrast_audit_test` and the
+five `settings_spotlight` goldens. No golden is ever regenerated against moved
+code. Gates run on committed trees with no untracked inputs against the latest
+`settings_widgets/` base; gate 2 also compares with gate 1. Never `--record` a
+regression.
+
+**Linux replay.** At gate 2's commit Claude replays all five new goldens
+**and** the five `settings_spotlight` goldens in the calibrated Docker image,
+strict, no regeneration, recording provenance (SHA, tree hashes, image ID,
+Flutter version) and unchanged PNG hashes.
+
+**Step 4** also adds the facade and `test/support/settings_widgets_*.dart` to
+the `checks.yml` format list and the facade to the analyze list — **paths
+before `| tee analyze.txt`, never after** — and records the facade's `wc -l`
+breakdown (export directives + comments = total), the chosen cap, and final
+per-file sizes.
+
+### Integration (Claude)
+
+Merged by Claude into `refactor/codebase` after the parallel Stremio TV and
+edit-profile branches, integrating shared files **semantically, by union**:
+`check_search_architecture.py` (`FEATURES`, `PRESENTATION_BRIDGE_IMPORTS`,
+`COMPOSITION_ROOTS`, `main()` facade paths, every `*_COMPLETE`),
+`shape_manifest_test.dart`, `theme_surface_manifest.txt`,
+`ci_behavior_tests.txt`, `ci_behavior_known_failures.txt`,
+`analyzer_allowlist.txt`, `checks.yml` (paths before `| tee`),
+`file_size_baseline.txt`. Then, on the merged committed tree: every manifest
+with self-tests (isolated parser packages); architecture, size, shape, theme;
+CI format, analyze and allowlist; a full-suite comparison; the Linux golden
+replay.
+
+## Definition of done
+
+1. **Facade:** pure re-export of exactly the 47 names, formatted, within its
+   measured cap; all 132 importing files compile unchanged.
+2. **Feature:** 19 destinations, each ≤ 500 lines, no size exception, no
+   cross-file private, acyclic imports, no runtime type name change.
+3. **Guard:** feature, facade rules and cap, exact `show` service imports, the
+   `url_launcher` confinement, the playback/storage/http and settings-family
+   cross-import bans, each proven through the real checker.
+4. **Tests:** all manifests with self-tests pass; every characterization test
+   and guard from (b) passes unchanged; macOS and Linux goldens (five new plus
+   the five `settings_spotlight`) match, with the completion Linux replay's
+   provenance recorded.
+5. **Diagnostics:** no new diagnostics, suppressions or allowlist entries.
+6. **CI:** behaviour list holds the importing and new tests; shape slice
+   totals 7 bare radii and 26 token calls with 0 of each in the facade, the
+   488 floor unchanged; theme surface unchanged; size baseline
+   entry removed.
+7. **Progress** records commits ((a) = R, (b), L, each step), and the
+   end-of-series device checklist below as pending.
+8. **Gate 2** passes against the latest base and gate 1. Then stop and report.
+
+## Explicitly not in scope
+
+Every settings page and layout that imports the library,
+`dynamic_settings_builder.dart`, `AppThemeScope`/`AppTheme`, `ParallaxFocus`,
+`tv_reveal`, `MainPageBridge`, `ProfileBootstrap`, Riverpod, localization, a
+link-launcher or sidebar-focus port, and every bug fix or behaviour change
+below.
+
+## Decisions taken before design review
+
+1. **Location:** new feature `lib/features/settings_widgets/presentation/`
+   behind a pure re-export facade at the original path (not
+   `lib/features/settings/`, not `lib/ui/core/`; reasons under Goal).
+2. **No aliases:** the split leaves no cross-file private; nothing is renamed.
+3. **Format-only original R** (5 hunks, 2 optional commas) so destinations are
+   formatted without a second format pass; proof script per feature.
+4. **Goldens:** five new direct-harness scenes covering both looks and TV/phone
+   sizes, captured on macOS by execution and on Linux by Claude; the existing
+   `settings_spotlight` goldens are the integration check through real pages.
+5. **Service/platform touchpoints stay verbatim** behind exact `show` imports
+   and one link file; their ports are a later milestone (exceptions table).
+6. **Dead or single-use public names stay public and move verbatim**
+   (`kSettings*`, `settingsInitialsFor`); removal is out of scope.
+7. **Importers are not edited**, including the two `show` importers and the
+   three completed features.
+
+## End-of-series device checklist (no device gate before merge)
+
+- Android TV: D-pad through every Connections card in both column layouts,
+  with and without media servers and MDBList; Left from the left column opens
+  the TV sidebar; the reveal scroll keeps the focused card visible.
+- Android TV: settings rows/toggles are one D-pad stop each; a disabled row is
+  skipped; returning from a sub-page shows one cursor (stale-focus contract).
+- Apple TV: the same rows with the Siri remote; hover is irrelevant there.
+- Desktop/phone: hover lights rows; the look hero shows swatches when wide;
+  dropdown menus open, take D-pad focus and close with Back.
+- The legacy-mode dialog opens from the Profiles row and OK closes it; the
+  community links open the browser.
+
+## Found, not fixed
+
+1. Of the 11 `kSettings*` colors only `kSettingsAccent` and `kSettingsPanel2`
+   have production uses (two top-level `final` focus styles that cannot read the theme);
+   the rest are read only by `theme/legacy_pins_test` (and named in
+   `app_theme.dart` comments).
+2. `settingsInitialsFor` is public with a single caller (`ConnectionCard`).
+3. `launchSettingsUrl` ignores `launchUrl`'s `false` result and any exception.
+4. `ConnectionCard`'s `MouseRegion` is not TV-gated (hover state is set but
+   unused on TV).
+5. `SettingsSelectDropdown` passes `initialValue` to a `FormField`. On the
+   recorded Flutter 3.44.8 original, a parent value change updates both the
+   closed field state value and selected subtitle; null is not forwarded and
+   a stale value renders empty. Characterized, not changed.
+6. Import directives in the original are unsorted (`tv_reveal` before
+   `services`, `package:debrify/models` last); destinations write sorted imports,
+   which is formatting of new files, not a behaviour change.
+
+7. Eight importing files reference no facade name (listed in the deps report);
+   their original imports remain unchanged.
+8. Flutter 3.44.8's ordinary unspecified `IconTheme` color resolves to black
+   before `WebDavSyncPendingBadge` reads it. The widget's explicit nullable
+   `settings.dim2` fallback is retained and characterized with a public
+   resolved `IconThemeData` palette double, alongside explicit-color and
+   ordinary-unspecified-color cases. No production behavior is changed.
+9. The named legacy and Spotlight looks have identical selected/unselected
+   switch thumb ink; Broadsheet's light palette distinguishes them. Named
+   Broadsheet's motion scale is 1; the reveal test uses the public
+   `AppTheme.fromDetail` motion override and `AppThemeScope` at scale 1.15.
+
+10. The pre-existing `dev/tool/torbox_manifest.tsv` uses CRLF. Its bytes are
+    unchanged from 0b; this refactor keeps its own manifest LF and does not
+    rewrite another feature's proof inputs.
+
+11. The frozen service-show guard compares whitespace literally. Its long
+    ProfileBootstrap qualified import wraps under the default formatter, so
+    the new dialog destination protects only that import with format off/on.
+    All moved body text/comments stay byte-equal; normalizing the guard's
+    whitespace is a separate reviewed test change, not part of this move.
+
+## Round 1 review resolution (Codex design review at `8ccf2d8a`)
+
+1. P1 shape registration → token-bearing destinations in `kShapeResidue`,
+   the rest in `kExtractedShapeResidue`, facade transferred when its last
+   token call moves; 26 tokens / 488 floor asserted (Step 0 item 8).
+2. P1 "exactly 10" → measured 7 bare radii allocated by destination; ceilings
+   and measurements reported separately.
+3. P2 reader → all 60 AST declarations by kind, analyzer-span cross-check and
+   per-kind deletion/duplication proofs before freezing; `show` assertions
+   staged by destination creation (Step 0 item 5).
+4. P2 key routing → ancestor event recorder for handled/ignored, neighbour
+   fields read from the element tree, recording `ScrollPosition.animateTo`,
+   sidebar 2×2 matrix (Contract 3).
+5. P2 mutation recipes → rendering fallback class S with table completeness;
+   compilable `onChanged(v!)` dropdown mutant with `returnsNormally`.
+6. P2 goldens → five scenes (phone connections at 390×1000, skeleton alone),
+   font/timeline policy, reverse-order define.
+7. P2 inventory → 132 importing files (117 lib, 15 test, 14 runnable);
+   missing runnable importers and the helper's consumers added to CI.
+8. P2 per-symbol diagnostics → `settings_widgets_diagnostics.py`; relocation
+   via `suite_evidence.py compare --relocate`.
+9. P3 scan scopes → profile log-redaction scan and light-ink PRIMARY gain the
+   feature path in step 1.
+10. P3 → direct implementation-import ban stated and tested both ways; private
+    count corrected to 10 + 3 variables; `kSettingsAccent`/`kSettingsPanel2`
+    production uses recorded.
+
+Round 2 (at `4bec3ce3`): **No P1s — executable**, no P2s; three P3 wording
+notes (post-frame phase assertion, 300 ms sample, `final` styles) applied.
+
+## Progress
+
+### Step 0 — originals and characterization preparation
+
+- Execution starts at plan HEAD `397485b416c7060e9da5a33e488435f6a3fb6bf3`
+  (base `0cb50df7`) in the dedicated `refactor/settings-widgets` worktree.
+  `flutter pub get` ran here first; pubspec and lockfile remain unchanged.
+  All evidence is in the git common directory's
+  `refactor-evidence/settings_widgets/`; parser/kernel caches and detached
+  proof/probe copies are in this worktree's ignored `.dart_tool/settings_widgets/`.
+- (a), R: `0eadeb8c516b55445a367f1885136a7cf4be2312`, exact subject
+  `style(settings-widgets): format the original settings widgets`.
+  Only the original source and its size-baseline entry changed (2835 → 2847).
+  `settings_widgets_format_proof.py --original 397485b4 --formatted
+  lib/screens/settings/widgets/settings_widgets.dart --parser-package
+  .dart_tool/settings_widgets/parser/.dart_tool/package_config.json --kernel
+  .dart_tool/settings_widgets/parser/.dart_tool/settings_widgets_format_proof_final.dill
+  --output <evidence>/format-proof.json` passed: exactly two AST-identified
+  optional commas, both owned by `_ConnectionsSummaryState`; whole-file
+  tokens/comments/literals equal otherwise; edited comment, trailing comment,
+  literal and required singleton-record comma negatives all rejected.
+  `dart format --output=none --set-exit-if-changed` is idempotent on R.
+- Full suites `suite_evidence.py run settings_widgets/base --no-pub` on
+  untouched HEAD and `run settings_widgets/base-fmt --no-pub` on R:
+  each **11654 success / 13 failure / 28 error / 20 skipped**. Both env files
+  record Flutter 3.44.8 / Dart 3.12.2, paths `[]`, flags `["--no-pub"]`,
+  HEAD = index = tested = end tree, no untracked input, no changed tree.
+  `compare --against <evidence>/base.jsonl <evidence>/base-fmt.jsonl` PASS:
+  zero added/missing/changed identities, new failures, new skips or fixes.
+- Whole-repo analyzer initially duplicated diagnostics while generated test
+  assets were being created (3201 reports). Retained raw evidence; a clean
+  detached replay of untouched HEAD with the same generated asset inputs is
+  `base-analyzer-stable.txt`: **1689 reports / 578 identities**, identical by
+  severity/file/rule/message/count to `base-fmt-analyzer.txt`; zero additions
+  or removals (`format-analyzer-comparison.txt`). The preliminary replay's
+  twelve missing-asset warnings are environmental and not accepted as code
+  diagnostics. No format-induced diagnostic, suppression or allowlist entry.
+- Deps report and reproducible analyzer-backed inventory: **60 declarations,
+  47 public names, 132 importers (117 lib / 15 test / 14 runnable)**. URI
+  directives are resolved; public-reference DAG is acyclic; no cross-file
+  private reference, alias or application seam is needed. Every declaration,
+  private item, State read and comment fragment has an owner and wiring row.
+  Eight original importers use no facade name; their imports remain unchanged.
+- Real sections config/manifest: 60 unchanged leaves, empty type_aliases;
+  original/current and complete-split positives plus nine textual negatives
+  and duplicate/missing-leaf negatives. Every manifest run/self-test uses its
+  own copied parser package with all copied `*.dill` removed. The integrated
+  manifest results are recorded under `checkers/` and summarized below after
+  completion; no other feature's proof script or shared checker is edited.
+- Strict record/split: `settings_widgets_diagnostics.py record --rev
+  0eadeb8c5 --split --parser-package <isolated-package> --output
+  <evidence>/strict/baseline.json`. Zero errors/warnings. The split has the
+  **four original const infos** (SettingsSkeleton, _SkeletonHeader and two
+  _SkeletonTile sites), no private-public-API/import/undefined-name issue.
+  Five original ordering infos and two qualification-induced ordering counts
+  are retained separately; baseline maximum is 11 counts, never a sum.
+  Fixture command `settings_widgets_diagnostics.py fixtures` proves moved
+  identities pass, added/re-owned/new-rule identities fail, and maximum
+  counts never sum. Sorted probe exports avoid artificial ordering growth.
+- Frozen reader: `settings_widgets_reader_check.py --parser-package
+  <isolated-package> --output <evidence>/reader-check-final.json` PASS:
+  **all 60 spans exactly equal analyzer spans**, deletion and duplication
+  rejected for class/enum/function/variable, and lexical stress fixtures
+  cover nested comments, raw/triple/interpolated strings, generics, arrow
+  bodies and an uninitialized memo. Service shows are staged by destination;
+  completion topology is dormant while the completion flag is absent.
+- Harness and frozen tests proved on R: **48 behavioral tests** (seven files,
+  including five pixel scenes), separately **6 source/surface guards (S)**.
+  Host resources, sidebar/launcher/legacy reason/platform flags and parallax
+  travel are restored. Bounded fake-clock pumps; no new scene loads a font or
+  changes typography globals. The existing 19 related files pass **201 tests**,
+  including all 14 direct importing runners, both helper consumers, the five
+  existing settings Spotlight goldens and shape/theme/stale-runtime guards.
+- macOS originals (captured only against R), strict forward and reverse:
+  `tv_legacy_gallery` 1920×1080, `tv_spotlight_gallery` 1920×1080,
+  `wide_connections` 1280×900, `phone_connections` 390×1000,
+  `phone_skeleton` 390×844. All promised widgets overlap capture bounds;
+  all five PNGs match strictly in reverse order. Default flutter_test font,
+  DPR 1, en-US, text scale 1, 300 ms focus sample / 400 ms shimmer sample.
+  Capture hashes and 16 frozen test/helper/PNG inputs are recorded in
+  `frozen-input-sha256.json`. Existing Spotlight PNGs remain untouched.
+- CI inventory adds the six missing runnable importers, two helper consumers
+  and all nine new tests (17 paths); never the helper itself. None of these
+  related identities failed in the observed base, so no known-failure entry.
+  Actual checks.yml format/analyze commands and allowlist PASS (25 existing
+  warnings); no workflow or analyzer-allowlist change is made in Step 0.
+  Whole-repo analyzer with the new tests still equals R: 1689 reports.
+- Source inventories: slice exactly **26 token calls / 7 bare radii**, ceiling
+  10 measured separately; global **488**, zero slack. Per-destination totals
+  are in `source-inventory.json`. Theme settings surface is **219 files /
+  657 sites**, identical before/after the explicit presentation glob. Light
+  ink is **774 sites / 198 files**, PRIMARY **240 / 67**, unchanged. The scan
+  inventory identifies shape, theme, light-ink PRIMARY and profile log scans;
+  the last two gain the destination scope only at step 1. All-lib theme and
+  stale-runtime scans, storage member map and facade-based legacy pins remain
+  applicable. No shape entry is changed before a destination is created.
+- Linux handoff `dev/tool/capture_settings_widgets_linux_goldens.sh` passes
+  `bash -n`; exact unique-subject lookup consumes all git-log output, checks
+  (b)'s lib/pubspec/lock equality to R, requires calibrated Linux/amd64 Flutter
+  3.44.8, and double-captures independent originals in opposite scene orders,
+  requires byte/hash equality and strict replay, and records provenance.
+  **It is not run in Step 0. No Linux PNG, step L or extraction is started.**
+- Conservative decisions: keep the original library intact after R; no
+  behavior fix, import cleanup, font load, API/dependency/seam change, lint
+  suppression or weakened assertion. The hero threshold fixture uses inner
+  width (outer width includes 40 px padding/border). The generic move adapter
+  cannot inventory callers with multi-variable fields, so the small opt-in
+  inventory adapter reads their import directives/identifiers; no shared
+  checker is changed. Any 0b proof must fail an assertion, never compilation.
+  The 0b runner prepares 30 B + 8 S mutations, including both layouts for all
+  four optional-card variants and each of the three borrowed-node widgets.
+  Committed (b), detached original proof, base3 and the complete mutation
+  table follow below before the Step 0 stop.
+
+- Before finalizing (b), original-code review adds the Console rule-surface
+  branch (transparent fill, unchanged border/divider/blurb) and makes the
+  service/import guard inspect the facade as well as created destinations (including player/launcher paths).
+  These pass on R; their targeted fill, HTTP-import and player-import mutants join the table.
+  The harness explicitly declares en-US as supported as well as selected;
+  strict macOS PNG hashes remain identical. Linux scenes skip only while the
+  original PNG is absent before L, then run strictly without changing this
+  frozen test; the capture script explicitly requires strict Linux replay.
+  The mutation runner distinguishes compiler source-location errors from an
+  asserted runtime `_TypeError` in the nullable-callback/sidebar cases.
+  Preliminary checkpoint/suite/proof records are retained separately; final
+  committed original proofs and base3 use the amended, frozen checkpoint.
+
+### Step 0 — final original checkpoint and 0b assertion proofs
+
+- (b): `c3f9cde85ac3e9c7ad926a821b9f590f14ca816c`, exact subject
+  `test(settings-widgets): step 0 original-code characterization checkpoint`.
+  R and (b) are hash-equal for `lib` (`aa74e34a9ac3c15864d00185195c76323df4004b`),
+  `pubspec.yaml` (`5f983ff8c68a01aef5c7a1ec393e677e7693591f`) and
+  `pubspec.lock` (`e0ff9cca69c00ae69bb4dfe111c18a89547cec98`).
+  Evidence: `application-equality.json`. Nothing moved; no feature folder,
+  completion flag, aliases, dependency change or production seam was added.
+- Detached ORIGINAL (b) proof: `original-B` **48 passing** and `original-S`
+  **6 passing**, run separately, serialized, flags `--no-pub --concurrency=1`.
+  Both env files pin clean committed tree
+  `58490d3523a187ecfb4e3a839f439348bbeb0367`, no untracked input/snapshot/tree
+  change, Flutter 3.44.8 / Dart 3.12.2. Every frozen test runs on original code.
+  Final reverse-order macOS replay also passes all five scenes. All 16 frozen
+  test/helper/PNG hashes match both the root and original copy after mutations;
+  every pre-existing tracked PNG is unchanged.
+- Final reader check: all 60 analyzer spans equal, per-kind deletion/duplication
+  rejected, lexical stress fixture PASS (`reader-check-final-b.json`).
+  `settings_widgets_diagnostics.py compare --rev <b> --parser-package
+  <isolated-copy> --baseline <evidence>/strict/baseline.json --output
+  <evidence>/strict/final-checkpoint/comparison.json`: **zero additions**.
+  Strict raw original has 9 infos, qualified original 8, split 4 const infos;
+  maximum by identity/count is 11 (not a sum), no errors/warnings. Diagnostics
+  fixtures reject added/re-owned/new-rule counts and accept relocation.
+- Original-only mutation command: `settings_widgets_original_mutations.py
+  --worktree .dart_tool/settings_widgets/settings_widgets_original
+  --checkpoint <b> --parser-package <isolated-copy> --evidence
+  <evidence>/step0b-mutations-final`. **38/38 assertion rejections**,
+  **30 B + 8 S**, zero survivors, compile errors or no-op mutations; each
+  original/mutant/log hash is audited. B and S logs are separate directories;
+  scratch (b) is restored clean after every mutation. S is used for source-only
+  lifecycle ordering/labels/hooks, unreachable enum fallback, physical
+  declaration ownership and staged import/completion boundaries; those are
+  not claimed as behavioral coverage. Full exact failing-test table follows.
+- The preliminary checkpoint's full run is retained as `base3-initial`:
+  11707 success / 13 failure / 28 error / 20 skip, exactly 53 added passing
+  identities. The later incomplete run was deliberately stopped for the
+  facade import-guard review (`base3-aborted-NOTE.txt`); it is not baseline
+  evidence or an accepted result. No load timeout was recorded or allowlisted.
+
+- Final `suite_evidence.py run settings_widgets/base3 --no-pub
+  --concurrency=2 --timeout=120s` on committed (b): **11708 success / 13
+  failure / 28 error / 20 skip**, paths `[]`, flags recorded separately;
+  clean HEAD/index/tested/end tree `58490d3523a187ecfb4e3a839f439348bbeb0367`.
+  `compare --against <evidence>/base.jsonl <evidence>/base-fmt.jsonl
+  <evidence>/base3.jsonl` PASS: exactly **54 added passing identities**,
+  every prior outcome unchanged, zero new failures/missing/skips/fixes.
+  Counts/provenance and every added identity are audited in `final-audit.json`;
+  comparison in `base3-comparison.txt`. No timeout or named load flake occurred
+  in the accepted runs; no retry/allowlist exception was needed. The existing
+  13 failures and 28 errors remain found-not-fixed baseline limitations.
+
+| Mutation | Class | Failing test / guard |
+| --- | --- | --- |
+| `swapped-neighbour-wide=false-media=false-mdblist=false` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `swapped-neighbour-wide=false-media=false-mdblist=true` | B | `Connections every edge wide=false media=false mdblist=true` |
+| `swapped-neighbour-wide=false-media=true-mdblist=false` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `swapped-neighbour-wide=false-media=true-mdblist=true` | B | `Connections every edge wide=false media=true mdblist=true` |
+| `swapped-neighbour-wide=true-media=false-mdblist=false` | B | `Connections every edge wide=true media=false mdblist=false` |
+| `swapped-neighbour-wide=true-media=false-mdblist=true` | B | `Connections every edge wide=true media=false mdblist=true` |
+| `swapped-neighbour-wide=true-media=true-mdblist=false` | B | `Connections every edge wide=true media=true mdblist=false` |
+| `swapped-neighbour-wide=true-media=true-mdblist=true` | B | `Connections every edge wide=true media=true mdblist=true` |
+| `tracking-up-parenthesized` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `sidebar-handoff-removed` | B | `sidebar callback=true left=true` |
+| `sidebar-called-when-null` | B | `sidebar callback=false left=true` |
+| `repeat-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `reveal-not-scheduled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `disabled-canRequestFocus-true` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `disabled-onTap-kept` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `ExcludeFocus-removed` | B | `toggle row is one stop and tap or OK invert the value` |
+| `toggle-does-not-invert` | B | `toggle row is one stop and tap or OK invert the value` |
+| `tile-borrowed-node-ignored` | B | `tile focus ownership borrowed=true and live focus` |
+| `toggle-borrowed-node-ignored` | B | `toggle focus ownership borrowed=true and live focus` |
+| `hero-borrowed-node-ignored` | B | `hero focus ownership borrowed=true and live focus` |
+| `hero-threshold-380` | B | `hero swatches threshold width=380.0` |
+| `memo-base-only` | B | `page theme memo keys identical base and app independently` |
+| `page-instead-of-route-theme` | B | `push themes route State context so its dialog inherits palette` |
+| `barrierDismissible-dropped` | B | `settings dialog scopes palette barrierDismissible=false` |
+| `attention-keyword-removed` | B | `connection predicates characterize every negative keyword and readiness` |
+| `initials-capital-rule-removed` | B | `initials preserve separators internal capitals and empty fallback` |
+| `screen-size-label-fallback` | B | `TV choices preserve order labels subtitles completeness and size fallback` |
+| `dropdown-null-guard` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `visible-radius-change` | B | `original pixel golden tv_legacy_gallery` |
+| `rule-surface-fill` | B | `section rule surface keeps border dividers and blurb without fill` |
+| `dispose-order` | S | `S summary focus labels creation points and ordered disposal` |
+| `focus-debug-label` | S | `S summary focus labels creation points and ordered disposal` |
+| `motion-hook` | S | `S motion dependency hook reveal guard wrapper disposal and borrowed ownership` |
+| `rendering-fallback` | S | `S rendering fallback remains Automatic and memo is private to one owner` |
+| `declaration-deleted` | S | `all 60 manifest declarations have exactly one physical owner` |
+| `completion-flag-on-original` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-http-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-player-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+
+- All **17 integrated manifests + self-tests PASS**, each invocation with its
+  own copied parser package and no copied kernel cache. Settings widgets:
+  original/current and complete split positives PASS; 60 leaves; 11 required
+  real-config negatives rejected. Shared checker modules and other features'
+  proof scripts are unchanged; outputs/commands in `checkers/results.json`.
+- Final architecture/size checks PASS: 1448 migrated files; 2454 physical
+  application files, 154 existing over-limit ratchets. No unrelated baseline
+  reduction. CI format, scoped analyze/allowlist and whole-repo comparison
+  PASS, 25 existing scoped warnings, 1689 whole-repo reports with zero added
+  or removed diagnostic occurrences. Shape remains 26 tokens / 7 radii / 488
+  global floor; theme 219 files / 657 sites, light ink 774 / 198 and PRIMARY
+  240 / 67 unchanged. CI adds 17 paths, no failure allowlist change.
+- Scope/merge decisions: additive CI test block and settings theme glob only;
+  R changes only the source formatter output and its size entry. No
+  architecture/shape/profile/light-ink/workflow/allowlist/shared-checker or
+  unrelated feature script edits. Found 5 records the observed SDK's parent
+  dropdown update; Found 7 adds the eight original unused importing files.
+  No application issue was fixed. Linux capture script passes `bash -n`; no
+  Linux capture, step L, step 1, push, emulator/device or `flutter run`.
+
+Step 0 is complete. Linux originals remain the next separately authorized
+step L; no extraction begins here. Device/build/remote CI checks were not
+requested for this original-code checkpoint.
+
+### Step 0b — close Claude's original-only review gaps
+
+- Scope: ORIGINAL application only, before L/1. `flutter pub get` ran here
+  first (`step0b-pub-get.txt`); dependencies/lockfile unchanged. Root `lib`,
+  `pubspec.yaml` and `pubspec.lock` remain byte-equal to R and (b).
+- All 26 reviewer mutation anchors are incorporated verbatim in
+  `settings_widgets_original_mutations.py`, including the 12 already killed.
+  The combined table contains 64 cases (56 B, 8 S); all reviewer cases are B.
+  Its reviewer-script SHA-256 and unique-original-anchor assertions identify
+  the exact recipes. Proofs will run one at a time on a clean, detached copy
+  of this committed checkpoint; compile errors cannot qualify.
+- Characterization preparation on ORIGINAL: all **82 tests pass** (76 B,
+  6 S), 28 added identities, with all earlier names/assertions retained.
+  New coverage: non-unit reveal tempo (230 ms versus 200 ms); full platform
+  launch options; widths 520/521 for all optional-card combinations; every
+  spec factory parameter; both header variants' text/styles/structure;
+  badge size and explicit/default/nullable colors; hero/tile awaited taps;
+  hover versus focus border/shadow/inverse across four rows and two looks;
+  empty section title; handled arrows to an unattached neighbor with no
+  post-frame exception.
+  The reviewer borrowed-first-node mutation's duplicate host disposal masked
+  the existing public `addListener` expectation. Its real borrowed FocusNode
+  now tracks disposal solely for host cleanup, so a broken widget cannot
+  replace that assertion failure with a second disposal error; post-unmount
+  `requestFocus` also has an explicit `returnsNormally` expectation. The
+  preliminary mutation run and incomplete `base3b` are retained as superseded
+  evidence, not accepted assertion/baseline proof; every case will rerun.
+- The frozen public resolved-theme fixture covers every field set by the
+  builder, including all ButtonStyle properties and all 32 combinations of
+  selected/disabled/focused/hovered/pressed states. Looks: legacy, Spotlight,
+  light Broadsheet. It was created once from hash-equal ORIGINAL R through
+  `settingsPageTheme`; the committed test has no capture/update mode.
+  `step0b-original-theme-capture-inputs.json` pins R equality;
+  `step0b-theme-capture.txt` records capture. Broadsheet kills the unselected
+  thumb mutation; legacy kills the focused input border-width mutation.
+- All five macOS scenes/PNG hashes are unchanged; no scene was added or
+  recaptured. `step0b-frozen-input-sha256.json` freezes 20 inputs (11 test
+  files, three helpers, JSON theme fixture, five original PNGs).
+- CI list: two additive `settings_widgets step 0b` paths. Linux capture now
+  resolves the exact subject `test(settings-widgets): step 0b close review
+  gaps on original` while preserving all R lib/pubspec equality checks and
+  independent reproduction checks; `bash -n` passes. No Linux capture.
+- Changed Dart format passes. Whole-repo analyzer: the same 1689 diagnostics,
+  zero added/removed occurrences versus the accepted original checkpoint
+  (`step0b-analyzer-comparison.txt`). Architecture/size checks pass. No shared
+  checker, workflow, shape/theme/light-ink/allowlist or other feature proof
+  script was edited. Found 8/9 record the SDK fallback and fixture decisions.
+- Pending at checkpoint creation: detached 76 B and 6 S original proofs,
+  the complete 64-case assertion mutation run, and full-suite `base3b` with
+  tree/SDK provenance and identity comparison against accepted `base3`.
+
+STOP after Step 0b review evidence. Step L and Step 1 are not started.
+
+### Step 0b — final original review closure
+
+- Checkpoint: `65d7fd801a43bb32ae9d1657e0cce92f17d9a017`, exact subject
+  `test(settings-widgets): step 0b close review gaps on original`; no application
+  change. R / (b) / 0b lib and both pubspec objects equal, recorded in
+  `step0b-application-equality.json`. Frozen tested tree:
+  `49c77df68215a6e1621b738a3a12fd2c355a0d6c`.
+- Detached committed ORIGINAL proof: **76 B passing / 6 S passing**, separate
+  serialized `suite_evidence.py run settings_widgets/step0b-original-{B,S}
+  --no-pub --concurrency=1`, nine B paths and two S paths. Clean committed
+  HEAD/index/tested/end trees, no snapshot, untracked input or tree change.
+  Comparison against (b): exactly 28 added passing B identities, no S
+  additions, missing tests, changed prior outcomes or newly skipped tests.
+- Full mutation table: **64/64 assertion failures (56 B / 8 S)**, all 26
+  reviewer recipes included; every B uses a behavioral file, no source guard
+  substitutions. No survivors, compile-error proofs or no-op mutations.
+  One-at-a-time run on the final original copy, `--checkpoint <0b>
+  --parser-package .dart_tool/settings_widgets/step0b/parser_mutations_final/
+  .dart_tool/package_config.json --evidence <evidence>/step0b-review-mutations-final`.
+  B/S log directories are separate. Original/mutant/log hashes verified;
+  scratch restored clean; all 20 test/helper/fixture/PNG inputs match root
+  and scratch. `step0b-assertion-audit.json` and `table.json` pin every result.
+- Frozen public theme table: three looks, **35 non-null state properties per
+  look × 32 state combinations**, plus every scalar the builder sets and null
+  ButtonStyle fields. No capture/update mode in the committed tests. No new
+  scenes or recapture; all five original macOS PNGs unchanged.
+- Checker: current/original/split positives and all 11 real-config negatives
+  pass with an isolated copied parser. Reader: 60 exact analyzer spans,
+  per-kind deletion/duplication for four kinds and lexical stress pass.
+  Diagnostics fixtures pass; strict original 9 infos, qualified 8, split 4,
+  maximum 11 (never a sum), zero additions/errors/warnings. The amendment
+  changes only test cleanup/expectations and Progress, so these results and
+  the 16 other manifests' existing self-tests remain valid: identical lib,
+  checker modules/configs/fixtures, reader, diagnostics and SDK, audited in
+  `step0b-checker-reuse.json`. All 17 manifest results pass, every invocation
+  has its explicit isolated parser package; no shared checker edits.
+- Final whole analyzer: 1689 occurrences unchanged by identity/count;
+  `step0b-analyzer-comparison-final.txt` PASS. Changed Dart format, architecture
+  (1448 migrated files), sizes (2454 application files / 154 ratchets) and
+  shell syntax pass. CI adds two keyed paths (19 total Step 0 additions),
+  all 11 characterizations registered, paths exist, no duplicates or failure
+  allowlist edits. Existing scoped CI analyzer/allowlist proof (25 warnings)
+  remains applicable; scopes/app/dependencies/allowlist unchanged.
+- Shape/theme/source inventory unchanged: 60 original leaves / 47 public,
+  132 original importers / 14 runnable; 26 shape tokens / 7 bare radii,
+  global floor 488; theme 219 files / 657 sites; light ink 774 / 198,
+  PRIMARY 240 / 67. Shared shape/theme/workflow/profile/light-ink modules and
+  other features' proof scripts unchanged. Found 8/9 document the ordinary
+  SDK black icon fallback, nullable public palette double, light thumb ink
+  distinction and non-unit public motion scope. Borrowed first-node cleanup
+  preserves the public usability assertion; no application issue was fixed.
+
+- Final `suite_evidence.py run settings_widgets/base3b --no-pub
+  --concurrency=2 --timeout=120s` on committed 0b: **11736 success / 13
+  failure / 28 error / 20 skip**. `paths: []`, flags recorded separately,
+  Flutter 3.44.8 / Dart 3.12.2. HEAD/index/tested/end tree stays clean and
+  identical throughout; no snapshot/untracked input. `compare --against
+  <evidence>/base3.jsonl <evidence>/base3b.jsonl` PASS: exactly **28 added
+  passing identities**, every earlier outcome unchanged, zero new failures,
+  missing tests, skips or fixes. `base3b-comparison.txt` and
+  `step0b-final-audit.json` audit the identities, counts, SDK and tree. No
+  test-runner timeout or named load flake occurred; no isolation retry or
+  allowlist exception was needed. The original 13 failures and 28 errors
+  remain found-not-fixed baseline limitations.
+
+The complete combined mutation table follows (S is source-guard-only).
+
+| Mutation | Class | Failing test / guard |
+| --- | --- | --- |
+| `swapped-neighbour-wide=false-media=false-mdblist=false` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `swapped-neighbour-wide=false-media=false-mdblist=true` | B | `Connections every edge wide=false media=false mdblist=true` |
+| `swapped-neighbour-wide=false-media=true-mdblist=false` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `swapped-neighbour-wide=false-media=true-mdblist=true` | B | `Connections every edge wide=false media=true mdblist=true` |
+| `swapped-neighbour-wide=true-media=false-mdblist=false` | B | `Connections every edge wide=true media=false mdblist=false width=521.0` |
+| `swapped-neighbour-wide=true-media=false-mdblist=true` | B | `Connections every edge wide=true media=false mdblist=true width=521.0` |
+| `swapped-neighbour-wide=true-media=true-mdblist=false` | B | `Connections every edge wide=true media=true mdblist=false width=521.0` |
+| `swapped-neighbour-wide=true-media=true-mdblist=true` | B | `Connections every edge wide=true media=true mdblist=true width=521.0` |
+| `tracking-up-parenthesized` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `sidebar-handoff-removed` | B | `sidebar callback=true left=true` |
+| `sidebar-called-when-null` | B | `sidebar callback=false left=true` |
+| `repeat-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `reveal-not-scheduled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `disabled-canRequestFocus-true` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `disabled-onTap-kept` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `ExcludeFocus-removed` | B | `toggle row is one stop and tap or OK invert the value` |
+| `toggle-does-not-invert` | B | `toggle row is one stop and tap or OK invert the value` |
+| `tile-borrowed-node-ignored` | B | `tile focus ownership borrowed=true and live focus` |
+| `toggle-borrowed-node-ignored` | B | `toggle focus ownership borrowed=true and live focus` |
+| `hero-borrowed-node-ignored` | B | `hero focus ownership borrowed=true and live focus` |
+| `hero-threshold-380` | B | `hero swatches threshold width=380.0` |
+| `memo-base-only` | B | `page theme memo keys identical base and app independently` |
+| `page-instead-of-route-theme` | B | `push themes route State context so its dialog inherits palette` |
+| `barrierDismissible-dropped` | B | `settings dialog scopes palette barrierDismissible=false` |
+| `attention-keyword-removed` | B | `connection predicates characterize every negative keyword and readiness` |
+| `initials-capital-rule-removed` | B | `initials preserve separators internal capitals and empty fallback` |
+| `screen-size-label-fallback` | B | `TV choices preserve order labels subtitles completeness and size fallback` |
+| `dropdown-null-guard` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `visible-radius-change` | B | `original pixel golden tv_legacy_gallery` |
+| `rule-surface-fill` | B | `section rule surface keeps border dividers and blurb without fill` |
+| `reveal-unscaled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `legacy-autofocus-off` | B | `legacy dialog shows full current reason autofocus OK and pops` |
+| `launch-mode` | B | `settings URL forwards parsed URI through launcher platform` |
+| `spotlight-bg-bloom` | B | `original pixel golden tv_spotlight_gallery` |
+| `keyup-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `wide-threshold` | B | `Connections every edge wide=false media=false mdblist=false width=520.0` |
+| `tile-opacity` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `tile-spec-subtitle` | B | `spec factories retain icon title subtitles and overrides` |
+| `toggle-spec-maxlines` | B | `spec factories retain icon title subtitles and overrides` |
+| `banner-warning-tone` | B | `original pixel golden tv_legacy_gallery` |
+| `tile-own-node-not-disposed` | B | `tile focus ownership borrowed=false and live focus` |
+| `header-copy` | B | `header copy styles and structure spotlight=false` |
+| `skeleton-two-sections` | B | `section chrome banners skeleton runtime types spotlight=false` |
+| `badge-size` | B | `pending badge size and color palette=explicit` |
+| `legacy-reason-dropped` | B | `legacy dialog shows full current reason autofocus OK and pops` |
+| `dropdown-echo-removed` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `hero-tap-not-awaited` | B | `hero awaits async tap completion` |
+| `input-focused-width` | B | `resolved settings theme table look=legacy` |
+| `card-focus-border` | B | `card hover differs from focus spotlight=false` |
+| `summary-first-borrowed-disposed` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `section-empty-title-label` | B | `empty section title creates no section label` |
+| `info-tile-spec` | B | `spec factories retain icon title subtitles and overrides` |
+| `right-col-left-nosidebar` | B | `sidebar callback=true left=false` |
+| `reveal-context-check` | B | `unattached neighbour remains handled and reveal does not throw` |
+| `pending-badge-color` | B | `pending badge size and color palette=resolved-null` |
+| `switch-thumb-unselected` | B | `resolved settings theme table look=broadsheet` |
+| `dispose-order` | S | `S summary focus labels creation points and ordered disposal` |
+| `focus-debug-label` | S | `S summary focus labels creation points and ordered disposal` |
+| `motion-hook` | S | `S motion dependency hook reveal guard wrapper disposal and borrowed ownership` |
+| `rendering-fallback` | S | `S rendering fallback remains Automatic and memo is private to one owner` |
+| `declaration-deleted` | S | `all 60 manifest declarations have exactly one physical owner` |
+| `completion-flag-on-original` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-http-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-player-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+
+
+The incomplete superseded run and rejected partial mutation run have NOTE
+files; neither is accepted baseline/proof evidence. Linux capture uses the
+exact 0b subject and retains R equality checks. It was syntax-checked only.
+**STOP: Step 0b closed; Step L and Step 1 have not started.**
+
+
+### Step L and Step 1 — verified originals and first moves
+
+- Step L `43b845651`: only the five Linux PNGs. SHA-256 matches both forward
+  and independent reverse-order captures; dimensions match the five scenes.
+  Provenance pins 0b `65d7fd80`, R `0eadeb8c`, equal lib/pubspec hashes,
+  Flutter 3.44.8 / Dart 3.12.2, linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`.
+  Verification is `stepL-verification.json` beside the supplied evidence.
+- `flutter pub get` reran in this worktree; no dependency changes. Step 1
+  moves tokens, pending badge, rows, links, page theme, page chrome and root
+  chrome verbatim from R. Importers remain unchanged. The original ratchets
+  to 1837 lines; seven destinations are below 500. Service allowances,
+  screen/facade back-import bans, settings-family implementation bans,
+  URL confinement and the 500-line limit are keyed by settings_widgets.
+- Shape entries are added with their files: 26 tokens and seven bare radii
+  over the slice, global floor exactly 488. The alternate
+  `BorderRadius.all(Radius.circular(...))` spelling is included in measurement;
+  initial ceiling undercount corrected before committing. Profile redaction
+  and light-ink PRIMARY scopes now include the feature. Theme classification
+  retains the existing explicit settings_widgets pattern.
+- Decision: preserve all twenty frozen 0b test/helper/fixture/macOS-PNG
+  hashes. Linux is mandatory in CI via the frozen test's existing
+  `SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true` define; existing PNGs replay
+  strictly on ordinary Linux runs too. No golden is regenerated. The Linux
+  completion replay is Claude's gate-2 handoff.
+- Per-step evidence is `step1/` plus `step1-focused-stable.*`. Checks and
+  diagnostics are completed before starting the dependent batch; exact
+  outcomes and committed revisions are recorded in the completion entry.
+  Existing profile SharedPreferences guard failure stays unfixed and is
+  compared by identity against base3b. No allowlist addition.
+
+- Step 1 verification complete: all 17 integrated manifests and self-tests
+  pass with separate parser copies; own real-config fixtures preserve all 60
+  declarations/comments. Architecture real-main positives/negatives pass;
+  CI format, scoped analyze/25-warning allowlist and size ratchet pass. Whole
+  analyzer retains exactly 1689 reports with zero additions/removals by
+  relocation. Strict per-owner comparison has four original const infos,
+  zero additions; its fixtures pass. Shape is 26/7/488; settings theme is
+  226 files / 657 sites (same classification/site count); light-ink remains
+  774 sites / 198 files, PRIMARY 240 / 67. Stable focused comparison: 295
+  success / one unchanged baseline failure, zero missing/new-skipped/added
+  identities. All twenty frozen inputs remain hash-equal. Superseded focused
+  runs and checker scheduling have NOTE files; neither partial evidence nor
+  changed-tree evidence is accepted. Parser scheduling increases to four
+  independent workers on the 18-core/128-GB host; suite runs/commits stay
+  serialized. The unchanged legacy TorBox CRLF input is Found 10.
+
+
+### Step 2 — connections and focusable rows (gate 1)
+
+- Step 1 commit: `181421578`. Step 2 moves ConnectionInfo/predicates,
+  ConnectionsSummary/State, ConnectionCard/State/initials, SettingsSection,
+  SettingsLookHero/State/swatches, SettingsTile/State and
+  SettingsToggleTile/State from R without edits to their bodies/comments.
+  Importers and all frozen tests/helpers/fixtures/goldens stay unchanged.
+  New shape entries are allocated at file creation; exact slice totals and
+  floor are checked before the committed-tree gate.
+- Per-step evidence: `step2/`, `step2-focused.*`; gate 1 records `gate1.*`
+  on the clean committed checkpoint and compares against `base3b.jsonl`.
+  Diagnostics snapshots preserve the staged application/test/config inputs;
+  committed lib/pubspec/test hashes are tied to those snapshots in evidence.
+
+- Step 2 verification: 17 manifests/self-tests and architecture fixtures pass;
+  CI format, analyze/unchanged 25-warning allowlist and sizes pass. Original
+  is 471 lines; largest destination 378. Shape remains exactly 26 tokens,
+  seven radii and 488 global calls; original residue is one token/three
+  radii. Settings theme retains 657 sites; light-ink site counts unchanged.
+  Whole analyzer relocation: no additions/removals (1689 reports). Strict
+  comparison: four original const infos, zero additions; fixtures pass.
+  Focused replay: 295 passing / one baseline failure, exact same identities
+  versus base3b, no skips/additions/missing tests; frozen twenty inputs equal.
+  The committed-tree full-suite gate follows before any Step 3 work.
+
+- Step 2 / gate 1 commit: `38056de27`. Full suite on its clean committed tree
+  (paths [], no untracked inputs, no snapshot, stable start/end tree;
+  `--no-pub --concurrency=2 --timeout=120s` plus the mandatory Linux define):
+  **11736 success / 13 failure / 28 error / 20 skipped**. Helper comparison
+  and independent exact outcome-map audit against base3b pass: no added,
+  missing, changed, newly skipped or fixed identity. No load flake/timeout
+  retry was needed. `gate1-identity-audit.json` records the full environment.
+
+### Step 3 — final declarations and pure compatibility facade
+
+- Move TV choice tables/labels, select dropdown, info tile, skeleton/private
+  widgets and legacy-mode dialog verbatim from R. All 19 destinations now
+  exist; the original contains only 19 exports naming the 47 public names.
+  The original size-baseline entry is removed. Its last shape token moves to
+  info tile; the zero-shape facade moves to kExtractedShapeResidue. The
+  completion flag remains dormant until Step 4.
+- Evidence is `step3/` and `step3-focused.*`; every manifest/self-test gets a
+  fresh isolated parser copy. Frozen inputs and original callers stay fixed.
+
+- Conservative formatting decision: the frozen service-show guard is
+  whitespace-sensitive and requires ProfileBootstrap's long qualified import
+  on one line. A width-88/100 scratch probe removed an original trailing comma
+  inside the dialog body, so it was rejected and never applied. The new
+  destination instead brackets only that import with `dart format off/on`;
+  default formatting still covers the rest, whose moved body and comments are
+  byte-identical to R. No test/helper is edited, no diagnostic suppression
+  added. `legacy-import-format-proof.json` records this. Initial Step 3
+  focused evidence is superseded by its stable replay after this import-only
+  adjustment. Exit: separately reviewed whitespace normalization of the guard
+  can remove the import formatting boundary.
+
+- Step 3 verification complete: all 17 manifests/self-tests, architecture
+  fixtures, sizes, CI format/analyze/unchanged 25-warning allowlist pass.
+  Stable focused replay is 295 success / one unchanged failure with no added,
+  missing or newly skipped identity. Shape is exactly 26 tokens / seven
+  radii / 488 floor; facade has zero. Theme classification retains 657 sites;
+  light-ink retains 774 total / 240 PRIMARY sites. Frozen twenty inputs equal.
+- Four original skeleton const infos become visible to the whole analyzer
+  after entering the strict feature scope: raw reports 1689 → 1693. This is
+  precisely the four already captured at Step 0 on ORIGINAL R (owners
+  SettingsSkeleton, _SkeletonHeader, two _SkeletonTile sites). Independent
+  ORIGINAL-R strict-scope Flutter reproduction confirms their original sites
+  and exact messages. Raw baseline is untouched; a comparison view combines
+  its 1689 reports with only those four recorded original infos. Relocation
+  against that view has zero additions/removals; per-owner strict comparison
+  independently has four infos/zero additions. No code fix, lint suppression,
+  warning allowlist entry or --record/--update. Evidence:
+  `original-R-strict-scope-reproduction.*`,
+  `base-fmt-with-original-strict-const-infos.txt`, `step3/strict/` and the raw
+  scope-comparison NOTE. This applies again at Step 4.
+- The facade measures 63 physical export lines (19 directives), zero comments
+  and zero blanks. Step 4 uses an exact 63-line cap. Every destination is
+  ≤378 lines. The dialog is 63 lines including its two import-format markers;
+  no size exception or compressed body formatting is used. Found 11 records
+  the guard's formatting constraint.
+
+
+### Step 4 — completion checks and gate 2
+
+- Step 3 commit: `b86332e35`. Step 4 enables SETTINGS_WIDGETS_COMPLETE,
+  registers the pure facade in COMPOSITION_ROOTS/main and activates its exact
+  63-line cap / 47-name / feature-target / no-declaration rules.
+  TEMP(settings_widgets) is rejected in the facade and every feature file.
+- CI format now includes the facade and test/support/settings_widgets_*.dart;
+  analyze includes the facade inside the command before `| tee analyze.txt`.
+  The real-main architecture fixture tool is required in CI. The existing
+  behavior list already contains all importing/new tests; mandatory Linux
+  define remains. No dependency, frozen input, application body or original
+  caller changes.
+- Evidence: `step4/`, `step4-focused.*`; gate 2 records `gate2.*` on the clean
+  committed tree and compares by exact outcome maps against base3b and gate1.
+  Linux gate-2 replay and the device checklist remain the specified handoff.
+
+- Step 4 verification: all 17 manifests/self-tests pass with distinct cleaned
+  parser copies; completed architecture main passes 1468 files and its real
+  fixtures pass six positives/reject 31 negatives. Size and CI format pass;
+  scoped analyzer has only the unchanged 25 allowed warnings. Strict per-owner
+  diagnostics retain four original infos/zero additions; whole scope-aware
+  relocation is unchanged at 1693 reports (the four ORIGINAL strict-scope
+  infos reproduced in Step 3, no other addition). Shape is 26/7/488 and facade
+  0/0; settings theme 238 files / 657 sites; light-ink 774 / 198, PRIMARY
+  240 / 67. Frozen twenty inputs, 132 original importers, ten existing
+  Spotlight PNGs and all original macOS/new Linux PNGs remain unchanged.
+  CI list covers 11 characterization files and 14 original runnable importers
+  plus gallery/contrast consumers. Focused comparison against base3b passes
+  with 295 success / one existing failure and no identity/skip regression.
+- `completion-inventory.json` records the final facade breakdown, exact cap,
+  per-file sizes, importer/frozen/golden equality and CI command placement.
+  The gate-2 commit and full-suite comparison follow before stopping.
+
+
+### Completed through Step 4 — STOP
+
+| Checkpoint | Commit |
+| --- | --- |
+| L, verified original Linux PNGs only | `43b845651` |
+| 1, vocabulary/page chrome | `181421578` |
+| 2, connections/rows, gate 1 | `38056de27` |
+| 3, final declarations/pure facade | `b86332e35` |
+| 4, completion/CI, gate 2 | `90a976857` |
+
+Gate 2's full suite on the clean committed tree records **11736 success /
+13 failure / 28 error / 20 skipped**. Both helper comparisons and independent
+exact outcome-map audits PASS against base3b and gate1: zero added, missing,
+changed, newly skipped or fixed identity. No timeout or known load-flake retry
+was needed at either gate. Env files record Flutter 3.44.8 / Dart 3.12.2,
+paths [], no untracked inputs/snapshot, HEAD/index/tested/end tree equality,
+`--no-pub --concurrency=2 --timeout=120s` and the strict Linux define.
+`gate{1,2}-identity-audit.json` and comparison txt files retain the evidence.
+
+Every move checkpoint has 17 isolated-parser manifest/self-test passes (68
+accepted runs total), per-owner diagnostics/fixtures with zero additions,
+architecture/size/shape/theme checks, CI format/analyzer/unchanged allowlist,
+LF own manifest and unchanged legacy proof inputs, frozen characterizations,
+14 runnable importers and the gallery/contrast/source scans. The completed
+architecture tool's six positives and 31 negatives pass through the real
+main. No app behavior, original caller, frozen assertion, helper, fixture,
+macOS/Linux golden or dependency changed; all 60 declarations are verbatim,
+47 names are exported once, private owners remain local and imports form a
+DAG. The original size exception is removed; no feature exception is added.
+
+Final facade: **63 lines = 63 export-directive lines + 0 comments + 0 blanks**,
+19 directives, exactly 47 names, cap **63**. Physical destination sizes:
+
+| `lib/features/settings_widgets/presentation/` file | Lines |
+| --- | ---: |
+| `settings_connection_card.dart` | 315 |
+| `settings_connection_info.dart` | 33 |
+| `settings_connections_summary.dart` | 338 |
+| `settings_info_tile.dart` | 68 |
+| `settings_legacy_mode_dialog.dart` | 63 |
+| `settings_links.dart` | 6 |
+| `settings_look_hero.dart` | 188 |
+| `settings_page_chrome.dart` | 165 |
+| `settings_page_theme.dart` | 295 |
+| `settings_pending_badge.dart` | 17 |
+| `settings_root_chrome.dart` | 171 |
+| `settings_rows.dart` | 378 |
+| `settings_section.dart` | 86 |
+| `settings_select_dropdown.dart` | 123 |
+| `settings_skeleton.dart` | 104 |
+| `settings_tile.dart` | 271 |
+| `settings_toggle_tile.dart` | 175 |
+| `settings_tokens.dart` | 34 |
+| `settings_tv_choices.dart` | 73 |
+
+Shape: the eight token-bearing files own all **26 calls**; eleven remaining
+destinations and the facade have zero. Bare radii remain **7**, ceilings
+measured at creation (page chrome/card/section/tile/dropdown: one each;
+skeleton: two; others: zero). Global floor **488**, facade 0/0. Settings
+theme retains **657 sites** across 238 files (219 before the 19 destinations);
+classification unchanged. Light-ink remains **774 / 198**, PRIMARY **240 /
+67**, including the moved scope. CI paths are inside commands; no path follows
+tee. Both new and existing macOS scene sets match, no golden was regenerated.
+
+Decisions and Found additions: Linux strictness uses the existing frozen-test
+CI define; per-step whole diagnostics compare against the recorded ORIGINAL
+strict infos as documented above; only the long legacy service import has a
+format boundary. Found 10 (other feature's unchanged CRLF manifest) and Found
+11 (frozen guard's whitespace sensitivity) remain unfixed. Existing bugs and
+service/localization/token exceptions remain as originally scoped. No new
+analyzer allowance or suppression, source assertion weakening, or behavior fix.
+`checkpoint-input-equality.json` ties each committed lib/test/config/pubspec
+object to its diagnostic proof snapshot. `completion-summary.json` and
+`completion-inventory.json` contain the final hashes/counts and inventories.
+
+**Pending handoff:** Claude's strict Linux replay at gate 2
+`90a976857fb3eeccfdb447f7331eb916b5185be0`: all five settings_widgets and five
+settings_spotlight scenes in the calibrated linux/amd64 image, no regeneration;
+record provenance and unchanged PNG hashes. The Android TV, Apple TV,
+desktop/phone and legacy-dialog/community-link device checklist remains
+pending. No emulator/device, flutter run, push, merge or branch switch occurred.
+The worktree remains on refactor/settings-widgets. **STOP after Step 4.**
+
+
+### Tooling-only review hardening
+
+- Reject failed/empty/malformed analyzer output before parsing diagnostics. Dart
+  3.12.2 machine mode emits no completion summary, so run identical targets
+  with `--fatal-infos` in machine and normal formats and require the normal
+  completion summary, matching count and severity/status. Analyzer caches stay
+  in the owned scratch checkout. Preserve the original identity/max assertions.
+  Source: https://raw.githubusercontent.com/dart-lang/sdk/3.12.2/pkg/dartdev/lib/src/commands/analyze.dart
+- Add a real subprocess-exit-70 fixture and malformed/empty/missing-summary/
+  count/status/crash fixtures. Remove only the quadratic compiler-error regex
+  prefix; a 512 KiB negative line has a five-second subprocess deadline and
+  a two-second classification assertion, alongside positive compiler markers.
+- Reader `--rev` defaults to the exact Step 0b subject (consume the whole log),
+  reads the original via `git show` into an owned temporary file and retains
+  every existing 60-span/per-kind/lexical assertion. Its kernel/scratch parents
+  are created. Architecture fixtures also create `.dart_tool`; inventory
+  creates kernel/report parents. Audit all eight settings_widgets Python tools:
+  none copies `.git` or assumes a gitfile; mutation copies keep their existing
+  scratch-path/clean-original safety requirements. Probe/checker are pure source
+  checks with explicit isolated parser packages. Format/diagnostics already
+  create their scratch/output parents. No shared checker, lib, frozen test,
+  dependency, baseline or golden changes.
+- Verification: fresh normal clone under `/tmp`, application `flutter pub get`,
+  distinct cleaned parser packages for every analyzer-backed run, original R
+  format/inventory, default Step 0b reader, real checker/self-test, architecture
+  fixtures, diagnostics fixtures/HEAD compare and mutation classifier fixtures.
+  Exact commands/exits and final equality evidence are recorded below.
+  No full-suite gate is needed for this tooling-only correction.
+
+Fresh-clone verification PASS (Flutter 3.44.8 / Dart 3.12.2). Clone:
+`/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout`; `.git` is a directory,
+not a worktree gitfile. All requested tools/self-tests exit **0** after
+`flutter pub get`. Every analyzer-backed invocation uses its own copied parser
+package, with all copied `*.dill` removed before execution. The checker also
+exercises the pure probe and its complete-split/real-config fixtures. No other
+feature proof script changed.
+
+- Manifest: 60 leaves. Shared/own checker self-tests PASS, including the
+  original/current and complete-split positives and all existing negatives.
+- Architecture: six positive cases / 31 rejected negatives; real main passes
+  1468 files. Extra reader/architecture fixtures start without `.dart_tool`
+  and create it successfully. The git-backed reader fixture writes
+  `gitdir: <git rev-parse --absolute-git-dir>`; it never copies `.git`.
+- Reader default resolves `65d7fd801a43bb32ae9d1657e0cce92f17d9a017`; explicit
+  revision agrees. All 60 spans, deletion/duplication for four declaration
+  kinds and lexical stress assertions pass, unchanged.
+- Diagnostics fixtures: three valid diagnostic statuses and ten rejected
+  invalid runs, including the actual subprocess exit 70, empty/malformed
+  records, missing summary, count/status mismatch and crashes. ORIGINAL-R
+  strict/split replay retains 11 maximum identities, exactly equal to the
+  archived baseline. HEAD compare retains four infos, zero added identities.
+- Compiler-error classifier: 512 KiB single-line negative completes in
+  0.001227 s and is not a compilation error; positive markers remain caught.
+- R format proof: two AST-identified optional commas, four rejected negatives;
+  comments/literals/tokens equal. R inventory: 60 declarations / 47 public /
+  132 importers / 14 runnable; six original missing-CI identities unchanged.
+- Clone clean after replay. `lib`, the entire `test` tree (including frozen
+  characterizations/fixtures/goldens), `pubspec.yaml` and `pubspec.lock` are
+  Git-object equal to pre-fix `2e9ddb9a`. Final commit only adds this verification
+  record to the tools already tested; the final input seal checks equality.
+  No new found-not-fixed item, application/test change or gate. STOP.
+
+Exact commands (all paths/flags preserved), with exit codes:
+
+| Working directory | Command | Exit |
+| --- | --- | ---: |
+| `/Users/varunbsalian/Documents/Projects/debrify-wt/settings-widgets` | `git clone --no-hardlinks --branch refactor/settings-widgets /Users/varunbsalian/Documents/Projects/debrify-wt/settings-widgets /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `flutter pub get` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `dart pub get --enforce-lockfile --directory /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-base` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_verbatim_moves.py --manifest dev/tool/settings_widgets_manifest.tsv --config dev/tool/settings_widgets_checker_config.json --self-test --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-checker-self-test/.dart_tool/package_config.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_verbatim_moves.py --manifest dev/tool/settings_widgets_manifest.tsv --config dev/tool/settings_widgets_checker_config.json --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-manifest/.dart_tool/package_config.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_architecture_test.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_reader_check.py --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-reader-default/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/reader-default.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_reader_check.py --rev 65d7fd801a43bb32ae9d1657e0cce92f17d9a017 --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-reader-explicit/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/reader-explicit.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py fixtures` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_original_mutations.py --fixtures` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py record --rev 0eadeb8c516b55445a367f1885136a7cf4be2312 --split --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-diagnostics-record-R/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/record-R/baseline.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py compare --rev HEAD --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-diagnostics-compare-HEAD/.dart_tool/package_config.json --baseline /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/previous-strict-baseline.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/compare-HEAD/comparison.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_format_proof.py --original 397485b4 --formatted /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/original-R.dart --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-format-R/.dart_tool/package_config.json --kernel /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/new-kernel/format.dill --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/format-R.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_inventory.py --rev 0eadeb8c516b55445a367f1885136a7cf4be2312 --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-inventory-R/.dart_tool/package_config.json --report /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/new-report-parent/deps.md --evidence /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/inventory-R` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/missing-dart-tool.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_search_architecture.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `git diff --check` | 0 |
+
+Parser bootstrap copies the checked-in `verbatim_parser.pubspec.lock`, pins
+`analyzer: 14.3.0`, and uses `--enforce-lockfile`. Each `parser-<run>` is a fresh
+copy of that resolved base; kernels remain inside this clone. The format input
+is `git show 0eadeb8c:lib/screens/settings/widgets/settings_widgets.dart`,
+written to the displayed evidence path. Diagnostics compare reads an unchanged
+copy of the archived Step 0 strict baseline, rather than accepting new results.
+The missing-directory fixture source, commands JSON, logs, parsed outputs and
+input seal are under `.git/refactor-evidence/settings_widgets/tooling-hardening/`
+(in the worktree's common Git evidence directory, with matching evidence under
+the normal clone's own `.git`). No push, merge, branch switch, device/emulator
+or application execution.
+
+### Completion Linux replay and review (Claude)
+
+- Strict Linux replay at gate 2 `90a97685` in `debrify-flutter:3.44.8`
+  (`sha256:cc4fea9c…a263a`, linux/amd64): the five new goldens pass in forward
+  and reverse order with PNG hashes unchanged from step L; the five
+  `settings_spotlight` Linux goldens pass (`settings_spotlight_shell_test` +
+  `settings_tv_spotlight_layout_test`, 21 tests). Provenance: lib
+  `fb743955`, test `5c23a3fa`, pubspec/lock unchanged. Evidence:
+  `refactor-evidence/settings_widgets/linux-gate2-replay.txt`.
+- Step 0 review: 26 additional original-only mutations (14 initially
+  surviving) closed by 0b; all 26 re-run independently and killed.
+- Independent Codex review (`setw-rev`): production split verified (60
+  declarations byte/token/comment-identical, 47 exports, 1,837 references
+  across 132 importers unchanged); one P2 + one P3 tooling finding and the
+  reader-check HEAD dependency fixed in `68df9d5a`, re-verified from a fresh
+  normal clone (`.git` directory).
