@@ -924,7 +924,7 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
 
 ### Step 3 — extract save and admin actions, 2026-10-06
 
-- **Commit:** `refactor(edit-profile): step 3 extract save and admin actions`. Previous checkpoint
+- **Commit:** `35c0cc4b4` (`refactor(edit-profile): step 3 extract save and admin actions`). Previous checkpoint
   `1998eb161`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
 - **Files (formatted physical lines):** facade **1646**; edit_profile_admin_actions.dart 124; edit_profile_avatar_picker.dart 87; edit_profile_grants.dart 86; edit_profile_save.dart 354; edit_profile_tv_navigation.dart 172.
 - **Verification:** wiring reviewed before pinning; compiling checkpoint,
@@ -941,3 +941,20 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
   comparisons included. No behavior fix, seam, borrowed State action or
   size exception; Found-not-fixed items remain.
+
+### Full-suite gate 1 — 2026-10-06
+
+- **Commit:** `test(edit-profile): full-suite gate 1 evidence`; tested clean
+  committed step 3 `35c0cc4b4f79171c68c30d173d2570077c5e9d38` (Flutter 3.44.8 / Dart 3.12.2).
+- **Command/result:** `python3 dev/tool/suite_evidence.py run
+  edit_profile/gate1 --no-pub --concurrency=1` → **11731 success / 13 failure / 28 error / 20 skipped**.
+  Identity comparison against **base2** passes: **zero new failures, zero
+  missing, zero newly skipped**. Source stayed unchanged throughout the run.
+- **Evidence:** `gate1-*`, `.jsonl`, `.env.json` and `-verification.json`
+  under `refactor-evidence/edit_profile/`. Four macOS originals pass strictly;
+  Linux replay is assigned to Claude in Docker at this tested source SHA.
+- **Load NOTE:** the raw concurrency-2 run had two additional WebDAV
+  30-second shard timeouts (11729 success / 13 failure / 30 error / 20 skipped).
+  All **105** WebDAV tests pass in isolation; the full replay above uses
+  concurrency **1**. Raw logs and `gate1-load-sensitive-NOTE.md` retained;
+  no test, timeout or allowlist changes.
