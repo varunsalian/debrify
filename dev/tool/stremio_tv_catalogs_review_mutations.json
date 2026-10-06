@@ -1,0 +1,594 @@
+[
+  {
+    "id": "entry-url-target-swap",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review URL entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromUrl",
+        "before": "const _ImportUrlDialog()",
+        "after": "const _ImportJsonDialog()",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-url-null-is-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review URL entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromUrl",
+        "before": "return result == true;",
+        "after": "return result != false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-json-target-swap",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review JSON entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromJson",
+        "before": "const _ImportJsonDialog()",
+        "after": "const _ImportUrlDialog()",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-json-null-is-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review JSON entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromJson",
+        "before": "return result == true;",
+        "after": "return result != false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-trakt-target-swap",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review Trakt entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromTrakt",
+        "before": "const _ImportTraktDialog()",
+        "after": "const _ImportMdblistDialog()",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-trakt-null-is-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review Trakt entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromTrakt",
+        "before": "return result == true;",
+        "after": "return result != false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-mdblist-target-swap",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review MDBList entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromMdblist",
+        "before": "const _ImportMdblistDialog()",
+        "after": "const _ImportTraktDialog()",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "entry-mdblist-null-is-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review MDBList entry opens",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromMdblist",
+        "before": "return result == true;",
+        "after": "return result != false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "repo-wrong-delegate",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review repo entry delegates",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromRepo",
+        "before": "await StremioTvRepoBrowserDialog.show(context)",
+        "after": "await showDialog<bool>(context: context, builder: (ctx) => const _ImportJsonDialog())",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "repo-null-is-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review repo entry delegates",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromRepo",
+        "before": "return result == true;",
+        "after": "return result != false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-center-removed",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage show centers",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.show",
+        "before": "const Center(child: StremioTvLocalCatalogsDialog())",
+        "after": "const StremioTvLocalCatalogsDialog()",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-prev-next-swapped",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor D-pad chain",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._rebuildNavigation",
+        "before": "final prev = i > 0 ? order[i - 1] : null;\n      final next = i < order.length - 1 ? order[i + 1] : null;",
+        "after": "final next = i > 0 ? order[i - 1] : null;\n      final prev = i < order.length - 1 ? order[i + 1] : null;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-up-ignored",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor D-pad chain",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._rebuildNavigation",
+        "before": "key == LogicalKeyboardKey.arrowUp && prev != null",
+        "after": "key == LogicalKeyboardKey.home && prev != null",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-activate-next-item",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor activates the selected row",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._handleActivate",
+        "before": "_removeItem(index, items[index]);",
+        "after": "_removeItem(index + 1, items[index + 1]);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-changed-barrier-false",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor barrier returns recorded changed=true",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogEditorDialog.show",
+        "before": "Navigator.of(context).pop(editorKey.currentState?._changed)",
+        "after": "Navigator.of(context).pop(false)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-system-back-false",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor system Back returns changed=false",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState.build",
+        "before": "if (!didPop) {\n          Navigator.of(context).pop(_changed);",
+        "after": "if (!didPop) {\n          Navigator.of(context).pop(true);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-system-back-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor system Back returns changed=true",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState.build",
+        "before": "if (!didPop) {\n          Navigator.of(context).pop(_changed);",
+        "after": "if (!didPop) {\n          Navigator.of(context).pop(false);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-remove-wrong-order",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor persists exact order",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "items.removeAt(index);",
+        "after": "items.removeAt((index + 1) % items.length);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-last-row-focus-first",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "review editor persists exact order",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "index < items.length ? index : items.length - 1",
+        "after": "index < items.length ? index : 0",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-close-false",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage delete Close",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState.build",
+        "before": "onPressed: () => Navigator.of(context).pop(_changed)",
+        "after": "onPressed: () => Navigator.of(context).pop(false)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-delete-drops-changed",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage delete Close",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._deleteLocalCatalog",
+        "before": "_changed = true;",
+        "after": "// changed flag intentionally omitted by mutant",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-delete-wrong-plus",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage delete Close",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._handleActivate",
+        "before": "_deleteLocalCatalog(_catalogs[idx]);",
+        "after": "_deleteLocalCatalog(_catalogs[(idx + 1) % _catalogs.length]);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-delete-wrong-minus",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage delete Close",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._handleActivate",
+        "before": "_deleteLocalCatalog(_catalogs[idx]);",
+        "after": "_deleteLocalCatalog(_catalogs[(idx - 1 + _catalogs.length) % _catalogs.length]);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-null-dismiss-became-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "review manage delete",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.show",
+        "before": "    );",
+        "after": "    ).then((result) => result ?? true);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-cancel-up-name",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL Cancel and Import",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleCancelButtonKey",
+        "before": "_urlFocusNode.requestFocus();",
+        "after": "_nameFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-cancel-left-wrong-target",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL Cancel and Import",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleCancelButtonKey",
+        "before": "if (key == LogicalKeyboardKey.arrowLeft) {\n      _importFocusNode.requestFocus();",
+        "after": "if (key == LogicalKeyboardKey.arrowLeft) {\n      _cancelFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-cancel-right-wrong-target",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL Cancel and Import",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleCancelButtonKey",
+        "before": "if (key == LogicalKeyboardKey.arrowRight) {\n      _importFocusNode.requestFocus();",
+        "after": "if (key == LogicalKeyboardKey.arrowRight) {\n      _cancelFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-import-left-wrong-target",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL Cancel and Import",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleImportButtonKey",
+        "before": "if (key == LogicalKeyboardKey.arrowLeft) {\n      _cancelFocusNode.requestFocus();",
+        "after": "if (key == LogicalKeyboardKey.arrowLeft) {\n      _importFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-import-right-wrong-target",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL Cancel and Import",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleImportButtonKey",
+        "before": "if (key == LogicalKeyboardKey.arrowRight) {\n      _cancelFocusNode.requestFocus();",
+        "after": "if (key == LogicalKeyboardKey.arrowRight) {\n      _importFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-cancel-pop-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "pops without a result",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleCancelButtonKey",
+        "before": "Navigator.of(context).pop();",
+        "after": "Navigator.of(context).pop(true);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-loading-allows-second-key",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review URL queued Import activation",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._handleImportButtonKey",
+        "before": "if (!_loading) {",
+        "after": "if (true) {",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-end-down-ignored",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review JSON Arrow Down",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._handleJsonFieldKey",
+        "before": "key == LogicalKeyboardKey.arrowDown || isActivateKey(key)",
+        "after": "isActivateKey(key)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-end-activate-ignored",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review JSON Select",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._handleJsonFieldKey",
+        "before": "key == LogicalKeyboardKey.arrowDown || isActivateKey(key)",
+        "after": "key == LogicalKeyboardKey.arrowDown",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-escape-name",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "review JSON",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._handleJsonFieldKey",
+        "before": "_cancelFocusNode.requestFocus();",
+        "after": "_nameFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-directory-fetch-swapped",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review Trakt custom and liked fetch",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._fetchLists",
+        "before": "lists = await _traktService.fetchCustomLists();\n      } else {\n        lists = await _traktService.fetchLikedLists();",
+        "after": "lists = await _traktService.fetchLikedLists();\n      } else {\n        lists = await _traktService.fetchCustomLists();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-owner-shown-custom",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review Trakt custom and liked fetch",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState.build",
+        "before": "_source == _TraktListSource.likedLists",
+        "after": "_source == _TraktListSource.customLists",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-source-retains-error",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review Trakt source change clears",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._onSourceChanged",
+        "before": "_error = null;",
+        "after": "// error not cleared by mutant",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-source-retains-lists",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "review source guard preserves the masked Trakt source-list reset",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._onSourceChanged",
+        "before": "_lists = [];",
+        "after": "// list not cleared by mutant",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-loader-mine-liked",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review MDBList categories load",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "loadUserLists()",
+        "after": "__REPLACEMENT__()"
+      },
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "loadLikedLists()",
+        "after": "loadUserLists()"
+      },
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "__REPLACEMENT__()",
+        "after": "loadLikedLists()"
+      }
+    ]
+  },
+  {
+    "id": "mdb-loader-top-mine",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review MDBList categories load",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "loadTopLists()",
+        "after": "__REPLACEMENT__()"
+      },
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "loadUserLists()",
+        "after": "loadTopLists()"
+      },
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "__REPLACEMENT__()",
+        "after": "loadUserLists()"
+      }
+    ]
+  },
+  {
+    "id": "mdb-empty-top-generic-swapped",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "review MDBList empty messages",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState.build",
+        "before": "? 'No top lists found.'\n                      : 'No lists found. Create some on mdblist.com.'",
+        "after": "? 'No lists found. Create some on mdblist.com.'\n                      : 'No top lists found.'",
+        "count": 1
+      }
+    ]
+  }
+]

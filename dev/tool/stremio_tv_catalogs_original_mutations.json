@@ -1,0 +1,1219 @@
+[
+  {
+    "id": "validate-order",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "validation message precedence",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.validate",
+        "before": "    if (name == null || name.trim().isEmpty) return 'Missing \"name\" field';\n    final items = parsed['items'] as List<dynamic>?;\n    if (items == null || items.isEmpty) return '\"items\" is missing or empty';",
+        "after": "    final items = parsed['items'] as List<dynamic>?;\n    if (items == null || items.isEmpty) return '\"items\" is missing or empty';\n    if (name == null || name.trim().isEmpty) return 'Missing \"name\" field';",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "majority-tie",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "seriesCount > movieCount",
+        "after": "seriesCount >= movieCount",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mixed-existing-side",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "mixed split skips",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.import",
+        "before": "if (existing.any((c) => c['name'] == catName)) continue;",
+        "after": "if (false && existing.any((c) => c['name'] == catName)) continue;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "portable-watchlist",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "single-type import trims",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter._portableTraktSources",
+        "before": "'trending',",
+        "after": "'watchlist',\n    'trending',",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "liked-without-owner",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "portable direct sources and liked",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter._portableImportMetadata",
+        "before": "slug == null || slug.isEmpty || owner == null || owner.isEmpty",
+        "after": "slug == null || slug.isEmpty",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "export-default",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_export_test.dart",
+    "assertion": "export first id and type match",
+    "edits": [
+      {
+        "member": "LocalCatalogExporter.loadCatalog",
+        "before": "?? 'movie'",
+        "after": "?? 'series'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "compact-600",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor compact layout and Close initial focus at width 714.0",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState.build",
+        "before": "constraints.maxWidth < 700",
+        "after": "constraints.maxWidth < 600",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "initial-first-row",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor compact layout and Close initial focus at width 1280.0",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._requestInitialFocus",
+        "before": "final target = _closeFocusNode;",
+        "after": "final target = _removeFocusNodes.first;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "remove-index-plus-one",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor cancel preserves items",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "index < items.length ? index : items.length - 1",
+        "after": "index + 1 < items.length ? index + 1 : items.length - 1",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "last-item-pop-false",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor last item deletes catalog and returns true",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "Navigator.of(context).pop(true);",
+        "after": "Navigator.of(context).pop(false);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "last-item-pop-null",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor last item deletes catalog and returns true",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "Navigator.of(context).pop(true);",
+        "after": "Navigator.of(context).pop(null);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "barrier-pop-true",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor barrier returns recorded changed=false",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogEditorDialog",
+        "before": "Navigator.of(context).pop(editorKey.currentState?._changed)",
+        "after": "Navigator.of(context).pop(true)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-scroll-48",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage D-pad uses 56 pixel scroll offsets",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._scrollToNode",
+        "before": "const itemHeight = 56.0;",
+        "after": "const itemHeight = 48.0;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-concurrency",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage refresh disables every other refresh",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState.build",
+        "before": "onPressed: _refreshingCatalogId != null",
+        "after": "onPressed: false",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "subtitle-trakt-mdb",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage subtitles only sourced rows refresh",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState.build",
+        "before": "? ' \u00b7 Trakt'\n                              : isMdblist\n                              ? ' \u00b7 MDBList'",
+        "after": "? ' \u00b7 MDBList'\n                              : isMdblist\n                              ? ' \u00b7 Trakt'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "file-cap-off-by-one",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "file picker size 20971520 boundary",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromFile",
+        "before": "size > 20 * 1024 * 1024",
+        "after": "size >= 20 * 1024 * 1024",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-suffix-case",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "file picker size 20971520 boundary",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromFile",
+        "before": "caseSensitive: false",
+        "after": "caseSensitive: true",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "snackbar-durations",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "file picker size 20971520 boundary",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog._showSnackBar",
+        "before": "isError ? 4 : 2",
+        "after": "isError ? 2 : 4",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-timeout-30",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "URL times out at 15 seconds",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._import",
+        "before": "Duration(seconds: 15)",
+        "after": "Duration(seconds: 30)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-http-message",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "URL exact HTTP status error",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._import",
+        "before": "'HTTP ${resp.statusCode}'",
+        "after": "'HTTP: ${resp.statusCode}'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "back-browserback",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "URL TV shell Back Browser Back",
+    "edits": [
+      {
+        "member": "_backHopsTo",
+        "before": " ||\n          key == LogicalKeyboardKey.browserBack",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-up-start-import",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "JSON Up-at-start reaches Name",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._handleJsonFieldKey",
+        "before": "_nameFocusNode.requestFocus();",
+        "after": "_importFocusNode.requestFocus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-direct-name",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt direct exact name",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importDirect",
+        "before": "'Trakt ${_source.label}'",
+        "after": "'Trakt: ${_source.label}'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-list-meta",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt custom list metadata",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importList",
+        "before": "? 'custom'\n              : 'liked'",
+        "after": "? 'liked'\n              : 'custom'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-force-refresh",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "MDB refresh bypasses warm cache",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshMdblistCatalog",
+        "before": "forceRefresh: true",
+        "after": "forceRefresh: false",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "validate-item-id",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "validation message precedence",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.validate",
+        "before": "return 'Item $i: missing \"id\"';",
+        "after": "return 'Item $i: missing identifier';",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-year",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "int.tryParse(meta.year!) ?? meta.year",
+        "after": "meta.year",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-overview",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'overview': meta.description",
+        "after": "'description': meta.description",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-genres",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "if (meta.genres != null && meta.genres!.isNotEmpty)",
+        "after": "if (meta.genres != null)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "id-radix",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "generateId sanitizes",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.generateId",
+        "before": "toRadixString(36)",
+        "after": "toRadixString(16)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "is-trakt-show",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "Trakt detection examines",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.isTrakt",
+        "before": " || first.containsKey('show')",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "native-type-default",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "single-type import trims",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.import",
+        "before": "parsed['type'] as String? ?? 'movie'",
+        "after": "parsed['type'] as String? ?? 'series'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "duplicate-name-error",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "single-type import trims",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.import",
+        "before": "'Catalog \"$name\" already exists'",
+        "after": "'Catalog already exists'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "export-fallback",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_export_test.dart",
+    "assertion": "export empty trimmed name",
+    "edits": [
+      {
+        "member": "LocalCatalogExporter.loadCatalog",
+        "before": "'local_catalog'",
+        "after": "'catalog'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "export-indent",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_export_test.dart",
+    "assertion": "export first id and type match",
+    "edits": [
+      {
+        "member": "LocalCatalogExporter.loadCatalog",
+        "before": "JsonEncoder.withIndent('  ')",
+        "after": "JsonEncoder.withIndent('    ')",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-trakt-slug",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh Trakt missing source",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "'Missing list slug'",
+        "after": "'Missing slug'",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "refresh-trakt-filter",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh Trakt custom requests",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "if (catalogType == 'series' && meta.type != 'series') continue;",
+        "after": "if (false && catalogType == 'series' && meta.type != 'series') continue;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-liked-listid",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh Trakt liked requests",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "if (listId != null && listId.isNotEmpty) 'trakt': listId,",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-liked-ownerslug",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh liked ownerSlug",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "'slug': ownerSlug",
+        "after": "'slug': owner",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-trakt-empty",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh Trakt empty, empty-after-filter",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "'No items found in list'",
+        "after": "'No items'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "refresh-trakt-notfound",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "refresh Trakt empty, empty-after-filter",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshTraktCatalog",
+        "before": "'Catalog not found \u2014 it may have been deleted'",
+        "after": "'Catalog missing'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-incomplete",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "MDB refresh missing id",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshMdblistCatalog",
+        "before": "loaded.failed || !loaded.complete",
+        "after": "loaded.failed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-cancel",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor cancel preserves items",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "if (confirmed != true || !mounted || _catalog == null) return;",
+        "after": "if (!mounted || _catalog == null) return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-delete-write",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor last item deletes catalog and returns true",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "await StremioCatalogStorage.removeStremioTvLocalCatalog(widget.catalogId);",
+        "after": "await StremioCatalogStorage.removeStremioTvLocalCatalog('wrong');",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-failed-update",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor failed update leaves visible",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._removeItem",
+        "before": "'Local catalog could not be updated'",
+        "after": "'Catalog could not be updated'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "editor-back-result",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog_test.dart",
+    "assertion": "editor cancel preserves items",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState._rebuildNavigation",
+        "before": "Navigator.of(context).pop(_changed);",
+        "after": "Navigator.of(context).pop(false);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-delete-cancel",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage subtitles only sourced rows refresh",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._deleteLocalCatalog",
+        "before": "if (confirmed != true || !mounted) return;",
+        "after": "if (!mounted) return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-refresh-result",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage refresh disables every other refresh",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._refreshTraktCatalog",
+        "before": "_changed = true;",
+        "after": "_changed = false;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "manage-refresh-error",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "manage Trakt refresh failure red snackbar",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogsDialogState._refreshTraktCatalog",
+        "before": "'Refresh failed: $err'",
+        "after": "'Failed: $err'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "file-read-error",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog_test.dart",
+    "assertion": "file import null bytes returns false",
+    "edits": [
+      {
+        "member": "StremioTvLocalCatalogsDialog.importFromFile",
+        "before": "'Could not read file'",
+        "after": "'Read failed'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-name-forward",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "URL forwards name and success",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState._import",
+        "before": "catalogName: _nameController.text",
+        "after": "catalogName: null",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "url-submit",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "URL submitting the URL field",
+    "edits": [
+      {
+        "member": "_ImportUrlDialogState.build",
+        "before": "if (!_loading) _import();",
+        "after": "if (false) _import();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-empty",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "JSON empty input, importer error",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._import",
+        "before": "'Paste JSON content'",
+        "after": "'Paste content'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "json-save-result",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_text_import_dialogs_test.dart",
+    "assertion": "JSON forwards name and success",
+    "edits": [
+      {
+        "member": "_ImportJsonDialogState._import",
+        "before": "Navigator.of(context).pop(true);",
+        "after": "Navigator.of(context).pop(false);",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-auth",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt unauthenticated message",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState.build",
+        "before": "'Sign in to Trakt first in Settings.'",
+        "after": "'Sign in first.'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-movies-shows-order",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt direct exact name",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importDirect",
+        "before": "final movies = await _traktService.fetchList(_source.apiValue, 'movies');\n      final shows = await _traktService.fetchList(_source.apiValue, 'shows');",
+        "after": "final shows = await _traktService.fetchList(_source.apiValue, 'shows');\n      final movies = await _traktService.fetchList(_source.apiValue, 'movies');",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-split-type",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt custom list metadata",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._saveAsCatalog",
+        "before": "'type': entry.type",
+        "after": "'type': 'movie'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-missing-owner",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt liked missing owner",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importList",
+        "before": "'Missing list owner'",
+        "after": "'No owner'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-empty",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt empty errors",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._saveAsCatalog",
+        "before": "'\"$name\" is empty'",
+        "after": "'Empty list'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-no-imdb",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt no IMDB errors",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._saveAsCatalog",
+        "before": "'No items with IMDB IDs found'",
+        "after": "'No IMDB IDs'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-duplicate",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt direct duplicate guard Trakt Watchlist \u2014 Series",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importDirect",
+        "before": "c['name'] == '$name \u2014 Series'",
+        "after": "c['name'] == '$name \u2014 Wrong'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-auth",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDBList unauthenticated message",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState.build",
+        "before": "'Connect MDBList first in Settings.'",
+        "after": "'Connect MDBList first.'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-meta",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB My Lists directory",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._importList",
+        "before": "'mdblistListId': choice.id",
+        "after": "'mdblistListId': choice.id + 1",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-duplicate",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB duplicate guard suffix  \u2014 Movies",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._importList",
+        "before": "c['name'] == '$name \u2014 Movies'",
+        "after": "c['name'] == '$name \u2014 Wrong'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-split-type",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB My Lists directory",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._saveAsCatalog",
+        "before": "'type': entry.type",
+        "after": "'type': 'movie'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-single-type",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB single list import contract",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._saveAsCatalog",
+        "before": "'type': catalogType",
+        "after": "'type': 'series'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-dialog-incomplete",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB incomplete list import contract",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._importList",
+        "before": "loaded.failed || !loaded.complete",
+        "after": "loaded.failed",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-empty",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "MDB empty list import contract",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._saveAsCatalog",
+        "before": "'\"$name\" is empty'",
+        "after": "'Empty list'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "dispose-order",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard owned-resource dispose order",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState.dispose",
+        "before": "_closeFocusNode.dispose();\n    _scrollController.dispose();",
+        "after": "_scrollController.dispose();\n    _closeFocusNode.dispose();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-log",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importList",
+        "before": "StremioTV TraktImport: start list=",
+        "after": "StremioTV TraktImport: beginning list=",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "focus-debug-label",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard labels",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState",
+        "before": "debugLabel: 'localCatalogEditorClose'",
+        "after": "debugLabel: 'editorClose'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-disabled-error",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.refreshMdblistCatalog",
+        "before": "'MDBList integration is disabled'",
+        "after": "'Disabled'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-fetch-catch",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._fetchLists",
+        "before": "'Failed to load lists: $e'",
+        "after": "'Failed: $e'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-import-catch",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._importList",
+        "before": "'Failed to import: $e'",
+        "after": "'Import failed: $e'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "public-surface",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_surface_test.dart",
+    "assertion": "resolved facade namespace",
+    "edits": [
+      {
+        "before": "LocalCatalogExportPayload",
+        "after": "RenamedExportPayload",
+        "count": 4
+      }
+    ]
+  },
+  {
+    "id": "trakt-direct-catch",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importDirect",
+        "before": "'Failed to import: $e'",
+        "after": "'Failed: $e'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "mdb-fetch-catch",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportMdblistDialogState._fetchLists",
+        "before": "'Failed to load lists: $e'",
+        "after": "'Failed: $e'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "shape-radius",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "shape slice remains four bare radii",
+    "edits": [
+      {
+        "member": "_StremioTvLocalCatalogEditorDialogState.build",
+        "before": "BorderRadius.circular(24)",
+        "after": "BorderRadius.circular(25)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-id",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'id':",
+        "after": "'changed_id':",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-name",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'name':",
+        "after": "'changed_name':",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "transform-rating",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'rating':",
+        "after": "'changed_rating':",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-poster",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'poster':",
+        "after": "'changed_poster':",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "transform-fanart",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "'fanart':",
+        "after": "'changed_fanart':",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "majority-series",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/data/local_catalog_importer_test.dart",
+    "assertion": "transform majority ties movie",
+    "edits": [
+      {
+        "member": "LocalCatalogImporter.transformTrakt",
+        "before": "seriesCount > movieCount",
+        "after": "seriesCount < movieCount",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-source-label",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt source History labels",
+    "edits": [
+      {
+        "member": "_TraktListSourceExt",
+        "before": "return 'History';",
+        "after": "return 'History changed';",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-api-value",
+    "kind": "B",
+    "test": "test/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_list_import_dialogs_test.dart",
+    "assertion": "Trakt source History labels",
+    "edits": [
+      {
+        "member": "_TraktListSourceExt",
+        "before": "return 'history';",
+        "after": "return 'watchlist';",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "trakt-log-spaces",
+    "kind": "S",
+    "test": "test/features/stremio_tv_catalogs/stremio_tv_catalogs_source_contract_test.dart",
+    "assertion": "source guard Trakt debugPrint lines",
+    "edits": [
+      {
+        "member": "_ImportTraktDialogState._importList",
+        "before": "StremioTV TraktImport: start list=",
+        "after": "StremioTV TraktImport: start  list=",
+        "count": 1
+      }
+    ]
+  }
+]

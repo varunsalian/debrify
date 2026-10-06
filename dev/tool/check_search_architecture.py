@@ -12,6 +12,26 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
+FEATURES += ("stremio_tv_catalogs",)
+STREMIO_TV_CATALOGS_COMPLETE = True
+STREMIO_TV_CATALOGS_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart"
+STREMIO_TV_CATALOGS_BRIDGE = "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/"
+# Measured pure-export facade; completion activates its cap.
+STREMIO_TV_CATALOGS_FACADE_CAP = 8
+STREMIO_TV_CATALOGS_PUBLIC_NAMES = frozenset([
+    "LocalCatalogExportPayload", "LocalCatalogExporter", "LocalCatalogImporter",
+    "StremioTvLocalCatalogEditorDialog", "StremioTvLocalCatalogsDialog",
+])
+# Creation commits register exact measurements. Exit: separately characterized
+# item-card extraction (editor) and public list-source model extraction (Trakt).
+STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS = {
+    STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_trakt_import_dialog.dart": 554,
+    STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_editor_dialog.dart": 632,
+}
+# Exit: inject an import data contract instead of HTTP in this legacy dialog.
+STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT = (
+    STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_url_import_dialog.dart", "package:http/http.dart",
+)
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
@@ -153,6 +173,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Pure catalog compatibility export surface; feature files own declarations.
+    STREMIO_TV_CATALOGS_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,
@@ -402,6 +424,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     EPISODES_PANEL_BRIDGE,
     CATALOG_DETAIL_BRIDGE,
     DEBRIFY_TV_BRIDGE,
+    # Move-only catalog dialogs; exit: import/refresh contracts + Riverpod controllers.
+    STREMIO_TV_CATALOGS_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -432,6 +456,28 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/stremio_tv_catalogs/"):
+        limit = STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS.get(relative, 500)
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line Stremio TV catalogs extraction limit")
+        if "TEMP(stremio_tv_catalogs)" in source and (STREMIO_TV_CATALOGS_COMPLETE or not relative.startswith(STREMIO_TV_CATALOGS_BRIDGE)):
+            problems.append("Stremio TV catalogs temporary cross-call outside its exact legacy bridge")
+    if STREMIO_TV_CATALOGS_COMPLETE and relative == STREMIO_TV_CATALOGS_FACADE:
+        if lines > STREMIO_TV_CATALOGS_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {STREMIO_TV_CATALOGS_FACADE_CAP}-line Stremio TV catalogs facade limit")
+        if "TEMP(stremio_tv_catalogs)" in source:
+            problems.append("Stremio TV catalogs temporary cross-call remains in the facade")
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+        exports = re.compile(r"export\s+['\"]([^'\"]+)['\"]\s+show\s+([\w,\s]+);", re.MULTILINE)
+        names = [name.strip() for match in exports.finditer(without_comments)
+                 for name in match.group(2).split(",")]
+        if exports.sub("", without_comments).strip():
+            problems.append("Stremio TV catalogs facade must contain only export directives and comments")
+        if len(names) != 5 or set(names) != STREMIO_TV_CATALOGS_PUBLIC_NAMES:
+            problems.append("Stremio TV catalogs facade must export exactly the original five names")
+        if any(not match.group(1).startswith("package:debrify/features/stremio_tv_catalogs/")
+               for match in exports.finditer(without_comments)):
+            problems.append("Stremio TV catalogs facade must export its feature destinations")
     if relative.startswith("lib/features/debrify_tv/"):
         limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -657,6 +703,20 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/stremio_tv_catalogs/"):
+                if target == STREMIO_TV_CATALOGS_FACADE:
+                    problems.append("Stremio TV catalogs feature imports its facade")
+                if (not relative.startswith((STREMIO_TV_CATALOGS_BRIDGE, "lib/features/stremio_tv_catalogs/data/"))
+                        and target.startswith("lib/services/")):
+                    problems.append("Stremio TV catalogs service import outside data or its exact legacy bridge")
+                if target.startswith("package:http/") and (relative, target) != STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT:
+                    problems.append("Stremio TV catalogs HTTP import outside its exact URL-dialog pair")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_catalog_feature = relative.split("/")[2]
+                other_catalog_feature = target.split("/")[2]
+                if ({own_catalog_feature, other_catalog_feature} == {"stremio_tv", "stremio_tv_catalogs"}
+                        and not target.startswith(f"lib/features/{other_catalog_feature}/models/")):
+                    problems.append("Stremio TV/catalogs implementation cross-import outside models")
             if relative.startswith("lib/features/addon_hub/"):
                 if target in (ADDON_HUB_FACADE, "lib/screens/addons_screen.dart", "lib/screens/settings/stremio_addons_page.dart"):
                     problems.append("addon hub feature imports a legacy addon screen")
@@ -749,7 +809,7 @@ def violations(path: Path) -> list[str]:
                              and target.startswith("lib/services/"))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT) and target not in (
+                    "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT, STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT) and target not in (
                         PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):
@@ -842,6 +902,8 @@ def main() -> int:
         paths.add(ROOT / ADDON_HUB_FACADE)
     if DEBRIFY_TV_COMPLETE:
         paths.add(ROOT / DEBRIFY_TV_FACADE)
+    if STREMIO_TV_CATALOGS_COMPLETE:
+        paths.add(ROOT / STREMIO_TV_CATALOGS_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

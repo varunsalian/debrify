@@ -35,6 +35,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
+      1,
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart':
+      0,
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_json_import_dialog.dart':
+      0,
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
@@ -200,7 +206,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
   'lib/screens/stremio_tv/stremio_tv_screen.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_empty_state.dart': 0,
-  'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 4,
   'lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart': 3,
   'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
   'lib/screens/trakt_calendar_screen.dart': 2,
@@ -246,6 +251,15 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 0,
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog.dart':
+      1,
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_trakt_import_dialog.dart':
+      1,
+  'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_mdblist_import_dialog.dart':
+      1,
+  'lib/features/stremio_tv_catalogs/data/local_catalog_importer.dart': 0,
+  'lib/features/stremio_tv_catalogs/data/local_catalog_export.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,

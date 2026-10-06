@@ -1,0 +1,108 @@
+{
+  "baseline": "0cb50df7",
+  "source": "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart",
+  "feature": "lib/features/stremio_tv_catalogs",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": false,
+  "allowed_edits": [
+    "unchanged"
+  ],
+  "receivers": [],
+  "completed_step": 4,
+  "self_test_module": "stremio_tv_catalogs_staged_checker_test",
+  "extension_declarations": [
+    "_TraktListSourceExt"
+  ],
+  "verbatim_comment_bytes": true,
+  "type_aliases": [
+    {
+      "original_name": "_ImportUrlDialog",
+      "alias": "LcUrlDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart"
+    },
+    {
+      "original_name": "_ImportJsonDialog",
+      "alias": "LcJsonDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_json_import_dialog.dart"
+    },
+    {
+      "original_name": "_ImportTraktDialog",
+      "alias": "LcTraktDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_trakt_import_dialog.dart"
+    },
+    {
+      "original_name": "_ImportMdblistDialog",
+      "alias": "LcMdblistDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_mdblist_import_dialog.dart"
+    }
+  ],
+  "file_aliases": [
+    {
+      "original_name": "_ImportUrlDialog",
+      "alias": "LcUrlDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart",
+      "kind": "widget",
+      "constructors": []
+    },
+    {
+      "original_name": "_ImportJsonDialog",
+      "alias": "LcJsonDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_json_import_dialog.dart",
+      "kind": "widget",
+      "constructors": []
+    },
+    {
+      "original_name": "_ImportTraktDialog",
+      "alias": "LcTraktDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_trakt_import_dialog.dart",
+      "kind": "widget",
+      "constructors": []
+    },
+    {
+      "original_name": "_ImportMdblistDialog",
+      "alias": "LcMdblistDialog",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_mdblist_import_dialog.dart",
+      "kind": "widget",
+      "constructors": []
+    },
+    {
+      "original_name": "_backHopsTo",
+      "alias": "lcBackHop",
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart",
+      "kind": "value",
+      "constructors": []
+    }
+  ],
+  "additional_owners": [
+    {
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart",
+      "owner": "",
+      "names": [
+        "LcUrlDialog",
+        "lcBackHop"
+      ]
+    },
+    {
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_json_import_dialog.dart",
+      "owner": "",
+      "names": [
+        "LcJsonDialog"
+      ]
+    },
+    {
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_trakt_import_dialog.dart",
+      "owner": "",
+      "names": [
+        "LcTraktDialog"
+      ]
+    },
+    {
+      "file": "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_mdblist_import_dialog.dart",
+      "owner": "",
+      "names": [
+        "LcMdblistDialog"
+      ]
+    }
+  ]
+}
