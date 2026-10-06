@@ -74,18 +74,6 @@ void main() {
         }
         final platform = Platform.isMacOS ? 'macos' : 'linux';
         final path = '../../../../goldens/edit_profile/$platform/$scene.png';
-        final file = File('test/goldens/edit_profile/$platform/$scene.png');
-        if (Platform.isLinux &&
-            !file.existsSync() &&
-            !const bool.fromEnvironment(
-              'EDIT_PROFILE_CAPTURE_ORIGINAL_LINUX',
-            ) &&
-            !const bool.fromEnvironment(
-              'EDIT_PROFILE_REQUIRE_ORIGINAL_LINUX',
-            )) {
-          markTestSkipped('Step L ORIGINAL Linux capture pending');
-          return;
-        }
         await expectLater(find.byKey(f.capture), matchesGoldenFile(path));
       });
     });
