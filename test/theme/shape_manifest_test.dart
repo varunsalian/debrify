@@ -59,6 +59,10 @@ const Map<String, int> kShapeResidue = {
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_parts.dart': 0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage_content.dart':
       0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_layout.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart':
+      0,
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
@@ -221,7 +225,10 @@ const Map<String, int> kShapeResidue = {
   'lib/features/settings/presentation/legacy_settings/settings_release_details.dart':
       0,
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
-  'lib/screens/stremio_tv/stremio_tv_screen.dart': 0,
+  'lib/features/stremio_tv/presentation/stremio_tv_manual_source_picker.dart':
+      0,
+  'lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart':
+      0,
   'lib/screens/stremio_tv/widgets/stremio_tv_empty_state.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart': 3,
   'lib/screens/trakt_calendar_screen.dart': 2,
@@ -310,6 +317,46 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/stremio_tv_tuner_widget_view.dart':
       0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage.dart': 0,
+  'lib/screens/stremio_tv/stremio_tv_screen.dart': 0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_play_channel.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_actions.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_bindings.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_focus_state.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_library_state.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_owners.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_playback_state.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_sections.dart':
+      0,
+  'lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_state.dart':
+      0,
+
+  'lib/features/stremio_tv/models/stremio_tv_playback_records.dart': 0,
+  'lib/features/stremio_tv/application/stremio_tv_stream_quality.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,

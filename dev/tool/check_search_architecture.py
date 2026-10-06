@@ -38,6 +38,33 @@ SETTINGS_WIDGETS_COMPLETE = True
 SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"
 SETTINGS_WIDGETS_FACADE_CAP = 63  # settings_widgets: 63 export lines, 0 comments/blanks.
 SETTINGS_WIDGETS_PUBLIC_NAMES = frozenset(['ConnectionCard', 'ConnectionInfo', 'ConnectionsSummary', 'SettingsBackground', 'SettingsBannerTone', 'SettingsHeader', 'SettingsInfoBanner', 'SettingsInfoTile', 'SettingsLookHero', 'SettingsPageHeader', 'SettingsPageScaffold', 'SettingsRowContent', 'SettingsRows', 'SettingsSection', 'SettingsSectionLabel', 'SettingsSelectDropdown', 'SettingsSelectOption', 'SettingsSkeleton', 'SettingsTile', 'SettingsToggleTile', 'TvRenderQualityChoice', 'TvUiScaleChoice', 'WebDavSyncPendingBadge', 'kSettingsAccent', 'kSettingsAccent2', 'kSettingsAmber', 'kSettingsBg', 'kSettingsDim', 'kSettingsDim2', 'kSettingsGreen', 'kSettingsLine', 'kSettingsMaxWidth', 'kSettingsPanel', 'kSettingsPanel2', 'kSettingsRed', 'kTvRenderQualityChoices', 'kTvUiScaleChoices', 'launchSettingsUrl', 'pushSettingsPage', 'settingsConnectionIsReady', 'settingsConnectionNeedsAttention', 'settingsInitialsFor', 'settingsPageTheme', 'showLegacyModeInfoDialog', 'showSettingsDialog', 'tvRenderQualityLabel', 'tvUiScaleLabel'])
+STREMIO_TV_COMPLETE = True
+STREMIO_TV_FACADE = "lib/screens/stremio_tv/stremio_tv_screen.dart"
+STREMIO_TV_BRIDGE = "lib/features/stremio_tv/presentation/legacy_stremio_tv/"
+# The original screen's catalog-detail caller moves unchanged to this file.
+STREMIO_TV_CATALOG_DETAIL_CALLER = STREMIO_TV_BRIDGE + "stremio_tv_channel_actions.dart"
+# Final cap is activated only at completion and measured over every line.
+STREMIO_TV_FACADE_CAP = 115
+STREMIO_TV_PREEXISTING = {
+    "lib/features/stremio_tv/" + path for path in (
+        "application/stremio_tv_providers.dart",
+        "data/stremio_tv_catalog_editor.dart",
+        "models/stremio_tv_catalog_option.dart",
+        "models/stremio_tv_catalog_picker_result.dart",
+        "presentation/stremio_tv_catalog_picker_dialog.dart",
+        "presentation/stremio_tv_catalog_picker_views.dart",
+        "presentation/stremio_tv_focus_frame.dart",
+    )
+}
+# D2: one original build body cannot be split by a move. Measure at creation.
+# Exit: separately characterized header/channel paint decomposition with goldens.
+STREMIO_TV_SIZE_EXCEPTIONS = {
+    STREMIO_TV_BRIDGE + "stremio_tv_layout.dart": 707,
+}
+STREMIO_TV_HANDOFF_FILES = {
+    STREMIO_TV_BRIDGE + "stremio_tv_play_channel.dart",
+    STREMIO_TV_BRIDGE + "stremio_tv_player_guide.dart",
+}
 # Completion alone activates the facade cap; feature scans are unconditional.
 # Pure UI tuner extraction. All feature guards apply before completion.
 STREMIO_TV_TUNER_COMPLETE = True
@@ -192,6 +219,8 @@ COMPOSITION_ROOTS = {
     SETTINGS_WIDGETS_FACADE,
     # Tuner facade wires its live widget view, owners and legacy sections.
     STREMIO_TV_TUNER_FACADE,
+    # Stremio TV facade wires route-owned records, live State and frozen sections.
+    STREMIO_TV_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,
@@ -451,6 +480,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     # Move-only catalog dialogs; exit: import/refresh contracts + Riverpod controllers.
     STREMIO_TV_CATALOGS_BRIDGE,
     STREMIO_TV_TUNER_BRIDGE,
+    # Move-only State bridge; exit: Stremio TV data contracts/Riverpod.
+    STREMIO_TV_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -517,6 +548,20 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the {STREMIO_TV_TUNER_FACADE_CAP}-line Stremio TV tuner facade limit")
         if "TEMP(stremio_tv_tuner)" in source:
             problems.append("Stremio TV tuner temporary cross-call remains in the facade")
+    stremio_tv = relative.startswith("lib/features/stremio_tv/")
+    if stremio_tv and relative not in STREMIO_TV_PREEXISTING:
+        limit = max(500, STREMIO_TV_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line Stremio TV extraction limit")
+        if "TEMP(stremio_tv)" in source and (STREMIO_TV_COMPLETE or not relative.startswith(STREMIO_TV_BRIDGE)):
+            problems.append("Stremio TV temporary cross-call outside its exact legacy bridge")
+        if relative not in STREMIO_TV_HANDOFF_FILES and re.search(r"\b(?:VideoPlayerLauncher\s*\.\s*push|VideoPlayerScreen)\s*\(", source):
+            problems.append("Stremio TV playback entry outside its registered handoff files")
+    if STREMIO_TV_COMPLETE and relative == STREMIO_TV_FACADE:
+        if lines > STREMIO_TV_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {STREMIO_TV_FACADE_CAP}-line Stremio TV facade limit")
+        if "TEMP(stremio_tv)" in source:
+            problems.append("Stremio TV temporary cross-call remains in the facade")
     if relative.startswith("lib/features/debrify_tv/"):
         limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -797,6 +842,15 @@ def violations(path: Path) -> list[str]:
                         or (other_widgets_feature == "settings_widgets" and own_widgets_feature in widgets_peers)):
                     if not target.startswith(f"lib/features/{other_widgets_feature}/models/"):
                         problems.append("settings widgets/settings-family implementation cross-import")
+            if stremio_tv:
+                if target == STREMIO_TV_FACADE:
+                    problems.append("Stremio TV feature imports its facade")
+                if relative not in STREMIO_TV_PREEXISTING:
+                    if not relative.startswith(STREMIO_TV_BRIDGE) and target.startswith("lib/services/"):
+                        problems.append("Stremio TV service import outside its exact legacy bridge")
+                    if relative not in STREMIO_TV_HANDOFF_FILES and any(name in target for name in (
+                            "video_player_launcher", "player_launch", "media_kit", "lib/screens/video_player/")):
+                        problems.append("Stremio TV playback import outside its registered handoff files")
             if relative.startswith("lib/features/addon_hub/"):
                 if target in (ADDON_HUB_FACADE, "lib/screens/addons_screen.dart", "lib/screens/settings/stremio_addons_page.dart"):
                     problems.append("addon hub feature imports a legacy addon screen")
@@ -944,7 +998,9 @@ def violations(path: Path) -> list[str]:
                         problems.append("playlist content/cloud cross-feature import")
                 if own == "playlist_content" and target == PLAYLIST_CONTENT_FACADE:
                     problems.append("playlist content feature imports its facade")
-                if target == CATALOG_DETAIL_FACADE and relative != "lib/features/home/presentation/home_detail_presentation.dart":
+                if (target == CATALOG_DETAIL_FACADE and
+                        relative != "lib/features/home/presentation/home_detail_presentation.dart" and
+                        relative != STREMIO_TV_CATALOG_DETAIL_CALLER):
                     problems.append("feature imports the catalog-detail facade outside the existing Home caller")
                 if own == "catalog_detail" and not relative.startswith(CATALOG_DETAIL_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("catalog-detail service/storage import outside the legacy bridge")
@@ -1004,6 +1060,8 @@ def main() -> int:
         paths.add(ROOT / STREMIO_TV_CATALOGS_FACADE)
     if STREMIO_TV_TUNER_COMPLETE:
         paths.add(ROOT / STREMIO_TV_TUNER_FACADE)
+    if STREMIO_TV_COMPLETE:
+        paths.add(ROOT / STREMIO_TV_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
@@ -1026,6 +1084,8 @@ def main() -> int:
     ]
     if not (ROOT / "lib/features/spotlight_board").is_dir():
         problems.append("Registered spotlight board directory is missing")
+    if STREMIO_TV_COMPLETE and not (ROOT / STREMIO_TV_FACADE).is_file():
+        problems.append("Stremio TV facade is missing")
     if not (ROOT / STORAGE_SOURCE_DIR).is_dir():
         problems.append(f'Registered storage directory is missing: {STORAGE_SOURCE_DIR}')
     if not paths:

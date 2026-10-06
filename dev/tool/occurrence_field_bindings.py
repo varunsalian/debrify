@@ -12,7 +12,7 @@ def aligned(node, config):
     scaffolding = set()
     paths = [(_parts(path), set(config.get('receiver_members', {}).get(owner, [])))
              for path, owner in config.get('receiver_paths', {}).items()]
-    paths += [(['_deps'], {'context', 'mounted', 'setState'})]
+    paths += [(['_deps'], {'context', 'mounted', 'setState'} | set(config.get('live_widget_getters', [])))]
     by_first = {}
     for path, members in paths:
         by_first.setdefault(path[0], []).append((path, members))
@@ -26,6 +26,11 @@ def aligned(node, config):
                 # A declared receiver is scaffolding only for a registered leaf
                 # or the three live State callbacks, never an arbitrary selector.
                 scaffolding.update(range(i, end))
+    # A registered live widget getter replaces the receiver at the same site.
+    # Retain the raw selector classification and check its qualifier below.
+    for i in range(len(values) - 2):
+        if values[i:i+2] == ['widget', '.'] and values[i+2] in config.get('live_widget_getters', []):
+            scaffolding.add(i)
     return [o for o in node.get('occurrences', []) if o['tokenIndex'] not in scaffolding]
 
 
@@ -44,14 +49,19 @@ def _canonical_name(name, rows, config):
     return mapping.get(name, name)
 
 
-def failures(original, lookup, rows, source, config, *, members=None):
+def failures(original, lookup, rows, source, config, *, members=None, package=None):
     if not config.get('occurrence_field_bindings'):
         return []
     from check_settings_moves import normalize
     owners = config['occurrence_field_bindings']['owners']
     by_old = {r['original_name'].split('.')[-1]: r for r in rows if r['original_name'].rpartition('.')[0] in owners}
     fields = {name: r for name, r in by_old.items() if original[r['original_name']].get('variables')}
-    record_owners = config.get('record_owners', ['_DebrifyTVScreenState'])
+    binding_config = config['occurrence_field_bindings']
+    # Preserve the Debrify TV default; additional owners opt in explicitly,
+    # either by record_paths (all owners) or record_owners/record_fields.
+    record_paths = binding_config.get('record_paths')
+    default_owners = set(owners) if record_paths is not None else {'_DebrifyTVScreenState'}
+    record_owners = config.get('record_owners', default_owners)
     def is_record_field(row):
         owner, _, name = row['original_name'].rpartition('.')
         selected = config.get('record_fields', {}).get(owner)
@@ -67,6 +77,26 @@ def failures(original, lookup, rows, source, config, *, members=None):
         if after is None:
             continue
         left, right = aligned(before, config), aligned(after, config)
+        annotations = config.get('forwarded_annotation_occurrences', {}).get(identity)
+        destination = (row['destination_file'], row['destination_class'], row['new_name'])
+        if annotations and destination in lookup and destination[0] != source:
+            from check_settings_moves import check_forwarder
+            owner, _, name = identity.rpartition('.')
+            retained = lookup.get((source, owner, name))
+            spec = config.get('forwarders', {}).get(identity)
+            code_indices = [i for i,t in enumerate(before['tokens']) if not t['comment']]
+            leading = code_indices[:2]
+            if (annotations != ['override'] or len(leading) != 2
+                    or [before['tokens'][i]['text'] for i in leading] != ['@','override']
+                    or retained is None or spec is None
+                    or check_forwarder(before, retained, row, spec, package)):
+                errors.append('Forwarded annotation requires exact validated forwarder: '+identity)
+            else:
+                actual_code = [t['text'] for t in after['tokens'] if not t['comment']]
+                if actual_code[:2] == ['@','override']:
+                    errors.append('Moved forwarded declaration retains override annotation: '+identity)
+                else:
+                    left = [o for o in left if o['tokenIndex'] != leading[1]]
         if len(left) != len(right):
             errors.append('Occurrence alignment changed: '+identity+f' ({len(left)} != {len(right)})')
             continue
@@ -86,7 +116,7 @@ def failures(original, lookup, rows, source, config, *, members=None):
             registered = by_old.get(a['name']) if is_state or is_this else None
             if registered:
                 target = registered['destination_class']
-                paths = [p for p, owner in config.get('receiver_owners', {}).items() if owner == target]
+                paths = [p for p, owner in (record_paths if field and record_paths is not None else config.get('receiver_owners', {})).items() if owner == target]
                 moved_field = field and is_record_field(field) and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
                 if b['kind'] == 'selector':
                     if b['qualifierTokens'] not in [_parts(p) for p in paths] or b['name'] != registered['new_name']:
@@ -101,6 +131,12 @@ def failures(original, lookup, rows, source, config, *, members=None):
                     errors.append('Occurrence lexical binding changed: '+label)
                 elif a['role'] != b['role']:
                     errors.append('Occurrence lexical role changed: '+label)
+            elif (a['kind'] == 'selector' and a['qualifierTokens'] == ['widget']
+                  and a['name'] in config.get('live_widget_getters', [])):
+                retained_widget = b['kind'] == 'selector' and b['qualifierTokens'] == ['widget'] and b['role'] == a['role']
+                live_widget = b['kind'] == 'selector' and b['qualifierTokens'] == ['_deps'] and b['role'] == 'invocation'
+                if not (retained_widget or live_widget):
+                    errors.append('Occurrence live widget getter changed: '+label)
             elif a['kind'] == 'selector':
                 if b['kind'] != 'selector' or normalize(a['qualifierTokens'], rows, row) != normalize(b['qualifierTokens'], rows, row) or a['role'] != b['role']:
                     errors.append('Occurrence selector chain changed: '+label)
@@ -116,7 +152,9 @@ def failures(original, lookup, rows, source, config, *, members=None):
         if file == '<original>' or not file.startswith(config['feature']+'/'):
             continue
         for occurrence in node.get('occurrences', []):
-            if occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound' and occurrence['name'] in record_fields:
+            if (binding_config.get('mandatory_qualification', False)
+                    and occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
+                    and occurrence['name'] in record_fields):
                 errors.append('Bare owner field reference: '+f'{file}:{owner}.{name} {occurrence["name"]}')
             if str(occurrence.get('binding', '')).startswith('early:'):
                 errors.append('Early destination reference: '+f'{file}:{owner}.{name}')

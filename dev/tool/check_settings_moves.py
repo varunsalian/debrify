@@ -1011,7 +1011,13 @@ def check_forwarder(before, actual, row, spec, package=None):
                 + before['text'][end - before['start']:])
     else:
         return ['Forwarder must be a method, getter or initialized constant']
+    text = spec.get('text', text)
     node = parse({'forwarder': 'class Facade { ' + text + ' }'}, package)['forwarder']['declarations'][0]['members'][0]
+    if 'text' in spec:
+        # An explicit forwarder pins every token, including optional commas.
+        expected = [token['text'] for token in node['tokens']]
+        observed = [token['text'] for token in actual['tokens']]
+        return [] if expected == observed else ['Pinned forwarder tokens changed']
     return [] if tokens(node) == tokens(actual) else ['Forwarder signature/default/dispatch/argument order changed']
 
 
@@ -1065,7 +1071,7 @@ def _check(original_source, sources, rows, source_path, package=None,
     if CONFIG.get('occurrence_field_bindings'):
         from occurrence_field_bindings import failures as occurrence_failures
         errors.extend(occurrence_failures(original, all_nodes(parsed), rows,
-                                           source_path, CONFIG))
+                                           source_path, CONFIG, package=package))
     if CONFIG.get('lexical_state_setters'):
         from occurrence_field_bindings import lexical_setter_failures
         errors.extend(lexical_setter_failures(original, all_nodes(parsed), rows,
@@ -1136,6 +1142,9 @@ def _check(original_source, sources, rows, source_path, package=None,
         errors.extend(check_file_aliases(lookup, rows, source_path, CONFIG))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
+    if CONFIG.get('stremio_tv_contracts'):
+        from stremio_tv_contracts import check_contracts
+        errors.extend(check_contracts(lookup, rows, source_path, CONFIG, sources))
     if CONFIG.get('debrify_tv_contracts'):
         from debrify_tv_contracts import check_contracts
         errors.extend(check_contracts(lookup, rows, source_path, CONFIG))

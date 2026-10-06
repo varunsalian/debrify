@@ -411,7 +411,8 @@ def main():
                               cwd=ROOT, text=True, capture_output=True, check=True).stdout
     sources = {args.source: (ROOT / args.source).read_text()}
     sources.update({p.relative_to(ROOT).as_posix(): p.read_text()
-                    for p in (ROOT / args.feature).rglob('*.dart')})
+                    for p in (ROOT / args.feature).rglob('*.dart')
+                    if p.relative_to(ROOT).as_posix() not in (config or {}).get('excluded_feature_files', [])})
     if sections:
         from check_settings_moves import check as settings_check, check_seams
         original, seam_errors = check_seams(original, sources, config, args.baseline, package)

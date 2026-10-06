@@ -47,6 +47,8 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'support/stremio_tv_source.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temp;
@@ -1265,9 +1267,7 @@ void main() {
         engineStates: const {},
       );
       expect(enabled['torrents'], hasLength(2));
-      final tvCode = File(
-        'lib/screens/stremio_tv/stremio_tv_screen.dart',
-      ).readAsStringSync();
+      final tvCode = stremioTvCurrentSource();
       final calls = RegExp(
         r'searchByImdbWithStremio\([\s\S]*?\);',
       ).allMatches(tvCode).toList();
