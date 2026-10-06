@@ -520,9 +520,9 @@ never names the `@visibleForTesting` widget field outside the facade's
 | 0 | Baseline `base`; lint/rename probes; dependency report; manifest, config, callback sites; harness, characterization tests, source reader, macOS goldens (two reversed-order captures); checkpoint (b); CI list; source-text inventory; Linux capture script | Nothing moves |
 | 0b | Independent review (Claude); original-only mutation proofs; compiling-composition probe with the real checker and facade measurement; `base2` at (b) | Nothing moves |
 | L | **Before step 1:** Linux originals hash-verified (Claude, Docker), committed separately, Linux golden test made strict | Goldens |
-| 1 | Guard registration and architecture test (CI-registered runner); parts file; entry file and the facade re-export; guide models (renamed public; the State keeps using them by their new names through type renames). These are whole classes and public types that never read State members. **Full-suite gate 1** | 11, 12, Technique 9 |
+| 1 | Guard registration and architecture test (CI-registered runner); CI format/analyze inputs for the facade and support files plus the analyzer info inventory; parts file; entry file and the facade re-export; guide models (renamed public; the State keeps using them by their new names through type renames). These are whole classes and public types that never read State members. **Full-suite gate 1** | 11, 12, Technique 9 |
 | 2 | The whole State body in one step: owners, view (header addition), dependencies, sections aggregator, all seven sections (track with the geometry declarations), composition, `_holdOk` with receivers, verbatim lifecycle with receivers, `build` forwarder, controller forwarders; the palette file is created here with its readers (no unused scaffold in step 1) | 1–12 |
-| 3 | Completion: `COMPLETE = True`, facade cap and `TEMP`, `COMPOSITION_ROOTS`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
+| 3 | Completion: `COMPLETE = True`, facade cap and `TEMP`, `COMPOSITION_ROOTS`, real-checker negatives, final CI verification (format/analyze inputs and the inventory were registered at step 1), final evidence. **Full-suite gate 2** | All |
 
 The geometry declarations stay in the facade through step 1 (their only
 callers are State members) and move with the track section in step 2, so
@@ -893,6 +893,13 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
    format/analyze inputs at step 1 with the inventory; added-info negatives
    in the facade and a destination (Step 0.7).
 3. The `build` row lists `retained_forwarder` in `allowed_edits`.
+
+## Round 3 review resolution
+
+No P1 or P2. P3 (step-table wording) fixed: CI format/analyze inputs and the
+inventory are step 1; step 3 is final CI verification.
+
+Round 3 verdict: **No P1s — executable.** Execution may start.
 
 ## Progress
 
