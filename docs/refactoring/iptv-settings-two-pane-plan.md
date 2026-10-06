@@ -727,4 +727,110 @@ integrating shared files **semantically, by union**:
 
 ## Progress
 
-(Execution records here.)
+### Step 0 — original-code characterization (2026-10-07)
+
+R is `6c0a609962f673616c08aed513ccf4e5f04d59ed`. Checkpoint (b) is
+resolved by the exact subject `test(iptv-settings-two-pane): step 0
+original-code characterization checkpoint`; its hash and original application
+object equality are recorded after commit in `step0-checkpoint.json` under
+`refactor-evidence/iptv_settings_two_pane/`. All evidence below stays in that
+namespace. No application file has changed: the facade remains 2,231 lines,
+`lib` is `7d84002d0eac9b5acc023d922759dd335d321e94`, `pubspec.yaml` is
+`5f983ff8c68a01aef5c7a1ec393e677e7693591f`, and `pubspec.lock` is
+`e0ff9cca69c00ae69bb4dfe111c18a89547cec98`.
+
+- `flutter pub get` was the first command involving Flutter. Flutter 3.44.8 /
+  Dart 3.12.2 and the resolved lockfile are unchanged. `base.jsonl` is the
+  untouched R full suite: paths `[]`, flags `--no-pub --concurrency=2`, stable
+  HEAD/tree, 12,030 successful identities, 13 failures, 30 errors and 20 skips.
+  The complete failure identities are in `base-failures.json`. Two load-sensitive
+  errors are notes, not accepted regressions: Xtream 50k ingest passed with
+  unchanged assertions in isolation at 29 seconds (`--timeout=3m` after another
+  default-timeout run failed); MDBList category loading passed in isolation.
+  The WebDAV appearance assertion `imported_launch_animation_v1` still fails
+  in isolation. No failure/analyzer allowlist was changed. Step 0b's `base2`
+  must supersede this baseline for both gates; a timeout must never conceal a
+  subsequently reintroduced failure. See `baseline-notes.json` and the note logs.
+- Whole-repo analyzer baseline: 917 errors, 95 warnings, 706 infos; step-0
+  comparison: 917 errors, 91 warnings, 701 infos, **zero added diagnostic
+  identities**. Existing errors are confined to patched package tests and the
+  tvOS package library; removed diagnostics concern generated assets and
+  duplicate infos. The seven new Dart files analyze with zero issues. Strict
+  original analysis has eight Radio deprecation infos; the full-shape lint
+  probe has 19 infos and zero errors/warnings. The inventory freezes maxima
+  per rule/original symbol/message: eight existing deprecations, nine public
+  key-less widget infos, the cached-sections recursive-getter info and the
+  receiver-qualified guard's formatter-related flow-control info (tuner
+  precedent). No key, constructor, `const`, body or suppression fix was made.
+- The dependency report freezes all 73 original leaves: one whole widget,
+  eight State fields, 38 other State members and the whole dialog/destination/
+  piece declarations. Seven instance fields use the existing record binder;
+  the static stays excluded. The actual local functions are `styleIcon` and
+  `styleRow` (the plan's `option` name was stale). The exact URI scan finds six
+  direct feature importers plus the page's relative import and three tests;
+  composition is the seventh participating feature file. These consumers are
+  unchanged. Live widget/context closures, eager owners and cached sections
+  are frozen in 27 step-2 scaffolds. A strict-probe missing label import was
+  corrected, and scaffold-only section fields use `listPanes`/
+  `preferencePanes`; moved-body tokens are unchanged.
+- The callback sidecar freezes 115 full expressions, including ten assignment
+  sites and complete conditional branches. Seventy-three supported direct
+  tear-off/single-call sites use the existing identity checker. Real-config
+  schedules S = 0…3 check activation, moved-leaf uniqueness, exact exports,
+  State headers, lifecycle/timing/focus/signature/const/comment mutations,
+  callback receiver swaps/wraps/hoisting and lexical binder hazards through
+  both checker and reader. Constructor `this._deps` is a legal plain-section
+  field binding; the inherited-State token ban applies to methods/getters,
+  with a `this.widget` negative. Callback mutations copy only the affected AST
+  node; all named assertions remain intact.
+- Characterization fixes every public property and borrowed method node,
+  with bounded pumps, recorded frame/attachment timing, mouse/repeat input,
+  surplus-node identity and seeded-FFI stats caching. The new set is 70
+  behavior cases, nine strict macOS goldens and 75 source/tooling contracts.
+  Existing tests are unchanged: 15 two-pane, seven auto-refresh and seven
+  appearance tests passed in R's full suite, as did all 124 `iptv_settings`
+  feature identities, three shape guards and ten theme source guards. The
+  existing reachable `wide_two_pane` golden passed separately in a normal
+  clone. Fixture/checker development failures are discarded preliminary runs;
+  final accepted logs and detached-(b) replay are recorded before extraction.
+  The spare-node assertion also checks that the ignored request stays ignored
+  after reattachment. It passed against original code. Normal-clone source
+  contracts passed 75/75; its final manifest CLI and both analyzer-inventory
+  CLI probes passed. The deliberately broken fixture failed the named Dart
+  runner assertion (`Expected: 0 / Actual: 1`), not compilation or a timeout.
+- Nine original macOS PNGs use the named Spotlight look, `en-US`, DPR 1,
+  scale 1, pinned dimensions and real bundled Inter/Poppins/JetBrains Mono/
+  Material Icons. The bundled Roboto asset is HTML (already identified by the
+  typography tests), so the host explicitly uses Inter. Initial Ahem captures
+  were discarded; final forward/reverse captures have identical SHA-256 maps
+  and strict comparisons pass. No catalog DB is used in golden scenes.
+- CI lists all five new test files. Source-text inventory, original theme
+  regex hits (0 / 2 / 1), ink output and shape evidence are retained. The
+  original slice still has two `app.shape.` sites and seven bare radii; the
+  global 488 floor passes unchanged. Shape/theme/ink/workflow/architecture
+  registrations remain step 1 work. The executable Linux capture script
+  resolves R/(b) by exact subject, rejects application/hash/SDK/platform/lock
+  mismatches, captures nine originals twice in reverse order, verifies hashes,
+  then performs a strict comparison. `bash -n` passes; Linux capture is Claude's
+  handoff, not a macOS-generated substitute.
+- All 295 pre-existing shared tool/config files (excluding the additive CI
+  list) are byte-identical to R. No adapter, shared checker, key mechanism or
+  existing manifest changed. Each manifest invocation uses an explicit isolated
+  parser package below this worktree's `.dart_tool`; no parser package or
+  `.git` file was copied. Normal-clone checks run after `flutter pub get` with
+  `.git` a directory. Full-suite evidence runs are serialized.
+
+All 20 manifest/self-test CLI runs pass (19 pre-existing plus this one), with
+isolated parser packages; `integrated/results.json` records every command and
+exit 0. The accepted logs, formatter/diff/link checks, unchanged shared-tool
+blob audit, strict inventories and repeatable golden hashes are retained in
+the evidence namespace. The frozen detached-(b) replay and application object
+equality are recorded there after commit, before any extraction, following the
+tuner handoff procedure.
+All five found-not-fixed items and every temporary exception/exit remain as
+written above. Step 0b (independent review, ORIGINAL-only named-assertion
+mutation proofs, real-checker compiling-composition/facade measurement and
+`base2`), step L, steps 1–3 and both full-suite extraction gates have not begun.
+Device remote repeat/hold, weak-box stats performance, tvOS focus, remote CI
+and merged integration remain pending. STOP POINT 1 applies after the committed
+and verified checkpoint; resume only after Claude's review/findings.
