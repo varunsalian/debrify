@@ -1,36 +1,34 @@
 import 'dart:io';
 import 'dart:typed_data';
-
+import 'package:debrify/features/edit_profile/models/edit_profile_snapshot.dart';
+import 'package:debrify/features/edit_profile/models/edit_profile_tv_section.dart';
+import 'package:debrify/features/edit_profile/presentation/edit_profile_tv_surfaces.dart';
+import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/models/profiles/profile_avatar.dart';
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/user_profile.dart';
+import 'package:debrify/services/cache_scratch_cleanup.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/profiles/connection_resource_service.dart';
+import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
+import 'package:debrify/services/profiles/profile_avatar_mutation.dart';
+import 'package:debrify/services/profiles/profile_avatar_policy.dart';
+import 'package:debrify/services/profiles/profile_creation_service.dart';
+import 'package:debrify/services/profiles/profile_diagnostics_service.dart';
+import 'package:debrify/services/profiles/profile_engine_assignment_service.dart';
+import 'package:debrify/services/profiles/profile_pin_service.dart';
+import 'package:debrify/services/profiles/profile_registry.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/profiles/profile_art.dart';
+import 'package:debrify/widgets/profiles/profile_avatar_view.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../../services/cache_scratch_cleanup.dart';
-
-import '../../models/profiles/profile_avatar.dart';
-import '../../models/profiles/profile_policy.dart';
-import '../../models/profiles/user_profile.dart';
-import '../../models/profiles/connection_resource.dart';
-import '../../services/profiles/connection_resource_service.dart';
-import '../../services/profiles/device_key_provider.dart';
-import '../../services/profiles/profile_authorization.dart';
-import '../../services/profiles/profile_avatar_ingest.dart';
-import '../../services/profiles/profile_avatar_mutation.dart';
-import '../../services/profiles/profile_avatar_policy.dart';
-import '../../services/profiles/profile_diagnostics_service.dart';
-import '../../services/profiles/profile_engine_assignment_service.dart';
-import '../../services/profiles/profile_pin_service.dart';
-import '../../services/profiles/profile_registry.dart';
-import '../../services/profiles/profile_runtime.dart';
-import '../../services/main_page_bridge.dart';
-import '../../services/profiles/profile_creation_service.dart';
-import '../../utils/platform_util.dart';
-import '../../utils/tv_keys.dart';
-import '../../widgets/profiles/profile_art.dart';
-import '../../widgets/profiles/profile_avatar_view.dart';
-import '../../widgets/tv_text_field.dart';
-
-enum _TvProfileSection { profile, pages, access, lock, data }
 
 /// The profile create/edit form, in six labelled sections: Avatar, Identity,
 /// Role, Lock, Access, Data. The sectioning is presentation only — what a save
@@ -87,279 +85,6 @@ class EditProfileScreen extends StatefulWidget {
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
-class _EnsureVisibleOnFocus extends StatelessWidget {
-  const _EnsureVisibleOnFocus({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Focus(
-    canRequestFocus: false,
-    skipTraversal: true,
-    onFocusChange: (focused) {
-      if (!focused) return;
-      Scrollable.ensureVisible(
-        context,
-        alignment: .35,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-      );
-    },
-    child: child,
-  );
-}
-
-/// Gives a read-only TV row a real DPAD stop. Flutter removes disabled
-/// ListTiles from focus traversal, which used to leave the active Admin's
-/// Access page with no way to advance (and therefore no way to scroll).
-class _TvReadOnlyScrollAnchor extends StatefulWidget {
-  const _TvReadOnlyScrollAnchor({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<_TvReadOnlyScrollAnchor> createState() =>
-      _TvReadOnlyScrollAnchorState();
-}
-
-class _TvReadOnlyScrollAnchorState extends State<_TvReadOnlyScrollAnchor> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Focus(
-      onFocusChange: (focused) {
-        if (_focused != focused) setState(() => _focused = focused);
-        if (focused) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: .5,
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-          );
-        }
-      },
-      onKeyEvent: (_, event) {
-        if (isActivateOrSpaceKey(event.logicalKey)) {
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _focused ? colors.primary : Colors.transparent,
-            width: 3,
-          ),
-        ),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class _TvActionSurface extends StatefulWidget {
-  const _TvActionSurface({
-    super.key,
-    required this.child,
-    required this.onPressed,
-    this.selected = false,
-    this.autofocus = false,
-    this.focusNode,
-    this.onKeyEvent,
-  });
-
-  final Widget child;
-  final VoidCallback? onPressed;
-  final bool selected;
-  final bool autofocus;
-  final FocusNode? focusNode;
-  final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
-
-  @override
-  State<_TvActionSurface> createState() => _TvActionSurfaceState();
-}
-
-class _TvActionSurfaceState extends State<_TvActionSurface> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final active = _focused || widget.selected;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        final result = widget.onKeyEvent?.call(node, event);
-        if (result != null && result != KeyEventResult.ignored) return result;
-        if (isActivateOrSpaceKey(event.logicalKey)) {
-          if (event is KeyDownEvent) widget.onPressed?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedScale(
-        scale: _focused ? 1.025 : 1,
-        duration: const Duration(milliseconds: 120),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            color: active
-                ? colors.primary.withValues(alpha: widget.selected ? .15 : .1)
-                : colors.surfaceContainerHighest.withValues(alpha: .55),
-            borderRadius: const BorderRadius.all(Radius.circular(14)),
-            border: Border.all(
-              color: active ? colors.primary : Colors.transparent,
-              width: _focused ? 3 : 2,
-            ),
-            boxShadow: _focused
-                ? [
-                    BoxShadow(
-                      color: colors.primary.withValues(alpha: .28),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            autofocus: widget.autofocus,
-            focusNode: widget.focusNode,
-            onFocusChange: (focused) {
-              if (_focused != focused) setState(() => _focused = focused);
-              if (focused) {
-                Scrollable.ensureVisible(
-                  context,
-                  alignment: .35,
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                );
-              }
-            },
-            onTap: widget.onPressed,
-            borderRadius: const BorderRadius.all(Radius.circular(14)),
-            child: IconTheme.merge(
-              data: IconThemeData(color: active ? colors.primary : null),
-              child: DefaultTextStyle.merge(
-                style: TextStyle(color: active ? colors.primary : null),
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Left/right remain pane navigation; OK opens the value picker.
-class _TvAutoLockField extends StatelessWidget {
-  const _TvAutoLockField({required this.value, required this.onChanged});
-
-  final int value;
-  final ValueChanged<int> onChanged;
-  static const _labels = <int, String>{
-    0: 'Never',
-    5: 'After 5 minutes',
-    15: 'After 15 minutes',
-    30: 'After 30 minutes',
-    60: 'After 1 hour',
-  };
-
-  @override
-  Widget build(BuildContext context) => _TvActionSurface(
-    key: const ValueKey('tv-profile-auto-lock'),
-    onPressed: () async {
-      final selected = await showDialog<int>(
-        context: context,
-        builder: (context) => TvHeldKeyGuard(
-          child: SimpleDialog(
-            title: const Text('Auto-lock'),
-            children: [
-              for (final entry in _labels.entries)
-                ListTile(
-                  autofocus: entry.key == value,
-                  selected: entry.key == value,
-                  title: Text(entry.value),
-                  trailing: entry.key == value ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.pop(context, entry.key),
-                ),
-            ],
-          ),
-        ),
-      );
-      if (selected != null && context.mounted) onChanged(selected);
-    },
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Auto-lock',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _labels[value] ?? _labels[0]!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.expand_more_rounded, size: 30),
-        ],
-      ),
-    ),
-  );
-}
-
-/// Immutable save input. The form is also focus/pointer locked while saving,
-/// but the snapshot is the correctness boundary: no value is re-read after an
-/// authorization, PIN KDF, grant write, or engine copy yields to the event
-/// loop.
-class _ProfileEditSnapshot {
-  final String name;
-  final String pin;
-  final UserProfileRole role;
-  final Set<ProfileFeature> features;
-  final bool copyDefaults;
-  final bool lockOnResume;
-  final int inactivityMinutes;
-  final String avatarKey;
-  final Uint8List? pendingAvatarBytes;
-  final List<ConnectionResource> resources;
-  final Set<String> selectedResources;
-  final Map<String, Set<ResourcePermission>> resourcePermissions;
-  final Set<String> selectedEngines;
-
-  const _ProfileEditSnapshot({
-    required this.name,
-    required this.pin,
-    required this.role,
-    required this.features,
-    required this.copyDefaults,
-    required this.lockOnResume,
-    required this.inactivityMinutes,
-    required this.avatarKey,
-    required this.pendingAvatarBytes,
-    required this.resources,
-    required this.selectedResources,
-    required this.resourcePermissions,
-    required this.selectedEngines,
-  });
-}
-
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _name;
   final TextEditingController _pin = TextEditingController();
@@ -370,7 +95,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late bool _lockOnResume;
   late int _inactivityMinutes;
   late String _avatarKey;
-  _TvProfileSection _tvSection = _TvProfileSection.profile;
+  EditProfileTvSection _tvSection = EditProfileTvSection.profile;
   // One node per rail section, plus the rail's Save item at the end.
   late final List<FocusNode> _tvTabFocusNodes;
 
@@ -413,7 +138,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _tvTabFocusNodes = [
-      for (final section in _TvProfileSection.values)
+      for (final section in EditProfileTvSection.values)
         FocusNode(debugLabel: 'Edit profile ${section.name} tab'),
       FocusNode(debugLabel: 'Edit profile save'),
     ];
@@ -751,7 +476,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       for (final feature in effectiveFeatures)
         if (ceilingLens.allows(_role, feature)) feature,
     };
-    final snapshot = _ProfileEditSnapshot(
+    final snapshot = EditProfileSnapshot(
       name: _name.text,
       pin: _pin.text,
       role: _role,
@@ -994,7 +719,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<ProfileAuthorizationContext> _applyResourceGrants(
     String targetProfileId,
-    _ProfileEditSnapshot snapshot,
+    EditProfileSnapshot snapshot,
     ProfileAuthorizationContext operationActor,
   ) async {
     final resources = snapshot.resources;
@@ -1411,15 +1136,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 child: KeyedSubtree(
                                   key: ValueKey(_tvSection),
                                   child: switch (_tvSection) {
-                                    _TvProfileSection.profile =>
+                                    EditProfileTvSection.profile =>
                                       _buildTvProfileSection(),
-                                    _TvProfileSection.pages =>
+                                    EditProfileTvSection.pages =>
                                       _buildTvPagesSection(),
-                                    _TvProfileSection.lock =>
+                                    EditProfileTvSection.lock =>
                                       _buildTvLockSection(),
-                                    _TvProfileSection.access =>
+                                    EditProfileTvSection.access =>
                                       _buildTvAccessSection(),
-                                    _TvProfileSection.data =>
+                                    EditProfileTvSection.data =>
                                       _buildTvDataSection(),
                                   },
                                 ),
@@ -1440,12 +1165,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildTvSectionRail(ColorScheme colors) {
-    const tabs = <(_TvProfileSection, IconData, String)>[
-      (_TvProfileSection.profile, Icons.person_rounded, 'PROFILE'),
-      (_TvProfileSection.pages, Icons.grid_view_rounded, 'PAGES'),
-      (_TvProfileSection.access, Icons.group_rounded, 'ACCESS'),
-      (_TvProfileSection.lock, Icons.lock_rounded, 'LOCK'),
-      (_TvProfileSection.data, Icons.shield_rounded, 'DATA'),
+    const tabs = <(EditProfileTvSection, IconData, String)>[
+      (EditProfileTvSection.profile, Icons.person_rounded, 'PROFILE'),
+      (EditProfileTvSection.pages, Icons.grid_view_rounded, 'PAGES'),
+      (EditProfileTvSection.access, Icons.group_rounded, 'ACCESS'),
+      (EditProfileTvSection.lock, Icons.lock_rounded, 'LOCK'),
+      (EditProfileTvSection.data, Icons.shield_rounded, 'DATA'),
     ];
     final saveIndex = tabs.length;
     Widget railItem({
@@ -1456,7 +1181,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       bool selected = false,
     }) => SizedBox(
       height: 56,
-      child: _TvActionSurface(
+      child: editProfileTvActionSurface(
         key: key,
         selected: selected,
         autofocus: index == 0,
@@ -1550,8 +1275,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _tvFocusRequest++;
         break;
       case TraversalDirection.right:
-        if (index < _TvProfileSection.values.length) {
-          _selectTvSection(_TvProfileSection.values[index]);
+        if (index < EditProfileTvSection.values.length) {
+          _selectTvSection(EditProfileTvSection.values[index]);
         }
         _focusTvContent();
       case TraversalDirection.up:
@@ -1563,8 +1288,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _tvBackFocus.requestFocus();
         } else {
           // Select synchronously: a quick RIGHT must never enter the old pane.
-          if (target < _TvProfileSection.values.length) {
-            _selectTvSection(_TvProfileSection.values[target]);
+          if (target < EditProfileTvSection.values.length) {
+            _selectTvSection(EditProfileTvSection.values[target]);
           }
           _tvTabFocusNodes[target].requestFocus();
         }
@@ -1572,7 +1297,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return KeyEventResult.handled;
   }
 
-  void _selectTvSection(_TvProfileSection section) {
+  void _selectTvSection(EditProfileTvSection section) {
     if (_tvSection == section) return;
     _tvLastContentFocus = null;
     _tvFocusRequest++;
@@ -1694,7 +1419,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final enabled = on(feature);
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: _TvActionSurface(
+        child: editProfileTvActionSurface(
           key: ValueKey('tv-pages-${feature.name}'),
           onPressed: () => toggle(feature),
           child: Padding(
@@ -1835,7 +1560,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       if (ProfileAvatarPolicy.userImagesSupported)
-                        _EnsureVisibleOnFocus(
+                        editProfileEnsureVisibleOnFocus(
                           child: OutlinedButton.icon(
                             onPressed: _saving ? null : _pickAvatarImage,
                             icon: const Icon(Icons.image_outlined),
@@ -1895,7 +1620,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   _buildTvRoleCards(),
                   if (widget.profile == null) ...[
                     const SizedBox(height: 14),
-                    _EnsureVisibleOnFocus(
+                    editProfileEnsureVisibleOnFocus(
                       child: SwitchListTile(
                         value: _copyDefaults,
                         title: const Text(
@@ -1989,7 +1714,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       height: 78,
       child: Tooltip(
         message: label,
-        child: _TvActionSurface(
+        child: editProfileTvActionSurface(
           key: ValueKey('tv-profile-avatar-$keyName'),
           selected: selected,
           onPressed: () => setState(() {
@@ -2020,7 +1745,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       UserProfileRole.member: ('Member', 'No profile management', Icons.group),
       UserProfileRole.child: ('Kid', 'Limited content', Icons.child_care),
     };
-    Widget card(UserProfileRole role) => _TvActionSurface(
+    Widget card(UserProfileRole role) => editProfileTvActionSurface(
       key: ValueKey('tv-profile-role-${role.name}'),
       selected: _role == role,
       onPressed: () => _setRole(role),
@@ -2135,7 +1860,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
               const SizedBox(height: 16),
-              _EnsureVisibleOnFocus(
+              editProfileEnsureVisibleOnFocus(
                 child: SwitchListTile(
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -2154,7 +1879,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _TvAutoLockField(
+              EditProfileTvAutoLockField(
                 value: _inactivityMinutes,
                 onChanged: (value) =>
                     setState(() => _inactivityMinutes = value),
@@ -2188,7 +1913,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 14),
               if (_setupLoadError != null)
-                _EnsureVisibleOnFocus(
+                editProfileEnsureVisibleOnFocus(
                   child: ListTile(
                     leading: const Icon(Icons.error_outline_rounded),
                     title: Text(_setupLoadError!),
@@ -2237,7 +1962,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               if (widget.profile != null)
                 SizedBox(
                   height: 92,
-                  child: _TvActionSurface(
+                  child: editProfileTvActionSurface(
                     onPressed: _showDiagnostics,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -2592,8 +2317,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }) {
     if (!PlatformUtil.isTelevision) return child;
     return interactive
-        ? _EnsureVisibleOnFocus(key: key, child: child)
-        : _TvReadOnlyScrollAnchor(key: key, child: child);
+        ? editProfileEnsureVisibleOnFocus(key: key, child: child)
+        : editProfileTvReadOnlyScrollAnchor(key: key, child: child);
   }
 
   /// The order and membership of the Access groups. Anything a future type

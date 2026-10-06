@@ -11,7 +11,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
-FEATURES += ("debrify_tv",)
+FEATURES += ("debrify_tv", "edit_profile")
+# Completion activates only the facade checks; feature scans are unconditional.
+EDIT_PROFILE_COMPLETE = False
+EDIT_PROFILE_FACADE = "lib/screens/profiles/edit_profile_screen.dart"
+EDIT_PROFILE_BRIDGE = "lib/features/edit_profile/presentation/legacy_edit_profile/"
+EDIT_PROFILE_FACADE_CAP = 150
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
@@ -382,6 +387,7 @@ PRESENTATION_BRIDGE_IMPORTS = {
 # http, shared_preferences and sqflite stay forbidden. Exit milestone: those
 # calls move behind Sources data contracts and this folder is dissolved.
 LEGACY_PLAYBACK_BRIDGES = (
+    EDIT_PROFILE_BRIDGE,
     "lib/features/sources/presentation/legacy_playback/",
     # Move-only launcher bridge; exit: data contracts replace service calls.
     "lib/features/player_launch/presentation/legacy_launch/",
@@ -432,6 +438,19 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/edit_profile/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line edit-profile extraction limit")
+        if "TEMP(edit_profile)" in source and (EDIT_PROFILE_COMPLETE or not relative.startswith(EDIT_PROFILE_BRIDGE)):
+            problems.append("edit-profile temporary cross-call outside its exact legacy bridge")
+        if not relative.startswith(EDIT_PROFILE_BRIDGE):
+            if re.search(r"\bClipboard\s*\.", source):
+                problems.append("edit-profile Clipboard access outside its exact legacy bridge")
+    if EDIT_PROFILE_COMPLETE and relative == EDIT_PROFILE_FACADE:
+        if lines > EDIT_PROFILE_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {EDIT_PROFILE_FACADE_CAP}-line edit-profile facade limit")
+        if "TEMP(edit_profile)" in source:
+            problems.append("edit-profile temporary cross-call remains in the facade")
     if relative.startswith("lib/features/debrify_tv/"):
         limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -677,6 +696,17 @@ def violations(path: Path) -> list[str]:
                     problems.append("spotlight board feature imports its facade")
                 if not relative.startswith(SPOTLIGHT_BOARD_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("spotlight board service import outside the exact legacy bridge")
+            if relative.startswith("lib/features/edit_profile/"):
+                if target == EDIT_PROFILE_FACADE:
+                    problems.append("edit-profile feature imports its facade")
+                if (not relative.startswith(EDIT_PROFILE_BRIDGE)
+                        and target.startswith(("lib/services/", "dart:io", "package:file_picker/"))):
+                    problems.append("edit-profile service/platform import outside its exact legacy bridge")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_edit_feature = relative.split("/")[2]
+                other_edit_feature = target.split("/")[2]
+                if own_edit_feature != other_edit_feature and "edit_profile" in (own_edit_feature, other_edit_feature):
+                    problems.append("edit-profile cross-feature import")
             if relative.startswith("lib/features/debrify_tv/"):
                 if target == DEBRIFY_TV_FACADE:
                     problems.append("Debrify TV feature imports its facade")
@@ -840,6 +870,8 @@ def main() -> int:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if ADDON_HUB_COMPLETE:
         paths.add(ROOT / ADDON_HUB_FACADE)
+    if EDIT_PROFILE_COMPLETE:
+        paths.add(ROOT / EDIT_PROFILE_FACADE)
     if DEBRIFY_TV_COMPLETE:
         paths.add(ROOT / DEBRIFY_TV_FACADE)
     if PIKPAK_COMPLETE:

@@ -863,3 +863,36 @@ avatar finalization as distinct cases). P2: `tvProfile → tvPanes` edge
   600×1000, with real phone role/art/checkbox actions and no preseeded grant.
   No regression acceptance, device/emulator run, push or merge. **L and
   step 1 remain unstarted.**
+
+### Step L — strict Linux originals, 2026-10-06
+
+Claude committed `791aa4e87`: four ORIGINAL Linux PNGs captured from
+`36b6288d` in `debrify-flutter:3.44.8` linux/amd64. First/reversed captures
+are byte-identical; strict replay passed at the capture checkpoint and at
+`791aa4e8`. Local SHA-256 verification matches all four entries in
+`refactor-evidence/edit_profile/linux-original-verification.json`; the
+pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
+
+### Step 1 — extract models and TV surfaces, 2026-10-06
+
+- **Commit:** `refactor(edit-profile): step 1 extract models and TV surfaces`. Previous checkpoint
+  `791aa4e87`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
+- **Files (formatted physical lines):** facade **2489**; edit_profile_snapshot.dart 41; edit_profile_tv_section.dart 3; edit_profile_tv_surfaces.dart 269.
+- **Verification:** wiring reviewed before pinning; compiling checkpoint,
+  real 90-leaf checker/reader, occurrence bindings/substitutions and callback
+  identities pass. All **17** manifests/self-tests pass with isolated parsers
+  (Debrify TV: 265 leaves / 236 callback negatives). Architecture, sizes,
+  storage, shape (**13**, global floor unchanged), theme exclusion, CI format
+  and scoped analyzer/allowlist pass. Strict comparison: **6** diagnostics,
+  **zero additions**. Focused/characterization identities match base2:
+  **177 success / 1 unchanged known source-guard failure**, zero missing or
+  newly skipped; all **4 macOS** originals pass strictly. All **103** original
+  comments, core services and dependency files stay byte-identical.
+- **Evidence:** `step1-*` under `refactor-evidence/edit_profile/`; commands,
+  wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
+  comparisons included. No behavior fix, seam, borrowed State action or
+  size exception; Found-not-fixed items remain.
+- Five enum `unused_field` warnings are recorded at the new model path with
+  a dated R comment. Unfinished fixtures were rerun using the existing exact
+  syntax-unit cache (batch/per-unit equality in both modes, defensive copies);
+  all assertions run and the production CLI comparison stays uncached.

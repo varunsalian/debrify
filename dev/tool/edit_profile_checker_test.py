@@ -6,6 +6,7 @@ def self_test(package):
     from debrify_tv_fixture_parse_cache import exact_parse_cache
     with exact_parse_cache(package):
         _self_test(package)
+        _checkpoint_self_test(package)
 
 
 def _self_test(package):
@@ -15,6 +16,10 @@ def _self_test(package):
     from check_verbatim_moves import parse,ROOT
     from occurrence_field_bindings import failures
     original,rows,config,leaves=inputs(package)
+    # Raw ORIGINAL/partial/complete syntax fixtures stay at the accepted 0b map;
+    # the CLI separately checks live checkpoint wiring and exact scaffolds.
+    import subprocess
+    config=json.loads(subprocess.check_output(['git','show','2e46ad4216c496f7150e6c292c6e280e8efa8f87:dev/tool/edit_profile_checker_config.json'],cwd=ROOT,text=True))
     source=config['source']
     def verify(sources):
         try:return check(original,sources,rows,source,package,context_guard=True,config=config)
@@ -180,3 +185,45 @@ def _self_test(package):
                     reject(r['original_name'],r['original_name']+' '+call+' callback #'+str(ordinal),lambda s,a=start,b=end:s[:a]+'cachedTearOff'+s[b:])
     print('Edit profile same-class callback identity negatives: '+str(callback_count))
     print('Edit profile checker + reader negatives proved: '+str(count+callback_count))
+
+
+def _checkpoint_self_test(package):
+    """Check the live checkpoint and reject changes to its exact new wiring."""
+    from edit_profile_checker_fixtures import inputs
+    from edit_profile_source_reader import validate
+    from check_settings_moves import check
+    from check_verbatim_moves import ROOT
+    original,rows,config,_=inputs(package)
+    if config.get('completed_step',0)<1:return
+    sources={config['source']:(ROOT/config['source']).read_text()}
+    sources.update({p.relative_to(ROOT).as_posix():p.read_text()
+                    for p in (ROOT/config['feature']).rglob('*.dart')})
+    assert not check(original,sources,rows,config['source'],package,
+                     context_guard=True,config=config)
+    assert validate(original,sources,rows,config,package)==original
+    base='lib/features/edit_profile/presentation/legacy_edit_profile/'
+    cases=[('typedef enum','lib/features/edit_profile/models/edit_profile_tv_section.dart',
+            'typedef EditProfileTvSection = _TvProfileSection;',
+            'typedef EditProfileTvSection = bool;'),
+           ('surface default','lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart',
+            'bool selected = false,','bool selected = true,')]
+    if config['completed_step']>=2:
+        cases += [
+            ('cached State context',config['source'],'context: () => context,','context: () => cachedContext,'),
+            ('composition reconstructed',config['source'],'_composition ??= EditProfileSections(',
+             '_composition = EditProfileSections('),
+            ('authorization write cached',config['source'],'writeAuthorization: (value) => _authorization = value,',
+             'writeAuthorization: (value) => cachedAuthorization = value,'),
+            ('eager owner order',base+'edit_profile_owners.dart',
+             'final EditProfileFormState form = EditProfileFormState();\n  final EditProfileTvFocusState tv = EditProfileTvFocusState();',
+             'final EditProfileTvFocusState tv = EditProfileTvFocusState();\n  final EditProfileFormState form = EditProfileFormState();')]
+    for label,file,before,after in cases:
+        assert before in sources[file],label
+        changed=dict(sources);changed[file]=changed[file].replace(before,after,1)
+        assert check(original,changed,rows,config['source'],package,
+                     context_guard=True,config=config),'Checkpoint accepted '+label
+        try:validate(original,changed,rows,config,package)
+        except ValueError:pass
+        else:raise AssertionError('Checkpoint reader accepted '+label)
+        print('Edit profile live checkpoint '+label+': checker + reader rejected')
+    print('Edit profile live checkpoint wiring: PASS; '+str(len(cases))+' negatives')
