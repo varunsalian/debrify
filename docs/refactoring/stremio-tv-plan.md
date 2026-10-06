@@ -1367,11 +1367,11 @@ The Linux ORIGINAL capture script now selects this Step 0b checkpoint by its
 exact subject, verifies application objects against R and retains the same
 six original-only scenes. Two new characterization files are added to CI's
 behavior list; no golden, allowlist or shared checker implementation changes.
-The checkpoint records this completed test/probe work. The post-commit replay
-of Claude's unchanged 29 line mutations, whole-file replay of the original
-43 proxies plus the new RD cache control, real CLI/self-tests and all-manifest
-compatibility runs, and serialized full-suite `base2` are in progress; their
-accepted outcomes will be appended below after completion. **Stop before
+The checkpoint records the completed test/probe work. Post-commit acceptance
+covers Claude's unchanged 29 line mutations, whole-file replay of the original
+43 proxies plus the RD cache control, real CLI/self-tests, all-manifest
+compatibility and serialized full-suite `base2`; the accepted outcomes follow
+below. **Stop before
 Step 1** for Claude's probe review, S agreement and Linux-original handoff.
 
 
@@ -1381,6 +1381,82 @@ That run is preserved under `step0b-initial-checkpoint-*` and
 `step0b-initial-claude-*`. The added fifteenth case prepares a mismatched
 PikPak episode and observes the exact root `files:batchTrash` payload and its
 ordering before retry. It passes on ORIGINAL. The unpublished checkpoint is
-amended to include it; all 29 line mutations will be replayed again at the
+amended to include it; all 29 line mutations are replayed again at the
 resolved final checkpoint before accepting the result. The Linux script's
 exact subject still resolves one checkpoint in the final branch history.
+
+
+**Final post-commit acceptance (2026-10-06).** Review checkpoint **
+`e1d4fe1f2b0462826de0a591ef7371a84200d85d`** supersedes the unpublished
+`b3b7cd357` checkpoint. Both application and dependency objects still equal R;
+`step0b-checkpoint-provenance.json` records the final tree and all test hashes.
+The Progress completion is a separate documentation commit so the recorded
+checkpoint and full-suite tree remain unchanged.
+
+- **ORIGINAL characterization:** all **63/63** pass at the committed final
+  checkpoint, including six strict unchanged macOS goldens. The two new files
+  contain **15** cases and analyze with zero diagnostics. Evidence:
+  `step0b-characterization.jsonl`, its stable-tree/SDK `.env.json`,
+  `step0b-characterization-run.txt`, `step0b-new-cases-analyze-final.txt`.
+- **Behavioral proxies:** Claude's exact script is copied and hash-pinned;
+  only runner options change to explicit concurrency 4 and JSON reporting,
+  with an outer `finally` restoration. Its dictionary, line edits and whole
+  behavioral-file glob (goldens included, source guards/crop excluded) are
+  unchanged. All **28 observable review mutations** fail their named
+  behavioral assertions; `autoLabel` completes successfully and remains the
+  **one S proposal pending Claude's required agreement**, with checker and
+  reader rejection. The original **43** frozen mutations retain their exact
+  mutation hashes, now run whole files with concurrency 1 and no name filter;
+  all reject on their named assertions. The additional RD cache control also
+  rejects. **73 merged definitions = 72 behavioral rejections + one guarded
+  S proposal** in `original-mutations.json` and
+  `step0b-behavioural-proxies.json`; `original-mutations-coverage.json` proves
+  named assertion-failing coverage for all **52** behavioral cases. Compile
+  errors, fixture failures and unrelated assertion failures never count.
+  All mutators restore R, and the full replay follows the final commit.
+  Original review inputs/raw logs, rejected initial replay, exact commands,
+  test names, expectations, failure messages and raw runs are preserved.
+- **Guards and probe:** all **19** simulated mutations reject through both
+  checker and reader; their unmutated full layout passes. They cover all seven
+  section kinds, the S proposal, three composition mutations, two D4 typed
+  forwarders and both launch sites for the three native-only arguments.
+  The real compiling-probe CLI at R with an isolated parser package and
+  `--self-test` passes **8 positives, 185 checker negatives and 185 reader
+  negatives**. Unchanged `main.dart` plus the full composition compiles.
+  Facade **119**, play **495**, layout **713**; no other destination exceeds
+  500. Strict warnings/errors remain zero, with seven inventoried infos.
+  `step0b-guard-mutants.json`, `step0b-composition-proof.json`,
+  `step0b-compiling-sources/` and `step0b-analyzer-inventory.json` contain the
+  exact evidence. No production Dart file or dependency changes.
+- **Compatibility and CI:** all **16 existing manifests plus Stremio TV**
+  pass real CLI/self-tests with isolated parser packages and copied `*.dill`
+  files deleted. All 16 existing stdout files are byte-identical to Step 0
+  (`step0b-manifests.json`, `step0b-manifest-compatibility.json`). Shared
+  checker/adapter and CI configuration inputs equal (b) byte-for-byte;
+  `step0b-unchanged-inputs.json` validates reuse of the Step 0 raw adapter and
+  unchanged CI analyzer/allowlist evidence. The exact expanded CI format
+  command passes **1,966 files, zero changes**. Architecture, file sizes,
+  storage keys/references, Stremio TV manifest/changed-file LF and diff checks,
+  and Linux script syntax pass;
+  `step0b-ci-paths.json` verifies the Stremio TV analyze path before `| tee`.
+  No allowlist changes. Linux goldens remain with Claude, as planned.
+- **Full-suite `base2`:** serialized after all owned AST jobs and mutation
+  runs finish, at the final committed checkpoint, with `--no-pub
+  --concurrency=4`, matching the observed base SDK/configuration. **11,717
+  success, 13 failure, 28 error, 20 skipped, 1,150 suites**. Identity comparison
+  against `base.jsonl` is **PASS: zero new failures, zero missing tests, zero
+  newly skipped tests and exactly 63 passing additions**. Existing failing
+  identities remain unchanged. Raw runner exit 1 reflects those observed
+  baseline failures; the comparison is the acceptance verdict. No
+  load-sensitive flake occurs and no isolated rerun/allowlisting is needed.
+  Evidence: `base2.jsonl`, `base2.env.json`, `base2-run.txt`,
+  `base2-compare.txt`, `step0b-base2-proof.json`.
+
+**Stop at Step 0b.** Step 1 and production extraction remain unstarted.
+Claude reviews the probe and the `autoLabel` S proposal, agrees the latter
+before treating that classification as final, and hands over Linux originals
+before extraction. Remote CI and device-only/native playback checks remain
+pending. Material adjustments are the additional PikPak cleanup coverage,
+D4's authorized constructor forwarders, omission of two unused scaffold
+getters, and the documented public-model genre input; none changes production
+behavior or introduces a production seam.
