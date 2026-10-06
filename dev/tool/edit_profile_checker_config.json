@@ -499,7 +499,7 @@
   "test_accessors": [],
   "required_nodes": [],
   "scaffolds": [],
-  "completed_step": 5,
+  "completed_step": 6,
   "original_static_receivers": {},
   "additional_owners": [],
   "occurrence_layout_bodies": [
@@ -857,5 +857,7 @@
       "call": "editProfileTvActionSurface",
       "file": "lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart"
     }
-  ]
+  ],
+  "required_scaffolds_step": 6,
+  "required_facade_source_step": 6
 }

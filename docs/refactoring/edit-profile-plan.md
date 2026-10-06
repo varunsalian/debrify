@@ -985,7 +985,7 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
 
 ### Step 5 — extract phone form and parts, 2026-10-06
 
-- **Commit:** `refactor(edit-profile): step 5 extract phone form and parts`. Previous checkpoint
+- **Commit:** `61b6b8d7e` (`refactor(edit-profile): step 5 extract phone form and parts`). Previous checkpoint
   `aadc0d697`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
 - **Files (formatted physical lines):** facade **150**; edit_profile_phone_form.dart 197; edit_profile_phone_parts.dart 235.
 - **Verification:** wiring reviewed before pinning; compiling checkpoint,
@@ -1002,3 +1002,36 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
   comparisons included. No behavior fix, seam, borrowed State action or
   size exception; Found-not-fixed items remain.
+
+### Step 6 — enforce completed facade, 2026-10-06
+
+- **Commit:** `refactor(edit-profile): step 6 enforce completed facade`. Previous checkpoint
+  `61b6b8d7e`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
+- **Files (formatted physical lines):** facade **150**; No application move; source hashes unchanged from step 5..
+- **Verification:** wiring reviewed before pinning; compiling checkpoint,
+  real 90-leaf checker/reader, occurrence bindings/substitutions and callback
+  identities pass. All **17** manifests/self-tests pass with isolated parsers
+  (Debrify TV: 265 leaves / 236 callback negatives). Architecture, sizes,
+  storage, shape (**13**, global floor unchanged), theme exclusion, CI format
+  and scoped analyzer/allowlist pass. Strict comparison: **10** diagnostics,
+  **zero additions**. Focused/characterization identities match base2:
+  **177 success / 1 unchanged known source-guard failure**, zero missing or
+  newly skipped; all **4 macOS** originals pass strictly. All **103** original
+  comments, core services and dependency files stay byte-identical.
+- **Evidence:** `step6-*` under `refactor-evidence/edit_profile/`; commands,
+  wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
+  comparisons included. No behavior fix, seam, borrowed State action or
+  size exception; Found-not-fixed items remain.
+- Completion enables the **150-line** facade cap, facade composition scan,
+  `TEMP` rejection and mandatory **103** scaffolds, and adds the facade to
+  the actual CI format/analyze commands. The actual guard passes its tree
+  positive and **13** negatives; checker/reader reject missing facade, missing
+  scaffold-only file and retained completed leaf (**9** live negatives total).
+  Other completion flags/configs, original assertions and CI test lists
+  unchanged. All **24** application files match committed step 5; maximum
+  destination **362** lines. Linux gate replay remains Claude-owned.
+- The new missing-facade case exposed an unchecked source lookup. A
+  **five-line additive guard** in `check_settings_moves.py` is enabled only by
+  edit-profile’s `required_facade_source_step: 6`; other configs retain the
+  existing path. All **17** self-tests rerun fresh after the change; original
+  assertions preserved (`step6-source-presence-gap.json`, completion probe).

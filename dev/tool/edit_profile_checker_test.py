@@ -193,7 +193,7 @@ def _checkpoint_self_test(package):
     from edit_profile_source_reader import validate
     from check_settings_moves import check
     from check_verbatim_moves import ROOT
-    original,rows,config,_=inputs(package)
+    original,rows,config,leaves=inputs(package)
     if config.get('completed_step',0)<1:return
     sources={config['source']:(ROOT/config['source']).read_text()}
     sources.update({p.relative_to(ROOT).as_posix():p.read_text()
@@ -226,4 +226,32 @@ def _checkpoint_self_test(package):
         except ValueError:pass
         else:raise AssertionError('Checkpoint reader accepted '+label)
         print('Edit profile live checkpoint '+label+': checker + reader rejected')
-    print('Edit profile live checkpoint wiring: PASS; '+str(len(cases))+' negatives')
+    extra=0
+    if config['completed_step']>=6:
+        completion=[]
+        for label,file in [('facade missing',config['source']),
+                           ('scaffold-only file missing',base+'edit_profile_owners.dart')]:
+            changed=dict(sources);del changed[file]
+            completion.append((label,changed))
+        changed=dict(sources)
+        at=changed[config['source']].rfind('\n}')
+        assert at>=0
+        changed[config['source']]=(changed[config['source']][:at]+'\n'+
+            leaves['_EditProfileScreenState._save']['text']+'\n'+
+            changed[config['source']][at:])
+        completion.append(('completed original leaf retained',changed))
+        for label,changed in completion:
+            try:
+                errors=check(original,changed,rows,config['source'],package,
+                             context_guard=True,config=config)
+            except ValueError as error:
+                errors=[str(error)]
+            assert errors,'Completion accepted '+label
+            try:validate(original,changed,rows,config,package)
+            except ValueError:pass
+            else:raise AssertionError('Completion reader accepted '+label)
+            extra+=1
+            print('Edit profile completion '+label+': checker + reader rejected')
+        from edit_profile_architecture_test import self_test as architecture_self_test
+        architecture_self_test()
+    print('Edit profile live checkpoint wiring: PASS; '+str(len(cases)+extra)+' negatives')

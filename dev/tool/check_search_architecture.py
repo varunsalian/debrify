@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv", "edit_profile")
 # Completion activates only the facade checks; feature scans are unconditional.
-EDIT_PROFILE_COMPLETE = False
+EDIT_PROFILE_COMPLETE = True
 EDIT_PROFILE_FACADE = "lib/screens/profiles/edit_profile_screen.dart"
 EDIT_PROFILE_BRIDGE = "lib/features/edit_profile/presentation/legacy_edit_profile/"
 EDIT_PROFILE_FACADE_CAP = 150
@@ -158,6 +158,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Edit-profile facade owns live State wiring and lifecycle.
+    EDIT_PROFILE_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,

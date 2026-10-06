@@ -1049,6 +1049,11 @@ def lifecycle_tokens(node, rows):
 
 def _check(original_source, sources, rows, source_path, package=None,
            partition=False, context_guard=False):
+    required_source_step = CONFIG.get('required_facade_source_step')
+    if (required_source_step is not None
+            and CONFIG.get('completed_step', 0) >= required_source_step
+            and source_path not in sources):
+        return ['Missing required facade source: ' + source_path]
     from check_verbatim_moves import parse, original_leaves, split_names, missing_line_comments, ROOT
     parsed = parse({'<original>': original_source, **sources}, package,
                    occurrence_bindings=bool(CONFIG.get('occurrence_field_bindings')
