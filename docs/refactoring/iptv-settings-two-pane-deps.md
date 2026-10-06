@@ -10,13 +10,13 @@ it is then frozen.
 
 | Original (lines) | Destination file | New name |
 | --- | --- | --- |
-| `iptvAutoRefreshLabel`, `iptvAutoRefreshExplanation`, `IptvAutoRefreshDialog` (13–79) | `presentation/iptv_auto_refresh_dialog.dart` | unchanged |
+| `iptvAutoRefreshLabel`, `iptvAutoRefreshExplanation`, `IptvAutoRefreshDialog` (13–58) | `presentation/iptv_auto_refresh_dialog.dart` | unchanged |
 | `_Dest` family (256–301) | `presentation/iptv_two_pane_destination.dart` | `IptvTwoPaneDest`, `IptvTwoPaneSourceDest`, `IptvTwoPaneAddDest`, `IptvTwoPaneListsDest`, `IptvTwoPaneStartupDest`, `IptvTwoPaneAutoRefreshDest`, `IptvTwoPaneContinueWatchingDest`, `IptvTwoPaneChannelPreviewDest`, `IptvTwoPaneAppearanceDest`, `IptvTwoPanePlayerGuideDest`, `IptvTwoPaneRecordingDest` |
 | `_RailHeading`, `_RailEntry`, `_RailEntryState` (1583–1784) | `presentation/iptv_two_pane_rail_entry.dart` | `IptvTwoPaneRailHeading`, `IptvTwoPaneRailEntry`, `IptvTwoPaneRailEntryState` |
 | `_PaneHeader`, `_Badge`, `_StatStrip`, `_QuietBanner`, `_RowGroup` (1786–1977) | `presentation/iptv_two_pane_pane_parts.dart` | `IptvTwoPanePaneHeader`, `IptvTwoPaneBadge`, `IptvTwoPaneStatStrip`, `IptvTwoPaneQuietBanner`, `IptvTwoPaneRowGroup` |
 | `_PaneRow`, `_PaneRowState` (1979–2119) | `presentation/iptv_two_pane_row.dart` | `IptvTwoPaneRow`, `IptvTwoPaneRowState` |
 | `_MethodCard`, `_MethodCardState` (2121–2231) | `presentation/iptv_two_pane_method_card.dart` | `IptvTwoPaneMethodCard`, `IptvTwoPaneMethodCardState` |
-| `IptvSettingsTwoPane` (81–254) | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` | unchanged |
+| `IptvSettingsTwoPane` (60–254, doc from 60) | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` | unchanged |
 | State lifecycle, `focusRail`, `focusAddPane`, `build` | same file, `IptvSettingsTwoPaneState` | unchanged |
 | `_panePoolSize`, `_app`, `_dest`, `_railNodes`, `_paneNodes`, `_railScroll`, `_stats`, `_statsSignature` | `legacy_…/iptv_settings_two_pane_owners.dart` | `_panePoolSize` (static, private), `app`, `dest`, `railNodes`, `paneNodes`, `railScroll`, `stats`, `statsSignature` |
 | `_initialDest`, `_railCount`, index getters, `_syncRailNodes`, `_syncStats`, `_paneNode`, `_focusRail`, `_selectedRailIndex`, `_destForRail`, `_enterPane`, `_returnToRail` | `legacy_…/iptv_settings_two_pane_navigation.dart` | `initialDest`, `_railCount`, `channelPreviewIndex`…`autoRefreshIndex`, `syncRailNodes`, `syncStats`, `paneNode`, `focusRailAt`, `selectedRailIndex`, `destForRail`, `enterPane`, `returnToRail` |
