@@ -1162,7 +1162,9 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _allDebridFocusNode;
   late final FocusNode _pikpakFocusNode;
   late final FocusNode _webDavFocusNode;
-  final FocusNode _mediaServersFocusNode = FocusNode(debugLabel: 'settings-media-servers');
+  final FocusNode _mediaServersFocusNode = FocusNode(
+    debugLabel: 'settings-media-servers',
+  );
   late final FocusNode _indexerManagersFocusNode;
   late final FocusNode _iptvFocusNode;
   late final FocusNode _trackingFocusNode;
@@ -1335,7 +1337,9 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         rightNeighbor: wide ? _iptvFocusNode : null,
                         upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
                         downNeighbor: wide
-                            ? (widget.mediaServers != null ? _mediaServersFocusNode : _trackingFocusNode)
+                            ? (widget.mediaServers != null
+                                  ? _mediaServersFocusNode
+                                  : _trackingFocusNode)
                             : _iptvFocusNode,
                       ),
                     ),
@@ -1349,16 +1353,22 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         upNeighbor: wide
                             ? _webDavFocusNode
                             : _indexerManagersFocusNode,
-                        downNeighbor: widget.mediaServers != null ? _mediaServersFocusNode : _trackingFocusNode,
+                        downNeighbor: widget.mediaServers != null
+                            ? _mediaServersFocusNode
+                            : _trackingFocusNode,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 22),
                 if (widget.mediaServers != null) ...[
-                  ConnectionCard(info: widget.mediaServers!,
-                    focusNode: _mediaServersFocusNode, isLeftColumn: true,
-                    upNeighbor: _iptvFocusNode, downNeighbor: _trackingFocusNode),
+                  ConnectionCard(
+                    info: widget.mediaServers!,
+                    focusNode: _mediaServersFocusNode,
+                    isLeftColumn: true,
+                    upNeighbor: _iptvFocusNode,
+                    downNeighbor: _trackingFocusNode,
+                  ),
                   const SizedBox(height: 22),
                 ],
                 const SettingsSectionLabel('Tracking'),
@@ -1368,7 +1378,9 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                     info: widget.tracking,
                     focusNode: _trackingFocusNode,
                     isLeftColumn: true,
-                    upNeighbor: widget.mediaServers != null ? _mediaServersFocusNode : wide
+                    upNeighbor: widget.mediaServers != null
+                        ? _mediaServersFocusNode
+                        : wide
                         ? _indexerManagersFocusNode
                         : _iptvFocusNode,
                     downNeighbor: _traktFocusNode,
