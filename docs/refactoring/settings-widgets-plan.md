@@ -698,6 +698,15 @@ below.
 
 7. Eight importing files reference no facade name (listed in the deps report);
    their original imports remain unchanged.
+8. Flutter 3.44.8's ordinary unspecified `IconTheme` color resolves to black
+   before `WebDavSyncPendingBadge` reads it. The widget's explicit nullable
+   `settings.dim2` fallback is retained and characterized with a public
+   resolved `IconThemeData` palette double, alongside explicit-color and
+   ordinary-unspecified-color cases. No production behavior is changed.
+9. The named legacy and Spotlight looks have identical selected/unselected
+   switch thumb ink; Broadsheet's light palette distinguishes them. Named
+   Broadsheet's motion scale is 1; the reveal test uses the public
+   `AppTheme.fromDetail` motion override and `AppThemeScope` at scale 1.15.
 
 ## Round 1 review resolution (Codex design review at `8ccf2d8a`)
 
@@ -973,3 +982,56 @@ notes (post-frame phase assertion, 300 ms sample, `final` styles) applied.
 Step 0 is complete. Linux originals remain the next separately authorized
 step L; no extraction begins here. Device/build/remote CI checks were not
 requested for this original-code checkpoint.
+
+### Step 0b — close Claude's original-only review gaps
+
+- Scope: ORIGINAL application only, before L/1. `flutter pub get` ran here
+  first (`step0b-pub-get.txt`); dependencies/lockfile unchanged. Root `lib`,
+  `pubspec.yaml` and `pubspec.lock` remain byte-equal to R and (b).
+- All 26 reviewer mutation anchors are incorporated verbatim in
+  `settings_widgets_original_mutations.py`, including the 12 already killed.
+  The combined table contains 64 cases (56 B, 8 S); all reviewer cases are B.
+  Its reviewer-script SHA-256 and unique-original-anchor assertions identify
+  the exact recipes. Proofs will run one at a time on a clean, detached copy
+  of this committed checkpoint; compile errors cannot qualify.
+- Characterization preparation on ORIGINAL: all **82 tests pass** (76 B,
+  6 S), 28 added identities, with all earlier names/assertions retained.
+  New coverage: non-unit reveal tempo (230 ms versus 200 ms); full platform
+  launch options; widths 520/521 for all optional-card combinations; every
+  spec factory parameter; both header variants' text/styles/structure;
+  badge size and explicit/default/nullable colors; hero/tile awaited taps;
+  hover versus focus border/shadow/inverse across four rows and two looks;
+  empty section title; handled arrows to an unattached neighbor with no
+  post-frame exception.
+  The reviewer borrowed-first-node mutation's duplicate host disposal masked
+  the existing public `addListener` expectation. Its real borrowed FocusNode
+  now tracks disposal solely for host cleanup, so a broken widget cannot
+  replace that assertion failure with a second disposal error; post-unmount
+  `requestFocus` also has an explicit `returnsNormally` expectation. The
+  preliminary mutation run and incomplete `base3b` are retained as superseded
+  evidence, not accepted assertion/baseline proof; every case will rerun.
+- The frozen public resolved-theme fixture covers every field set by the
+  builder, including all ButtonStyle properties and all 32 combinations of
+  selected/disabled/focused/hovered/pressed states. Looks: legacy, Spotlight,
+  light Broadsheet. It was created once from hash-equal ORIGINAL R through
+  `settingsPageTheme`; the committed test has no capture/update mode.
+  `step0b-original-theme-capture-inputs.json` pins R equality;
+  `step0b-theme-capture.txt` records capture. Broadsheet kills the unselected
+  thumb mutation; legacy kills the focused input border-width mutation.
+- All five macOS scenes/PNG hashes are unchanged; no scene was added or
+  recaptured. `step0b-frozen-input-sha256.json` freezes 20 inputs (11 test
+  files, three helpers, JSON theme fixture, five original PNGs).
+- CI list: two additive `settings_widgets step 0b` paths. Linux capture now
+  resolves the exact subject `test(settings-widgets): step 0b close review
+  gaps on original` while preserving all R lib/pubspec equality checks and
+  independent reproduction checks; `bash -n` passes. No Linux capture.
+- Changed Dart format passes. Whole-repo analyzer: the same 1689 diagnostics,
+  zero added/removed occurrences versus the accepted original checkpoint
+  (`step0b-analyzer-comparison.txt`). Architecture/size checks pass. No shared
+  checker, workflow, shape/theme/light-ink/allowlist or other feature proof
+  script was edited. Found 8/9 record the SDK fallback and fixture decisions.
+- Pending at checkpoint creation: detached 76 B and 6 S original proofs,
+  the complete 64-case assertion mutation run, and full-suite `base3b` with
+  tree/SDK provenance and identity comparison against accepted `base3`.
+
+STOP after Step 0b review evidence. Step L and Step 1 are not started.

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/theme/app_motion.dart';
+import 'package:debrify/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -15,18 +16,37 @@ const arrows = [
   LogicalKeyboardKey.arrowDown,
 ];
 
+// Keep real FocusNode behavior. Track disposal only so a broken widget cannot
+// mask the public usability expectation with a second disposal in host cleanup.
+class _BorrowedFirstNode extends FocusNode {
+  _BorrowedFirstNode() : super(debugLabel: 'first');
+  bool wasDisposed = false;
+  @override
+  void dispose() {
+    wasDisposed = true;
+    super.dispose();
+  }
+}
+
 void main() {
-  for (final wide in [false, true]) {
+  for (final width in [390.0, 520.0, 521.0, 900.0]) {
+    final wide = width > 520;
+    final suffix = width == 520 || width == 521 ? ' width=$width' : '';
     for (final media in [false, true]) {
       for (final mdblist in [false, true]) {
         testWidgets(
-          'Connections every edge wide=$wide media=$media mdblist=$mdblist',
+          'Connections every edge wide=$wide media=$media mdblist=$mdblist$suffix',
           (tester) async {
             await settingsWidgetsCase(tester, (f) async {
               f.blockIgnoredArrows = true;
-              f.width = wide ? 900 : 390;
+              f.width = width;
               f.scrollable = true;
-              final first = f.node('first');
+              final first = _BorrowedFirstNode();
+              addTearDown(() {
+                if (!first.wasDisposed) {
+                  first.dispose();
+                }
+              });
               await tester.pumpWidget(
                 f.host(f.summary(media: media, mdblist: mdblist, first: first)),
               );
@@ -115,6 +135,24 @@ void main() {
               };
               for (final entry in cards.entries) {
                 final card = entry.value;
+                final expectedWidth =
+                    ['Policy', 'Media servers'].contains(entry.key)
+                    ? width
+                    : wide
+                    ? (width - 10) / 2
+                    : width;
+                expect(
+                  tester
+                      .getSize(
+                        find.byWidgetPredicate(
+                          (w) =>
+                              w is ConnectionCard && w.info.title == entry.key,
+                        ),
+                      )
+                      .width,
+                  closeTo(expectedWidth, 0.001),
+                  reason: entry.key,
+                );
                 expect(
                   card.isLeftColumn,
                   !wide ||
@@ -164,7 +202,7 @@ void main() {
                 }
               }
               await tester.pumpWidget(f.host(const SizedBox.shrink()));
-              first.requestFocus();
+              expect(first.requestFocus, returnsNormally);
               expect(() => first.addListener(() {}), returnsNormally);
             });
           },
@@ -277,6 +315,12 @@ void main() {
     (tester) async {
       await settingsWidgetsCase(tester, (f) async {
         f.scrollable = true;
+        // The public scope carries a supported non-unit tempo into AppMotion.
+        final look = AppThemes.byId('broadsheet');
+        f.app = AppTheme.fromDetail(
+          look.core,
+          motion: look.motion.copyWith(scale: 1.15),
+        );
         final a = f.node('top');
         final b = f.node('below');
         await tester.pumpWidget(
@@ -313,9 +357,14 @@ void main() {
               0.0,
               f.scroll.position.maxScrollExtent,
             );
-        final expectedDuration = AppMotion.of(
-          tester.element(find.text('Top')),
-        ).scaled(const Duration(milliseconds: 200));
+        final motion = AppMotion.of(tester.element(find.text('Top')));
+        expect(motion.tokens.scale, isNot(1));
+        expect(motion.reduced, isFalse);
+        final expectedDuration = motion.scaled(
+          const Duration(milliseconds: 200),
+        );
+        expect(expectedDuration, const Duration(milliseconds: 230));
+        expect(expectedDuration, isNot(const Duration(milliseconds: 200)));
         await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
         expect(f.scroll.calls, isEmpty);
         await tester.pump();
@@ -327,6 +376,36 @@ void main() {
         expect(call.target, closeTo(expectedTarget, 0.01));
         await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump(const Duration(milliseconds: 300));
+      });
+    },
+  );
+  testWidgets(
+    'unattached neighbour remains handled and reveal does not throw',
+    (tester) async {
+      await settingsWidgetsCase(tester, (f) async {
+        f.blockIgnoredArrows = true;
+        final attached = f.node('attached');
+        final detached = f.node('detached');
+        await tester.pumpWidget(
+          f.host(
+            ConnectionCard(
+              info: f.info('Attached'),
+              focusNode: attached,
+              downNeighbor: detached,
+            ),
+          ),
+        );
+        attached.requestFocus();
+        await tester.pump();
+        expect(detached.context, isNull);
+        f.events.clear();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+        expect(f.events.whereType<KeyDownEvent>(), isEmpty);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(detached.context, isNull);
+        expect(f.scroll.calls, isEmpty);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
       });
     },
   );

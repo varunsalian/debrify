@@ -16,11 +16,13 @@ const settingsWidgetsCapture = ValueKey('settings-widgets-original-capture');
 
 class SettingsUrlLauncher extends UrlLauncherPlatform {
   final urls = <String>[];
+  final options = <LaunchOptions>[];
   @override
   LinkDelegate? get linkDelegate => null;
   @override
   Future<bool> launchUrl(String url, LaunchOptions options) async {
     urls.add(url);
+    this.options.add(options);
     return true;
   }
 }

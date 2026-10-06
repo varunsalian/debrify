@@ -3,6 +3,7 @@ import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 import '../../../support/settings_widgets_fixture.dart';
 
 void main() {
@@ -16,6 +17,14 @@ void main() {
       expect(f.launcher.urls, [
         'https://example.test/path?value=one%20two#anchor',
       ]);
+      expect(f.launcher.options, hasLength(1));
+      final options = f.launcher.options.single;
+      expect(options.mode, PreferredLaunchMode.platformDefault);
+      expect(options.webOnlyWindowName, isNull);
+      expect(options.webViewConfiguration.enableJavaScript, isTrue);
+      expect(options.webViewConfiguration.enableDomStorage, isTrue);
+      expect(options.webViewConfiguration.headers, isEmpty);
+      expect(options.browserConfiguration.showTitle, isFalse);
     });
   });
   testWidgets('legacy dialog shows full current reason autofocus OK and pops', (

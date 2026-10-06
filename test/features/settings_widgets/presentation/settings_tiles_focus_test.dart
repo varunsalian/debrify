@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:flutter/gestures.dart';
@@ -260,6 +261,54 @@ void main() {
     expect(info.icon, spec.icon);
     expect(info.title, spec.title);
     expect(info.value, 'Value');
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    const key = ValueKey('spec-key');
+    const trailing = Icon(Icons.star);
+    Future<void> activate() async {}
+    void change(bool value) {}
+    final allTile = SettingsTile.spec(
+      spec,
+      key: key,
+      onTap: activate,
+      subtitle: 'Override',
+      tag: 'Tag',
+      trailing: trailing,
+      destructive: true,
+      enabled: false,
+      focusNode: focus,
+    );
+    expect(allTile.key, same(key));
+    expect(allTile.icon, spec.icon);
+    expect(allTile.title, spec.title);
+    expect(allTile.subtitle, 'Override');
+    expect(allTile.onTap, same(activate));
+    expect(allTile.tag, 'Tag');
+    expect(allTile.trailing, same(trailing));
+    expect(allTile.destructive, isTrue);
+    expect(allTile.enabled, isFalse);
+    expect(allTile.focusNode, same(focus));
+    final allToggle = SettingsToggleTile.spec(
+      spec,
+      key: key,
+      value: false,
+      onChanged: change,
+      focusNode: focus,
+      subtitleMaxLines: 3,
+    );
+    expect(allToggle.key, same(key));
+    expect(allToggle.icon, spec.icon);
+    expect(allToggle.title, spec.title);
+    expect(allToggle.subtitle, spec.subtitle);
+    expect(allToggle.value, isFalse);
+    expect(allToggle.onChanged, same(change));
+    expect(allToggle.focusNode, same(focus));
+    expect(allToggle.subtitleMaxLines, 3);
+    final allInfo = SettingsInfoTile.spec(spec, key: key, value: 'Custom');
+    expect(allInfo.key, same(key));
+    expect(allInfo.icon, spec.icon);
+    expect(allInfo.title, spec.title);
+    expect(allInfo.value, 'Custom');
   });
   for (final width in [380.0, 389.0, 390.0, 420.0]) {
     testWidgets('hero swatches threshold width=$width', (tester) async {
@@ -280,6 +329,46 @@ void main() {
           ),
           width >= 390 ? findsOneWidget : findsNothing,
         );
+      });
+    });
+  }
+  for (final kind in ['hero', 'tile']) {
+    testWidgets('$kind awaits async tap completion', (tester) async {
+      await settingsWidgetsCase(tester, (f) async {
+        final gate = Completer<void>();
+        try {
+          final Widget row = kind == 'hero'
+              ? SettingsLookHero(
+                  label: 'Async',
+                  subtitle: '',
+                  onTap: () => gate.future,
+                )
+              : SettingsTile(
+                  icon: Icons.home,
+                  title: 'Async',
+                  subtitle: '',
+                  onTap: () => gate.future,
+                );
+          await tester.pumpWidget(f.host(row));
+          final dynamic activate = tester
+              .widget<InkWell>(rowInk(row.runtimeType))
+              .onTap;
+          final result = activate();
+          expect(result, isA<Future<void>>());
+          var finished = false;
+          (result as Future<void>).then((_) {
+            finished = true;
+          });
+          await tester.pump();
+          expect(finished, isFalse);
+          gate.complete();
+          await tester.pump();
+          expect(finished, isTrue);
+        } finally {
+          if (!gate.isCompleted) {
+            gate.complete();
+          }
+        }
       });
     });
   }

@@ -319,3 +319,7 @@ test/features/settings_widgets/presentation/settings_touchpoints_test.dart
 test/features/settings_widgets/presentation/settings_helpers_test.dart
 test/features/settings_widgets/presentation/settings_page_theme_test.dart
 test/features/settings_widgets/presentation/settings_widgets_render_test.dart
+
+# settings_widgets step 0b: close original-only behavioural review gaps.
+test/features/settings_widgets/presentation/settings_widgets_review_render_test.dart
+test/features/settings_widgets/presentation/settings_widgets_theme_table_test.dart
