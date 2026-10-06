@@ -4,12 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../../support/iptv_spotlight_timeline_fixture.dart';
 
 const reverse = bool.fromEnvironment('IPTV_SPOTLIGHT_TIMELINE_REVERSE_GOLDENS');
-const captureLinux = bool.fromEnvironment(
-  'IPTV_SPOTLIGHT_TIMELINE_CAPTURE_ORIGINAL_LINUX',
-);
-const requireLinux = bool.fromEnvironment(
-  'IPTV_SPOTLIGHT_TIMELINE_REQUIRE_ORIGINAL_LINUX',
-);
 void main() {
   final scenes = [
     'identity',
@@ -122,8 +116,7 @@ void main() {
         final platform = Platform.isLinux ? 'linux' : 'macos';
         final path =
             'test/goldens/iptv_spotlight_timeline/$platform/$scene.png';
-        if (Platform.isLinux && !captureLinux) {
-          if (!requireLinux && !File(path).existsSync()) return;
+        if (Platform.isLinux) {
           expect(
             File(path).existsSync(),
             isTrue,

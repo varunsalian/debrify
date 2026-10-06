@@ -1133,3 +1133,22 @@ Step 0b is complete; no production code moved. Linux originals are present
 but deliberately unstaged here; their hash verification, strict tests and
 separate commit are step L. Device checks, remote CI and integration remain
 pending. No push or branch switch.
+
+### Step L — strict Linux originals
+
+Step 0b commit: `9a373b8dd96a9694d1ee601c689b61159a21e877`. Six supplied
+Linux PNGs match both `linux-original-sha256-first.txt` and the reversed
+capture list exactly. Checkpoint (b), R and current library/pubspec objects
+match. `linux-original-verification.json` freezes PNG hashes, capture
+evidence hashes, Flutter/Dart and calibrated linux/amd64 image provenance.
+No original capture was performed here.
+
+The current golden test removes the capture/require booleans and Linux
+missing-file skip; missing or mismatched Linux originals now fail by
+default. The capture script still resolves frozen (b), whose original test
+supports its capture flags. Strict macOS 6/6 and Linux 6/6 pass without
+image updates (`stepL-macos-strict.txt`, `stepL-linux-strict.txt`). Linux
+verification uses a fresh normal clone under this worktree's `.dart_tool`,
+its own pub get and `debrify-flutter:3.44.8`; pubspec objects stay unchanged.
+All six supplied hashes remain unchanged afterward. Step L is complete;
+production remains ORIGINAL and step 1 may begin.
