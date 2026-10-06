@@ -1,0 +1,502 @@
+# Premiumize files screen refactor — plan
+
+Written 2026-10-06 on `refactor/premiumize-files` (a worktree branch off
+`refactor/codebase` at `49c53e2e`). Follow [AGENTS.md](../../AGENTS.md).
+Read `docs/refactoring/pikpak-files-plan.md` first, including its Progress
+section: this plan reuses its technique, checker (`check_verbatim_moves.py`
+with a per-feature manifest/config/scaffolding/accessor), staging, evidence
+and gate procedure (callback-identity checks, tree-recording evidence,
+real-config fixtures, ORIGINAL-code worktree proofs, wiring checklist, Linux
+goldens captured from the original code, `analyzer_allowlist.txt`), and only
+states what differs. `torbox-downloads-plan.md` and
+`debrid-downloads-plan.md` are the older templates PikPak itself built on.
+
+Work only in the worktree `../debrify-wt/premiumize-files` on
+`refactor/premiumize-files`. Commit after every step. Never push anywhere;
+never merge (the integrator merges). Gate commits must contain `gate`.
+
+## Goal
+
+`lib/screens/premiumize/premiumize_files_screen.dart` is 2,276 lines: the
+Premiumize cloud library. It holds:
+- a **Files** view browsing the server-side folder tree by id (no paging);
+- a **Transfers** view (queued/running/finished magnet transfers), with
+  per-transfer delete and "Clear finished";
+- folder view modes (Raw and Sort A–Z, remembered per folder for the session);
+- search: a **debounced server-side cloud search at the root**, a local
+  filter of loaded files inside a folder, and an `initialSearchQuery` that
+  starts searching on open;
+- playback (file, folder, multi-video collection);
+- downloads (single file, folder through the file-selection dialog);
+- playlist add (file, folder);
+- add-by-link (magnet/URL → Premiumize transfer, with clipboard auto-paste);
+- single delete and selection with batch delete;
+- the select-source mode used by the Home source editor.
+
+Split it into a new feature, `lib/features/premiumize_files/`, **moving code
+verbatim**.
+- **Unchanged:** the widget tree, keys, focus nodes, build order and the
+  State's lifecycle.
+- **Stays in `premiumize_files_screen.dart`:** the public
+  `PremiumizeFilesScreen` widget (same constructor, parameters, field order
+  and doc comments) and its State, with a verbatim `initState`, `dispose`
+  (including `static const int _tabIndex = 11`, used only there), a `build`
+  forwarder and section wiring. There is no `didUpdateWidget`, and none is
+  added.
+
+**Nothing is merged with PikPak, TorBox, Real-Debrid or AllDebrid.** Helpers
+that match theirs (`_extractSeasonNumber`, `_extractLeadingNumber`,
+`_findFirstEpisodeIndex`, `_formatPlaylistTitle`, `_composeEntryTitle`,
+`_FolderViewMode`, `_autoPasteLink`) move into this feature as copies. No file
+under `lib/features/premiumize_files/` may import `lib/features/pikpak_files/`,
+`lib/features/torbox_downloads/`, `lib/features/debrid_downloads/` or
+`lib/features/alldebrid_files/` (a sibling extraction running concurrently),
+or the reverse.
+
+**Architectural status:** a bounded legacy-extraction stage, with the same
+temporary exceptions and exits as PikPak:
+- **State-driven sections instead of Riverpod.** Exit: Premiumize drive state
+  in Riverpod notifiers, later.
+- **A `legacy_premiumize/` bridge folder that calls services directly.**
+  Exit: `PremiumizeService`, `PremiumizeStorage`, `PlaylistStorage`,
+  `DownloadService` and launcher calls behind Premiumize data contracts, then
+  dissolve the bridge.
+- **Unchanged legacy text.** Exit: the app-wide localization migration.
+- **Helpers duplicated with the other cloud screens.** Exit: the future shared
+  cloud-library plan (`docs/refactoring/cloud-library-shared-plan.md`, not yet
+  written).
+- **Mutable legacy models.** `PremiumizeFolderItem`/`PremiumizeTransfer` lists
+  are shared by identity between owners and sections; no snapshots are added.
+  The folder dialog keeps its raw `Map<String, dynamic>` rows. Exit: typed
+  immutable boundaries behind the data contracts.
+
+## Public surface
+
+```dart
+class PremiumizeFilesScreen extends StatefulWidget {
+  final String? initialFolderId;
+  final String? initialFolderName;
+  final String? initialSearchQuery;
+  final bool selectSourceMode;
+  final Future<void> Function(SeriesSource)? onSourceSelected;
+  /// When true, this screen was pushed as a route (not displayed in a tab).
+  /// Back navigation pops the route instead of switching tabs.
+  final bool isPushedRoute;
+  const PremiumizeFilesScreen({super.key, this.initialFolderId,
+    this.initialFolderName, this.initialSearchQuery,
+    this.isPushedRoute = false, this.selectSourceMode = false,
+    this.onSourceSelected});
+}
+```
+
+Kept exactly (field order differs from parameter order; both stay), with the
+class doc comment. It is the only public symbol. Callers: `main.dart` (tab
+page 1551 `const PremiumizeFilesScreen()`, deep link 1816, Cloud hub 3410),
+`lib/features/home/presentation/home_source_editor.dart:382` (pushed,
+`initialSearchQuery`, `selectSourceMode`, `onSourceSelected`), and
+`test/features/home/presentation/home_source_editor_test.dart:192`, which
+reads fields. All compile unchanged.
+
+## What it contains (line numbers at `49c53e2e`; the step 0 manifest is authoritative)
+
+| Lines | Area | Notes |
+| --- | --- | --- |
+| 1–60 | 27 imports, widget, `_FolderViewMode`, `_PremiumizeView` | No top-level functions. |
+| 62–140 | State fields, `_tabIndex`, getters `_isAllSelected` (104) and `_isAtRoot` (140) | No `late`. One static const. `_searchResults` is reassigned **and** mutated. |
+| 142–195 | `initState`, `dispose` | **Stay verbatim in the State.** |
+| 197–317 | `_loadSettings`, `_loadFolder`, `_loadTransfers`, `_refresh`, `_switchView` | |
+| 319–382 | Folder navigation, `_handleBackNavigation` | |
+| 384–455 | View modes, sort, number extractors | `_applySortedView` and the extractors read no State. |
+| 457–528 | Search: toggle, debounce, cloud search | Owns `_searchDebounce` writes. |
+| 530–613 | `_selectBoundSource` | Select-source validation and binding. |
+| 615–800 | `_playFile`, `_playFolder`, `_playPremiumizeVideos` | Three launcher sites. |
+| 802–910 | Downloads | Two enqueue sites; sequential loop. |
+| 912–1000 | Playlist add | Three `addPlaylistItemRaw` maps. |
+| 1002–1149 | Delete (single, selected), transfer delete and clear | |
+| 1151–1287 | Add-link dialog, auto-paste, `_addLink` | |
+| 1289–1409 | Selection helpers, loading dialog, `_dismissDialog`, focus fallback, `_showSnackBar` | |
+| 1411–1484 | `_formatUnixDate` (reads `DateTime.now`), series title helpers, `_findFirstEpisodeIndex` | |
+| 1486–2276 | `_isBrowsePush`, `build` (147 lines) and 13 builders | |
+
+No single method is over 200 lines. The largest destination is expected well
+under 500 lines; **no size exception is planned** (any need found later is a
+design change that must come back for review).
+
+## Contracts that must not change
+
+1. **Navigation and back handling.**
+   - **Pushed route:** `pushRouteBackHandler(_handleBackNavigation)` and
+     `popRouteBackHandler(_handleBackNavigation)`, matched by `==`.
+   - **Tab:** `registerTabBackHandler('premiumize', …)`, the **key-only**
+     `unregisterTabBackHandler('premiumize')`, and the stored TV content
+     focus closure for tab **11** (`_tabIndex`), unregistered by identity.
+   - **Startup order:** analytics `screenView('premiumize_files')`, then
+     `_loadSettings()` (unawaited) **before** the back handlers.
+   - **Back priority** (357–382): selection → search (toggle off) → folder
+     stack (`_navigateUp`) → pushed route `Navigator.of(context).pop()` →
+     `returnToTorrentSearchOnBack` reset and switch to
+     `MainTab.legacyTorrentSearch` → `false`. Each level characterized.
+   - **"Opening folder..." scaffold** while pushed, at root and on the
+     initial load (1495), with its own back button popping the route.
+   - **Browse push** (`_isBrowsePush`): pushed with no initial folder shows a
+     root back button that calls `maybePop`.
+   - **Scroll reset:** `_switchView`, `_navigateIntoFolder` and `_navigateUp`
+     call `jumpTo(0)` when the controller has clients, **before** their
+     `setState`.
+2. **Settings load** (197–223): integration flag **and** a non-empty API key
+   enable the screen; the initial folder is applied only when **both**
+   `initialFolderId` and `initialFolderName` are set; a non-empty trimmed
+   `initialSearchQuery` activates search and fills the controller inside the
+   same `setState`; when enabled, `_loadFolder()` then
+   `_performSearch(initialQuery)` (both unawaited, in that order); when
+   disabled, `_initialLoad = false`. The API key is read **once**.
+3. **Loading.** `_loadFolder` returns early on a missing key or while
+   `_isLoading`; it applies the folder's current view mode to the listing,
+   replaces `_items` **in place** (`clear()..addAll`), then calls
+   `_focusFirstItemOrFallback()`. `_loadTransfers` has its own
+   `_isLoadingTransfers` guard and replaces `_transfers` in place. Both write
+   the shared `_errorMessage` and clear `_initialLoad`. `_refresh` exits
+   selection mode and reloads only the active view. `_switchView` is a no-op
+   for the current view, exits selection, resets scroll, clears the error,
+   then loads the new view.
+4. **Select-source mode.** One awaited callback site (590–601), then
+   `if (!mounted) return; Navigator.of(context).pop();`.
+   `SeriesSource(torrentHash: '', torrentName: item.name, debridService:
+   'premiumize', debridTorrentId: item.id, cloudSourceKind: folder or file,
+   boundAt: now)`.
+   - Validation before it stays exactly: the "Checking folder for
+     videos..." / "Checking file..." loading dialog (barrier not
+     dismissible, closed once through `closeCheckingDialog` →
+     `_dismissDialog`, the root-navigator pop); folder → recursive listing,
+     videos only, **only the first** video's readiness (`playableUrl`
+     non-empty or `resolveItemById` non-null); file → video check, then
+     `resolveItemById` with a non-empty link; each rejection message; the
+     catch message.
+   - Entry points: rows in select mode (folders and videos tap to bind;
+     other files are disabled; folders have a "Browse folder" action), and
+     search results, which reuse the same card.
+   - Hidden in select mode: the selection toggle, Add Link and the
+     Files/Transfers selector. Title "Select Premiumize Source".
+5. **Playback handoff:** all **three launcher sites** (634, 699, 790), each
+   preceded by `MainPageBridge.notifyPlayerLaunching()` and a `mounted`
+   check, keep their `VideoPlayerLaunchArgs` exactly (`videoUrl`, `title`,
+   `subtitle` (file size, or "N episodes/files • total"), `playlist` entries
+   with `url`, `title`, `relativePath ?? name`, `provider: 'premiumize'`,
+   `premiumizeItemId`, `sizeBytes`, and `startIndex`). `_playFile` resolves
+   a missing URL by id first. The collection sort (season, episode,
+   lower-cased name; or name only), the series test
+   (`SeriesParser.isSeriesPlaylist`), `_findFirstEpisodeIndex` with its range
+   clamp, entry titles, and `url: playableUrl ?? ''` for every entry stay.
+6. **Downloads:** both **enqueue sites** (811, 887) keep `credentialKey:
+   'premiumize_api_key'`, `url: item.link` (not `playableUrl`), `fileName`,
+   `torrentName: folderName` on the loop site, and the inline
+   `mounted ? context : null`. The folder dialog rows (`name`, `_fullPath`,
+   `size` as a string, `_premiumizeIndex`), the unawaited `onDownload`, the
+   sequential awaited loop with index and URL failures counted, and the
+   three result messages stay.
+7. **Playlists:** the three `addPlaylistItemRaw` maps (927, 962, 981) exactly,
+   including key order, `FileUtils.cleanPlaylistTitle`, single versus
+   collection, and video order from the recursive listing.
+8. **Destructive actions.**
+   - **Single delete:** a dialog (Cancel autofocus, red Delete); Delete pops,
+     then calls `_executeDelete([item])` **unawaited**.
+   - **Delete selected:** the item snapshot is taken **before** the dialog, in
+     `_items` order; `showDialog<bool>`; on `true`, one awaited
+     `_executeDelete(selected)`.
+   - **`_executeDelete`:** the "Deleting N item(s)..." snackbar **before** any
+     request; **sequential** per item, `deleteFolder` for folders and
+     `deleteItem` for files, failures counted; then (if mounted) removes
+     deleted ids from `_items` **and** `_searchResults`, clears the selection
+     and leaves selection mode — even after a single delete; the two result
+     messages.
+   - **Transfers:** delete with its own confirm dialog, `deleteTransfer`,
+     in-place removal and message; "Clear finished" calls
+     `clearFinishedTransfers`, shows its message, then awaits
+     `_loadTransfers()`.
+9. **Search.** Toggling on clears selection and requests search focus
+   post-frame; toggling off cancels the debounce and clears query, results and
+   the in-flight flag. An empty query cancels the debounce and clears results.
+   **At the root:** cancel, set `_isSearching`, start a **350 ms** `Timer`
+   that runs `_runCloudSearch(q)`; a result is dropped if the trimmed field
+   text no longer equals its query; errors clear the flag and show "Search
+   failed". **In a folder:** synchronous filter of non-folder `_items` by
+   lower-cased substring. The clear button and its Focus key handler
+   (activate keys clear and refocus; arrow-left refocuses) stay.
+10. **Add link.** `_showAddLinkDialog` awaits `_autoPasteLink()` (clipboard
+    text starting with `http://`, `https://` or `magnet:`), checks `mounted`,
+    then shows the dialog (theme surface, the arrow-down `Focus` around the
+    autofocus `TextField`, Cancel clearing the controller, Add enabled from
+    `_isAddingLink` **as read when the dialog is built**). `_addLink`
+    validates (two messages), returns on a missing key, pops the dialog with
+    the **State's** `Navigator.of(context)`, sets `_isAddingLink`, shows the
+    loading dialog, `createTransfer(apiKey, link, folderId:
+    _currentFolderId)`, dismisses, clears, shows "Added to Premiumize",
+    awaits `_refresh()`, and resets the flag in `finally` when mounted.
+11. **Lists and views.** The Files/Transfers selector shows only at the root,
+    outside search and select mode. The view-mode dropdown shows only in the
+    Files view inside a folder (`_navigationStack.isNotEmpty`). Raw returns a
+    **copy** (`List.of`) — unlike PikPak there is no Raw aliasing — and Sort
+    puts folders first (season-aware) then files (leading number), each with a
+    lower-cased name fallback. `_setViewMode` is ignored at the root.
+    Skeleton while loading an empty folder; empty, error, not-configured and
+    transfers-empty states; "Clear finished" only when a transfer is
+    finished; the transfer card's status colour/icon, running progress bar
+    (indeterminate at 0) and message fallback. Dates via `_formatUnixDate`
+    (relative within 7 days).
+12. **D-pad and focus:** the 11 focus nodes and their debug labels; the back
+    button's arrow-left `Focus` to `focusTvSidebar`; the dropdown's
+    `skipTraversal` Focus with arrow-up to the back button; the search field's
+    `onUpArrow`/`onDownArrow`/`onRightArrow`; `_firstItemFocusNode` only on
+    index 0 when `autofocusFirst` (search results pass `false`);
+    `_focusFirstItemOrFallback` (post-frame; first item, else the Add Link
+    button when not loading; `_shouldFocusOnLoad` set by the TV closure and by
+    folder navigation); both `FocusTraversalGroup(OrderedTraversalPolicy)`s;
+    the autofocused Retry and Go to Settings buttons; `TvFocusScrollWrapper`
+    on transfer cards.
+13. **Lifecycle:** `initState` and `dispose` stay verbatim with receiver-only
+    qualification: back unregistration (pushed vs tab, TV closure by identity),
+    `_searchDebounce?.cancel()`, then **14 disposals** in order (3
+    controllers, 11 focus nodes), then `super.dispose()`.
+14. **Profile behaviour:** the integration flag and API key are read once
+    from the active profile at startup; every service call uses that captured
+    key. The screen relies on the profile gate remounting it. No scoping is
+    added or removed.
+
+## Destination layout
+
+`lib/features/premiumize_files/`:
+- **`application/`:** pure helpers with no services, no context and no
+  State: `_extractSeasonNumber`, `_extractLeadingNumber`, `_applySortedView`
+  (it only calls those two), `_formatPlaylistTitle`, `_composeEntryTitle`,
+  `_findFirstEpisodeIndex`. `_formatUnixDate` reads `DateTime.now()` and stays
+  in a section. No parameter is added to make anything pure.
+- **`models/`:** `_FolderViewMode` and `_PremiumizeView`, made public with
+  manifest-listed names (`PremiumizeFolderViewMode`, `PremiumizeView`).
+- **`presentation/legacy_premiumize/`:** the bridge (exact path in the guard):
+  state/resource owners, every section that takes a `BuildContext` or calls
+  services, dialogs and builders.
+- **The facade** (`lib/screens/premiumize/premiumize_files_screen.dart`) is an
+  exact composition root. A provisional 400-line cap and `TEMP(premiumize)`
+  rejection turn on at step 7, then the cap is lowered to the measured size.
+- **Guard rules,** added in step 1: no back-imports of the facade from
+  `lib/features/premiumize_files/`; no imports between `premiumize_files` and
+  `pikpak_files`, `torbox_downloads`, `debrid_downloads` or `alldebrid_files`
+  (both directions); the exact bridge prefix for service/storage imports; no
+  service, storage, `http` or Flutter-context use in `application/`;
+  500-line destination caps from step 1.
+
+## Technique
+
+The same as PikPak's Technique, with these points:
+1. **No `didUpdateWidget`; no `late` fields.** Every field keeps its
+   initializer at its declaration, on its new owner; list/set/map identity is
+   preserved (`_items`, `_transfers`, `_navigationStack`, `_folderViewModes`,
+   `_selectedIds` are `final` and mutated in place; `_searchResults` is
+   reassigned and also mutated by `_executeDelete`).
+2. **Callback identity** (receiver path plus member; wrapping-closure and
+   same-class receiver-swap negatives) for `_handleBackNavigation` (push and
+   pop) and the stored tab-11 TV focus closure. The 350 ms debounce `Timer`
+   callback `() => _runCloudSearch(q)` keeps its closure shape.
+3. **The debounce timer** (`_searchDebounce`) is a resource: it is written by
+   search and cancelled by search and by `dispose`. Its field moves to an
+   owner, and `dispose`'s `_searchDebounce?.cancel()` keeps its position.
+4. **`_tabIndex`** is a `static const` used only by the verbatim lifecycle; it
+   stays in the State. If any section needs it, that is a design change.
+5. **Contexts and liveness:** `context`, `mounted`, `widget` and `setState`
+   stay live getters/callbacks evaluated at their original sites (the PikPak
+   receiver rules); no context hoisting, no added or removed `mounted`
+   checks.
+6. **Original analyzer state:** one info (`deprecated_member_use`, the
+   dropdown's `value`, 1696). It moves with its builder; record the identity
+   relocation. Destination lint configuration may add const/ordering infos on
+   moved code; handle them exactly as PikPak did (observed original-under-
+   destination-lints evidence; no rewrite, no suppression, allowlist only for
+   relocated original warnings).
+
+## Steps
+
+| # | Work | Notes |
+| --- | --- | --- |
+| 0 | Baseline, dependency report, manifest/config/scaffolding/accessor, characterization tests and baselines, source-text inventory, CI test list, Linux capture script | Nothing moves. |
+| 0b | Claude's independent step-0 review: close every gap (mutation proofs on ORIGINAL) | Before step 1. |
+| L | Original-code Linux goldens (Claude captures in Docker), committed separately | Before step 6. |
+| 1 | Guard registration; enums and pure helpers | |
+| 2 | State and resource owners; the lifecycle stays verbatim | |
+| 3 | Settings load, loading (files and transfers), refresh, view switching, back navigation, selection, delete (single, selected, transfers), loading dialog, `_dismissDialog`, focus fallback, snackbar | Contracts 1–3, 8, 12. **Full-suite gate 1.** |
+| 4 | Folder navigation, view modes, search (with the debounce), select-source binding | Contracts 4, 9, 11. |
+| 5 | Play (three sites), downloads (two sites), playlist add, add link and auto-paste, `_formatUnixDate` | Contracts 5–7, 10. |
+| 6 | `build` forwarder and every builder (strict Linux goldens from here) | Contracts 11, 12. |
+| 7 | Final State, guards, CI. **Full-suite gate 2.** | |
+
+### Step 0
+
+1. **Baseline:** `suite_evidence.py run premiumize/base` and the whole-repo
+   analyzer, with tree provenance. Flutter must be 3.44.8.
+2. **Dependency report** (`docs/refactoring/premiumize-files-deps.md`), with
+   the per-entry wiring checklist (as PikPak).
+3. **Checker:** `dev/tool/premiumize_manifest.tsv`,
+   `premiumize_checker_config.json` (+ scaffolding/accessor/context-exception
+   files as PikPak needed them), real-config fixtures, the callback-identity
+   negatives, and a `premiumize_checker_test.py` self-test. Reuse existing
+   opt-in checker keys; any new key must be opt-in and leave every existing
+   feature's checks byte-identical.
+4. **Harness:** `ProfileRuntime` initialized and reset, the `SecretVault`
+   override seeding the Premiumize API key and integration flag, and
+   `http.runWithClient` with a `MockClient` for `www.premiumize.me/api`
+   (folder/list, folder/search, item/details, item/delete, folder/delete,
+   transfer/list, transfer/delete, transfer/clearfinished, transfer/create).
+   Prove one passing HTTP fixture against the ORIGINAL first. A held-response
+   helper for in-flight cases. Responses are decoded by `decodeJsonAsync`
+   (`lib/utils/json_isolate.dart`); check whether it can leave the test zone
+   (isolate) for the body sizes used and drive it accordingly (`runAsync`).
+5. **Characterization tests,** recorded against the ORIGINAL. Apply the
+   TorBox/Real-Debrid/PikPak lessons up front: drive actions through real
+   entry points; re-read state after acting; non-monotonic ids where order
+   matters; assert values, not names; exact request lists (method, path,
+   query/body); sentinel handlers for route versus tab registration.
+
+   | Contract | Coverage |
+   | --- | --- |
+   | 1 Navigation | Tab versus pushed route registration and removal on dispose (sentinel handlers, key-only tab unregister, TV closure by identity); each back level including `returnToTorrentSearchOnBack`; the Opening-folder scaffold and its back; browse-push back (`maybePop`); scroll reset before navigation `setState` (offset 0 after switching view / entering / leaving a folder with a scrolled list). Startup order (source guard). |
+   | 2 Settings | Disabled flag; missing/empty key; enabled; initial folder needs both id and name; `initialSearchQuery` (trimmed, field text, search active, root cloud search request fired after the debounce, folder listing also requested). |
+   | 3 Loading | First load and in-place `_items` identity; loading guard (second load while held makes no request); error state with message and Retry; transfers load, guard, empty and error; refresh reloads only the active view and exits selection; `_switchView` same-view no-op. |
+   | 4 Select-source | On a pushed route: folder binding (recursive listing, first-video readiness by `playableUrl` and by `resolveItemById`), file binding; callback awaited before the pop; `SeriesSource` fields; the checking dialog closed exactly once (root navigator) and distinguished from the screen pop; each rejection (no videos, first not ready, not a video, not ready to stream, thrown error); disabled non-video file rows; "Browse folder"; binding from search results; hidden toggle/Add Link/selector; title. **Back hazard:** with the request held, system Back pops the checking dialog while `checkingDialogOpen` stays true, so the later `_dismissDialog` root pop can pop the screen: characterize and keep. |
+   | 5 Playback | Source guards on all three launcher sites and their arguments (and `notifyPlayerLaunching` order), plus pending device verification. Through the accessor where feasible: collection entry order, titles and start index for a series folder (episode order ≠ name order, cross-season) and a non-series folder; `_playFile` resolve-by-id request when the URL is missing; "No playable URL" paths. |
+   | 6 Downloads | Source guards on both enqueue sites. Folder dialog rows (exact maps) and the sequential loop's index/URL failure counting through the accessor. Enqueue success/mixed messages only if an isolated enqueue fixture is first proven against the ORIGINAL; otherwise **pending**, with the source guards kept. |
+   | 7 Playlists | Source guards on the three maps; accessor tests on persisted entries: single file (non-video rejected), folder with one video (single), folder with several (collection, recursive order), "Already in playlist". |
+   | 8 Destructive | Single delete Cancel (no request) and Delete (snackbar before the request; `item/delete` vs `folder/delete`; selection mode exited); delete selected Cancel, confirm with non-monotonic ids (snapshot in `_items` order, sequential requests in that order), partial failure (rows kept for failures, message), removal from search results; transfer delete Cancel/confirm/failure; clear finished then reload. |
+   | 9 Search | Toggle on/off (focus request, selection cleared, debounce cancelled); root: debounce at 349 ms vs 350 ms (fake time), one request per settled query, stale result dropped when the text changed, error message; folder: synchronous local filter (files only); clear button by tap and by activate key, arrow-left; empty query. |
+   | 10 Add link | Clipboard auto-paste (platform-channel mock: accepted and ignored prefixes); validation messages; exact `transfer/create` POST (query `apikey`; form body `src`, plus `folder_id` only inside a folder); success (dialog pops via State navigator, loading dialog dismissed, message, refresh request) and failure; Cancel clears. |
+   | 11 Lists | Files/Transfers selector visibility; dropdown visibility; Raw copy vs Sort order (folders season-aware first, files by leading number, name fallback) and per-folder memory; root ignores `_setViewMode`; skeleton, empty (root vs folder), not-configured, error, transfers-empty; Clear-finished visibility; transfer card status variants; `_formatUnixDate` with fixed old dates (> 7 days, so output is date-only and clock-independent). Pixel goldens of the reachable views (root files with selector, folder with dropdown, selection mode, transfers with all three statuses, select-source, search results, not-configured) on macOS and Linux, Linux from the ORIGINAL (capture script, run by Claude). |
+   | 12 D-pad | Back button arrow-left (sidebar sentinel); dropdown arrow-up to back; search field arrows and clear-button keys; first-item focus after a navigation load and the Add Link fallback on an empty folder; TV closure path; autofocused Retry / Go to Settings. |
+   | 13 Lifecycle | Source guards on the verbatim lifecycle and the full dispose sequence; unmount with a pending load and with a pending debounce timer: no throw and no request after dispose. |
+   | 14 Profile | A profile-gate remount gives a fresh State with new owners; two independent routes don't share owners. |
+
+   - Record `premiumize/base2` after any seam, then `premiumize/base3` after
+     the tests; compare each with the previous one (`PASS`, only added
+     identities, all passing).
+   - **Mutation proofs:** every behavioural test above must be shown to fail
+     an assertion against a deliberately broken ORIGINAL variant (restored
+     afterwards, never committed), as in PikPak's step 0b. Record the variant
+     list and outcomes in evidence. Source-guard-only coverage is labelled as
+     such.
+6. **CI list:** add every new test as a concrete path in
+   `dev/tool/ci_behavior_tests.txt`.
+7. **Source-text inventory:** the `cloud` glob in
+   `theme_surface_manifest.txt:5` (add the new feature directories; the
+   AllDebrid fork edits the same line — keep the edit minimal and keyed to
+   `premiumize_files`); the shape manifest (the facade's residue is 6 today;
+   every destination registered, token files in `kShapeResidue`, others in
+   `kExtractedShapeResidue`, the final facade at its measured value);
+   `file_size_baseline.txt:29`; `check_search_architecture.py` (new
+   Premiumize constants and rules); `checks.yml` (format and analyze the
+   facade and the new `test/support/premiumize_*` helpers, paths inside the
+   command, never after `| tee`); `analyzer_allowlist.txt` (only relocated
+   original warnings, if any); the generic profile, theme and storage
+   readers (verify). Update `dev/design/ADDING_A_PROVIDER.md` only if it
+   names a moved private member.
+8. **Linux capture script** (`dev/tool/capture_premiumize_linux_goldens.sh`),
+   resolving the step-0 checkpoint by exact subject; Claude runs it in the
+   local `debrify-flutter:3.44.8` Docker image. The Linux golden test becomes
+   strict at step 6.
+9. **Fresh-clone proof:** every new self-test/checker passes from a fresh
+   normal `git clone` (where `.git` is a directory) after `flutter pub get`.
+   Never copy `.git` as a file.
+
+### Per step and gates
+
+As in PikPak: after each step, all manifest runs (every
+`dev/tool/*_manifest.tsv`) with self-tests on isolated `--parser-package`
+copies, architecture, sizes, storage references/keys, exact CI format and
+analyze-plus-allowlist, staged diff checks, and the focused Premiumize
+characterization run compared with the latest base. Gate 1 (after step 3) and
+gate 2 (after step 7) are full-suite runs from committed source, compared by
+identity with the latest Premiumize base (and gate 2 with gate 1).
+
+## Decisions taken before design review
+
+1. **Separate feature, no sharing** with the other cloud screens (above).
+2. **No size exceptions planned.** The 147-line `build` and every builder fit
+   500-line files.
+3. **No format commit of the original:** the file is already `dart format`
+   clean (verify in step 0; if not, a format-only commit before step 0 with
+   its own full-suite identity check).
+4. **`_tabIndex` stays in the State** (lifecycle-only).
+5. **Goldens are needed** (the screen has no existing tests; layout and
+   transfer-card paint are otherwise unpinned), macOS and Linux.
+6. **Dead or odd code moves verbatim:** `_isAddingLink`'s build-time-only
+   effect, the "Go to Settings" snackbar, and the `_runCloudSearch` early
+   return that leaves `_isSearching` set.
+7. **Device-only items go to the end-of-series checklist**, never a merge gate.
+
+## Definition of done
+
+1. **The facade** is at most its measured cap (≤ 400) and formatted, holding
+   `PremiumizeFilesScreen` and the State with its verbatim lifecycle,
+   forwarders and wiring. Every caller compiles unchanged.
+2. **The guard** registers the feature, the exact bridge path, the facade as a
+   composition root with its cap and `TEMP(premiumize)` rejection, no import
+   of the facade from the feature, and no imports between `premiumize_files`
+   and the other cloud features.
+3. **Checks:** all manifest runs pass with self-tests (including from a fresh
+   clone), and every characterization test passes unchanged.
+4. **Analyzer and tests:** no new diagnostics and no suppressions; the CI
+   analyzer allowlist check passes; gate 2 passes against the latest
+   Premiumize base and gate 1.
+5. **CI:** local CI-equivalent checks pass; remote CI is pending (Actions
+   billing). The test list holds the new tests; no failure allowlist grows.
+6. **Progress records:** commits, ownership, seams, evidence paths, and the
+   end-of-series device checklist.
+7. Stop after gate 2 and report.
+
+## End-of-series device checklist
+
+- Android TV D-pad: back arrow-left to the sidebar, dropdown arrow-up, search
+  field arrows and clear button, first-row focus after folder navigation and
+  after the TV content-focus request (tab 11), Files/Transfers selector.
+- All three native/Flutter playback handoffs (file, single-video folder,
+  collection) with a real Premiumize account.
+- Real account flows: cloud search, add magnet/link (fair-use points), delete
+  file/folder, transfers delete and clear finished, folder download through
+  the file-selection dialog (native enqueue success/mixed messages).
+- Select-source binding from the Home source editor, including system Back
+  during "Checking…".
+
+## Explicitly not in scope
+
+- Merging or sharing anything with the other cloud screens.
+- `PremiumizeService`, `PremiumizeStorage`, `DownloadService`, the player and
+  launcher, `CloudFileRow` and other cloud widgets, the Premiumize settings
+  page.
+- Bug fixes and behaviour changes, including everything below.
+
+## Found, not fixed
+
+All pre-existing; the extraction keeps each exactly.
+- **Stale or lost folder loads.** `_loadFolder` returns early while loading,
+  so navigating during a load never fetches the new folder, and the old
+  listing is written into the new folder's view.
+- **`_dismissDialog` pops whatever is on top of the root navigator** when it
+  can pop. If system Back already closed a loading dialog (select-source
+  "Checking…", folder scans, add link), the later pop can close the screen or
+  another route. The catch blocks of `_playFolder`, `_downloadFolder` and
+  `_addFolderToPlaylist` dismiss again after an earlier dismiss when the
+  error is thrown later (double pop).
+- **`_addLink` closes the dialog with the State's `Navigator.of(context)`**,
+  which can differ from the dialog's (root) navigator inside a tab.
+- **`_isAddingLink`** only affects the Add button when the dialog is built.
+- **A single delete exits selection mode** and clears any selection.
+- **Delete selected** snapshots items before the confirmation; a reload
+  during the dialog can delete rows no longer shown.
+- **In-folder search** filters the items loaded when typing; it is not
+  re-run after a reload.
+- **`_runCloudSearch` with no key** returns leaving `_isSearching` true.
+- **Key-only tab unregistration** (`'premiumize'`), as in the other cloud
+  screens.
+- **The not-configured "Go to Settings" button** only shows a snackbar.
+- **The shared `_errorMessage`**: a transfers error can show the full-screen
+  error while files are empty, and vice versa.
+
+## Progress
+
+(Not started.)
