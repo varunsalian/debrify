@@ -712,6 +712,12 @@ below.
     unchanged from 0b; this refactor keeps its own manifest LF and does not
     rewrite another feature's proof inputs.
 
+11. The frozen service-show guard compares whitespace literally. Its long
+    ProfileBootstrap qualified import wraps under the default formatter, so
+    the new dialog destination protects only that import with format off/on.
+    All moved body text/comments stay byte-equal; normalizing the guard's
+    whitespace is a separate reviewed test change, not part of this move.
+
 ## Round 1 review resolution (Codex design review at `8ccf2d8a`)
 
 1. P1 shape registration → token-bearing destinations in `kShapeResidue`,
@@ -1253,3 +1259,59 @@ exact 0b subject and retains R equality checks. It was syntax-checked only.
   Focused replay: 295 passing / one baseline failure, exact same identities
   versus base3b, no skips/additions/missing tests; frozen twenty inputs equal.
   The committed-tree full-suite gate follows before any Step 3 work.
+
+- Step 2 / gate 1 commit: `38056de27`. Full suite on its clean committed tree
+  (paths [], no untracked inputs, no snapshot, stable start/end tree;
+  `--no-pub --concurrency=2 --timeout=120s` plus the mandatory Linux define):
+  **11736 success / 13 failure / 28 error / 20 skipped**. Helper comparison
+  and independent exact outcome-map audit against base3b pass: no added,
+  missing, changed, newly skipped or fixed identity. No load flake/timeout
+  retry was needed. `gate1-identity-audit.json` records the full environment.
+
+### Step 3 — final declarations and pure compatibility facade
+
+- Move TV choice tables/labels, select dropdown, info tile, skeleton/private
+  widgets and legacy-mode dialog verbatim from R. All 19 destinations now
+  exist; the original contains only 19 exports naming the 47 public names.
+  The original size-baseline entry is removed. Its last shape token moves to
+  info tile; the zero-shape facade moves to kExtractedShapeResidue. The
+  completion flag remains dormant until Step 4.
+- Evidence is `step3/` and `step3-focused.*`; every manifest/self-test gets a
+  fresh isolated parser copy. Frozen inputs and original callers stay fixed.
+
+- Conservative formatting decision: the frozen service-show guard is
+  whitespace-sensitive and requires ProfileBootstrap's long qualified import
+  on one line. A width-88/100 scratch probe removed an original trailing comma
+  inside the dialog body, so it was rejected and never applied. The new
+  destination instead brackets only that import with `dart format off/on`;
+  default formatting still covers the rest, whose moved body and comments are
+  byte-identical to R. No test/helper is edited, no diagnostic suppression
+  added. `legacy-import-format-proof.json` records this. Initial Step 3
+  focused evidence is superseded by its stable replay after this import-only
+  adjustment. Exit: separately reviewed whitespace normalization of the guard
+  can remove the import formatting boundary.
+
+- Step 3 verification complete: all 17 manifests/self-tests, architecture
+  fixtures, sizes, CI format/analyze/unchanged 25-warning allowlist pass.
+  Stable focused replay is 295 success / one unchanged failure with no added,
+  missing or newly skipped identity. Shape is exactly 26 tokens / seven
+  radii / 488 floor; facade has zero. Theme classification retains 657 sites;
+  light-ink retains 774 total / 240 PRIMARY sites. Frozen twenty inputs equal.
+- Four original skeleton const infos become visible to the whole analyzer
+  after entering the strict feature scope: raw reports 1689 → 1693. This is
+  precisely the four already captured at Step 0 on ORIGINAL R (owners
+  SettingsSkeleton, _SkeletonHeader, two _SkeletonTile sites). Independent
+  ORIGINAL-R strict-scope Flutter reproduction confirms their original sites
+  and exact messages. Raw baseline is untouched; a comparison view combines
+  its 1689 reports with only those four recorded original infos. Relocation
+  against that view has zero additions/removals; per-owner strict comparison
+  independently has four infos/zero additions. No code fix, lint suppression,
+  warning allowlist entry or --record/--update. Evidence:
+  `original-R-strict-scope-reproduction.*`,
+  `base-fmt-with-original-strict-const-infos.txt`, `step3/strict/` and the raw
+  scope-comparison NOTE. This applies again at Step 4.
+- The facade measures 63 physical export lines (19 directives), zero comments
+  and zero blanks. Step 4 uses an exact 63-line cap. Every destination is
+  ≤378 lines. The dialog is 63 lines including its two import-format markers;
+  no size exception or compressed body formatting is used. Found 11 records
+  the guard's formatting constraint.
