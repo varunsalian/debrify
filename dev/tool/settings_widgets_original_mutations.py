@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from check_verbatim_moves import parse
 from settings_widgets_probe import SOURCE
@@ -15,7 +16,29 @@ PREFIX='test/features/settings_widgets/presentation/'
 def digest(text):return hashlib.sha256(text.encode()).hexdigest()
 
 def compilation_error(text):
-    return bool(re.search(r'Compilation failed|Failed to load|[^\n]+\.dart:\d+:\d+: Error:', text))
+    return bool(re.search(r'Compilation failed|Failed to load|\.dart:\d+:\d+: Error:', text))
+
+def fixture_test():
+    assert compilation_error('lib/example.dart:1:2: Error: invalid declaration')
+    assert compilation_error('Compilation failed')
+    assert compilation_error('Failed to load test')
+    assert not compilation_error('Actual: _TypeError:<Null check operator used on a null value>')
+    # A subprocess deadline also bounds this fixture if the quadratic prefix
+    # is accidentally restored; a timing assertion alone would hang first.
+    script="""from settings_widgets_original_mutations import compilation_error
+import time
+negative='x'*(512*1024)+'.dart:1:2: Expected: a failing assertion, without a compiler error'
+start=time.monotonic()
+assert not compilation_error(negative)
+elapsed=time.monotonic()-start
+assert compilation_error(negative+'\\nlib/example.dart:1:2: Error: invalid declaration')
+print(elapsed)
+"""
+    result=subprocess.run([sys.executable,'-c',script],cwd=Path(__file__).resolve().parent,
+                          capture_output=True,text=True,check=True,timeout=5)
+    elapsed=float(result.stdout)
+    assert elapsed<2, f'Large negative log took {elapsed:.3f}s'
+    print(f'Mutation classifier fixtures: 512 KiB negative line classified as no compile error in {elapsed:.6f}s; positive markers PASS')
 
 def cases_for(original,ast):
     nodes={n['name']:n for n in ast['declarations']}
@@ -159,10 +182,14 @@ def cases_for(original,ast):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--worktree',type=Path,required=True);p.add_argument('--checkpoint',required=True)
-    p.add_argument('--parser-package',type=Path,required=True);p.add_argument('--evidence',type=Path,required=True)
+    p.add_argument('--fixtures',action='store_true')
+    p.add_argument('--worktree',type=Path);p.add_argument('--checkpoint')
+    p.add_argument('--parser-package',type=Path);p.add_argument('--evidence',type=Path)
     p.add_argument('--only',nargs='*')
     args=p.parse_args();
+    if args.fixtures:fixture_test();return
+    if not all((args.worktree,args.checkpoint,args.parser_package,args.evidence)):
+        p.error('--worktree, --checkpoint, --parser-package and --evidence are required without --fixtures')
     assert compilation_error('lib/example.dart:1:2: Error: invalid declaration')
     assert not compilation_error('Actual: _TypeError:<Null check operator used on a null value>')
     root=args.worktree.resolve();evidence=args.evidence.resolve();evidence.mkdir(parents=True,exist_ok=True)

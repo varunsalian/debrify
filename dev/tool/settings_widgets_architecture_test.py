@@ -12,7 +12,9 @@ FEATURE = 'lib/features/settings_widgets/presentation/'
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix='settings_widgets_architecture_', dir=ROOT / '.dart_tool') as directory:
+    scratch=ROOT / '.dart_tool'
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='settings_widgets_architecture_', dir=scratch) as directory:
         tree = Path(directory)
         shutil.copytree(ROOT / 'lib', tree / 'lib')
         tool = tree / 'dev/tool/check_search_architecture.py'

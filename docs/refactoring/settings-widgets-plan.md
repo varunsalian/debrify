@@ -1433,3 +1433,100 @@ record provenance and unchanged PNG hashes. The Android TV, Apple TV,
 desktop/phone and legacy-dialog/community-link device checklist remains
 pending. No emulator/device, flutter run, push, merge or branch switch occurred.
 The worktree remains on refactor/settings-widgets. **STOP after Step 4.**
+
+
+### Tooling-only review hardening
+
+- Reject failed/empty/malformed analyzer output before parsing diagnostics. Dart
+  3.12.2 machine mode emits no completion summary, so run identical targets
+  with `--fatal-infos` in machine and normal formats and require the normal
+  completion summary, matching count and severity/status. Analyzer caches stay
+  in the owned scratch checkout. Preserve the original identity/max assertions.
+  Source: https://raw.githubusercontent.com/dart-lang/sdk/3.12.2/pkg/dartdev/lib/src/commands/analyze.dart
+- Add a real subprocess-exit-70 fixture and malformed/empty/missing-summary/
+  count/status/crash fixtures. Remove only the quadratic compiler-error regex
+  prefix; a 512 KiB negative line has a five-second subprocess deadline and
+  a two-second classification assertion, alongside positive compiler markers.
+- Reader `--rev` defaults to the exact Step 0b subject (consume the whole log),
+  reads the original via `git show` into an owned temporary file and retains
+  every existing 60-span/per-kind/lexical assertion. Its kernel/scratch parents
+  are created. Architecture fixtures also create `.dart_tool`; inventory
+  creates kernel/report parents. Audit all eight settings_widgets Python tools:
+  none copies `.git` or assumes a gitfile; mutation copies keep their existing
+  scratch-path/clean-original safety requirements. Probe/checker are pure source
+  checks with explicit isolated parser packages. Format/diagnostics already
+  create their scratch/output parents. No shared checker, lib, frozen test,
+  dependency, baseline or golden changes.
+- Verification: fresh normal clone under `/tmp`, application `flutter pub get`,
+  distinct cleaned parser packages for every analyzer-backed run, original R
+  format/inventory, default Step 0b reader, real checker/self-test, architecture
+  fixtures, diagnostics fixtures/HEAD compare and mutation classifier fixtures.
+  Exact commands/exits and final equality evidence are recorded below.
+  No full-suite gate is needed for this tooling-only correction.
+
+Fresh-clone verification PASS (Flutter 3.44.8 / Dart 3.12.2). Clone:
+`/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout`; `.git` is a directory,
+not a worktree gitfile. All requested tools/self-tests exit **0** after
+`flutter pub get`. Every analyzer-backed invocation uses its own copied parser
+package, with all copied `*.dill` removed before execution. The checker also
+exercises the pure probe and its complete-split/real-config fixtures. No other
+feature proof script changed.
+
+- Manifest: 60 leaves. Shared/own checker self-tests PASS, including the
+  original/current and complete-split positives and all existing negatives.
+- Architecture: six positive cases / 31 rejected negatives; real main passes
+  1468 files. Extra reader/architecture fixtures start without `.dart_tool`
+  and create it successfully. The git-backed reader fixture writes
+  `gitdir: <git rev-parse --absolute-git-dir>`; it never copies `.git`.
+- Reader default resolves `65d7fd801a43bb32ae9d1657e0cce92f17d9a017`; explicit
+  revision agrees. All 60 spans, deletion/duplication for four declaration
+  kinds and lexical stress assertions pass, unchanged.
+- Diagnostics fixtures: three valid diagnostic statuses and ten rejected
+  invalid runs, including the actual subprocess exit 70, empty/malformed
+  records, missing summary, count/status mismatch and crashes. ORIGINAL-R
+  strict/split replay retains 11 maximum identities, exactly equal to the
+  archived baseline. HEAD compare retains four infos, zero added identities.
+- Compiler-error classifier: 512 KiB single-line negative completes in
+  0.001227 s and is not a compilation error; positive markers remain caught.
+- R format proof: two AST-identified optional commas, four rejected negatives;
+  comments/literals/tokens equal. R inventory: 60 declarations / 47 public /
+  132 importers / 14 runnable; six original missing-CI identities unchanged.
+- Clone clean after replay. `lib`, the entire `test` tree (including frozen
+  characterizations/fixtures/goldens), `pubspec.yaml` and `pubspec.lock` are
+  Git-object equal to pre-fix `2e9ddb9a`. Final commit only adds this verification
+  record to the tools already tested; the final input seal checks equality.
+  No new found-not-fixed item, application/test change or gate. STOP.
+
+Exact commands (all paths/flags preserved), with exit codes:
+
+| Working directory | Command | Exit |
+| --- | --- | ---: |
+| `/Users/varunbsalian/Documents/Projects/debrify-wt/settings-widgets` | `git clone --no-hardlinks --branch refactor/settings-widgets /Users/varunbsalian/Documents/Projects/debrify-wt/settings-widgets /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `flutter pub get` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `dart pub get --enforce-lockfile --directory /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-base` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_verbatim_moves.py --manifest dev/tool/settings_widgets_manifest.tsv --config dev/tool/settings_widgets_checker_config.json --self-test --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-checker-self-test/.dart_tool/package_config.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_verbatim_moves.py --manifest dev/tool/settings_widgets_manifest.tsv --config dev/tool/settings_widgets_checker_config.json --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-manifest/.dart_tool/package_config.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_architecture_test.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_reader_check.py --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-reader-default/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/reader-default.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_reader_check.py --rev 65d7fd801a43bb32ae9d1657e0cce92f17d9a017 --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-reader-explicit/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/reader-explicit.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py fixtures` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_original_mutations.py --fixtures` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py record --rev 0eadeb8c516b55445a367f1885136a7cf4be2312 --split --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-diagnostics-record-R/.dart_tool/package_config.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/record-R/baseline.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_diagnostics.py compare --rev HEAD --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-diagnostics-compare-HEAD/.dart_tool/package_config.json --baseline /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/previous-strict-baseline.json --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/compare-HEAD/comparison.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_format_proof.py --original 397485b4 --formatted /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/original-R.dart --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-format-R/.dart_tool/package_config.json --kernel /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/new-kernel/format.dill --output /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/format-R.json` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/settings_widgets_inventory.py --rev 0eadeb8c516b55445a367f1885136a7cf4be2312 --parser-package /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.dart_tool/settings_widgets/tooling-hardening/parser-inventory-R/.dart_tool/package_config.json --report /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/new-report-parent/deps.md --evidence /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/inventory-R` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 /tmp/debrify-settings-widgets-tools-d4hhavx5/checkout/.git/refactor-evidence/settings_widgets/tooling-hardening/missing-dart-tool.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `python3 dev/tool/check_search_architecture.py` | 0 |
+| `/tmp/debrify-settings-widgets-tools-d4hhavx5/checkout` | `git diff --check` | 0 |
+
+Parser bootstrap copies the checked-in `verbatim_parser.pubspec.lock`, pins
+`analyzer: 14.3.0`, and uses `--enforce-lockfile`. Each `parser-<run>` is a fresh
+copy of that resolved base; kernels remain inside this clone. The format input
+is `git show 0eadeb8c:lib/screens/settings/widgets/settings_widgets.dart`,
+written to the displayed evidence path. Diagnostics compare reads an unchanged
+copy of the archived Step 0 strict baseline, rather than accepting new results.
+The missing-directory fixture source, commands JSON, logs, parsed outputs and
+input seal are under `.git/refactor-evidence/settings_widgets/tooling-hardening/`
+(in the worktree's common Git evidence directory, with matching evidence under
+the normal clone's own `.git`). No push, merge, branch switch, device/emulator
+or application execution.

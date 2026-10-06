@@ -17,6 +17,7 @@ public={n['name'] for n in ast['declarations'] if not n['name'].startswith('_')}
 owner={n:g for g,names in GROUPS.items() for n in names}
 paths=[line.split(':',1)[1] for line in subprocess.check_output(['git','grep','-l','settings_widgets.dart',args.rev,'--','lib','test'],cwd=ROOT,text=True).splitlines() if line.endswith('.dart')]
 kernel=package.parent/'settings_widgets_inventory.dill'
+kernel.parent.mkdir(parents=True,exist_ok=True)
 subprocess.run(['dart','compile','kernel','--packages='+str(package),'-o',str(kernel),str(ROOT/'dev/tool/settings_widgets_inventory.dart.txt')],check=True,stdout=subprocess.DEVNULL)
 units=json.loads(subprocess.check_output(['dart',str(kernel)],input=json.dumps({p:subprocess.check_output(['git','show',args.rev+':'+p],cwd=ROOT,text=True) for p in paths}),text=True))
 importers=[]
@@ -72,5 +73,6 @@ lines+=['The graph is acyclic. No cross-file private reference exists, so type_a
 for i in importers:lines.append('| `'+i['path']+'` | '+(', '.join('`'+n+'`' for n in i['names']) or 'none (original unused import)')+' | `'+i['directives'][0]+'` |')
 lines+=['','## CI additions','','Missing runnable direct importers:','']+['- `'+p+'`' for p in missing]+['','Also register the helper consumers `test/theme/goldens_test.dart` and `test/theme/contrast_audit_test.dart` when absent, and all nine new tests. Never register `test/theme/surface_gallery.dart`.','', '## Wiring checklist','','Step 0: every declaration remains in R. Each destination is still pending. For every later move: copy the whole leaf and comments, wire the public references/imports above, re-export its public name, run the manifest, reader, diagnostics and affected tests, then remove its original declaration.','']
 lines += ['- [ ] `'+n['name']+'` → `settings_'+owner[n['name']]+'.dart` (production remains original at Step 0)' for n in ast['declarations']]
+args.report.parent.mkdir(parents=True,exist_ok=True)
 args.report.write_text('\n'.join(lines)+'\n')
 print('Deps: 60 leaves, 47 public, 132 importing files / 14 runnable; missing CI:',missing)
