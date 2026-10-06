@@ -1530,3 +1530,20 @@ input seal are under `.git/refactor-evidence/settings_widgets/tooling-hardening/
 (in the worktree's common Git evidence directory, with matching evidence under
 the normal clone's own `.git`). No push, merge, branch switch, device/emulator
 or application execution.
+
+### Completion Linux replay and review (Claude)
+
+- Strict Linux replay at gate 2 `90a97685` in `debrify-flutter:3.44.8`
+  (`sha256:cc4fea9c…a263a`, linux/amd64): the five new goldens pass in forward
+  and reverse order with PNG hashes unchanged from step L; the five
+  `settings_spotlight` Linux goldens pass (`settings_spotlight_shell_test` +
+  `settings_tv_spotlight_layout_test`, 21 tests). Provenance: lib
+  `fb743955`, test `5c23a3fa`, pubspec/lock unchanged. Evidence:
+  `refactor-evidence/settings_widgets/linux-gate2-replay.txt`.
+- Step 0 review: 26 additional original-only mutations (14 initially
+  surviving) closed by 0b; all 26 re-run independently and killed.
+- Independent Codex review (`setw-rev`): production split verified (60
+  declarations byte/token/comment-identical, 47 exports, 1,837 references
+  across 132 importers unchanged); one P2 + one P3 tooling finding and the
+  reader-check HEAD dependency fixed in `68df9d5a`, re-verified from a fresh
+  normal clone (`.git` directory).
