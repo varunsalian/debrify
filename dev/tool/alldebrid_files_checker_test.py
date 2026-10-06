@@ -8,6 +8,49 @@ import subprocess
 from pathlib import Path
 
 
+def source_reader_self_test(ROOT, original):
+    """Normalize a retained real facade body after its fields move; no masking."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='alldebrid-reader-', dir=ROOT / '.dart_tool') as directory:
+        fixture = Path(directory)
+        source = fixture / 'lib/screens/alldebrid/alldebrid_files_screen.dart'
+        source.parent.mkdir(parents=True)
+        source.write_text(original)
+        (fixture / 'dev/tool').mkdir(parents=True)
+        for name in ['alldebrid_files_manifest.tsv', 'alldebrid_files_checker_config.json', 'alldebrid_files_context_exceptions.json']:
+            (fixture / 'dev/tool' / name).write_bytes((ROOT / 'dev/tool' / name).read_bytes())
+        reader = (ROOT / 'test/support/alldebrid_files_source.dart').as_uri()
+        probe = fixture / 'probe.dart'
+        probe.write_text("import 'dart:io';\nimport '" + reader + "';\n" + r'''
+String lines(String s) => s.split('\n').map((s) => s.trim()).join('\n').trim();
+void main() {
+  final file = File('lib/screens/alldebrid/alldebrid_files_screen.dart');
+  final original = file.readAsStringSync();
+  final expected = allDebridOriginalMember('_AllDebridFilesScreenState._showLoading');
+  if (!original.contains(expected)) throw StateError('Original body altered by normalization');
+  final qualified = expected.replaceAll('_loadingDialogOpen', '_feedback.loadingDialogOpen').replaceAll('!mounted', '!_deps.mounted()').replaceAll('context: context', 'context: _deps.context()');
+  if (qualified == expected) throw StateError('No fixture change');
+  try {
+    file.writeAsStringSync(original.replaceFirst(expected, qualified));
+    if (lines(allDebridOriginalMember('_AllDebridFilesScreenState._showLoading')) != lines(expected)) throw StateError('Legitimate facade qualification not normalized');
+    print('real facade qualified fields/live callbacks: PASS');
+    file.writeAsStringSync(original.replaceFirst(expected, qualified.replaceAll('_feedback.loadingDialogOpen', '_navigation.loadingDialogOpen')));
+    if (lines(allDebridOriginalMember('_AllDebridFilesScreenState._showLoading')) == lines(expected)) throw StateError('Foreign receiver masked');
+    print('foreign receiver: rejected');
+    file.writeAsStringSync(original.replaceFirst(expected, qualified.replaceAll('_deps.mounted()', 'savedMounted')));
+    if (lines(allDebridOriginalMember('_AllDebridFilesScreenState._showLoading')) == lines(expected)) throw StateError('Cached mounted masked');
+    print('cached mounted: rejected');
+  } finally {
+    file.writeAsStringSync(original);
+  }
+}
+''')
+        result = subprocess.run(['dart', str(probe)], cwd=fixture, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        for line in result.stdout.splitlines():
+            print('AllDebrid source reader ' + line)
+
+
 def self_test(package):
     from check_verbatim_moves import ROOT, parse, original_leaves, split_names
     from check_settings_moves import all_nodes, check, configured, tokens, normalize
@@ -132,3 +175,4 @@ def self_test(package):
                 assert [[normalize(arg,rows,row) for arg in call_args] for call_args in arguments(current,call)] == [[normalize(arg,rows,row) for arg in expected]],site['member']+' '+call
             assert normalize(current,rows,row)==normalize(site['member_tokens'],rows,row),site['member']
     print('AllDebrid all three playback ledgers token-exact: PASS')
+    source_reader_self_test(ROOT, original)

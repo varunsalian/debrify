@@ -66,9 +66,6 @@ String allDebridOriginalMember(String originalName) {
     memberStart = previousStart;
   }
   var member = source.substring(memberStart, start.end + end.end);
-  if (path == 'lib/screens/alldebrid/alldebrid_files_screen.dart') {
-    return member;
-  }
   final formatting =
       jsonDecode(
             File(
