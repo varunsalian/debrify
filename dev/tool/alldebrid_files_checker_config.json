@@ -1,0 +1,413 @@
+{
+  "baseline": "49c53e2e",
+  "source": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+  "feature": "lib/features/alldebrid_files",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "live_getter_callback",
+    "root_build_forwarder",
+    "retained_forwarder"
+  ],
+  "receivers": [
+    "AllDebridLibraryState",
+    "AllDebridNavigationState",
+    "AllDebridNavigation",
+    "AllDebridSearchState",
+    "AllDebridFocusState",
+    "AllDebridSelectionState",
+    "AllDebridLibraryLoading",
+    "AllDebridPlayback",
+    "AllDebridDownloads",
+    "AllDebridAddActions",
+    "AllDebridDeleteActions",
+    "AllDebridPlaylistActions",
+    "AllDebridSelection",
+    "AllDebridSearch",
+    "AllDebridFeedbackState",
+    "AllDebridFeedback",
+    "AllDebridRootLayout",
+    "AllDebridToolbar",
+    "AllDebridSearchBars",
+    "AllDebridListViews",
+    "_deps",
+    "deps"
+  ],
+  "receiver_paths": {
+    "_library": "AllDebridLibraryState",
+    "_deps.libraryState": "AllDebridLibraryState",
+    "_navigation": "AllDebridNavigationState",
+    "_deps.navigationState": "AllDebridNavigationState",
+    "_sections.navigation": "AllDebridNavigation",
+    "_search": "AllDebridSearchState",
+    "_deps.searchState": "AllDebridSearchState",
+    "_focus": "AllDebridFocusState",
+    "_deps.focusState": "AllDebridFocusState",
+    "_selection": "AllDebridSelectionState",
+    "_deps.selectionState": "AllDebridSelectionState",
+    "_sections.libraryLoading": "AllDebridLibraryLoading",
+    "_sections.playback": "AllDebridPlayback",
+    "_sections.downloads": "AllDebridDownloads",
+    "_sections.addActions": "AllDebridAddActions",
+    "_sections.deleteActions": "AllDebridDeleteActions",
+    "_sections.playlistActions": "AllDebridPlaylistActions",
+    "_sections.selection": "AllDebridSelection",
+    "_sections.search": "AllDebridSearch",
+    "_feedback": "AllDebridFeedbackState",
+    "_deps.feedbackState": "AllDebridFeedbackState",
+    "_sections.feedback": "AllDebridFeedback",
+    "_sections.rootLayout": "AllDebridRootLayout",
+    "_sections.toolbar": "AllDebridToolbar",
+    "_sections.searchBars": "AllDebridSearchBars",
+    "_sections.listViews": "AllDebridListViews"
+  },
+  "receiver_owners": {
+    "_library": "AllDebridLibraryState",
+    "_deps.libraryState": "AllDebridLibraryState",
+    "_navigation": "AllDebridNavigationState",
+    "_deps.navigationState": "AllDebridNavigationState",
+    "_sections.navigation": "AllDebridNavigation",
+    "_search": "AllDebridSearchState",
+    "_deps.searchState": "AllDebridSearchState",
+    "_focus": "AllDebridFocusState",
+    "_deps.focusState": "AllDebridFocusState",
+    "_selection": "AllDebridSelectionState",
+    "_deps.selectionState": "AllDebridSelectionState",
+    "_sections.libraryLoading": "AllDebridLibraryLoading",
+    "_sections.playback": "AllDebridPlayback",
+    "_sections.downloads": "AllDebridDownloads",
+    "_sections.addActions": "AllDebridAddActions",
+    "_sections.deleteActions": "AllDebridDeleteActions",
+    "_sections.playlistActions": "AllDebridPlaylistActions",
+    "_sections.selection": "AllDebridSelection",
+    "_sections.search": "AllDebridSearch",
+    "_feedback": "AllDebridFeedbackState",
+    "_deps.feedbackState": "AllDebridFeedbackState",
+    "_sections.feedback": "AllDebridFeedback",
+    "_sections.rootLayout": "AllDebridRootLayout",
+    "_sections.toolbar": "AllDebridToolbar",
+    "_sections.searchBars": "AllDebridSearchBars",
+    "_sections.listViews": "AllDebridListViews"
+  },
+  "receiver_members": {
+    "AllDebridLibraryState": [
+      "apiKey",
+      "loading",
+      "error",
+      "magnets",
+      "links",
+      "loadingLinks",
+      "linksLoadedOnce",
+      "linksError"
+    ],
+    "AllDebridNavigationState": [
+      "selectedView",
+      "currentMagnet",
+      "currentFiles",
+      "loadingFiles"
+    ],
+    "AllDebridNavigation": [
+      "isAtRoot",
+      "focusWebDownloads",
+      "focusFirstItem",
+      "refresh",
+      "openMagnet",
+      "navigateUp",
+      "handleBackNavigation"
+    ],
+    "AllDebridSearchState": [
+      "searchActive",
+      "searchQuery",
+      "searchController",
+      "fileSearchActive",
+      "fileSearchQuery",
+      "fileSearchController"
+    ],
+    "AllDebridFocusState": [
+      "searchFocusNode",
+      "searchClearFocusNode",
+      "fileSearchFocusNode",
+      "scrollController",
+      "backButtonFocusNode",
+      "deleteButtonFocusNode",
+      "toolbarSearchFocusNode",
+      "tvContentFocusHandler",
+      "shouldFocusOnLoad",
+      "firstItemFocusNode"
+    ],
+    "AllDebridSelectionState": [
+      "selectionMode",
+      "selectedIds"
+    ],
+    "AllDebridLibraryLoading": [
+      "load",
+      "loadLinks"
+    ],
+    "AllDebridPlayback": [
+      "looksLikeVideo",
+      "unlockStart",
+      "playFile",
+      "playMagnet",
+      "playVideos",
+      "playLink"
+    ],
+    "AllDebridDownloads": [
+      "downloadFile",
+      "downloadMagnet",
+      "downloadSelectedFiles",
+      "downloadLink",
+      "copyLink"
+    ],
+    "AllDebridAddActions": [
+      "showAddMagnetDialog",
+      "showAddLinkDialog"
+    ],
+    "AllDebridDeleteActions": [
+      "deleteLinks",
+      "confirmDeleteAllLinks",
+      "deleteMagnets",
+      "confirmDeleteAll",
+      "handleDeleteSelected"
+    ],
+    "AllDebridPlaylistActions": [
+      "addMagnetToPlaylist"
+    ],
+    "AllDebridSelection": [
+      "toggleSelectionMode",
+      "exitSelectionMode",
+      "toggleSelection",
+      "isAllSelected",
+      "toggleSelectAll"
+    ],
+    "AllDebridSearch": [
+      "toggleSearch",
+      "visibleMagnets",
+      "visibleFiles",
+      "visibleLinks",
+      "moveFocusTo"
+    ],
+    "AllDebridFeedbackState": [
+      "loadingDialogOpen"
+    ],
+    "AllDebridFeedback": [
+      "showLoading",
+      "dismissLoading",
+      "snack"
+    ],
+    "AllDebridRootLayout": [
+      "build",
+      "buildBody"
+    ],
+    "AllDebridToolbar": [
+      "isBrowsePush",
+      "buildToolbar",
+      "buildViewSelectorBar",
+      "buildSelectionBar"
+    ],
+    "AllDebridSearchBars": [
+      "searchDecoration",
+      "buildSearchBar",
+      "buildFileSearchBar"
+    ],
+    "AllDebridListViews": [
+      "buildMagnetsView",
+      "buildMagnetCard",
+      "buildLinksView",
+      "buildLinkCard",
+      "buildFilesView",
+      "buildFileCard"
+    ]
+  },
+  "live_getter_callbacks": [
+    "context",
+    "mounted",
+    "isAtRoot",
+    "isAllSelected",
+    "isBrowsePush",
+    "visibleMagnets",
+    "visibleFiles",
+    "visibleLinks"
+  ],
+  "live_widget_getters": [
+    "isPushedRoute",
+    "selectSourceMode",
+    "onSourceSelected"
+  ],
+  "occurrence_field_bindings": {
+    "owners": [
+      "_AllDebridFilesScreenState"
+    ],
+    "mandatory_qualification": true
+  },
+  "record_owners": [
+    "_AllDebridFilesScreenState"
+  ],
+  "record_fields": {
+    "_AllDebridFilesScreenState": [
+      "_apiKey",
+      "_loading",
+      "_error",
+      "_magnets",
+      "_selectedView",
+      "_links",
+      "_loadingLinks",
+      "_linksLoadedOnce",
+      "_linksError",
+      "_currentMagnet",
+      "_currentFiles",
+      "_loadingFiles",
+      "_searchActive",
+      "_searchQuery",
+      "_searchController",
+      "_searchFocusNode",
+      "_searchClearFocusNode",
+      "_fileSearchActive",
+      "_fileSearchQuery",
+      "_fileSearchController",
+      "_fileSearchFocusNode",
+      "_selectionMode",
+      "_selectedIds",
+      "_scrollController",
+      "_backButtonFocusNode",
+      "_deleteButtonFocusNode",
+      "_toolbarSearchFocusNode",
+      "_tvContentFocusHandler",
+      "_shouldFocusOnLoad",
+      "_firstItemFocusNode",
+      "_loadingDialogOpen"
+    ]
+  },
+  "lifecycle": [
+    "_AllDebridFilesScreenState.initState",
+    "_AllDebridFilesScreenState.dispose"
+  ],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {},
+  "plain_sections": [],
+  "annotation_exceptions": {},
+  "named_exceptions": {},
+  "test_accessors": [
+    {
+      "name": "allDebridFilesTestAccess",
+      "tokens_file": "dev/tool/alldebrid_files_test_accessor.json",
+      "required": true
+    }
+  ],
+  "seams": [],
+  "sidecars": {
+    "scaffolding": "dev/tool/alldebrid_files_scaffolding.json",
+    "context_exceptions": "dev/tool/alldebrid_files_context_exceptions.json"
+  },
+  "self_test_module": "alldebrid_files_checker_test",
+  "callback_instances": {
+    "_AllDebridFilesScreenState": "$State",
+    "AllDebridLibraryState": "$State._library",
+    "AllDebridNavigationState": "$State._navigation",
+    "AllDebridNavigation": "$State._sections.navigation",
+    "AllDebridSearchState": "$State._search",
+    "AllDebridFocusState": "$State._focus",
+    "AllDebridSelectionState": "$State._selection",
+    "AllDebridLibraryLoading": "$State._sections.libraryLoading",
+    "AllDebridPlayback": "$State._sections.playback",
+    "AllDebridDownloads": "$State._sections.downloads",
+    "AllDebridAddActions": "$State._sections.addActions",
+    "AllDebridDeleteActions": "$State._sections.deleteActions",
+    "AllDebridPlaylistActions": "$State._sections.playlistActions",
+    "AllDebridSelection": "$State._sections.selection",
+    "AllDebridSearch": "$State._sections.search",
+    "AllDebridFeedbackState": "$State._feedback",
+    "AllDebridFeedback": "$State._sections.feedback",
+    "AllDebridRootLayout": "$State._sections.rootLayout",
+    "AllDebridToolbar": "$State._sections.toolbar",
+    "AllDebridSearchBars": "$State._sections.searchBars",
+    "AllDebridListViews": "$State._sections.listViews"
+  },
+  "callback_receiver_aliases": {
+    "_library": "$State._library",
+    "_navigation": "$State._navigation",
+    "_sections.navigation": "$State._sections.navigation",
+    "_search": "$State._search",
+    "_focus": "$State._focus",
+    "_selection": "$State._selection",
+    "_sections.libraryLoading": "$State._sections.libraryLoading",
+    "_sections.playback": "$State._sections.playback",
+    "_sections.downloads": "$State._sections.downloads",
+    "_sections.addActions": "$State._sections.addActions",
+    "_sections.deleteActions": "$State._sections.deleteActions",
+    "_sections.playlistActions": "$State._sections.playlistActions",
+    "_sections.selection": "$State._sections.selection",
+    "_sections.search": "$State._sections.search",
+    "_feedback": "$State._feedback",
+    "_sections.feedback": "$State._sections.feedback",
+    "_sections.rootLayout": "$State._sections.rootLayout",
+    "_sections.toolbar": "$State._sections.toolbar",
+    "_sections.searchBars": "$State._sections.searchBars",
+    "_sections.listViews": "$State._sections.listViews",
+    "_deps.libraryState": "$State._library",
+    "_deps.navigationState": "$State._navigation",
+    "_deps.searchState": "$State._search",
+    "_deps.focusState": "$State._focus",
+    "_deps.selectionState": "$State._selection",
+    "_deps.feedbackState": "$State._feedback"
+  },
+  "callback_identities": [
+    {
+      "name": "route back push/pop and tab registration",
+      "callback_member": "_AllDebridFilesScreenState._handleBackNavigation",
+      "sites": [
+        {
+          "member": "_AllDebridFilesScreenState.initState",
+          "call": "pushRouteBackHandler",
+          "argument": 0
+        },
+        {
+          "member": "_AllDebridFilesScreenState.dispose",
+          "call": "popRouteBackHandler",
+          "argument": 0
+        },
+        {
+          "member": "_AllDebridFilesScreenState.initState",
+          "call": "registerTabBackHandler",
+          "argument": 1
+        }
+      ]
+    },
+    {
+      "name": "deep link assignment and own disposal comparison",
+      "callback_member": "_AllDebridFilesScreenState._focusWebDownloads",
+      "sites": [
+        {
+          "member": "_AllDebridFilesScreenState.initState",
+          "assignment_property": "focusAllDebridWebDownloads"
+        },
+        {
+          "member": "_AllDebridFilesScreenState.dispose",
+          "comparison_property": "focusAllDebridWebDownloads"
+        }
+      ]
+    },
+    {
+      "name": "TV tab 12 stored focus closure",
+      "callback_member": "_AllDebridFilesScreenState._tvContentFocusHandler",
+      "sites": [
+        {
+          "member": "_AllDebridFilesScreenState.initState",
+          "call": "registerTvContentFocusHandler",
+          "argument": 1
+        },
+        {
+          "member": "_AllDebridFilesScreenState.dispose",
+          "call": "unregisterTvContentFocusHandler",
+          "argument": 1
+        }
+      ]
+    }
+  ]
+}

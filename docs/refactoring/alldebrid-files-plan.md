@@ -540,3 +540,119 @@ executable". Its one P3 (Found-not-fixed numbering) is fixed.
 - Only a frozen `@visibleForTesting` accessor is added: fresh unmodifiable state snapshots, resource reads and the retained `_refresh` tear-off for the dormant forced-files branch. No action/service/player seam, setter, constructor change or original method move. Temporary facade ratchet 1,996 → 2,040 lines; original responsibilities remain until Steps 1–5 and final facade cap in Step 6.
 - The first real HTTP fixture passed in an isolated original-code normal clone before writing the characterization matrix. It verifies the success envelope, ready-only filtering, exact magnet/status POST/header and lazy links. JSON/env/stable tested tree are retained as `original-fixture-first.*`; the clone contains only the original screen plus this permitted seam and test overlay.
 - Existing manifest self-tests are being recorded before the opt-in shared-tool extension. All later-step production architecture/theme/shape registrations remain deferred to their scheduled steps. Base2, characterization/mutation proofs, final checks and fresh-clone verification are still pending; this is a seam checkpoint, not completion.
+
+### Step 0 — original-code characterization checkpoint
+
+- Nothing is extracted. All 98 original AST leaves and both class containers have frozen destinations in [alldebrid-files-deps.md](alldebrid-files-deps.md); the per-entry wiring checklist remains unchecked until the scheduled move. Three launch sites retain token-exact ordered launch/entry arguments and full owning bodies in `alldebrid_files_playback_ledger.json`. Callback owners stay on the State through Step 2, then the stable navigation section from Step 3.
+- Checker configuration pins record owners/fields and receiver paths, mandatory field qualification, live context/mounted/setState and widget getters. The real-config positive has no scaffold masking. Independent raw callback checks reject wrappers and same-class foreign receivers at each assignment/comparison site; real moved `_load` fixtures reject bare/foreign fields, a field replacing a local, cached mounted and a foreign State setter. Only the additive opt-in `comparison_property` selector changes shared tooling. Existing manifest and fresh-clone verification are recorded below when complete.
+- Ten test files contain 107 identities: 94 behavioral cases, including six macOS pixel cases, and 13 source-only cases. Every Step 0 table row (contracts 1–11, Loading dialog, Selection) is covered through real widgets, keys or MainPageBridge handlers. Requests compare complete ordered method/URL/form/header tuples; ids and selected order are deliberately non-monotonic. The dormant files refresh alone calls the frozen retained refresh accessor. Native playback handoffs and successful/mixed enqueue messages remain pending as permitted by rows 3/4.
+- The fixture uses `ProfileRuntime.initializeLegacy`, SecretVault reset/device override, real storage credentials, HTTP success/error envelopes and platform clipboard mocking. Fixture-private Inter uses the existing valid font asset for deterministic popup metrics; bundled Roboto assets resolve to HTML, and remain untouched. The first original-code HTTP fixture preceded the matrix.
+
+| Test file (all under `test/features/alldebrid_files/presentation/legacy_alldebrid/`) | Identities | Coverage |
+| --- | ---: | --- |
+| `alldebrid_add_playlist_test.dart` | 14 | Add magnet/link, clipboard paste, original-link save, playlist maps/dedup |
+| `alldebrid_binding_test.dart` | 6 | Picker bindings, live callback, title and search visibility |
+| `alldebrid_delete_selection_test.dart` | 11 | Destructive dialogs/order/errors, filtered selection/pruning |
+| `alldebrid_fixture_test.dart` | 1 | Initial real HTTP fixture, ready-only filter |
+| `alldebrid_focus_test.dart` | 5 | Hardware search exits, clear activation/left, add arrow-down, load focus |
+| `alldebrid_navigation_test.dart` | 13 | Route/tab/TV handlers, back levels, query lifecycle, deep links, scroll, unmount |
+| `alldebrid_playback_download_test.dart` | 13 | Unlock order/fallback/failures, dialog maps/indices, copy, duplicate/modal Back hazard |
+| `alldebrid_profile_test.dart` | 14 | Credential changes, cached action headers, remount resources |
+| `alldebrid_source_contract_test.dart` | 13 | Lifecycle, three launch ledgers, three enqueue sites, dormant branches and feedback |
+| `alldebrid_views_test.dart` | 17 | Loads/retry/lazy views/refresh/search/keys/empty/error; six macOS goldens |
+
+Mutation proof summary: **83 variants: 70 behavioral and 13 source-only; 107 unique test identities killed (94 + 13); zero final survivors and zero compiler/infrastructure kills.** The frozen case file maps each variant to exact test identities and original-method edits; `mutation-table.json` and per-case `.patch`, `.jsonl`, `.stderr`, `.result.json` under `.git/refactor-evidence/alldebrid_files/` contain actual assertion failures and source hashes. Every edit was applied to the original 49c53e2e implementation plus permitted seam in a normal scratch clone, restored in `finally`, and never committed. Behavioral and source-only runs are separate.
+
+| Variant | Kind | Named test assertions killed | Result |
+| --- | --- | ---: | --- |
+| `ready-filter` | behavioral | 1 | PASS: assertion failure |
+| `back-root-sentinel` | behavioral | 2 | PASS: assertion failure |
+| `focus-first-row` | behavioral | 2 | PASS: assertion failure |
+| `back-priority` | behavioral | 1 | PASS: assertion failure |
+| `navigate-reset` | behavioral | 1 | PASS: assertion failure |
+| `initial-query-trim` | behavioral | 1 | PASS: assertion failure |
+| `pending-consumption` | behavioral | 2 | PASS: assertion failure |
+| `own-handler-clear` | behavioral | 1 | PASS: assertion failure |
+| `replacement-handler-survives` | behavioral | 1 | PASS: assertion failure |
+| `live-search-reset` | behavioral | 1 | PASS: assertion failure |
+| `reload-skeleton-detach` | behavioral | 1 | PASS: assertion failure |
+| `unmount-publication` | behavioral | 1 | PASS: assertion failure |
+| `picker-map-fields` | behavioral | 2 | PASS: assertion failure |
+| `picker-empty-hash` | behavioral | 1 | PASS: assertion failure |
+| `picker-toolbar-title` | behavioral | 1 | PASS: assertion failure |
+| `picker-empty-search` | behavioral | 1 | PASS: assertion failure |
+| `picker-live-dispatch` | behavioral | 1 | PASS: assertion failure |
+| `search-up-target` | behavioral | 1 | PASS: assertion failure |
+| `file-search-up-target` | behavioral | 1 | PASS: assertion failure |
+| `add-dialog-down` | behavioral | 2 | PASS: assertion failure |
+| `multi-unlock-start-order` | behavioral | 2 | PASS: assertion failure |
+| `no-videos-snack` | behavioral | 1 | PASS: assertion failure |
+| `single-shortcut-snack` | behavioral | 1 | PASS: assertion failure |
+| `unlock-failure-file_play` | behavioral | 1 | PASS: assertion failure |
+| `unlock-failure-file_download` | behavioral | 1 | PASS: assertion failure |
+| `unlock-failure-link_play` | behavioral | 1 | PASS: assertion failure |
+| `unlock-failure-link_download` | behavioral | 1 | PASS: assertion failure |
+| `dialog-maps` | behavioral | 1 | PASS: assertion failure |
+| `invalid-selection-result` | behavioral | 1 | PASS: assertion failure |
+| `clipboard-value` | behavioral | 1 | PASS: assertion failure |
+| `duplicate-modal` | behavioral | 1 | PASS: assertion failure |
+| `system-back-dismiss` | behavioral | 1 | PASS: assertion failure |
+| `missing-key-text` | behavioral | 1 | PASS: assertion failure |
+| `load-error-text` | behavioral | 2 | PASS: assertion failure |
+| `view-selection-reset` | behavioral | 1 | PASS: assertion failure |
+| `root-refresh-header-false` | behavioral | 1 | PASS: assertion failure |
+| `root-refresh-header-true` | behavioral | 1 | PASS: assertion failure |
+| `row-key` | behavioral | 1 | PASS: assertion failure |
+| `dormant-force-retention` | behavioral | 1 | PASS: assertion failure |
+| `search-case` | behavioral | 1 | PASS: assertion failure |
+| `empty-state-text` | behavioral | 1 | PASS: assertion failure |
+| `open-file-error` | behavioral | 1 | PASS: assertion failure |
+| `golden-padding` | behavioral | 6 | PASS: assertion failure |
+| `magnet-cancel` | behavioral | 1 | PASS: assertion failure |
+| `magnet-delete-order` | behavioral | 4 | PASS: assertion failure |
+| `link-delete-results` | behavioral | 4 | PASS: assertion failure |
+| `visible-only-selection` | behavioral | 1 | PASS: assertion failure |
+| `prune-stale-selection` | behavioral | 1 | PASS: assertion failure |
+| `add-magnet-cancel-empty` | behavioral | 2 | PASS: assertion failure |
+| `add-magnet-header` | behavioral | 2 | PASS: assertion failure |
+| `clipboard-prefix` | behavioral | 1 | PASS: assertion failure |
+| `add-link-cancel-empty` | behavioral | 2 | PASS: assertion failure |
+| `add-link-validation` | behavioral | 1 | PASS: assertion failure |
+| `add-link-header` | behavioral | 3 | PASS: assertion failure |
+| `playlist-map` | behavioral | 2 | PASS: assertion failure |
+| `playlist-hash-reject` | behavioral | 1 | PASS: assertion failure |
+| `root-key-reread` | behavioral | 1 | PASS: assertion failure |
+| `remount-new-key` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-play_file` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-play_magnet` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-download_file` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-download_magnet` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-play_link` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-download_link` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-copy_link` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-add_magnet` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-add_link` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-delete_magnet` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-delete_link` | behavioral | 1 | PASS: assertion failure |
+| `cached-action-playlist` | behavioral | 1 | PASS: assertion failure |
+| `source-only-01` (verbatim State startup and ten ordered disposals) | source-only | 1 | PASS: assertion failure |
+| `source-only-02` (token-exact file launcher arguments and mounted handoff) | source-only | 1 | PASS: assertion failure |
+| `source-only-03` (token-exact series playlist sorting fallback clamp and launcher arguments) | source-only | 1 | PASS: assertion failure |
+| `source-only-04` (token-exact saved-link launcher arguments and notify order) | source-only | 1 | PASS: assertion failure |
+| `source-only-05` (file enqueue credentials context size and failure contracts) | source-only | 1 | PASS: assertion failure |
+| `source-only-06` (saved-link enqueue credentials context and failure contracts) | source-only | 1 | PASS: assertion failure |
+| `source-only-07` (selected-files sequential enqueue and three result branches) | source-only | 1 | PASS: assertion failure |
+| `source-only-08` (download dialog maps retain full paths sizes indices and unawaited callback) | source-only | 1 | PASS: assertion failure |
+| `source-only-09` (playlist persistence single and collection maps retain all arguments) | source-only | 1 | PASS: assertion failure |
+| `source-only-10` (shared loading flag guard clear-before-pop and non-dismissible barrier) | source-only | 1 | PASS: assertion failure |
+| `source-only-11` (dormant non-ready snacks and badges remain unreachable and verbatim) | source-only | 1 | PASS: assertion failure |
+| `source-only-12` (navigate-up attached-scroll reset and focus protocol remain verbatim) | source-only | 1 | PASS: assertion failure |
+| `source-only-13` (clipboard auto-paste and original input link-save contract remain verbatim) | source-only | 1 | PASS: assertion failure |
+
+- Initial survivors led to stronger assertions, never relaxed ones: catch-side mounted protection as well as success-side protection; add-dialog focus landing on a button; selection reset on every view transition; mixed-case name/host queries; Cancel/empty with no snackbar; both playlist-map branches. A runner classifier initially mistook the literal `Failed to load` in expected source text for compilation failure; it now requires an actual runner-error prefix, and the affected proofs were rerun. First attempts and rechecks remain in `mutations/` and `mutations-final/`; final navigate and source-reader follow-ups remain separate.
+- Source-text inventory is frozen in the dependency report: one bare radius and five shape token calls; theme/shape/import/placement registrations wait for the scheduled extraction steps. Four generic storage checks, file-size ratchet and architecture checks pass. Existing profile/theme/shape source guards were run: the profile direct-SharedPreferences inventory failure is the same observed baseline identity; all 107 added identities and both production caller suites pass in the original-code scoped comparison (157 success / 1 baseline failure; comparison PASS). No suppression, allowlist, dependency or other-feature source change.
+- CI lists all ten concrete new test paths. `checks.yml` adds the facade and support globs inside both format/analyze commands before any `| tee`. The Linux capture script is committed, shell-syntax checked, **not run**: local `debrify-flutter:3.44.8`, linux/amd64, normal clone under container HOME, container pub get, double capture in reversed order and strict replay. Claude owns Step L, including verified Linux PNGs and strict default. No Docker/device/emulator run or push.
+
+Final full-suite, whole-analyzer, shared-tool and fresh-clone evidence follows in the verification checkpoint.
+
+- Current original-code matrix: 107/107 passing, stable tested tree (`original-characterization-current.*`); its identity set exactly equals the named mutation kills (`characterization-mutation-coverage.json`). Whole analyzer: 1,718 records, zero added identities versus the 3,230-record untouched baseline, stable tree (`step0-analyze-final.*`, comparison PASS). Two independent macOS capture processes, second in reversed order, each passed 6/6 and preserved all six already-characterized PNG hashes (`mac-original-double-capture.json`).

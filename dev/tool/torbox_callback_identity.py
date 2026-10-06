@@ -211,6 +211,31 @@ def check_callback_identities(lookup, rows, source_path, config):
                         end = values.index(';', i + 2)
                         resolved.append(identity(values[i + 2:end], node['owner']))
                     continue
+                if 'comparison_property' in site:
+                    # Opt-in: retain the complete raw RHS of property ==.
+                    # Balance nested expressions so a wrapper cannot appear
+                    # to be the direct tear-off inside its own parentheses.
+                    property_name = site['comparison_property']
+                    matches = [i for i, value in enumerate(values[:-1])
+                               if value == property_name and values[i + 1] == '==']
+                    if len(matches) != count:
+                        raise ValueError('comparison site count changed: ' + property_name)
+                    selected = [matches[occurrence]] if occurrence is not None else matches
+                    for i in selected:
+                        depth, end = 0, None
+                        for j in range(i + 2, len(values)):
+                            value = values[j]
+                            if depth == 0 and value in (')', ';', '&&', '||'):
+                                end = j
+                                break
+                            if value in ('(', '[', '{', '${'):
+                                depth += 1
+                            elif value in (')', ']', '}'):
+                                depth -= 1
+                        if end is None:
+                            raise ValueError('unterminated comparison operand: ' + property_name)
+                        resolved.append(identity(values[i + 2:end], node['owner']))
+                    continue
                 call_name = site['call']
                 if 'call_member' in site:
                     call_name = node_for(site['call_member'])['name']
