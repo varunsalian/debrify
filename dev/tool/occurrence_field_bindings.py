@@ -169,7 +169,9 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
         if file == '<original>' or not file.startswith(config['feature']+'/'):
             continue
         for occurrence in node.get('occurrences', []):
-            if (binding_config.get('mandatory_qualification', False)
+            # Unconditional by default (the pre-flag behaviour every feature
+            # relied on); a config may only opt out explicitly.
+            if (binding_config.get('mandatory_qualification', True)
                     and occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
                     and occurrence['name'] in record_fields):
                 errors.append('Bare owner field reference: '+f'{file}:{owner}.{name} {occurrence["name"]}')
