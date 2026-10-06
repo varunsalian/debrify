@@ -245,11 +245,13 @@ membership from the actual references.
   shape). It holds `_buildContent` (public `buildContent`), `_glassPill`
   (`glassPill`) and the private `_channelTag`, `_metaRow`, `_metaStyle`,
   `_dot`, `_liveBar`, `_upNext`, `_tuningState`, `_hiddenState`, unchanged
-  names. At the original sites the only changes are receivers: bare State
-  `context` → `stageState.context`, `widget.<p>` → `stageState.widget.<p>`,
-  `_cascade(` → `stageState.cascade(`, private class names → manifest names.
-  No `setState`, `mounted` or `this` occurs in these bodies (step 0 verifies).
-  ≈ 400 lines.
+  names, plus exactly two **live forwarding getters**
+  `BuildContext get context => stageState.context;` and
+  `StremioTvTunerStage get widget => stageState.widget;` (Technique 6). The
+  moved bodies are therefore token-identical except `_cascade(` →
+  `stageState.cascade(` (a registered receiver path) and private class names →
+  manifest names. No `setState`, `mounted` or `this` occurs in these bodies
+  (step 0 verifies). ≈ 400 lines.
 - `stremio_tv_tuner_parts.dart` — `_StageDescription` →
   `StremioTvTunerStageDescription`, `_LivePip` → `StremioTvTunerLivePip`,
   `_Marquee` → `StremioTvTunerMarquee` (with its banner), `_DialHintChip` →
@@ -275,8 +277,9 @@ membership from the actual references.
   `sections()`; and `stremio_tv_tuner_sections.dart` —
   `StremioTvTunerSections`, which builds every section in its constructor in a
   fixed order; section constructors only store `_deps`.
-- Sections (each `final StremioTvTunerDependencies _deps;` with `_view`,
-  `_owners`, `_sections` getters):
+- Sections (each `final StremioTvTunerDependencies _deps;` with three
+  one-line getters: `StremioTvTunerWidgetView get widget => _deps.view;`,
+  `_owners` and `_sections`; Technique 5 explains the `widget` name):
   - `stremio_tv_tuner_channels.dart` — `StremioTvTunerChannels`: `_syncTick`,
     `_rebuildIndex`, `_identFor`, `_nowPlaying`, `_nextPlaying`,
     `_displayProgress`, `_realIndex`, `_nodeFor`, `_setActive`,
@@ -303,14 +306,14 @@ sections, the verbatim lifecycle and `build`, the controller forwarder and the
 **Cap.** Measured over every physical line: target **350**, hard maximum
 **400** (estimate: imports 18, controller 28, widget 107, State header and
 composition ~15, lifecycle ~62, `build` 14, forwarder 2, view ~65, blanks).
-Progress records `wc -l` and an AST-range breakdown summing to it from step 2.
+Progress records `wc -l` and an AST-range breakdown summing to it from step 3.
 Above 400 is a plan failure to report, not a new exception; the cap becomes
-the measured value at step 6 and `TEMP(stremio_tv_tuner)` rejection enforces
+the measured value at step 4 and `TEMP(stremio_tv_tuner)` rejection enforces
 it.
 
 **Guard registration** (`check_search_architecture.py`, step 1):
 `stremio_tv_tuner` in `FEATURES`; `STREMIO_TV_TUNER_FACADE`/`_BRIDGE`/
-`_COMPLETE = False` (→ `True` at step 6) and `_FACADE_CAP`; the bridge in
+`_COMPLETE = False` (→ `True` at step 4) and `_FACADE_CAP`; the bridge in
 `LEGACY_PLAYBACK_BRIDGES` (still no `http`, `shared_preferences`, `sqflite`);
 500-line caps with `STREMIO_TV_TUNER_SIZE_EXCEPTIONS` (empty unless D2); no
 facade back-import; no service import outside the bridge; the playback/
@@ -372,58 +375,87 @@ As in the Spotlight and Debrify TV plans, plus:
    existing context guard and the Debrify TV `lexical_state_setters` key (for
    `setSheet`) apply; negatives replace a lexical `ctx`/`context` with
    `_deps.context()` and the reverse, and `setSheet` with `_deps.setState`.
-4. **Owner fields and the occurrence binder (opt-in reuse).** Every moved
-   field reference is receiver-qualified (`_owners.activeId`); no section
-   declares an instance field besides `_deps`; the owners record holds only
-   declarations and initializers. The hazard this file actually has:
-   `_buildWide`'s `ValueListenableBuilder` builder declares a **parameter named
-   `activeId`** (877), the same name as the renamed `_activeId` field, and its
-   body reads the parameter (`_channelById(activeId)`). Enable the Debrify TV
-   `occurrence_field_bindings` check for this manifest (owners:
-   `_StremioTvTunerState` for the record, `_StageState` for the bound content
-   owner) after **generalising its one hard-coded owner**
-   (`occurrence_field_bindings.py` names `_DebrifyTVScreenState` when
-   computing record fields) into a config value; the Debrify TV config sets it
-   to today's value and every other manifest's output and self-tests stay
-   byte-identical. Registered scaffolding: `_owners.`, `_sections.<key>.`,
-   `_view.`, the three live getters, and `stageState.` (content owner only).
-   Fixtures: positive — the VLB parameter `activeId` stays a bare lexical
-   reference while `_owners.activeId` is the field; negatives — the parameter
-   read replaced by `_owners.activeId.value`, a field read replaced by a bare
-   `activeId` inside that builder, a bare owner field in a section, and
-   `stageState.widget.ident` replaced by a captured `ident` local.
-5. **Typed widget view (Spotlight Technique 5).** The facade State's header
-   gains exactly `implements StremioTvTunerWidgetView`; the manifest registers
-   that one header addition for `_StremioTvTunerState` only (negatives: a
-   changed superclass, an extra interface or mixin, the addition on another
-   class, `final`/`base`/`sealed`). Each getter reads `widget.<p>` live;
-   function-typed properties return the host's function object, so
-   `onUp: _view.onFocusHeader` passes the same object as today (an
-   identity test compares it with the host's closure). At the original sites
-   the only change is `widget.<p>` → `_view.<p>`. Negatives: a cached
-   property snapshot, a wrapper closure, a getter reading a stored copy of
-   `widget`, any facade import.
+4. **Owner fields and the occurrence binder (opt-in reuse, no new
+   substitution kinds).** Every moved field reference is receiver-qualified
+   (`_owners.activeId`); no section declares an instance field besides
+   `_deps`; the owners record holds only declarations and initializers. The
+   hazard this file actually has: `_buildWide`'s `ValueListenableBuilder`
+   builder declares a **parameter named `activeId`** (877), the same name as
+   the renamed `_activeId` field, and its body reads the parameter
+   (`_channelById(activeId)`). The design deliberately uses **only the
+   substitutions the existing binder already supports** (round 1 P1-1):
+   registered receiver paths with their member lists (`_owners`,
+   `_sections.<key>`, and `stageState` for the content owner's `cascade`) and
+   the three `_deps` live getters. The two other receivers a straightforward
+   design would need (`widget.<p>` → `_view.<p>`, State `context` →
+   `stageState.context`) are avoided by the token-preserving getters of
+   Techniques 5 and 6, so the original and destination occurrences stay
+   `lexical`/`unbound` with the same names. The only tooling change is
+   **generalising the two hard-coded `_DebrifyTVScreenState` comparisons**
+   (`occurrence_field_bindings.py:52` and `:83`) into a config key
+   (`occurrence_field_bindings.record_owners`, a list); the Debrify TV config
+   sets it to `["_DebrifyTVScreenState"]`, and every other manifest's adapter
+   output and self-tests stay byte-identical. The binder runs for this
+   manifest with record owner `_StremioTvTunerState`. **Real moved-body
+   proofs before extraction** (step 0b, through both the checker and the
+   reader, on a scratch tree built from R by the actual manifest moves of
+   `_buildWide`, `_setActive`, `_syncTick`, `_channelListRow` and
+   `_buildContent`): positives — those bodies as planned; the VLB parameter
+   `activeId` stays a bare `decl:` reference while `_owners.activeId` is the
+   field; negatives — the parameter read replaced by `_owners.activeId.value`,
+   a field read replaced by a bare `activeId` inside that builder, a bare
+   owner field in a section, `_deps.context()` in place of a lexical
+   `context`/`ctx` and the reverse, `widget.ident` in the content owner
+   replaced by a captured `ident` local, and `stageState.cascade` replaced by
+   a cached tear-off.
+5. **Typed widget view (Spotlight Technique 5), read through a `widget`
+   getter.** The facade State's header gains exactly `implements
+   StremioTvTunerWidgetView`; the manifest registers that one header addition
+   for `_StremioTvTunerState` only (negatives: a changed superclass, an extra
+   interface or mixin, the addition on another class,
+   `final`/`base`/`sealed`). Each view getter is exactly `@override T get p =>
+   widget.p;` (live on every call); function-typed properties return the
+   host's function object, so `onUp: widget.onFocusHeader` still passes the
+   same object (an identity test compares it with the host's closure). Each
+   section exposes the view as `StremioTvTunerWidgetView get widget =>
+   _deps.view;`, so **every moved `widget.<p>` site stays token-identical**
+   and still resolves to a member of the enclosing class (`unbound` in both
+   ASTs). A tuner-specific source contract pins each section's `widget`,
+   `_owners` and `_sections` getters and each view getter to their exact
+   one-line bodies. Negatives: a cached property snapshot, a stored copy of
+   `widget`, a getter returning another object, a wrapper closure, any facade
+   import.
 6. **The Stage content owner is bound to its Stage State (Spotlight Technique
    4, without `this` or `setState`).** One `StremioTvTunerStageContent` per
-   Stage State (nullable cached field). Inside it the original bare State
-   `context` (1400, 1464, 1489, 1558, 1591, 1603, 1610, 1672, 1715, 1740)
-   becomes `stageState.context` — the same object the State getter returns —
-   and the context guard must classify `stageState.context` as **State
-   context** for these members (a config-scoped `bound_state_receivers` entry
-   whose sites are recorded as State-context in the original). The only
-   lexical `context` in the moved content is `_cascade`'s `AnimatedBuilder`
-   builder parameter, and `_cascade` stays in the State. Negatives:
-   `stageState.context` swapped for a lexical builder context, a different
-   State receiver (a tuner section, `widget`), a wrapper closure, and the
-   binding used outside the content owner. A behaviour test asserts
-   `AppThemeScope.of` resolves through the Stage's own element by wrapping the
-   Stage alone in a different look than the dial (the surface theme
-   boundary) and comparing rendered colours.
-7. **Callback identity** (`torbox_callback_identity.py` mechanism: receiver
-   path + member, wrapper and same-class receiver-swap negatives) for the
-   Contract 1 sites, the `Timer` callbacks (tick, settle, sheet tick), the
-   `NotificationListener` snap, the `Listener.onPointerSignal` wheel handler and
-   the post-frame callbacks.
+   Stage State (nullable cached field). Its two live forwarding getters
+   (`context => stageState.context`, `widget => stageState.widget`) keep the
+   original bare State `context` sites (1400, 1464, 1489, 1558, 1591, 1603,
+   1610, 1672, 1715, 1740) and every `widget.<p>` site token-identical; both
+   are evaluated on every call, never cached. The only lexical `context` in the
+   moved content would be `_cascade`'s `AnimatedBuilder` builder parameter, and
+   `_cascade` stays in the State (renamed `cascade`, reached as
+   `stageState.cascade`). The source contract pins the two getters' exact
+   bodies and the single `stageState` field. Negatives: a getter returning a
+   cached context/widget, a different receiver (a tuner section, a new State),
+   a wrapper closure, and `stageState` used outside the content owner. A
+   behaviour test asserts the content reads the Stage's own element: it wraps
+   the Stage alone in a different look than its surroundings (the surface
+   theme boundary) and compares rendered colours.
+7. **Callback identity, split by shape.** The `torbox_callback_identity.py`
+   mechanism (receiver path + member, wrapper and same-class receiver-swap
+   negatives) covers the **direct tear-offs and single-call arrow closures**:
+   `addListener`/`removeListener(_onDialScroll)`, `onOpenList:
+   _openChannelList`, `onUp: widget.onFocusHeader`, `onKeyEvent: _onKey`,
+   `_onCentredChanged` add/swap/remove, and the dial card's `onFocused`,
+   `onSelect`, `onLongPress`, `onLeft`, `onRight` closures and the Stage's
+   `onTap`/`onLongPress`/`onOpenDetail` closures. **Block closures** (the 15 s
+   tick, the 180 ms settle, the 5 s sheet tick, the `Listener.onPointerSignal`
+   wheel handler, the `NotificationListener` snap, the post-frame callbacks,
+   the sheet tile `onTap`s) are covered as part of their enclosing moved
+   bodies by the whole-body verbatim comparison, the occurrence binder and the
+   context guard, with receiver-swap negatives inside each (for example the
+   settle's `_deps.setState` replaced by a section-local call, or the wheel
+   handler's `_owners.dialScroll` replaced by `_owners.pageController`).
 8. **Verbatim comments.** The checker compares comments; never reword, move or
    drop one, including the section banners (`// --- Channel ident ---…`,
    `// =====…`) which travel with the first member below them, and the
@@ -450,12 +482,26 @@ As in the Spotlight and Debrify TV plans, plus:
 | 0 | Baseline `base`; format commit (a) and `base-fmt`; lint/rename probes; dependency report; manifest, config, callback sites; harness, characterization tests, source reader, macOS goldens (two reversed-order captures); checkpoint (b); CI list; source-text inventory; Linux capture script | Nothing moves |
 | 0b | Independent review (Claude); original-only mutation proofs; compiling-composition probe with the real checker and facade measurement; `base2` at (b) | Nothing moves |
 | L | **Prerequisite before step 1 (before anything moves):** Linux originals hash-verified, committed separately, Linux golden test made strict | Goldens |
-| 1 | Guard registration and architecture test; parts file (description, pip, marquee, hint chip); dial card file; shape/CI registrations begin | 6, 10, 11 |
-| 2 | Stage and its bound content owner | 11, 13, Technique 6 |
-| 3 | Tuner owners, view (header addition), dependencies, sections composition with its first consumer (the lifecycle, verbatim with receivers); channels section; occurrence binder live for all fields. **Full-suite gate 1** | 1–5 |
-| 4 | Dial section and sheets section | 6–8, 12 |
-| 5 | Layout section; `build` forwarder; the facade now holds only lifecycle, `build`, forwarder, view and composition | 3, 9, 10 |
-| 6 | Completion: `STREMIO_TV_TUNER_COMPLETE = True`, facade cap and `TEMP`, `COMPOSITION_ROOTS`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
+| 1 | Guard registration and architecture test (with its CI-registered source-contract runner); parts file (description, pip, marquee, hint chip); dial card file; shape/CI registrations begin | 6, 10, 11 |
+| 2 | Stage and its bound content owner. **Full-suite gate 1** | 11, 13, Technique 6 |
+| 3 | The whole tuner State in one step: owners, view (header addition), dependencies, all four sections (channels, dial, sheets, layout), composition, verbatim lifecycle and `build` with receivers, controller forwarder. Nothing is left half-moved, so no temporary forwarder exists | 1–10, 12 |
+| 4 | Completion: `STREMIO_TV_TUNER_COMPLETE = True`, facade cap and `TEMP`, `COMPOSITION_ROOTS`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
+
+**Why step 3 moves the whole State at once (round 1 P1-2).** The State's
+methods call each other across every planned section (`_buildWide` →
+`_nodeFor`, `_identFor`, `_nowPlaying`, `_setActive`, `_surf`,
+`_openActions`, `_snapDial`; `_channelListRow` → `_identFor`, `_nowPlaying`,
+`_setActive`; lifecycle → `_rebuildIndex`, `_syncTick`, `_onDialScroll`,
+`_touchDial`). Moving them over several steps would need temporary facade
+forwarders and a per-step borrowing map; moving all 30 members, the 8 fields
+and the 2 statics in one reviewed step avoids both. The step is still
+verbatim: every leaf is a manifest row, and the frozen member map (dependency
+report) assigns each to exactly one destination. The add and remove of
+`_onDialScroll` are rewritten together, both to `_sections.dial.onDialScroll`.
+Step 0b's compiling-composition probe builds **this exact step-3 shape**
+(all destinations, real bodies, full facade) on a scratch tree, runs the real
+checker and the strict analyzer over it, measures the facade, and is then
+discarded.
 
 ### Step 0
 
@@ -471,10 +517,19 @@ As in the Spotlight and Debrify TV plans, plus:
    and the cross-class call graph that decides public names.
 3. **Checker.** `dev/tool/stremio_tv_tuner_manifest.tsv` (LF only) and
    `stremio_tv_tuner_checker_config.json`, real-config fixtures and
-   `stremio_tv_tuner_checker_test.py`. **Every planned destination file and
-   scaffold is registered as mandatory from its step** (the Debrify TV
-   completed-scaffold fix, `88c7f9be`): a missing registered destination fails
-   rather than skips. Negatives (each must fail): `_onDialScroll` receiver
+   `stremio_tv_tuner_checker_test.py`. **Step-aware mandatory destinations
+   (round 1 P2-3).** The shared checker has one global scaffold threshold and
+   a destination-or-facade fallback (`check_settings_moves.py:1142`, `:1269`),
+   so the tuner adds its own validator through the existing opt-in
+   `source_validator_module` key (`dev/tool/stremio_tv_tuner_contracts.py`,
+   no shared-checker change): given the config's `completed_step` S, every
+   manifest row with step ≤ S must exist **only** at its destination (absent
+   from the facade), every destination file and scaffold registered for steps
+   ≤ S must exist, and every row with step > S must still be in the facade
+   (future files may be absent). Fixtures run at S = 0…4 and prove: deleting
+   an activated destination fails; restoring a moved leaf to the facade
+   (double definition or fallback) fails; an absent future file passes.
+   Negatives (each must fail): `_onDialScroll` receiver
    swapped or wrapped at add or remove; a reordered or dropped dispose step in
    any of the three States; the 180 ms or 15 s duration changed; the
    `!autoRefresh` settle `setState` dropped; `ModalRoute` check dropped; a
@@ -485,19 +540,43 @@ As in the Spotlight and Debrify TV plans, plus:
    `StremioTvService` (`implements` with `noSuchMethod`; scripted
    `getNowPlaying`/`getNextPlaying` per channel id, recording `rotationMinutes`
    and `salt`); channels built from real `StremioAddon`/`StremioAddonCatalog`
-   values, including duplicates, a local channel and a favourite; now-playing
-   slots fixed in the past (`progressText` 'Ended', `progress` 1.0) or the
-   future for the 'Tuning in…'/'No broadcast' states; host-owned focus nodes
+   values, including a duplicate id placed **earlier** in `allChannels` than a
+   displayed copy (dial ids stay unique), a local channel and a favourite;
+   now-playing slots fixed in the past (`progressText` 'Ended', `progress`
+   1.0) for ordinary items, future slots only for next-playing/progress
+   cases, and **`getNowPlaying` returning null** with the channel in or out of
+   `loadingChannelIds` for the 'Tuning in…'/'No broadcast' states; host-owned focus nodes
    disposed in teardown; recording host callbacks; `AppThemeScope` with a
    named look; pinned `tester.view` size and DPR; explicit
    `debugDefaultTargetPlatformOverride` per test, reset in teardown; a
    `MediaQuery(disableAnimations)` variant; `HapticFeedback` recorded through
    `SystemChannels.platform` mock. **No `pumpAndSettle`** (Ken Burns repeats
    with art; the tuning spinner never settles); bounded pumps; fake time for
-   the 15 s tick, 180 ms settle and 5 s sheet tick. Artwork: no network —
-   tests that need art assert `CachedNetworkImage` widget properties without
-   painting, and goldens use items without `poster`/`background`
-   (placeholder paths).
+   the 15 s tick, 180 ms settle and 5 s sheet tick.
+   **Artwork (round 1 P2-4).** Image resolution starts during build and
+   `precacheImage` resolves eagerly, so "not painting" is not enough. Each
+   artwork test file installs a test binding whose `createImageCache()`
+   returns a **recording `ImageCache`**: `putIfAbsent` records the key
+   (provider type, URL, `ResizeImage` width) and returns a never-completing
+   `ImageStreamCompleter` **without calling the loader**, so neither the cache
+   manager, `path_provider`, `sqflite` nor HTTP is reached. The harness also
+   fails the test on any `MethodChannel` call to `plugins.flutter.io/path_provider`
+   or `com.tekartik.sqflite`, clears the recording cache and releases listeners
+   in teardown. Stage, poster and warm-up decode widths are asserted from the
+   recorded keys and the `CachedNetworkImage` widget fields. Goldens stay
+   artwork-free (D5).
+   **Observation schedules (round 1 P2-6).** Build counters are reset after
+   the focus change has been processed (the card's own `setState` at 2112),
+   so the settle assertion counts only settle-caused rebuilds. Retry coverage
+   forces delayed attachment: the target card is kept out of the built range
+   for the first post-frame callback (a scroll physics/viewport that needs
+   more than one frame), so `_focusWhenAttached` must retry. The
+   `didUpdateWidget` index proof uses the earlier duplicate: an in-place host
+   mutation that keeps the old cached index valid for the wrong copy, so only
+   a skipped `_rebuildIndex` (not `_realIndex`'s self-repair) changes the
+   reported index. Sheet cleanup is proved by a named assertion (no active
+   `Timer` after close, with tuner auto-refresh off so the 15 s tick does not
+   mask it), not by teardown failure alone.
 5. **Characterization tests** under
    `test/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/`,
    written against R and frozen in (b), one group per contract; each passes in
@@ -514,7 +593,13 @@ As in the Spotlight and Debrify TV plans, plus:
    reversed scene order must be byte-identical. Execution captures macOS in
    (b); Claude captures Linux (step L).
 7. **CI list and known failures.** Add the new tests and the golden test to
-   `ci_behavior_tests.txt`. Add to `ci_behavior_known_failures.txt` only
+   `ci_behavior_tests.txt`. **Tooling in CI (round 1 P2-8):** a Dart test
+   `stremio_tv_tuner_source_contracts_test.dart` (listed in
+   `ci_behavior_tests.txt`, which runs in the behaviour job that already has
+   `fetch-depth: 0`) runs `python3 dev/tool/stremio_tv_tuner_checker_test.py`
+   and, from step 1, `stremio_tv_tuner_architecture_test.py`, each with an
+   isolated parser package under `.dart_tool/`, and asserts exit 0. It lands
+   in (b) (checker) and step 1 (architecture), before anything moves. Add to `ci_behavior_known_failures.txt` only
    failures `base` actually observes for newly listed tests, by identity,
    under a dated comment (none expected: no existing test covers the tuner).
 8. **Source-text inventory.** Shape (Technique 9), theme (Technique 10),
@@ -523,7 +608,7 @@ As in the Spotlight and Debrify TV plans, plus:
    `StremioTvScreen` root rule untouched), `profile_source_guard_test`,
    `stale_runtime_guard_test`, `storage_member_map.tsv`, and the two doc
    comments in `lib/theme/app_art.dart:51` and `app_motion.dart:254` (they
-   name the facade path, which survives; unchanged). `checks.yml` (step 6):
+   name the facade path, which survives; unchanged). `checks.yml` (step 4):
    the facade and `test/support/stremio_tv_tuner_*` into the format and
    analyze lists **before `| tee`**, never after.
 9. **Linux capture script** `dev/tool/capture_stremio_tv_tuner_linux_goldens.sh`,
@@ -550,8 +635,8 @@ preloading next; Ken Burns on TV; `_textFx` not forwarding on change; TV
 `ColorFiltered` instead of the overlay; dial `boxShadow` on TV; hover lighting
 under `touchSelect`; touch tap requesting focus; the `ValueListenableBuilder`
 replaced by a tuner `setState`; the controller not rebound on a controller
-change. It also runs the compiling-composition probe (header addition, one
-stub section, one stub content owner, under the strict config, through the
+change. It also runs the compiling-composition probe (the full step-3 shape
+plus the step-2 Stage split with real bodies, under the strict config, through the
 real checker CLI with header negatives) and records the facade measurement.
 `base2` at (b) must pass with only added, passing identities.
 
@@ -657,3 +742,30 @@ adapter; behaviour fixes (below) and the dial-card decomposition.
   `p2_stremio_tv` glob; the move keeps it outside (Technique 10).
 - **D5. Goldens without artwork.** Network images never load in tests;
   decode/fade/blur choices are pinned by widget-property tests instead.
+
+## Round 1 review resolution
+
+1. **P1 — binder support.** No new substitution kind: sections and the Stage
+   content owner expose token-preserving live getters (`widget`, `context`),
+   so only existing receiver-path and `_deps` scaffolding is used; the two
+   hard-coded record-owner comparisons become `record_owners` config
+   (Debrify TV byte-identical). Step 0b proves real moved bodies (positives
+   and capture negatives) through checker and reader before extraction
+   (Techniques 4–6).
+2. **P1 — intermediate composition.** The tuner State moves in one step
+   (step 3), so no temporary forwarder or borrowing map exists; the step-0b
+   probe compiles and checks that exact shape (Steps).
+3. **P2 — step-aware destinations.** A tuner validator through the existing
+   `source_validator_module` key, with S = 0…4 fixtures (Step 0.3).
+4. **P2 — artwork loading.** Recording `ImageCache` that never calls loaders,
+   plugin-channel tripwires, teardown release (Step 0.4).
+5. **P2 — loading/empty states.** Null now-playing with `loadingChannelIds`
+   toggled; future slots only for next/progress (Step 0.4).
+6. **P2 — observation schedules.** Counter reset after focus, forced delayed
+   attachment, earlier-duplicate index proof, named timer assertion
+   (Step 0.4).
+7. **P2 — block closures.** Direct identity for tear-offs/arrow closures;
+   block closures covered by whole-body, binder and context guards with
+   in-body receiver-swap negatives (Technique 7).
+8. **P2 — CI registration.** A CI-listed Dart source-contract test runs the
+   checker and architecture fixtures before anything moves (Step 0.7).
