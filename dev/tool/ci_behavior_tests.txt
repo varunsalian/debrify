@@ -355,3 +355,11 @@ test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_rotation_test
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_source_guard_test.dart
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_review_library_test.dart
 test/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_review_playback_test.dart
+
+# Edit profile ORIGINAL characterization (step 0).
+test/profiles/edit_profile_screen_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_goldens_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_review_closure_test.dart

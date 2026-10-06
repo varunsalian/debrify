@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:debrify/services/profiles/privacy_log.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/edit_profile_source.dart';
+
 void main() {
   test(
     'direct SharedPreferences opens stay inside reviewed adapters/stores',
@@ -112,9 +114,7 @@ void main() {
   });
 
   test('profile editor keeps feature controls hidden behind one switch', () {
-    final source = File(
-      'lib/screens/profiles/edit_profile_screen.dart',
-    ).readAsStringSync();
+    final source = editProfileOriginalSource();
     // The switch moved onto the widget (public, @visibleForTesting) when the
     // save rule was extracted into EditProfileScreen.policyFor.
     expect(

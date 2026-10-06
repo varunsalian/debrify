@@ -13,6 +13,8 @@ def aligned(node, config):
     paths = [(_parts(path), set(config.get('receiver_members', {}).get(owner, [])))
              for path, owner in config.get('receiver_paths', {}).items()]
     paths += [(['_deps'], {'context', 'mounted', 'setState'} | set(config.get('live_widget_getters', [])))]
+    paths += [(['_deps'], {s['after'][2] for s in config.get('registered_occurrence_substitutions', [])
+                          if s['after'][:2] == ['_deps', '.']})]
     by_first = {}
     for path, members in paths:
         by_first.setdefault(path[0], []).append((path, members))
@@ -57,16 +59,25 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
     by_old = {r['original_name'].split('.')[-1]: r for r in rows if r['original_name'].rpartition('.')[0] in owners}
     fields = {name: r for name, r in by_old.items() if original[r['original_name']].get('variables')}
     binding_config = config['occurrence_field_bindings']
-    # Preserve the Debrify TV default; additional owners opt in explicitly,
-    # either by record_paths (all owners) or record_owners/record_fields.
+    # Preserve the Debrify TV default; additional owners opt in explicitly:
+    # state_classes (edit_profile), record_paths (stremio_tv, all owners) or
+    # record_owners/record_fields (stremio_tv_tuner); field_classes narrows.
     record_paths = binding_config.get('record_paths')
     default_owners = set(owners) if record_paths is not None else {'_DebrifyTVScreenState'}
-    record_owners = config.get('record_owners', default_owners)
+    state_classes = set(binding_config['state_classes']) if 'state_classes' in binding_config else default_owners
+    field_classes = binding_config.get('field_classes')
+    record_owners = config.get('record_owners', state_classes)
     def is_record_field(row):
         owner, _, name = row['original_name'].rpartition('.')
         selected = config.get('record_fields', {}).get(owner)
-        return owner in record_owners and (selected is None or name in selected)
+        return (owner in record_owners and (selected is None or name in selected)
+                and (field_classes is None or row['destination_class'] in field_classes))
     record_fields = {r['new_name'] for r in fields.values() if is_record_field(r)}
+    if config.get('registered_occurrence_substitutions'):
+        from registered_occurrence_substitutions import project
+        moved = {r['original_name'] for r in rows if r['destination_file'] != source
+                 and (r['destination_file'], r['destination_class'], r['new_name']) in lookup}
+        original = project(original, config, package, moved)
     errors = []
     for row in rows:
         identity = row['original_name']
@@ -140,6 +151,12 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
             elif a['kind'] == 'selector':
                 if b['kind'] != 'selector' or normalize(a['qualifierTokens'], rows, row) != normalize(b['qualifierTokens'], rows, row) or a['role'] != b['role']:
                     errors.append('Occurrence selector chain changed: '+label)
+            elif (config.get('require_live_state_callbacks') and a['name'] in ['context', 'mounted', 'setState']
+                  and a['binding'] == 'unbound' and before['owner'] in state_classes
+                  and row['destination_file'] != source
+                  and (row['destination_file'], row['destination_class'], row['new_name']) in lookup
+                  and b['kind'] != 'selector'):
+                errors.append('Occurrence live State callback qualification lost: '+label)
             elif a['name'] in ['context', 'mounted', 'setState'] and a['binding'] == 'unbound' and b['kind'] == 'selector':
                 expected_role = 'invocation' if a['name'] in config.get('live_getter_callbacks', []) else a['role']
                 if b['qualifierTokens'] != ['_deps'] or b['role'] != expected_role:

@@ -357,6 +357,52 @@ const Map<String, int> kExtractedShapeResidue = {
 
   'lib/features/stremio_tv/models/stremio_tv_playback_records.dart': 0,
   'lib/features/stremio_tv/application/stremio_tv_stream_quality.dart': 0,
+  // Edit profile: original slice total 13; every destination and facade.
+  'lib/features/edit_profile/models/edit_profile_snapshot.dart': 0,
+  'lib/features/edit_profile/models/edit_profile_tv_section.dart': 0,
+  'lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart': 3,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_rows.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_state.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_guard.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_dependencies.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_form_state.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_owners.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_form.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_parts.dart':
+      5,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_editor.dart':
+      1,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_focus_state.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_panes.dart':
+      2,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_profile_pane.dart':
+      2,
+  'lib/screens/profiles/edit_profile_screen.dart': 0,
+  // End edit profile.
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,

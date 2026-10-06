@@ -222,7 +222,10 @@
       "_DebrifyTVScreenState",
       "_SpotlightChoiceChipState"
     ],
-    "mandatory_qualification": true
+    "mandatory_qualification": true,
+    "state_classes": [
+      "_DebrifyTVScreenState"
+    ]
   },
   "scaffolds": [
     "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart",
