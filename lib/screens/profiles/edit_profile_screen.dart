@@ -67,13 +67,6 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  // One node per rail section, plus the rail's Save item at the end.
-
-  // Where downloads/remote started, so their paired features (recordings,
-  // remoteTransfer) follow the toggle only when the answer actually MOVED —
-  // an untouched save must not re-couple a policy the old feature matrix
-  // split (mirrors ProfileSetupFlow._seedDownloads/_seedRemote).
-
   final EditProfileOwners _owners = EditProfileOwners();
   EditProfileSections? _composition;
   EditProfileSections get _sections => _composition ??= EditProfileSections(

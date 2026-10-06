@@ -227,6 +227,46 @@ def _checkpoint_self_test(package):
         else:raise AssertionError('Checkpoint reader accepted '+label)
         print('Edit profile live checkpoint '+label+': checker + reader rejected')
     extra=0
+    if config.get('sidecars', {}).get('leading_field_comments'):
+        from check_settings_moves import (configured, check_leading_field_comments,
+                                         leading_line_comment_block, sidecar)
+        original_lookup={(config['source'],*name.rsplit('.',1)):node
+                         for name,node in leaves.items() if node.get('variables')}
+        with configured(config):
+            assert not check_leading_field_comments(original,{config['source']:original},
+                leaves,original_lookup,rows,config['source'])
+            fields=sidecar('leading_field_comments','leading_field_comments',[])
+        print('Edit profile leading field comments ORIGINAL placement: PASS')
+        for name in fields:
+            row=next(row for row in rows if row['original_name']==name)
+            file=row['destination_file']
+            block=leading_line_comment_block(original,leaves[name])
+            assert block is not None and sources[file].count(block)==1
+            declaration={'tvTabFocusNodes':'  late final List<FocusNode> tvTabFocusNodes;',
+                         'seedDownloads':'  late bool seedDownloads;'}[row['new_name']]
+            wrong={'tvTabFocusNodes':'  EditProfileTvSection tvSection =',
+                   'seedDownloads':'  late bool seedRemote;'}[row['new_name']]
+            assert block+declaration in sources[file]
+            for label in ['stranded in facade','wrong field','blank line gap','reworded']:
+                changed=dict(sources)
+                changed[file]=changed[file].replace(block,'',1)
+                if label=='stranded in facade':
+                    anchor='class _EditProfileScreenState extends State<EditProfileScreen> {\n'
+                    changed[config['source']]=changed[config['source']].replace(anchor,anchor+block,1)
+                elif label=='wrong field':
+                    changed[file]=changed[file].replace(wrong,block+wrong,1)
+                else:
+                    replacement=block+'\n' if label=='blank line gap' else block.replace('// ','// Reworded ',1)
+                    changed[file]=changed[file].replace(declaration,replacement+declaration,1)
+                errors=check(original,changed,rows,config['source'],package,
+                             context_guard=True,config=config)
+                reason='Leading field comment bytes or placement changed: '+name
+                assert reason in errors,(name,label,errors)
+                try:validate(original,changed,rows,config,package)
+                except ValueError as error:assert reason in str(error),(name,label,error)
+                else:raise AssertionError('Checkpoint reader accepted '+name+' '+label)
+                extra+=1
+                print('Edit profile leading field comment '+name+' '+label+': checker + reader rejected')
     if config['completed_step']>=6:
         completion=[]
         for label,file in [('facade missing',config['source']),

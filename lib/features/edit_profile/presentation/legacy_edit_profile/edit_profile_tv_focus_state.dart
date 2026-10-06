@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 class EditProfileTvFocusState {
   EditProfileTvSection tvSection = EditProfileTvSection.profile;
+  // One node per rail section, plus the rail's Save item at the end.
   late final List<FocusNode> tvTabFocusNodes;
   final tvContentFocus = FocusNode(
     debugLabel: 'Edit profile content',

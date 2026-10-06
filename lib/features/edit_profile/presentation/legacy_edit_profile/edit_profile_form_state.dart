@@ -18,6 +18,10 @@ class EditProfileFormState {
   /// policy (edit) or the role defaults (create), same as when no feature
   /// control existed at all.
   bool policyTouched = false;
+  // Where downloads/remote started, so their paired features (recordings,
+  // remoteTransfer) follow the toggle only when the answer actually MOVED —
+  // an untouched save must not re-couple a policy the old feature matrix
+  // split (mirrors ProfileSetupFlow._seedDownloads/_seedRemote).
   late bool seedDownloads;
   late bool seedRemote;
 

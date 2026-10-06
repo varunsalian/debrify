@@ -1051,3 +1051,33 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   gate 1 source `35c0cc4b4` and gate 2 source `747669aed` have no returned
   result yet. No Docker, device or emulator was used here. All 24 application
   files still match step 6 measurements; gate 2 adds only this Progress entry.
+
+### Review fix — field comments follow their records, 2026-10-07
+
+- **Commit:** `refactor(edit-profile): move field comments with their records`;
+  previous checkpoint `0cb53bedc`. Both comment blocks move verbatim directly
+  above their original fields in the form/TV focus records. Facade **150 → 143**
+  lines, cap **143**; form state **28 → 32**, TV focus state **15 → 16**.
+  File-size/shape registrations remain applicable (slice **13**, maximum
+  destination **362**). All **24** application files retain their code tokens;
+  all **103** original comments and scaffold token pins are preserved.
+- **Checker:** additive edit-profile opt-in pins leading field-comment bytes
+  and placement to R `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
+  All **17** manifests with `--self-test --parser-package` pass serially using
+  isolated `.dart_tool/edit_profile_parser/` copies with `*.dill` removed,
+  including Debrify TV. All **8** new comment-placement/rewording negatives
+  fail the named checker and reader assertion; occurrence bindings,
+  substitutions, callback identities and existing assertions remain intact.
+- **Checks:** architecture plus **13** real-checker negatives, sizes, storage,
+  shape/theme, actual CI format and scoped analyzer/allowlist pass. Analyzer
+  identities match step 6: **zero additions/removals**. No allowlist, core
+  service, dependency, other manifest/config, CI-list or parser-adapter change.
+- **Behavior:** `suite_evidence.py run edit_profile/field-comment-review-focused
+  --no-pub --concurrency=1` (recorded scoped paths) → **177 success / 1 unchanged
+  known profile source-guard failure** (direct SharedPreferences opens).
+  Comparisons against **base2** and **gate2** pass with **zero new failures,
+  zero missing, zero newly skipped**; all **4 macOS** originals pass strictly.
+  **No full suite run**, as requested for this comment-only application change.
+- **Evidence:** `field-comment-review-*` and `stepfield-comment-review-*` under
+  `refactor-evidence/edit_profile/`; exact commands/helpers, original-byte
+  placement proof, source hashes/counts and final verification retained there.

@@ -919,6 +919,33 @@ def check_live_widget_factory(lookup, config):
     return errors
 
 
+def leading_line_comment_block(source, node):
+    prefix = source[:node['start']]
+    match = re.search(r'((?:^[ \t]*//[^\r\n]*\r?\n)+)[ \t]*\Z', prefix, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def check_leading_field_comments(original_source, sources, original, lookup, rows, source_path):
+    errors = []
+    by_name = {row['original_name']: row for row in rows}
+    for name in sidecar('leading_field_comments', 'leading_field_comments', []):
+        row, before = by_name.get(name), original.get(name)
+        if row is None or before is None or not before.get('variables'):
+            errors.append('Leading field comment registration is not a manifest field: ' + name)
+            continue
+        expected = leading_line_comment_block(original_source, before)
+        if expected is None:
+            errors.append('Leading field comment registration has no original block: ' + name)
+            continue
+        destination = (row['destination_file'], row['destination_class'], row['new_name'])
+        retained = (source_path, *name.rsplit('.', 1))
+        key = destination if destination in lookup else retained
+        after = lookup.get(key)
+        if after is None or leading_line_comment_block(sources[key[0]], after) != expected:
+            errors.append('Leading field comment bytes or placement changed: ' + name)
+    return errors
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -1060,6 +1087,9 @@ def _check(original_source, sources, rows, source_path, package=None,
                                             or CONFIG.get('lexical_state_setters')))
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     errors = missing_line_comments(original_source, sources, rows)
+    if CONFIG.get('sidecars', {}).get('leading_field_comments'):
+        errors.extend(check_leading_field_comments(original_source, sources, original,
+                                                   all_nodes(parsed), rows, source_path))
     if CONFIG.get('source_validator_module'):
         import importlib
         validator = importlib.import_module(CONFIG['source_validator_module'])

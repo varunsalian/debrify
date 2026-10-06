@@ -16,7 +16,7 @@ FEATURES += ("debrify_tv", "edit_profile")
 EDIT_PROFILE_COMPLETE = True
 EDIT_PROFILE_FACADE = "lib/screens/profiles/edit_profile_screen.dart"
 EDIT_PROFILE_BRIDGE = "lib/features/edit_profile/presentation/legacy_edit_profile/"
-EDIT_PROFILE_FACADE_CAP = 150
+EDIT_PROFILE_FACADE_CAP = 143
 # Completion alone activates the facade cap; feature scans are unconditional.
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"

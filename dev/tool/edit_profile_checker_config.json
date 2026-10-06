@@ -436,7 +436,8 @@
   "self_test_module": "edit_profile_checker_test",
   "conditional_scaffolds": true,
   "sidecars": {
-    "scaffolding": "dev/tool/edit_profile_checkpoint_scaffolding.json"
+    "scaffolding": "dev/tool/edit_profile_checkpoint_scaffolding.json",
+    "leading_field_comments": "dev/tool/edit_profile_checkpoint_scaffolding.json"
   },
   "plain_sections": [
     {
