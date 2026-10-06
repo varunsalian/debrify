@@ -1,0 +1,45 @@
+{
+  "checkpoint": "6c7a35f8d97744036552019d92c2d31c68341205",
+  "reference": "2d3ef03404b62a6a61116d9e7636c43dba7349c2",
+  "objects": {
+    "lib": "7ee714852bb5cfdb65cea0fa380d16b74e1bf86e",
+    "pubspec.yaml": "5f983ff8c68a01aef5c7a1ec393e677e7693591f",
+    "pubspec.lock": "e0ff9cca69c00ae69bb4dfe111c18a89547cec98"
+  },
+  "capture_platform": "linux/amd64",
+  "image": "debrify-flutter:3.44.8",
+  "sdk": {
+    "frameworkVersion": "3.44.8",
+    "channel": "stable",
+    "repositoryUrl": "https://github.com/flutter/flutter.git",
+    "frameworkRevision": "058e0af2c2b57e369d905a03ac9748b0ebf543c6",
+    "frameworkCommitDate": "2026-07-23 10:56:21 -0700",
+    "engineRevision": "0cd610717bde95fd88343c64f81c11ba4e5c0010",
+    "engineCommitDate": "2026-07-23 16:11:34.000Z",
+    "engineContentHash": "13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939",
+    "engineBuildDate": "2026-07-23 09:36:29.809",
+    "dartSdkVersion": "3.12.2",
+    "devToolsVersion": "2.57.0",
+    "flutterVersion": "3.44.8",
+    "flutterRoot": "/opt/flutter"
+  },
+  "first_reverse_identical": true,
+  "strict_original_tests": 7,
+  "png_sha256": {
+    "test/goldens/stremio_tv_tuner/linux/desktop_wide.png": "fa179c9d6dfd81cda2e7dc0ef5f6f18d0575a34de4ca8b52238e23b694fc8bba",
+    "test/goldens/stremio_tv_tuner/linux/phone_actions.png": "cec549e9001e0aafdbee758a26e2bb598818db4b828f95bd1f1ebf3439cbe269",
+    "test/goldens/stremio_tv_tuner/linux/phone_channel_list.png": "a2224a39146aa191b5e79008c16bdd6ecab303d9a33c693903bd75db2185c82a",
+    "test/goldens/stremio_tv_tuner/linux/phone_narrow.png": "e71002f4e52e6906e188acfd96ae37c6be5f1bf94ea387520adbb9d0312d70b1",
+    "test/goldens/stremio_tv_tuner/linux/touch_tablet.png": "4f6ee3daf242b4a3e6e656fd5c9b0d3f9a47bd06099ceeee3f3f2ee014bdb2f9",
+    "test/goldens/stremio_tv_tuner/linux/tv_hidden.png": "3ee43f10e306743fa9b22dd868781ff730cd154c1b07ee7b1944ca2a15146a17",
+    "test/goldens/stremio_tv_tuner/linux/tv_wide.png": "a379ce9205b52251557687632b0286ad1b9aa2699a2ea42f05aaeffb89e92b4d"
+  },
+  "evidence_sha256": {
+    "linux-original-strict.txt": "7770a59e4d68216c85db60ce5d6eb969e05a4f5df34d61255c1e2b0118f7b727",
+    "linux-original-sha256-reverse.txt": "c1e3b29ea8f6f931c8a7f41f5161d87123ddb96f05d6c4728229d9c11d9ce12b",
+    "linux-original-sha256-first.txt": "c1e3b29ea8f6f931c8a7f41f5161d87123ddb96f05d6c4728229d9c11d9ce12b",
+    "linux-original-capture-first.txt": "5d0cfc6852e4a95def1bef3055c03421cca5555c77a6d97739ef5ff3bab1f3f0",
+    "linux-original-revision.txt": "4a1f693e3712fb422fc9619b006b7fc8b6815be3e683d83e3600575a821c8a8e",
+    "linux-original-capture-reverse.txt": "080986d74232f75359d4c63b03a1250ae70c3100d0e0e662adaad46d56e0b899"
+  }
+}
