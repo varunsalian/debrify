@@ -4,6 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../../support/stremio_tv_tuner_source.dart';
 
 void main() {
+  test('dial ignores nested scroll-end notifications', () {
+    final files = [
+      File('lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart'),
+      if (Directory('lib/features/stremio_tv_tuner').existsSync())
+        ...Directory('lib/features/stremio_tv_tuner')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.dart')),
+    ];
+    expect(
+      files.map((f) => f.readAsStringSync()).join('\n'),
+      matches(r'n\.depth == 0 && n is ScrollEndNotification'),
+      reason: 'dial scroll-end handling keeps its depth-zero source guard',
+    );
+  });
+
   test(
     'real-config checker fixtures and source reader accept all steps and reject mutations',
     () {

@@ -202,6 +202,27 @@ void main() {
             (scale.duration, scale.curve, scale.scale),
             (const Duration(milliseconds: 140), Curves.easeOutCubic, 1.10),
           );
+          final decoration =
+              tester
+                      .widget<Container>(
+                        find
+                            .descendant(
+                              of: f.card(1),
+                              matching: find.byWidgetPredicate(
+                                (w) =>
+                                    w is Container &&
+                                    w.constraints?.minWidth == 138,
+                              ),
+                            )
+                            .first,
+                      )
+                      .decoration
+                  as BoxDecoration;
+          expect(
+            decoration.boxShadow,
+            tv ? isNull : hasLength(1),
+            reason: 'TV focused card omits blurred bloom',
+          );
           final decorations = tester
               .widgetList<Container>(
                 find.descendant(
@@ -252,6 +273,48 @@ void main() {
         }, artwork: true);
       },
     );
+  }
+  for (final platform in [TargetPlatform.macOS, TargetPlatform.android]) {
+    testWidgets('Ken Burns reverses after 22 seconds on $platform', (
+      tester,
+    ) async {
+      await tunerCase(tester, (f) async {
+        f.television = false;
+        f.platform = platform;
+        await f.mount(tester);
+        double scale() => tester
+            .widget<Transform>(
+              find
+                  .descendant(
+                    of: f.stages.first,
+                    matching: find.byWidgetPredicate(
+                      (w) =>
+                          w is Transform &&
+                          w.alignment == Alignment.bottomCenter,
+                    ),
+                  )
+                  .first,
+            )
+            .transform
+            .storage[0];
+        await tester.pump(const Duration(seconds: 21));
+        final rising = scale();
+        await tester.pump(const Duration(seconds: 2));
+        final falling = scale();
+        expect(rising, greaterThan(1.05));
+        expect(
+          falling,
+          greaterThan(1.05),
+          reason: 'Ken Burns reverses at the peak instead of wrapping to 1.0',
+        );
+        await tester.pump(const Duration(seconds: 2));
+        expect(
+          scale(),
+          lessThan(falling),
+          reason: 'Ken Burns scale moves back down after the peak',
+        );
+      }, artwork: true);
+    });
   }
   testWidgets(
     'text starts settled, forwards on item change, and reduced motion snaps',

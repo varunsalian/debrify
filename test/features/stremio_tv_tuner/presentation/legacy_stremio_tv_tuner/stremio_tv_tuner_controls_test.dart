@@ -27,6 +27,31 @@ KeyEvent event(
       );
 
 void main() {
+  testWidgets('D-pad focus centres a mid-list TV dial card', (tester) async {
+    await tunerCase(tester, (f) async {
+      await f.mount(tester);
+      await f.focus(tester, 0);
+      for (var index = 0; index < 10; index++) {
+        final focus = f.focusWidget(index, tester);
+        focus.onKeyEvent!(f.nodes[index], event(LogicalKeyboardKey.arrowRight));
+        await tester.pump();
+        await tester.pump();
+      }
+      expect(f.nodes[10].hasPrimaryFocus, isTrue);
+      final viewport = tester.getRect(find.byType(ListView));
+      expect(
+        tester.getCenter(f.card(10)).dx,
+        closeTo(viewport.center.dx, 0.01),
+        reason: 'D-pad focus centres the card instead of left-aligning it',
+      );
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).controller!.offset,
+        greaterThan(0),
+        reason: 'mid-list centering moves the dial',
+      );
+    }, count: 40);
+  });
+
   testWidgets(
     'Left and Right repeat, first Left hands off, last Right stops, Up borrows host callback',
     (tester) async {
