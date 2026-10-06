@@ -1642,3 +1642,37 @@ with exits in Steps 4–6.
 E/`step3-*` contains commands, hashes, spans and comparisons. No protected
 sibling widget, player, launcher, service or dependency changes, production
 seam, device run, push, merge or branch switch.
+
+
+### Step 4 — streams, provider resolvers, channel resolution and guide (2026-10-06)
+
+Previous checkpoint: **`1645a7b3c`**. Five sections now own direct/torrent candidates, RD/AD/TorBox resolution, PikPak/Premiumize resolution, channel playback resolution and player guide/provider factories. Retry limits, provider ordering, selected-file logic and every finally/cleanup body remain verbatim. The guide, Next, channel-switch and source-resolver closures keep their original snapshot/live reads and identities. No native/Flutter handoff argument changes. The sole borrowed `playChannelById` callback remains until Step 5.
+Per-entry wiring review is E/`step4-wiring-review.json`; bodies derive from
+R and the accepted compiling probe, with only registered substitutions.
+
+All **17 manifests** pass real CLI/self-tests with isolated parser packages
+and copied kernels deleted. The other **16 stdout files are byte-identical**
+to Step 0b; shared adapter/config/source hashes remain unchanged. All 119
+leaves, field binding, callback identity, contracts and the reader pass.
+Architecture, sizes, storage keys/references/member map/bodies, CI format
+(zero changes), scoped analyzer/allowlist (same 25 warnings), LF, protected
+scope and staged diff pass. Per-symbol inventory has **6 probe-inventoried
+infos, zero warnings/errors and zero additions** beyond R/probe maxima;
+the explicit relocation comparison passes. No suppression is added.
+
+The serialized focused run uses `--no-pub --concurrency=1`: **178 successes
+and the same one known profile source-guard failure**, with no new failure,
+missing identity or skip against base2. All **63 characterizations** pass,
+including strict macOS **6/6**; calibrated Linux strict is **6/6** with unchanged
+lockfile and PNG bytes. Shape remains **13**, floor **488**, bare-radius
+residue zero; owned/full theme sites **30/79**, light ink **three non-primary /
+zero primary**. Original behavioral tests and goldens retain their bytes.
+
+Formatted facade **1,522**: imports 31 + widget 16 + State header/close 2 + owners/composition 12 + lifecycle 72 + retained original bodies 679 + retained build 681 + remaining blanks/comments 29
+= 1,522. The ratchet is lowered by hand. New files: **stream_selection 254**, **debrid_resolvers 331**, **cloud_resolvers 329**, **channel_resolve 289**, **player_guide 270**.
+All new files are below 500; no layout exception is activated. The oversized
+facade temporarily retains play/channel actions and layout,
+with exits in Steps 5–6.
+E/`step4-*` contains commands, hashes, spans and comparisons. No protected
+sibling widget, player, launcher, service or dependency changes, production
+seam, device run, push, merge or branch switch.

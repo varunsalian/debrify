@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 3,
+  "completed_step": 4,
   "completion_step": 7,
   "required_scaffolds_step": 7,
   "receivers": [
@@ -1108,6 +1108,26 @@
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
       "owner": "StremioTvChrome"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_stream_selection.dart",
+      "owner": "StremioTvStreamSelection"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_resolve.dart",
+      "owner": "StremioTvChannelResolve"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_player_guide.dart",
+      "owner": "StremioTvPlayerGuide"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_debrid_resolvers.dart",
+      "owner": "StremioTvDebridResolvers"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_cloud_resolvers.dart",
+      "owner": "StremioTvCloudResolvers"
     },
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
