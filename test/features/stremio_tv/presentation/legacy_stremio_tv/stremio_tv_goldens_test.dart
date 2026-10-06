@@ -12,8 +12,6 @@ import '../../../../support/stremio_tv_goldens.dart';
 import '../../../../support/stremio_tv_preferences.dart';
 
 const _reverse = bool.fromEnvironment('STREMIO_TV_REVERSE_GOLDENS');
-const _captureLinux = bool.fromEnvironment('STREMIO_TV_CAPTURE_ORIGINAL_LINUX');
-const _requireLinux = bool.fromEnvironment('STREMIO_TV_REQUIRE_ORIGINAL_LINUX');
 
 Future<void> fonts(WidgetTester t) async {
   await t.runAsync(() async {
@@ -207,11 +205,6 @@ void main() {
           }
         });
       },
-      skip:
-          Platform.isLinux &&
-          !_captureLinux &&
-          !_requireLinux &&
-          !File('test/goldens/stremio_tv/linux/$scene.png').existsSync(),
     );
   }
 }

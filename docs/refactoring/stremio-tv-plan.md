@@ -1460,3 +1460,34 @@ pending. Material adjustments are the additional PikPak cleanup coverage,
 D4's authorized constructor forwarders, omission of two unused scaffold
 getters, and the documented public-model genre input; none changes production
 behavior or introduces a production seam.
+
+
+### Accepted Step 0b review and Step L — Linux ORIGINALs (2026-10-06)
+
+Claude accepted `e1d4fe1f2b0462826de0a591ef7371a84200d85d`, independently
+confirmed **28/29** named behavioral assertion rejections and agreed
+**`autoLabel` is S**: the provider menu exists only with non-empty providers,
+so its empty-provider label branch has no host-observable UI boundary. The
+119-line facade / 495-line play / 713-line layout probe and frozen D4
+forwarders are accepted. The merged ledger is **72 behavioral rejections +
+one accepted S**, with historical proposals preserved and agreement recorded
+in E/`step0b-auto-label-s-accepted.json`.
+
+Supplied Linux originals are from the accepted checkpoint and R, with equal
+`lib`, `pubspec.yaml` and `pubspec.lock` objects, Flutter **3.44.8**, Dart
+**3.12.2** and framework revision `058e0af2c2b57e369d905a03ac9748b0ebf543c6`.
+All six PNG hashes match both supplied SHA-256 lists byte-for-byte. Both
+capture logs contain six passing readiness scenes; their orders are original
+and reversed. The supplied strict replay also passes six. E contains the six
+original evidence text files and `linux-original-verification.json`; the six
+PNGs are committed under `test/goldens/stremio_tv/linux/`.
+
+The golden test now runs strictly on Linux with no missing-file skip or opt-in.
+Local strict replays pass **6/6 macOS and 6/6 Linux**, the latter in calibrated
+`debrify-flutter:3.44.8` **linux/amd64**, image
+`sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`
+via Colima, using an isolated worktree-local package cache. No PNG is generated
+or updated. Lockfile and all golden bytes remain unchanged. Evidence:
+E/`stepL-macos-strict.txt`, `stepL-linux-strict.txt`, `stepL-linux-replay.json`.
+Application source still equals R. Step L is committed separately; execution
+is now authorized through Step 5 / full-suite gate 1 only.
