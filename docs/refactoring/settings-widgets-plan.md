@@ -1035,3 +1035,143 @@ requested for this original-code checkpoint.
   tree/SDK provenance and identity comparison against accepted `base3`.
 
 STOP after Step 0b review evidence. Step L and Step 1 are not started.
+
+### Step 0b — final original review closure
+
+- Checkpoint: `65d7fd801a43bb32ae9d1657e0cce92f17d9a017`, exact subject
+  `test(settings-widgets): step 0b close review gaps on original`; no application
+  change. R / (b) / 0b lib and both pubspec objects equal, recorded in
+  `step0b-application-equality.json`. Frozen tested tree:
+  `49c77df68215a6e1621b738a3a12fd2c355a0d6c`.
+- Detached committed ORIGINAL proof: **76 B passing / 6 S passing**, separate
+  serialized `suite_evidence.py run settings_widgets/step0b-original-{B,S}
+  --no-pub --concurrency=1`, nine B paths and two S paths. Clean committed
+  HEAD/index/tested/end trees, no snapshot, untracked input or tree change.
+  Comparison against (b): exactly 28 added passing B identities, no S
+  additions, missing tests, changed prior outcomes or newly skipped tests.
+- Full mutation table: **64/64 assertion failures (56 B / 8 S)**, all 26
+  reviewer recipes included; every B uses a behavioral file, no source guard
+  substitutions. No survivors, compile-error proofs or no-op mutations.
+  One-at-a-time run on the final original copy, `--checkpoint <0b>
+  --parser-package .dart_tool/settings_widgets/step0b/parser_mutations_final/
+  .dart_tool/package_config.json --evidence <evidence>/step0b-review-mutations-final`.
+  B/S log directories are separate. Original/mutant/log hashes verified;
+  scratch restored clean; all 20 test/helper/fixture/PNG inputs match root
+  and scratch. `step0b-assertion-audit.json` and `table.json` pin every result.
+- Frozen public theme table: three looks, **35 non-null state properties per
+  look × 32 state combinations**, plus every scalar the builder sets and null
+  ButtonStyle fields. No capture/update mode in the committed tests. No new
+  scenes or recapture; all five original macOS PNGs unchanged.
+- Checker: current/original/split positives and all 11 real-config negatives
+  pass with an isolated copied parser. Reader: 60 exact analyzer spans,
+  per-kind deletion/duplication for four kinds and lexical stress pass.
+  Diagnostics fixtures pass; strict original 9 infos, qualified 8, split 4,
+  maximum 11 (never a sum), zero additions/errors/warnings. The amendment
+  changes only test cleanup/expectations and Progress, so these results and
+  the 16 other manifests' existing self-tests remain valid: identical lib,
+  checker modules/configs/fixtures, reader, diagnostics and SDK, audited in
+  `step0b-checker-reuse.json`. All 17 manifest results pass, every invocation
+  has its explicit isolated parser package; no shared checker edits.
+- Final whole analyzer: 1689 occurrences unchanged by identity/count;
+  `step0b-analyzer-comparison-final.txt` PASS. Changed Dart format, architecture
+  (1448 migrated files), sizes (2454 application files / 154 ratchets) and
+  shell syntax pass. CI adds two keyed paths (19 total Step 0 additions),
+  all 11 characterizations registered, paths exist, no duplicates or failure
+  allowlist edits. Existing scoped CI analyzer/allowlist proof (25 warnings)
+  remains applicable; scopes/app/dependencies/allowlist unchanged.
+- Shape/theme/source inventory unchanged: 60 original leaves / 47 public,
+  132 original importers / 14 runnable; 26 shape tokens / 7 bare radii,
+  global floor 488; theme 219 files / 657 sites; light ink 774 / 198,
+  PRIMARY 240 / 67. Shared shape/theme/workflow/profile/light-ink modules and
+  other features' proof scripts unchanged. Found 8/9 document the ordinary
+  SDK black icon fallback, nullable public palette double, light thumb ink
+  distinction and non-unit public motion scope. Borrowed first-node cleanup
+  preserves the public usability assertion; no application issue was fixed.
+
+- Final `suite_evidence.py run settings_widgets/base3b --no-pub
+  --concurrency=2 --timeout=120s` on committed 0b: **11736 success / 13
+  failure / 28 error / 20 skip**. `paths: []`, flags recorded separately,
+  Flutter 3.44.8 / Dart 3.12.2. HEAD/index/tested/end tree stays clean and
+  identical throughout; no snapshot/untracked input. `compare --against
+  <evidence>/base3.jsonl <evidence>/base3b.jsonl` PASS: exactly **28 added
+  passing identities**, every earlier outcome unchanged, zero new failures,
+  missing tests, skips or fixes. `base3b-comparison.txt` and
+  `step0b-final-audit.json` audit the identities, counts, SDK and tree. No
+  test-runner timeout or named load flake occurred; no isolation retry or
+  allowlist exception was needed. The original 13 failures and 28 errors
+  remain found-not-fixed baseline limitations.
+
+The complete combined mutation table follows (S is source-guard-only).
+
+| Mutation | Class | Failing test / guard |
+| --- | --- | --- |
+| `swapped-neighbour-wide=false-media=false-mdblist=false` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `swapped-neighbour-wide=false-media=false-mdblist=true` | B | `Connections every edge wide=false media=false mdblist=true` |
+| `swapped-neighbour-wide=false-media=true-mdblist=false` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `swapped-neighbour-wide=false-media=true-mdblist=true` | B | `Connections every edge wide=false media=true mdblist=true` |
+| `swapped-neighbour-wide=true-media=false-mdblist=false` | B | `Connections every edge wide=true media=false mdblist=false width=521.0` |
+| `swapped-neighbour-wide=true-media=false-mdblist=true` | B | `Connections every edge wide=true media=false mdblist=true width=521.0` |
+| `swapped-neighbour-wide=true-media=true-mdblist=false` | B | `Connections every edge wide=true media=true mdblist=false width=521.0` |
+| `swapped-neighbour-wide=true-media=true-mdblist=true` | B | `Connections every edge wide=true media=true mdblist=true width=521.0` |
+| `tracking-up-parenthesized` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `sidebar-handoff-removed` | B | `sidebar callback=true left=true` |
+| `sidebar-called-when-null` | B | `sidebar callback=false left=true` |
+| `repeat-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `reveal-not-scheduled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `disabled-canRequestFocus-true` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `disabled-onTap-kept` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `ExcludeFocus-removed` | B | `toggle row is one stop and tap or OK invert the value` |
+| `toggle-does-not-invert` | B | `toggle row is one stop and tap or OK invert the value` |
+| `tile-borrowed-node-ignored` | B | `tile focus ownership borrowed=true and live focus` |
+| `toggle-borrowed-node-ignored` | B | `toggle focus ownership borrowed=true and live focus` |
+| `hero-borrowed-node-ignored` | B | `hero focus ownership borrowed=true and live focus` |
+| `hero-threshold-380` | B | `hero swatches threshold width=380.0` |
+| `memo-base-only` | B | `page theme memo keys identical base and app independently` |
+| `page-instead-of-route-theme` | B | `push themes route State context so its dialog inherits palette` |
+| `barrierDismissible-dropped` | B | `settings dialog scopes palette barrierDismissible=false` |
+| `attention-keyword-removed` | B | `connection predicates characterize every negative keyword and readiness` |
+| `initials-capital-rule-removed` | B | `initials preserve separators internal capitals and empty fallback` |
+| `screen-size-label-fallback` | B | `TV choices preserve order labels subtitles completeness and size fallback` |
+| `dropdown-null-guard` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `visible-radius-change` | B | `original pixel golden tv_legacy_gallery` |
+| `rule-surface-fill` | B | `section rule surface keeps border dividers and blurb without fill` |
+| `reveal-unscaled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `legacy-autofocus-off` | B | `legacy dialog shows full current reason autofocus OK and pops` |
+| `launch-mode` | B | `settings URL forwards parsed URI through launcher platform` |
+| `spotlight-bg-bloom` | B | `original pixel golden tv_spotlight_gallery` |
+| `keyup-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `wide-threshold` | B | `Connections every edge wide=false media=false mdblist=false width=520.0` |
+| `tile-opacity` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `tile-spec-subtitle` | B | `spec factories retain icon title subtitles and overrides` |
+| `toggle-spec-maxlines` | B | `spec factories retain icon title subtitles and overrides` |
+| `banner-warning-tone` | B | `original pixel golden tv_legacy_gallery` |
+| `tile-own-node-not-disposed` | B | `tile focus ownership borrowed=false and live focus` |
+| `header-copy` | B | `header copy styles and structure spotlight=false` |
+| `skeleton-two-sections` | B | `section chrome banners skeleton runtime types spotlight=false` |
+| `badge-size` | B | `pending badge size and color palette=explicit` |
+| `legacy-reason-dropped` | B | `legacy dialog shows full current reason autofocus OK and pops` |
+| `dropdown-echo-removed` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `hero-tap-not-awaited` | B | `hero awaits async tap completion` |
+| `input-focused-width` | B | `resolved settings theme table look=legacy` |
+| `card-focus-border` | B | `card hover differs from focus spotlight=false` |
+| `summary-first-borrowed-disposed` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `section-empty-title-label` | B | `empty section title creates no section label` |
+| `info-tile-spec` | B | `spec factories retain icon title subtitles and overrides` |
+| `right-col-left-nosidebar` | B | `sidebar callback=true left=false` |
+| `reveal-context-check` | B | `unattached neighbour remains handled and reveal does not throw` |
+| `pending-badge-color` | B | `pending badge size and color palette=resolved-null` |
+| `switch-thumb-unselected` | B | `resolved settings theme table look=broadsheet` |
+| `dispose-order` | S | `S summary focus labels creation points and ordered disposal` |
+| `focus-debug-label` | S | `S summary focus labels creation points and ordered disposal` |
+| `motion-hook` | S | `S motion dependency hook reveal guard wrapper disposal and borrowed ownership` |
+| `rendering-fallback` | S | `S rendering fallback remains Automatic and memo is private to one owner` |
+| `declaration-deleted` | S | `all 60 manifest declarations have exactly one physical owner` |
+| `completion-flag-on-original` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-http-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-player-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+
+
+The incomplete superseded run and rejected partial mutation run have NOTE
+files; neither is accepted baseline/proof evidence. Linux capture uses the
+exact 0b subject and retains R equality checks. It was syntax-checked only.
+**STOP: Step 0b closed; Step L and Step 1 have not started.**
