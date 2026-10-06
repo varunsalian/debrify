@@ -627,4 +627,126 @@ into the sections above; round 3 ended "No P1s — executable" with no P2s.
 
 ## Progress
 
-(Not started.)
+### Step 0 — original-code characterization checkpoint
+
+No extraction has begun. The first 2,276 source lines remain byte-identical to
+`49c53e2e`; the only production addition is the frozen testing accessor. Its
+100 formatted lines make the temporary facade 2,376 lines. The exact manual
+size-baseline raise has the step-7 exit; it is lowering-only from step 1.
+Services, storage, player/launcher, MainPageBridge, cloud widgets, models,
+AllDebrid and other worktrees are unchanged. No branch switch or push occurred.
+
+The 113-leaf manifest and dependency report assign every original declaration
+and include per-entry reads/writes/calls and wiring checks. Step-0 production
+scaffolds/plain sections/root rules remain empty. The accessor is a fresh map
+of live members and original tear-offs; it adds no setters or service seam.
+The existing opt-in `callback_closure_binding` key pins the Timer's closure,
+including its receiver. Direct identity negatives cover wrappers and a second
+instance of the same class. No shared checker/adapter implementation changed.
+The original facade remains registered for its six shape-token calls and six
+bare radii; destination registration and architecture activation occur with
+the first production destination in step 1 (no nonexistent shape entries).
+The floor remains 488 with zero slack.
+
+All evidence is confined to `<git-common-dir>/refactor-evidence/premiumize/`.
+SDK: Flutter 3.44.8 (`058e0af2c2`), Dart 3.12.2. `flutter pub get` was the first
+command. `base` is the observed original whole-suite baseline; `base2` records
+the accessor; `base3` records the completed characterization tests. Full-suite
+paths are empty, runner flags recorded separately, and full runs serialized.
+No failure allowlist, assertion, or baseline recorder was weakened.
+
+Checks and original-code proof:
+
+- `original-final-frozen-control`: **139 passing identities** (94 behaviour,
+  seven pixel comparisons, 38 frozen source guards). The first HTTP fixture
+  passed before the rest of the harness was built. Draft failures/probes are
+  retained as development evidence and do not count as characterization proof.
+- `mutation-map.json`: **101/101 behaviour/pixel identities**, **45 accepted
+  named-assertion mutations**, each with original/mutated/restored source hashes
+  and a passing replay after restoration. One first-guard-only attempt did not
+  fail and is explicitly excluded. An additional original test proves that
+  unmounting before first-video readiness prevents an `item/details` request;
+  its first-guard mutation fails that exact request assertion. Required 349/351,
+  cancellation, callback waiting, collection-copy ownership, delete ordering,
+  and lexical/State navigator mutations all fail named assertions, not compile
+  or infrastructure failures. Expected golden-negative PNG outputs are archived
+  in evidence; their tree-change note is separate from source-input integrity.
+- Full suites: `base` 12,032 success / 13 failure / 28 error / 20 skipped;
+  `base2` 12,030 / 13 / 30 / 20; `base3` 12,170 / 13 / 29 / 20.
+  Raw comparators report **FAIL** only for contention flakes: `base2` keyword
+  focus/MDB snackbar (both isolated retries pass), and `base3` Xtream50k
+  responsiveness (isolated retry passes on the identical tested tree).
+  No raw outcome is overwritten or allowlisted. Reconciled identity audits are
+  **PASS**: no unexplained failures, missing/newly skipped identities; all 139
+  additions pass. `base3` also restores the two transient `base2` failures.
+  The observed original passing identities remain authoritative; neither old allowlists nor `base2` failures conceal a later failure.
+- Whole analyzer comparison: **PASS, zero added diagnostics**. Exact CI format,
+  scoped analyzer and existing analyzer-allowlist commands: **PASS**. Size,
+  architecture, storage-key and storage-reference checks: **PASS**. The original
+  source's dropdown deprecation stays an info, outside the allowlist.
+- Premiumize's 113-leaf real-config manifest/self-test: **PASS**. All **20 other
+  manifests** and their self-tests: **PASS**, each on its own explicit local
+  parser package. Their source inputs and all six shared checker/adapter
+  implementations are byte-identical to `49c53e2e`; twice-parsed adapter output
+  bytes match for every manifest (`existing-manifest-proof.json`). No shared
+  implementation or new parallel checker mechanism was introduced. All 293
+  pre-existing tooling/configuration/fixture files (except the three approved
+  shared inventory edits) are byte-identical (`shared-configuration-proof.json`).
+- Fresh normal-clone proof: **PASS** (`fresh-clone-proof.json`), with `.git`
+  verified as a directory, `flutter pub get`, standalone Premiumize self-test,
+  generic manifest/self-tests, capture-script syntax and all 38 source-reader
+  contracts. The generic checker requires its explicit parser package to be
+  bootstrapped first. The external clone harness initially omitted that setup;
+  its infrastructure failure is retained separately, then the correct setup
+  and replay pass without shared-tool or application edits. The checkpoint's
+  final documentation-only amendment preserves every checked code/data byte
+  (`checkpoint.json`); no application recheck is invalidated.
+
+Seven macOS PNGs were initially captured against this unchanged original with
+`PREMIUMIZE_CAPTURE_ORIGINAL_MACOS=true`; their hashes are frozen in evidence.
+The committed Linux script resolves the checkpoint's exact subject, verifies
+the original prefix and absent production feature, records revision/SDK/input
+and PNG hashes, captures seven original Linux PNGs and runs a strict replay.
+Claude captures/reviews these in Docker at stop point 1; Linux originals are
+pending and strict Linux mode still activates only at step 6.
+
+Conservative decisions / material limitations:
+
+- Tests advance the 350 ms debounce in fake time; mount has no unconditional
+  delay. Real waits are isolated from timer assertions. Both 349/351 mutations
+  target explicit request-boundary assertions.
+- Collection identity is tested across reload, deletion, independent routes
+  and real profile-gate remounts. A/B HTTP keys come from committed bound
+  `provider.premiumize` resources; playlist writes are verified under a stable
+  profile. Switch-during-write timing remains pending (storage guards unchanged).
+- Native player observation attempts fail because `Mpv.framework` is absent.
+  No throwing notification probe or copied preparation helper was adopted.
+  All three launcher sites/arguments/order remain frozen source-guard-only;
+  no-URL rejection tests assert zero notifications. Positive launcher payloads
+  and native notification counts remain device-only pending.
+- Both download enqueue sites remain frozen source guards. Original dialog
+  row maps and invalid-index/missing-URL failure counting are exercised;
+  native successful/mixed enqueue and its messages remain pending.
+- D-pad tests cover reachable key/focus paths; a one-result search's Down key
+  retains the search field under the original geometric traversal policy.
+  Physical TV repeat/hold and player-return focus remain pending.
+- The original analyzer has the dropdown `value` deprecation info. An unchanged
+  copy under destination lint rules adds five import-order infos. No suppression
+  or allowlist entry was introduced.
+
+Found-not-fixed remains unchanged: clear-button pending timer/flag; folder-entry
+pending root timer; stale failure clearing a newer loading flag; A→B→A accepting
+the first A; initial folder+query filtering the still-empty list; stale folder
+listing winning a newer guarded navigation; binding file/folder disposal
+asymmetry; the checking-dialog Back hazard; root Raw ignoring view-mode writes
+and Raw copying the current sort instead of restoring server order; nested Add
+State pop versus root loading dismissal. Device/platform work is pending; no
+behaviour repair is bundled.
+
+Shared edits to union at integration: Premiumize-only globs on the `cloud` line,
+format/analyzer paths inside both CI commands, nine concrete CI behaviour-test
+paths, and the exact temporary Premiumize facade size-baseline value. Other
+manifest/config/fixture/source bytes and adapter outputs remain unchanged.
+
+Stop here for Claude's independent step-0 review. Step 0b, L, steps 1–7 and both
+full-suite gates remain unstarted.

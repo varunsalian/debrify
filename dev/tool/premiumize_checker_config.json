@@ -1,0 +1,147 @@
+{
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "live_getter_callback",
+    "root_build_forwarder",
+    "retained_forwarder",
+    "formatter_if_braces",
+    "context_confirmation"
+  ],
+  "baseline": "49c53e2e",
+  "source": "lib/screens/premiumize/premiumize_files_screen.dart",
+  "feature": "lib/features/premiumize_files",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "sidecars": {
+    "scaffolding": "dev/tool/premiumize_scaffolding.json",
+    "context_exceptions": "dev/tool/premiumize_context_exceptions.json"
+  },
+  "named_exceptions": {},
+  "annotation_exceptions": {},
+  "live_getter_callbacks": [
+    "isAllSelected",
+    "isAtRoot",
+    "isBrowsePush"
+  ],
+  "live_widget_getters": [
+    "initialFolderId",
+    "initialFolderName",
+    "initialSearchQuery",
+    "isPushedRoute",
+    "selectSourceMode",
+    "onSourceSelected"
+  ],
+  "token_rules": [],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {},
+  "lifecycle": [
+    "_PremiumizeFilesScreenState.initState",
+    "_PremiumizeFilesScreenState.dispose"
+  ],
+  "test_accessors": [
+    {
+      "name": "premiumizeFilesTestAccess",
+      "tokens_file": "dev/tool/premiumize_test_accessor.json",
+      "required": true,
+      "unbound_tearoffs": {
+        "receiver": "s",
+        "members": [
+          "_PremiumizeFilesScreenState._applySortedView",
+          "_PremiumizeFilesScreenState._extractSeasonNumber",
+          "_PremiumizeFilesScreenState._extractLeadingNumber",
+          "_PremiumizeFilesScreenState._formatPlaylistTitle",
+          "_PremiumizeFilesScreenState._composeEntryTitle",
+          "_PremiumizeFilesScreenState._findFirstEpisodeIndex"
+        ]
+      }
+    }
+  ],
+  "seams": [],
+  "self_test_module": "premiumize_checker_test",
+  "receivers": [],
+  "receiver_paths": {},
+  "receiver_owners": {
+    "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState"
+  },
+  "plain_sections": [],
+  "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
+  "callback_identities": [
+    {
+      "name": "route back push/pop and tab registration",
+      "callback_member": "_PremiumizeFilesScreenState._handleBackNavigation",
+      "sites": [
+        {
+          "member": "_PremiumizeFilesScreenState.initState",
+          "call": "pushRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PremiumizeFilesScreenState.dispose",
+          "call": "popRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PremiumizeFilesScreenState.initState",
+          "call": "registerTabBackHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "TV tab 11 focus registration/teardown",
+      "callback_member": "_PremiumizeFilesScreenState._tvContentFocusHandler",
+      "sites": [
+        {
+          "member": "_PremiumizeFilesScreenState.initState",
+          "call": "registerTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        },
+        {
+          "member": "_PremiumizeFilesScreenState.dispose",
+          "call": "unregisterTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "350ms debounce search owner",
+      "callback_member": "_PremiumizeFilesScreenState._runCloudSearch",
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "q"
+          ]
+        ]
+      },
+      "sites": [
+        {
+          "member": "_PremiumizeFilesScreenState._performSearch",
+          "call": "Timer",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "callback_closure_binding": true,
+  "callback_instances": {
+    "_PremiumizeFilesScreenState": "$State"
+  },
+  "callback_receiver_aliases": {},
+  "original_activation": {}
+}
