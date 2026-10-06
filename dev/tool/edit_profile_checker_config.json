@@ -472,6 +472,14 @@
       "owner": "EditProfileTvNavigation"
     },
     {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_form.dart",
+      "owner": "EditProfilePhoneForm"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_parts.dart",
+      "owner": "EditProfilePhoneParts"
+    },
+    {
       "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_editor.dart",
       "owner": "EditProfileTvEditor"
     },
@@ -491,7 +499,7 @@
   "test_accessors": [],
   "required_nodes": [],
   "scaffolds": [],
-  "completed_step": 4,
+  "completed_step": 5,
   "original_static_receivers": {},
   "additional_owners": [],
   "occurrence_layout_bodies": [

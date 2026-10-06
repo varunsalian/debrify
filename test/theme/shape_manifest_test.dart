@@ -268,6 +268,10 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_owners.dart':
       0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_form.dart':
+      0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_parts.dart':
+      5,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_sections.dart':
@@ -286,7 +290,7 @@ const Map<String, int> kExtractedShapeResidue = {
       2,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_profile_pane.dart':
       2,
-  'lib/screens/profiles/edit_profile_screen.dart': 5,
+  'lib/screens/profiles/edit_profile_screen.dart': 0,
   // End edit profile.
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,

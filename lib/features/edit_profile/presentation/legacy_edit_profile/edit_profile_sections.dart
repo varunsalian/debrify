@@ -4,6 +4,8 @@ import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/e
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_picker.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_dependencies.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_grants.dart';
+import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_form.dart';
+import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_phone_parts.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_selection.dart';
 import 'package:debrify/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart';
@@ -21,6 +23,8 @@ class EditProfileSections {
   final EditProfileGrants grants;
   final EditProfileSelection selection;
   final EditProfileTvNavigation tvNav;
+  final EditProfilePhoneForm phone;
+  final EditProfilePhoneParts phoneParts;
   final EditProfileTvEditor tvEditor;
   final EditProfileTvProfilePane tvProfile;
   final EditProfileTvPanes tvPanes;
@@ -34,6 +38,8 @@ class EditProfileSections {
       grants = EditProfileGrants(deps),
       selection = EditProfileSelection(deps),
       tvNav = EditProfileTvNavigation(deps),
+      phone = EditProfilePhoneForm(deps),
+      phoneParts = EditProfilePhoneParts(deps),
       tvEditor = EditProfileTvEditor(deps),
       tvProfile = EditProfileTvProfilePane(deps),
       tvPanes = EditProfileTvPanes(deps),
