@@ -96,8 +96,8 @@ are out of scope and are not edited.
 
 | # | Decision | Rationale |
 | --- | --- | --- |
-| D1 | **Format-only reference commit.** The file is not formatter-clean, so step 0 commits (a) `style(stremio-tv): format the original Stremio TV screen` (this file only) with the token/optional-comma proof; (a) is R. | Spotlight precedent; the verbatim checker compares formatted ASTs. |
-| D2 | **`build` is 565 lines in one method**; move-only cannot split it. It moves alone into `legacy_stremio_tv/stremio_tv_layout.dart` with a documented size exception equal to its measured lines (estimate about 600, under the 800 ceiling). The facade keeps an exact forwarder `Widget build(BuildContext context) => _sections.layout.build(context);` (addon-hub precedent). | Exit: a later paint decomposition of the header bar and channel area with its own goldens and review. |
+| D1 | **Format-only reference commit.** The file is not formatter-clean, so step 0 commits (a) `style(stremio-tv): format the original Stremio TV screen` (this file plus the hand-raised `file_size_baseline.txt:15` entry: formatting makes the file 3,958 lines) with the token/optional-comma proof; (a) is R. | Spotlight precedent; the verbatim checker compares formatted ASTs. |
+| D2 | **`build` is 565 lines in one method**; move-only cannot split it. It moves alone into `legacy_stremio_tv/stremio_tv_layout.dart` with a documented size exception equal to its measured lines (scratch measurement: 682 qualified method lines, about 700 with imports and scaffolding; under the 800 ceiling). The facade keeps an exact forwarder `Widget build(BuildContext context) => _sections.layout.build(context);` (addon-hub precedent). | Exit: a later paint decomposition of the header bar and channel area with its own goldens and review. |
 | D3 | **`_playChannel` is 422 lines.** It moves alone into `stremio_tv_play_channel.dart` (estimate about 470 formatted with imports and header). If the measured file exceeds 500, it gets the same kind of documented exception equal to its measured lines; no other exception is authorized. | Exit: the players goal (a play-pipeline decomposition with its own characterization). |
 | D4 | Private widget classes keep private runtime types, exported by typedef from their own file (Debrify TV/catalog precedent); an exact typed constructor forwarder is added only if step 0b's compiling probe shows a new `unused_element_parameter` (frozen in the scaffolding sidecar). The three data classes become public renamed models (`_AllDebridPrepared` precedent). | Keeps widget runtime types; data classes must be named across libraries. |
 | D5 | Pre-existing defects move unchanged (Found, not fixed). No behaviour fix, guard or dead-code removal in this split. | Move-only. |
@@ -390,7 +390,7 @@ measures.
 | `stremio_tv_cloud_resolvers.dart` | `_resolveViaTorbox`, `_resolveViaPikPak`, `_trashRejectedPikPakItem`, `_resolveViaPremiumize` | 320 |
 | `stremio_tv_channel_actions.dart` | `_playChannelById`, the Channel Detail banner, `_openChannelDetail` (doc), `_pushChannelDetail`, the Channel Guide banner + `_showGuide`, the Favorites banner + `_toggleFavorite`, `_copyLocalCatalogJson`, `_editLocalCatalog` | 250 |
 | `stremio_tv_navigation.dart` | the Search banner, `_filteredChannels` getter, `_currentFocusedChannelId`, `_focusDialFromHeader` (doc), `_reorderRowFocusNodes`, `_handleSearchBarBack` (doc) | 125 |
-| `stremio_tv_layout.dart` | the Build banner and `build` alone (D2, size exception) | ~600 |
+| `stremio_tv_layout.dart` | the Build banner and `build` alone (D2, size exception) | ~700 |
 
 **Banner placement.** Banners and other free comments are manifest leaves.
 Each banner moves to the file of the section whose members it heads, placed
@@ -453,23 +453,30 @@ no line may be added to use headroom.
 
 **Guard rules** (step 1, `check_search_architecture.py`, additive, keyed by
 this feature): `STREMIO_TV_FACADE`, `STREMIO_TV_BRIDGE`,
-`STREMIO_TV_COMPLETE = False`, `STREMIO_TV_FILES` (the exact set of new
-files above, outside and inside the bridge — the size and service rules
-apply to this set and the bridge only, never to the existing catalog-picker
-files); the bridge in `LEGACY_PLAYBACK_BRIDGES` (still no
+`STREMIO_TV_COMPLETE = False`, `STREMIO_TV_PREEXISTING` (the exact seven
+catalog-picker files present at base `0cb50df7`: `application/stremio_tv_providers.dart`,
+`data/stremio_tv_catalog_editor.dart`, `models/stremio_tv_catalog_option.dart`,
+`models/stremio_tv_catalog_picker_result.dart`,
+`presentation/stremio_tv_catalog_picker_dialog.dart`,
+`presentation/stremio_tv_catalog_picker_views.dart`,
+`presentation/stremio_tv_focus_frame.dart`) — **every other** file under
+`lib/features/stremio_tv/` (this split's files and any future file) is held
+to the 500-line cap (or its registered exception) and the service rule,
+while the seven pre-existing files keep exactly their current treatment; the bridge in `LEGACY_PLAYBACK_BRIDGES` (still no
 `shared_preferences`/`sqflite`); no facade back-import from any
 `lib/features/stremio_tv/` file; `lib/services/` imports only inside the
 exact bridge; the models/application files import no `lib/services/` and no
 UI (existing layer rules); the playback-import ban (Contract 3.9); 500-line
 caps with `STREMIO_TV_SIZE_EXCEPTIONS`, and the global 800 ceiling read for
 the layout file stays satisfied without generalisation (estimate about
-600). At step 8 (`STREMIO_TV_COMPLETE = True`): the facade added to `paths`
+700). At step 7 (`STREMIO_TV_COMPLETE = True`): the facade added to `paths`
 in `main()`, the facade in `COMPOSITION_ROOTS` with a comment, its measured
 cap and the `TEMP(stremio_tv)` rejection. Tests run **the real checker**
 against a temporary copy of the tree and must reject: the facade missing;
 the facade at cap + 1; `TEMP(stremio_tv)` in the facade and in a feature
 file; each size-exception file at its measured cap + 1; an unrelated new
-Stremio TV destination at 501 lines; a non-bridge new file importing
+Stremio TV destination at 501 lines, and separately an unregistered new file
+under `lib/features/stremio_tv/presentation/` at 501 lines; a non-bridge new file importing
 `lib/services/`; a `video_player_launcher` import in
 `stremio_tv_channel_actions.dart`. The unmodified tree passes, and the
 existing catalog-picker files (including the 618-line picker dialog) pass
@@ -536,9 +543,24 @@ As in the Debrify TV and Spotlight plans, plus:
    fields move at step 2 into the four records, renamed by dropping the
    leading underscore, and **every moved field reference is
    receiver-qualified** (`_owners.library.channels`). Reuse the Debrify TV
-   opt-in `occurrence_field_bindings` key (`owners:
-   ["_StremioTvScreenState"]`, `mandatory_qualification: true`) and binder
-   unchanged; enable `spotlight_state_field_bindings` for
+   opt-in `occurrence_field_bindings` key and binder with **two narrowly
+   scoped, opt-in extensions** (authorized here; Debrify TV's config,
+   adapter output and self-tests must stay byte-identical): **(i)** the
+   State owner and record-path qualification come from the config (`owners:
+   ["_StremioTvScreenState"]`, `record_paths` from `receiver_paths`) instead
+   of the hard-coded `_DebrifyTVScreenState`
+   (`occurrence_field_bindings.py:15`, `:52`), with Debrify TV's values as
+   the default; `mandatory_qualification: true` is **implemented** (a
+   destination `lexical`+`unbound` record-member name is rejected in every
+   new Stremio TV file) rather than merely stated; **(ii)** alignment
+   accepts each registered `live_widget_getters` substitution
+   (`widget.isTelevision` ↔ `_deps.isTelevision()`) beside the three State
+   callbacks, as registered receiver scaffolding only. Positives: all three
+   `widget.isTelevision` sites (`_openChannelFilter`, `_pushChannelDetail`,
+   `build`'s tuner argument). Negatives (through checker **and** reader): a
+   cached widget value (`final tv = _deps.isTelevision();` hoisted), the
+   getter on a wrong receiver (`_owners.focus`), a bare record field, and the
+   Debrify TV fixtures unchanged. Enable `spotlight_state_field_bindings` for
    `_StremioTvScreenState`. Hazards (dependency report lists them all):
    locals named `channels` in `_discoverAndLoad` and `_refresh` and the
    `_sortedChannels(channels)` parameter beside the `channels` field;
@@ -628,7 +650,7 @@ As in the Debrify TV and Spotlight plans, plus:
    (Technique 1) and record `base-fmt` (analyzer only; the suite need not
    rerun for a formatter-only change unless an identity changes).
 2. **Dependency report** (`docs/refactoring/stremio-tv-deps.md`). For every
-   leaf (40 fields, the getter, the static, every method, the 10 top-level
+   leaf (40 fields, the getter, the static, every method, the nine top-level
    declarations outside the retained widget/State, comment fragments and
    banners) it records the destination; reads of `context` (State or
    lexical), `mounted`, `setState`, `widget.isTelevision`; every field
@@ -702,11 +724,12 @@ As in the Debrify TV and Spotlight plans, plus:
    `test/support/debrify_tv_handoff.dart`'s typed field accessor for
    `VideoPlayerScreen` (import, don't copy). `stremioTvRotationMinutes`,
    `stremioTvSeriesRotationMinutes` and `stremioTvMixSalt` are consumed only
-   by the native payload builder, not by `VideoPlayerScreen`: step 0
-   determines whether a host path observes them without a seam (e.g. the
-   existing `isAndroidTvOverride`/`PlatformUtil` TV overrides with a
-   method-channel mock for the native launch); if not, they are (S) via the
-   ledger and recorded so. Prove the interceptor on R first (one fixture).
+   by the native payload builder, not by `VideoPlayerScreen`, and the
+   native bridge returns before its method-channel call on non-Android hosts
+   (`android_tv_player_bridge.dart:1866`; TV overrides do not change
+   `Platform.isAndroid`). They are therefore **(S)**: pinned by the ledger and
+   contracts module only. Rotation and mix-salt behaviour stays (O) through
+   the guide/next provider results. Prove the interceptor on R first (one fixture).
    **No `pumpAndSettle`**: delays (3 s settle, 120 ms poll, 200 ms
    `AnimatedSize`) use fake time; IO runs inside `runAsync`. **Time:** the
    rotation reads `DateTime.now()` (not faked by `fake_async`), so
@@ -726,7 +749,9 @@ As in the Debrify TV and Spotlight plans, plus:
    | --- | --- |
    | C1 Lifecycle | After mount: screen view logged (O if observable, else S), `watchStremioTvChannel` set, the content-focus request focuses the search button (R/O), the search listener filters channels (R); after unmount: `watchStremioTvChannel` null and the tab-9 handler removed (O through the bridge's request path), focus/controller disposal (S); `initState`/`dispose` bodies and the forwarder (S). |
    | C2 Hooks | `HomeHeroShellBridge` path with the screen unmounted stores the id; mounting plays that channel after discovery (O: overlay shown, search request issued); unknown id while startup auto-play is active → `notifyAutoLaunchFailed('Startup channel not found')` (O via `hideAutoLaunchOverlay` probe); while mounted the call goes through `watchStremioTvChannel` (O). |
-   | C3 Playback handoff P2 (RD) | One-item movie channel + RD `MockClient`: tune in from the tuner → loader shown (R) → search request (O) → add/info/unrestrict requests in order (O) → loader dismissed **before** the push (O: observer order) → captured `VideoPlayerScreen` fields equal the P2 ledger entry field by field, with unlisted parameters at their defaults (O) → invoking the captured `resolveStremioSource` resolves through the **creation-time** provider even after the provider menu changes it (O) → invoking the captured `stremioTvNextProvider(channelId)` advances one slot and returns the map with every key (O) → `stremioTvChannelSwitchProvider` for a second channel returns its map (O) → `stremioTvGuideDataProvider([ids])` returns now/next for loaded channels (O). |
+   | C3 Playback handoff P2 (RD) | One-item movie channel + RD `MockClient`: tune in from the tuner → loader shown (R) → search request (O) → add/info/unrestrict requests in order (O) → loader dismissed **before** the push (O: observer order) → captured `VideoPlayerScreen` fields equal the P2 ledger entry field by field, with unlisted parameters at their defaults (O) → invoking the captured `resolveStremioSource` resolves through the **creation-time** provider even after the provider menu changes it (O) → invoking the captured `stremioTvNextProvider(channelId)` advances one slot and returns the map with every key (O) → `stremioTvChannelSwitchProvider` for a second channel returns its map (O) → `stremioTvGuideDataProvider([ids])` returns now/next for loaded channels **and loads an initially unloaded addon channel through its catalog request** (O). |
+   | C3 Next and cursor | (a) Next whose resolve fails: returns null, logs, and records the failed slot; a second explicit Next asks for the **following** slot (O: slot boundaries in the returned/requested data, since one-item titles are identical). (b) Cursor reset by P2: advance through captured Next (offset 2 recorded), retune the **same** channel through P2 within the same base slot, then Next returns slot 1 again, not slot 3 (O: returned slot boundaries). |
+   | C3 startup flag | Startup auto-play (pending id) → P2 launch; afterwards `watchStremioTvChannel('unknown-id')` plays the first channel via `orElse` (O), proving `_notifyStartupPlayerLaunching` cleared the startup flag (with the flag left set it would report 'Startup channel not found' instead). |
    | C3 P1 (manual picker) | Every auto candidate fails (RD returns no links, direct HEAD invalid) → picker sheet shown with All/Direct/Torrent counts (R) → selecting a source resolves and validates, pops the choice → push with `result.url`/`result.sourceIndex` (O, ledger P1) and `notifyAutoLaunchFailed` already fired once (O). A failed pick marks the item failed and stays open (R). |
    | C3 provider paths | TorBox (cache filter then create/info/link and `finally` delete of a rejected torrent), Premiumize (cache filter then direct download), AllDebrid (not-ready → delete magnet → next; ready → unlock), auto mode ladder order with the RD blocked-torrent skip (O: request order). Series: random-episode resolve and the episode filter dropping a confidently different single episode (O). |
    | C3 cancel | Cancel on the loader while the RD `unrestrictLink` is held: after release, **no push** (O) and `'Playback canceled'` reported (O). Cancel while the TorBox cache check is held (no generation check there, as-is): the cache request completes, then the next generation-checked step stops (O: request sequence; no push). A second `playChannel` while the first is held: the first stops at its next generation check (O). |
@@ -735,7 +760,7 @@ As in the Debrify TV and Spotlight plans, plus:
    | C6 Menu and dialogs | Options menu items in order with Shuffle label `Mix n` advancing (R); Import submenu items, MDBList entry only when connected (R); filter page push returns `true` → refresh (O); local-catalog copy writes the JSON to the clipboard and snackbars (O/R); edit refocuses the edited channel (R). |
    | C7 Detail and guide | Detail opens `CatalogItemDetailScreen` with `isTelevision` and `enablePrimarySourcesHold: false` (O: route content); re-entrancy flag blocks a double open (O); still-loading channel waits on the 120 ms poll (O, fake time); guide sheet tap plays (O). |
    | C8 D-pad | Search button Left → sidebar probe, Right → menu, Down → tuner focus via the controller (R/O); search Escape ladder (clear, then close and refocus) (R); menu open by Select and closed by Escape with focus restored (R); submenu Left/Right returns to the Import item (R); provider menu Escape (R); picker: first item autofocus, Up → tabs, Escape pops (R). |
-   | C9 Field binding (behavioural proxies) | After load: rotation minutes, mix salt, preferred quality, torrents-first and max-start reach the push/ledger values (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
+   | C9 Field binding (behavioural proxies) | After load: rotation and mix salt observable through guide/next results (O; the three native-only push args are S), preferred quality, torrents-first and max-start reach request order and `startAtPercent` (O); `hideNowPlaying` and `autoRefresh` reach the tuner (R/O). |
 
    **Mutation proofs** come in two kinds, recorded separately.
    - **Behavioural (ORIGINAL) proxies** (`original-mutations.json`):
@@ -747,9 +772,11 @@ As in the Debrify TV and Spotlight plans, plus:
      `0`; P1 `videoUrl` replaced by the first source's URL; `title` without
      the `_currentPlayTitle ??`; `_createSourceResolver` reading
      `_debridProvider` live inside the closure; `_rememberPlaybackCursor`
-     before P2 removed (next provider then repeats slot 1);
+     before P2 removed (rejected by the C3 cursor-reset case (b): Next then
+     continues from the stale offset);
      `overlay.dismiss()` before P2 removed; `_notifyStartupPlayerLaunching()`
-     removed; **every** generation check removed together in the paths the
+     removed (rejected by the C3 startup-flag case, not by a launching probe,
+     since `LaunchRouter` itself calls `notifyPlayerLaunching`); **every** generation check removed together in the paths the
      cancel case exercises (each replaced by its not-cancelled value; a
      single removal masked by the remaining checks is a guard mutation, S);
      the `onCancel` bump removed; `includeMediaServers: false` flipped (the
@@ -763,31 +790,37 @@ As in the Debrify TV and Spotlight plans, plus:
    - **Checker/guard mutations (S)** over simulated moved source, for what no
      host test can observe: the tab-9 unregister with a new closure (the
      bridge keeps the old one silently); the `_searchController` listener
-     body changes that render identically; rotation/mix-salt ledger
-     arguments if (S) per Step 0.4; single redundant generation checks;
+     body changes that render identically; the three native-only
+     rotation/mix-salt push arguments (Step 0.4); single redundant generation checks;
      native-only arguments; `_loadSettings` field writes moved into
      `setState`. Each is rejected by the manifest checker, contracts module,
      binding guard or callback-identity checker, and classified **S**.
 6. **Goldens** (macOS captured by execution in (b), Linux by Claude; strict
-   from capture). Scenes avoid wall-clock text: **(1)** loading skeleton,
-   TV 1920×1080 (discovery held); **(2)** loaded wall, TV 1920×1080,
-   `hideNowPlaying: true`, `maxStartPercent: 0`, six one-item local
-   channels (two favourites), focus on the search button, providers RD and
-   TorBox (provider chip visible); **(3)** header with the search field open
-   and a term matching two channels, phone 390×844; **(4)** empty state
-   (no channels), desktop 1280×800; **(5)** options menu open with the Import
-   submenu expanded, TV; **(6)** manual source picker sheet with one direct
-   and two torrent sources, one marked failed, TV. Before each capture the
-   test asserts its readiness markers (channels rendered, intended focus
-   owner, menu/sheet fully shown) and that no time-derived text is present
-   (scene 2 hides now-playing; if the tuner still renders wall-clock text,
-   that scene uses a fixed `DateTime` window proven stable by the double
-   capture across two runs at least one minute apart, else it is dropped
-   and recorded). No network images (posters null). Fonts include
-   JetBrainsMono; DPR 1.0; pinned theme; `en-US`; text scale 1.0; bounded
-   fixed pumps. macOS originals are captured **twice in independent
+   from capture). **No scene renders the tuner**: its hidden-now-playing
+   branch still paints `_liveBar()` with `np.progressText`
+   (`stremio_tv_tuner.dart:1412`, `:1657`), derived from real-time slot
+   bounds with no injection path, so loaded-wall pixels cannot be made
+   deterministic without a seam. Tuner wiring is covered by the (R/O)
+   behaviour cases; the tuner's own pixels belong to its sibling refactor.
+   Scenes: **(1)** loading skeleton, TV 1920×1080 (discovery held); **(2)**
+   header over the empty state (no channels), TV 1920×1080, providers RD and
+   TorBox (provider chip visible), focus on the search button; **(3)** the
+   same with the search field open and a typed term, phone 390×844; **(4)**
+   empty state, desktop 1280×800, no providers; **(5)** options menu open
+   with the Import submenu expanded (MDBList connected), over the empty
+   state, TV; **(6)** the manual source picker sheet with one direct and two
+   torrent sources, one marked failed, TV — captured as a **region golden of
+   the sheet's own repaint boundary** (located by runtime type name
+   `_ManualSourcePickerSheet`), with an assertion that the captured
+   boundary has no tuner descendant (the tuner behind the modal is
+   excluded). Before each capture the test asserts its readiness markers
+   (header rendered, intended focus owner, menu/sheet fully shown, no
+   `StremioTvTuner` in the captured subtree). No network images. Fonts
+   include JetBrainsMono; DPR 1.0; pinned theme; `en-US`; text scale 1.0;
+   bounded fixed pumps. macOS originals are captured **twice in independent
    processes, the second in reversed scene order**, byte-identical before
-   (b) is committed; the Linux script does the same.
+   (b) is committed; the Linux script does the same; later replays are
+   strict.
 7. **CI list and pre-existing failures.** Add every new test and the golden
    test to `ci_behavior_tests.txt`. Add **only failures `base` actually
    observes** in newly listed files, by identity, in the same commit, under a
@@ -798,10 +831,28 @@ As in the Debrify TV and Spotlight plans, plus:
      `dev/tool/stremio_tv_source_reader.py`), the Debrify TV reader rules:
      ownership per declaration by **AST declaration presence** (destination
      declares it → owned there; else the retained facade declaration);
-     duplicate and missing ownership rejected; unregistered extra files
-     under the new file set rejected; scaffold files registered with pinned
-     declarations; tests for ORIGINAL, partial, completed (simulated),
-     scaffold-only, mixed file and each rejection.
+     duplicate and missing ownership rejected; scaffold files registered with
+     pinned declarations; tests for ORIGINAL, partial, completed (simulated),
+     scaffold-only, mixed file and each rejection. **Source selection
+     (opt-in, shared by the CLI and the reader):** a config key
+     `excluded_feature_files` lists the seven `STREMIO_TV_PREEXISTING`
+     catalog-picker files, which are removed **before parsing** (the adapter
+     cannot parse their multi-variable fields, `.variables.single`) and
+     before ownership; every other file under `lib/features/stremio_tv/`
+     must own a manifest declaration or be a registered scaffold, and any
+     unexpected new file is rejected. Configs without the key behave
+     byte-identically. **Validated forwarder:** `_StremioTvScreenState.build`
+     is registered as an exact forwarder (`forwarders` with its pinned token
+     text `@override Widget build(BuildContext context) =>
+     _sections.layout.build(context);`); the reader treats the facade
+     declaration as the validated forwarder and `StremioTvLayout.build` as the
+     implementation owner (no duplicate-ownership error), `plain_sections`
+     registers `StremioTvLayout`, and the addon-hub token rule removes only
+     the moved method's `@override` while the facade keeps its annotation.
+     Fixtures: forwarder present with the body still in the facade (step 5
+     shape), forwarder plus moved body (step 6 shape), a forwarder with any
+     extra token, a moved body still annotated, and the body in both places
+     each rejected. Completion enforcement uses this plan's final step **7**.
      `stremioTvOriginalSource()` returns raw ORIGINAL (R) text only after the
      checker proves every current declaration equals its original under the
      registered substitutions. **`stremioTvCurrentSource()`** returns the
@@ -996,6 +1047,40 @@ All pre-existing; the extraction keeps each exactly.
    edits are `mounted`-only across awaits.
 10. Strings are unlocalized; icon-only header buttons have no `Semantics`
     labels.
+
+## Round 1 review resolution
+
+Codex design review round 1 (`~/.codex-runs/stv-design/last.txt`, at
+`cd6443dd`); each point re-checked against source before revising.
+
+1. **P1 manifest scope** — `excluded_feature_files` (opt-in, CLI and reader)
+   drops the seven pre-existing catalog-picker files before parsing; the
+   architecture rule caps **every** other `lib/features/stremio_tv/` file
+   (`STREMIO_TV_PREEXISTING` replaces the exact new-file set), with a
+   501-line unregistered-file negative.
+2. **P1 binder reuse** — two authorized opt-in extensions (config-driven
+   owner/record paths with `mandatory_qualification` implemented;
+   live-widget-getter alignment), with positives for all three
+   `isTelevision` sites and cached/wrong-receiver/bare-field negatives through
+   checker and reader; Debrify TV byte-identical.
+3. **P1 reader vs forwarder** — registered validated forwarder,
+   `plain_sections`, the addon-hub `@override` token rule, step-5/step-6
+   fixtures and rejections; completion at step 7.
+4. **P1 golden determinism** — no scene renders the tuner (its `_liveBar`
+   prints real-time `progressText`); loaded scenes sit over the empty state,
+   and the picker is a region golden of its own repaint boundary with a
+   no-tuner assertion.
+5. **P1 surviving mutations** — new C3 cursor-reset case (Next, retune the
+   same channel through P2 in the same base slot, Next returns slot 1) and
+   a startup-flag case (`orElse` play vs 'Startup channel not found')
+   reject the two mutations.
+6. **P2 native-only args** — the three rotation/mix arguments are (S);
+   rotation behaviour stays (O) through provider results.
+7. **P2 factory branches** — failed Next followed by another Next, and
+   guide loading of an unloaded addon channel, added to C3.
+8. **P3** — format commit raises the size baseline (3,958); layout estimate
+   about 700 (682 measured qualified); nine top-level declarations; step 7
+   completion.
 
 ## Progress
 
