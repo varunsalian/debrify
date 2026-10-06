@@ -622,8 +622,9 @@ Never `--record` or `--update` to accept a regression.
    grants never churn").
 3. `_transferOwnership` performs its first `_validateManagingAdmin` before
    the `try`; a failure there escapes the later failure-snackbar handler.
-   Source observation at R; the characterized session-change case exercises
-   the second validation, after confirmation.
+   The step-0b stale-before-dialog case captures that escaped exception;
+   the post-confirmation case demonstrates the core transfer guard masking
+   omission of the second editor validation.
 4. Successful admin PIN removal does not replace `widget.profile` or rebuild
    its PIN flags. The reset action can remain visible until the route reloads
    that immutable profile. Persistence and success/failure feedback are
@@ -631,6 +632,16 @@ Never `--record` or `--update` to accept a regression.
 5. The original `assets/fonts/Roboto-Regular.ttf` and
    `Merriweather-Regular.ttf` contain HTML, not font data (`file` verified).
    The fixed golden theme loads the valid Inter asset; no asset was repaired.
+6. After transfer of an initially unselected connection, `_loadResources`
+   updates the resources without reseeding `_selectedResources`. The now-owned
+   row can remain unchecked and disabled despite its owner grant. The step-0b
+   ORIGINAL transfer case records that state before its later successful Save;
+   no selection refresh was added.
+7. The original phone connection-group header overflows by 71 pixels at
+   390×844 with a real connection (`_groupHeader` Row, R line 2694).
+   The 0b narrow-phone trial demonstrates it in `step0b-final-original.jsonl`;
+   the passing phone write case uses 600×1000. No layout fix or exception
+   suppression was introduced.
 
 ## Decisions taken before design review (Claude, 2026-10-06)
 
@@ -788,3 +799,67 @@ avatar finalization as distinct cases). P2: `tvProfile → tvPanes` edge
   feedback handler, unchanged PIN flags after reset, invalid original font
   assets (items 3–5 above). No bug fix, device/emulator run, Linux capture,
   independent 0b review, base2, or extraction has been performed.
+
+
+### Step 0b — independent review closure, 2026-10-06
+
+- **Scope / R:** closes G1–G8 from checkpoint `36b6288d`; R remains
+  `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`. No application move, production
+  seam or core-service edit. `lib/`, pubspec and lock objects remain R.
+  All evidence below is under `<git-common-dir>/refactor-evidence/edit_profile/`.
+- **ORIGINAL cases:** 23 new cases in `edit_profile_review_closure_test.dart`,
+  appended to CI. `flutter test --no-pub --concurrency=1 --reporter=json`
+  against the owned ORIGINAL copy passes the 109 visible editor cases
+  (50 prior + four strict macOS goldens + 23 closure + 32 existing).
+  The final 23-case replay includes direct creation/transfer core rejection
+  stacks (`step0b-final-original2.jsonl`, `step0b-final-original4.jsonl`).
+  **No new goldens**; the four originals are unchanged.
+- **Mutation closure:** `edit_profile_original_mutations.py --only 0b-…`
+  and `edit_profile_review_mutations.py`, with `--original-root` and the
+  isolated inventory `--parser-package`, prove **27 assertion-failing
+  mutations + two S demonstrations**. All 23 identities are covered:
+  20 behaviorally killed, three core-masked contexts; 28 unique mutant
+  sources. `original-mutations.json` retains every prior proof (54 B / 8 S),
+  giving **81 B / 10 S** total; commands, assertions, source/test hashes and
+  initial rejected attempts remain recorded (`step0b-final-mutation-audit.json`,
+  `step0b-gap-closure.json`, `step0b-final-{behavior,source}-mutations.txt`).
+  Create's omitted start guard is masked by `createStaged`'s first
+  `actor.validate`; both stale/demoted contexts still refuse staging.
+  Transfer's omitted prewrite guard is masked by `transferOwnership`'s first
+  `actor.validate`. Both mutants actually run, core stacks are asserted,
+  and checker, reader and existing source-guard assertions reject them.
+- **Compiling composition:** `python3 dev/tool/edit_profile_composition_probe.py
+  --parser-package .dart_tool/edit_profile_parser/composition/.dart_tool/package_config.json`
+  applies all 90 manifest leaves (86 destination leaves) in owned scratch.
+  Real checker/reader pass occurrence bindings/substitutions, callback
+  identity, public bytes, lifecycle and 100 exact new scaffold leaves.
+  Facade **150 lines**: public widget 54, composition 20, authorization 1,
+  lifecycle 45, build 2, imports/header/blanks 28. Per-span breakdown and all
+  file sizes are in `step0b-composition-probe.json`; every probe file <500.
+  Strict analyzer: **0 errors / 5 known enum warnings / 5 infos**, by original
+  identity. Two infos arise from wrapped receiver qualifications in frozen
+  original control statements; no suppression or allowlist change
+  (`step0b-composition-analyzer-identities.json`, analyzer inventory).
+- **Checks:** all **17 manifests** pass their live configs and self-tests,
+  Debrify TV included; edit-profile proves **169 negatives**, including
+  **17 same-class callback identities** (`step0b-all-checkers.json`). Every
+  parser is isolated below `.dart_tool/edit_profile_parser/`; copied kernels
+  are deleted. Shared checker sources remain byte-identical; config adds
+  only edit-profile callback aliases, CI only appends the new test path.
+  Whole `flutter analyze --no-pub`: **1689 diagnostics, no added identities**;
+  actual CI formatting, architecture, size, storage map/bodies/keys/references
+  and script syntax pass (`step0b-analyze-comparison.txt`, `step0b-static-checks.json`).
+- **Checkpoint / base2:** subject
+  `test(edit-profile): step 0b independent review closure`.
+  The full suite runs serially at this committed checkpoint with
+  `python3 dev/tool/suite_evidence.py run edit_profile/base2 --no-pub --concurrency=2`;
+  its exact result line and identity verdict against `base` are retained in
+  `base2-summary.txt`, `base2-comparison.txt` and `base2-comparison.json`.
+  `base2.env.json` records the checkpoint, SDK and unchanged execution tree;
+  `step0b-checkpoint-provenance.json` ties the final audit to that revision.
+- **Found-not-fixed:** item 3's pre-dialog exception is exercised; additions
+  6–7 record the stale unchecked owner row after transfer and ORIGINAL's
+  390-pixel phone connection-header overflow. Passing phone persistence uses
+  600×1000, with real phone role/art/checkbox actions and no preseeded grant.
+  No regression acceptance, device/emulator run, push or merge. **L and
+  step 1 remain unstarted.**

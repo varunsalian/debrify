@@ -4,7 +4,7 @@ Execution base R: `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`. Application source
 
 Every field read/write and live State/widget occurrence below retains its original evaluation site. Lexical `context` parameters/builders and role/resources/engines/features/section locals retain their bindings. Unbound State references alone receive owner/deps qualifiers. Public declarations and comments retain their bytes. `_authorization` remains the State lazy `late` field; deps forwarding is S evidence.
 
-Wiring checklist for every row: construct inert owners/sections once; preserve initializer and lifecycle order; qualify only unbound State members; keep lexical locals/parameters; read widget fields through live closures at the listed sites; preserve callback identity and exact receiver; preserve comments; run checker/reader and relevant R/O cases. Actual destination composition review remains step 0b and creation-step work.
+Wiring checklist for every row: construct inert owners/sections once; preserve initializer and lifecycle order; qualify only unbound State members; keep lexical locals/parameters; read widget fields through live closures at the listed sites; preserve callback identity and exact receiver; preserve comments; run checker/reader and relevant R/O cases. Step 0b verifies the full scratch composition below; production construction remains in the later extraction steps.
 
 ## `_TvProfileSection`
 
@@ -1488,7 +1488,7 @@ Comments: 0 AST tokens; exact text pinned by the original leaf and original-comm
 
 ## Cross-owner calls at R
 
-Derived from unbound original AST occurrences; record fields and top-level types are included. These are the dependencies to wire before each row moves. The 0b compiling composition remains pending.
+Derived from unbound original AST occurrences; record fields and top-level types are included. These are the dependencies to wire before each row moves. The 0b compiling composition is verified in the audit below.
 
 | Source owner | Reads/calls into |
 | --- | --- |
@@ -1564,3 +1564,31 @@ These remain inside their whole-class manifest leaves; no member may be duplicat
 The editor is outside the shape and theme manifests and is not a PRIMARY light-ink surface. The shape-test regex counts 13 literal sites; the broader `circular(` search counts 14 because one conditional radius is outside that regex. No surface registration changes occur at step 0.
 
 The only exact editor-file source reader is `profile_source_guard_test.dart`; its expectation strings are unchanged. Global profile preference/database/SQL sweeps, stale-runtime reset-cache discovery, theme sweeps, and storage references also see the editor. Each editor leaf has zero raw preference opens, fixed TV/IPTV database names, SQL upserts, VACUUM INTO, or StorageService references. Their identical syntax-fixture destinations retain those zero counts. The full concrete inventory and original counts are in `source-text-and-surface-inventory.json` under the common evidence directory.
+
+
+## Step 0b composition audit
+
+The complete 90-leaf manifest (86 destination leaves) compiles in
+`.dart_tool/edit_profile_composition_probe/`. The real checker and source reader
+accept the occurrence bindings/substitutions, callback identities, public bytes,
+lifecycle, and 100 frozen new scaffolding leaves. The primary application remains
+R; this probe is not a production integration.
+
+The formatted facade measures **150 physical lines**: public widget 54,
+composition fields/getter 20, retained authorization 1, lifecycle 45, build
+forwarder 2, and imports/header/blank overhead 28. Per-member source spans and
+all destination sizes are in `step0b-composition-probe.json` under
+`<git-common-dir>/refactor-evidence/edit_profile/`. Every probe file is below 500
+lines. Analyzer identities are recorded in `edit_profile_analyzer_inventory.json`:
+zero errors, five known enum warnings and five infos. Two infos arise when
+registered receiver qualifications wrap original control statements; no original
+body/comment, diagnostic suppression or CI allowlist was changed.
+
+Reproduce with:
+
+```sh
+python3 dev/tool/edit_profile_composition_probe.py --parser-package .dart_tool/edit_profile_parser/composition/.dart_tool/package_config.json
+```
+
+The command creates the isolated locked parser package if needed and deletes
+copied `*.dill` files before parsing.

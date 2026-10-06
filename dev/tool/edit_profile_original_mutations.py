@@ -76,6 +76,8 @@ def specifications():
     add('phone-form-padding', 'build', 'padding: const EdgeInsets.all(20)', 'padding: const EdgeInsets.all(24)', ['R ORIGINAL golden phone_create', 'R ORIGINAL golden phone_edit'], file='goldens')
     add('tv-rail-width', '_buildTvSectionRail', 'width: 200,', 'width: 220,', ['R ORIGINAL golden tv_profile', 'R ORIGINAL golden tv_access'], file='goldens')
     add('policy-reload-condition-widened', '_save', 'widget.profile?.id == ProfileRuntime.capture().profileId', 'widget.profile != null', ['O identity edit preserves stored split policy on target'])
+    from edit_profile_review_mutations import specifications as review_specs
+    result.extend(review_specs())
     return result
 
 
@@ -104,7 +106,12 @@ def main():
         if args.only and spec['name'] not in args.only:continue
         node = members[spec['member']]
         assert node['text'].count(spec['before'])==spec['count'],(spec['name'],node['text'].count(spec['before']))
-        changed = node['text'].replace(spec['before'],spec['after'])
+        if 'site' in spec:
+            sites = list(re.finditer(re.escape(spec['before']), node['text']))
+            hit = sites[spec['site']]
+            changed = node['text'][:hit.start()] + spec['after'] + node['text'][hit.end():]
+        else:
+            changed = node['text'].replace(spec['before'],spec['after'])
         mutant = original.decode()[:node['start']]+changed+original.decode()[node['end']:]
         command = ['flutter','test','--no-pub','--concurrency=1','--reporter=json',spec['file'],'--name','^(?:'+'|'.join(re.escape(c) for c in spec['cases'])+')$']
         print('START '+spec['name'],flush=True)
@@ -128,7 +135,7 @@ def main():
                             and '_EditProfileScreenState._loadSetupOptions' in message)
             messages = {case:[x['message'] for x in events if x['type']=='print' and identities.get(x.get('testID'))==case and assertion(x.get('message',''))] for case in spec['cases']}
             assertions = {case:[m.split('When the exception')[0] for m in ms] for case,ms in messages.items() if ms}
-            record = dict(spec,command=command,cwd=str(args.original_root),exit=result.returncode,failed=sorted(failed),assertions=assertions,mutant_sha256=hashlib.sha256(mutant.encode()).hexdigest(),original_sha256=hashlib.sha256(original).hexdigest(),proved=result.returncode!=0 and set(spec['cases'])<=failed and set(spec['cases'])<=set(assertions))
+            record = dict(spec,command=command,cwd=str(args.original_root),exit=result.returncode,failed=sorted(failed),assertions=assertions,mutant_sha256=hashlib.sha256(mutant.encode()).hexdigest(),original_sha256=hashlib.sha256(original).hexdigest(),test_sha256=hashlib.sha256((args.original_root/spec["file"]).read_bytes()).hexdigest(),proved=result.returncode!=0 and set(spec['cases'])<=failed and set(spec['cases'])<=set(assertions))
             previous['behavioral']=[r for r in previous['behavioral'] if r['name']!=spec['name']]+[record]
             output.write_text(json.dumps(previous,indent=2)+'\n')
             print('DONE '+spec['name']+' proved='+str(record['proved']),flush=True)

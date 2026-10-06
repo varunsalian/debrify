@@ -307,3 +307,4 @@ test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_
 test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_test.dart
 test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_goldens_test.dart
 test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_review_closure_test.dart

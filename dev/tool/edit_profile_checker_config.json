@@ -744,5 +744,10 @@
       "call": "editProfileTvActionSurface",
       "file": "lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart"
     }
-  ]
+  ],
+  "callback_call_aliases": {
+    "_EnsureVisibleOnFocus": "editProfileEnsureVisibleOnFocus",
+    "_TvReadOnlyScrollAnchor": "editProfileTvReadOnlyScrollAnchor",
+    "_TvActionSurface": "editProfileTvActionSurface"
+  }
 }
