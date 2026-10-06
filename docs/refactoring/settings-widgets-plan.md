@@ -81,7 +81,7 @@ verbatim behind exact `show` imports (Contract 6).
 | `MainPageBridge` / `ProfileBootstrap` type-and-static imports via `PRESENTATION_BRIDGE_IMPORTS` `show` entries | A sidebar-focus callback and a legacy-reason value injected by the settings composition root |
 | `launchSettingsUrl` calls `url_launcher` from presentation (AGENTS: widgets must not invoke native services) | A link-launcher port wired at composition |
 | Legacy English text (row specs, headers, dialog) | Localization migration |
-| `kSettings*` legacy color constants kept for compatibility: `kSettingsAccent`/`kSettingsPanel2` still feed two `const` focus styles (`indexer_managers_settings_page.dart:21,25,842`, `iptv_settings_dialog_button_style.dart:11`) and `legacy_pins_test` pins all of them | Those styles become functions of context (Found 1) |
+| `kSettings*` legacy color constants kept for compatibility: `kSettingsAccent`/`kSettingsPanel2` still feed two top-level `final` focus styles (`indexer_managers_settings_page.dart:21,25,842`, `iptv_settings_dialog_button_style.dart:11`) and `legacy_pins_test` pins all of them | Those styles become functions of context (Found 1) |
 
 No size exception is needed: every destination is ≤ 500 lines.
 
@@ -184,8 +184,12 @@ comments included, through `test/support/settings_widgets_source.dart`, a
    public `ConnectionCard` widget fields from the element tree, per variant,
    independent of traversal; (c) records the reveal through a recording
    `ScrollController` whose `ScrollPosition` subclass logs `animateTo`
-   (target, duration, curve) with the frame it ran in, proving it runs after
-   the post-frame callback, not synchronously, with the tempo-scaled 200 ms;
+   (target, duration, curve) and the `SchedulerBinding` phase it ran in:
+   nothing is recorded synchronously with the key event, and the call happens
+   during `SchedulerPhase.postFrameCallbacks` with the tempo-scaled 200 ms
+   (`tvRevealMinimal` uses `animateTo` for a non-zero duration, `jumpTo` for
+   zero, and neither when no reveal is needed — the fixture places the target
+   so a reveal is needed);
    (d) drives the sidebar case for callback present/absent ×
    `isLeftColumn` true/false.
 4. **Tiles.** `SettingsTile`, `SettingsToggleTile`, `SettingsLookHero`: own
@@ -477,7 +481,9 @@ As in the detail-showcase plan, plus:
    no change to typography globals (any global the harness touches is saved
    and restored in teardown); fixed timeline per scene — build, one
    `pump()`, focus request through the public node, `pump()` then
-   `pump(const Duration(milliseconds: 300))` past the snap/parallax settle,
+   `pump(const Duration(milliseconds: 300))` as a deterministic **300 ms sample**
+   of the snap/parallax spring (not a claim of settlement; the fake clock makes
+   the sample identical on every run),
    and for the skeleton a fixed `pump(const Duration(milliseconds: 400))` of
    the `Shimmer` controller's fake clock; no `pumpAndSettle` (the shimmer
    repeats forever); dropdowns captured closed only. Scene order is
@@ -675,7 +681,7 @@ below.
 ## Found, not fixed
 
 1. Of the 11 `kSettings*` colors only `kSettingsAccent` and `kSettingsPanel2`
-   have production uses (two `const` focus styles that cannot read the theme);
+   have production uses (two top-level `final` focus styles that cannot read the theme);
    the rest are read only by `theme/legacy_pins_test` (and named in
    `app_theme.dart` comments).
 2. `settingsInitialsFor` is public with a single caller (`ConnectionCard`).
@@ -715,6 +721,9 @@ below.
 10. P3 → direct implementation-import ban stated and tested both ways; private
     count corrected to 10 + 3 variables; `kSettingsAccent`/`kSettingsPanel2`
     production uses recorded.
+
+Round 2 (at `4bec3ce3`): **No P1s — executable**, no P2s; three P3 wording
+notes (post-frame phase assertion, 300 ms sample, `final` styles) applied.
 
 ## Progress
 
