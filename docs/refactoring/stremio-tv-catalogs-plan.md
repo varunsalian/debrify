@@ -509,4 +509,92 @@ facade 8.
 
 ## Progress
 
-(Execution appends here.)
+### Step 0 — ORIGINAL characterization checkpoint (2026-10-06)
+
+Execution started at `8316eaefb2268c0e5bb44f824d487643b68ab808`; R/base is
+`0cb50df7e767485c6a3f9febd3dec7fb97df1239`. Evidence is local to
+`refactor-evidence/stremio_tv_catalogs/`. The checkpoint keeps all `lib/`
+bytes and both pubspec files identical to R. No Step 1 registration or move.
+
+Base: `base.jsonl` / `base.env.json`, paths `[]`, flags
+`--no-pub --concurrency=2 --timeout=120s`, Flutter 3.44.8 / Dart 3.12.2,
+tested tree `9a3d396c8b4e99e0f273fde8e8bf4903a70534df`: 11,654 success,
+13 failure, 28 error, 20 skipped across 1,138 suites. No runner timeout.
+Failure identities are in `base-failures.json`; the WebDAV appearance-policy
+failure reproduced in `base-webdav-isolated.jsonl` (51 success, 1 failure),
+so it is baseline behavior. No timing flake or allowlist change. Whole-repo
+analyzer: 1,687 identical diagnostic identities in `base-analyze.txt` and
+`checkpoint-source-analyze.txt`; `analyze-compare.txt` has zero additions.
+The explicit source paths avoid duplicate diagnostics from owned scratch
+copies; `baseline-notes.json` records that correction.
+
+The 19-leaf manifest, opt-in extension checker, complete-split/negative
+self-tests, eight test files, isolated fixture, frozen manifest-driven
+reader, resolved namespace check, CI list, and dependencies/inventory are
+added. Final aliases: `LcUrlDialog`, `LcJsonDialog`, `LcTraktDialog`,
+`LcMdblistDialog`, `lcBackHop`; no constructor tear-off. Strict probe has
+zero new diagnostics and removes only the original import-order identity;
+no declaration reflow. Scratch measurements: export 38, importer 347,
+editor 632, manage 488, URL 264, JSON 230, Trakt 554, MDBList 346, facade 8.
+The exact shape assertions retain four bare radii and the 488 floor.
+
+Proof checkpoint: `af3074641a9aa91adbd3b75b0e2336154ed17b55`, tested tree
+`1d6fddeb92155ed624864f9cc054f73efd80b110`. `characterization.jsonl` /
+`characterization.env.json`: all 94 tests pass across eight suites, paths
+`[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s`; comparison to base adds 94 passing
+identities with zero new failures, missing tests, or skips. The final (b)
+amendment changes documentation and the mutation reader's load-error
+classification; source, tests, manifest, and move checker remain identical
+to the proof checkpoint.
+
+ORIGINAL proofs ran B and S in separate serialized invocations with
+`--original-worktree .dart_tool/stremio_tv_catalogs_original` and the isolated
+`.dart_tool/stremio_tv_catalogs_mutation_parser/.dart_tool/package_config.json`.
+Each case records its test path, `--plain-name`, `--no-pub --concurrency=1
+--timeout=120s`, SDK/tree provenance, mutated source hash, and named assertion.
+
+| Kind | Cases | Named assertion kills | Survivors | Compile/timeout kills accepted |
+| --- | ---: | ---: | ---: | ---: |
+| B | 77 | 77 | 0 | 0 |
+| S | 10 | 10 | 0 | 0 |
+
+Evidence: `original-B-mutations.json`, `original-S-mutations.json`, per-case
+`original-{B,S}-*.jsonl` / `.env.json`, and `mutation-audit.json`. Every failed
+identity passed on ORIGINAL; all 87 hashes and trees were audited (only the
+original dialog file changes), and the scratch checkout is restored clean.
+Mutation probes tightened per-row subtitles, refresh item-count assertions,
+and custom/liked split types/items/ID assertions before freezing the tests.
+S initially exposed a reader false positive on the assertion literal "Failed
+to load lists"; loader failures are now recognized by their prefix. Five
+reader probes retain actual load/compile/timeout rejection, all 77 B records
+were revalidated, and all ten S cases were rerun (`mutation-reader-self-test.json`).
+No real suite timeout was retained or accepted as a kill.
+
+S classifications (details in the deps inventory): disposal order (1: no
+existing disposal-sequence callback), logs (2: exact diagnostic text/spacing),
+debug labels (1: diagnostic identifiers), disabled MDBList text (1:
+compile-time true enablement), service catches (4: non-strict services
+convert failures to empty results; no singleton throw-injection seam), and
+shape construction (1: source inventory; layouts are behavioral). Other
+contract classifications are B. No source guard is counted as a B kill.
+
+Verification: final formatting and scoped analysis pass (zero issues),
+CI-equivalent format/analyzer and existing warning allowlist checks pass,
+architecture and sizes pass, Python compilation and diff checks pass.
+Integrated manifest/self-tests: 17/17 PASS, including this feature’s ORIGINAL,
+complete-split, staged-owner, and extension/alias/comment/dispose/label/timeout
+negative probes.
+All checker invocations use separate in-worktree parser packages with copied
+`*.dill` removed. An incomplete merged-detail checker run was discarded when
+rescheduling independent checkers into two workers; its replacement passed.
+Suite evidence remained serialized. `integrated-checkers.json` records every
+command and verdict; no existing test/check/allowlist was weakened or deleted.
+
+Final `lib` tree remains `c529a99209dc591d0a99917b1db90d534e8a4265`, equal to
+R; both pubspec blobs are unchanged. Device/emulator/run/install and remote
+CI/push/merge were not run, as scoped. FilePicker restores an existing platform
+instance; its API cannot restore an initially unset late singleton, so that case
+resets to a fresh empty picker (documented in the deps inventory). Step 0b and
+all production moves remain unstarted. No Step 0 check remains pending; stop
+after (b).

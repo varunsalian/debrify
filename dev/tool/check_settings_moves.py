@@ -1221,9 +1221,17 @@ def _check(original_source, sources, rows, source_path, package=None,
                        for i in range(len(values))):
                 errors.append('Public widget key exception used on a non-widget: ' + name)
         new_name = mapping.get(name, name)
+        # Opt-in whole extensions retain their exact header/body tokens and
+        # single physical owner. Other manifests keep the class-only policy.
+        declaration_kind = ('ExtensionDeclarationImpl'
+                            if name in CONFIG.get('extension_declarations', [])
+                            else 'ClassDeclarationImpl')
+        if (declaration_kind == 'ExtensionDeclarationImpl'
+                and declaration['kind'] != declaration_kind):
+            errors.append('Registered extension is not an extension: ' + name)
         headers = [d for path, unit in parsed.items() if path != '<original>'
                    for d in unit['declarations'] if d['name'] in {name, new_name}
-                   and d['kind'] == 'ClassDeclarationImpl']
+                   and d['kind'] == declaration_kind]
         if len(headers) != 1:
             errors.append('Widget class missing or duplicated: ' + name); continue
         def header(node):

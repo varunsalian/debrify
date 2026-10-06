@@ -1,0 +1,21 @@
+{
+  "baseline": "0cb50df7",
+  "source": "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart",
+  "feature": "lib/features/stremio_tv_catalogs",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": false,
+  "allowed_edits": [
+    "unchanged"
+  ],
+  "receivers": [],
+  "completed_step": 0,
+  "self_test_module": "stremio_tv_catalogs_checker_test",
+  "extension_declarations": [
+    "_TraktListSourceExt"
+  ],
+  "verbatim_comment_bytes": true,
+  "type_aliases": [],
+  "file_aliases": [],
+  "additional_owners": []
+}

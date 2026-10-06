@@ -1,0 +1,13 @@
+[
+  "'StremioTV TraktImport: start list=\"$name\" slug=\"$slug\" '\n      'listId=${listId ?? 'none'} source=${_source.label} '\n      'owner=${owner ?? 'none'} ownerSlug=${ownerSlug ?? 'none'} '\n      'itemCount=$listedCount',",
+  "'StremioTV TraktImport: fetched custom list=\"$name\" '\n          'movies=${movies.length} shows=${shows.length}',",
+  "'StremioTV TraktImport: missing owner for liked list=\"$name\"',",
+  "'StremioTV TraktImport: fetched liked list=\"$name\" '\n          'listId=${listId ?? 'none'} owner=${ownerSlug ?? owner ?? 'none'} '\n          'movies=${movies.length} shows=${shows.length}',",
+  "'StremioTV TraktImport: save start name=\"$name\" '\n      'rawItems=${rawItems.length} meta=$traktMeta',",
+  "'StremioTV TraktImport: \"$name\" rejected: raw list is empty'",
+  "'StremioTV TraktImport: transformed name=\"$name\" '\n      'metas=${metas.length} rawItems=${rawItems.length}',",
+  "'StremioTV TraktImport: \"$name\" rejected: no transformable IMDB items',",
+  "'StremioTV TraktImport: catalog split name=\"$name\" '\n      'movies=${movies.length} series=${series.length}',",
+  "'StremioTV TraktImport: saving split catalog \"$catName\" '\n          'type=${entry.type} items=${entry.items.length}',",
+  "'StremioTV TraktImport: saving catalog \"$name\" '\n        'type=$catalogType items=${catalogItems.length}',"
+]
