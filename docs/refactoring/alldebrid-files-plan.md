@@ -529,3 +529,14 @@ Codex round 2: one P1, one P2, one P3; round-1 items confirmed resolved.
 Codex round 3: all round-2 findings resolved, no P1 or P2 — "No P1s —
 executable". Its one P3 (Found-not-fixed numbering) is fixed.
 
+
+
+## Progress
+
+### Step 0 — in progress; baseline and permitted seam
+
+- Execution starts at clean `52996ce3` on `refactor/alldebrid-files`, base `49c53e2e`; original screen byte-identical to the base, Flutter 3.44.8 / Dart 3.12.2. Original format check: one file, zero changes. No extraction, push or device run.
+- Untouched full suite `alldebrid_files/base`: 12,031 success / 13 failure / 29 error / 20 skipped; stable tested tree and SDK are recorded in `base.env.json`. Whole analyzer `base-analyze.txt`: 3,230 records, including unresolved vendor media-kit tests; this observed environment baseline is retained without dependency or suppression edits. Tree provenance is in its env file.
+- Only a frozen `@visibleForTesting` accessor is added: fresh unmodifiable state snapshots, resource reads and the retained `_refresh` tear-off for the dormant forced-files branch. No action/service/player seam, setter, constructor change or original method move. Temporary facade ratchet 1,996 → 2,040 lines; original responsibilities remain until Steps 1–5 and final facade cap in Step 6.
+- The first real HTTP fixture passed in an isolated original-code normal clone before writing the characterization matrix. It verifies the success envelope, ready-only filtering, exact magnet/status POST/header and lazy links. JSON/env/stable tested tree are retained as `original-fixture-first.*`; the clone contains only the original screen plus this permitted seam and test overlay.
+- Existing manifest self-tests are being recorded before the opt-in shared-tool extension. All later-step production architecture/theme/shape registrations remain deferred to their scheduled steps. Base2, characterization/mutation proofs, final checks and fresh-clone verification are still pending; this is a seam checkpoint, not completion.

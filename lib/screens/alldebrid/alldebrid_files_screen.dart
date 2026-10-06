@@ -1994,3 +1994,47 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     );
   }
 }
+
+/// Frozen step-0 seam: state reads and the dormant forced-files refresh only.
+@visibleForTesting
+Map<String, Object?> allDebridFilesTestAccess(
+  State<AllDebridFilesScreen> state,
+) {
+  final s = state as _AllDebridFilesScreenState;
+  return {
+    'apiKey': s._apiKey,
+    'loading': s._loading,
+    'error': s._error,
+    'magnets': List<AllDebridMagnet>.unmodifiable(s._magnets),
+    'selectedView': s._selectedView.name,
+    'links': List<AllDebridLink>.unmodifiable(s._links),
+    'loadingLinks': s._loadingLinks,
+    'linksLoadedOnce': s._linksLoadedOnce,
+    'linksError': s._linksError,
+    'currentMagnet': s._currentMagnet,
+    'currentFiles': List<AllDebridFile>.unmodifiable(s._currentFiles),
+    'loadingFiles': s._loadingFiles,
+    'isAtRoot': s._isAtRoot,
+    'searchActive': s._searchActive,
+    'searchQuery': s._searchQuery,
+    'fileSearchActive': s._fileSearchActive,
+    'fileSearchQuery': s._fileSearchQuery,
+    'selectionMode': s._selectionMode,
+    'selectedIds': Set<String>.unmodifiable(s._selectedIds),
+    'isAllSelected': s._isAllSelected,
+    'visibleMagnets': List<AllDebridMagnet>.unmodifiable(s._visibleMagnets),
+    'visibleFiles': List<AllDebridFile>.unmodifiable(s._visibleFiles),
+    'visibleLinks': List<AllDebridLink>.unmodifiable(s._visibleLinks),
+    'loadingDialogOpen': s._loadingDialogOpen,
+    'scrollController': s._scrollController,
+    'searchFocusNode': s._searchFocusNode,
+    'searchClearFocusNode': s._searchClearFocusNode,
+    'fileSearchFocusNode': s._fileSearchFocusNode,
+    'backButtonFocusNode': s._backButtonFocusNode,
+    'deleteButtonFocusNode': s._deleteButtonFocusNode,
+    'toolbarSearchFocusNode': s._toolbarSearchFocusNode,
+    'firstItemFocusNode': s._firstItemFocusNode,
+    'shouldFocusOnLoad': s._shouldFocusOnLoad,
+    'refresh': s._refresh,
+  };
+}
