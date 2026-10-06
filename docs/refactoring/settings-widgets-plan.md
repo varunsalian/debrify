@@ -855,3 +855,121 @@ notes (post-frame phase assertion, 300 ms sample, `final` styles) applied.
   asserted runtime `_TypeError` in the nullable-callback/sidebar cases.
   Preliminary checkpoint/suite/proof records are retained separately; final
   committed original proofs and base3 use the amended, frozen checkpoint.
+
+### Step 0 — final original checkpoint and 0b assertion proofs
+
+- (b): `c3f9cde85ac3e9c7ad926a821b9f590f14ca816c`, exact subject
+  `test(settings-widgets): step 0 original-code characterization checkpoint`.
+  R and (b) are hash-equal for `lib` (`aa74e34a9ac3c15864d00185195c76323df4004b`),
+  `pubspec.yaml` (`5f983ff8c68a01aef5c7a1ec393e677e7693591f`) and
+  `pubspec.lock` (`e0ff9cca69c00ae69bb4dfe111c18a89547cec98`).
+  Evidence: `application-equality.json`. Nothing moved; no feature folder,
+  completion flag, aliases, dependency change or production seam was added.
+- Detached ORIGINAL (b) proof: `original-B` **48 passing** and `original-S`
+  **6 passing**, run separately, serialized, flags `--no-pub --concurrency=1`.
+  Both env files pin clean committed tree
+  `58490d3523a187ecfb4e3a839f439348bbeb0367`, no untracked input/snapshot/tree
+  change, Flutter 3.44.8 / Dart 3.12.2. Every frozen test runs on original code.
+  Final reverse-order macOS replay also passes all five scenes. All 16 frozen
+  test/helper/PNG hashes match both the root and original copy after mutations;
+  every pre-existing tracked PNG is unchanged.
+- Final reader check: all 60 analyzer spans equal, per-kind deletion/duplication
+  rejected, lexical stress fixture PASS (`reader-check-final-b.json`).
+  `settings_widgets_diagnostics.py compare --rev <b> --parser-package
+  <isolated-copy> --baseline <evidence>/strict/baseline.json --output
+  <evidence>/strict/final-checkpoint/comparison.json`: **zero additions**.
+  Strict raw original has 9 infos, qualified original 8, split 4 const infos;
+  maximum by identity/count is 11 (not a sum), no errors/warnings. Diagnostics
+  fixtures reject added/re-owned/new-rule counts and accept relocation.
+- Original-only mutation command: `settings_widgets_original_mutations.py
+  --worktree .dart_tool/settings_widgets/settings_widgets_original
+  --checkpoint <b> --parser-package <isolated-copy> --evidence
+  <evidence>/step0b-mutations-final`. **38/38 assertion rejections**,
+  **30 B + 8 S**, zero survivors, compile errors or no-op mutations; each
+  original/mutant/log hash is audited. B and S logs are separate directories;
+  scratch (b) is restored clean after every mutation. S is used for source-only
+  lifecycle ordering/labels/hooks, unreachable enum fallback, physical
+  declaration ownership and staged import/completion boundaries; those are
+  not claimed as behavioral coverage. Full exact failing-test table follows.
+- The preliminary checkpoint's full run is retained as `base3-initial`:
+  11707 success / 13 failure / 28 error / 20 skip, exactly 53 added passing
+  identities. The later incomplete run was deliberately stopped for the
+  facade import-guard review (`base3-aborted-NOTE.txt`); it is not baseline
+  evidence or an accepted result. No load timeout was recorded or allowlisted.
+
+- Final `suite_evidence.py run settings_widgets/base3 --no-pub
+  --concurrency=2 --timeout=120s` on committed (b): **11708 success / 13
+  failure / 28 error / 20 skip**, paths `[]`, flags recorded separately;
+  clean HEAD/index/tested/end tree `58490d3523a187ecfb4e3a839f439348bbeb0367`.
+  `compare --against <evidence>/base.jsonl <evidence>/base-fmt.jsonl
+  <evidence>/base3.jsonl` PASS: exactly **54 added passing identities**,
+  every prior outcome unchanged, zero new failures/missing/skips/fixes.
+  Counts/provenance and every added identity are audited in `final-audit.json`;
+  comparison in `base3-comparison.txt`. No timeout or named load flake occurred
+  in the accepted runs; no retry/allowlist exception was needed. The existing
+  13 failures and 28 errors remain found-not-fixed baseline limitations.
+
+| Mutation | Class | Failing test / guard |
+| --- | --- | --- |
+| `swapped-neighbour-wide=false-media=false-mdblist=false` | B | `Connections every edge wide=false media=false mdblist=false` |
+| `swapped-neighbour-wide=false-media=false-mdblist=true` | B | `Connections every edge wide=false media=false mdblist=true` |
+| `swapped-neighbour-wide=false-media=true-mdblist=false` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `swapped-neighbour-wide=false-media=true-mdblist=true` | B | `Connections every edge wide=false media=true mdblist=true` |
+| `swapped-neighbour-wide=true-media=false-mdblist=false` | B | `Connections every edge wide=true media=false mdblist=false` |
+| `swapped-neighbour-wide=true-media=false-mdblist=true` | B | `Connections every edge wide=true media=false mdblist=true` |
+| `swapped-neighbour-wide=true-media=true-mdblist=false` | B | `Connections every edge wide=true media=true mdblist=false` |
+| `swapped-neighbour-wide=true-media=true-mdblist=true` | B | `Connections every edge wide=true media=true mdblist=true` |
+| `tracking-up-parenthesized` | B | `Connections every edge wide=false media=true mdblist=false` |
+| `sidebar-handoff-removed` | B | `sidebar callback=true left=true` |
+| `sidebar-called-when-null` | B | `sidebar callback=false left=true` |
+| `repeat-handled` | B | `ConnectionCard repeat/up are ignored; tap awaits callback` |
+| `reveal-not-scheduled` | B | `neighbour reveal is deferred post-frame with scaled tempo target and curve` |
+| `disabled-canRequestFocus-true` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `disabled-onTap-kept` | B | `disabled tile cannot focus activate or hover-light and stays dim` |
+| `ExcludeFocus-removed` | B | `toggle row is one stop and tap or OK invert the value` |
+| `toggle-does-not-invert` | B | `toggle row is one stop and tap or OK invert the value` |
+| `tile-borrowed-node-ignored` | B | `tile focus ownership borrowed=true and live focus` |
+| `toggle-borrowed-node-ignored` | B | `toggle focus ownership borrowed=true and live focus` |
+| `hero-borrowed-node-ignored` | B | `hero focus ownership borrowed=true and live focus` |
+| `hero-threshold-380` | B | `hero swatches threshold width=380.0` |
+| `memo-base-only` | B | `page theme memo keys identical base and app independently` |
+| `page-instead-of-route-theme` | B | `push themes route State context so its dialog inherits palette` |
+| `barrierDismissible-dropped` | B | `settings dialog scopes palette barrierDismissible=false` |
+| `attention-keyword-removed` | B | `connection predicates characterize every negative keyword and readiness` |
+| `initials-capital-rule-removed` | B | `initials preserve separators internal capitals and empty fallback` |
+| `screen-size-label-fallback` | B | `TV choices preserve order labels subtitles completeness and size fallback` |
+| `dropdown-null-guard` | B | `dropdown stale value is empty null callback returns normally and subtitle echoes` |
+| `visible-radius-change` | B | `original pixel golden tv_legacy_gallery` |
+| `rule-surface-fill` | B | `section rule surface keeps border dividers and blurb without fill` |
+| `dispose-order` | S | `S summary focus labels creation points and ordered disposal` |
+| `focus-debug-label` | S | `S summary focus labels creation points and ordered disposal` |
+| `motion-hook` | S | `S motion dependency hook reveal guard wrapper disposal and borrowed ownership` |
+| `rendering-fallback` | S | `S rendering fallback remains Automatic and memo is private to one owner` |
+| `declaration-deleted` | S | `all 60 manifest declarations have exactly one physical owner` |
+| `completion-flag-on-original` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-http-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+| `facade-player-import` | S | `staged service show lists import boundaries DAG and dormant completion` |
+
+- All **17 integrated manifests + self-tests PASS**, each invocation with its
+  own copied parser package and no copied kernel cache. Settings widgets:
+  original/current and complete split positives PASS; 60 leaves; 11 required
+  real-config negatives rejected. Shared checker modules and other features'
+  proof scripts are unchanged; outputs/commands in `checkers/results.json`.
+- Final architecture/size checks PASS: 1448 migrated files; 2454 physical
+  application files, 154 existing over-limit ratchets. No unrelated baseline
+  reduction. CI format, scoped analyze/allowlist and whole-repo comparison
+  PASS, 25 existing scoped warnings, 1689 whole-repo reports with zero added
+  or removed diagnostic occurrences. Shape remains 26 tokens / 7 radii / 488
+  global floor; theme 219 files / 657 sites, light ink 774 / 198 and PRIMARY
+  240 / 67 unchanged. CI adds 17 paths, no failure allowlist change.
+- Scope/merge decisions: additive CI test block and settings theme glob only;
+  R changes only the source formatter output and its size entry. No
+  architecture/shape/profile/light-ink/workflow/allowlist/shared-checker or
+  unrelated feature script edits. Found 5 records the observed SDK's parent
+  dropdown update; Found 7 adds the eight original unused importing files.
+  No application issue was fixed. Linux capture script passes `bash -n`; no
+  Linux capture, step L, step 1, push, emulator/device or `flutter run`.
+
+Step 0 is complete. Linux originals remain the next separately authorized
+step L; no extraction begins here. Device/build/remote CI checks were not
+requested for this original-code checkpoint.
