@@ -12,9 +12,6 @@ void main() {
   const captureLinux = bool.fromEnvironment(
     'IPTV_SETTINGS_TWO_PANE_CAPTURE_ORIGINAL_LINUX',
   );
-  const requireLinux = bool.fromEnvironment(
-    'IPTV_SETTINGS_TWO_PANE_REQUIRE_ORIGINAL_LINUX',
-  );
   final scenes = [
     'add_file',
     'channel_lists',
@@ -82,13 +79,6 @@ void main() {
         }
         final platform = Platform.isLinux ? 'linux' : 'macos';
         final path = 'test/goldens/iptv_settings_two_pane/$platform/$scene.png';
-        if (Platform.isLinux &&
-            !File(path).existsSync() &&
-            !captureLinux &&
-            !requireLinux) {
-          // Step L makes Linux strict after independently captured originals.
-          return;
-        }
         if (Platform.isLinux && !captureLinux) {
           expect(
             File(path).existsSync(),

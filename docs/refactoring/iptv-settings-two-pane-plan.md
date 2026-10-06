@@ -920,3 +920,22 @@ used for both gates; any load-sensitive failure requires an unchanged-assertion
 isolated rerun and a NOTE, never an allowlist entry. Whole-repo analyzer
 comparison with step 0 also passes with zero added or removed diagnostics.
 Step L and application extraction have not begun.
+
+### Step L — committed Linux originals before extraction (2026-10-07)
+
+Step 0b is `d8a1700b9`. Claude's calibrated `debrify-flutter:3.44.8`
+`linux/amd64` capture from (b) provides nine PNGs. Every local SHA-256 matches
+both first/reverse inventories byte-for-byte; no image was updated. The
+Linux test is now strict by default. macOS and clean Linux strict runs both
+pass 9/9; removing one PNG in the owned normal clone fails the named
+`ORIGINAL golden add_file ready focus and dimensions` assertion with
+`Missing ORIGINAL Linux golden`, without a strictness dart-define. Restoration
+preserves all nine hashes. The changed test analyzes with zero issues.
+
+The first Docker dependency cache was ephemeral; it was replaced by a
+persistent cache inside this worktree's ignored `.dart_tool` and the accepted
+strict evidence was rerun cleanly. The normal clone has a `.git` directory
+and ran `flutter pub get` with no lockfile changes. Root application and
+pubspec objects remain identical to R/(b). Step L commits only originals,
+the stricter test and this evidence record. Application extraction starts
+after this separate checkpoint.
