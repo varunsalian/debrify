@@ -2,98 +2,26 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_entry.dart';
+import 'package:debrify/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_guide_models.dart';
+import 'package:debrify/features/iptv_spotlight_timeline/presentation/spotlight_timeline_parts.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/services/debrify_image_cache.dart';
+import 'package:debrify/services/iptv_epg_service.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../models/iptv_playlist.dart';
-import '../../../services/debrify_image_cache.dart';
-import '../../../services/iptv_epg_service.dart';
-import '../../../utils/tv_keys.dart';
-import '../styles/iptv_style.dart';
-
-/// Loads the schedule for one visible live channel.
-///
-/// Callers can wire this directly to
-/// `IptvEpgService.instance.schedule(channel.url)`. Keeping the loader outside
-/// this widget also lets a mixed-source list restore the correct guide context
-/// before asking for a channel's programmes.
-typedef SpotlightScheduleLoader =
-    Future<List<EpgProgramme>> Function(IptvChannel channel);
-
-typedef SpotlightChannelActivate = void Function(SpotlightTimelineEntry entry);
-
-typedef SpotlightProgrammeActivate =
-    void Function(SpotlightTimelineEntry entry, EpgProgramme programme);
-
-/// The stable identity of an item in a flattened or virtual IPTV source.
-///
-/// A channel URL is deliberately absent: providers can repeat URLs and a
-/// favorites/custom-list row can contain entries from several sources. The
-/// source projection generation and row ordinal make those rows collision-free.
-/// A filter or sort replacement must supply a new generation.
-@immutable
-class SpotlightTimelineEntryKey {
-  final String sourceId;
-  final int loadGeneration;
-  final int sourceOrdinal;
-
-  const SpotlightTimelineEntryKey({
-    required this.sourceId,
-    required this.loadGeneration,
-    required this.sourceOrdinal,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SpotlightTimelineEntryKey &&
-          sourceId == other.sourceId &&
-          loadGeneration == other.loadGeneration &&
-          sourceOrdinal == other.sourceOrdinal;
-
-  @override
-  int get hashCode => Object.hash(sourceId, loadGeneration, sourceOrdinal);
-
-  @override
-  String toString() => '$sourceId/$loadGeneration/$sourceOrdinal';
-}
-
-/// A channel plus the source identity needed to reject recycled-row results.
-@immutable
-class SpotlightTimelineEntry {
-  final String sourceId;
-  final int loadGeneration;
-  final int sourceOrdinal;
-  final IptvChannel channel;
-
-  const SpotlightTimelineEntry({
-    required this.sourceId,
-    required this.loadGeneration,
-    required this.sourceOrdinal,
-    required this.channel,
-  });
-
-  SpotlightTimelineEntryKey get entryKey => SpotlightTimelineEntryKey(
-    sourceId: sourceId,
-    loadGeneration: loadGeneration,
-    sourceOrdinal: sourceOrdinal,
-  );
-}
-
-/// The widget's single logical cursor, exposed for a surrounding preview pane.
-@immutable
-class SpotlightTimelineSelection {
-  final SpotlightTimelineEntry entry;
-  final EpgProgramme? programme;
-  final bool fromPointer;
-
-  const SpotlightTimelineSelection({
-    required this.entry,
-    this.programme,
-    this.fromPointer = false,
-  });
-}
+export 'package:debrify/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/spotlight_timeline_entry.dart'
+    show
+        SpotlightScheduleLoader,
+        SpotlightChannelActivate,
+        SpotlightProgrammeActivate,
+        SpotlightTimelineEntryKey,
+        SpotlightTimelineEntry,
+        SpotlightTimelineSelection;
 
 /// Imperative focus handoff used by the surrounding Browse/search shell.
 ///
@@ -293,64 +221,6 @@ class SpotlightLiveTimeline extends StatefulWidget {
   State<SpotlightLiveTimeline> createState() => _SpotlightLiveTimelineState();
 }
 
-enum _CursorLane { identity, retry, programme }
-
-enum _GuideStatus { loading, ready, error }
-
-@immutable
-class _GuideSnapshot {
-  final _GuideStatus status;
-  final int contextVersion;
-  final List<EpgProgramme> programmes;
-
-  const _GuideSnapshot.loading(this.contextVersion)
-    : status = _GuideStatus.loading,
-      programmes = const [];
-
-  const _GuideSnapshot.ready(this.contextVersion, this.programmes)
-    : status = _GuideStatus.ready;
-
-  const _GuideSnapshot.error(this.contextVersion)
-    : status = _GuideStatus.error,
-      programmes = const [];
-}
-
-@immutable
-class _LoadToken {
-  final int generation;
-  final SpotlightTimelineEntryKey entryKey;
-  final int contextVersion;
-  final int sourceIndex;
-  final IptvChannel channel;
-
-  const _LoadToken({
-    required this.generation,
-    required this.entryKey,
-    required this.contextVersion,
-    required this.sourceIndex,
-    required this.channel,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LoadToken &&
-          generation == other.generation &&
-          entryKey == other.entryKey &&
-          contextVersion == other.contextVersion &&
-          sourceIndex == other.sourceIndex &&
-          identical(channel, other.channel);
-
-  @override
-  int get hashCode => Object.hash(
-    generation,
-    entryKey,
-    contextVersion,
-    sourceIndex,
-    identityHashCode(channel),
-  );
-}
-
 class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   static const _background = Color(0xFF06111E);
   static const _identityBackground = Color(0xFF081522);
@@ -361,8 +231,10 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   );
   final FocusNode _nowFocusNode = FocusNode(debugLabel: 'spotlight-now');
   final ScrollController _verticalController = ScrollController();
-  final Map<SpotlightTimelineEntryKey, _GuideSnapshot> _guides = {};
-  final Map<SpotlightTimelineEntryKey, _LoadToken> _pendingLoads = {};
+  final Map<SpotlightTimelineEntryKey, SpotlightTimelineGuideSnapshot> _guides =
+      {};
+  final Map<SpotlightTimelineEntryKey, SpotlightTimelineLoadToken>
+  _pendingLoads = {};
 
   late DateTime _windowStart;
   late bool _followNow;
@@ -374,7 +246,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   int _requestGeneration = 0;
   double _viewportHeight = 0;
   int _cursorRow = 0;
-  _CursorLane _cursorLane = _CursorLane.identity;
+  SpotlightTimelineCursorLane _cursorLane =
+      SpotlightTimelineCursorLane.identity;
   int? _selectedProgrammeStartMs;
   late int _cursorTimeMs;
   bool _hasFocus = false;
@@ -457,8 +330,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     _cursorRow = _cursorRow.clamp(0, math.max(0, widget.channels.length - 1));
     if (widget.channels.isEmpty ||
         sourceChanged ||
-        (contextChanged && _cursorLane == _CursorLane.retry)) {
-      _cursorLane = _CursorLane.identity;
+        (contextChanged && _cursorLane == SpotlightTimelineCursorLane.retry)) {
+      _cursorLane = SpotlightTimelineCursorLane.identity;
       _selectedProgrammeStartMs = null;
     }
     if (oldWidget.initialWindowStart != widget.initialWindowStart &&
@@ -535,8 +408,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       // bounded snapshots makes the next settled viewport request fresh data.
       _guides.clear();
       _pendingLoads.clear();
-      if (_cursorLane == _CursorLane.retry) {
-        _cursorLane = _CursorLane.identity;
+      if (_cursorLane == SpotlightTimelineCursorLane.retry) {
+        _cursorLane = SpotlightTimelineCursorLane.identity;
         _selectedProgrammeStartMs = null;
         selectionReset = true;
       }
@@ -601,12 +474,12 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       final current = _guides[key];
       if (current != null &&
           current.contextVersion == widget.epgContextVersion &&
-          (current.status == _GuideStatus.ready ||
-              current.status == _GuideStatus.error)) {
+          (current.status == SpotlightTimelineGuideStatus.ready ||
+              current.status == SpotlightTimelineGuideStatus.error)) {
         continue;
       }
 
-      final token = _LoadToken(
+      final token = SpotlightTimelineLoadToken(
         generation: generation,
         entryKey: key,
         contextVersion: widget.epgContextVersion,
@@ -616,7 +489,9 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       if (_pendingLoads[key] == token) continue;
 
       _pendingLoads[key] = token;
-      _guides[key] = _GuideSnapshot.loading(widget.epgContextVersion);
+      _guides[key] = SpotlightTimelineGuideSnapshot.loading(
+        widget.epgContextVersion,
+      );
       changed = true;
       unawaited(_loadSchedule(entry, token));
     }
@@ -642,7 +517,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
 
   Future<void> _loadSchedule(
     SpotlightTimelineEntry entry,
-    _LoadToken token,
+    SpotlightTimelineLoadToken token,
   ) async {
     try {
       final loaded = await widget.scheduleLoader(entry.channel);
@@ -658,7 +533,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       }
       _pendingLoads.remove(token.entryKey);
       setState(() {
-        _guides[token.entryKey] = _GuideSnapshot.ready(
+        _guides[token.entryKey] = SpotlightTimelineGuideSnapshot.ready(
           token.contextVersion,
           List.unmodifiable(programmes),
         );
@@ -672,11 +547,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _pendingLoads.remove(token.entryKey);
       final selectedProgrammeFailed =
           token.sourceIndex == _cursorRow &&
-          _cursorLane == _CursorLane.programme;
+          _cursorLane == SpotlightTimelineCursorLane.programme;
       setState(() {
-        _guides[token.entryKey] = _GuideSnapshot.error(token.contextVersion);
+        _guides[token.entryKey] = SpotlightTimelineGuideSnapshot.error(
+          token.contextVersion,
+        );
         if (selectedProgrammeFailed) {
-          _cursorLane = _CursorLane.identity;
+          _cursorLane = SpotlightTimelineCursorLane.identity;
           _selectedProgrammeStartMs = null;
         }
       });
@@ -688,13 +565,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     }
   }
 
-  void _removePendingIfCurrent(_LoadToken token) {
+  void _removePendingIfCurrent(SpotlightTimelineLoadToken token) {
     if (identical(_pendingLoads[token.entryKey], token)) {
       _pendingLoads.remove(token.entryKey);
     }
   }
 
-  bool _accepts(_LoadToken token) {
+  bool _accepts(SpotlightTimelineLoadToken token) {
     if (!mounted || token.generation != _requestGeneration) return false;
     if (token.contextVersion != widget.epgContextVersion) return false;
     if (_pendingLoads[token.entryKey] != token) return false;
@@ -711,10 +588,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   void _retry(SpotlightTimelineEntry entry) {
     final key = entry.entryKey;
     final leaveRetryLane =
-        _cursorLane == _CursorLane.retry && _cursorRow == key.sourceOrdinal;
+        _cursorLane == SpotlightTimelineCursorLane.retry &&
+        _cursorRow == key.sourceOrdinal;
     _guides.remove(key);
     _pendingLoads.remove(key);
-    final token = _LoadToken(
+    final token = SpotlightTimelineLoadToken(
       generation: _requestGeneration == 0
           ? ++_requestGeneration
           : _requestGeneration,
@@ -726,10 +604,12 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     _pendingLoads[key] = token;
     setState(() {
       if (leaveRetryLane) {
-        _cursorLane = _CursorLane.identity;
+        _cursorLane = SpotlightTimelineCursorLane.identity;
         _selectedProgrammeStartMs = null;
       }
-      _guides[key] = _GuideSnapshot.loading(widget.epgContextVersion);
+      _guides[key] = SpotlightTimelineGuideSnapshot.loading(
+        widget.epgContextVersion,
+      );
     });
     if (leaveRetryLane) _announceSelection();
     unawaited(_loadSchedule(entry, token));
@@ -751,7 +631,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
     if (isActivateOrSpaceKey(event.logicalKey) &&
         widget.onChannelActions != null &&
-        _cursorLane != _CursorLane.retry) {
+        _cursorLane != SpotlightTimelineCursorLane.retry) {
       _cancelPointerSelection();
       return _holdOk.handle(event);
     }
@@ -797,26 +677,26 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     if (target >= widget.channels.length) return KeyEventResult.handled;
     setState(() {
       _cursorRow = target;
-      if (_cursorLane == _CursorLane.programme) {
+      if (_cursorLane == SpotlightTimelineCursorLane.programme) {
         final programmes = _programmesForRow(target);
         if (programmes == null) {
           _selectedProgrammeStartMs = null;
           // A cached failure has no programme target to reconcile later.
           // Keep channel playback and RIGHT-to-retry visibly reachable.
           if (_hasGuideError(_entryAt(target)!)) {
-            _cursorLane = _CursorLane.identity;
+            _cursorLane = SpotlightTimelineCursorLane.identity;
           }
         } else if (programmes.isEmpty) {
-          _cursorLane = _CursorLane.identity;
+          _cursorLane = SpotlightTimelineCursorLane.identity;
           _selectedProgrammeStartMs = null;
         } else {
           final nearest = _nearestProgramme(programmes, _cursorTimeMs);
           _selectProgrammeValue(nearest);
         }
-      } else if (_cursorLane == _CursorLane.retry) {
+      } else if (_cursorLane == SpotlightTimelineCursorLane.retry) {
         final entry = _entryAt(target);
         if (entry == null || !_hasGuideError(entry)) {
-          _cursorLane = _CursorLane.identity;
+          _cursorLane = SpotlightTimelineCursorLane.identity;
         }
       }
     });
@@ -829,7 +709,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     if (widget.channels.isEmpty) return KeyEventResult.handled;
     final entry = _entryAt(_cursorRow)!;
     final programmes = _programmesForRow(_cursorRow);
-    if (_cursorLane == _CursorLane.identity) {
+    if (_cursorLane == SpotlightTimelineCursorLane.identity) {
       if (delta < 0) {
         if (widget.onExitLeft == null) return KeyEventResult.ignored;
         widget.onExitLeft!();
@@ -837,7 +717,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       }
       if (_hasGuideError(entry)) {
         setState(() {
-          _cursorLane = _CursorLane.retry;
+          _cursorLane = SpotlightTimelineCursorLane.retry;
           _selectedProgrammeStartMs = null;
         });
         _announceSelection();
@@ -848,7 +728,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       }
       final nearest = _nearestProgramme(programmes, _cursorTimeMs);
       setState(() {
-        _cursorLane = _CursorLane.programme;
+        _cursorLane = SpotlightTimelineCursorLane.programme;
         _selectProgrammeValue(nearest);
         _ensureProgrammeVisible(nearest);
       });
@@ -856,10 +736,10 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       return KeyEventResult.handled;
     }
 
-    if (_cursorLane == _CursorLane.retry) {
+    if (_cursorLane == SpotlightTimelineCursorLane.retry) {
       if (delta > 0) return KeyEventResult.handled;
       setState(() {
-        _cursorLane = _CursorLane.identity;
+        _cursorLane = SpotlightTimelineCursorLane.identity;
         _selectedProgrammeStartMs = null;
       });
       _announceSelection();
@@ -869,7 +749,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     if (programmes == null || programmes.isEmpty) {
       if (delta < 0) {
         setState(() {
-          _cursorLane = _CursorLane.identity;
+          _cursorLane = SpotlightTimelineCursorLane.identity;
           _selectedProgrammeStartMs = null;
         });
         _announceSelection();
@@ -890,7 +770,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final target = current + delta;
     if (target < 0) {
       setState(() {
-        _cursorLane = _CursorLane.identity;
+        _cursorLane = SpotlightTimelineCursorLane.identity;
         _selectedProgrammeStartMs = null;
       });
       _announceSelection();
@@ -911,7 +791,9 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final entry = _entryAt(row);
     if (entry == null) return null;
     final snapshot = _guides[entry.entryKey];
-    return snapshot?.status == _GuideStatus.ready ? snapshot!.programmes : null;
+    return snapshot?.status == SpotlightTimelineGuideStatus.ready
+        ? snapshot!.programmes
+        : null;
   }
 
   EpgProgramme _nearestProgramme(List<EpgProgramme> programmes, int targetMs) {
@@ -967,12 +849,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   }
 
   void _reconcileProgrammeCursor() {
-    if (!mounted || _cursorLane != _CursorLane.programme) return;
+    if (!mounted || _cursorLane != SpotlightTimelineCursorLane.programme)
+      return;
     final programmes = _programmesForRow(_cursorRow);
     if (programmes == null) return;
     if (programmes.isEmpty) {
       setState(() {
-        _cursorLane = _CursorLane.identity;
+        _cursorLane = SpotlightTimelineCursorLane.identity;
         _selectedProgrammeStartMs = null;
       });
       _announceSelection();
@@ -1019,11 +902,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   void _activateCursor() {
     final entry = _entryAt(_cursorRow);
     if (entry == null) return;
-    if (_cursorLane == _CursorLane.retry) {
+    if (_cursorLane == SpotlightTimelineCursorLane.retry) {
       if (_hasGuideError(entry)) _retry(entry);
       return;
     }
-    if (_cursorLane == _CursorLane.programme) {
+    if (_cursorLane == SpotlightTimelineCursorLane.programme) {
       final programmes = _programmesForRow(_cursorRow);
       if (programmes != null) {
         for (final programme in programmes) {
@@ -1040,7 +923,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
 
   bool _hasGuideError(SpotlightTimelineEntry entry) =>
       entry.channel.isLive &&
-      _guides[entry.entryKey]?.status == _GuideStatus.error;
+      _guides[entry.entryKey]?.status == SpotlightTimelineGuideStatus.error;
 
   void _activateIdentity(SpotlightTimelineEntry entry) =>
       widget.onChannelActivate(entry);
@@ -1048,7 +931,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   bool _restoreFocus() {
     if (!mounted || widget.channels.isEmpty) return false;
     _cancelPointerSelection();
-    if (_cursorLane == _CursorLane.programme) {
+    if (_cursorLane == SpotlightTimelineCursorLane.programme) {
       for (final programme
           in _programmesForRow(_cursorRow) ?? const <EpgProgramme>[]) {
         if (programme.start.millisecondsSinceEpoch ==
@@ -1131,7 +1014,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         _lastTappedCell = null;
       }
       _cursorRow = row;
-      _cursorLane = _CursorLane.identity;
+      _cursorLane = SpotlightTimelineCursorLane.identity;
       _selectedProgrammeStartMs = null;
     });
     _revealRow(row);
@@ -1156,7 +1039,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         _lastTappedCell = null;
       }
       _cursorRow = row;
-      _cursorLane = _CursorLane.programme;
+      _cursorLane = SpotlightTimelineCursorLane.programme;
       _selectProgrammeValue(programme);
     });
     _revealRow(row);
@@ -1169,7 +1052,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final entry = _entryAt(_cursorRow);
     if (callback == null || entry == null) return;
     EpgProgramme? selected;
-    if (_cursorLane == _CursorLane.programme) {
+    if (_cursorLane == SpotlightTimelineCursorLane.programme) {
       for (final programme in _programmesForRow(_cursorRow) ?? const []) {
         if (programme.start.millisecondsSinceEpoch ==
             _selectedProgrammeStartMs) {
@@ -1278,7 +1161,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _followNow = true;
       _windowStart = _defaultWindowStart(widget.now());
       _cursorTimeMs = widget.now().millisecondsSinceEpoch;
-      _cursorLane = _CursorLane.identity;
+      _cursorLane = SpotlightTimelineCursorLane.identity;
       _selectedProgrammeStartMs = null;
     });
     _restoreFocus();
@@ -1478,7 +1361,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                       left: _timeX(mark, timelineWidth),
                       top: 0,
                       bottom: 0,
-                      child: _RulerMark(
+                      child: SpotlightTimelineRulerMark(
                         time: mark,
                         color: tokens.fgDim,
                         lineColor: tokens.hairline,
@@ -1556,17 +1439,20 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   ) {
     final snapshot = _guides[entry.entryKey];
     final programmeIsRefreshing =
-        _cursorLane == _CursorLane.programme &&
-        (snapshot == null || snapshot.status == _GuideStatus.loading);
+        _cursorLane == SpotlightTimelineCursorLane.programme &&
+        (snapshot == null ||
+            snapshot.status == SpotlightTimelineGuideStatus.loading);
     final current = _cursorRow == row;
     final selected =
         _hasFocus &&
         !_nowFocusNode.hasFocus &&
         current &&
-        (_cursorLane == _CursorLane.identity || programmeIsRefreshing);
+        (_cursorLane == SpotlightTimelineCursorLane.identity ||
+            programmeIsRefreshing);
     final channel = entry.channel;
     final guideUnavailable =
-        channel.isLive && snapshot?.status == _GuideStatus.error;
+        channel.isLive &&
+        snapshot?.status == SpotlightTimelineGuideStatus.error;
     return Semantics(
       button: true,
       focusable: true,
@@ -1716,7 +1602,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
             left: BorderSide(color: tokens.hairline),
           ),
         ),
-        child: _GuideMessage(
+        child: SpotlightTimelineGuideMessage(
           label: 'On demand  ·  Press OK to open',
           color: tokens.fgFaint,
           leading: Icon(
@@ -1729,13 +1615,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       );
     }
     final snapshot = _guides[entry.entryKey];
-    final status = snapshot?.status ?? _GuideStatus.loading;
+    final status = snapshot?.status ?? SpotlightTimelineGuideStatus.loading;
     final retrySelected =
         _hasFocus &&
         !_nowFocusNode.hasFocus &&
         _cursorRow == row &&
-        _cursorLane == _CursorLane.retry &&
-        status == _GuideStatus.error;
+        _cursorLane == SpotlightTimelineCursorLane.retry &&
+        status == SpotlightTimelineGuideStatus.error;
     final visible =
         <
           ({
@@ -1744,7 +1630,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
             SpotlightProgrammeGeometry geometry,
           })
         >[];
-    if (status == _GuideStatus.ready) {
+    if (status == SpotlightTimelineGuideStatus.ready) {
       for (var index = 0; index < snapshot!.programmes.length; index++) {
         final programme = snapshot.programmes[index];
         final geometry = spotlightProgrammeGeometry(
@@ -1778,8 +1664,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               bottom: 0,
               child: Container(width: 1, color: tokens.hairline),
             ),
-          if (status == _GuideStatus.loading)
-            _GuideMessage(
+          if (status == SpotlightTimelineGuideStatus.loading)
+            SpotlightTimelineGuideMessage(
               key: ValueKey(('spotlight-loading', entry.entryKey)),
               label: 'Loading guide…',
               color: tokens.fgFaint,
@@ -1792,8 +1678,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                 ),
               ),
             )
-          else if (status == _GuideStatus.error)
-            _GuideMessage(
+          else if (status == SpotlightTimelineGuideStatus.error)
+            SpotlightTimelineGuideMessage(
               key: ValueKey(('spotlight-error', entry.entryKey)),
               label: 'Guide unavailable  ·  Retry',
               color: tokens.rec,
@@ -1809,14 +1695,14 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               onTap: () => _retry(entry),
             )
           else if (snapshot!.programmes.isEmpty)
-            _GuideMessage(
+            SpotlightTimelineGuideMessage(
               key: ValueKey(('spotlight-empty', entry.entryKey)),
               label: 'No programme information',
               color: tokens.fgFaint,
               onTap: () => _tapIdentity(row),
             )
           else if (visible.isEmpty)
-            _GuideMessage(
+            SpotlightTimelineGuideMessage(
               key: ValueKey(('spotlight-window-empty', entry.entryKey)),
               label: 'No information in this time window',
               color: tokens.fgFaint,
@@ -1857,7 +1743,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final startMs = programme.start.millisecondsSinceEpoch;
     final current =
         _cursorRow == row &&
-        _cursorLane == _CursorLane.programme &&
+        _cursorLane == SpotlightTimelineCursorLane.programme &&
         _selectedProgrammeStartMs == startMs;
     final selected = _hasFocus && !_nowFocusNode.hasFocus && current;
     final now = widget.now();
@@ -2123,139 +2009,6 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     'Sat',
     'Sun',
   ][weekday - 1];
-}
-
-class _RulerMark extends StatelessWidget {
-  final DateTime time;
-  final Color color;
-  final Color lineColor;
-
-  const _RulerMark({
-    required this.time,
-    required this.color,
-    required this.lineColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final local = time.toLocal();
-    final label =
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
-    return SizedBox(
-      width: 48,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: Container(width: 1, color: lineColor),
-          ),
-          Positioned(
-            left: 7,
-            top: 10,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GuideMessage extends StatelessWidget {
-  final String label;
-  final Color color;
-  final Widget? leading;
-  final VoidCallback? onTap;
-  final String? hint;
-  final bool focused;
-  final Color? focusFill;
-  final Color? focusInk;
-
-  const _GuideMessage({
-    super.key,
-    required this.label,
-    required this.color,
-    this.leading,
-    this.onTap,
-    this.hint,
-    this.focused = false,
-    this.focusFill,
-    this.focusInk,
-  }) : assert(
-         !focused || (focusFill != null && focusInk != null),
-         'A focused guide message needs focus colors.',
-       );
-
-  @override
-  Widget build(BuildContext context) {
-    final content = AnimatedContainer(
-      duration: const Duration(milliseconds: 130),
-      curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: focused
-          ? BoxDecoration(
-              color: focusFill,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.28),
-                  blurRadius: 16,
-                  spreadRadius: -5,
-                ),
-              ],
-            )
-          : null,
-      child: Row(
-        children: [
-          if (leading != null) ...[leading!, const SizedBox(width: 8)],
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: focused ? focusInk : color,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (onTap == null) {
-      return Semantics(label: label, child: content);
-    }
-    return Semantics(
-      excludeSemantics: true,
-      button: true,
-      focusable: true,
-      focused: focused,
-      selected: focused,
-      label: label,
-      hint: hint,
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: content,
-        ),
-      ),
-    );
-  }
 }
 
 class _ChannelMark extends StatelessWidget {

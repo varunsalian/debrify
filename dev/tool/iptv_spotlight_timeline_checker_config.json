@@ -4,7 +4,7 @@
   "feature": "lib/features/iptv_spotlight_timeline",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 0,
+  "completed_step": 1,
   "allowed_edits": [
     "receiver",
     "rename",

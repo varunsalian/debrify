@@ -1152,3 +1152,51 @@ verification uses a fresh normal clone under this worktree's `.dart_tool`,
 its own pub get and `debrify-flutter:3.44.8`; pubspec objects stay unchanged.
 All six supplied hashes remain unchanged afterward. Step L is complete;
 production remains ORIGINAL and step 1 may begin.
+
+### Step 1 — whole types and widget parts; gate 1 input
+
+Step L commit: `de5672d13`. Twelve whole declarations move from R: the six
+unchanged entry/selection/loader/activation types (88 lines), four public
+guide types (64 lines) and two whole widget parts (134 lines). The State
+uses their registered public names through actual imports; the facade
+exports exactly the original six entry names. Geometry and all State
+workflow/resource ownership remain in the 2,057-line facade until step 2.
+Its existing size ratchet is lowered to 2,057; no destination exception.
+`step1-wiring-review.json` records every entry, caller and ownership exit.
+
+Architecture registration is additive, on its own `FEATURES +=` line:
+exact bridge, 500-line limits, empty exceptions, unconditional feature
+scan, service/back-import/storage/playback/keep-alive/TEMP guards and both
+directions of the IPTV implementation boundary (models allowed). Real
+copy negatives and positives pass, including completion-only facade cap,
+missing facade and TEMP probes. The new runner passes from a fresh normal
+clone after its own pub get and is CI-registered. CI format/analyze paths
+include the facade and support files inside their commands, before `| tee`;
+the per-symbol inventory runs in CI too.
+
+Current feature CLI self-test passes all 103 leaves, reader, occurrence,
+context, callback and mandatory-qualification fixtures. The 228 selected
+behavior/paint/golden/source-body identities match `base2` exactly; the
+unchanged subprocess driver is covered by the separately passing real CLI
+and will run in full gate 1. Wrong test paths and an empty regex draft are
+discarded, never accepted. Strict macOS timeline/results goldens pass in
+the selected tests; calibrated Linux timeline 6/6 and unchanged IPTV
+results 4/4 pass with no updates (`step1-linux-strict.txt`).
+
+Analysis has two exact inventoried infos and zero new warning/error;
+outside-slice diagnostics/locations match the latest ORIGINAL run. The
+loaded analyzer emitted repeated identical lines; only byte-identical
+severity/message/file:line:column/rule emissions are canonicalized for
+comparison, with raw logs retained (`step1-analyzer-identities.json`).
+The two infos are the public RulerMark constructor and original
+reconcileProgrammeCursor's formatter-expanded conditional. No braces,
+key, suppression or behavior changes. CI format/allowlist/inventory,
+architecture, size, storage and shape checks pass. Theme output is
+byte-identical; light-ink remains 774 / 240 primary. Protected source
+guards/storage hashes and every unrelated production file are unchanged.
+Found-not-fixed 1–6 remain preserved.
+
+The full gate runs on this committed input against latest `base2`; the
+fresh rerun of all 20 other manifests is also finishing with isolated
+packages. Their verdicts are required before step 2. No source mutation or
+dependent move will overlap the gate.
