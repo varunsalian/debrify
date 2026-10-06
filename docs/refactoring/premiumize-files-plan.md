@@ -131,12 +131,15 @@ later is a design change that must come back for review).
 **Bounded step-0 facade growth (the only size exception).** Private State
 members can only be reached by an accessor declared in the original library,
 so step 0 grows the formatted facade above its 2,276-line baseline. Step 0
-measures the formatted accessor and raises `file_size_baseline.txt:29` to that
-exact measured value in the step-0 commit (manual raise; `--update` cannot
-grow a baseline), recorded with its reason. From step 1 the baseline is
-lowering-only; steps 1–6 shrink the facade, and step 7 replaces the baseline
-entry with the final measured facade size and the architecture cap. Exit
-milestone: step 7.
+measures the **entire formatted facade** after adding the accessor and raises
+`file_size_baseline.txt:29` to that exact value in the step-0 commit (manual
+raise; `--update` cannot grow a baseline), recorded with its reason. From step
+1 the baseline is lowering-only and each step lowers it to the measured facade
+size. `check_file_sizes.py` drops an entry once the file is 800 lines or fewer
+(`check_file_sizes.py:80`), so when the facade crosses that line its baseline
+entry is removed (not re-added); from then on the size bound is the
+architecture facade cap, which step 7 sets to the final measured facade size.
+Exit milestone: step 7.
 
 ## Contracts that must not change
 
@@ -297,8 +300,12 @@ milestone: step 7.
 14. **Profile behaviour:** the integration flag and API key are read once
     from the active profile at startup, and every **Premiumize HTTP** call
     uses that captured key. Other owners keep their existing boundaries:
-    `PlaylistStorage` resolves the current profile's preferences at write time
-    (`playlist_storage.dart:20`), and `DownloadService.enqueueDownload`
+    `PlaylistStorage.addPlaylistItemRaw` captures profile preferences before
+    its later awaits (`playlist_storage.dart:38`), and a profile switch after
+    that makes the captured instance fail its session check
+    (`profile_preferences.dart:296`) rather than redirecting the write; reads
+    and saves resolve preferences separately. These stale-session guards are
+    retained as they are. And `DownloadService.enqueueDownload`
     resolves authorization and credential authority during enqueue
     (`download_service.dart:2178`). The screen relies on the profile gate
     remounting it. No scoping is added or removed.
@@ -411,7 +418,7 @@ The same as PikPak's Technique, with these points:
    | 2 Settings | Disabled flag; missing/empty key; enabled; initial folder needs both id and name; `initialSearchQuery` (trimmed, field text, search active, root cloud search request fired after the debounce, folder listing also requested). **Initial folder + initial query:** listing held, query matches files in the listing; after it completes the search results are still empty (filter ran against the empty list). |
    | 3 Loading | First load and in-place `_items` identity; loading guard (second load while held makes no request); error state with message and Retry; transfers load, guard, empty and error; refresh reloads only the active view and exits selection; `_switchView` same-view no-op. |
    | 4 Select-source | On a pushed route: folder binding (recursive listing, first-video readiness by `playableUrl` and by `resolveItemById`; **an unready first video followed by a ready second video is rejected, with exactly one `item/details` request for the first**), file binding; held-request unmount on both paths (folder: no callback; file: callback still invoked, no pop); the widget callback replaced while a request is held (the new callback is the one called); the catch through a throwing `folder/list`; callback awaited before the pop; `SeriesSource` fields; the checking dialog closed exactly once (root navigator) and distinguished from the screen pop; each rejection (no videos, first not ready, not a video, not ready to stream, thrown error); disabled non-video file rows; "Browse folder"; binding from search results; hidden toggle/Add Link/selector; title. **Back hazard:** with the request held, system Back pops the checking dialog while `checkingDialogOpen` stays true, so the later `_dismissDialog` root pop can pop the screen: characterize and keep. |
-   | 5 Playback | Source guards on all three launcher sites and their arguments (and `notifyPlayerLaunching` order), plus pending device verification. Launch occurrence and count through `MainPageBridge.addPlayerLaunchListener` (the playlist-content pattern). `_playFile` resolve-by-id request when the URL is missing; "No playable URL" paths (no launch). **Collection arguments** (entry order, titles, start index for a series folder with episode order ≠ name order and cross-season, and a non-series folder): only if an observer of the pushed arguments is first proven against the ORIGINAL without any production change; PikPak's failing-resolution trick does not apply (the collection launches even with an empty start URL). Otherwise they are **source-guard-only and pending**. No copied preparation helper, no early return. |
+   | 5 Playback | Source guards on all three launcher sites and their arguments (and `notifyPlayerLaunching` order), plus pending device verification. **Notification-count coverage only:** `MainPageBridge.addPlayerLaunchListener` observes `notifyPlayerLaunching()` (it runs inside the notification, before and separate from the launcher call, `main_page_bridge.dart:472`); the probe must never throw. Actual launcher counts and arguments stay source-guard-only unless an ORIGINAL-proven observer exists. `_playFile` resolve-by-id request when the URL is missing; "No playable URL" paths (no launch). **Collection arguments** (entry order, titles, start index for a series folder with episode order ≠ name order and cross-season, and a non-series folder): only if an observer of the pushed arguments is first proven against the ORIGINAL without any production change; PikPak's failing-resolution trick does not apply (the collection launches even with an empty start URL). Otherwise they are **source-guard-only and pending**. No copied preparation helper, no early return. |
    | 6 Downloads | Source guards on both enqueue sites. Folder dialog rows (exact maps) and the sequential loop's index/URL failure counting through the accessor. Enqueue success/mixed messages only if an isolated enqueue fixture is first proven against the ORIGINAL; otherwise **pending**, with the source guards kept. |
    | 7 Playlists | Source guards on the three maps; accessor tests on persisted entries: single file (non-video rejected), folder with one video (single), folder with several (collection, recursive order), "Already in playlist". |
    | 8 Destructive | Single delete Cancel (no request) and Delete (snackbar before the request; `item/delete` vs `folder/delete`; selection mode exited); delete selected Cancel, confirm with non-monotonic ids (snapshot in `_items` order, sequential requests in that order), partial failure (rows kept for failures, message), removal from search results; transfer delete Cancel/confirm/failure; clear finished then reload. |
@@ -420,7 +427,7 @@ The same as PikPak's Technique, with these points:
    | 11 Lists | Files/Transfers selector visibility; dropdown visibility; Raw copy vs Sort order (folders season-aware first, files by leading number, name fallback) and per-folder memory; root ignores `_setViewMode`; skeleton, empty (root vs folder), not-configured, error, transfers-empty; Clear-finished visibility; transfer card status variants; `_formatUnixDate` with fixed old dates (> 7 days, so output is date-only and clock-independent). Pixel goldens of the reachable views (root files with selector, folder with dropdown, selection mode, transfers with all three statuses, select-source, search results, not-configured) on macOS and Linux, Linux from the ORIGINAL (capture script, run by Claude). |
    | 12 D-pad | Back button arrow-left (sidebar sentinel); dropdown arrow-up to back; search field arrows and clear-button keys; first-item focus after a navigation load and the Add Link fallback on an empty folder; TV closure path; autofocused Retry / Go to Settings. |
    | 13 Lifecycle | Source guards on the verbatim lifecycle and the full dispose sequence; unmount with a pending load and with a pending debounce timer: no throw and no request after dispose. |
-   | 14 Profile | A profile-gate remount gives a fresh State with new owners; two independent routes don't share owners; requests made before/after a profile switch carry the A/B keys actually read at each mount, and playlist writes land in the profile active at write time. |
+   | 14 Profile | A profile-gate remount gives a fresh State with new owners; two independent routes don't share owners; requests made before/after a profile switch carry the A/B keys actually read at each mount; a playlist add under a **stable** profile persists to that profile. Any switch-during-write timing is characterized against the ORIGINAL first and asserted only as observed (or left pending). |
 
    - Record `premiumize/base2` after any seam, then `premiumize/base3` after
      the tests; compare each with the previous one (`PASS`, only added
@@ -453,10 +460,12 @@ The same as PikPak's Technique, with these points:
    `kExtractedShapeResidue`);
    `file_size_baseline.txt:29`; `check_search_architecture.py` (new
    Premiumize constants and rules; architecture scanning covers registered
-   features only (`check_search_architecture.py:1028`), so the reverse ban
-   from `lib/features/alldebrid_files/` is enforced by this feature's rule on
-   import **targets** even before AllDebrid registers, with feature-keyed
-   negative probes for both directions); `checks.yml` (format and analyze the
+   features only (`check_search_architecture.py:1030`), so an unregistered
+   `lib/features/alldebrid_files/` is never scanned. Add a Premiumize-keyed
+   scan of `lib/features/alldebrid_files/**` import directives, restricted to
+   the cross-import prohibition with `premiumize_files`, and prove both
+   directions through the real `main()` with negative probes while AllDebrid
+   is absent from `FEATURES` (and still correct once it registers); `checks.yml` (format and analyze the
    facade and the new `test/support/premiumize_*` helpers, paths inside the
    command, never after `| tee`); `analyzer_allowlist.txt` (only relocated
    original **warnings**; the original's single diagnostic is an info
@@ -504,8 +513,8 @@ identity with the latest Premiumize base (and gate 2 with gate 1).
 ## Decisions taken before design review
 
 1. **Separate feature, no sharing** with the other cloud screens (above).
-2. **No size exceptions planned.** The 147-line `build` and every builder fit
-   500-line files.
+2. **No destination size exceptions;** the bounded step-0 facade exception
+   ends at step 7. The 147-line `build` and every builder fit 500-line files.
 3. **No format commit of the original:** the file is already `dart format`
    clean (verify in step 0; if not, a format-only commit before step 0 with
    its own full-suite identity check).
