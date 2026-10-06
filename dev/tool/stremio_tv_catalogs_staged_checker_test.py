@@ -28,8 +28,10 @@ def self_test(package=None):
         (fixture / 'dev/tool').mkdir(parents=True)
         (fixture / config_path).write_text(json.dumps(original_config, indent=2) + '\n')
         shutil.copyfile(ROOT / manifest_path, fixture / manifest_path)
-        # Read-only git show resolves the same original revision in this worktree.
-        shutil.copyfile(ROOT / '.git', fixture / '.git')
+        # Read-only git show resolves the same original revision through a
+        # gitfile to this checkout's git directory (a worktree or a main clone).
+        git_dir = subprocess.check_output(['git', 'rev-parse', '--absolute-git-dir'], cwd=ROOT, text=True).strip()
+        (fixture / '.git').write_text('gitdir: ' + git_dir + '\n')
         with check_settings_moves.configured(original_config):
             previous = check_settings_moves.ROOT
             try:
