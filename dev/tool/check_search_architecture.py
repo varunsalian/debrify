@@ -16,8 +16,8 @@ FEATURES += ("stremio_tv_catalogs",)
 STREMIO_TV_CATALOGS_COMPLETE = False
 STREMIO_TV_CATALOGS_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart"
 STREMIO_TV_CATALOGS_BRIDGE = "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/"
-# Measured at Step 3; completion activates the pure-export facade cap.
-STREMIO_TV_CATALOGS_FACADE_CAP = 0
+# Measured pure-export facade; completion activates its cap.
+STREMIO_TV_CATALOGS_FACADE_CAP = 8
 STREMIO_TV_CATALOGS_PUBLIC_NAMES = frozenset([
     "LocalCatalogExportPayload", "LocalCatalogExporter", "LocalCatalogImporter",
     "StremioTvLocalCatalogEditorDialog", "StremioTvLocalCatalogsDialog",
@@ -26,6 +26,7 @@ STREMIO_TV_CATALOGS_PUBLIC_NAMES = frozenset([
 # item-card extraction (editor) and public list-source model extraction (Trakt).
 STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS = {
     STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_trakt_import_dialog.dart": 554,
+    STREMIO_TV_CATALOGS_BRIDGE + "local_catalog_editor_dialog.dart": 632,
 }
 # Exit: inject an import data contract instead of HTTP in this legacy dialog.
 STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT = (

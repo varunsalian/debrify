@@ -759,3 +759,41 @@ Compared against base: PASS, zero new failures/missing/new skips;
 exactly 119 added passing identities vs base, all frozen characterizations
 (`gate1-vs-*.txt`, `gate1-summary.json`).
 Gate 1 is complete; Step 3 may proceed.
+
+### Step 3 — editor and pure facade (2026-10-06)
+
+Parent `709c563f8349682f73c3bbb544a34eac80c91913`; tested/proof commit `d58385880b83a65eaf1fc4f5e79ef5ec7ea6224c`,
+tree `461620b264c047883f24c030c84b7a81373c9cea`. Final amendment adds only this Progress entry.
+Evidence names below are relative to the common Git directory’s
+`refactor-evidence/stremio_tv_catalogs/`.
+
+Measured physical lines: `local_catalog_export.dart` 38, `local_catalog_importer.dart` 347, `local_catalog_editor_dialog.dart` 632, `local_catalog_json_import_dialog.dart` 230, `local_catalog_mdblist_import_dialog.dart` 346, `local_catalog_trakt_import_dialog.dart` 554, `local_catalog_url_import_dialog.dart` 264, `local_catalogs_manage_dialog.dart` 488, `stremio_tv_local_catalogs_dialog.dart` 8.
+Moved the editor and registered its exact 632-line exception (exit:
+separately characterized item-card extraction). The original is an eight-line
+pure export facade: four exports over eight lines, no imports/declarations,
+exporting exactly the original five public names; measured facade cap is 8.
+
+All 19 whole declarations and seven section dividers are byte-identical to R
+except the 5 registered alias-use substitutions
+(`step3-byte-audit.json`). All 119 characterizations and both support
+files are unchanged from 0b; 119/119 pass, paths
+`[test/features/stremio_tv_catalogs]`, flags
+`--no-pub --concurrency=1 --timeout=120s`. Shape/theme 13/13 pass, paths
+`[test/theme/shape_manifest_test.dart, test/theme/source_guard_test.dart]`,
+same flags (`step3-{characterization,shape-theme}.jsonl` / `.env.json`).
+
+17/17 integrated manifests + self-tests pass with fresh isolated
+`.dart_tool/stremio_tv_catalogs_step3_parsers/` packages and copied
+`*.dill` deleted (`step3-integrated-checkers.json`). Architecture/sizes,
+31 architecture probes (23 rejections), CI format, scoped
+analyzer/allowlist, storage and diff checks pass (`step3-quality.json`).
+CI identities 325→325, zero additions after exact source relocation;
+strict identities retain both dropdown deprecations, only ORIGINAL directive
+ordering disappears (`step3-strict-identities.json`).
+
+Exact shape floor 488, catalogs radii 4 and token calls 6. Original budget
+0; original moved to `kExtractedShapeResidue`; URL/JSON/editor remain in `kShapeResidue`.
+Every created destination has its measured budget; theme surface metrics
+remain unchanged/uncovered and text-white exclusion remains effective
+(`step3-inventory.json`). Suite runs serialized; no allowlist changes,
+no re-record, no application-body edits beyond the registered aliases.
