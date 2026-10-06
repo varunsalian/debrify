@@ -1349,3 +1349,87 @@ exact 0b subject and retains R equality checks. It was syntax-checked only.
 - `completion-inventory.json` records the final facade breakdown, exact cap,
   per-file sizes, importer/frozen/golden equality and CI command placement.
   The gate-2 commit and full-suite comparison follow before stopping.
+
+
+### Completed through Step 4 — STOP
+
+| Checkpoint | Commit |
+| --- | --- |
+| L, verified original Linux PNGs only | `43b845651` |
+| 1, vocabulary/page chrome | `181421578` |
+| 2, connections/rows, gate 1 | `38056de27` |
+| 3, final declarations/pure facade | `b86332e35` |
+| 4, completion/CI, gate 2 | `90a976857` |
+
+Gate 2's full suite on the clean committed tree records **11736 success /
+13 failure / 28 error / 20 skipped**. Both helper comparisons and independent
+exact outcome-map audits PASS against base3b and gate1: zero added, missing,
+changed, newly skipped or fixed identity. No timeout or known load-flake retry
+was needed at either gate. Env files record Flutter 3.44.8 / Dart 3.12.2,
+paths [], no untracked inputs/snapshot, HEAD/index/tested/end tree equality,
+`--no-pub --concurrency=2 --timeout=120s` and the strict Linux define.
+`gate{1,2}-identity-audit.json` and comparison txt files retain the evidence.
+
+Every move checkpoint has 17 isolated-parser manifest/self-test passes (68
+accepted runs total), per-owner diagnostics/fixtures with zero additions,
+architecture/size/shape/theme checks, CI format/analyzer/unchanged allowlist,
+LF own manifest and unchanged legacy proof inputs, frozen characterizations,
+14 runnable importers and the gallery/contrast/source scans. The completed
+architecture tool's six positives and 31 negatives pass through the real
+main. No app behavior, original caller, frozen assertion, helper, fixture,
+macOS/Linux golden or dependency changed; all 60 declarations are verbatim,
+47 names are exported once, private owners remain local and imports form a
+DAG. The original size exception is removed; no feature exception is added.
+
+Final facade: **63 lines = 63 export-directive lines + 0 comments + 0 blanks**,
+19 directives, exactly 47 names, cap **63**. Physical destination sizes:
+
+| `lib/features/settings_widgets/presentation/` file | Lines |
+| --- | ---: |
+| `settings_connection_card.dart` | 315 |
+| `settings_connection_info.dart` | 33 |
+| `settings_connections_summary.dart` | 338 |
+| `settings_info_tile.dart` | 68 |
+| `settings_legacy_mode_dialog.dart` | 63 |
+| `settings_links.dart` | 6 |
+| `settings_look_hero.dart` | 188 |
+| `settings_page_chrome.dart` | 165 |
+| `settings_page_theme.dart` | 295 |
+| `settings_pending_badge.dart` | 17 |
+| `settings_root_chrome.dart` | 171 |
+| `settings_rows.dart` | 378 |
+| `settings_section.dart` | 86 |
+| `settings_select_dropdown.dart` | 123 |
+| `settings_skeleton.dart` | 104 |
+| `settings_tile.dart` | 271 |
+| `settings_toggle_tile.dart` | 175 |
+| `settings_tokens.dart` | 34 |
+| `settings_tv_choices.dart` | 73 |
+
+Shape: the eight token-bearing files own all **26 calls**; eleven remaining
+destinations and the facade have zero. Bare radii remain **7**, ceilings
+measured at creation (page chrome/card/section/tile/dropdown: one each;
+skeleton: two; others: zero). Global floor **488**, facade 0/0. Settings
+theme retains **657 sites** across 238 files (219 before the 19 destinations);
+classification unchanged. Light-ink remains **774 / 198**, PRIMARY **240 /
+67**, including the moved scope. CI paths are inside commands; no path follows
+tee. Both new and existing macOS scene sets match, no golden was regenerated.
+
+Decisions and Found additions: Linux strictness uses the existing frozen-test
+CI define; per-step whole diagnostics compare against the recorded ORIGINAL
+strict infos as documented above; only the long legacy service import has a
+format boundary. Found 10 (other feature's unchanged CRLF manifest) and Found
+11 (frozen guard's whitespace sensitivity) remain unfixed. Existing bugs and
+service/localization/token exceptions remain as originally scoped. No new
+analyzer allowance or suppression, source assertion weakening, or behavior fix.
+`checkpoint-input-equality.json` ties each committed lib/test/config/pubspec
+object to its diagnostic proof snapshot. `completion-summary.json` and
+`completion-inventory.json` contain the final hashes/counts and inventories.
+
+**Pending handoff:** Claude's strict Linux replay at gate 2
+`90a976857fb3eeccfdb447f7331eb916b5185be0`: all five settings_widgets and five
+settings_spotlight scenes in the calibrated linux/amd64 image, no regeneration;
+record provenance and unchanged PNG hashes. The Android TV, Apple TV,
+desktop/phone and legacy-dialog/community-link device checklist remains
+pending. No emulator/device, flutter run, push, merge or branch switch occurred.
+The worktree remains on refactor/settings-widgets. **STOP after Step 4.**
