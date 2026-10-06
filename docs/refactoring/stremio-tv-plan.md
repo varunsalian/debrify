@@ -849,8 +849,8 @@ As in the Debrify TV and Spotlight plans, plus:
      implementation owner (no duplicate-ownership error), `plain_sections`
      registers `StremioTvLayout`, and the addon-hub token rule removes only
      the moved method's `@override` while the facade keeps its annotation.
-     Fixtures: forwarder present with the body still in the facade (step 5
-     shape), forwarder plus moved body (step 6 shape), a forwarder with any
+     Fixtures: the original `build` body still in the facade with no
+     forwarder (steps 0–5 shape), forwarder plus moved body (step 6 shape), a forwarder with any
      extra token, a moved body still annotated, and the body in both places
      each rejected. Completion enforcement uses this plan's final step **7**.
      `stremioTvOriginalSource()` returns raw ORIGINAL (R) text only after the
