@@ -1840,3 +1840,56 @@ measurements/spans/source hashes, frozen D4 and map pins, commands and results
 are E/`step6-*`. Protected sibling widgets, player/launcher/services/main and
 dependencies remain byte-identical to R; original tests/goldens unchanged since
 Step L. No behavior change, seam, device run, push, merge or branch switch.
+
+
+### Step 7 — completion and gate 2 checkpoint (2026-10-06)
+
+Previous checkpoint: **`61ef01524751cb0db88d4c4f3fad29e7e7a5b22f`**. Composition is final and application-source hashes equal Step 6 exactly.
+`STREMIO_TV_COMPLETE = True`, facade membership in `COMPOSITION_ROOTS` and the
+existing conditional `main()` source-set registration enforce completion. The
+facade cap is its measured **115** physical lines, without headroom. The real
+architecture checker passes the final tree and rejects missing facade, facade
+cap + 1, TEMP in facade/feature, layout cap + 1, both 501-line future-file paths,
+non-bridge services and the forbidden actions-file launcher import/entry. Its
+feature self-test additionally asserts the completed cap equals actual lines.
+
+**CI scope:** Step 0 already registered the facade and `test/support/stremio_tv_*`;
+`lib/features` covers every new destination in both format and analyze. The
+actual workflow is re-parsed, all owned paths and support globs are checked,
+all analyze paths precede `| tee`, and source-behavior retains `fetch-depth: 0`.
+No duplicate paths or shared-checker/allowlist changes are needed.
+
+The feature checker, fixtures, reader and capture script use `git show` or
+`git rev-parse`; no code assumes `.git` is a file or directory. The architecture
+fixture copies only `lib` and needs no Git metadata. `main-checkout-audit.json`
+records these inputs. A regular independent clone of this final branch, followed
+by pub get, all 17 isolated manifest self-tests, both architecture checks and
+whole characterization/reader tests is the next proof. Full-suite gate 2 then
+runs serialized on this committed checkpoint after owned AST jobs finish, with
+`--no-pub --concurrency=4`, against base2 and accepted gate1-retry2.
+
+All **17 manifests** pass real CLI/self-tests with explicit isolated parser
+packages and every copied `*.dill` deleted. All **16 other stdout files remain
+byte-identical** to Step 0b; unchanged adapter/config inputs retain the earlier
+raw-adapter equality proof. All 119 declaration leaves, mandatory field binding,
+callback identities, contracts, annotation-forwarder and reader checks pass.
+Architecture, sizes, storage keys/references/member map/bodies, exact CI format
+(zero changes), scoped analyze/allowlist (same 25 known warnings), LF, protected
+scope and staged diff pass. Per-symbol inventory has **seven accepted-probe
+infos, zero new warnings/errors/infos**, with 13 original directive infos
+removed. Explicit relocation comparison is PASS; no suppression is added.
+
+Serialized focused evidence uses `--no-pub --concurrency=1`: **178 success /
+one unchanged known profile source-guard failure**; base2 comparison PASS with
+no new failure, missing identity or new skip. All **63 characterizations** pass,
+including strict macOS **6/6**; calibrated Linux strict **6/6**, unchanged PNGs
+and lockfile. Shape **13**, global floor **488**, bare-radius residue zero;
+owned/full theme **30/79**, light ink **three non-primary / zero primary**.
+
+Facade **115**: imports 7 + widget 16 + State header/close 2 + owners/composition 11 + lifecycle 72 + build forwarder 2 + remaining blanks/comments 5 = 115.
+Layout **715** is the sole size exception; all other 23 destination files are
+at most **495**. Composition is **46**, bindings **21**. Per-entry review,
+measurements/spans/source hashes, frozen D4 and map pins, commands and results
+are E/`step7-*`. Protected sibling widgets, player/launcher/services/main and
+dependencies remain byte-identical to R; original tests/goldens unchanged since
+Step L. No behavior change, seam, device run, push, merge or branch switch.

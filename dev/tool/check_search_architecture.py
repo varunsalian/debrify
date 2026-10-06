@@ -12,13 +12,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
-STREMIO_TV_COMPLETE = False
+STREMIO_TV_COMPLETE = True
 STREMIO_TV_FACADE = "lib/screens/stremio_tv/stremio_tv_screen.dart"
 STREMIO_TV_BRIDGE = "lib/features/stremio_tv/presentation/legacy_stremio_tv/"
 # The original screen's catalog-detail caller moves unchanged to this file.
 STREMIO_TV_CATALOG_DETAIL_CALLER = STREMIO_TV_BRIDGE + "stremio_tv_channel_actions.dart"
 # Final cap is activated only at completion and measured over every line.
-STREMIO_TV_FACADE_CAP = 0
+STREMIO_TV_FACADE_CAP = 115
 STREMIO_TV_PREEXISTING = {
     "lib/features/stremio_tv/" + path for path in (
         "application/stremio_tv_providers.dart",
@@ -180,6 +180,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Stremio TV facade wires route-owned records, live State and frozen sections.
+    STREMIO_TV_FACADE,
     # Debrify TV facade wires concrete legacy bridge sections and live State.
     DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,

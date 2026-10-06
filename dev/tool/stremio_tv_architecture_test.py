@@ -13,6 +13,9 @@ def self_test():
         'stremio_tv_architecture', root / 'dev/tool/check_search_architecture.py')
     checker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checker)
+    if checker.STREMIO_TV_COMPLETE:
+        assert checker.STREMIO_TV_FACADE_CAP == len(
+            (root / checker.STREMIO_TV_FACADE).read_text().splitlines())
     with tempfile.TemporaryDirectory(prefix='stremio_tv_architecture_',
                                      dir=root / '.dart_tool') as directory:
         copy = Path(directory)
