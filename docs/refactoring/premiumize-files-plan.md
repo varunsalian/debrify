@@ -137,8 +137,8 @@ raise; `--update` cannot grow a baseline), recorded with its reason. From step
 1 the baseline is lowering-only and each step lowers it to the measured facade
 size. `check_file_sizes.py` drops an entry once the file is 800 lines or fewer
 (`check_file_sizes.py:80`), so when the facade crosses that line its baseline
-entry is removed (not re-added); from then on the size bound is the
-architecture facade cap, which step 7 sets to the final measured facade size.
+entry is removed (not re-added); after removal the standard 800-line limit
+applies until step 7 activates the measured architecture facade cap.
 Exit milestone: step 7.
 
 ## Contracts that must not change
@@ -300,7 +300,8 @@ Exit milestone: step 7.
 14. **Profile behaviour:** the integration flag and API key are read once
     from the active profile at startup, and every **Premiumize HTTP** call
     uses that captured key. Other owners keep their existing boundaries:
-    `PlaylistStorage.addPlaylistItemRaw` captures profile preferences before
+    `PlaylistStorage.addPlaylistItemRaw` delegates to `savePlaylistItemsRaw`
+    (`playlist_storage.dart:165`), which captures profile preferences before
     its later awaits (`playlist_storage.dart:38`), and a profile switch after
     that makes the captured instance fail its session check
     (`profile_preferences.dart:296`) rather than redirecting the write; reads
@@ -618,6 +619,11 @@ source-guard-only unless an ORIGINAL-proven observer exists; (9) the narrowed
 profile claim and A/B assertions; (10) reverse AllDebrid probes, six radii/six
 token calls, the info kept out of the allowlist, and fake-time timing rules;
 (11) the two wording fixes.
+
+## Round 2–3 review resolution
+
+Round 2 (three P2s, two P3s) and round 3 (two P3 wording fixes) are folded
+into the sections above; round 3 ended "No P1s — executable" with no P2s.
 
 ## Progress
 
