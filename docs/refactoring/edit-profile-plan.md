@@ -141,14 +141,21 @@ analyze` reports no issues for it (re-measure at step 0).
    - The target is fixed per operation: `staged.id` (create), `existing.id` /
      `savedProfileId` (edit), `widget.profile!.id` (PIN reset), `target.id`
      (transfer). No write resolves the active profile implicitly.
-   - `operationActor` is captured from `_authorization` before the first
-     `await` in `_save`, `_transferOwnership` and `_removePinAsAdminLocally`;
-     `_validateManagingAdmin(operationActor)` precedes the first write;
-     `_refreshSameManagingAdmin(operationActor.profileId)` follows every
-     `updateProfile`, PIN set, grant and revoke exactly where it does today and
-     throws `StateError('Managing profile session changed')` when the active
-     profile changed; `_validateManagingAdmin` throws for a non-admin or a
-     missing `manageProfiles`.
+   - `operationActor` is read from `_authorization` **at its original site**:
+     in `_save` after the optional `ProfileAvatarIngest.prepare` await (source
+     777 then 783), in `_transferOwnership` before its first validation, in
+     `_removePinAsAdminLocally` first. It is never hoisted.
+   - Validate/refresh sequences are preserved exactly as written, not
+     normalised: `_save` validates once before the first write; **create**
+     runs PIN set → `updateProfile` → refresh (no refresh between PIN and
+     update) → grants (refresh after each grant/revoke) → engines →
+     `completeStaged`; **edit** runs publish → refresh → optional PIN →
+     refresh → grants → engines; transfer validates before the dialog and
+     again before the write, then refreshes; PIN reset validates, removes,
+     refreshes. `_refreshSameManagingAdmin` throws `StateError('Managing
+     profile session changed')` when the active profile changed;
+     `_validateManagingAdmin` throws for a non-admin or a missing
+     `manageProfiles`. No refresh is added or removed.
    - `_authorization` is assigned only at the original sites (after a
      successful save, before the `mounted` check; after transfer; after PIN
      reset).
@@ -160,8 +167,12 @@ analyze` reports no issues for it (re-measure at step 0).
    PIN regex `^\d{4,8}$`). Pair-follow rule (`recordings` follows `downloads`,
    `remoteTransfer` follows `remoteControl`, only when moved from the seeds),
    role-ceiling clamp, then the **immutable snapshot built synchronously before
-   `setState(() => _saving = true)`**; no form field is re-read after an
-   `await`. `policyFor` with `controlsShown = showFeaturePolicyControls ||
+   `setState(() => _saving = true)`**. The snapshot holds exactly its 13
+   fields; every other read stays live at its original site, including
+   `_policyTouched` and `widget.profile` inside the `policyFor` call after the
+   validation await (source 793–794), `widget.profile` in the branch and tail,
+   and `_authorization`. Nothing is added to the snapshot and no read is
+   hoisted. `policyFor` with `controlsShown = showFeaturePolicyControls ||
    _policyTouched || role changed on edit`.
    - **Create:** `createStaged(…, avatarKey: snapshot.avatarKey)` →
      `ProfileAvatarMutation.runExclusive(staged.id, …)`: `begin` → candidate
@@ -331,7 +342,9 @@ As in the Debrify TV plan, plus:
 3. **Live getters and setState.** Sections reach `context`, `mounted`,
    `setState` and the widget fields only through `_deps`, at the original
    evaluation site; nothing is hoisted or cached. **Lexical scopes stay
-   lexical**: builder `context` parameters (`_transferOwnership`'s dialog
+   lexical**: the `context` parameters of `build` and `_buildTvEditor`, the
+   `ProfileAuthorizationContext context` parameter of `_validateManagingAdmin`
+   (never the State-context getter), builder `context` parameters (`_transferOwnership`'s dialog
    builder, the LayoutBuilders in the rail, preview, TV role cards and phone
    role cards), `dialogContext`, and every local function that reads the
    State's `context` (`railItem`, `railLabel`, `group`, `tile`, `card`) are
@@ -343,13 +356,40 @@ As in the Debrify TV plan, plus:
    fields move at step 2 into the three records, renamed by dropping the
    underscore; **every moved field reference is receiver-qualified**
    (`_owners.form.role`). Enable the existing opt-in `occurrence_field_bindings`
-   check for this config (generalise its config lookup additively if it is
-   hard-wired to Debrify TV; Debrify TV's behaviour and self-tests unchanged).
+   check for this config. It is **not** usable as is (round 1: it hard-codes
+   `_DebrifyTVScreenState` at `occurrence_field_bindings.py:52/83`, and a
+   scratch probe of these rewrites failed alignment, 10 ≠ 11), so step 0
+   extends it, config-scoped and additive:
+   - the State class(es) come from config (`state_classes`), Debrify TV's
+     config naming `_DebrifyTVScreenState` so its behaviour and self-tests are
+     unchanged;
+   - a config list of **registered occurrence substitutions**, each with its
+     expected role change and qualifier chain: `widget.<f>` (selector, read)
+     → `_deps.<f>()` (selector, invocation) for `registry`, `pins`,
+     `profile`, `setupOptionsLoader` (including `widget.setupOptionsLoader!()`
+     → `_deps.setupOptionsLoader()!()` and nested chains such as
+     `widget.profile?.id`, `widget.registry.getGrant`);
+     `EditProfileScreen.policyFor` → `_deps.policyFor` and
+     `EditProfileScreen.showFeaturePolicyControls` →
+     `_deps.showFeaturePolicyControls`; the retained State field
+     `_authorization` (lexical, unbound) → `_deps.authorization` (selector)
+     for reads, writes and nested chains (`_authorization.validate(…)`,
+     `_authorization.profileId`); plus the existing `context`/`mounted`/
+     `setState` live-getter forms;
+   - any other inserted, removed or reordered occurrence still fails, and
+     mandatory qualification of moved fields is kept.
+   Positives and negatives for every substitution kind (a substitution
+   applied at the wrong occurrence, a `widget.profile` read replaced by
+   `_deps.profile` without invocation, an `_authorization` write turned into
+   a section field) run **through both the checker and the reader at step 0**,
+   and the step-0b compiling-composition probe applies the full rewrite set
+   to a compiling copy and passes the real checker before step 2.
    Hazards (dependency report lists all): `_setRole(role)`,
    `_defaultResourcePermissions(role, [features])`, `_roleCard(role, …)` and the
    role-card loops (`role` vs `_role`); locals `resources`, `engines`,
    `selectedResources`, `resourcePermissions` in `_loadSetupOptions` assigned
-   into same-named fields inside `setState`; `resources` in
+   into same-named fields inside `setState`; the same `resources` local/field
+   assignment in `_loadResources` (500–503); `resources` in
    `_applyResourceGrants`/`_buildConnectionGroups`; `engines` in
    `_buildEngineGroup`; `section` in `_selectTvSection`/`_focusTvContent` vs
    `_tvSection`; `selected` locals vs `_selectedResources`/`_selectedEngines`
@@ -361,12 +401,12 @@ As in the Debrify TV plan, plus:
    replaced by the parameter; a bare record member inside a section and inside
    a record. Positives cover every hazard. The guard runs from step 2.
 5. **`_authorization` deps pair.** `_deps.authorization` (get) and
-   `_deps.authorization = …` (set) are registered receiver substitutions for
-   `_authorization`; the checker rejects a cached copy, a read hoisted above
-   its original site, and a write moved across an `await`. Negatives: the
-   pair wired to a separate field (laziness lost: a probe test proves first
-   evaluation happens after `widget` is available and only once); a section
-   field caching the actor.
+   `_deps.authorization = …` (set) are registered occurrence substitutions for
+   `_authorization` (Technique 4); the checker rejects a cached copy, a read
+   hoisted above its original site, and a write moved across an `await`.
+   Composition negatives (S): the pair wired to a separate eager field instead
+   of the State's lazy `late`; a section field caching the actor; the facade
+   declaration changed from `late … = widget.authorization`.
 6. **Receivers and composition.** Sections hold `final EditProfileDependencies
    _deps;` with `_owners`/`_sections` getters; cross-section calls are
    `_sections.<key>.<member>` (registered `receiver_paths`/`receiver_owners`);
@@ -407,9 +447,26 @@ As in the Debrify TV plan, plus:
 | L | **Before step 2:** Linux originals captured by Claude in Docker, hash-verified, committed separately; Linux golden test strict | Goldens |
 | 1 | Guard registration; enum and snapshot models; TV surfaces; shape registrations begin | 1, 8, 9 |
 | 2 | Owners (25 fields → 3 records, eager), deps (incl. the `_authorization` pair), composition with its first consumer (the lifecycle); lifecycle verbatim with receivers; field-binding guard live; `setup`, `admin`, `selection` sections | 2, 3, 5 |
-| 3 | `save`, `grants`, `avatar`, `adminActions` sections. **Full-suite gate 1** | 3, 4, 5, 6, 7 |
-| 4 | `tvNav`, `tvEditor`, `tvProfile`, `tvPanes` | 8, 9, 10 |
-| 5 | `phone`, `phoneParts`, `access`; the facade keeps only lifecycle, `build` forwarder and composition | 9, 10 |
+| 3 | `tvNav`, `save`, `grants`, `avatar`, `adminActions` sections. **Full-suite gate 1** | 3, 4, 5, 6, 7, 8 |
+| 4 | `tvEditor`, `tvProfile`, `tvPanes`, `access` | 8, 9, 10 |
+| 5 | `phone`, `phoneParts`; the facade keeps only lifecycle, `build` forwarder and composition | 9, 10 |
+
+**Checkpoint wiring (no borrowed State members).** The order above is chosen
+so that at every checkpoint a moved section calls only owners, `_deps` and
+sections already moved; only the facade calls into sections (`_sections.<key>`).
+Calls per step: step 2 — `setup` → `admin`; `selection` → none. Step 3 —
+`tvNav` → none; `save` → `grants`, `admin`, `tvNav` (`restoreTvSaveFocus`),
+own `_showRecoveryCode`; `grants` → `selection` (`defaultResourcePermissions`),
+`admin`; `avatar` → none; `adminActions` → `setup` (`loadResources`),
+`admin`. Step 4 — `tvEditor` → `tvNav`, `save`, `tvProfile`, `tvPanes`;
+`tvProfile` → `avatar`, `selection`, `tvNav`; `tvPanes` → `adminActions`,
+`setup`, `access`, `tvNav`, the TV surfaces; `access` → `selection`,
+`adminActions`. Step 5 — `phone` → `tvEditor`, `phoneParts`, `access`,
+`save`, `adminActions`, `setup`; `phoneParts` → `avatar`, `selection`. The
+dependency report confirms this graph from source; if it finds a call not
+listed, the member moves earlier (a plan amendment), never a borrowed State
+tear-off. Each step runs a compiling + real-checker probe of its own
+checkpoint before commit.
 | 6 | Completion: facade registration, cap, `TEMP`, real-checker negatives, CI format/analyze paths, final evidence. **Full-suite gate 2** | All |
 
 ### Step 0
@@ -433,8 +490,17 @@ As in the Debrify TV plan, plus:
    `ProfileRuntime`, `ProfileBootstrap.debugInstallRegistry`), helpers to
    create additional profiles, connection resources (via
    `ConnectionResourceService` with a test cipher or the registry directly, as
-   existing profile tests do) and engine assignments; a recording/holding
-   `ProfilePinService` subclass (the widget takes `pins`); a `FilePicker`
+   existing profile tests do) and **real engine fixtures** (installed engines
+   whose per-profile metadata/YAML is read back under each profile's current
+   visible generation); the fixture cipher installed with the existing
+   `DeviceKeyProvider.debugInstallCipher` and reset in tear-down (every real
+   save reads `DeviceKeyProvider.cipher` in `_applyResourceGrants`, even with
+   zero resources); a recording/holding `ProfilePinService` subclass (the
+   widget takes `pins`) whose hold sits **after** the real `super` write, so
+   the editor's following refresh is the boundary exercised; failure
+   injection through the registry's existing `authorityWillChangeCallback`
+   (fires before authority-changing writes, `profile_registry.dart:1027` and
+   later sites), armed for a chosen call ordinal; a `FilePicker`
    platform fake (`FilePicker.platform = …`) returning scripted files; a
    `MainPageBridge.reloadProfilePolicy` recorder; `runAsync` pump windows as in
    the existing test. **No production seam.**
@@ -446,9 +512,9 @@ As in the Debrify TV plan, plus:
    | Contract | Coverage |
    | --- | --- |
    | 1 Surface | Existing `policyFor` units; byte guard on lines 35–88. |
-   | 2 Lifecycle | Create seeds (role member, defaults, `'person'`), edit seeds (stored policy, lock, timeout, avatar); child → `'child'`; dispose with a pending held load publishes nothing and throws nothing (R); `_authorization` first read: a fixture whose `authorization` becomes invalid between construction and the first load surfaces the load-error tile (R). Order/structure of `initState`/`dispose` (S). |
-   | 3 Ownership | **Edit another profile while admin**: every persisted change (name, role, policy, lock, timeout, grants, engines) lands on the target and nothing on the admin (O: registry re-read). **Session change mid-save**: the PIN fake holds `setPinAsAdmin`; the active profile switches; release → `'Could not save this profile'`, `_saving` cleared, grants/engines after the hold not written, writes before the hold persisted (R+O). Non-admin actor → load error / save refused (R). Policy reload called once when editing the active profile, never for another (O). Transfer: confirm → owner changed + snackbar; cancel → unchanged; session changed between confirm and write → failure snackbar, unchanged (R+O). |
-   | 4 Save | Empty name no-op; loading/error snackbars; PIN validation; create (all fields, `completeStaged` visible, pop `true`); create with PIN → recovery dialog then pop; create failure (PIN fake throws) → rolled back, not listed, snackbar; edit identity-only keeps stored policy; role change writes role defaults; TV Pages toggle writes the selection; pair-follow (downloads moved → recordings follows; unmoved → split policy preserved); Kid clamp drops `remoteTransfer`; double-tap Save saves once (O); `PopScope` blocks pop while held (R). |
+   | 2 Lifecycle | Create seeds (role member, defaults, `'person'`), edit seeds (stored policy, lock, timeout, avatar); child → `'child'`; dispose with a pending held load publishes nothing and throws nothing (R); stale authorization (the passed context invalid by the first load) surfaces the load-error tile (R, stale-rejection only). The retained lazy `late` declaration, its single first read and the exact deps getter/setter wiring are **S** evidence (checker + source guard); no R/O claim about evaluation timing or count is made. Order/structure of `initState`/`dispose` (S). |
+   | 3 Ownership | **Edit another profile while admin**: every persisted change (name, role, policy, lock, timeout, grants, engines) lands on the target and nothing on the admin (O: registry re-read). Engine ownership is read from each profile's engine metadata under its current generation (target, managing admin, and any incoming profile checked). **Session change mid-save**: the PIN fake holds after its real write; the active profile switches; release → the editor's refresh throws → `'Could not save this profile'`, `_saving` cleared, grants/engines after the hold not written, writes before the hold persisted (R+O). Non-admin actor → load error / save refused (R). Policy reload called once when editing the active profile, never for another (O). Transfer: confirm → owner changed + snackbar; cancel → unchanged; session changed between confirm and write → failure snackbar, unchanged (R+O). |
+   | 4 Save | Empty name no-op; loading/error snackbars; PIN validation; create (all fields, `completeStaged` visible, pop `true`); create with PIN → recovery dialog then pop; create failure (PIN fake throws) → rolled back: `getProfile(staged)` null and `listProfiles(includeStaging: true)` without it, owned avatar files cleaned, snackbar; **failure immediately before completion** (`authorityWillChangeCallback` throwing on the `completeStaged` write) → rolled back the same way, which is what kills the early-`stagedPublished` mutation; **failure after completion** (avatar commit/`complete` throwing after `completeStaged`) → profile stays active and visible, its avatar recovery intent retained, save reported per the original path; edit identity-only keeps stored policy; role change writes role defaults; TV Pages toggle writes the selection; pair-follow (downloads moved → recordings follows; unmoved → split policy preserved); Kid clamp drops `remoteTransfer`; double-tap Save saves once (O); `PopScope` blocks pop while held (R). |
    | 5 Grants | Select → grant with derived mask (use/download/writeRemote by features and role); existing grant with a stored mask unchanged on an unrelated save (O: no churn); deselect → revoke; owned row never revoked and not editable; singleton rivals deselected; All/None per group; engines All/None and own-editor read-only. |
    | 6 Avatar | Picker fake: too large (declared), too large (streamed), unreadable path, `PlatformException`, valid PNG → preview + Discard; picked during a held save is dropped; save with picked image publishes `file:`-format key (edit) and stages then commits (create); scratch copy released in every path (O: recorder on `CacheScratchCleanup` if observable, else S). |
    | 7 PIN | Admin reset success/failure snackbars and persisted state; reset visible only with a PIN or reset-required. |
@@ -570,6 +636,29 @@ Never `--record` or `--update` to accept a regression.
   form); Linux originals by Claude in Docker before step 2.
 - D7 No size exception is authorized; `_save` is 270 lines and its file is
   estimated at 355.
+
+## Round 1 review resolution
+
+1. P1 binder: Technique 4 now requires config-scoped `state_classes` and
+   registered occurrence substitutions (widget fields, statics, the retained
+   `_authorization` pair, nested chains), proved through checker and reader at
+   step 0 and by the 0b compiling probe.
+2. P1 ordering: Contracts 3–4 restate the exact original sequences (actor read
+   after the avatar prepare; create PIN → update → refresh; live
+   `_policyTouched`/`widget.profile` reads after awaits); nothing hoisted,
+   added or normalised.
+3. P1 early publication: failure injection before `completeStaged` via
+   `authorityWillChangeCallback`, rollback asserted with `getProfile` and
+   `listProfiles(includeStaging: true)` plus file cleanup; a separate
+   post-completion failure case.
+4. P2 intermediate wiring: steps reordered (`tvNav` at 3, `access` at 4) with
+   an explicit per-step call graph; no borrowed State tear-offs; per-step
+   compiling probe.
+5. P2 harness: `DeviceKeyProvider.debugInstallCipher`, real engine fixtures
+   read per profile generation, post-write PIN hold.
+6. P2 hazards: `_loadResources`, `_validateManagingAdmin(context)`, and the
+   `build`/`_buildTvEditor` `context` parameters added.
+7. P2 laziness: reclassified as S evidence; stale-authorization stays as R.
 
 ## Progress
 
