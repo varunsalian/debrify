@@ -277,9 +277,12 @@ membership from the actual references.
   `sections()`; and `stremio_tv_tuner_sections.dart` —
   `StremioTvTunerSections`, which builds every section in its constructor in a
   fixed order; section constructors only store `_deps`.
-- Sections (each `final StremioTvTunerDependencies _deps;` with three
-  one-line getters: `StremioTvTunerWidgetView get widget => _deps.view;`,
-  `_owners` and `_sections`; Technique 5 explains the `widget` name):
+- Sections (each `final StremioTvTunerDependencies _deps;` plus **only the
+  one-line getters it uses** among `StremioTvTunerWidgetView get widget =>
+  _deps.view;`, `_owners` and `_sections` — an unused getter would be a new
+  `unused_element` warning; the dependency report lists each section's set
+  and the source contract pins exactly that set; Technique 5 explains the
+  `widget` name):
   - `stremio_tv_tuner_channels.dart` — `StremioTvTunerChannels`: `_syncTick`,
     `_rebuildIndex`, `_identFor`, `_nowPlaying`, `_nextPlaying`,
     `_displayProgress`, `_realIndex`, `_nodeFor`, `_setActive`,
@@ -390,13 +393,28 @@ As in the Spotlight and Debrify TV plans, plus:
    design would need (`widget.<p>` → `_view.<p>`, State `context` →
    `stageState.context`) are avoided by the token-preserving getters of
    Techniques 5 and 6, so the original and destination occurrences stay
-   `lexical`/`unbound` with the same names. The only tooling change is
-   **generalising the two hard-coded `_DebrifyTVScreenState` comparisons**
-   (`occurrence_field_bindings.py:52` and `:83`) into a config key
-   (`occurrence_field_bindings.record_owners`, a list); the Debrify TV config
-   sets it to `["_DebrifyTVScreenState"]`, and every other manifest's adapter
-   output and self-tests stay byte-identical. The binder runs for this
-   manifest with record owner `_StremioTvTunerState`. **Real moved-body
+   `lexical`/`unbound` with the same names. The binder needs **three opt-in
+   extensions** (round 2), each defaulting to today's behaviour so the
+   Debrify TV manifest and every other manifest's adapter output and
+   self-tests stay byte-identical:
+   - `record_owners` (list) replaces the two hard-coded
+     `_DebrifyTVScreenState` comparisons (`occurrence_field_bindings.py:52`,
+     `:83`); Debrify TV sets `["_DebrifyTVScreenState"]`.
+   - `record_fields` (optional explicit list per owner) restricts mandatory
+     record qualification to named members. The tuner lists exactly the eight
+     instance fields, so the two `static const`s `_dialItemExtent` and
+     `_dialLeadingPad` (469, 472), which move to `StremioTvTunerDial` and are
+     read bare there (seven reads), are not treated as record fields. Without
+     the key, all variable declarations count (today's behaviour).
+   - `_canonical_name` honours the manifest config's `type_renames` when the
+     opt-in `occurrence_type_renames: true` is set, because `_StageState` is
+     split into member rows and has no whole-class row to carry its rename
+     (the scratch probe rejected `_Stage.createState` without it).
+   Fixtures for each: the static reads bare in the dial section pass; a
+   static moved into the owners record and read bare fails; `createState() =>
+   StremioTvTunerStageState()` passes while a wrong State type fails; Debrify
+   TV's config without the new keys reproduces today's results exactly.
+   The binder runs for this manifest with record owner `_StremioTvTunerState`. **Real moved-body
    proofs before extraction** (step 0b, through both the checker and the
    reader, on a scratch tree built from R by the actual manifest moves of
    `_buildWide`, `_setActive`, `_syncTick`, `_channelListRow` and
@@ -526,9 +544,23 @@ discarded.
    manifest row with step ≤ S must exist **only** at its destination (absent
    from the facade), every destination file and scaffold registered for steps
    ≤ S must exist, and every row with step > S must still be in the facade
-   (future files may be absent). Fixtures run at S = 0…4 and prove: deleting
-   an activated destination fails; restoring a moved leaf to the facade
-   (double definition or fallback) fails; an absent future file passes.
+   (future files may be absent). Rows fall into three kinds, read from the
+   manifest: **retained** rows (destination = facade: the controller, the
+   widget, the State's lifecycle and `build`) must be in the facade at every
+   step; **moved** rows with step ≤ S must exist only at their destination;
+   **registered forwarders** (exactly one: the State's `_focusRealIndex`,
+   with its exact one-line body `=> _sections.dial.focusRealIndex(realIndex)`)
+   must exist in the facade alongside their moved implementation from their
+   step. The hook today passes only `sources`
+   (`check_settings_moves.py:1058`); the shared checker gains an **additive**
+   call: when the module also defines `validate_with_context(sources, config,
+   rows)`, that is called with the live parsed config (including
+   `completed_step`) and manifest rows; modules without it are unaffected. The
+   validator caches nothing between calls. Fixtures run at S = 0…4 **within
+   one process**, changing the config in memory, and prove: deleting an
+   activated destination fails; restoring a moved leaf to the facade (double
+   definition or fallback) fails; a missing or altered forwarder fails; a
+   retained row moved out fails; an absent future file passes.
    Negatives (each must fail): `_onDialScroll` receiver
    swapped or wrapped at add or remove; a reordered or dropped dispose step in
    any of the three States; the 180 ms or 15 s duration changed; the
@@ -556,14 +588,18 @@ discarded.
    **Artwork (round 1 P2-4).** Image resolution starts during build and
    `precacheImage` resolves eagerly, so "not painting" is not enough. Each
    artwork test file installs a test binding whose `createImageCache()`
-   returns a **recording `ImageCache`**: `putIfAbsent` records the key
-   (provider type, URL, `ResizeImage` width) and returns a never-completing
+   returns a **recording `ImageCache`**: `putIfAbsent` records the opaque key
+   and returns a never-completing
    `ImageStreamCompleter` **without calling the loader**, so neither the cache
    manager, `path_provider`, `sqflite` nor HTTP is reached. The harness also
    fails the test on any `MethodChannel` call to `plugins.flutter.io/path_provider`
    or `com.tekartik.sqflite`, clears the recording cache and releases listeners
-   in teardown. Stage, poster and warm-up decode widths are asserted from the
-   recorded keys and the `CachedNetworkImage` widget fields. Goldens stay
+   in teardown. `ResizeImageKey` keeps its fields private, so assertions
+   compare recorded keys **by equality** with keys obtained from the expected
+   providers (`ResizeImage.resizeIfNeeded(width, null,
+   CachedNetworkImageProvider(url))`, `obtainKey` with the test's
+   `ImageConfiguration`, which never calls a loader), plus the
+   `CachedNetworkImage` widget fields for `memCacheWidth` and fades. Goldens stay
    artwork-free (D5).
    **Observation schedules (round 1 P2-6).** Build counters are reset after
    the focus change has been processed (the card's own `setState` at 2112),
@@ -597,6 +633,9 @@ discarded.
    `stremio_tv_tuner_source_contracts_test.dart` (listed in
    `ci_behavior_tests.txt`, which runs in the behaviour job that already has
    `fetch-depth: 0`) runs `python3 dev/tool/stremio_tv_tuner_checker_test.py`
+   (which must have a `__main__` entry that parses `--parser-package` and
+   runs every fixture, exiting non-zero on any failure; a positive control
+   proves a deliberately broken fixture makes the Dart test fail)
    and, from step 1, `stremio_tv_tuner_architecture_test.py`, each with an
    isolated parser package under `.dart_tool/`, and asserts exit 0. It lands
    in (b) (checker) and step 1 (architecture), before anything moves. Add to `ci_behavior_known_failures.txt` only
@@ -769,3 +808,22 @@ adapter; behaviour fixes (below) and the dial-card decomposition.
    in-body receiver-swap negatives (Technique 7).
 8. **P2 — CI registration.** A CI-listed Dart source-contract test runs the
    checker and architecture fixtures before anything moves (Step 0.7).
+
+## Round 2 review resolution
+
+1. **P1 — split Stage State rename.** Opt-in `occurrence_type_renames` makes
+   binder canonicalization honour `type_renames`; correct/wrong State-type
+   fixtures (Technique 4).
+2. **P1 — dial statics.** Opt-in `record_fields` limits mandatory record
+   qualification to the eight instance fields; statics stay bare on the dial
+   section (Technique 4).
+3. **P1 — validator vs facade retention.** Retained, moved and registered
+   forwarder rows are distinguished; an additive `validate_with_context`
+   hook passes live config and rows; in-process fixtures for S = 0…4
+   (Step 0.3).
+4. **P2 — unused section getters.** Each section declares and pins only the
+   getters it uses (Destination layout).
+5. **P2 — resize keys.** Recorded keys compared by equality with keys
+   obtained from expected providers (Step 0.4).
+6. **P3 — checker entry point.** `__main__` with parser arguments and a
+   broken-fixture positive control (Step 0.7).
