@@ -39,6 +39,8 @@ const Map<String, int> kShapeResidue = {
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_dial_card.dart':
       0,
   'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_parts.dart': 0,
+  'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage_content.dart':
+      0,
   'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
   'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_share.dart':
@@ -249,6 +251,7 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/stremio_tv_tuner/presentation/stremio_tv_tuner_stage.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,
   'lib/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart': 0,
