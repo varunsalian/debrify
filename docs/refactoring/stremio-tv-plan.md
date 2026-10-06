@@ -1710,3 +1710,82 @@ with exits in Step 6.
 E/`step5-*` contains commands, hashes, spans and comparisons. No protected
 sibling widget, player, launcher, service or dependency changes, production
 seam, device run, push, merge or branch switch.
+
+
+### Full-suite gate 1 and stop (2026-10-06)
+
+| Checkpoint | Commit | Facade lines | Largest new file |
+| --- | --- | ---: | ---: |
+| Step L — strict Linux originals | `d96c4ae2b` | 3,958 (equals R) | — |
+| Step 1 — models / quality / picker | `d65736b93` | 3,365 | 294 |
+| Step 2 — eager owners / live composition | `cb416c86b` | 3,428 | 37 |
+| Step 3 — settings / library / menu / navigation / chrome | `1645a7b3c` | 2,839 | 199 |
+| Step 4 — streams / provider resolution / channel resolution / guide | `7464ad3a2` | 1,522 | 331 |
+| Step 5 — play / channel actions / gate checkpoint | `0ef2e356c` | 806 | 495 |
+
+Gate 1 runs on committed **`0ef2e356cb80d5524ffde502d8cd0514f8665c81`**,
+tree **`83217f1bcfc1207f9df481b5cfeae2c2ad24f89a`**, after this worktree's
+independent AST jobs stop. Every full run is serialized with
+`--no-pub --concurrency=4`, Flutter **3.44.8**, Dart **3.12.2**, framework
+`058e0af2c2b57e369d905a03ac9748b0ebf543c6`, matching latest base2 at
+`e1d4fe1f2`. All three runs retain the exact committed tree, with no untracked
+inputs or change during a run.
+
+The final full comparison **PASS** observes **11,717 successes, 13 known
+failures, 28 known errors, 20 skips, 1,150 suites**, exactly equal to base2.
+No new failure, missing identity, new skip, fixed or added identity. The raw
+runner still exits nonzero for those known outcomes. Evidence: E/
+`gate1-retry2.jsonl`, `gate1-retry2.env.json`, `gate1-retry2-run.txt`,
+`gate1-retry2-vs-base2.txt`, `gate1-summary.json`.
+
+Two earlier full comparisons are preserved, without accepting their new
+failures or changing any baseline, allowlist, test, application code or wait:
+
+- `gate1.jsonl`: **11,713 success / 13 failure / 32 error / 20 skip**. Four
+  real UDP pairing cases log socket errors then time out at the readiness
+  assertion. Their complete local import closure (including conditional
+  imports) contains **382 byte-identical files** from ORIGINAL. The entire
+  five-case file passes **5/5 on ORIGINAL and 5/5 current** in serialized
+  isolation (`--no-pub --concurrency=1`), same SDK and stable clean trees.
+  A detached ORIGINAL checkout at `e1d4fe1f2` is retained under E/
+  `gate1-original/` for review; the active branch never changes.
+- `gate1-retry.jsonl`: **11,716 success / 14 failure / 28 error / 20 skip**.
+  The IPTV first-movie-search case passes its behavior assertions but its
+  teardown finds a remaining download directory after its **150 ms** cleanup
+  grace wait. It passed the first full run on the identical tree. Its
+  **144-file** local import closure is byte-identical to ORIGINAL. The entire
+  file passes **12/12 ORIGINAL and 12/12 current** in the same serialized
+  isolation. The wait and assertions remain untouched.
+
+These are transient socket/timing and cleanup failures; host load was present
+but its exact role in the UDP failures is not established. E/
+`gate1-flake-notes.json`, both `*-import-closure.json` files and the four
+`gate1-*-isolated*` run/env/comparison groups preserve the causal evidence.
+The final full rerun, with the original concurrency and unchanged tree,
+passes comparison. No `--record`, `--update`, allowlist or golden update.
+
+All five extraction checkpoints pass all **17 manifests** with isolated
+parser packages and copied kernels deleted; the other **16 stdout files are
+byte-identical at every checkpoint**. Every checkpoint passes all **63
+characterization cases**, strict macOS **6/6** and strict Linux **6/6**, and
+all required static, storage, binding, callback, contract, reader, scope and
+diff checks. E/`stepN-measurement.json` records every file's physical size and
+the facade's span arithmetic; all **23 new destination files are at most
+495 lines**. D4 pins and the final section/alias/forwarder registration remain
+frozen. Gate preflight proves the public widget byte-identical to R and all
+protected sibling/player/launcher/service/dependency paths unchanged.
+
+Material adjustments/corrections are recorded above: nullable cached
+composition following the written plan instead of the probe's `late final`,
+intermediate typed borrowed tear-offs removed by Step 5, the owned/full theme
+measurement distinction (30/79), the retained-build ownership metadata fix,
+and the late exact catalog-detail caller registration. Rejected command and
+measurement runs remain in evidence. No application-body correction, behavior
+change or production seam is introduced.
+
+**STOP:** Step 6 has not started. Build remains **683** lines in the
+**806-line** facade; `stremio_tv_layout.dart` does not exist, its exception
+cap remains zero, and completion enforcement remains inactive until Step 7.
+Claude reviews gate 1 before further extraction. Remote CI and the
+end-of-series device checklist remain pending; no device/emulator/Flutter run,
+push, merge or branch switch was performed.
