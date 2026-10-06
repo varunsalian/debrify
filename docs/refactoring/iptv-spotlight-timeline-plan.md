@@ -566,7 +566,8 @@ then discarded.
    widget, State lifecycle, `_holdOk`), **moved** (every other leaf,
    including the original `State.build`, which moves at step 2 to
    `SpotlightTimelineFrame.build`), **registered forwarders** (the five
-   controller forwarders and the exact `build` forwarder
+   controller forwarders and the exact `build` forwarder (the moved
+   `build` row lists `retained_forwarder` in `allowed_edits`)
    `@override Widget build(BuildContext context) => _sections.frame.build(context);`).
    Because the moved `build` loses its `@override` on the plain frame class
    (keeping it would be a new warning), the config registers the existing
@@ -608,7 +609,10 @@ then discarded.
    listener removed at dispose, controller rebind, `initialWindowStart`
    transitions, size-change re-arm, no re-arm on unrelated changes); the
    30 s tick / 30 min refresh / follow-now anchor; eviction buffer and
-   cursor-row retention; `_accepts` rejection matrix (each clause alone);
+   cursor-row retention; the `_accepts` rejection cases that are reachable
+   on their own (unmounted completion, a newer generation after a viewport
+   move, a superseded pending token, a recycled channel at the same ordinal
+   in an in-place list mutation) plus the existing stale-result tests;
    `_retry` generation rule; hold laziness and hold/tap/repeat matrix; the
    Now-button key matrix; `focusChannel` visible-range limit; announcement
    payloads (`programme`, `fromPointer`); playhead visibility; day heading;
@@ -644,9 +648,15 @@ then discarded.
    checker's parsing by import only if that leaves the tuner script
    byte-identical, otherwise a standalone copy). It runs in `checks.yml`
    **after** the general allowlist on the same `analyze.txt`, with its own
-   isolated parser package. Proofs: a fresh-clone positive and an
-   added-info negative (one extra `prefer_const_constructors` in a
-   destination fails), both run at every step from step 1.
+   isolated parser package. **The facade and
+   `test/support/iptv_spotlight_timeline_*` join the CI format and analyze
+   inputs at step 1** (before `| tee`), together with the inventory
+   registration, so the facade is analyzed from the first checkpoint the
+   inventory covers it (round 2 P2; the facade's `recursive_getters` info
+   is recorded by identity). Proofs at every step from step 1: a
+   fresh-clone positive, and added-info negatives in **both** the facade
+   and a destination (one extra `prefer_const_constructors` each) that
+   fail.
 8. **Source-text inventory.** `file_size_baseline.txt:26` (lowered from
    step 1, removed at step 2 once the facade is under 500); shape (Technique 8); theme and light-ink
    (Technique 8); verify unaffected: `test/theme/source_guard_test.dart`
@@ -654,10 +664,10 @@ then discarded.
    containment check, no path change needed), `profile_source_guard_test`,
    `stale_runtime_guard_test`, `settings_tv_input_source_guard_test`,
    `iptv_results_source_guard_test`, `storage_member_map.tsv`.
-   `checks.yml` (step 3): the facade and
+   `checks.yml` (step 1, Step 0.7): the facade and
    `test/support/iptv_spotlight_timeline_*` into the format and analyze
-   lists **before `| tee`**, never after; the architecture test as its own
-   step.
+   lists **before `| tee`**, never after; the architecture test and the
+   inventory checker as their own steps.
 9. **Linux capture script**
    `dev/tool/capture_iptv_spotlight_timeline_linux_goldens.sh`, resolving
    (b) by exact subject and failing unless its application hash matches R
@@ -687,16 +697,29 @@ range; announcement `fromPointer` always false; programme announced outside
 the programme lane; identity width clamp 45 % → 50 %; row-height scaler
 term dropped; NOW badge threshold 25 → 20 min; playhead shown outside the
 window; dispose not removing the listener; `didUpdateWidget` not re-arming
-on `rowHeight`; controller not rebound. **Source-guard-only mutants (round
-1 P3-6), named in the mutation ledger with their reason:** the `_accepts`
-generation and pending-token clauses under a source/context change (that
-change also clears `_pendingLoads` and re-arms, so the result is rejected
-by the pending-token clause either way — the stale-result behaviour test is
-kept, but it does not isolate each redundant clause); the negative-index
-and ordinal-mismatch clauses (`_loadVisibleRows` never constructs such a
-token); the explicit `removeListener` in `dispose` (masked by the
-controller's own disposal). Every other listed mutant must fail a named
-behavioural assertion. It also runs the
+on `rowHeight`; controller not rebound. **Source-guard-only mutants (rounds
+1 P3-6 and 2 P1), named in the mutation ledger with the masking reason;
+each is pinned by the whole-body source guard instead of a behavioural
+assertion:**
+- `_armViewportLoad`'s `generation == _requestGeneration` check (the
+  previous timer is always cancelled before re-arming);
+- `_accepts`' context-version, source-id and load-generation clauses (every
+  widget update that changes them also re-arms, so the generation clause
+  rejects first), its generation and pending-token clauses under a
+  source/context change (pending tokens are cleared too), and its
+  negative-index and ordinal-mismatch clauses (`_loadVisibleRows` and
+  `_retry` never construct such a token);
+- the pointer dwell's source-id, load-generation, context-version and
+  channel-list identity guards (any widget update changing them first
+  cancels the dwell in `didUpdateWidget`), its `mounted` guard (`dispose`
+  cancels the timer) and its negative-row guard (entries are built from
+  valid ordinals);
+- the explicit `removeListener` in `dispose` (masked by the controller's own
+  disposal).
+Every listed mutant **not in this ledger** must fail a named behavioural
+assertion; the ledger is final at step 0b and any further masked mutant
+found then is added with its reason before (b)'s review closes (the
+stale-result, cancellation and recycled-row behaviour tests stay). It also runs the
 compiling-composition probe (the full step-2 shape with real bodies, under
 the strict config, through the real checker CLI with header and re-export
 negatives) and records the facade measurement. `base2` at (b) must pass
@@ -841,7 +864,8 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
    role); caching, wrapping, delayed invocation, a second hold, replacement
    ownership and eager creation are negatives (Technique 3).
 2. **P1 — `build` ownership.** The original `State.build` is a moved row
-   (step 2 → `SpotlightTimelineFrame.build`) with an exact registered facade
+   (step 2 → `SpotlightTimelineFrame.build`, its row's `allowed_edits`
+   including `retained_forwarder`) with an exact registered facade
    forwarder; `retained_override_bodies` and
    `forwarded_annotation_occurrences` handle the dropped `@override`; S = 0–3
    proven (Step 0.3).
@@ -856,6 +880,19 @@ native code; Riverpod, data contracts, localization; behaviour fixes (below).
    tests cover live callback/clock/loader replacement (Technique 5).
 6. **P3 — guard-only mutants** named with reasons (Step 0b).
 7. **P3 — month list** quirk removed (it is a `const` list).
+
+## Round 2 review resolution
+
+1. **P1 — unobservable mutants.** The masked mutants (settle generation,
+   `_accepts` context/source/load-generation/negative/ordinal clauses, the
+   dwell's update-cancelled guards, mounted and negative-row guards,
+   `removeListener`) are named source-guard-only with reasons; the
+   behavioural matrix is restricted to reachable cases; "every other"
+   now means every mutant not in that ledger (Step 0.5, Step 0b).
+2. **P2 — facade analysis in CI.** The facade and support files join the CI
+   format/analyze inputs at step 1 with the inventory; added-info negatives
+   in the facade and a destination (Step 0.7).
+3. The `build` row lists `retained_forwarder` in `allowed_edits`.
 
 ## Progress
 
