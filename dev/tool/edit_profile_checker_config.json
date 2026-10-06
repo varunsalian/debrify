@@ -470,12 +470,28 @@
     {
       "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart",
       "owner": "EditProfileTvNavigation"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_editor.dart",
+      "owner": "EditProfileTvEditor"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_profile_pane.dart",
+      "owner": "EditProfileTvProfilePane"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_panes.dart",
+      "owner": "EditProfileTvPanes"
+    },
+    {
+      "file": "lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_rows.dart",
+      "owner": "EditProfileAccessRows"
     }
   ],
   "test_accessors": [],
   "required_nodes": [],
   "scaffolds": [],
-  "completed_step": 3,
+  "completed_step": 4,
   "original_static_receivers": {},
   "additional_owners": [],
   "occurrence_layout_bodies": [

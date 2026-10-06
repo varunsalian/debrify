@@ -250,6 +250,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/edit_profile/models/edit_profile_snapshot.dart': 0,
   'lib/features/edit_profile/models/edit_profile_tv_section.dart': 0,
   'lib/features/edit_profile/presentation/edit_profile_tv_surfaces.dart': 3,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_rows.dart':
+      0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_state.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_admin_actions.dart':
@@ -274,11 +276,17 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_setup_options.dart':
       0,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_editor.dart':
+      1,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_focus_state.dart':
       0,
   'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_navigation.dart':
       0,
-  'lib/screens/profiles/edit_profile_screen.dart': 10,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_panes.dart':
+      2,
+  'lib/features/edit_profile/presentation/legacy_edit_profile/edit_profile_tv_profile_pane.dart':
+      2,
+  'lib/screens/profiles/edit_profile_screen.dart': 5,
   // End edit profile.
   'lib/features/debrify_tv/application/debrify_tv_byte_format.dart': 0,
   'lib/features/debrify_tv/application/debrify_tv_random_start.dart': 0,

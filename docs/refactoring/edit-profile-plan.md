@@ -944,7 +944,7 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
 
 ### Full-suite gate 1 — 2026-10-06
 
-- **Commit:** `test(edit-profile): full-suite gate 1 evidence`; tested clean
+- **Commit:** `3a7e4c475` (`test(edit-profile): full-suite gate 1 evidence`); tested clean
   committed step 3 `35c0cc4b4f79171c68c30d173d2570077c5e9d38` (Flutter 3.44.8 / Dart 3.12.2).
 - **Command/result:** `python3 dev/tool/suite_evidence.py run
   edit_profile/gate1 --no-pub --concurrency=1` → **11731 success / 13 failure / 28 error / 20 skipped**.
@@ -958,3 +958,27 @@ pending-capture skip is removed. Claude owns Linux replays at gates 1 and 2.
   All **105** WebDAV tests pass in isolation; the full replay above uses
   concurrency **1**. Raw logs and `gate1-load-sensitive-NOTE.md` retained;
   no test, timeout or allowlist changes.
+
+### Step 4 — extract TV editor and access rows, 2026-10-06
+
+- **Commit:** `refactor(edit-profile): step 4 extract TV editor and access rows`. Previous checkpoint
+  `3a7e4c475`; R remains `f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8`.
+- **Files (formatted physical lines):** facade **556**; edit_profile_access_rows.dart 258; edit_profile_tv_editor.dart 219; edit_profile_tv_panes.dart 362; edit_profile_tv_profile_pane.dart 321.
+- **Verification:** wiring reviewed before pinning; compiling checkpoint,
+  real 90-leaf checker/reader, occurrence bindings/substitutions and callback
+  identities pass. All **17** manifests/self-tests pass with isolated parsers
+  (Debrify TV: 265 leaves / 236 callback negatives). Architecture, sizes,
+  storage, shape (**13**, global floor unchanged), theme exclusion, CI format
+  and scoped analyzer/allowlist pass. Strict comparison: **10** diagnostics,
+  **zero additions**. Focused/characterization identities match base2:
+  **177 success / 1 unchanged known source-guard failure**, zero missing or
+  newly skipped; all **4 macOS** originals pass strictly. All **103** original
+  comments, core services and dependency files stay byte-identical.
+- **Evidence:** `step4-*` under `refactor-evidence/edit_profile/`; commands,
+  wiring/scaffold review, per-symbol diagnostics, source hashes/counts and
+  comparisons included. No behavior fix, seam, borrowed State action or
+  size exception; Found-not-fixed items remain.
+- Wiring audit now accepts whitespace around receiver dots, including the
+  formatted TV Editor → TV Profile edge already in the frozen map. Identical
+  scaffolds were re-pinned after the complete review; source/config bytes
+  unchanged (`step4-wiring-repin.json`).
