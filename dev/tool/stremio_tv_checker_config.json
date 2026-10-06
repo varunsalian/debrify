@@ -4,7 +4,7 @@
   "feature": "lib/features/stremio_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 2,
+  "completed_step": 3,
   "completion_step": 7,
   "required_scaffolds_step": 7,
   "receivers": [
@@ -199,8 +199,6 @@
       "extractQuality"
     ],
     "_StremioTvScreenState": [
-      "loadSettings",
-      "discoverAndLoad",
       "playChannelById"
     ]
   },
@@ -1094,7 +1092,28 @@
       "file": "lib/features/stremio_tv/presentation/stremio_tv_source_picker_controls.dart"
     }
   ],
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
+      "owner": "StremioTvSettingsLoader"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_channel_library.dart",
+      "owner": "StremioTvChannelLibrary"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_menu_actions.dart",
+      "owner": "StremioTvMenuActions"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_chrome.dart",
+      "owner": "StremioTvChrome"
+    },
+    {
+      "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_navigation.dart",
+      "owner": "StremioTvNavigation"
+    }
+  ],
   "planned_plain_sections": [
     {
       "file": "lib/features/stremio_tv/presentation/legacy_stremio_tv/stremio_tv_settings_loader.dart",
@@ -1535,8 +1554,6 @@
     }
   ],
   "callback_member_aliases": {
-    "_sections.legacy.loadSettings": "_StremioTvScreenState._loadSettings",
-    "_sections.legacy.discoverAndLoad": "_StremioTvScreenState._discoverAndLoad",
     "_sections.legacy.playChannelById": "_StremioTvScreenState._playChannelById"
   }
 }

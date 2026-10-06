@@ -12,8 +12,6 @@ class StremioTvDependencies {
   final bool Function() isTelevision;
   late final StremioTvSections sections;
   // TEMP(stremio_tv): borrowed State tear-offs; removed with their scheduled moves.
-  final Future<void> Function() loadSettings;
-  final Future<void> Function() discoverAndLoad;
   final void Function(String channelId) playChannelById;
   StremioTvDependencies({
     required this.owners,
@@ -21,8 +19,6 @@ class StremioTvDependencies {
     required this.mounted,
     required this.setState,
     required this.isTelevision,
-    required this.loadSettings,
-    required this.discoverAndLoad,
     required this.playChannelById,
   });
 }

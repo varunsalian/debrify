@@ -13,8 +13,6 @@ import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';
 import 'package:debrify/models/stremio_tv/stremio_tv_now_playing.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/screens/catalog_item_detail_screen.dart';
-import 'package:debrify/screens/settings/stremio_tv_settings_page.dart';
-import 'package:debrify/screens/stremio_tv/stremio_tv_filter_page.dart';
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_empty_state.dart';
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_guide_sheet.dart';
 import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart';
@@ -79,23 +77,16 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       mounted: () => mounted,
       setState: setState,
       isTelevision: () => widget.isTelevision,
-      loadSettings: loadSettings,
-      discoverAndLoad: discoverAndLoad,
       playChannelById: playChannelById,
     ),
   );
-
-  /// Get the rotation duration for a channel based on its content type.
-  int rotationFor(StremioTvChannel channel) => channel.type == 'series'
-      ? _owners.settings.seriesRotationMinutes
-      : _owners.settings.rotationMinutes;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('stremio_tv');
-    _sections.legacy.loadSettings().then(
-      (_) => _sections.legacy.discoverAndLoad(),
+    _sections.settings.loadSettings().then(
+      (_) => _sections.library.discoverAndLoad(),
     );
     MdblistService.instance.isAuthenticated().then((v) {
       if (mounted && v != _owners.settings.mdblistConnected) {
@@ -162,408 +153,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
     }
     super.dispose();
-  }
-
-  Future<void> loadSettings() async {
-    _owners.settings.rotationMinutes =
-        await StremioTvStorage.getStremioTvRotationMinutes();
-    _owners.settings.seriesRotationMinutes =
-        await StremioTvStorage.getStremioTvSeriesRotationMinutes();
-    _owners.settings.randomEpisodes =
-        await StremioTvStorage.getStremioTvRandomEpisodes();
-    _owners.settings.autoRefresh =
-        await StremioTvStorage.getStremioTvAutoRefresh();
-    _owners.settings.preferredQuality =
-        await StremioTvStorage.getStremioTvPreferredQuality();
-    final debridProvider = await StremioTvStorage.getStremioTvDebridProvider();
-    _owners.settings.availableProviders = await _loadAvailableProviders();
-    if (debridProvider != 'auto' &&
-        !_owners.settings.availableProviders.any(
-          (provider) => provider.key == debridProvider,
-        )) {
-      _owners.settings.debridProvider = 'auto';
-      await StremioTvStorage.setStremioTvDebridProvider('auto');
-    } else {
-      _owners.settings.debridProvider = debridProvider;
-    }
-    _owners.settings.rdSkipBlockedTorrents =
-        await RealDebridStorage.getRdSkipBlockedTorrents();
-    _owners.settings.torrentsFirst =
-        await StremioTvStorage.getStremioTvTorrentsFirst();
-    _owners.settings.maxStartPercent =
-        await StremioTvStorage.getStremioTvMaxStartPercent();
-    _owners.settings.hideNowPlaying =
-        await StremioTvStorage.getStremioTvHideNowPlaying();
-  }
-
-  Future<List<MapEntry<String, String>>> _loadAvailableProviders() async {
-    final providers = <MapEntry<String, String>>[];
-    final rdKey = await RealDebridStorage.getApiKey();
-    if (rdKey != null && rdKey.isNotEmpty) {
-      providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
-    }
-    final tbKey = await TorboxStorage.getTorboxApiKey();
-    if (tbKey != null && tbKey.isNotEmpty) {
-      providers.add(const MapEntry('torbox', 'TorBox'));
-    }
-    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
-    if (pikpakEnabled) {
-      providers.add(const MapEntry('pikpak', 'PikPak'));
-    }
-    final pmEnabled = await PremiumizeStorage.getPremiumizeIntegrationEnabled();
-    final pmKey = await PremiumizeStorage.getPremiumizeApiKey();
-    if (pmEnabled && pmKey != null && pmKey.isNotEmpty) {
-      providers.add(const MapEntry('premiumize', 'Premiumize'));
-    }
-    final adEnabled = await AllDebridStorage.getAllDebridIntegrationEnabled();
-    final adKey = await AllDebridStorage.getAllDebridApiKey();
-    if (adEnabled && adKey != null && adKey.isNotEmpty) {
-      providers.add(const MapEntry('alldebrid', 'AllDebrid'));
-    }
-    return providers;
-  }
-
-  Future<void> discoverAndLoad() async {
-    setState(() => _owners.library.loading = true);
-
-    final channels = await _owners.library.service.discoverChannels();
-
-    // Set up focus nodes
-    for (final node in _owners.focus.rowFocusNodes) {
-      node.dispose();
-    }
-    _owners.focus.rowFocusNodes.clear();
-    for (int i = 0; i < channels.length; i++) {
-      _owners.focus.rowFocusNodes.add(FocusNode(debugLabel: 'stremioTvRow$i'));
-    }
-
-    if (mounted) {
-      setState(() {
-        _owners.library.channels = sortedChannels(channels);
-        _owners.library.loading = false;
-      });
-    }
-
-    // Handle pending auto-play (eagerly load the target channel first)
-    if (_owners.playback.pendingChannelId != null && mounted) {
-      final id = _owners.playback.pendingChannelId!;
-      _owners.playback.pendingChannelId = null;
-      _owners.playback.startupAutoPlayActive = true;
-      await _ensureChannelLoaded(id);
-      if (mounted) playChannelById(id);
-    }
-  }
-
-  void notifyStartupAutoLaunchFailed(String reason) {
-    if (!_owners.playback.startupAutoPlayActive) return;
-    _owners.playback.startupAutoPlayActive = false;
-    MainPageBridge.notifyAutoLaunchFailed(reason);
-  }
-
-  void notifyStartupPlayerLaunching() {
-    if (!_owners.playback.startupAutoPlayActive) return;
-    _owners.playback.startupAutoPlayActive = false;
-    MainPageBridge.notifyPlayerLaunching();
-  }
-
-  Future<void> refresh() async {
-    if (_owners.library.refreshing) return;
-    setState(() => _owners.library.refreshing = true);
-
-    await loadSettings();
-    final channels = await _owners.library.service.discoverChannels();
-
-    // Clear loading tracker and invalidate cache so channels refetch
-    _owners.library.loadingChannelIds.clear();
-    for (final ch in channels) {
-      ch.lastFetched = null;
-    }
-
-    // Reset focus nodes
-    for (final node in _owners.focus.rowFocusNodes) {
-      node.dispose();
-    }
-    _owners.focus.rowFocusNodes.clear();
-    for (int i = 0; i < channels.length; i++) {
-      _owners.focus.rowFocusNodes.add(FocusNode(debugLabel: 'stremioTvRow$i'));
-    }
-
-    if (mounted) {
-      setState(() {
-        _owners.library.channels = sortedChannels(channels);
-        _owners.library.refreshing = false;
-      });
-    } else {
-      _owners.library.refreshing = false;
-    }
-  }
-
-  List<StremioTvChannel> sortedChannels(List<StremioTvChannel> channels) {
-    final favorites = channels.where((ch) => ch.isFavorite).toList();
-    final rest = channels.where((ch) => !ch.isFavorite).toList();
-    favorites.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
-    rest.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
-    return [...favorites, ...rest];
-  }
-
-  /// Wraps a MenuItemButton inside a submenu with DPAD navigation:
-  /// - Left/Right arrow: close submenu, return to parent SubmenuButton
-  /// - Escape/Back: close entire menu, return to 3-dot button
-  Widget submenuItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    bool autofocus = false,
-  }) {
-    return Focus(
-      canRequestFocus: false,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-            event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          // Close just the submenu — focus parent SubmenuButton
-          _owners.focus.submenuFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.escape ||
-            event.logicalKey == LogicalKeyboardKey.goBack) {
-          // Close entire menu
-          _owners.focus.menuController.close();
-          _owners.focus.menuFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MenuItemButton(
-        autofocus: autofocus,
-        leadingIcon: Icon(icon),
-        onPressed: onPressed,
-        child: Text(label),
-      ),
-    );
-  }
-
-  Widget topMenuItem({
-    required Widget leadingIcon,
-    required String label,
-    required VoidCallback onPressed,
-    required MenuController controller,
-    required FocusNode anchorFocusNode,
-    bool autofocus = false,
-    bool closeOnArrowUp = false,
-  }) {
-    return Focus(
-      canRequestFocus: false,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if ((closeOnArrowUp &&
-                event.logicalKey == LogicalKeyboardKey.arrowUp) ||
-            event.logicalKey == LogicalKeyboardKey.escape ||
-            event.logicalKey == LogicalKeyboardKey.goBack) {
-          controller.close();
-          anchorFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MenuItemButton(
-        autofocus: autofocus,
-        leadingIcon: leadingIcon,
-        onPressed: onPressed,
-        child: Text(label),
-      ),
-    );
-  }
-
-  Future<void> openChannelFilter() async {
-    final filterTree = await _owners.library.service.getFilterTree();
-    final disabledBefore = await StremioTvStorage.getStremioTvDisabledFilters();
-    if (!mounted) return;
-
-    // Full-screen DPAD-first filter page (instant push, matching the
-    // channel-detail transition). The page persists before popping and
-    // reports whether anything changed.
-    final changed = await Navigator.of(context).push<bool>(
-      PageRouteBuilder(
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-        pageBuilder: (_, __, ___) => StremioTvFilterPage(
-          filterTree: filterTree,
-          disabledFilters: Set.of(disabledBefore),
-          isTelevision: widget.isTelevision,
-        ),
-      ),
-    );
-
-    if (changed == true && mounted) {
-      refresh();
-    }
-  }
-
-  Future<void> openLocalCatalogs() async {
-    final changed = await StremioTvLocalCatalogsDialog.show(context);
-    if (changed == true && mounted) {
-      refresh();
-    }
-  }
-
-  Future<void> importFromFile() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromFile(context);
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> importFromUrl() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromUrl(context);
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> importFromJson() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromJson(context);
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> importFromRepo() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromRepo(context);
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> importFromTrakt() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromTrakt(
-      context,
-    );
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> importFromMdblist() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromMdblist(
-      context,
-    );
-    if (imported && mounted) refresh();
-  }
-
-  Future<void> openStremioTvSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const StremioTvSettingsPage()));
-    if (!mounted) return;
-    await loadSettings();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> setDebridProvider(String value) async {
-    await StremioTvStorage.setStremioTvDebridProvider(value);
-    if (!mounted) return;
-    setState(() => _owners.settings.debridProvider = value);
-  }
-
-  String providerShortLabel(String provider) {
-    switch (provider) {
-      case 'realdebrid':
-        return 'RD';
-      case 'torbox':
-        return 'TB';
-      case 'pikpak':
-        return 'PP';
-      case 'premiumize':
-        return 'PM';
-      case 'alldebrid':
-        return 'AD';
-      default:
-        return 'AUTO';
-    }
-  }
-
-  String providerFullLabel(String provider) {
-    switch (provider) {
-      case 'realdebrid':
-        return 'Real-Debrid';
-      case 'torbox':
-        return 'TorBox';
-      case 'pikpak':
-        return 'PikPak';
-      case 'premiumize':
-        return 'Premiumize';
-      case 'alldebrid':
-        return 'AllDebrid';
-      default:
-        if (_owners.settings.availableProviders.isEmpty) return 'Auto';
-        return 'Auto (${_owners.settings.availableProviders.first.value})';
-    }
-  }
-
-  // ============================================================================
-  // Lazy Loading
-  // ============================================================================
-
-  /// Lazy-load items for a single channel by ID.
-  Future<void> _ensureChannelLoaded(String channelId) async {
-    final idx = _owners.library.channels.indexWhere((ch) => ch.id == channelId);
-    if (idx == -1) return;
-    await ensureChannelItemsLoaded(_owners.library.channels[idx]);
-  }
-
-  /// Lazy-load items for a single channel.
-  /// Prevents duplicate concurrent fetches via [_loadingChannelIds].
-  /// Removes the channel from the list if it loads with zero items.
-  Future<void> ensureChannelItemsLoaded(StremioTvChannel channel) async {
-    if (channel.isLocal) return;
-    if (channel.hasItems && !channel.isCacheStale) return;
-    if (_owners.library.loadingChannelIds.contains(channel.id)) return;
-
-    _owners.library.loadingChannelIds.add(channel.id);
-
-    try {
-      await _owners.library.service.loadChannelItems(channel);
-    } catch (_) {
-      // Mark as fetched so we don't retry every frame
-      channel.lastFetched = DateTime.now();
-    } finally {
-      _owners.library.loadingChannelIds.remove(channel.id);
-    }
-
-    if (!mounted) return;
-
-    // Remove channels that loaded with no usable items
-    if (channel.items.isEmpty && channel.lastFetched != null) {
-      setState(() {
-        final idx = _owners.library.channels.indexWhere(
-          (ch) => ch.id == channel.id,
-        );
-        if (idx == -1) return;
-
-        // Rescue focus before disposing the node
-        final removingFocused =
-            idx < _owners.focus.rowFocusNodes.length &&
-            _owners.focus.rowFocusNodes[idx].hasFocus;
-        if (removingFocused) {
-          if (idx > 0 && idx - 1 < _owners.focus.rowFocusNodes.length) {
-            _owners.focus.rowFocusNodes[idx - 1].requestFocus();
-          } else if (idx + 1 < _owners.focus.rowFocusNodes.length) {
-            _owners.focus.rowFocusNodes[idx + 1].requestFocus();
-          } else {
-            _owners.focus.searchFocusNode.requestFocus();
-          }
-        }
-
-        _owners.library.channels.removeAt(idx);
-        if (idx < _owners.focus.rowFocusNodes.length) {
-          _owners.focus.rowFocusNodes[idx].dispose();
-          _owners.focus.rowFocusNodes.removeAt(idx);
-        }
-
-        // Keep _focusedIndex in sync
-        if (removingFocused) {
-          _owners.focus.focusedIndex = idx > 0 ? idx - 1 : 0;
-        } else if (_owners.focus.focusedIndex > idx) {
-          _owners.focus.focusedIndex--;
-        }
-      });
-    } else {
-      // Items landed for an existing channel: rebuild just the tuner (via its
-      // ValueListenableBuilder), not the whole screen — a full setState here
-      // fired once per completing fetch and stuttered mid-surf navigation.
-      _owners.library.contentRevision.value++;
-    }
   }
 
   // ============================================================================
@@ -795,17 +384,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Ensure items are loaded before trying to play
     if (!channel.hasItems) {
-      await ensureChannelItemsLoaded(channel);
+      await _sections.library.ensureChannelItemsLoaded(channel);
       if (!mounted || _owners.playback.playGeneration != myGeneration) return;
     }
 
     final nowPlaying = _owners.library.service.getNowPlaying(
       channel,
-      rotationMinutes: rotationFor(channel),
+      rotationMinutes: _sections.library.rotationFor(channel),
       salt: _owners.library.mixSalt,
     );
     if (nowPlaying == null) {
-      notifyStartupAutoLaunchFailed('No items available for channel');
+      _sections.library.notifyStartupAutoLaunchFailed(
+        'No items available for channel',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No items available for this channel')),
@@ -821,7 +412,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
 
     if (!item.hasValidId) {
-      notifyStartupAutoLaunchFailed('Channel item has no valid ID');
+      _sections.library.notifyStartupAutoLaunchFailed(
+        'Channel item has no valid ID',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -868,7 +461,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         // The overlay dismisses itself; just abort the in-flight play. Every
         // await below bails on the _playGeneration mismatch.
         _owners.playback.playGeneration++;
-        notifyStartupAutoLaunchFailed('Playback canceled');
+        _sections.library.notifyStartupAutoLaunchFailed('Playback canceled');
       },
     );
 
@@ -892,7 +485,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (resolved == null) {
         overlay.dismiss();
-        notifyStartupAutoLaunchFailed('Could not resolve episode');
+        _sections.library.notifyStartupAutoLaunchFailed(
+          'Could not resolve episode',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -941,7 +536,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (torrents.isEmpty) {
         overlay.dismiss();
-        notifyStartupAutoLaunchFailed('No streams found');
+        _sections.library.notifyStartupAutoLaunchFailed('No streams found');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No streams found for ${item.name}')),
@@ -1064,7 +659,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (playableSources.isEmpty) {
         overlay.dismiss();
-        notifyStartupAutoLaunchFailed('No playable streams found');
+        _sections.library.notifyStartupAutoLaunchFailed(
+          'No playable streams found',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1116,7 +713,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
         overlay.dismiss();
-        notifyStartupAutoLaunchFailed('No auto-play stream resolved');
+        _sections.library.notifyStartupAutoLaunchFailed(
+          'No auto-play stream resolved',
+        );
         // Skip the manual picker if the play was cancelled mid-resolve.
         if (mounted && _owners.playback.playGeneration == myGeneration) {
           // Show source picker so user can manually select
@@ -1127,7 +726,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             episode: episode,
           );
           if (result != null && mounted) {
-            notifyStartupPlayerLaunching();
+            _sections.library.notifyStartupPlayerLaunching();
             rememberPlaybackCursor(
               channel.id,
               baseSlotStartMs: nowPlaying.slotStart.millisecondsSinceEpoch,
@@ -1178,7 +777,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       // Tick the final stage, then dismiss right before the player launches.
       overlay.setStage(PlayLoadStage.starting);
       overlay.dismiss();
-      notifyStartupPlayerLaunching();
+      _sections.library.notifyStartupPlayerLaunching();
       rememberPlaybackCursor(
         channel.id,
         baseSlotStartMs: nowPlaying.slotStart.millisecondsSinceEpoch,
@@ -1217,7 +816,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
     } catch (e) {
       overlay.dismiss();
-      notifyStartupAutoLaunchFailed('Error searching streams: $e');
+      _sections.library.notifyStartupAutoLaunchFailed(
+        'Error searching streams: $e',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -1233,13 +834,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }) async {
     // Ensure items are loaded
     if (!channel.hasItems) {
-      await ensureChannelItemsLoaded(channel);
+      await _sections.library.ensureChannelItemsLoaded(channel);
     }
 
     final schedule = _owners.library.service.getSchedule(
       channel,
       count: slotOffset + 2,
-      rotationMinutes: rotationFor(channel),
+      rotationMinutes: _sections.library.rotationFor(channel),
       salt: _owners.library.mixSalt,
     );
     if (schedule.length <= slotOffset) return null;
@@ -1485,7 +1086,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _nextSlotOffsetFor(StremioTvChannel channel) {
     final current = _owners.library.service.getNowPlaying(
       channel,
-      rotationMinutes: rotationFor(channel),
+      rotationMinutes: _sections.library.rotationFor(channel),
       salt: _owners.library.mixSalt,
     );
     if (current == null) return 1;
@@ -1572,7 +1173,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         'isFavorite': ch.isFavorite,
       };
       if (ch.hasItems) {
-        final rotation = rotationFor(ch);
+        final rotation = _sections.library.rotationFor(ch);
         final np = _owners.library.service.getNowPlaying(
           ch,
           rotationMinutes: rotation,
@@ -1618,7 +1219,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         if (ch == null) continue;
         if (!ch.hasItems) await _owners.library.service.loadChannelItems(ch);
         if (!ch.hasItems) continue;
-        final rotation = rotationFor(ch);
+        final rotation = _sections.library.rotationFor(ch);
         final np = _owners.library.service.getNowPlaying(
           ch,
           rotationMinutes: rotation,
@@ -1703,7 +1304,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
       final current = _owners.library.service.getNowPlaying(
         ch,
-        rotationMinutes: rotationFor(ch),
+        rotationMinutes: _sections.library.rotationFor(ch),
         salt: _owners.library.mixSalt,
       );
       if (current != null) {
@@ -2307,12 +1908,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   void playChannelById(String channelId) {
     if (_owners.library.channels.isEmpty) {
-      notifyStartupAutoLaunchFailed('Channels not loaded');
+      _sections.library.notifyStartupAutoLaunchFailed('Channels not loaded');
       return;
     }
     if (_owners.playback.startupAutoPlayActive &&
         !_owners.library.channels.any((channel) => channel.id == channelId)) {
-      notifyStartupAutoLaunchFailed('Startup channel not found');
+      _sections.library.notifyStartupAutoLaunchFailed(
+        'Startup channel not found',
+      );
       return;
     }
     final channel = _owners.library.channels.firstWhere(
@@ -2341,7 +1944,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> _pushChannelDetail(StremioTvChannel channel) async {
     if (!channel.hasItems) {
-      await ensureChannelItemsLoaded(channel);
+      await _sections.library.ensureChannelItemsLoaded(channel);
       // _ensureChannelItemsLoaded early-returns when a load is already in
       // flight (the Tuner kicks one off on focus), so the await above may
       // not have actually waited. Poll the in-flight load to settle before
@@ -2359,7 +1962,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
     final nowPlaying = _owners.library.service.getNowPlaying(
       channel,
-      rotationMinutes: rotationFor(channel),
+      rotationMinutes: _sections.library.rotationFor(channel),
       salt: _owners.library.mixSalt,
     );
     if (nowPlaying == null) {
@@ -2392,7 +1995,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> showGuide(StremioTvChannel channel) async {
     if (!channel.hasItems) {
-      await ensureChannelItemsLoaded(channel);
+      await _sections.library.ensureChannelItemsLoaded(channel);
       if (!mounted) return;
     }
     if (channel.items.isEmpty) {
@@ -2407,7 +2010,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final schedule = _owners.library.service.getSchedule(
       channel,
       count: 5,
-      rotationMinutes: rotationFor(channel),
+      rotationMinutes: _sections.library.rotationFor(channel),
       salt: _owners.library.mixSalt,
     );
     if (schedule.isEmpty || !mounted) return;
@@ -2428,7 +2031,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // ============================================================================
 
   Future<void> toggleFavorite(StremioTvChannel channel) async {
-    final focusedChannelId = currentFocusedChannelId();
+    final focusedChannelId = _sections.navigation.currentFocusedChannelId();
     final newState = !channel.isFavorite;
     await StremioTvStorage.setStremioTvChannelFavorited(channel.id, newState);
     if (!mounted) return;
@@ -2437,8 +2040,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
     setState(() {
       channel.isFavorite = newState;
-      _owners.library.channels = sortedChannels(_owners.library.channels);
-      reorderRowFocusNodes(previousChannels, _owners.library.channels);
+      _owners.library.channels = _sections.library.sortedChannels(
+        _owners.library.channels,
+      );
+      _sections.navigation.reorderRowFocusNodes(
+        previousChannels,
+        _owners.library.channels,
+      );
     });
     if (focusedChannelId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2481,10 +2089,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> editLocalCatalog(StremioTvChannel channel) async {
     final previousFocusedIndex = _owners.focus.focusedIndex;
-    final previousFocusedChannelId = currentFocusedChannelId();
+    final previousFocusedChannelId = _sections.navigation
+        .currentFocusedChannelId();
     final previousFilteredIndex = previousFocusedChannelId == null
         ? -1
-        : filteredChannels.indexWhere(
+        : _sections.navigation.filteredChannels.indexWhere(
             (ch) => ch.id == previousFocusedChannelId,
           );
     final changed = await StremioTvLocalCatalogEditorDialog.show(
@@ -2494,7 +2103,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
     if (changed != true || !mounted) return;
 
-    await refresh();
+    await _sections.library.refresh();
     if (!mounted) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2511,7 +2120,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       }
 
-      final visibleChannels = filteredChannels;
+      final visibleChannels = _sections.navigation.filteredChannels;
       final visibleEditedChannel = visibleChannels.firstWhereOrNull(
         (ch) => ch.id == channel.id,
       );
@@ -2543,123 +2152,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   // ============================================================================
-  // Search
-  // ============================================================================
-
-  List<StremioTvChannel> get filteredChannels {
-    if (_owners.focus.searchQuery.isEmpty) return _owners.library.channels;
-    return _owners.library.channels.where((ch) {
-      final q = _owners.focus.searchQuery;
-      return ch.displayName.toLowerCase().contains(q) ||
-          ch.addon.displayName.toLowerCase().contains(q) ||
-          ch.addon.name.toLowerCase().contains(q) ||
-          ch.catalog.name.toLowerCase().contains(q) ||
-          (ch.genre?.toLowerCase().contains(q) ?? false) ||
-          ch.type.toLowerCase().contains(q);
-    }).toList();
-  }
-
-  String? currentFocusedChannelId() {
-    final focusedNodeIndex = _owners.focus.rowFocusNodes.indexWhere(
-      (node) => node.hasFocus,
-    );
-    if (focusedNodeIndex >= 0 &&
-        focusedNodeIndex < _owners.library.channels.length) {
-      return _owners.library.channels[focusedNodeIndex].id;
-    }
-    if (_owners.focus.focusedIndex >= 0 &&
-        _owners.focus.focusedIndex < _owners.library.channels.length) {
-      return _owners.library.channels[_owners.focus.focusedIndex].id;
-    }
-    return null;
-  }
-
-  /// Returns focus from the header back into the Dial. Targets the card the
-  /// user last had focused (so it works after surfing right) rather than
-  /// always the first channel — whose card is scrolled off-screen and
-  /// focus-detached, which is why down-arrow silently did nothing.
-  void focusDialFromHeader() {
-    if (_owners.focus.rowFocusNodes.isEmpty) return;
-    final filtered = filteredChannels;
-    if (filtered.isEmpty) return;
-    // Preferred target: the last-focused channel if it's still displayed;
-    // otherwise the first visible channel.
-    int targetIdx = -1;
-    if (_owners.focus.focusedIndex >= 0 &&
-        _owners.focus.focusedIndex < _owners.focus.rowFocusNodes.length &&
-        _owners.focus.focusedIndex < _owners.library.channels.length &&
-        filtered.contains(
-          _owners.library.channels[_owners.focus.focusedIndex],
-        )) {
-      targetIdx = _owners.focus.focusedIndex;
-    } else {
-      targetIdx = _owners.library.channels.indexOf(filtered.first);
-    }
-    if (targetIdx < 0 || targetIdx >= _owners.focus.rowFocusNodes.length)
-      return;
-    // Route through the tuner so an off-screen (recycled) dial card is scrolled
-    // into view *before* focusing — a bare requestFocus on an unmounted
-    // ListView child silently no-ops, which is why down-arrow from the header
-    // could fail to return focus to the channels after a long surf.
-    if (_owners.focus.tunerController.focusRealIndex(targetIdx)) return;
-    // Fallback (narrow layout / tuner not mounted): best-effort direct focus.
-    _owners.focus.rowFocusNodes[targetIdx].requestFocus();
-  }
-
-  void reorderRowFocusNodes(
-    List<StremioTvChannel> previousChannels,
-    List<StremioTvChannel> reorderedChannels,
-  ) {
-    final nodeByChannelId = <String, FocusNode>{};
-    final previousLength =
-        previousChannels.length < _owners.focus.rowFocusNodes.length
-        ? previousChannels.length
-        : _owners.focus.rowFocusNodes.length;
-    for (int i = 0; i < previousLength; i++) {
-      nodeByChannelId[previousChannels[i].id] = _owners.focus.rowFocusNodes[i];
-    }
-
-    final reorderedNodes = <FocusNode>[];
-    for (int i = 0; i < reorderedChannels.length; i++) {
-      reorderedNodes.add(
-        nodeByChannelId.remove(reorderedChannels[i].id) ??
-            FocusNode(debugLabel: 'stremioTvRow$i'),
-      );
-    }
-
-    for (final leftover in nodeByChannelId.values) {
-      leftover.dispose();
-    }
-
-    _owners.focus.rowFocusNodes
-      ..clear()
-      ..addAll(reorderedNodes);
-  }
-
-  /// Back/Escape ladder for the search bar: clear text first, then hide the
-  /// field. Sits on an ancestor Focus of the search field so it runs when the
-  /// TvTextField shell lets the key bubble.
-  KeyEventResult handleSearchBarBack(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack) {
-      if (_owners.focus.searchController.text.isNotEmpty) {
-        _owners.focus.searchController.clear();
-        return KeyEventResult.handled;
-      }
-      // Hide search field on back when empty
-      if (_owners.focus.showSearchField) {
-        setState(() => _owners.focus.showSearchField = false);
-        _owners.focus.searchBtnFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  // ============================================================================
   // Build
   // ============================================================================
 
@@ -2676,7 +2168,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       body: Container(
         decoration: BoxDecoration(gradient: app.home.wash),
         child: _owners.library.loading
-            ? buildLoadingSkeleton()
+            ? _sections.chrome.buildLoadingSkeleton()
             : Column(
                 children: [
                   // Premium header bar
@@ -2706,7 +2198,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   child: Focus(
                                     canRequestFocus: false,
                                     skipTraversal: true,
-                                    onKeyEvent: handleSearchBarBack,
+                                    onKeyEvent: _sections
+                                        .navigation
+                                        .handleSearchBarBack,
                                     child: TvTextField(
                                       controller:
                                           _owners.focus.searchController,
@@ -2831,7 +2325,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 }
                                 if (event.logicalKey ==
                                     LogicalKeyboardKey.arrowDown) {
-                                  focusDialFromHeader();
+                                  _sections.navigation.focusDialFromHeader();
                                   return KeyEventResult.handled;
                                 }
                                 if (isActivateKey(event.logicalKey)) {
@@ -2866,31 +2360,39 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 },
                                 child: ListenableBuilder(
                                   listenable: _owners.focus.searchBtnFocusNode,
-                                  builder: (context, _) => headerButton(
-                                    focused: _owners
-                                        .focus
-                                        .searchBtnFocusNode
-                                        .hasFocus,
-                                    active:
-                                        _owners.focus.showSearchField ||
-                                        _owners.focus.searchQuery.isNotEmpty,
-                                    child: Icon(
-                                      Icons.search_rounded,
-                                      size: 20,
-                                      color:
-                                          (_owners
-                                                  .focus
-                                                  .searchBtnFocusNode
-                                                  .hasFocus ||
-                                              _owners.focus.showSearchField ||
-                                              _owners
-                                                  .focus
-                                                  .searchQuery
-                                                  .isNotEmpty)
-                                          ? app.core.tx
-                                          : app.core.tx.withValues(alpha: 0.5),
-                                    ),
-                                  ),
+                                  builder: (context, _) =>
+                                      _sections.chrome.headerButton(
+                                        focused: _owners
+                                            .focus
+                                            .searchBtnFocusNode
+                                            .hasFocus,
+                                        active:
+                                            _owners.focus.showSearchField ||
+                                            _owners
+                                                .focus
+                                                .searchQuery
+                                                .isNotEmpty,
+                                        child: Icon(
+                                          Icons.search_rounded,
+                                          size: 20,
+                                          color:
+                                              (_owners
+                                                      .focus
+                                                      .searchBtnFocusNode
+                                                      .hasFocus ||
+                                                  _owners
+                                                      .focus
+                                                      .showSearchField ||
+                                                  _owners
+                                                      .focus
+                                                      .searchQuery
+                                                      .isNotEmpty)
+                                              ? app.core.tx
+                                              : app.core.tx.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                        ),
+                                      ),
                                 ),
                               ),
                             ),
@@ -2940,7 +2442,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 }
                                 if (event.logicalKey ==
                                     LogicalKeyboardKey.arrowDown) {
-                                  focusDialFromHeader();
+                                  _sections.navigation.focusDialFromHeader();
                                   return KeyEventResult.handled;
                                 }
                                 if (isActivateKey(event.logicalKey)) {
@@ -2954,7 +2456,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 builder: (context, child) => MenuAnchor(
                                   controller: _owners.focus.menuController,
                                   menuChildren: [
-                                    topMenuItem(
+                                    _sections.chrome.topMenuItem(
                                       autofocus: true,
                                       leadingIcon: const Icon(
                                         Icons.shuffle_rounded,
@@ -2979,21 +2481,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                       ),
                                       onPressed: _owners.library.refreshing
                                           ? null
-                                          : () => refresh(),
+                                          : () => _sections.library.refresh(),
                                       child: const Text('Refresh'),
                                     ),
                                     MenuItemButton(
                                       leadingIcon: const Icon(
                                         Icons.tune_rounded,
                                       ),
-                                      onPressed: () => openChannelFilter(),
+                                      onPressed: () => _sections.menuActions
+                                          .openChannelFilter(),
                                       child: const Text('Filter channels'),
                                     ),
                                     MenuItemButton(
                                       leadingIcon: const Icon(
                                         Icons.settings_rounded,
                                       ),
-                                      onPressed: openStremioTvSettings,
+                                      onPressed: _sections
+                                          .settings
+                                          .openStremioTvSettings,
                                       child: const Text('Stremio TV Settings'),
                                     ),
                                     SubmenuButton(
@@ -3002,53 +2507,67 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         Icons.playlist_add_rounded,
                                       ),
                                       menuChildren: [
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           autofocus: true,
                                           icon: Icons.list_rounded,
                                           label: 'Manage',
-                                          onPressed: openLocalCatalogs,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .openLocalCatalogs,
                                         ),
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           icon: Icons.file_upload_outlined,
                                           label: 'From File',
-                                          onPressed: importFromFile,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .importFromFile,
                                         ),
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           icon: Icons.link_rounded,
                                           label: 'From URL',
-                                          onPressed: importFromUrl,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .importFromUrl,
                                         ),
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           icon: Icons.data_object_rounded,
                                           label: 'Paste JSON',
-                                          onPressed: importFromJson,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .importFromJson,
                                         ),
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           icon: Icons.source_rounded,
                                           label: 'From Repository',
-                                          onPressed: importFromRepo,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .importFromRepo,
                                         ),
-                                        submenuItem(
+                                        _sections.chrome.submenuItem(
                                           icon: Icons.movie_filter_rounded,
                                           label: 'From Trakt',
-                                          onPressed: importFromTrakt,
+                                          onPressed: _sections
+                                              .menuActions
+                                              .importFromTrakt,
                                         ),
                                         // Hidden for the alpha (kMdblistEnabled)
                                         // and only when connected — no dead import.
                                         if (kMdblistEnabled &&
                                             _owners.settings.mdblistConnected)
-                                          submenuItem(
+                                          _sections.chrome.submenuItem(
                                             icon: Icons
                                                 .playlist_add_check_circle_outlined,
                                             label: 'From MDBList',
-                                            onPressed: importFromMdblist,
+                                            onPressed: _sections
+                                                .menuActions
+                                                .importFromMdblist,
                                           ),
                                       ],
                                       child: const Text('Import'),
                                     ),
                                   ],
                                   builder: (context, controller, child) =>
-                                      headerButton(
+                                      _sections.chrome.headerButton(
                                         focused: _owners
                                             .focus
                                             .menuFocusNode
@@ -3124,7 +2643,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   }
                                   if (event.logicalKey ==
                                       LogicalKeyboardKey.arrowDown) {
-                                    focusDialFromHeader();
+                                    _sections.navigation.focusDialFromHeader();
                                     return KeyEventResult.handled;
                                   }
                                   if (isActivateKey(event.logicalKey)) {
@@ -3139,7 +2658,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     controller:
                                         _owners.focus.providerMenuController,
                                     menuChildren: [
-                                      topMenuItem(
+                                      _sections.chrome.topMenuItem(
                                         autofocus: true,
                                         leadingIcon: Icon(
                                           _owners.settings.debridProvider ==
@@ -3147,9 +2666,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                               ? Icons.check_rounded
                                               : Icons.circle_outlined,
                                         ),
-                                        label: providerFullLabel('auto'),
-                                        onPressed: () =>
-                                            setDebridProvider('auto'),
+                                        label: _sections.settings
+                                            .providerFullLabel('auto'),
+                                        onPressed: () => _sections.settings
+                                            .setDebridProvider('auto'),
                                         controller: _owners
                                             .focus
                                             .providerMenuController,
@@ -3168,8 +2688,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                                     ? Icons.check_rounded
                                                     : Icons.circle_outlined,
                                               ),
-                                              onPressed: () =>
-                                                  setDebridProvider(
+                                              onPressed: () => _sections
+                                                  .settings
+                                                  .setDebridProvider(
                                                     provider.key,
                                                   ),
                                               child: Text(provider.value),
@@ -3185,16 +2706,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                               controller.open();
                                             }
                                           },
-                                          child: headerButton(
+                                          child: _sections.chrome.headerButton(
                                             focused: _owners
                                                 .focus
                                                 .providerFocusNode
                                                 .hasFocus,
                                             wide: true,
                                             child: Text(
-                                              providerShortLabel(
-                                                _owners.settings.debridProvider,
-                                              ),
+                                              _sections.settings
+                                                  .providerShortLabel(
+                                                    _owners
+                                                        .settings
+                                                        .debridProvider,
+                                                  ),
                                               style: TextStyle(
                                                 color:
                                                     _owners
@@ -3233,7 +2757,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             // Computed inside the builder so a revision bump
                             // hands the tuner a fresh snapshot consistent with
                             // the live _channels/_rowFocusNodes it also gets.
-                            final filtered = filteredChannels;
+                            final filtered =
+                                _sections.navigation.filteredChannels;
                             if (filtered.isEmpty &&
                                 _owners.focus.searchQuery.isNotEmpty) {
                               return Center(
@@ -3251,7 +2776,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               allChannels: _owners.library.channels,
                               rowFocusNodes: _owners.focus.rowFocusNodes,
                               service: _owners.library.service,
-                              rotationFor: rotationFor,
+                              rotationFor: _sections.library.rotationFor,
                               mixSalt: _owners.library.mixSalt,
                               hideNowPlaying: _owners.settings.hideNowPlaying,
                               autoRefresh: _owners.settings.autoRefresh,
@@ -3263,7 +2788,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     !_owners.library.loadingChannelIds.contains(
                                       channel.id,
                                     )) {
-                                  ensureChannelItemsLoaded(channel);
+                                  _sections.library.ensureChannelItemsLoaded(
+                                    channel,
+                                  );
                                 }
                               },
                               onOpenDetail: openChannelDetail,
@@ -3307,122 +2834,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 ],
               ),
       ),
-    );
-  }
-
-  Widget headerButton({
-    required bool focused,
-    required Widget child,
-    bool active = false,
-    bool wide = false,
-    VoidCallback? onTap,
-  }) {
-    final app = AppThemeScope.of(context);
-    final btn = Container(
-      height: 40,
-      constraints: wide ? const BoxConstraints(minWidth: 48) : null,
-      width: wide ? null : 40,
-      padding: wide ? const EdgeInsets.symmetric(horizontal: 12) : null,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        // Home chrome language (matches the Catalog/Keyword mode toggle): an
-        // active control fills with the purple accent; focus is a white ring
-        // that shows even on the active one, since DPAD focus lands there first
-        // and the fill alone wouldn't signal the remote moved.
-        color: active ? app.home.chromeAccent : app.stremioTv.surfaceFill,
-        borderRadius: app.shape.br(12),
-        border: Border.all(
-          color: focused ? app.stremioTv.focusRing : app.stremioTv.hairline,
-          width: focused ? 2 : 0.5,
-        ),
-      ),
-      child: child,
-    );
-    if (onTap != null) return GestureDetector(onTap: onTap, child: btn);
-    return btn;
-  }
-
-  Widget buildLoadingSkeleton() {
-    final app = AppThemeScope.of(context);
-    return Column(
-      children: [
-        const SizedBox(height: 52),
-        // Skeleton stage area
-        Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 32),
-            decoration: BoxDecoration(
-              color: app.core.tx.withValues(alpha: 0.03),
-              borderRadius: app.shape.br(20),
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 48,
-                  bottom: 60,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: app.core.tx.withValues(alpha: 0.06),
-                          borderRadius: app.shape.br(10),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        width: 320,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: app.stremioTv.surfaceFill,
-                          borderRadius: app.shape.br(8),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: 200,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: app.core.tx.withValues(alpha: 0.03),
-                          borderRadius: app.shape.br(6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Skeleton dial cards
-        SizedBox(
-          height: 220,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            itemCount: 6,
-            itemBuilder: (context, i) {
-              return Container(
-                width: 138,
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                decoration: BoxDecoration(
-                  color: app.stremioTv.surfaceFill,
-                  borderRadius: app.shape.br(16),
-                  border: Border.all(
-                    color: app.core.tx.withValues(alpha: 0.04),
-                    width: 0.5,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 14),
-      ],
     );
   }
 }

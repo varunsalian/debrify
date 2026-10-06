@@ -1608,3 +1608,37 @@ navigation/chrome, play/resolvers/guide/channel actions and layout, with exits
 in Steps 3–6. E/`step2-*` records wiring, source hashes, commands, span inventory
 and comparisons. Protected sibling widgets, players, launcher, services and
 dependencies remain byte-identical to R.
+
+
+### Step 3 — settings, library, menu, navigation and chrome (2026-10-06)
+
+Previous checkpoint: **`cb416c86b`**. Five sections now own settings/provider selection, discovery/lazy loading, imports/filter navigation, search/focus and shared chrome. Original async ordering, mounted checks, focus restoration, menus and local contexts remain intact. Lifecycle calls the new settings/library sections; two borrowed State tear-offs are removed. Only `playChannelById` remains borrowed, with its Step 5 exit. Chrome holds six original shape sites; the facade retains three, and picker files four.
+Per-entry wiring review is E/`step3-wiring-review.json`; bodies derive from
+R and the accepted compiling probe, with only registered substitutions.
+
+All **17 manifests** pass real CLI/self-tests with isolated parser packages
+and copied kernels deleted. The other **16 stdout files are byte-identical**
+to Step 0b; shared adapter/config/source hashes remain unchanged. All 119
+leaves, field binding, callback identity, contracts and the reader pass.
+Architecture, sizes, storage keys/references/member map/bodies, CI format
+(zero changes), scoped analyzer/allowlist (same 25 warnings), LF, protected
+scope and staged diff pass. Per-symbol inventory has **6 probe-inventoried
+infos, zero warnings/errors and zero additions** beyond R/probe maxima;
+the explicit relocation comparison passes. No suppression is added.
+
+The serialized focused run uses `--no-pub --concurrency=1`: **178 successes
+and the same one known profile source-guard failure**, with no new failure,
+missing identity or skip against base2. All **63 characterizations** pass,
+including strict macOS **6/6**; calibrated Linux strict is **6/6** with unchanged
+lockfile and PNG bytes. Shape remains **13**, floor **488**, bare-radius
+residue zero; owned/full theme sites **30/79**, light ink **three non-primary /
+zero primary**. Original behavioral tests and goldens retain their bytes.
+
+Formatted facade **2,839**: imports 51 + widget 16 + State header/close 2 + owners/composition 12 + lifecycle 72 + retained original bodies 1,942 + retained build 681 + remaining blanks/comments 63
+= 2,839. The ratchet is lowered by hand. New files: **settings_loader 135**, **channel_library 184**, **menu_actions 96**, **navigation 132**, **chrome 199**.
+All new files are below 500; no layout exception is activated. The oversized
+facade temporarily retains play/resolvers/guide/channel actions and layout,
+with exits in Steps 4–6.
+E/`step3-*` contains commands, hashes, spans and comparisons. No protected
+sibling widget, player, launcher, service or dependency changes, production
+seam, device run, push, merge or branch switch.
