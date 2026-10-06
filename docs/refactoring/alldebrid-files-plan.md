@@ -127,8 +127,10 @@ No method is over 200 lines; no size exception is expected.
    - **Live deep-link notification** (`_focusWebDownloads`, 151): every call
      switches to Web Downloads, clears the open magnet, files, selection and
      root search, and **always** reloads links, even if already loaded. It
-     does **not** reset the scroll offset or the file search (see Found, not
-     fixed).
+     makes **no explicit scroll-controller jump** and does not reset the file
+     search. Because `_loadLinks` swaps the list for a skeleton while
+     loading, the controller detaches and the reloaded list starts at offset
+     0 (characterized with a held response).
    - **Back priority** in `_handleBackNavigation` (341–363): selection mode,
      file search, root search, open magnet, else `false`. Each level
      characterized.
@@ -148,8 +150,10 @@ No method is over 200 lines; no size exception is expected.
    - Hidden in select mode: the selection toggle, delete-all and add; the
      toolbar shows "Select AllDebrid Source" and the alternate search-button
      branch (1357–1378). The two search-button branches are mutually
-     exclusive; exactly one is built, with `_toolbarSearchFocusNode` attached,
-     in each mode.
+     exclusive: exactly one is built, with `_toolbarSearchFocusNode`
+     attached, when the active view's backing list (`_links` or `_magnets`)
+     is non-empty, and none otherwise; a search filtering to zero matches
+     keeps the button.
 3. **Playback handoff.** All **three launcher sites** (390 file, 531 magnet,
    747 link), each preceded by `MainPageBridge.notifyPlayerLaunching()`, keep
    every `VideoPlayerLaunchArgs` and `PlaylistEntry` argument, in order:
@@ -365,15 +369,15 @@ The same as the PikPak plan's Technique, with these points:
 
    | Contract | Coverage |
    | --- | --- |
-   | 1 Navigation | Tab versus pushed route (registered and removed on dispose, with sentinel handlers); the TV focus closure focusing the first row; each back level; `_navigateUp` focus and scroll reset; the initial query trimmed and applied once (a same-key widget update with a new query does not re-apply it). Deep link: the handler set in both modes; a pending flag opening Web Downloads and loading links once; **own disposal clears** the handler; a second screen's registration **survives** the first one's disposal; after the last screen disposes, a notification sets the pending flag and the next mount consumes it; **repeated live notifications** each reload links and reset magnet, files, selection and root search, while the scroll offset and file-search state are preserved. |
+   | 1 Navigation | Tab versus pushed route (registered and removed on dispose, with sentinel handlers); the TV focus closure focusing the first row; each back level; `_navigateUp` focus and scroll reset; the initial query trimmed and applied once (a same-key widget update with a new query does not re-apply it). Deep link: the handler set in both modes; a pending flag opening Web Downloads and loading links once; **own disposal clears** the handler; a second screen's registration **survives** the first one's disposal; after the last screen disposes, a notification sets the pending flag and the next mount consumes it; **repeated live notifications** each reload links and reset magnet, files, selection and root search, while the file-search state is preserved; with the links response held, a scrolled list shows the skeleton and the reloaded list starts at offset 0 (no explicit jump). |
    | 2 Select-source | Pushed picker: magnet binding (callback once, awaited before the pop, every `SeriesSource` field, `boundAt` in range) and its empty-hash rejection; web binding for a video link, a non-video link not tappable; hidden actions; the select-mode title and search button. |
    | 3 Playback | A fake launcher seam is not added; the three sites are covered by the argument ledger (source guard, token-exact) plus behavioural tests up to the handoff where reachable: unlock request order for a multi-file magnet (start entry first, fallback order on failure), the "No playable video files found." and unlock-failure snacks, and the single-video shortcut. Launch itself is **pending device verification**. |
    | 4 Downloads | Source guards on the three enqueue sites and the dialog-map construction; the dialog opened from the magnet action with its file list. The selected-files loop is driven through the **real `FileSelectionDialog.onDownload` callback** (found in the widget tree) with synthetic selected maps: missing, negative and out-of-range `_adIndex` count failures **without** unlock requests; empty unlocks count failures; unlock request order follows selection order. Success and mixed-result messages only if an isolated enqueue fixture is proven against the original; otherwise **pending**. Copy link writes the unlocked URL to the clipboard. |
    | 5 Destructive | Magnet delete Cancel (no request), single, selected (list order with non-monotonic selection order), all; link delete single, all, and a partial failure count; the follow-up reload and snacks. |
-   | 6 Lists | Initial load (ready-only filter), missing key, load error and Retry, lazy links load once, view switch resets, refresh in each of the three contexts, open magnet and forced refresh keeping files, the three searches, row keys, empty states. Pixel goldens (macOS and Linux) of: magnet root, Web Downloads, magnet files view, selection mode, select-source picker, error state. |
+   | 6 Lists | Initial load (ready-only filter), missing key, load error and Retry, lazy links load once, view switch resets, refresh through the toolbar in the two reachable root contexts (torrents root reloads magnets; Web Downloads reloads links), open magnet; the **dormant** forced-files refresh branch (no toolbar or `RefreshIndicator` in the files view) through the frozen test accessor's retained `_refresh` tear-off, labelled dormant coverage (keeps the current files while loading, uses the cached key) — no UI control is added, the three searches, row keys, empty states. Pixel goldens (macOS and Linux) of: magnet root, Web Downloads, magnet files view, selection mode, select-source picker, error state. |
    | 7 D-pad | Search field up/down/right exits, the clear button's Enter and arrow-left, file-search up/down, the add dialogs' arrow-down, focus after load. |
    | 8 Lifecycle | Source guards on the verbatim lifecycle and the 10 disposals; unmount during a pending load: no throw. |
-   | 9 Profile | The exact `Authorization: Bearer` header on every request; after a stored-credential change, a refresh in the torrents view uses the new key (since `_load` re-reads) while the links view and actions keep the cached key until `_load` runs; a remount reads the key again; two routes don't share owners. A same-key widget update with a new `onSourceSelected` callback: the next binding calls the new callback (live widget getters). |
+   | 9 Profile | The exact `Authorization: Bearer` header on every request; after a stored-credential change, a refresh at the torrents **root** uses the new key (since `_load` re-reads) while the links view, the dormant files refresh and every action keep the cached key until `_load` runs; a remount reads the key again; two routes don't share owners. A same-key widget update with a new `onSourceSelected` callback: the next binding calls the new callback (live widget getters). |
    | 10 Playlists | Single and collection maps persisted with exact fields; empty-hash rejection; the "Already in playlist" path. |
    | 11 Add | Add magnet: Cancel, empty, success (exact `magnet/upload` form body; the fixture returns a valid `data.magnets` entry), failure; snack before the reload; the reload request. Add link: auto-paste for http/https only (and none for other clipboard text), Cancel, empty, invalid URL (no request), success with an unlock response **different** from the input (proving `user/links/save` sends the original link), unlock failure and save failure (no reload); request order unlock → save → `user/links`. |
    | Loading dialog | Duplicate `_showLoading` suppressed; with an unlock held, **system Back** pops the dialog while the flag stays true; releasing the unlock makes `_dismissLoading` pop the route underneath (on a pushed route: the screen itself; distinguish the user's modal pop from the later root-navigator pop). Kept as found-not-fixed. |
@@ -448,8 +452,11 @@ must also pass from a fresh normal `git clone` (`.git` a directory) after
 5. `_loadLinks` reuses the cached `_apiKey`; a credential change while the
    screen stays mounted is not picked up (the profile gate remount covers
    profile switches).
-6. `_focusWebDownloads` does not reset the shared scroll offset or the file
+6. `_focusWebDownloads` makes no explicit scroll jump (the reload's
+   skeleton resets the offset as a side effect) and does not reset the file
    search, unlike the view selector.
+8. `_refresh`'s open-magnet branch is unreachable from the UI: the files view
+   has no toolbar or pull-to-refresh.
 7. System Back can pop the "loading" dialog while `_loadingDialogOpen` stays
    true; the later `_dismissLoading` then pops the route underneath (the
    pushed screen itself).
@@ -503,4 +510,17 @@ Codex round 1 (`ad-design`, gpt-6.1-sol xhigh): one P1, seven P2s, one P3.
    the shape-manifest facade transition; strict Linux goldens from step L.
 9. **P3:** `home_source_editor_test.dart:196` added to the caller inventory;
    the mutually exclusive search-button branches described (contract 2).
+
+## Round 2 review resolution
+
+Codex round 2: one P1, one P2, one P3; round-1 items confirmed resolved.
+1. **P1, scroll preservation:** the live-notification contract now states
+   "no explicit jump" and the characterized held-response reset to offset 0
+   (contract 1, row 1, Found-not-fixed 6).
+2. **P2, refresh reachability and credential scope:** two reachable root
+   refresh cases; the forced-files branch is dormant coverage through the
+   frozen accessor's retained `_refresh`; the credential-change expectation
+   is scoped to the torrents root (rows 6 and 9, Found-not-fixed 8).
+3. **P3:** the search-button condition includes the non-empty backing list
+   (contract 2).
 
