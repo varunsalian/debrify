@@ -1119,3 +1119,67 @@ and Add deep-link checks, weak-box stats performance, tvOS focus and desktop
 input/device checks, remote CI and semantic integration with sibling
 refactors. No push, rebase, branch switch or edit of a forbidden application
 file has occurred.
+
+
+### Gate 2 and completed series (2026-10-07)
+
+The full suite ran on clean committed step 3 `c27245e37`, tested tree
+`ae2790d88cfdba95c1f56bbfa4ba5baed6e14c7e`, with paths `[]`, flags
+`--no-pub --concurrency=2 --timeout=3m`, Flutter 3.44.8 / Dart 3.12.2 and
+unchanged start/end HEAD/tree. Raw outcome counts are 12,200 successes,
+13 failures, 34 errors and 20 skips. Comparisons with latest original-code
+`base2` and gate 1 have zero missing/added identities or new skips. The raw
+helper comparisons are **FAIL** for six transient errors and are preserved
+as such; no all-green full-run result is claimed.
+
+NOTE: four real UDP lost-request/challenge/ok/legacy_ok cases missed bounded
+readiness assertions; MDB manage-refresh missed its failure snackbar and MDB
+single-import missed its mocked choice after bounded async pumps. First
+failures were investigated before acceptance. All affected application and
+test/fixture bytes equal original (b). Serialized unchanged isolated runs pass
+UDP 5/5, MDB manage 22/22 and MDB import 35/35: 62 cases including every six
+failed identity. All six scoped comparisons against both bases pass. Every
+four transient gate-1 identity also passes in the full gate-2 run. Neither
+full gate has a runner timeout, unexplained new failure, missing identity or
+new skip; assertions, failure lists and raw evidence remain unchanged. Both
+gates are accepted with these documented timing notes. Evidence is in
+`gate2-identity-audit.json`, `gate2-NOTE.txt`, both `gate2-vs-*.txt` files and
+`gate2-isolated-*` runner/env/comparison files under the owned evidence
+namespace. The 41 baseline failures/errors remain outside this refactor.
+
+| Checkpoint | Commit |
+| --- | --- |
+| R, untouched application / reviewed plan | `6c0a6099` |
+| Step 0 characterization (b) | `7e700606` |
+| Step 0b review gaps, original mutations, composition and base2 | `d8a1700b9` |
+| Step L Linux originals and strict comparison | `55fc98ca0` |
+| Step 1 pieces and gate 1 | `bf11bc92f` |
+| Step 2 whole widget/State move | `9cee8acf1` |
+| Step 3 completion and gate 2 | `c27245e37` |
+
+Completion retains a seven-line five-name facade; all 73 leaves are moved and
+wired to 14 destinations (36–352 lines), with explicit resource ownership,
+cached sections and live dependencies. All 21 manifest/self-test runs pass at
+each extraction step, and all 20 pre-existing CLI outputs and actual adapter
+outputs remain byte-identical. Context, occurrence binding and callback
+identity proofs pass; mandatory qualification is explicit under either
+shared default. Original 39-mutation proofs reject 35 by named behavioral
+assertions and four by explained source guards. Current new checkers/self-tests
+and the original mutation proofs pass in fresh normal clones after pub get.
+Strict per-symbol inventory remains 19 infos with zero new errors/warnings;
+CI and 94 real-main architecture cases pass. Strict original goldens pass
+13/13 on each macOS/Linux checkpoint, with no image update. Shape remains two
+tokens/seven bare radii, global floor 488 with zero slack; ink/theme expressions
+and all forbidden application/importer/pubspec objects remain unchanged.
+
+Progress decisions are recorded above: unique internal `sourceStats` field
+rename for mandatory binder qualification; partial Auto-refresh facade exports
+at step 1; four explained source-only limits; corrected completion-negative
+fixture tokens; corrected 352-line measurement; complete 21-manifest inventory
+including plain VPL; full original ink comparison and preservation of existing
+manifests' bytes. All five Found, not fixed items remain exactly as listed.
+The seven shared registrations must be semantically unioned at integration;
+engines/binder/adapter/allowlists have no changes from this branch. Device-only
+checks, weak-box performance, remote CI and sibling integration remain pending.
+The final evidence commit is documentation only; gate 2's tested application,
+test, tooling, configuration and golden inputs remain byte-identical to it.
