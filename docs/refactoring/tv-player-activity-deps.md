@@ -4249,3 +4249,71 @@ Evidence: `p3/step0b/` (controls, exact four reruns/XML, mutation plan/patches/l
 | b70 | `TvRecordingMessagesCharacterizationTest.finalizeReportsPublicationFailureButIsSilentWhenFinishing` | `&& !isFinishing → && true` | `expected:<Recording st[arted]> but was:<Recording st[opped, but couldn't be added to Downloads]>` |
 
 Claude exact rerun: e12 → `fadeInPinsDurationAndAlphaAndBothSegmentLabels` (160 vs 200); e13 → `controlsLiftAndReturnPinDensityScaledTargetAndDuration` (−128 vs −120); e14 → `actualUpNextCardBlocksPresentFocusOfferWithoutHidingTheSegment` (unexpected offered key); e15 → `teeStartStopAndFailedPublicationKeepExactMessages` (truncated saved path).
+
+## Phase 3 step 1 — production extraction
+
+Applied `kotlin_move_partition.extraction` using the approved phase-3 manifest: 62 moved subtrees, 22 patched retained declarations with 52 exact context occurrences, six pinned slot additions, four exhaustively partitioned controller files. AppCompatActivity injection, computed explicitly-qualified Host forwarders, cross-feature Up Next reads through its controller, activity-owned readiness getters, braced templates, original Handler/scope initialization slots and teardown statement order are exactly manifest-bound. No production hand edits outside the materializer. Activity: 19,017 → 18,265 physical lines. Controllers: sleep 92, skip 282, Up Next 155, recording actions 436. Size baseline updated with --update and retained unrelated ratchets unchanged. Original localization strings/comments remain legacy text pending the separate localization migration.
+
+All 194 phase-2/3 characterizations pass after moving. Native assertions and fixtures are hash-identical to p3-step0b: only TvPlayerOriginalAccess changes, with typed selectors and Kotlin default dispatch routed to the owned controller. The helper also maps former nested SleepTimerMode/SkipSegmentRequest type names to their top-level owners. No internal-function JVM mangling is introduced. The following complete owned-field/function map defines the reflection retargets (property getters and lazy `$delegate` selectors route to the same owner):
+
+| Original activity selector | Controller selector |
+| --- | --- |
+| `property upNextCard` | `class TvUpNextController/property upNextCard` |
+| `property upNextPoster` | `class TvUpNextController/property upNextPoster` |
+| `property upNextTitle` | `class TvUpNextController/property upNextTitle` |
+| `property upNextCountdown` | `class TvUpNextController/property upNextCountdown` |
+| `property upNextVisible` | `class TvUpNextController/property upNextVisible` |
+| `property upNextTargetIndex` | `class TvUpNextController/property upNextTargetIndex` |
+| `property upNextDismissedForIndex` | `class TvUpNextController/property upNextDismissedForIndex` |
+| `property upNextHandler` | `class TvUpNextController/property upNextHandler` |
+| `property skipSegmentScope` | `class TvSkipSegmentController/property skipSegmentScope` |
+| `property skipSegmentFetchJob` | `class TvSkipSegmentController/property skipSegmentFetchJob` |
+| `property skipSegmentFetchGeneration` | `class TvSkipSegmentController/property skipSegmentFetchGeneration` |
+| `property loadedSkipSegmentKey` | `class TvSkipSegmentController/property loadedSkipSegmentKey` |
+| `property loadingSkipSegmentKey` | `class TvSkipSegmentController/property loadingSkipSegmentKey` |
+| `property skipSegments` | `class TvSkipSegmentController/property skipSegments` |
+| `property activeSkipSegment` | `class TvSkipSegmentController/property activeSkipSegment` |
+| `property skipFocusOfferedKey` | `class TvSkipSegmentController/property skipFocusOfferedKey` |
+| `property skipSegmentCache` | `class TvSkipSegmentController/property skipSegmentCache` |
+| `property sleepTimerMode` | `class TvSleepTimerController/property sleepTimerMode` |
+| `property sleepTimerDeadlineElapsedMs` | `class TvSleepTimerController/property sleepTimerDeadlineElapsedMs` |
+| `property sleepTimerHandler` | `class TvSleepTimerController/property sleepTimerHandler` |
+| `property sleepTimerRunnable` | `class TvSleepTimerController/property sleepTimerRunnable` |
+| `property sleepTimerMinuteOptions` | `class TvSleepTimerController/property sleepTimerMinuteOptions` |
+| `fun currentSkipSegmentRequest(Long)` | `class TvSkipSegmentController/fun currentSkipSegmentRequest(Long)` |
+| `fun updateSkipSegmentState(Long,Long)` | `class TvSkipSegmentController/fun updateSkipSegmentState(Long,Long)` |
+| `fun ensureSkipSegments(SkipSegmentRequest)` | `class TvSkipSegmentController/fun ensureSkipSegments(SkipSegmentRequest)` |
+| `fun presentSkipSegment(TvSkipSegment?,String?)` | `class TvSkipSegmentController/fun presentSkipSegment(TvSkipSegment?,String?)` |
+| `fun skipActiveSegment()` | `class TvSkipSegmentController/fun skipActiveSegment()` |
+| `fun sleepTimerMinutesLeft()` | `class TvSleepTimerController/fun sleepTimerMinutesLeft()` |
+| `fun sleepTimerValueLabel()` | `class TvSleepTimerController/fun sleepTimerValueLabel()` |
+| `fun startSleepCountdown(Int)` | `class TvSleepTimerController/fun startSleepCountdown(Int)` |
+| `fun armSleepAtEndOfItem()` | `class TvSleepTimerController/fun armSleepAtEndOfItem()` |
+| `fun cancelSleepTimer(Boolean)` | `class TvSleepTimerController/fun cancelSleepTimer(Boolean)` |
+| `fun fireSleepTimer()` | `class TvSleepTimerController/fun fireSleepTimer()` |
+| `fun resetSkipSegmentState()` | `class TvSkipSegmentController/fun resetSkipSegmentState()` |
+| `fun maybeShowUpNext()` | `class TvUpNextController/fun maybeShowUpNext()` |
+| `property upNextTicker` | `class TvUpNextController/property upNextTicker` |
+| `fun showUpNextCard(Int)` | `class TvUpNextController/fun showUpNextCard(Int)` |
+| `fun triggerUpNext()` | `class TvUpNextController/fun triggerUpNext()` |
+| `fun dismissUpNext()` | `class TvUpNextController/fun dismissUpNext()` |
+| `fun hideUpNextCard()` | `class TvUpNextController/fun hideUpNextCard()` |
+| `property recordingEngineEnabled` | `class TvIptvRecordingActionsController/property recordingEngineEnabled` |
+| `property recordingRegistryListener` | `class TvIptvRecordingActionsController/property recordingRegistryListener` |
+| `fun isCurrentIptvSegmented()` | `class TvIptvRecordingActionsController/fun isCurrentIptvSegmented()` |
+| `fun engineRecordableUrl(String)` | `class TvIptvRecordingActionsController/fun engineRecordableUrl(String)` |
+| `fun isSchedulableStreamUrl(String)` | `class TvIptvRecordingActionsController/fun isSchedulableStreamUrl(String)` |
+| `fun engineTaskIdForCurrentChannel()` | `class TvIptvRecordingActionsController/fun engineTaskIdForCurrentChannel()` |
+| `fun recordingResourceFor(IptvChannelEntry?)` | `class TvIptvRecordingActionsController/fun recordingResourceFor(IptvChannelEntry?)` |
+| `fun canRecordCurrentIptv()` | `class TvIptvRecordingActionsController/fun canRecordCurrentIptv()` |
+| `fun updateRecordButtonState()` | `class TvIptvRecordingActionsController/fun updateRecordButtonState()` |
+| `fun toggleIptvRecording()` | `class TvIptvRecordingActionsController/fun toggleIptvRecording()` |
+| `fun maybeAskNotificationPermission()` | `class TvIptvRecordingActionsController/fun maybeAskNotificationPermission()` |
+| `fun toggleEngineRecording()` | `class TvIptvRecordingActionsController/fun toggleEngineRecording()` |
+| `fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` | `class TvIptvRecordingActionsController/fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` |
+| `fun finalizeIptvRecordingIfActive()` | `class TvIptvRecordingActionsController/fun finalizeIptvRecordingIfActive()` |
+| `property notificationPermissionRequestCode` | `class TvIptvRecordingActionsController/property notificationPermissionRequestCode` |
+
+Dart retarget: `test/android_tv_auto_advance_resume_test.dart` reads triggerUpNext→dismissUpNext from TvUpNextController.kt; its ordering assertion pins `host.isAutoAdvancing = true` before `host.playItem(target)`. The playItem resume assertions still read the activity and are unchanged. All other Dart/native private-name anchors are retained in their original owners. Changed Dart formatted.
+
+Move checker: 2,671 declarations, zero differences; 53 self-tests pass. Historical p1@dcbd9aafe (3,477) and p2@ec365eb80 (2,839) pass; earlier 22 destinations unchanged. Full forced Kotlin compilation (`:app:compileDebugKotlin --rerun -Pkotlin.incremental=false`) succeeds with exactly the original five warning identities. All 58 substituted this sites have identical compiled invocation descriptors; Glide still selects FragmentActivity. The separate onStop/onDestroy token-order assertion passes. Evidence `p3/gate/{checker.log,historical-p1.log,historical-p2.log,earlier-destinations.log,compile-debug.log,kotlin-warnings-comparison.json,moved-characterizations.log,overload-audit.json,teardown-order.json,test-retarget-scope.json}`. Complete JVM/lint/release/Flutter gate follows on the committed Step 1 tree.
