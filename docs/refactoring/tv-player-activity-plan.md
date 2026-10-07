@@ -551,6 +551,189 @@ lists and categories, a recording start (file name), subtitle search
 (query/identity row), track menus (labels), Stremio TV guide data,
 quick-play next episode, EPG load on a slow provider (45 s timeout path).
 
+## Phase 3 — first stateful collaborators: sleep timer, skip segments, Up Next card, IPTV recording actions
+
+Branch `refactor/tvplayer-p3` off the phase-2 merge `ec365eb80` (activity 19,017 lines). Evidence under
+`refactor-evidence/tvplayer/p3/`. The feasibility inventory (owned state,
+every inbound reference, outbound host needs, timers and teardown position,
+`this`-ambiguity and `::x.isInitialized` hazards, per-feature substitution
+and patch counts) is the "Phase 3 inventory" section of the deps report;
+line numbers there are at `dcbd9aafe` and are re-measured on the phase-2
+merge before the manifest is written.
+
+**Re-estimate (honest scope).** The phase map's sizes were optimistic: most
+of the activity is stateful and cross-coupled. Phase 3 moves ≈ 810 lines
+(≈ 580 if skip segments are deferred) for ≈ 54 declared activity edits. The remaining phases are re-planned after
+phase 3 with the same per-feature feasibility method; expect more, smaller
+phases than the original seven.
+
+**Selected features** (ranked by patch count and risk in the inventory):
+sleep timer (≈ 68 lines, 13 call-site patches), skip segments (≈ 230, 8),
+Up Next card (≈ 118, 12), IPTV recording actions (≈ 395, 21). **Status pill
+deferred** (design round 1): keeping its 40 call sites verbatim needs
+delegators, i.e. one original declaration with two verified outputs, which
+the checker does not model; it moves later together with its callers. **Deferred, with reasons:** PikPak
+retry (shares `pikPakRetryId` with the startup gate → phase 6), auto-sync
+pill (belongs with the auto-sync engine → phase 4), "Next" overlay (one
+patch per line; reflected by a test → phase 6/7).
+
+### Collaborator pattern (applies from phase 3 on)
+
+- Each feature becomes `internal class Tv<Feature>Controller(...)` (house
+  pattern) in its own file. Its owned fields and functions move **verbatim**
+  into the class body, in original order, with only declared substitutions:
+  `this` (when it means the activity/Context) → `activity`; inherited
+  Activity members (`isFinishing`, `isDestroyed`, `runOnUiThread`,
+  `findViewById`, `getSharedPreferences`, `resources`, `window`,
+  `currentFocus`, `startService`) → `activity.` qualified; inherited
+  *static* members (`MODE_PRIVATE`) → `Context.MODE_PRIVATE`; host
+  state and calls → `host.x`. A `this` that refers to an anonymous
+  `Runnable`/`object` (inventory lists them, e.g. the Up Next ticker) is
+  never substituted; the checker gets each substitution with an exact token
+  context and occurrence count, so a wrong `this` cannot be rewritten
+  silently.
+- **Injected activity type.** Each controller receives the activity as
+  `activity: AppCompatActivity` (the activity's direct superclass), never
+  `Activity`/`Context`, so every `this` → `activity` substitution keeps the
+  original static type's overload resolution (e.g. Glide 4.16.0
+  `with(FragmentActivity)` → activity-lifecycle request manager, whereas
+  `with(Activity)` → application context). Step T lists every substituted
+  `this` site whose callee is overloaded on Context/Activity/
+  FragmentActivity/LifecycleOwner and records the resolved overload before
+  and after (from the compiled bytecode) — any difference fails.
+- **Cross-feature state** has one owner: when a moved feature reads another
+  moved feature's state (Skip reads Up Next visibility to suppress credits
+  skipping and focus offers), its Host getter reads the **owning
+  controller** through the activity (`this@AndroidTvTorrentPlayerActivity.
+  upNextController.x`), never a mirrored copy.
+- **Host interfaces** are narrow (only the members the moved bodies use) and
+  are implemented by an `object : Tv<Feature>Controller.Host { … }` inside the
+  controller's property initializer in the activity. Host members are
+  one-line forwarders to existing activity members (no logic), and their
+  binding is fixed: properties are **computed** (`override val player get()
+  = this@AndroidTvTorrentPlayerActivity.player`, `override var x get() = … set(v)
+  { this@AndroidTvTorrentPlayerActivity.x = v }`), never initialized `val`s
+  (no snapshot, no premature `lateinit` read); every forwarder targets
+  `this@AndroidTvTorrentPlayerActivity` explicitly (a same-name unqualified
+  reference inside the object would recurse); no Host member is read during
+  construction. The activity's class header does not change.
+- **Construction order.** The controller property is declared exactly where
+  the feature's field block was, so property-initializer order and creation
+  time of Handlers/scopes are unchanged (Handlers and the skip coroutine
+  scope are created in the controller's own initializers, in the same
+  relative order).
+- **`::x.isInitialized`** cannot be qualified across objects. Each such check
+  becomes an **activity-owned** private getter with the identical expression
+  (`private val skipSegmentButtonReady: Boolean get() =
+  ::skipSegmentButton.isInitialized`, an `added` declaration), which the Host
+  forwards explicitly; it is evaluated at the same moment as before; the
+  moved-code use is a declared substitution.
+- **String templates.** A host-qualified name inside a template must use the
+  braced form: `$skipSegmentProviderId` → `${host.skipSegmentProviderId}` (a
+  bare `$host.x` would interpolate the Host object). Declared per occurrence;
+  a checker negative proves the unbraced form fails.
+- **State not cleanly ownable stays** in the activity behind the host (e.g.
+  `sleepStopLatched`, written in 5 places, read on 7 playback paths).
+- **Teardown order is unchanged**: `onDestroy`/`onStop`/`onPause` keep their
+  statement order; a moved cancel call becomes `controller.cancelX()` in the
+  same position (a declared call-site patch). Borrowed handlers (e.g.
+  `externalSubtitleHandler` for the status pill) stay owned and cleared by
+  the activity; the controller never clears a borrowed handler.
+- **Companion constants** used by one feature only move with it as
+  file-private constants (Up Next ×3, skip ×2 incl. `IMDB_ID_REGEX`).
+- **Reflection.** Kotlin mangles JVM names of `internal` members; tests that
+  reflect moved members target `private` members or public members of the
+  `internal` class, never an `internal fun`. Dart source-text anchors on
+  `triggerUpNext`/`dismissUpNext` are retargeted to the new file with equal
+  assertions.
+- **Checker extensions (step T).** Destinations are partitioned
+  exhaustively like the original: every span of every destination file is
+  owned — moved members (selector = class + order, compared to the original
+  plus substitutions) or **pinned structural spans** (class header,
+  constructor and its defaults, `Host` interface, any other new declaration,
+  file-level items), each compared to exact token text in the manifest; any
+  unowned destination declaration fails. In the activity, `added` declarations
+  (controller properties incl. their Host object, readiness getters) are
+  pinned by exact text **and anchored to an original slot** (the position of
+  the feature's first removed field), so a controller property cannot move
+  among the initializers. Phase-3 fixtures are wired into
+  `test_kotlin_moves.py`'s dispatcher; a complete phase-3 positive extraction
+  fixture must pass before production moves. New negatives: an extra `this`→`activity`
+  rewrite at an undeclared position, a host forwarder containing logic
+  beyond its pinned text, a moved field reordered inside the controller, an
+  `added` declaration differing from its pinned text, teardown statement
+  reordering in `onDestroy`, an added constructor side effect, an unexpected
+  `init` block in a controller, a changed Host declaration, a relocated
+  controller property, an unbraced host template. Also: manifests are phase-scoped (each
+  describes the activity at its own phase's completion), so the checker
+  gains `--at <sha>` to verify a historical manifest against its phase's
+  merge commit (phase 1 at `dcbd9aafe`, phase 2 at `ec365eb80`), and the
+  integration checks run every manifest that way. In addition, every earlier
+  phase's destination file is compared in the current tree against its
+  approved revision (`ec365eb80`), with an explicit, reviewed whitelist for
+  any later change (none expected in phase 3).
+
+### Step 0 — characterization of the original
+
+Behaviour through the activity's existing surface on the original
+(Robolectric, PAUSED looper, reflection via `TvPlayerOriginalAccess`, fake
+Flutter channel where needed), mutation-proved:
+
+- **Sleep timer:** countdown arm/re-arm/cancel, minutes-left/value labels,
+  end-of-item arming, fire order (cancel → latch → `sendProgress(completed =
+  false)` → pause → release screen → toast), playbackListener interactions
+  (end-of-item consumes and cancels), `onDestroy` cancellation, unified-menu
+  rows wiring.
+- **Skip segments** (prerequisite: a deterministic network fixture — a
+  test-only Robolectric shadow of the private `SkipSegmentHttpClient` with
+  latch-controlled responses, keeping the production coroutine body and
+  IO/Main dispatch — demonstrated on the original first; if it cannot be made
+  reliable, skip segments are **deferred** out of phase 3): the complete
+  request key incl. provider id and stream duration (provider changes,
+  different durations; mutation-prove the unbraced-template mistake),
+  request construction (IMDb extraction, season/episode),
+  cache bound (`MAX_SKIP_SEGMENT_CACHE_ENTRIES`), stale-result rejection
+  (request identity), button visibility vs `hasEverBeenReady`, skip action
+  seek target, reset on `playItem` (order: `hasEverBeenReady` reset → Up
+  Next hide → skip reset), scope cancellation in `onDestroy`.
+- **Up Next card:** the poster request's Glide lifecycle ownership (request
+  manager bound to the activity's lifecycle; cleared on destroy) —
+  mutation-proved by changing the original to
+  `Glide.with(this.applicationContext)`; threshold/min-duration/tick constants, show/dismiss/
+  trigger, ticker start/stop, interaction with `isCleanPlaybackState`, key
+  handling while visible, `onDestroy` cleanup.
+- **Skip ↔ Up Next wiring** through the production activity: showing Up
+  Next suppresses credits skipping on the next skip-state update, dismissing
+  it reveals skipping again, and focus offering keeps its original conditions
+  (also exercised in the skip-deferred variant).
+- (Status pill characterization moves with the feature to a later phase.)
+- **IPTV recording actions:** gating (engine on, recordable URL, permissions
+  path incl. SDK 28/29/33 branches), start/stop toggles for tee and engine
+  recording (service-intent payloads), file naming (phase-2 helpers),
+  `RecordingRegistry` listener add/remove order and a queued notification
+  followed by listener removal before the looper drains (membership is
+  evaluated when the posted notification runs), finalize/publication in
+  `onStop`/`onDestroy` through a fake MediaStore provider, first-access timing
+  of the lazy `recordingEngineEnabled` (preference changed before vs after
+  first access) and the retained lazy tee, and profile/resource authorization
+  evaluated **when the confirmation is clicked** (change while the dialog is
+  open) followed by the persisted schedule payload.
+- **Host liveness:** player replacement and view binding after controller
+  construction are observed by the controllers (forwarding is live).
+- **Carried from phase 1:** `AutoSyncRingView` repaint requests
+  (invalidate on colour change, animator update, stop/reset).
+- Claude's independent mutation sample; 0b closes survivors.
+
+### Gate, review, device checks
+
+As rule 6, plus: the teardown-order assertion of the checker; JVM
+characterization re-run after moves unchanged except the access helper;
+lint issue-set comparison. Device checklist (end of series): sleep timer
+countdown + end-of-episode, intro/credits skip button and skip, Up Next card
+near the end of an episode (auto-advance and dismiss), status pill messages
+during source switching and subtitle loads, IPTV recording start/stop (tee
+and engine), scheduled recording confirmation.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
@@ -565,6 +748,7 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
 - Revisit the per-class R8 keep rules after the series.
+- `keyword_cache_screen_test.dart` uses a 150ms real async startup wait; one full run under concurrent gate workload missed it, while the isolated file and complete quiet retry passed unchanged. Investigate timing reliability separately; no test delay/allowlist or application fix here.
 - Independent post-review P3 coverage follow-up before phase 3: characterize
   ring repaint requests after color changes, animator updates and stop/reset,
   with original-code assertion-killed `invalidate()` removal mutations. Current
@@ -907,3 +1091,70 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   d01 closed in 0b. Independent Codex review (fresh session): **No P1s, no
   findings**. Decoder verification remains pending-environment (CI release
   build, end-of-series checklist). Phase 2 complete; merged.
+- 2026-10-07 — phase 3 design round 1 (Codex): P1s folded (status pill
+  deferred — no two-output delegator in the checker; exhaustive destination
+  partitioning with pinned structural spans and slot-anchored `added`
+  controller properties, phase-3 fixtures first); P2s folded (computed,
+  explicitly-qualified Host forwarders; braced host templates; skip network
+  fixture prerequisite or deferral; recording evaluation-time cases;
+  current-tree check of earlier destinations); P3 `Context.MODE_PRIVATE`.
+- 2026-10-07 — phase 3 design round 2 (Codex): P1 (Up Next `Glide.with`
+  overload would change with an `Activity`-typed injection) → controllers
+  take `AppCompatActivity`, overload-resolution audit of every substituted
+  `this`, Glide lifecycle test; P2 cross-feature reads go through the owning
+  controller + Skip↔Up Next characterization; P3 scope/title/estimate.
+- 2026-10-07 — phase 3 design round 3 (Codex): **No P1s** (all 58 activity `this` uses audited for overload resolution); P3 sketch types fixed. Phase 3 design approved.
+
+- 2026-10-08 — phase 3 step T complete on `refactor/tvplayer-p3` (base
+  `ec365eb80`), with production code untouched. Re-measured 62 moved subtrees,
+  22 patched declarations / 52 context occurrences, six original-slot additions.
+  Exhaustive pinned destination partitions, computed Host scaffolding, slot/order
+  checks, historical `--at` checks and unchanged earlier destinations are covered
+  by 53 passing dispatcher self-tests. Complete extraction fixture compiles;
+  all 58 activity-this sites retain their compiled overload descriptors. A
+  compiled Activity-injection negative is rejected for the Glide overload
+  change. Raw evidence is under `p3/`; the dependency report records the
+  re-measured inventory and commands/results. No production moves performed.
+
+- 2026-10-08 — phase 3 step 0 complete on original `ec365eb80`, with 44
+  new passing characterization identities and 44/44 assertion-based mutation
+  proofs (one named proof for every addition). Deterministic skip HTTP shadow
+  prerequisite passed 20 consecutive latch-controlled IO/Main fetches; skip
+  remains in scope. Timer/menu/end behavior, Glide activity lifecycle,
+  Up Next ticking/keys/teardown, Skip↔Up Next and playItem order, recording
+  engine/tee/permissions/lazy reads, registry delivery-time membership,
+  click-time profile/resource authority and persisted schedules, host liveness,
+  and ring repaint paths are covered. Clean JVM baseline `baseline-ec365eb80`
+  (382/381 pass) → `p3-step0` (426/425 pass): all prior statuses identical,
+  44 passing additions only; the same existing focus failure remains.
+  Original lint issue set archived (1,353 issues; 253 errors/1,100 warnings;
+  175 UnsafeOptInUsageError). Deps report contains the complete mutation table
+  and baseline provenance. Lockfile, ProGuard, activity and earlier destinations
+  unchanged. Temporary original worktree removed after evidence archival.
+  **Stopped after step T/0; no production moves, push or device interaction.**
+
+- 2026-10-08 — **Phase 3 step 0b complete before moves.** Added 30 original-surface characterization tests; all 70 sweep mutations fail named assertions on ec365eb80. All nine skip focus exclusions, key/post conditions, animation durations/targets/deadband, reachable recording Toast occurrences, dialog text and sleep/skip/Up Next strings are pinned. Claude exact e12–e15 rerun against 194 phase-2/3 tests: all killed, clean control passes. Clean `p3-step0b` has 456 identities (455 pass, unchanged source-browser focus failure), retaining all 426 p3-step0 statuses with 30 passing additions. Rejected fixture-leak attempt is archived; accepted combined run passes after cleanup. Three unreachable original recording-message guards are preserved and documented, no bug fix. Evidence `p3/step0b/` and `junit/p3-step0b/`; original detached tree removed. Production, lockfile, ProGuard and earlier manifests unchanged. Step 1 and gates follow.
+
+- 2026-10-08 — **Phase 3 step 1 moves complete.** Manifest-materialized four controllers (92/282/155/436 lines), 62 subtrees, 22 exact patched activity declarations, six slot-anchored additions; activity 19,017 → 18,265, size baseline updated without unrelated changes. Typed shared reflection helper and Dart Up Next anchor retargeted; all other characterization bytes/assertions unchanged. All 194 characterizations pass. Checker zero differences across 2,671 declarations; 53 self-tests, both historical manifests and current 22 earlier destinations pass. Forced Kotlin recompile matches all five original warnings. Compiled overload audit passes all 58 sites, Glide remains FragmentActivity; complete onStop/onDestroy order assertion passes. No snapshot Host state, initializer relocation, teardown reorder, status-pill move, bug fix, dependency or ProGuard edit. Full gate follows.
+
+- 2026-10-08 — **Phase 3 final step-0b message boundary supplement.** Gate verification corrected the earlier stable-dependency reachability assumption. Three extra cases pass on original ec365eb80 and three named assertion mutations kill engine/schedule permission revocation messages and a forced-HLS change between eligibility reads. All recording Toast branches/texts are now covered; step-0b totals 33 new tests and 73/73 sweep proofs. Original proofs precede bringing these cases into the moved tree. Sequencing deviation: these test-only additions finish during the gate after Step 1; production is unchanged. Original canonical p3-step0b is extended, preserving earlier 456-identity archives with before-boundary labels. The quiet full Flutter rerun already exactly matches all 12,855 phase-2 identity/status pairs; these later changes affect only Android JVM tests/docs, with no Dart or production input changes.
+
+- 2026-10-08 — **Phase 3 gate complete; decoder pending-environment.** Final original p3-step0b and clean moved p3-gate exactly match **459 JVM statuses** (458 pass, unchanged focus failure); 33 passing additions vs p3-step0. **73/73 sweep proofs**, final Claude e12–e15 rerun against 197 characterizations all killed. Checker zero differences for 2,671 declarations, 53 self-tests, both historical manifests, all 22 earlier destinations, 58 bytecode overload sites and full teardown order pass. Forced compile preserves five warnings; size passes at activity 18,265/controllers 92–436. Final lint no additions: 1,352 issues, same 253 errors/175 opt-ins, only fixture-referenced splash_logo unused warning removed. Release APK succeeds; R8/DEX verifies 21 classes/276 members including all Host/anonymous objects and both Kt facades (159 explicit + 117 DEX identities, three negatives). Decoder output and three libmpv hashes unchanged from earlier phases: pending-environment, no workaround. Full quiet Flutter run exactly matches **all 12,855 phase-2 statuses**; initial one keyword-cache startup timing miss rejected, focused and complete quiet retry pass unchanged. Analyzer exactly matches all 1,758 phase-2 diagnostics. Extra three original-proved message cases finished during gate, baseline/Native JVM/lint extended; complete Flutter/release evidence remains valid for test-only/docs additions. Protected inputs unchanged, original detached tree removed. Evidence p3/gate/, p3/step0b-boundary/, junit/p3-step0b/ and junit/p3-gate/. No self independent review, push, branch switch, device interaction or bug fix. **STOPPED after phase 3**; Claude's separate review follows.
+- 2026-10-08 — phase 3 post-implementation reviews of `399e115a2..2b0a38442`.
+  Claude: every added activity line read — controllers in their original
+  field slots, computed explicitly-qualified Host forwarders, activity-owned
+  readiness getters, Skip→Up Next read via `upNextController`, call-site
+  patches only, `onDestroy` cleanup order unchanged; Claude's 18-mutation
+  sample 14/18, survivors e12–e15 closed in 0b. Independent Codex review
+  (fresh session): **No P1s**; 58 overload descriptors, Host/ownership/
+  Runnable `this`/teardown verified; 117 mutation patches re-verified.
+  **P3 accepted as a documented exception:** a few moved field initializers
+  now run when the controller is constructed (activity line ≈162) instead of
+  at their original slot — the Up Next ticker `Runnable` allocation and the
+  notification request-code constant; both are allocation/constant-only
+  (no reads, no side effects), so no observable change. **Rule tightened for
+  phase 4+:** a moved field whose initializer would run earlier than its
+  original slot must be listed in the manifest and proven inert
+  (constant / allocation-only, no reads of other state, no side effects);
+  otherwise the controller property is split or the slot preserved.
+  Decoder verification remains pending-environment. Phase 3 complete; merged.

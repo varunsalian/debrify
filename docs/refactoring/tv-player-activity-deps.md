@@ -3322,3 +3322,1027 @@ archive. The original mutation worktree is removed. No push, branch switch,
 device/emulator interaction or bug fix. Gate summary:
 `p2/gate/execution-summary.json`. **Stopped after phase-2 moves and gate
 checks; Claude's separate review and patched-bundle verification remain.**
+
+---
+
+## Phase 3 inventory (stateful feature feasibility, at `dcbd9aafe`; re-measure on `ec365eb80`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`dcbd9aafe` (19,961 lines; class header 136, companion 19914–19960). Read-only survey. Line numbers
+are current (lines < 10602 are unchanged from the pre-phase-1 survey; later ones shifted).
+References were found with a word-boundary scan that resolves each hit's enclosing class member,
+then checked by hand. "Patch" means one token-level edit in a retained activity declaration
+(`foo` → `ctl.foo`), the edit the checker would record as `patched`.
+
+Phase-2 assumptions (from the `Phase 2 inventory` on `refactor/tvplayer-p2`, b840bf878; the
+section is **not** in the deps doc at `dcbd9aafe`): top-level by phase 3 are
+`isSegmentedStreamUrl`, `xtreamTsTwin`, `sanitizeRecordingName`, `recordingTimestamp` (group C),
+`isPikPakPlaybackItem` plus `internal const val PROVIDER_PIKPAK` (group J), `startupLog`, and
+`mrow`. Phase 2 explicitly leaves these in the activity because they are almost pure:
+`dp`, `releaseScreenForSleep`, `holdScreenForPlayback`, `fadeInNextOverlay`, `hideNextOverlay`,
+`isCurrentIptvSegmented`, `engineRecordableUrl`, `isSchedulableStreamUrl`,
+`engineTaskIdForCurrentChannel` and `recordingResourceFor`. `SkipSegmentRequest` and
+`SleepTimerMode` are pure but are deferred to phase 3, to move with their features.
+
+### Cross-cutting constraints (apply to every feature)
+
+- **`::prop.isInitialized` cannot be qualified.** It only compiles for properties in the same
+  lexical scope, so `host::x.isInitialized` is illegal. Every such check either keeps its lateinit
+  in the same class or becomes a host getter, which is a non-trivial substitution. Moved-code
+  sites: 6879 `::startupGateStatus`, 6893 `::pikPakReactivationIndicator`, 8165/8415
+  `::skipSegmentButton`, 8326 `::seekFeedbackManager`. 8397/8403 `::playerView` stay, because
+  their functions stay.
+- **Ambiguous `this`.** In 6819, 6839, 6851 and 6864, `this` is the polling `object : Runnable`,
+  and so is 8740 (`upNextTicker`). It must **not** be substituted. Every other `this` in the moved
+  code is the Activity/Context. Scope functions in the moved code have no receiver ambiguity
+  (checked: recording's only `apply` is `Intent(this, …).apply {}`, where `this` precedes the
+  receiver).
+- **Inherited statics and members.** `MODE_PRIVATE` (9427), `isFinishing`, `isDestroyed`,
+  `runOnUiThread`, `startService`, `getSharedPreferences`, `findViewById`, `currentFocus`,
+  `resources` and `window` need `activity.` substitutions. Labels such as `return@runOnUiThread`
+  survive `activity.runOnUiThread {`.
+- **Companion constants used by only one feature** move with it as file-private top-level
+  constants. A declared companion-member move:
+  - Up Next: `UP_NEXT_THRESHOLD_MS` 19940, `UP_NEXT_MIN_DURATION_MS` 19941, `UP_NEXT_TICK_MS` 19942.
+  - Skip: `MAX_SKIP_SEGMENT_CACHE_ENTRIES` 19951, `IMDB_ID_REGEX` 19952. `IMDB_ID_REGEX` is used
+    only at 8147.
+  - PikPak: `PIKPAK_MAX_RETRIES` 19956, `PIKPAK_METADATA_TIMEOUT_MS` 19957,
+    `PIKPAK_BASE_DELAY_MS` 19958, `PIKPAK_MAX_DELAY_MS` 19959, plus the comment at 19954.
+    `PROVIDER_PIKPAK` already goes top-level in phase 2.
+- **Reflection and name mangling.** Kotlin mangles the JVM names of `internal` *members*. A test
+  that reflects a moved member by simple name must target a `private` member or a public member of
+  an `internal class`; it must not target an `internal fun`. This matters for the PikPak retargets.
+- **Construction order.** The Handlers and the skip scope are property initializers created at
+  activity construction. Declare each controller as a property where its field block was, so
+  initializer order and creation time stay as they are. The checker treats the removed fields as
+  moved and the new property as a declared new declaration. Implement host interfaces as an
+  `object :` inside that property initializer. Making the activity implement them would patch the
+  class header.
+
+---
+
+### 1. Sleep timer (rank 2)
+
+**Owned state** (moves):
+
+| line | name | type / initializer |
+|---|---|---|
+| 1268 | `SleepTimerMode` | `private enum class { OFF, COUNTDOWN, END_OF_ITEM }` → top-level `internal enum` (unqualified uses then resolve unchanged) |
+| 1269 | `sleepTimerMode` | `= SleepTimerMode.OFF` |
+| 1270 | `sleepTimerDeadlineElapsedMs` | `= 0L` |
+| 1271 | `sleepTimerHandler` | `val = Handler(Looper.getMainLooper())` |
+| 1272 | `sleepTimerRunnable` | `Runnable? = null` |
+| 1273 | `sleepTimerMinuteOptions` | `val = listOf(15, 30, 45, 60, 90)` |
+
+The banner comment 1261–1267 moves with the block.
+
+**Not cleanly ownable:** `sleepStopLatched` (1275–1282, `= false`).
+- Written at: 1682 and 1717 (playbackListener), 4591 (playItem), 7417 (togglePlayPause), 8382
+  (fireSleepTimer).
+- Read at: 414 (iptvLiveRecoveryEligible), 582 (onIptvTwinTrialTimeout), 4584 (playItem), 4748
+  (discoverProtectedMime), 4778 (startPlayback), 5413 (shuffleAttemptOwned), 18874 (onStart).
+- It stays in the activity. Moving it would cost 11 patches in playback-core code.
+
+**Owned functions:**
+- Moved: `sleepTimerMinutesLeft@8336–8340`, `sleepTimerValueLabel@8342–8346`,
+  `startSleepCountdown@8348–8359`, `armSleepAtEndOfItem@8361–8365`, `cancelSleepTimer@8367–8373`,
+  and `fireSleepTimer@8380–8387` with its KDoc from 8375. The banner is at 8333.
+- **Stay:** `releaseScreenForSleep@8395–8398` and `holdScreenForPlayback@8401–8404`. They use
+  `window` and `::playerView.isInitialized`, and playbackListener calls them at 1683, 1718 and 1805.
+- Total ≈ 13 field lines + 55 function lines ≈ **68 lines**.
+
+**Inbound coupling** (13 patches in 4 declarations):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 414 | iptvLiveRecoveryEligible | `sleepTimerMode` | read |
+| 1680 | playbackListener (val@1499) | `sleepTimerMode` | read |
+| 1681 | playbackListener | `cancelSleepTimer()` | call |
+| 1715 | playbackListener | `sleepTimerMode` | read |
+| 1716 | playbackListener | `cancelSleepTimer()` | call |
+| 15422 | umPlaybackModel@15419 | `sleepTimerValueLabel()` | call |
+| 15429 | umPlaybackModel | `sleepTimerMode` | read |
+| 15430 | umPlaybackModel | `cancelSleepTimer(announce = true)` | call |
+| 15433 | umPlaybackModel | `sleepTimerMinuteOptions` | read |
+| 15434 | umPlaybackModel | `startSleepCountdown(minutes)` | call |
+| 15442 | umPlaybackModel | `sleepTimerMode` | read |
+| 15443 | umPlaybackModel | `armSleepAtEndOfItem()` | call |
+| 19103 | onDestroy | `cancelSleepTimer()` | call |
+
+`SleepTimerMode.X` at 414, 1680, 1715, 15429 and 15442 needs no patch once the enum is top-level.
+umPlaybackModel moves in phase 4; whichever phase runs second re-patches it.
+
+**Outbound:**
+- State/actions, all in `fireSleepTimer`: `sleepStopLatched` (write, 8382),
+  `sendProgress(completed = false)` (8383; named argument, so the host method must name its
+  parameter `completed`), `player?.pause()` (8384), `releaseScreenForSleep()` (8385).
+- Android: Toast context `this` at 8358, 8364, 8372 and 8386; the handler is owned.
+
+**Timers:**
+- `sleepTimerHandler` is the only timer. `cancelSleepTimer` removes its callbacks.
+- Teardown: only `onDestroy@19103`, after `RecordingRegistry.removeListener` 19100 and before
+  `finalizeIptvRecordingIfActive` 19107. Nothing in onPause/onStop.
+- The fire order is cancel → latch → sendProgress → pause → release screen → toast. It must stay.
+
+**Tests:** none reflective. No Dart anchors (the Dart `SleepTimerMode` is unrelated).
+
+**Proposed shape:**
+```kotlin
+internal class TvSleepTimerController(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        var sleepStopLatched: Boolean
+        val player: Player?
+        fun sendProgress(completed: Boolean)
+        fun releaseScreenForSleep()
+    }
+}
+```
+
+**Substitutions (8):**
+- `this` → `activity` ×4.
+- In `fireSleepTimer` only: `sleepStopLatched` → `host.sleepStopLatched`, `sendProgress` →
+  `host.sendProgress`, `player` → `host.player`, `releaseScreenForSleep` →
+  `host.releaseScreenForSleep`.
+
+**Activity patches: 13. Risk: low.**
+
+Note: the deps doc's earlier idea, that the controller owns `sleepStopLatched`, is not
+recommended, because it is read on 7 playback paths.
+
+---
+
+### 2. Skip segments (intro/credits) (rank 1)
+
+**Owned state** (moves; the comment block 1240–1242 travels with it):
+
+| line | name | type / initializer |
+|---|---|---|
+| 1243–1250 | `SkipSegmentRequest` | `private data class(providerId, imdbId, season, episode, durationSeconds, key)`; file-private in the destination |
+| 1251 | `skipSegmentScope` | `val = CoroutineScope(Dispatchers.Main + SupervisorJob())` |
+| 1252 | `skipSegmentFetchJob` | `kotlinx.coroutines.Job? = null` |
+| 1253 | `skipSegmentFetchGeneration` | `= 0` |
+| 1254 | `loadedSkipSegmentKey` | `String? = null` |
+| 1255 | `loadingSkipSegmentKey` | `String? = null` |
+| 1256 | `skipSegments` | `= TvSkipSegments.EMPTY` |
+| 1257 | `activeSkipSegment` | `TvSkipSegment? = null` |
+| 1258 | `skipFocusOfferedKey` | `String? = null` |
+| 1259 | `skipSegmentCache` | `val = mutableMapOf<String, TvSkipSegments>()` (bounded at 64, evicts the first key) |
+
+**Stay in the activity:**
+- `skipSegmentButton` (168, lateinit `AppCompatButton`). It is bound at 2523, and
+  dispatchKeyEvent@7217 does `::skipSegmentButton.isInitialized && currentFocus == skipSegmentButton`,
+  which cannot be qualified.
+- `skipSegmentsEnabled` (848) and `skipSegmentProviderId` (849). loadPlayerDefaults writes them
+  (16373, 16379) and logs them (16385). They are player defaults (phase 4).
+
+**Owned functions:**
+- `currentSkipSegmentRequest@8135–8162`, `updateSkipSegmentState@8164–8197`,
+  `ensureSkipSegments@8199–8255`, `presentSkipSegment@8257–8305`, `skipActiveSegment@8307–8331`,
+  `resetSkipSegmentState@8406–8416`. The last is separated from the others by the sleep block.
+- ≈ 20 + 197 + 11 + 2 constant lines ≈ **230 lines**.
+
+**Inbound** (8 patches in 4 declarations):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2524 | bindViews | `skipActiveSegment()` (click lambda) | call |
+| 4612 | playItem | `resetSkipSegmentState()` | call; must stay right after hideUpNextCard 4611 |
+| 7677 | updateSeekbarProgress | `updateSkipSegmentState(currentPosition, duration)` | call |
+| 19154 | onDestroy | `skipSegmentFetchGeneration++` | write |
+| 19155–19156 | onDestroy | `skipSegmentFetchJob?.cancel()`, `= null` | call / write |
+| 19157 | onDestroy | `skipSegmentScope.cancel()` | call |
+| 19158 | onDestroy | `skipSegmentCache.clear()` | call |
+
+A single `destroy()` member would cut the 5 onDestroy patches to 1, but it is a new declaration and
+not verbatim. Prefer the 5 qualified patches.
+
+**Outbound:**
+- State (host):
+  - Read-only: `skipSegmentsEnabled` 8136; `skipSegmentProviderId` 8137, 8155, 8160; `isIptvMode`
+    8138; `payload` 8145; `currentIndex` 8148; `hasEverBeenReady` 8175.
+  - `upNextVisible` 8195 and 8295. This is Up Next state: host getter.
+  - `player` 8241, 8252, 8308.
+  - `controlsMenuVisible` 8282, 8292; `playlistVisible` 8293; `seekbarVisible` 8294.
+  - `subtitlePanel` 8296, `unifiedMenu` 8297, `sourceBrowser` 8298, `syncOverlay` 8299,
+    `linePickerOverlay` 8300.
+  - `releaseResumeHold()` 8324.
+  - `seekFeedbackManager` 8326 (`::isInitialized`) and 8328.
+- Views/Android: `skipSegmentButton` 8165 (`::isInitialized`), 8258, 8415 (`::isInitialized`);
+  `currentFocus` and `playerView.requestFocus()` 8262; `resources.displayMetrics.density` 8283.
+- Pure: `TvSkipSegmentClients`, `TvSkipSegments`, `C.TIME_UNSET`, `Locale`.
+
+**Timers:**
+- `skipSegmentScope` (Main + SupervisorJob) and `skipSegmentFetchJob`.
+- `button.post {}` at 8303 and the ViewPropertyAnimators at 8263, 8276, 8279 and 8288 are
+  **not** cancelled on destroy. Keep that as is.
+- Teardown: only onDestroy 19154–19158, after `subtitleScope.cancel()` 19148 and before
+  `progressHandler.removeCallbacksAndMessages` 19161.
+- The staleness guard is the generation check at 8240 plus the recomputed key check at 8242.
+
+**Tests:** none (the Dart `skip_segment_*` tests target the Flutter service).
+
+**Proposed shape:**
+```kotlin
+internal class TvSkipSegmentController(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val skipSegmentButtonBound: Boolean            // activity: ::skipSegmentButton.isInitialized
+        val skipSegmentButton: AppCompatButton
+        val skipSegmentsEnabled: Boolean; val skipSegmentProviderId: String
+        val isIptvMode: Boolean; val payload: PlaybackPayload?; val currentIndex: Int
+        val hasEverBeenReady: Boolean; val player: ExoPlayer?; val playerView: PlayerView
+        val controlsMenuVisible: Boolean; val playlistVisible: Boolean; val seekbarVisible: Boolean
+        val upNextVisible: Boolean
+        val subtitlePanel: SubtitleSettingsPanelController?; val unifiedMenu: UnifiedMenuController?
+        val sourceBrowser: TvSourceBrowserController?; val syncOverlay: SubtitleSyncOverlay?
+        val linePickerOverlay: SubtitleLinePickerController?
+        val seekFeedbackManagerBound: Boolean; val seekFeedbackManager: SeekFeedbackManager
+        fun releaseResumeHold()
+    }
+}
+```
+Verify the exact view and controller types against the field declarations at 1197–1201.
+
+**Substitutions:** ≈ 34 `host.`/`activity.` token edits.
+- The two `::skipSegmentButton.isInitialized` checks become `host.skipSegmentButtonBound`.
+- `::seekFeedbackManager.isInitialized` becomes `host.seekFeedbackManagerBound`.
+- `currentFocus` and `resources` become `activity.…`.
+
+The host surface is wide, but it is all read-only except `releaseResumeHold()`.
+
+**Activity patches: 8. Risk: medium-low.** The async generation guard and per-item reset ordering
+are already well delimited.
+
+---
+
+### 3. Up Next card (rank 3)
+
+**Owned state** (moves; the banner at 163 moves too):
+
+| line | name | type / initializer |
+|---|---|---|
+| 164 | `upNextCard` | lateinit `View` |
+| 165 | `upNextPoster` | lateinit `android.widget.ImageView` |
+| 166 | `upNextTitle` | lateinit `TextView` |
+| 167 | `upNextCountdown` | lateinit `TextView` |
+| 169 | `upNextVisible` | `= false` |
+| 170 | `upNextTargetIndex` | `Int? = null` |
+| 171 | `upNextDismissedForIndex` | `= -1` |
+| 172 | `upNextHandler` | `val = Handler(Looper.getMainLooper())` |
+
+The field run is interleaved with `skipSegmentButton@168`, which stays. There are no
+`::isInitialized` checks on the Up Next views.
+
+**Owned functions:**
+- `maybeShowUpNext@8691–8711`, `upNextTicker` (val object Runnable) `@8713–8742`,
+  `showUpNextCard@8744–8769`, `triggerUpNext@8771–8777`, `dismissUpNext@8779–8782`,
+  `hideUpNextCard@8784–8796`. The banner is at 8672–8674.
+- **Keep `isCleanPlaybackState@8677–8687` in the activity.** It is a cross-cluster predicate (11
+  flags, including `nextOverlay` and `pikPakReactivationIndicator`) and becomes a host method.
+- ≈ 9 + 106 + 3 constant lines ≈ **118 lines**.
+
+**Inbound** (12 patches; 14 if skip is still in the activity):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2519–2522 | bindViews | `upNextCard/Poster/Title/Countdown =` | write ×4 |
+| 1454 | progressRunnable (val@1451) | `maybeShowUpNext()` | call, every 5 s |
+| 4611 | playItem | `hideUpNextCard()` | call (per-item reset; triggerUpNext depends on it) |
+| 5509 | playShowShuffle | `hideUpNextCard()` | call |
+| 7191 | dispatchKeyEvent | `upNextVisible` | read |
+| 7194 / 7198 / 7202 | dispatchKeyEvent | `triggerUpNext()`, `dismissUpNext()`, `hideUpNextCard()` | call ×3 |
+| 19135 | onDestroy | `upNextHandler.removeCallbacksAndMessages(null)` | call |
+| (8195, 8295) | updateSkipSegmentState, presentSkipSegment | `upNextVisible` | read; 0 if skip moved first (host getter) |
+
+**Outbound:**
+- State/actions (host):
+  - `continuousShuffleEnabled` 8693, 8705; `canShuffleWholeShow()` 8693.
+  - `isIptvMode`, `isStremioTvMode` 8694.
+  - `currentIndex` 8695, 8708, 8780; `isCleanPlaybackState()` 8696, 8722.
+  - `player` 8697, 8715; `pickShuffleIndex()` 8706; `getNextPlayableIndex()` 8708.
+  - `payload` 8745.
+  - `isAutoAdvancing` (**write**, 8775); `playItem(target)` 8776.
+- Android: Glide `with(this)` 8756 (activity). `this` at 8740 is the Runnable and is not
+  substituted.
+
+**Timers:**
+- `upNextHandler` with `upNextTicker`, removed in showUpNextCard 8767 and hideUpNextCard 8785.
+- Teardown: only onDestroy 19135, after `bufferingHandler.removeCallbacksAndMessages` 19132 and
+  before the metadata-receiver unregister. The card animators are not cancelled; keep that.
+
+**Tests:** `test/android_tv_auto_advance_resume_test.dart:39–51` uses
+`_between('private fun triggerUpNext()', 'private fun dismissUpNext()')` on the activity file. It
+asserts that `isAutoAdvancing = true` comes before `playItem(target)`.
+- **Retarget** it to the new file. Both anchors change if the functions become non-private:
+  activity calls triggerUpNext and dismissUpNext, so they lose `private`.
+- With `host.` prefixes the asserted substrings still match.
+- No reflection tests.
+
+**Proposed shape:**
+```kotlin
+internal class TvUpNextController(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val player: ExoPlayer?; val payload: PlaybackPayload?; val currentIndex: Int
+        val continuousShuffleEnabled: Boolean; val isIptvMode: Boolean; val isStremioTvMode: Boolean
+        var isAutoAdvancing: Boolean
+        fun isCleanPlaybackState(): Boolean
+        fun canShuffleWholeShow(): Boolean
+        fun pickShuffleIndex(): Int?
+        fun getNextPlayableIndex(i: Int): Int?
+        fun playItem(index: Int)   // playItem has defaulted params; the host wrapper must call playItem(index) exactly
+    }
+}
+```
+
+**Substitutions:** ≈ 17 `host.` edits, plus `this` → `activity` ×1 (8756).
+
+**Activity patches: 12 (+2 without skip). Risk: medium.** The ticker races playItem, and there is
+1 Dart retarget.
+
+---
+
+### 4. Status pill + auto-sync pill (rank 4 for the status pill; auto-sync pill: defer to phase 4)
+
+### 4a. Status pill
+
+**Owned state:**
+- `statusPill` 1296, `TextView? = null`.
+- `statusPillHideRunnable` 1297, `val = Runnable { hideStatusPill() }`.
+
+**Functions:**
+- `ensureStatusPill@15992–16015`, `showStatusPill@16017–16027`,
+  `showStatusPillTransient@16030–16033` (1400 ms), `hideStatusPill@16035–16043`.
+- With the banner 15988–15990: ≈ **58 lines**.
+
+**Inbound** (40 call sites in 18 declarations):
+- `showStatusPill`: 15815 (loadStremioSubtitle), 17762 (onStremioSourceSelected).
+- `showStatusPillTransient` (31 calls):
+  - 1821 (playbackListener) and 5506 (playShowShuffle).
+  - onExternalSubtitleLoaded: 15839, 15903.
+  - requestEpisodeFetch: 16791, 16796, 16811, 16833, 16840.
+  - requestAdjacentEpisodeFetch: 16859, 16865, 16885, 16891, 16921, 16928.
+  - commitManualSourceCandidate: 17145. failManualSourceCandidate: 17203.
+  - watchSourceSwitchOutcome: 17649, 17659.
+  - resolveStremioSourceViaFlutter: 17827, 17840, 17852, 17863.
+  - resolveSourceToPlaylistViaFlutter: 17917, 17930, 17942, 17953.
+  - failMoreTorrentSources: 18179.
+  - switchToSourcePlaylist: 18248, 18266, 18293.
+- `hideStatusPill` (7 calls): 15931 (stopExternalSubtitleRendering), 17205
+  (failManualSourceCandidate), 17342 (commitStartupCandidate), 17420 (failStartupCandidate), 17640
+  and 17656 (watchSourceSwitchOutcome), 17684 (dropStaleSourceSwitchFeedback).
+
+**Outbound:**
+- Android only: `this` 15994; `dp(` ×8 at 16000, 16001, 16003, 16004 and 16010; `findViewById`
+  16012.
+- Borrowed `externalSubtitleHandler` at 16018, 16032 and 16036. It is shared with the subtitle
+  ticker and the auto-sync ladder/verify.
+
+**Timers:**
+- The hide runnable is posted on the borrowed `externalSubtitleHandler`. It is cleared only by
+  onDestroy's `externalSubtitleHandler.removeCallbacksAndMessages(null)` @19195, which comes after
+  player release. The controller must not own or clear that handler.
+- The pill view is never removed, and its animators are not cancelled.
+
+**Tests:** none.
+
+**Shape:** `TvStatusPill(activity: Activity, handler: Handler /*borrowed*/, dp: (Int) -> Int)`.
+- Substitutions: `this` → `activity` ×1, `findViewById` → `activity.findViewById` ×1,
+  `externalSubtitleHandler` → `handler` ×3, `dp(` → `dp(` (lambda name kept) or `host.dp(` ×8.
+
+**Activity patches: 40.** Alternatively keep three one-line delegating members in the activity:
+**3 patched declarations, 0 call-site patches**.
+**Recommendation:** use the delegating members. The feature is tiny, so if delegating members are
+rejected as non-verbatim, defer it. **Risk: low** (UI only).
+
+### 4b. Auto-sync pill (UI for the auto-sync engine, cluster C5)
+
+**Owned state:**
+- `autoSyncPill` 1302 (`LinearLayout? = null`), `autoSyncPillRing` 1303
+  (`AutoSyncRingView? = null`), `autoSyncPillLabel` 1304 (`TextView? = null`).
+- `autoSyncPillResultShowing` 1305 (`= false`; **write-only**, never read),
+  `autoSyncPillWindowActive` 1306 (`= false`), `autoSyncPillAnnounceShowing` 1307 (`= false`).
+- `autoSyncPillAnnounceDismissRunnable` 1310–1315 (val Runnable),
+  `autoSyncCardHideRunnable` 1316 (val Runnable).
+- The comment block 1299–1301 moves too.
+- `autoSyncResultLabel/Url` (1319–1320) are menu-row state. They are **not** pill state and stay
+  with C5.
+
+**Functions:**
+- `ensureAutoSyncPill@16045–16090`, `openAutoSyncPillWindow@16097–16108` (KDoc from 16092),
+  `stopAutoSyncPillWindow@16110–16114`, `showSyncToast@16124–16164` (KDoc 16116),
+  `revealAutoSyncPill@16166–16175`, `hideAutoSyncPillView@16178–16186`,
+  `hideAutoSyncCard@16188–16192`.
+- ≈ **166 lines**.
+
+**Inbound** (18 sites in 4 declarations):
+
+| function | sites |
+|---|---|
+| runSubtitleAutoSync@14923 | `showSyncToast` 14929, 14948, 14957, 14965, 14994, 15018, 15030, 15044, 15053, 15064, 15073; `autoSyncPillWindowActive` reads 14962, 14988; `autoSyncPillRing?.arcColor =` write 14966; `hideAutoSyncPillView()` 14989 |
+| startAutoSyncLadder@15090 | `openAutoSyncPillWindow()` 15096 |
+| maybeRunAutoSyncVerify@15157 | `showSyncToast` 15220 |
+| onExternalSubtitleLoaded@15831 | `showSyncToast` 15896 |
+
+**Outbound:**
+- `this` ×3 (16047, 16048, 16055); `dp(` ×16; `findViewById` 16085.
+- `externalSubtitleHandler` at 16107, 16111, 16132, 16162 and 16189 (borrowed).
+- `AutoSyncRingView` and `AutoSyncColors` are already top-level (phase 1).
+- `Log.d` (16133).
+
+**Timers:**
+- The announce-dismiss (5 s) and card-hide runnables run on the borrowed handler. They are cleared
+  only at onDestroy@19195.
+- The ring's pulse animator self-cancels in `AutoSyncRingView.onDetachedFromWindow`.
+
+**Tests:** `TvAutoSyncRingCharacterizationTest` covers only the ring and the colours, not the pill.
+The open follow-up (plan "P3 → phase 3") adds ring-invalidation assertions; that is independent
+of the pill move.
+
+**Shape:** the same as 4a (`activity`, borrowed `handler`, `dp`). Expose `windowActive` and `ring`
+for the 3 field reads/writes.
+
+**Activity patches: 18, all inside the C5 engine.** **Recommendation:** move the pill **with C5 in
+phase 4**. Its only callers are the engine, so moving the two together makes all 18 edits
+intra-controller. Moving it now means patching the engine twice. **Risk: low-medium**, because it
+interacts with the ladder/verify runnables on the same handler.
+
+---
+
+### 5. PikPak cold-storage retry (rank 6)
+
+**Owned state:**
+
+| line | name | type / initializer |
+|---|---|---|
+| 1368 | `isPikPakRetrying` | `Boolean = false` |
+| 1369 | `pikPakRetryCount` | `Int = 0` (**write-only** everywhere; never read) |
+| 1370 | `pikPakRetryId` | `Int = 0` (**not cleanly ownable**: see below) |
+| 1371 | `pikPakRetryHandler` | `val = Handler(Looper.getMainLooper())` |
+
+**Stay** (they would need `::isInitialized` or have outside readers):
+- `pikPakReactivationIndicator` (1375, lateinit `View`).
+  - Bound at 2670; read at 8685 (isCleanPlaybackState) and 19036 (showBufferingIndicatorDebounced).
+  - onDestroy touches it at 19127–19129.
+  - The test sets it reflectively (StremioTvStartupWatchdogTest:55).
+- `pikPakReactivationText` (1376, lateinit `TextView`), bound at 2671.
+
+**Functions:**
+- `playPikPakVideoWithRetry@6652–6705`. This is really media start: subtitle reset,
+  `setMediaItem/prepare/play`, `updateTitle`, `restartProgressUpdates`, `fetchStremioSubtitles`.
+- `attemptPikPakPlaybackLoop@6707–6801`, `waitForPikPakMetadata@6803–6870` (its local `checkHandler`
+  is **never cancelled**; it relies on the retryId guard), `showPikPakRetryOverlay@6873–6889`,
+  `hidePikPakRetryOverlay@6891–6898`, `cancelPikPakRetry@6900–6912`.
+- Total with the banner 6648–6650 ≈ **265 lines + 5 field + 6 constant lines**.
+- The engine-only variant (6707–6912, leaving `playPikPakVideoWithRetry` in the activity) is
+  ≈ 206 lines.
+
+**Inbound** (19 patches in 10 declarations; the engine-only variant adds 4 more in
+`playPikPakVideoWithRetry`):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 4615 | playItem | `cancelPikPakRetry()` | call |
+| 4790 | startPlayback | `playPikPakVideoWithRetry(item)` | call |
+| 5440 | watchShufflePlayback (15 s posted lambda) | `isPikPakRetrying` | read |
+| 17503, 17509, 17511 | schedulePikPakGateReprepare (phase-6 gate) | `pikPakRetryId` | read ×3; 17503 captures, 17509 and 17511 compare at fire time |
+| 17755 | onStremioSourceSelected | `cancelPikPakRetry()` | call |
+| 18424 | switchToSourcePlaylist | `cancelPikPakRetry()` | call |
+| 18578 | switchToStremioSource | `cancelPikPakRetry()` | call |
+| 18624, 18625 | switchToStremioSource | `pikPakRetryId++`, `val myRetryId = pikPakRetryId` | write / read |
+| 18626, 18627 | switchToStremioSource | `pikPakRetryCount = 0`, `isPikPakRetrying = false` | write ×2 |
+| 18628 | switchToStremioSource | `hidePikPakRetryOverlay()` | call |
+| 18647 | switchToStremioSource | `attemptPikPakPlaybackLoop(tempItem, 0, myRetryId)` | call |
+| 19029 | onPause | `cancelPikPakRetry()` | call |
+| 19123 | onDestroy | `cancelPikPakRetry()` | call |
+| 19124 | onDestroy | `pikPakRetryHandler.removeCallbacksAndMessages(null)` | call |
+| 19667 | playStremioTvPlaybackMap | `cancelPikPakRetry()` | call |
+
+18624–18628 duplicate the reset at 6660–6665. A `beginRetry(): Int` member would replace them but
+is not verbatim.
+
+**Outbound** (engine 6707–6912):
+- Actions:
+  - `cancelPikPakGateReprepare()` 6754, 6830, 6905 and `schedulePikPakGateReprepare(retryId)` 6860
+    (phase-6 gate).
+  - `failShufflePlayback()` 6766, `failManualSourceCandidate("pikpak-exhausted")` 6767,
+    `failStartupCandidate(…)` 6771, `playNext()` 6781, `tryAutoSelectAddonSubtitle()` 6842.
+- State: `startupFailoverCursor` 6770, 6880; `isStremioTvMode` 6859; `player` 6718, 6827.
+- Views: `startupGateStatus` 6879 (`::isInitialized`), 6882; `pikPakReactivationText` 6884;
+  `pikPakReactivationIndicator` 6885–6887, 6893 (`::isInitialized`), 6894–6896.
+- Android: `runOnUiThread` 6776, 6874, 6892; `isFinishing` 6775, 6792, 6875, 6893; `isDestroyed`
+  6875, 6893; Toast `this` 6777.
+- **Do not substitute** `this` at 6819, 6839, 6851 and 6864: there it is the Runnable.
+- `playPikPakVideoWithRetry` adds:
+  - `resetSubtitleState` 6656, `player` 6668, 6688, `subtitleOverlay` 6674, `payload` 6680.
+  - `pendingShufflePlayback` 6689, `subtitleTrackReadiness` 6690, `updateTitle` 6696.
+  - `playlistAdapter` and `currentIndex` 6697, `restartProgressUpdates` 6698,
+    `fetchStremioSubtitles` 6701.
+
+**Timers:**
+- `pikPakRetryHandler`: the exhausted → `playNext` 1500 ms post at 6780.
+- The per-call `checkHandler` polls every 500 ms (6864, 6869) and is not tracked.
+- Cancel paths:
+  - `cancelPikPakRetry` at onPause 19029. This is the **only feature cancelled in onPause**;
+    onPause runs it after `super.onPause()` and the ActivityTracker reset.
+  - onDestroy 19123–19124, after the iptvBrowseHandler clear and zap token bumps 19114–19120 and before indicator cleanup
+    19127 and `bufferingHandler` 19132.
+  - Plus 6 navigation sites.
+
+**Tests:** `StremioTvStartupWatchdogTest` (`call` = `declaredMethods.first { name && parameterCount }`):
+- `waitForPikPakMetadata`/5 at :176.
+- `cancelPikPakRetry`/0 at :192, :221 and :237.
+- Field sets `pikPakReactivationIndicator` and `nextOverlay` at :54–55.
+- Reads `pikPakGateReprepare` (which stays) at :220 and :224.
+- Moving the engine **breaks 4 reflective calls**. Retarget them to the controller instance
+  through `read(activity, "<controllerField>")`. Keep the target methods `private` or public on an
+  internal class: an `internal` member is name-mangled.
+- No Dart anchors. The PikPak assertions in `manual_source_validation_contract_test.dart` target
+  the Flutter player, plus the whole-file `startupResolverProvider…`/`startupPikPakTorrent…` strings
+  in phase-6 code.
+
+**Proposed shape** (engine-only):
+```kotlin
+internal class TvPikPakRetryController(private val activity: Activity, private val host: Host) {
+    interface Host {
+        val player: ExoPlayer?; val isStremioTvMode: Boolean; val startupFailoverCursor: StartupFailoverCursor?
+        val startupGateStatusBound: Boolean; val startupGateStatus: TextView
+        val indicatorBound: Boolean; val pikPakReactivationIndicator: View; val pikPakReactivationText: TextView
+        fun cancelPikPakGateReprepare(); fun schedulePikPakGateReprepare(retryId: Int?)
+        fun failShufflePlayback(): Boolean; fun failManualSourceCandidate(reason: String): Boolean
+        fun failStartupCandidate(reason: String); fun playNext(); fun tryAutoSelectAddonSubtitle()
+    }
+}
+```
+Check the exact signatures and defaulted parameters of `failManualSourceCandidate` (17152),
+`failStartupCandidate` (17351) and `playNext` (5228) before fixing the interface.
+
+**Substitutions:** ≈ 35.
+
+**Activity patches: 19 (+4 test retargets). Risk: medium-high.**
+- `pikPakRetryId` is a shared token: the phase-6 gate reads it 3× and `switchToStremioSource`
+  writes it.
+- The engine calls back into the startup/manual/shuffle gates.
+- `playPikPakVideoWithRetry` is phase-7 playback start.
+- **Recommendation:** extract with the phase-6 source-switch/startup-gate unit, or at least after
+  it, so that `pikPakRetryId` and `schedulePikPakGateReprepare` share one owner.
+
+---
+
+### 6. IPTV recording actions (rank 5)
+
+**Owned state** (moves):
+- `recordingEngineEnabled` 9244–9250, `val Boolean by lazy { ProfilePreferenceProjection.getBoolean(this, "recording_engine_enabled", true) }`.
+  It is read lazily and fixed per launch; the first read happens on whichever path calls first.
+- `recordingRegistryListener` 9254–9256, `val () -> Unit`, guarded by `!isDestroyed && !isFinishing`.
+- `notificationPermissionRequestCode` 18991, `val = 7403`. It is used only at 9433.
+
+**Stay:**
+- `iptvRecordingController` (197, `by lazy { IptvRecordingController(this) }`, the tee). It has 9
+  references in IPTV-live code: 477 (performIptvLiveRetune), 2910/2918 (setupPlayer), 12674,
+  14142, 14306/14307, 19011/19012 (onResume). Moving it would add 9 patches.
+- `iptvRecordButton` (195), which dock/skin code assigns and styles: 4295, 4546, 9114, 9150, 9712,
+  9750, 9794.
+- `legacyStoragePermissionRequestCode` (18990, `= 7402`), unless it moves with a patch at 18999.
+
+**Functions:**
+- Phase-2 movers are excluded: `isSegmentedStreamUrl` 9258–9272, `xtreamTsTwin` 9279–9295,
+  `sanitizeRecordingName` 9667–9672, `recordingTimestamp` 9674–9676.
+- Moving:
+  - `isCurrentIptvSegmented@9274–9277`, `engineRecordableUrl@9297–9310`,
+    `isSchedulableStreamUrl@9312–9325`, `engineTaskIdForCurrentChannel@9327–9333`,
+    `recordingResourceFor@9335–9338`.
+  - `canRecordCurrentIptv@9340–9354`, `updateRecordButtonState@9356–9374`,
+    `toggleIptvRecording@9376–9413`, `maybeAskNotificationPermission@9415–9435`.
+  - `toggleEngineRecording@9437–9534`, `promptScheduleRecording@9536–9649` (its body has
+    tab-indented lines 9622–9645; the checker normalises indentation only),
+    `finalizeIptvRecordingIfActive@9651–9665`.
+- With the KDoc/banner (9233–9243) ≈ **395 lines**. The largest yield in phase 3.
+
+**Inbound** (21 patches in 13 declarations):
+
+| line | enclosing | ref |
+|---|---|---|
+| 451, 462 | performIptvLiveRetune | `isCurrentIptvSegmented()` |
+| 478, 479 | performIptvLiveRetune | `finalizeIptvRecordingIfActive()`, `updateRecordButtonState()` |
+| 2038 | onCreate | `RecordingRegistry.addListener(recordingRegistryListener)`; before the `mode=="iptv"` early return |
+| 2911 | setupPlayer (`iptvRecordingController.onAborted` lambda) | `updateRecordButtonState()` |
+| 9116 | setupIptvControls (click) | `toggleIptvRecording()` |
+| 9706, 9714 | updateIptvControlPresentation | `recordingEngineEnabled`, `updateRecordButtonState()` |
+| 9900 | setupIptvOverlay (`onRecordFuture` lambda) | `promptScheduleRecording(entry, program)` |
+| 12673 ×2 | isRecordingCurrentIptvChannel | `recordingEngineEnabled`, `engineTaskIdForCurrentChannel()` |
+| 14143, 14240 | setIptvMediaItem | `finalizeIptvRecordingIfActive()`, `updateRecordButtonState()` |
+| 14316 | retryIptvAsHlsIfUnrecognized | `updateRecordButtonState()` |
+| 14338 | beginIptvPlayback | `finalizeIptvRecordingIfActive()` |
+| 18926 | onStop | `finalizeIptvRecordingIfActive()`; after `super.onStop()`, before the twin park and `iptvLiveRecovery.cancel` |
+| 19001 | onRequestPermissionsResult | `updateRecordButtonState()` |
+| 19100 | onDestroy | `RecordingRegistry.removeListener(recordingRegistryListener)` |
+| 19107 | onDestroy | `finalizeIptvRecordingIfActive()` |
+
+Keeping `isCurrentIptvSegmented` in the activity (IPTV-live also uses it) saves 2 patches and adds
+1 host member.
+
+**Outbound:**
+- IPTV state:
+  - `currentIptvStreamUrl` at 9275, 9330, 9350, 9403 and 9474.
+  - `iptvHlsForcedUrls` at 9276 and 9308.
+  - `iptvChannels` and `currentIptvIndex` at 9405 and 9492.
+  - `iptvSources` 9337, `iptvSourceId` 9336, `currentIptvHttpHeaders` 9518.
+- Recording state: `iptvRecordingController` at 9360, 9381, 9382, 9407, 9655 and 9656;
+  `iptvRecordButton` at 9358.
+- Request codes: `legacyStoragePermissionRequestCode` at 9461 and 9547;
+  `notificationPermissionRequestCode` at 9433.
+- Android: **53 × `this`**, all Activity/Context: Toasts, `ActivityCompat.requestPermissions`
+  (needs an Activity), `AlertDialog.Builder` (themed Activity), `startService`,
+  `ContextCompat.startForegroundService`, ProfilePreferenceProjection, RecordingScheduleStore,
+  RecordingAlarmReceiver, DateFormat.
+- Also: `getSharedPreferences(…, MODE_PRIVATE)` 9427, `startService` 9442, `isFinishing` 9255 and
+  9658, `isDestroyed` 9255.
+
+**Timers/resources:**
+- There is no handler. The registry listener's add (onCreate 2038) and remove (onDestroy 19100)
+  must keep their positions.
+- The tee finalize runs in onStop 18926 and onDestroy 19107. The order in onDestroy is
+  removeListener 19100 → cancelSleepTimer 19103 → finalize 19107.
+- `AlertDialog` (9602) and the permission dialogs are not dismissed on destroy. That is the
+  existing behaviour.
+- onResume 19011 runs the tee's `retryPendingPublish`; it stays.
+
+**Tests:** none reflective. No Dart anchors. The profile/source guard tests scan the `recording/`
+package, not this file.
+
+**Proposed shape:**
+```kotlin
+internal class TvIptvRecordingActions(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val currentIptvStreamUrl: String?; val iptvHlsForcedUrls: Set<String>
+        val iptvChannels: List<IptvChannelEntry>; val currentIptvIndex: Int
+        val iptvSources: List<IptvSourceEntry>; val iptvSourceId: String?
+        val currentIptvHttpHeaders: Map<String, String>
+        val iptvRecordingController: IptvRecordingController; val iptvRecordButton: AppCompatButton?
+        val legacyStoragePermissionRequestCode: Int
+    }
+}
+```
+Verify the exact collection types at 863, 864, 883, 888, 992, 1010 and 1016.
+
+**Substitutions:** `this` → `activity` ×53, ≈ 22 `host.` edits, and `activity.` for
+`isFinishing`, `isDestroyed`, `startService`, `getSharedPreferences` and `MODE_PRIVATE`
+(→ `Context.MODE_PRIVATE`).
+
+**Activity patches: 21. Risk: medium.** Permission flows, the foreground-service start, profile
+authorisation (`jobAuthorizationValid`) and lazy-init timing must be preserved. This feature has
+the best lines-per-patch ratio after skip.
+
+---
+
+### 7. "Next" overlay (auto-advance toast) (rank 7: do not extract standalone)
+
+**Owned state:**
+- `nextOverlay` 156 (lateinit `View`), `nextText` 157 (lateinit `TextView`), `nextSubtext` 158
+  (lateinit `TextView`).
+- Related: `nextBackdrop` 161, plus `setNextOverlayBackdrop@5911–5925`. Its only caller passes
+  `null` (5906), so the image-load branch is dead.
+
+**Functions:**
+- `showNextOverlay@8650–8654`, `fadeInNextOverlay@8656–8661`, `hideNextOverlay@8663–8670`.
+- With the banner 8649: ≈ **22 lines**.
+
+**Inbound with the views moved: 23 patches.**
+- bindViews 2515–2517 (×3).
+- playbackListener: 1742 and 1754 (`showNextOverlay`), 1744 and 1756 (`hideNextOverlay`).
+- setResolvingState: 5901 (`nextText`), 5902 (`nextSubtext`), 5903 (`fadeIn`), 5905 (`hide`).
+- requestStremioTvNext@19732: 19753 and 19777 (`nextText`), 19754 and 19778 (`nextSubtext`),
+  19755 (`fadeIn`), 19770, 19787, 19795, 19809 and 19818 (`hide`).
+- Reads: isCleanPlaybackState 8684, showBufferingIndicatorDebounced 19036.
+
+**Inbound with the views kept** (host getters): 12 call patches.
+
+**Outbound:** views only.
+
+**Timers:**
+- None owned. The 1500 ms auto-advance-then-hide runs on **progressHandler** (1743, 1755, 19787),
+  which belongs to the playback core.
+- The fade animators are not cancelled.
+
+**Tests:** StremioTvStartupWatchdogTest:54 sets the field `nextOverlay` reflectively, so moving
+the field breaks the test.
+
+**Verdict:** the patch/line ratio is about 1:1, and the real owner is the loading/resolving overlay
+(`setResolvingState`, `setNextOverlayBackdrop`, the Stremio TV next-channel flow). Fold it into
+phase 7 (title/dock identity/loading overlay) or phase 6 (Stremio TV). **Risk: low; value: low.**
+
+---
+
+### Ranking (activity call-site patches, risk)
+
+| rank | feature | lines out | activity patches (decls) | test retargets | risk | notes |
+|---|---|---|---|---|---|---|
+| 1 | Skip segments | ≈230 | **8** (4) | 0 | med-low | wide read-only host (≈20 members); 3 `::isInitialized` → host getters |
+| 2 | Sleep timer | ≈68 | **13** (4) | 0 | low | `sleepStopLatched` stays (not ownable); enum → top-level |
+| 3 | Up Next card | ≈118 | **12** (6) (+2 if before skip) | 1 Dart `_between` anchor | med | keep `isCleanPlaybackState` on the host; do it after skip so `upNextVisible` is a host getter |
+| 4 | Status pill | ≈58 | **40** (18), or 3 delegating members | 0 | low | needs a ruling: delegators vs. call-site patches |
+| 5 | IPTV recording actions | ≈395 | **21** (13) | 0 | med | 53 `this`→`activity`; the tee controller stays |
+| 6 | PikPak retry | ≈206–276 | **19** (10) | 4 reflective calls | med-high | `pikPakRetryId` is shared with the phase-6 gate: best done with phase 6 |
+| — | Auto-sync pill | ≈166 | 18 (4, all in C5) | 0 | low-med | move with C5 in phase 4 |
+| — | Next overlay | ≈22 | 12–23 | 1 reflective field | low | fold into phase 6/7 |
+
+Suggested phase-3 batch order: skip → sleep → Up Next → recording (→ status pill, if delegators
+are allowed). The total is ≈ 810–870 lines out for ≈ 54 patches (+40 or +3 for the status pill).
+That is well below the plan's ≈2,500 estimate unless PikPak and the auto-sync pill are pulled
+forward. The plan's phase-3 line estimate should be re-measured.
+
+**onDestroy ordering to preserve** (current lines):
+
+| line | step |
+|---|---|
+| 19100 | `RecordingRegistry.removeListener` |
+| 19103 | `cancelSleepTimer` |
+| 19107 | `finalizeIptvRecordingIfActive` |
+| 19123–19124 | `cancelPikPakRetry` + `pikPakRetryHandler` |
+| 19127–19130 | `pikPakReactivationIndicator` |
+| 19135 | `upNextHandler` |
+| 19148 | `subtitleScope.cancel` |
+| 19154–19158 | skip generation/job/scope/cache |
+| 19161–19163 | progress/controls/seekbar handlers |
+| 19173+ | player release |
+| 19195 | `externalSubtitleHandler.removeCallbacksAndMessages` (pill runnables) |
+
+Elsewhere:
+- onStop: 18926 finalize (tee).
+- onPause: 19029 `cancelPikPakRetry`.
+- Per-item reset in playItem: 4611 `hideUpNextCard` → 4612 `resetSkipSegmentState` →
+  4615 `cancelPikPakRetry`.
+
+## Phase 3 re-measurement and step T (ec365eb80)
+
+The approved phase-2 merge has a 19,017-line activity and 2,671 PSI declarations. The earlier Phase 3 inventory remains historical at dcbd9aafe; the phase-3 manifest now uses ec365eb80 and the following measured declaration starts (including PSI-attached documentation). Status pill remains deferred.
+
+| Feature | Moved subtrees | Original member starts at ec365eb80 |
+| --- | ---: | --- |
+| sleep | 12 | `class SleepTimerMode` 1170; `property sleepTimerMode` 1178; `property sleepTimerDeadlineElapsedMs` 1179; `property sleepTimerHandler` 1180; `property sleepTimerRunnable` 1181; `property sleepTimerMinuteOptions` 1182; `fun sleepTimerMinutesLeft()` 8025; `fun sleepTimerValueLabel()` 8032; `fun startSleepCountdown(Int)` 8038; `fun armSleepAtEndOfItem()` 8051; `fun cancelSleepTimer(Boolean)` 8057; `fun fireSleepTimer()` 8065 |
+| skip | 18 | `class SkipSegmentRequest` 1149; `property skipSegmentScope` 1160; `property skipSegmentFetchJob` 1161; `property skipSegmentFetchGeneration` 1162; `property loadedSkipSegmentKey` 1163; `property loadingSkipSegmentKey` 1164; `property skipSegments` 1165; `property activeSkipSegment` 1166; `property skipFocusOfferedKey` 1167; `property skipSegmentCache` 1168; `fun currentSkipSegmentRequest(Long)` 7825; `fun updateSkipSegmentState(Long,Long)` 7854; `fun ensureSkipSegments(SkipSegmentRequest)` 7889; `fun presentSkipSegment(TvSkipSegment?,String?)` 7947; `fun skipActiveSegment()` 7997; `fun resetSkipSegmentState()` 8096; `property MAX_SKIP_SEGMENT_CACHE_ENTRIES` 19010; `property IMDB_ID_REGEX` 19011 |
+| upnext | 17 | `property upNextCard` 163; `property upNextPoster` 165; `property upNextTitle` 166; `property upNextCountdown` 167; `property upNextVisible` 169; `property upNextTargetIndex` 170; `property upNextDismissedForIndex` 171; `property upNextHandler` 172; `fun maybeShowUpNext()` 8379; `property upNextTicker` 8403; `fun showUpNextCard(Int)` 8434; `fun triggerUpNext()` 8461; `fun dismissUpNext()` 8469; `fun hideUpNextCard()` 8474; `property UP_NEXT_THRESHOLD_MS` 19001; `property UP_NEXT_MIN_DURATION_MS` 19002; `property UP_NEXT_TICK_MS` 19003 |
+| recording | 15 | `property recordingEngineEnabled` 8746; `property recordingRegistryListener` 8763; `fun isCurrentIptvSegmented()` 8769; `fun engineRecordableUrl(String)` 8774; `fun isSchedulableStreamUrl(String)` 8789; `fun engineTaskIdForCurrentChannel()` 8804; `fun recordingResourceFor(IptvChannelEntry?)` 8812; `fun canRecordCurrentIptv()` 8817; `fun updateRecordButtonState()` 8833; `fun toggleIptvRecording()` 8853; `fun maybeAskNotificationPermission()` 8892; `fun toggleEngineRecording()` 8914; `fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` 9013; `fun finalizeIptvRecordingIfActive()` 9128; `property notificationPermissionRequestCode` 18088 |
+
+Manifest: 62 moved subtrees, 22 patched activity declarations (52 exact context occurrences), six slot-anchored additions, four controller destinations. Every destination span is either a moved subtree or pinned structure. All 22 phase-1/2 destinations are unchanged against ec365eb80; the reviewed-change whitelist is empty.
+
+Step-T verification: 53 dispatcher tests passed (24 phase 1, eight phase 2, 17 phase 3, four bytecode-parser checks); the complete phase-3 extraction fixture passes and compiles in the evidence-only detached original worktree. Every required negative fails for its named reason. An initially omitted `Intent` import in the fixture was corrected before acceptance; production files in this worktree are untouched.
+
+Original self-comparison: 2,671 declarations classified, zero differences. Historical checks: p1@dcbd9aafe classifies 3,477 declarations, zero differences; p2@ec365eb80 classifies 2,839, zero differences. Current earlier-destination check: zero differences.
+
+`dev/tool/check_kotlin_overloads.py` audits all 58 substituted activity `this` sites from original and fixture JVM invocation descriptors, including lazy/lambda classes. All match. In particular the poster uses `Glide.with(FragmentActivity)` before and after. A separately compiled fixture with `Activity` injection selects `Glide.with(Activity)` and is rejected by the audit (not by compilation). No Runnable `this` is substituted.
+
+Evidence: `p3/remeasured-inventory.json`, `p3/original-self-comparison.log`, `p3/checker-self-tests-final.log`, `p3/historical-p1.log`, `p3/historical-p2.log`, `p3/earlier-destinations.log`, `p3/fixture-compile.log`, `p3/overload-audit.json`, `p3/overload-negative-compile.log`, `p3/overload-negative.log`, `p3/bytecode/`. Shared offline PSI cache remains under the previously approved `p1/psi`.
+
+## Phase 3 step 0 (ec365eb80)
+
+Production Kotlin is unchanged. Added 44 characterization tests through the activity’s original surface, using typed reflection selectors in `TvPlayerOriginalAccess`, a PAUSED looper, the existing binary Flutter messenger with an observation callback, real view binding, an ExoPlayer interface probe, and explicit original lifecycle dispatch. Shared setup retains the original activity controller without creating it until a lifecycle case explicitly requests creation.
+
+The skip prerequisite passed on the original before acceptance: the test-only shadow of private `SkipSegmentHttpClient` blocks each response on a latch, records its endpoint/query and IO thread, and leaves the production coroutine, `Dispatchers.IO`, and Main continuation intact. Twenty consecutive fetches in one test assert argument identity, absence of publication while blocked, and successful Main publication after release. The final focused run and full clean JVM run also passed it. No real HTTP is used by this fixture; missing planned responses fail closed. **Skip segments remain in phase 3; no feature is deferred.**
+
+Coverage includes sleep arm/re-arm/cancel and minute/menu values, cancellation/latch/progress/pause/screen/toast ordering, live/VOD end consumption; skip request identity and guards, 64-entry cache, provider/duration/generation stale rejection, dedup/cache hits, readiness and late binding, bounded seek/resume hold, playItem reset order; Up Next boundaries, 500ms ticking, countdown rounding, live player replacement, show/dismiss/trigger, key dispatch and teardown; production Skip↔Up Next suppression/focus wiring; engine and tee start/stop, SDK 28 permission/grant, SDK 29 and 33 behavior, service payloads, alpha/gating/capacity, lazy preference/tee first access, registry delivery-time membership and lifecycle add/remove order; click-time profile/resource changes/revocation with persisted schedule payloads; and three carried ring invalidation paths.
+
+The poster test uses the production Glide request for a local resource, checks membership in the activity lifecycle manager’s request tracker, and verifies clearing/removal on destroy. The MediaStore provider writes real fixture bytes and observes pending-row publication before player pause and after registry-listener removal on destroy. A test-only AAD-preserving cipher stands in for Android Keystore in schedule tests; profile authorization, dialog callback, serialization, store persistence and alarms are production code.
+
+Clean original JVM baseline: `junit/baseline-ec365eb80`, 382 identities / 381 pass / one historical focus failure. Clean post-characterization baseline: `junit/p3-step0`, 426 identities / 425 pass / the same failure. All 382 prior statuses are identical; **44 passing additions only**, with mutation-plan coverage matching the complete identity difference. Both canonical archives have stable before/after source fingerprints, no abort, and JBR 21.0.10. The post-step-0 archive identifies step-T commit `c8c39678e` plus the 14 test files before their commit.
+
+Baseline provenance: an initial run overlapping lint in the same evidence worktree encountered transient missing Java classes. It was rejected and retained as `junit/baseline-ec365eb80-concurrent-lint`; the sequential clean rerun is the canonical `baseline-ec365eb80`. All subsequent Gradle work within a tree was sequential. Original lint (`./gradlew :app:lintDebug`, Android Studio JBR) remains an existing failing baseline: **1,353 issues, 253 errors, 1,100 warnings; 175 UnsafeOptInUsageError issues**. XML, text, HTML and the normalized issue set are archived under `p3/lint-baseline-ec365eb80/` for the later move gate.
+
+Every row below was run against detached **ec365eb80 + the test files**, with one exact original-code mutation. Accepted failures are `java.lang.AssertionError` or `org.junit.ComparisonFailure` in the named test: **44/44 killed**, no accepted compile error or crash. The initial constructor-forcing preference mutation crashed on an unattached Robolectric context and was rejected (raw evidence retained); its replacement keeps a lazy delegate but re-evaluates on each access, producing the required cached-value assertion failure.
+
+| ID | Named test | Original-code mutation | Failing assertion on the mutant |
+| --- | --- | --- | --- |
+| m01 | `TvSleepTimerCharacterizationTest.countdownUsesElapsedTimeAndCeilingMinutesAndRearmReplacesTheOldCallback` | Countdown minute duration 60000 → 59000 | `TvSleepTimerCharacterizationTest.kt:35` — expected:<60100> but was:<59100> |
+| m02 | `TvSleepTimerCharacterizationTest.cancelAndEndArmingRemoveCountdownAndKeepOriginalLabels` | End arming selects countdown instead | `TvSleepTimerCharacterizationTest.kt:52` — expected:<[End of episode]> but was:<[0 min]> |
+| m03 | `TvSleepTimerCharacterizationTest.fireCancelsThenLatchesReportsBeforePauseReleasesBothScreenHoldsAndToasts` | Pause before progress checkpoint | `TvSleepTimerCharacterizationTest.kt:78` — expected:<[progress]> but was:<[]> |
+| m04 | `TvSleepTimerCharacterizationTest.liveEndedConsumesEndTimerWithoutCompletionOrAdvancing` | Live EOF does not cancel end timer | `TvSleepTimerCharacterizationTest.kt:112` — expected:<[Off]> but was:<[End of episode]> |
+| m05 | `TvSleepTimerCharacterizationTest.vodEndedReportsCompletionBeforeConsumingEndTimerAndNeverAdvances` | VOD EOF does not cancel end timer | `TvSleepTimerCharacterizationTest.kt:102` — expected:<[Off]> but was:<[End of episode]> |
+| m06 | `TvSleepTimerCharacterizationTest.unifiedMenuRowsDispatchEveryCountdownOffAndEndModeAndHideEndForLiveChannels` | First sleep menu duration 15 → 10 | `TvSleepTimerCharacterizationTest.kt:119` — expected:<[Off, 15 minutes, 30 minutes, 45 minutes, 60 minutes, 90 minutes, End of episode]> but was:<[Off, 10 minutes, 30 minutes, 45 minutes, 60 minutes, 90 minutes, End of episode]> |
+| m07 | `TvUpNextCharacterizationTest.exactMinimumDurationRemainingThresholdAndPlaybackGatesKeepTheCardHiddenOrShown` | Up Next remaining threshold 25000 → 24999 | `TvUpNextCharacterizationTest.kt:29` — duration=300001 remaining=25000 expected:<true> but was:<false> |
+| m08 | `TvUpNextCharacterizationTest.showTitlePosterGoneAndDismissalAreWiredToCurrentIndex` | Absent poster uses INVISIBLE instead of GONE | `TvUpNextCharacterizationTest.kt:46` — expected:<8> but was:<4> |
+| m09 | `TvUpNextCharacterizationTest.tickerRoundsUpAndRepostsAtFiveHundredMillisecondsAndObservesReplacementPlayer` | Up Next repeat delay 500 → 501 | `TvUpNextCharacterizationTest.kt:62` — expected:<500> but was:<501> |
+| m10 | `TvUpNextCharacterizationTest.tickerKeepsThirtySecondsButHidesBeyondSeekBackToleranceAndOnOverlay` | Seek-back grace 5000 → 5001 | `TvUpNextCharacterizationTest.kt:73` — p.position--; ticker(); assertFalse(visible()) |
+| m11 | `TvUpNextCharacterizationTest.tickerTriggersAtSevenHundredFiftyMillisecondsAndExplicitTriggerHonoursSleepLatch` | Trigger tolerance 250 → 249 | `TvUpNextCharacterizationTest.kt:86` — expected:<1> but was:<0> |
+| m12 | `TvUpNextCharacterizationTest.visibleCardBackAndSelectConsumeBothKeyActionsAndOnlyDownDispatches` | Back dismisses on UP instead of DOWN | `TvUpNextCharacterizationTest.kt:94` — assertTrue(visible()); assertEquals(-1, field("upNextDismissedForIndex")) |
+| m13 | `TvRingRepaintCharacterizationTest.colorAssignmentRequestsRepaintEvenForTheSameColor` | Remove color repaint | `TvRingRepaintCharacterizationTest.kt:22` — color setter requests repaint |
+| m14 | `TvRingRepaintCharacterizationTest.animatorFrameRequestsRepaint` | Remove animator-frame repaint | `TvRingRepaintCharacterizationTest.kt:31` — animation update requests repaint |
+| m15 | `TvRingRepaintCharacterizationTest.stoppingResetsAndRequestsRepaint` | Remove stop/reset repaint | `TvRingRepaintCharacterizationTest.kt:40` — stop/reset requests repaint |
+| m16 | `TvSkipNetworkCharacterizationTest.deterministicHttpFixtureKeepsRealIoMainDispatchAndRequestArgumentsAcrossTwentyFetches` | Fetch sends duration 1 rather than current seconds | `TvSkipNetworkCharacterizationTest.kt:51` — expected:<[(imdb_id, tt12345), (season, 0), (episode, 1), (duration, 120)]> but was:<[(imdb_id, tt12345), (season, 0), (episode, 1), (duration, 1)]> |
+| m17 | `TvSkipNetworkCharacterizationTest.boundedCacheEvictsOldestOnlyAtSixtyFourAndPublishesTheCurrentResponse` | Cache eviction allows a 65th entry | `TvSkipNetworkCharacterizationTest.kt:67` — expected:<64> but was:<65> |
+| m18 | `TvSkipNetworkCharacterizationTest.providerChangeWhileIoIsBlockedRejectsTheOldResult` | Accept stale provider result | `TvSkipNetworkCharacterizationTest.kt:76` — old provider cannot publish expected null, but was:<skipdb:tt12345:0:1:120> |
+| m19 | `TvSkipNetworkCharacterizationTest.replacementPlayerDurationWhileIoIsBlockedRejectsTheOldResult` | Accept stale replacement-player duration result | `TvSkipNetworkCharacterizationTest.kt:85` — old duration cannot publish expected null, but was:<skipdb:tt12345:0:1:120> |
+| m20 | `TvSkipNetworkCharacterizationTest.supersededGenerationCannotPublishEvenWhenRequestIdentityStillMatches` | Accept superseded fetch generation | `TvSkipNetworkCharacterizationTest.kt:94` — superseded generation cannot publish expected null, but was:<skipdb:tt12345:0:1:120> |
+| m21 | `TvSkipNetworkCharacterizationTest.sameLoadingRequestIsDeduplicatedAndCacheHitPublishesWithoutHttp` | Remove same-loading-request deduplication | `TvSkipNetworkCharacterizationTest.kt:100` — expected same:<"coroutine#1":StandaloneCoroutine{Active}@214e34d4> was not:<"coroutine#2":StandaloneCoroutine{Active}@47470bfa> |
+| m22 | `TvSkipNetworkCharacterizationTest.resetCancelsBlockedFetchClearsUiIdentityAndPreventsLatePublication` | Reset leaves blocked fetch uncancelled | `TvSkipNetworkCharacterizationTest.kt:113` — assertTrue(job.isCancelled); assertEquals(generation + 1, field("skipSegmentFetchGeneration")) |
+| m23 | `TvSkipUiCharacterizationTest.completeRequestIdentityIncludesProviderImdbSeasonEpisodeAndFlooredDuration` | Unbraced Host template interpolates the Host object instead of provider | `TvSkipUiCharacterizationTest.kt:26` — expected:<[skipdb]:tt12345:0:1:600> but was:<[com.debrify.app.tv.Activity@….skipSegmentProviderId]:tt12345:0:1:600> |
+| m24 | `TvSkipUiCharacterizationTest.viewBindingIsLiveAndReadyGateKeepsOutgoingPositionFromShowingANewItemMarker` | Remove readiness gate | `TvSkipUiCharacterizationTest.kt:46` — expected:<8> but was:<0> |
+| m25 | `TvSkipUiCharacterizationTest.skipSeeksToBoundedEndReleasesResumeHoldAndHidesButton` | Seek beyond duration instead of bounding end | `TvSkipUiCharacterizationTest.kt:58` — expected:<[seek:15000]> but was:<[seek:20000]> |
+| m26 | `TvSkipUiCharacterizationTest.creditsAndFocusOfferFollowActualUpNextShowAndDismiss` | Up Next fails to suppress credits marker | `TvSkipUiCharacterizationTest.kt:70` — expected:<8> but was:<0> |
+| m27 | `TvRecordingCharacterizationTest.enginePreferenceIsReadOnFirstAccessAndThenFrozenWhileTeeRemainsLazy` | Re-evaluate engine preference on every lazy getter access instead of caching first read | `TvRecordingCharacterizationTest.kt:37` — expected:<false> but was:<true> |
+| m28 | `TvRecordingCharacterizationTest.sdk28OffersEnginePermissionPathButNeverOffersTheUnsupportedTee` | Deny offered pre-Q permission path | `TvRecordingCharacterizationTest.kt:49` — expected:<true> but was:<false> |
+| m29 | `TvRecordingCharacterizationTest.sdk29EngineStartsWithTwinHeadersNameOwnerAndDurationThenStopsExistingTask` | Engine START drops HTTP headers | `TvRecordingCharacterizationTest.kt:73` — expected:<{X-Test=header}> but was:<{}> |
+| m30 | `TvRecordingCharacterizationTest.recordButtonBindsLateAndTracksAvailableDisabledAndActiveEngineStates` | Disabled Record alpha .4 → .5 | `TvRecordingCharacterizationTest.kt:91` — expected:<0.4> but was:<0.5> |
+| m31 | `TvRecordingCharacterizationTest.streamEligibilityKeepsForcedHlsAndNonHttpOutOfTeeAndChecksSchedulingExtensions` | Ignore forced HLS eligibility | `TvRecordingCharacterizationTest.kt:101` — expected null, but was:<https://example.test/no-extension> |
+| m32 | `TvRecordingCharacterizationTest.fullEngineCapacityBlocksStartAndReadsTheLimitAgainForTheNextAttempt` | Permit start at full capacity | `TvRecordingCharacterizationTest.kt:112` — expected null, but was:<Intent { act=com.debrify.app.recording.action.START cmp=com.debrify.app/.recording.LiveRecordingService (has extras) }> |
+| m33 | `TvRecordingCharacterizationTest.notificationPermissionIsAskedOnceAndRecordingContinuesWithoutIt` | Do not persist asked-once flag | `TvRecordingCharacterizationTest.kt:125` — assertTrue(activity.getSharedPreferences("debrify_permissions", 0).getBoolean("notification_permission_asked", false)) |
+| m34 | `TvRecordingCharacterizationTest.queuedRegistryNotificationUsesMembershipWhenDeliveredAndAddIsIdempotent` | Snapshot listener membership before delivery | `TvRecordingCharacterizationTest.kt:134` — expected:<[second]> but was:<[first]> |
+| m35 | `TvPhase3LifecycleCharacterizationTest.posterRequestBelongsToActivityGlideManagerAndIsClearedOnDestroy` | Poster request uses application Glide manager | `TvPhase3LifecycleCharacterizationTest.kt:73` — poster is tracked by activity lifecycle manager |
+| m36 | `TvPhase3LifecycleCharacterizationTest.destroyCancelsSleepUpNextSkipScopeAndCacheBeforeReleasingThePlayer` | Destroy leaves skip scope alive | `TvPhase3LifecycleCharacterizationTest.kt:93` — assertTrue(scope.coroutineContext[Job]!!.isCancelled); assertTrue(cache.isEmpty()) |
+| m37 | `TvPhase3LifecycleCharacterizationTest.teeToggleStartsWritesAndStopsPublishingTheSamePendingRow` | Tee STOP does not finalize actual controller | `TvPhase3LifecycleCharacterizationTest.kt:115` — assertFalse(tee.isActive); assertArrayEquals(byteArrayOf(1, 2, 3), provider.file.readBytes()) |
+| m38 | `TvPhase3LifecycleCharacterizationTest.onStopPublishesTeeBeforePauseAndDestroyRemovesListenerBeforePublication` | onStop fails to publish active tee | `TvPhase3LifecycleCharacterizationTest.kt:127` — assertFalse(tee.isActive); assertEquals(1, provider.publications.size); assertEquals(listOf("pause"), p.events) |
+| m39 | `TvPhase3WiringCharacterizationTest.originalLifecycleAndCrossFeatureWiring` | playItem resets skip before hiding Up Next | `TvPhase3WiringCharacterizationTest.kt:33` — Up Next hidden before skip reset expected:<false> but was:<true> |
+| m40 | `TvScheduleCharacterizationTest.confirmationCapturesTheProfileAtClickAndPersistsTheExecutionPayload` | Capture schedule owner while opening dialog rather than at confirmation | `TvScheduleCharacterizationTest.kt:73` — expected:<[b]> but was:<[a]> |
+| m41 | `TvScheduleCharacterizationTest.confirmationResolvesTheResourceFromTheLiveSourceTableAtClick` | Capture resource while opening dialog rather than at confirmation | `TvScheduleCharacterizationTest.kt:88` — expected:<r[2]> but was:<r[1]> |
+| m42 | `TvScheduleCharacterizationTest.authorizationRevokedWhileDialogIsOpenIsRejectedBeforePersisting` | Skip confirmation profile authorization gate | `TvScheduleCharacterizationTest.kt:96` — expected:<[Recording is disabled for this profi]le> but was:<[Could not save the recording schedu]le> |
+| m43 | `TvScheduleCharacterizationTest.resourceGrantRevokedWhileDialogIsOpenIsRejectedBeforePersisting` | Skip confirmation resource authorization gate | `TvScheduleCharacterizationTest.kt:103` — expected:<[Recording is disabled for this profi]le> but was:<[Could not save the recording schedu]le> |
+| m44 | `TvScheduleCharacterizationTest.engineStartResolvesLiveProfileAndConnectionResourceAtInvocation` | Engine START loses live source resource authority | `TvScheduleCharacterizationTest.kt:116` — expected:<r2> but was:<null> |
+
+Raw evidence: `p3/mutations/plan.json` has the exact before/after strings; `p3/mutations/results.json` contains the test identity, assertion type/message/stack and command outcome. Each `p3/mutations/mNN/` contains its patch, Gradle log and fresh JUnit XML. Rejected constructor-crash evidence is separately labelled and excluded from the 44 accepted proofs. Test-source snapshots/hashes are under `p3/test-source/`.
+
+Commands: `python3 dev/tool/android_junit_evidence.py --worktree <p3/original> run baseline-ec365eb80`; `python3 dev/tool/android_junit_evidence.py run p3-step0`; `python3 dev/tool/android_junit_evidence.py compare p3-step0 --against baseline-ec365eb80`; focused original characterization runs and one-test mutation commands are archived in `p3/` and `p3/mutations/`. `p3/jvm-additions.json` verifies exact prior-status equality and one mutation per added identity. No baseline recording accepted a regression.
+
+No new production bug was fixed or identified by this characterization batch. The previously recorded focus and lint failures remain Follow-ups; this phase does not change them. No device, emulator, install, release build or production extraction was performed in step 0. The temporary detached original worktree is removed after archiving; production moves await the next authorized step.
+
+## Phase 3 step 0b (ec365eb80)
+
+Production remains byte-identical to ec365eb80. Added 30 original-surface tests: skip fade/lift targets and durations, alpha/reset and half-pixel deadband, all nine focus-offer exclusions through real overlay getters, once-per-key and posted visibility checks, focus handoff before hiding, and seek feedback seconds; Up Next show/hide alpha/translation targets, durations, end reset and strings; sleep toast text/duration; recording tee/service/storage failures, permission messages, profile refusal, fallback labels, capacity text, schedule dialog labels/body/conflicts/duplicate/success/failure, and finalization silence when finishing. Platform failures are test-only; recording authorization, storage, handlers and action bodies stay real.
+
+All **70/70** sweep mutations fail a named assertion on ec365eb80 plus the tests. Claude's exact e12–e15 survivors are separately re-run against all 194 phase-2/3 characterization identities: control passes, all four are killed by assertion failures. e12 pins 160ms; e13 pins −128 × density; e14 directly presents a non-null segment with the actual Up Next card visible; e15 pins the complete Downloads/Debrify/Recordings toast. Focus request counters distinguish an explicit handoff before GONE from Android's automatic recovery and detect requests attempted after hiding. Up Next hide target values are inspected on Android's real animator because its end action resets translation.
+
+The initial sweep pinned reachable recording Toast occurrences but incorrectly treated three guards as unreachable under stable dependencies. The supplemental original-code boundary cases below prove all three when permissions or mutable stream eligibility change between reads; they supersede that reachability assessment. Every recording Toast branch now has exact-text coverage; the new message fixtures also pin toast durations. No production policy or bug fix was introduced.
+
+Accepted clean `p3-step0b`: **456 identities, 455 pass, one unchanged TvSourceBrowserFocusTest failure, no skips**; all 426 p3-step0 identity/status pairs are identical, 30 passing additions. Stable source fingerprints, JBR 21.0.10, six dirty test files, tested revision 043dfd1b8. A first combined run exposed test-cipher failure-flag leakage into two old schedule tests; cleanup was corrected and that run is retained under `junit/p3-step0b-rejected-fixture-leak`, never accepted as baseline. All 194 characterizations pass together after cleanup. An initial focus-return mutant survived an ambiguous focus assertion; the accepted timing-aware assertion kills it. Raw attempts are preserved.
+
+Evidence: `p3/step0b/` (controls, exact four reruns/XML, mutation plan/patches/logs/XML/results, test-source hashes, JVM comparison), `junit/p3-step0b/`. Detached original worktree removed after proofs. No production edit, dependency/lockfile/ProGuard change, device interaction or bug fix.
+
+| ID | Test | Mutation on original | Named failing assertion |
+| --- | --- | --- | --- |
+| b01 | `TvSkipPresentationCharacterizationTest.fadeInPinsDurationAndAlphaAndBothSegmentLabels` | `setDuration(160L) → setDuration(200L)` | `expected:<160> but was:<200>` |
+| b02 | `TvSkipPresentationCharacterizationTest.fadeInPinsDurationAndAlphaAndBothSegmentLabels` | `alpha(1f) → alpha(0.8f)` | `expected:<1.0> but was:<0.8>` |
+| b03 | `TvSkipPresentationCharacterizationTest.fadeInPinsDurationAndAlphaAndBothSegmentLabels` | `"Skip intro »" → "Skip intro"` | `expected:<Skip intro[ »]> but was:<Skip intro[]>` |
+| b04 | `TvSkipPresentationCharacterizationTest.fadeInPinsDurationAndAlphaAndBothSegmentLabels` | `"Skip credits »" → "Skip credits"` | `expected:<Skip credits[ »]> but was:<Skip credits[]>` |
+| b05 | `TvSkipPresentationCharacterizationTest.controlsLiftAndReturnPinDensityScaledTargetAndDuration` | `-128f * → -120f *` | `expected:<-128.0> but was:<-120.0>` |
+| b06 | `TvSkipPresentationCharacterizationTest.controlsLiftAndReturnPinDensityScaledTargetAndDuration` | `setDuration(180L) → setDuration(200L)` | `expected:<180> but was:<200>` |
+| b07 | `TvSkipPresentationCharacterizationTest.controlsLiftAndReturnPinDensityScaledTargetAndDuration` | `} else { 0f → } else { 8f` | `expected:<0.0> but was:<8.0>` |
+| b08 | `TvSkipPresentationCharacterizationTest.translationDeadbandIncludesHalfPixelAndAnimatesJustBeyondIt` | `> 0.5f → >= 0.5f` | `offset=-0.5 expected:<777> but was:<180>` |
+| b09 | `TvSkipPresentationCharacterizationTest.missingSegmentOrRequestRestoresPlayerFocusAndResetsPresentation` | `if (currentFocus == button) playerView.requestFocus() → if (false) playerView.requestFocus()` | `explicit handoff happens before hiding expected:<0> but was:<8>` |
+| b10 | `TvSkipPresentationCharacterizationTest.missingSegmentOrRequestRestoresPlayerFocusAndResetsPresentation` | `button.translationY = 0f → button.translationY = 1f` | `expected:<0.0> but was:<1.0>` |
+| b11 | `TvSkipPresentationCharacterizationTest.missingSegmentOrRequestRestoresPlayerFocusAndResetsPresentation` | `button.alpha = 0f button.translationY → button.alpha = 0.1f button.translationY` | `expected:<0.0> but was:<0.1>` |
+| b12 | `TvSkipPresentationCharacterizationTest.controlsMenuBlocksFocusOffer` | `!controlsMenuVisible && → true &&` | `focus blocked by controlsMenuVisible expected null, but was:<request:INTRO:1000>` |
+| b13 | `TvSkipPresentationCharacterizationTest.playlistBlocksFocusOffer` | `!playlistVisible && → true &&` | `focus blocked by playlistVisible expected null, but was:<request:INTRO:1000>` |
+| b14 | `TvSkipPresentationCharacterizationTest.seekbarBlocksFocusOffer` | `!seekbarVisible && → true &&` | `focus blocked by seekbarVisible expected null, but was:<request:INTRO:1000>` |
+| b15 | `TvSkipPresentationCharacterizationTest.actualUpNextCardBlocksPresentFocusOfferWithoutHidingTheSegment` | `!upNextVisible && → true &&` | `expected null, but was:<request:INTRO:1000>` |
+| b16 | `TvSkipPresentationCharacterizationTest.subtitlePanelBlocksFocusOffer` | `subtitlePanel?.isVisible != true → true` | `focus blocked by subtitlePanel expected null, but was:<request:INTRO:1000>` |
+| b17 | `TvSkipPresentationCharacterizationTest.unifiedMenuBlocksFocusOffer` | `unifiedMenu?.isVisible != true → true` | `focus blocked by unifiedMenu expected null, but was:<request:INTRO:1000>` |
+| b18 | `TvSkipPresentationCharacterizationTest.sourceBrowserBlocksFocusOffer` | `sourceBrowser?.isVisible != true → true` | `focus blocked by sourceBrowser expected null, but was:<request:INTRO:1000>` |
+| b19 | `TvSkipPresentationCharacterizationTest.syncOverlayBlocksFocusOffer` | `syncOverlay?.isVisible != true → true` | `focus blocked by syncOverlay expected null, but was:<request:INTRO:1000>` |
+| b20 | `TvSkipPresentationCharacterizationTest.linePickerBlocksFocusOffer` | `linePickerOverlay?.isVisible != true → true` | `focus blocked by linePickerOverlay expected null, but was:<request:INTRO:1000>` |
+| b21 | `TvSkipPresentationCharacterizationTest.focusOfferIsOncePerKeyAndPostedRequestRequiresVisibleButton` | `canOfferFocus && skipFocusOfferedKey != focusKey → canOfferFocus` | `expected:<1> but was:<2>` |
+| b22 | `TvSkipPresentationCharacterizationTest.focusOfferIsOncePerKeyAndPostedRequestRequiresVisibleButton` | `if (button.visibility == View.VISIBLE) button.requestFocus() → button.requestFocus()` | `expected:<1> but was:<2>` |
+| b23 | `TvSkipPresentationCharacterizationTest.skipFeedbackPinsSecondsSuffixFloorAndOneSecondMinimum` | `"${seconds}s" → "${seconds}sec"` | `expected:<+1s[]> but was:<+1s[ec]>` |
+| b24 | `TvSkipPresentationCharacterizationTest.skipFeedbackPinsSecondsSuffixFloorAndOneSecondMinimum` | `/ 1_000L → / 500L` | `expected:<+[2]s> but was:<+[5]s>` |
+| b25 | `TvSkipPresentationCharacterizationTest.skipFeedbackPinsSecondsSuffixFloorAndOneSecondMinimum` | `coerceAtLeast(1L) → coerceAtLeast(0L)` | `expected:<+[1]s> but was:<+[0]s>` |
+| b26 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `setDuration(220) → setDuration(240)` | `expected:<220> but was:<240>` |
+| b27 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `translationX = 40f → translationX = 30f` | `expected:<40.0> but was:<30.0>` |
+| b28 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `alpha(1f) → alpha(0.8f)` | `expected:<1.0> but was:<0.8>` |
+| b29 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `translationX(0f) → translationX(5f)` | `expected:<0.0> but was:<5.0>` |
+| b30 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `setDuration(160) → setDuration(180)` | `expected:<160> but was:<180>` |
+| b31 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `alpha(0f) → alpha(0.1f)` | `expected:<0.0> but was:<0.100000024>` |
+| b32 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `translationX(40f) → translationX(30f)` | `expected:<40.0> but was:<30.0>` |
+| b33 | `TvUpNextPresentationCharacterizationTest.showAndHidePinBothAlphaTranslationTargetsDurationsAndEndReset` | `translationX = 0f → translationX = 1f` | `expected:<0.0> but was:<1.0>` |
+| b34 | `TvUpNextPresentationCharacterizationTest.unbadgedTitleAndCountdownUseExactVisibleStrings` | `"Starting in ${secs}s" → "Starting in ${secs}sec"` | `expected:<Starting in 25s[]> but was:<Starting in 25s[ec]>` |
+| b35 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `"Sleep timer set for $minutes minutes" → "Sleep timer set for $minutes min"` | `expected:<...timer set for 10 min[utes]> but was:<...timer set for 10 min[]>` |
+| b36 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `"Sleep timer: stopping at the end of this episode" → "Sleep timer: stopping"` | `expected:<...leep timer: stopping[ at the end of this episode]> but was:<...leep timer: stopping[]>` |
+| b37 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `"Sleep timer off" → "Sleep timer disabled"` | `expected:<Sleep timer [off]> but was:<Sleep timer [disabled]>` |
+| b38 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `"Sleep timer ended — paused" → "Sleep timer ended"` | `expected:<Sleep timer ended[ — paused]> but was:<Sleep timer ended[]>` |
+| b39 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `Toast.LENGTH_SHORT → Toast.LENGTH_LONG` | `expected:<0> but was:<1>` |
+| b40 | `TvSleepMessagesCharacterizationTest.countdownEndOfItemCancelAndFireKeepExactToastTextsAndDurations` | `Toast.LENGTH_LONG → Toast.LENGTH_SHORT` | `expected:<1> but was:<0>` |
+| b41 | `TvRecordingMessagesCharacterizationTest.teeStartStopAndFailedPublicationKeepExactMessages` | `Recording started → Recording started!` | `expected:<Recording started[]> but was:<Recording started[!]>` |
+| b42 | `TvRecordingMessagesCharacterizationTest.teeStartStopAndFailedPublicationKeepExactMessages` | `Recording saved to Downloads/Debrify/Recordings → Recording saved to Downloads/Debrify/Recordings!` | `expected:<...s/Debrify/Recordings[]> but was:<...s/Debrify/Recordings[!]>` |
+| b43 | `TvRecordingMessagesCharacterizationTest.teeStartStopAndFailedPublicationKeepExactMessages` | `Recording stopped, but couldn't be added to Downloads → Recording stopped, but couldn't be added to Downloads!` | `expected:<...e added to Downloads[]> but was:<...e added to Downloads[!]>` |
+| b44 | `TvRecordingMessagesCharacterizationTest.teeInsertFailureAndSegmentedStreamKeepExactMessages` | `Couldn't start recording → Couldn't start recording!` | `expected:<...dn't start recording[]> but was:<...dn't start recording[!]>` |
+| b45 | `TvRecordingMessagesCharacterizationTest.teeInsertFailureAndSegmentedStreamKeepExactMessages` | `Recording isn't supported for this stream → Recording isn't supported for this stream!` | `expected:<...rted for this stream[]> but was:<...rted for this stream[!]>` |
+| b46 | `TvRecordingMessagesCharacterizationTest.unsupportedTeeKeepsItsPlatformMessage` | `Recording needs Android 10 or newer → Recording needs Android 10 or newer!` | `expected:<... Android 10 or newer[]> but was:<... Android 10 or newer[!]>` |
+| b47 | `TvRecordingMessagesCharacterizationTest.finalizeReportsPublicationFailureButIsSilentWhenFinishing` | `Recording stopped, but couldn't be added to Downloads → Recording stopped, but couldn't be added to Downloads!` | `expected:<...e added to Downloads[]> but was:<...e added to Downloads[!]>` |
+| b48 | `TvRecordingMessagesCharacterizationTest.engineStartStopAndBothServiceFailuresKeepExactMessages` | `Recording in background — keeps going if you zap or leave → Recording in background — keeps going if you zap or leave!` | `expected:<... if you zap or leave[]> but was:<... if you zap or leave[!]>` |
+| b49 | `TvRecordingMessagesCharacterizationTest.engineStartStopAndBothServiceFailuresKeepExactMessages` | `Recording stopped — saving… → Recording stopped — saving…!` | `expected:<...ng stopped — saving…[]> but was:<...ng stopped — saving…[!]>` |
+| b50 | `TvRecordingMessagesCharacterizationTest.engineStartStopAndBothServiceFailuresKeepExactMessages` | `Couldn't stop recording → Couldn't stop recording!` | `expected:<...ldn't stop recording[]> but was:<...ldn't stop recording[!]>` |
+| b51 | `TvRecordingMessagesCharacterizationTest.engineStartStopAndBothServiceFailuresKeepExactMessages` | `Couldn't start recording → Couldn't start recording!` | `expected:<...dn't start recording[]> but was:<...dn't start recording[!]>` |
+| b52 | `TvRecordingMessagesCharacterizationTest.engineFallbackNameAndRevokedProfileMessageRemainExact` | `Recording is disabled for this profile → Recording is disabled for this profile!` | `expected:<...led for this profile[]> but was:<...led for this profile[!]>` |
+| b53 | `TvRecordingMessagesCharacterizationTest.engineUnsupportedStreamAndCapacityMessageRemainExact` | `Recording isn't supported for this stream → Recording isn't supported for this stream!` | `expected:<...rted for this stream[]> but was:<...rted for this stream[!]>` |
+| b54 | `TvRecordingMessagesCharacterizationTest.engineUnsupportedStreamAndCapacityMessageRemainExact` | `stop one, or raise the limit in IPTV settings → stop one, or raise the limit in IPTV settings!` | `expected:<...mit in IPTV settings[]> but was:<...mit in IPTV settings[!]>` |
+| b55 | `TvRecordingMessagesCharacterizationTest.engineAndSchedulePermissionMessagesRemainExact` | `Allow storage access, then press Record again → Allow storage access, then press Record again!` | `expected:<...n press Record again[]> but was:<...n press Record again[!]>` |
+| b56 | `TvRecordingMessagesCharacterizationTest.engineAndSchedulePermissionMessagesRemainExact` | `Allow storage access, then pick the programme again → Allow storage access, then pick the programme again!` | `expected:<... the programme again[]> but was:<... the programme again[!]>` |
+| b57 | `TvRecordingMessagesCharacterizationTest.disabledSchedulingAndNonProgressiveSchedulingKeepExactMessages` | `This channel can't be scheduled → This channel can't be scheduled!` | `expected:<...l can't be scheduled[]> but was:<...l can't be scheduled[!]>` |
+| b58 | `TvRecordingMessagesCharacterizationTest.exactAlarmPermissionMessageRemainsExact` | `Allow \"Alarms & reminders\" for Debrify in system settings to schedule recordings → Allow \"Alarms & reminders\" for Debrify in system settings to schedule recordings!` | `expected:<... schedule recordings[]> but was:<... schedule recordings[!]>` |
+| b59 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `Already scheduled → Already scheduled!` | `expected:<Already scheduled[]> but was:<Already scheduled[!]>` |
+| b60 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `Recording scheduled → Recording scheduled!` | `expected:<Recording scheduled[]> but was:<Recording scheduled[!]>` |
+| b61 | `TvRecordingMessagesCharacterizationTest.plainScheduleDialogAndStorageFailureKeepExactVisibleText` | `Could not save the recording schedule → Could not save the recording schedule!` | `expected:<...e recording schedule[]> but was:<...e recording schedule[!]>` |
+| b62 | `TvRecordingMessagesCharacterizationTest.disabledSchedulingAndNonProgressiveSchedulingKeepExactMessages` | `if (!recordingEngineEnabled) { Toast.makeText(this, "Scheduled recording isn't available" → if (!recordingEngineEnabled) { Toast.makeText(this, "Scheduled recording isn't available!"` | `expected:<...ding isn't available[]> but was:<...ding isn't available[!]>` |
+| b63 | `TvRecordingMessagesCharacterizationTest.engineFallbackNameAndRevokedProfileMessageRemainExact` | `"Live channel" → "Live stream"` | `expected:<Live [channel]> but was:<Live [stream]>` |
+| b64 | `TvRecordingMessagesCharacterizationTest.engineFallbackNameAndRevokedProfileMessageRemainExact` | `entry?.name ?: "recording" → entry?.name ?: "capture"` | `java.lang.AssertionError` |
+| b65 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `"Recording conflict" → "Recording clash"` | `expected:<Recording c[onflict]> but was:<Recording c[lash]>` |
+| b66 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `setPositiveButton("Record") → setPositiveButton("Capture")` | `expected:<[Record]> but was:<[Capture]>` |
+| b67 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `setNegativeButton("Cancel", null) → setNegativeButton("Back", null)` | `expected:<[Cancel]> but was:<[Back]>` |
+| b68 | `TvRecordingMessagesCharacterizationTest.scheduleDuplicateConflictDialogAndSuccessKeepAllVisibleText` | `Conflicts with $names → Clashes with $names` | `expected:<...2:24 AM – 3:24 AM C[onflict]s with Second · Firs...> but was:<...2:24 AM – 3:24 AM C[lashe]s with Second · Firs...>` |
+| b69 | `TvRecordingMessagesCharacterizationTest.plainScheduleDialogAndStorageFailureKeepExactVisibleText` | `"Record programme" → "Capture programme"` | `expected:<[Record] programme> but was:<[Capture] programme>` |
+| b70 | `TvRecordingMessagesCharacterizationTest.finalizeReportsPublicationFailureButIsSilentWhenFinishing` | `&& !isFinishing → && true` | `expected:<Recording st[arted]> but was:<Recording st[opped, but couldn't be added to Downloads]>` |
+
+Claude exact rerun: e12 → `fadeInPinsDurationAndAlphaAndBothSegmentLabels` (160 vs 200); e13 → `controlsLiftAndReturnPinDensityScaledTargetAndDuration` (−128 vs −120); e14 → `actualUpNextCardBlocksPresentFocusOfferWithoutHidingTheSegment` (unexpected offered key); e15 → `teeStartStopAndFailedPublicationKeepExactMessages` (truncated saved path).
+
+## Phase 3 step 1 — production extraction
+
+Applied `kotlin_move_partition.extraction` using the approved phase-3 manifest: 62 moved subtrees, 22 patched retained declarations with 52 exact context occurrences, six pinned slot additions, four exhaustively partitioned controller files. AppCompatActivity injection, computed explicitly-qualified Host forwarders, cross-feature Up Next reads through its controller, activity-owned readiness getters, braced templates, original Handler/scope initialization slots and teardown statement order are exactly manifest-bound. No production hand edits outside the materializer. Activity: 19,017 → 18,265 physical lines. Controllers: sleep 92, skip 282, Up Next 155, recording actions 436. Size baseline updated with --update and retained unrelated ratchets unchanged. Original localization strings/comments remain legacy text pending the separate localization migration.
+
+All 194 phase-2/3 characterizations pass after moving. Native assertions and fixtures are hash-identical to p3-step0b: only TvPlayerOriginalAccess changes, with typed selectors and Kotlin default dispatch routed to the owned controller. The helper also maps former nested SleepTimerMode/SkipSegmentRequest type names to their top-level owners. No internal-function JVM mangling is introduced. The following complete owned-field/function map defines the reflection retargets (property getters and lazy `$delegate` selectors route to the same owner):
+
+| Original activity selector | Controller selector |
+| --- | --- |
+| `property upNextCard` | `class TvUpNextController/property upNextCard` |
+| `property upNextPoster` | `class TvUpNextController/property upNextPoster` |
+| `property upNextTitle` | `class TvUpNextController/property upNextTitle` |
+| `property upNextCountdown` | `class TvUpNextController/property upNextCountdown` |
+| `property upNextVisible` | `class TvUpNextController/property upNextVisible` |
+| `property upNextTargetIndex` | `class TvUpNextController/property upNextTargetIndex` |
+| `property upNextDismissedForIndex` | `class TvUpNextController/property upNextDismissedForIndex` |
+| `property upNextHandler` | `class TvUpNextController/property upNextHandler` |
+| `property skipSegmentScope` | `class TvSkipSegmentController/property skipSegmentScope` |
+| `property skipSegmentFetchJob` | `class TvSkipSegmentController/property skipSegmentFetchJob` |
+| `property skipSegmentFetchGeneration` | `class TvSkipSegmentController/property skipSegmentFetchGeneration` |
+| `property loadedSkipSegmentKey` | `class TvSkipSegmentController/property loadedSkipSegmentKey` |
+| `property loadingSkipSegmentKey` | `class TvSkipSegmentController/property loadingSkipSegmentKey` |
+| `property skipSegments` | `class TvSkipSegmentController/property skipSegments` |
+| `property activeSkipSegment` | `class TvSkipSegmentController/property activeSkipSegment` |
+| `property skipFocusOfferedKey` | `class TvSkipSegmentController/property skipFocusOfferedKey` |
+| `property skipSegmentCache` | `class TvSkipSegmentController/property skipSegmentCache` |
+| `property sleepTimerMode` | `class TvSleepTimerController/property sleepTimerMode` |
+| `property sleepTimerDeadlineElapsedMs` | `class TvSleepTimerController/property sleepTimerDeadlineElapsedMs` |
+| `property sleepTimerHandler` | `class TvSleepTimerController/property sleepTimerHandler` |
+| `property sleepTimerRunnable` | `class TvSleepTimerController/property sleepTimerRunnable` |
+| `property sleepTimerMinuteOptions` | `class TvSleepTimerController/property sleepTimerMinuteOptions` |
+| `fun currentSkipSegmentRequest(Long)` | `class TvSkipSegmentController/fun currentSkipSegmentRequest(Long)` |
+| `fun updateSkipSegmentState(Long,Long)` | `class TvSkipSegmentController/fun updateSkipSegmentState(Long,Long)` |
+| `fun ensureSkipSegments(SkipSegmentRequest)` | `class TvSkipSegmentController/fun ensureSkipSegments(SkipSegmentRequest)` |
+| `fun presentSkipSegment(TvSkipSegment?,String?)` | `class TvSkipSegmentController/fun presentSkipSegment(TvSkipSegment?,String?)` |
+| `fun skipActiveSegment()` | `class TvSkipSegmentController/fun skipActiveSegment()` |
+| `fun sleepTimerMinutesLeft()` | `class TvSleepTimerController/fun sleepTimerMinutesLeft()` |
+| `fun sleepTimerValueLabel()` | `class TvSleepTimerController/fun sleepTimerValueLabel()` |
+| `fun startSleepCountdown(Int)` | `class TvSleepTimerController/fun startSleepCountdown(Int)` |
+| `fun armSleepAtEndOfItem()` | `class TvSleepTimerController/fun armSleepAtEndOfItem()` |
+| `fun cancelSleepTimer(Boolean)` | `class TvSleepTimerController/fun cancelSleepTimer(Boolean)` |
+| `fun fireSleepTimer()` | `class TvSleepTimerController/fun fireSleepTimer()` |
+| `fun resetSkipSegmentState()` | `class TvSkipSegmentController/fun resetSkipSegmentState()` |
+| `fun maybeShowUpNext()` | `class TvUpNextController/fun maybeShowUpNext()` |
+| `property upNextTicker` | `class TvUpNextController/property upNextTicker` |
+| `fun showUpNextCard(Int)` | `class TvUpNextController/fun showUpNextCard(Int)` |
+| `fun triggerUpNext()` | `class TvUpNextController/fun triggerUpNext()` |
+| `fun dismissUpNext()` | `class TvUpNextController/fun dismissUpNext()` |
+| `fun hideUpNextCard()` | `class TvUpNextController/fun hideUpNextCard()` |
+| `property recordingEngineEnabled` | `class TvIptvRecordingActionsController/property recordingEngineEnabled` |
+| `property recordingRegistryListener` | `class TvIptvRecordingActionsController/property recordingRegistryListener` |
+| `fun isCurrentIptvSegmented()` | `class TvIptvRecordingActionsController/fun isCurrentIptvSegmented()` |
+| `fun engineRecordableUrl(String)` | `class TvIptvRecordingActionsController/fun engineRecordableUrl(String)` |
+| `fun isSchedulableStreamUrl(String)` | `class TvIptvRecordingActionsController/fun isSchedulableStreamUrl(String)` |
+| `fun engineTaskIdForCurrentChannel()` | `class TvIptvRecordingActionsController/fun engineTaskIdForCurrentChannel()` |
+| `fun recordingResourceFor(IptvChannelEntry?)` | `class TvIptvRecordingActionsController/fun recordingResourceFor(IptvChannelEntry?)` |
+| `fun canRecordCurrentIptv()` | `class TvIptvRecordingActionsController/fun canRecordCurrentIptv()` |
+| `fun updateRecordButtonState()` | `class TvIptvRecordingActionsController/fun updateRecordButtonState()` |
+| `fun toggleIptvRecording()` | `class TvIptvRecordingActionsController/fun toggleIptvRecording()` |
+| `fun maybeAskNotificationPermission()` | `class TvIptvRecordingActionsController/fun maybeAskNotificationPermission()` |
+| `fun toggleEngineRecording()` | `class TvIptvRecordingActionsController/fun toggleEngineRecording()` |
+| `fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` | `class TvIptvRecordingActionsController/fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` |
+| `fun finalizeIptvRecordingIfActive()` | `class TvIptvRecordingActionsController/fun finalizeIptvRecordingIfActive()` |
+| `property notificationPermissionRequestCode` | `class TvIptvRecordingActionsController/property notificationPermissionRequestCode` |
+
+Dart retarget: `test/android_tv_auto_advance_resume_test.dart` reads triggerUpNext→dismissUpNext from TvUpNextController.kt; its ordering assertion pins `host.isAutoAdvancing = true` before `host.playItem(target)`. The playItem resume assertions still read the activity and are unchanged. All other Dart/native private-name anchors are retained in their original owners. Changed Dart formatted.
+
+Move checker: 2,671 declarations, zero differences; 53 self-tests pass. Historical p1@dcbd9aafe (3,477) and p2@ec365eb80 (2,839) pass; earlier 22 destinations unchanged. Full forced Kotlin compilation (`:app:compileDebugKotlin --rerun -Pkotlin.incremental=false`) succeeds with exactly the original five warning identities. All 58 substituted this sites have identical compiled invocation descriptors; Glide still selects FragmentActivity. The separate onStop/onDestroy token-order assertion passes. Evidence `p3/gate/{checker.log,historical-p1.log,historical-p2.log,earlier-destinations.log,compile-debug.log,kotlin-warnings-comparison.json,moved-characterizations.log,overload-audit.json,teardown-order.json,test-retarget-scope.json}`. Complete JVM/lint/release/Flutter gate follows on the committed Step 1 tree.
+
+### Phase 3 step 0b — final recording boundary supplement
+
+During gate verification, corrected the initial stable-dependency assumption: SDK-28 storage permission can be revoked between needsLegacyPermission and isSupported, and forced-HLS eligibility is read again between scheduling eligibility and record-URL construction. Added three tests first in a detached ec365eb80 worktree: the real permission methods receive a grant then denial from a test-only ContextImpl shadow; a controlled mutable set changes after its first membership lookup while production eligibility methods stay real. All three original controls pass and all three literal mutations fail named comparison assertions. This finishes exact-text coverage for every recording Toast branch; these new fixtures also assert durations. Characterization assertions were not changed by the production move.
+
+The extra cases were discovered after the mechanical move, so their original proofs and baseline extension finish during the gate. Production code is unchanged from Step 1. The initial 456-identity baseline/gate archives remain under `junit/p3-step0b-before-boundary` and `junit/p3-gate-before-boundary`; canonical p3-step0b is re-recorded on the original plus all 33 new step-0b tests. Final JVM comparison follows against that canonical baseline. This is a sequencing deviation, not a behavior change or test relaxation.
+
+| ID | Test | Mutation on ec365eb80 | Named failing assertion |
+| --- | --- | --- | --- |
+| b71 | `TvRecordingBoundaryMessagesCharacterizationTest.permissionRevokedBetweenChecksUsesTheEngineUnavailableMessage` | Engine unavailable toast loses device qualifier after permission changes between reads | `expected:<...ding isn't available[ on this device]> but was:<...ding isn't available[]>` |
+| b72 | `TvRecordingBoundaryMessagesCharacterizationTest.permissionRevokedBetweenChecksUsesTheScheduleUnavailableMessage` | Second supported check: schedule unavailable text changed | `expected:<Scheduled recording [isn't ]available> but was:<Scheduled recording [un]available>` |
+| b73 | `TvRecordingBoundaryMessagesCharacterizationTest.forcedHlsChangeBetweenEligibilityReadsUsesTheUnrecordableMessage` | Eligibility changes between URL reads: unrecordable text changed to unschedulable | `expected:<...is channel can't be [record]ed> but was:<...is channel can't be [schedul]ed>` |
+
+Evidence: `p3/step0b-boundary/{original-control.log,mutations/,baseline-run.log,TvRecordingBoundaryMessagesCharacterizationTest.kt}`. Total phase-3 step-0b sweep proofs: **73/73**, in addition to Claude exact e12–e15 kills.
+
+## Phase 3 gate — final results
+
+Tested production move: 496a3d481. Final original-only boundary tests: 25f08cfb0. No production, Dart, build or dependency input differs between those revisions; the complete Flutter/release evidence remains applicable, as recorded in `p3/gate/gate-input-reuse.json`. Native JVM and lint were rerun after the extra tests. All characterization bytes match the original test worktree except the shared reflection access helper; no behavioral assertion was retargeted or weakened.
+
+- Final clean original `p3-step0b`: **459 identities, 458 pass, unchanged TvSourceBrowserFocusTest failure, no skips** at ec365eb80 plus final tests (19 dirty test files), JBR 21.0.10, stable fingerprint. Versus p3-step0: all 426 prior statuses retained, **33 passing additions**. Final moved `p3-gate` at clean 25f08cfb0 exactly matches all 459 identities/statuses. Earlier 456-identity archives and the rejected fixture-leak attempt are retained with descriptive labels. All **73 sweep mutations** fail named assertions; Claude exact e12–e15 are rerun again against **all 197 final phase-2/3 characterizations**, all killed, control clean. Detached original removed.
+- Checker: **2,671 original declarations, zero differences**; 53 self-tests pass with complete phase-3 fixture and all required negatives. Historical p1@dcbd9aafe (3,477) and p2@ec365eb80 (2,839) pass; all 22 earlier destinations match ec365eb80. Complete onStop/onDestroy token order unchanged after exact patches. All **58 compiled activity-this sites** resolve to identical invocation descriptors, including Glide.with(FragmentActivity). File-size check passes; activity 18,265, controllers 92/282/155/436; unchanged unrelated ratchets.
+- Forced compileDebugKotlin succeeds and exactly retains all five original warning identities. Final lint: **1,352 issues (253 errors, 1,099 warnings)**, all 175 opt-in issues unchanged, **no additions**. The sole removed warning is exact `UnusedResources` for splash_logo, now referenced by the original Glide lifecycle fixture. The comparison accepts only this specific fixture reference/removal; all other identities and multiplicities match. Gradle lint exits 1 for the existing errors, not a new issue.
+- `flutter build apk --release` succeeds (102.2MB; no install). R8/DEX check covers **21 classes, 276 members**: all four controllers and Host interfaces, four activity Host anonymous objects, their destination-generated classes (including ticker/coroutines/enums/request class), and both new Kt facades. **159 explicit member identities + 117 implicit identities verified independently in DEX**; three renamed/missing-member negative controls pass. Complete mapping/configuration/seeds/usage and provenance archived, ProGuard unchanged.
+- Decoder script exits 1 with the same nine missing subtitle decoders and three filters. All three packaged libmpv hashes and script output match phase 2 (and the earlier phase-1 hashes). **Pending-environment**, no decoder parity claim or workaround.
+- Full Flutter via suite_evidence.py on this worktree: accepted quiet run **exactly matches all 12,855 phase-2 identity/status pairs** (12,794 success, 13 existing failures, 28 existing errors, 20 skips), same SDK and stable clean tree; no additions/removals/new failures/skips. Initial full run with other gate work concurrently active had one additional error: unchanged keyword-cache widget test missed its 150ms real async engine-startup wait. It is retained and rejected. Isolated four-test suite passes, then complete quiet rerun passes comparison without changing source/assertions/allowlists. This timing sensitivity is a follow-up. `flutter analyze`: **1,758 diagnostics, exact identity/multiplicity match with phase-2 gate**, no additions/removals; modified Dart source guard formatted and included in the full suite.
+
+Evidence: `p3/gate/` (checker/self-tests/history/earlier destinations, compiled overloads/teardown, warnings, JVM metadata/comparison, lint reports/comparison, APK/R8 provenance and mapping/DEX inventory, decoder log/hash verification, full Flutter initial/quiet and focused runs with env/comparisons, analyzer comparison); `p3/step0b/`, `p3/step0b-boundary/`, and `junit/p3-step0b/`, `junit/p3-gate/`.
+
+Deviations: three final message boundary cases/proofs were completed during the gate after moves, correcting the initial stable-dependency assumption; baseline extended on the original first, then moved comparison rerun. Full Flutter required a quiet retry after the isolated timing failure. Production code unchanged after Step 1; complete Flutter/release evidence reused only for later JVM-test/docs changes. No bug fix, branch switch, push, device/emulator interaction, dependency/lockfile/ProGuard edit, or self independent review. Claude runs the separate review session. **Stopped after phase 3**, decoder verification pending-environment.

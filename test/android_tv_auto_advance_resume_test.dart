@@ -30,21 +30,23 @@ void main() {
     );
     expect(
       playItem,
-      contains(
-        'if (autoAdvance || suppressTrakt || suppressResume) 0.0',
-      ),
+      contains('if (autoAdvance || suppressTrakt || suppressResume) 0.0'),
     );
   });
 
+  final upNextController = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvUpNextController.kt',
+  ).readAsStringSync();
+
   test('native TV Up Next countdown is treated as an auto-advance', () {
     final triggerUpNext = _between(
-      nativePlayer,
-      'private fun triggerUpNext()',
-      'private fun dismissUpNext()',
+      upNextController,
+      'fun triggerUpNext()',
+      'fun dismissUpNext()',
     );
 
-    final autoAdvance = triggerUpNext.indexOf('isAutoAdvancing = true');
-    final play = triggerUpNext.indexOf('playItem(target)');
+    final autoAdvance = triggerUpNext.indexOf('host.isAutoAdvancing = true');
+    final play = triggerUpNext.indexOf('host.playItem(target)');
     expect(autoAdvance, isNonNegative);
     expect(play, greaterThan(autoAdvance));
   });

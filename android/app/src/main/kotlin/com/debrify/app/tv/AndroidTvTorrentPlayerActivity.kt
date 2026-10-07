@@ -159,17 +159,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Loading/tuning overlay backdrop art
     private lateinit var nextBackdrop: android.widget.ImageView
-
-    // Up Next card (slide-in near end of episode)
-    private lateinit var upNextCard: View
-    private lateinit var upNextPoster: android.widget.ImageView
-    private lateinit var upNextTitle: TextView
-    private lateinit var upNextCountdown: TextView
+    private val upNextController = TvUpNextController(
+        this,
+        object : TvUpNextController.Host {
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override val continuousShuffleEnabled: Boolean get() = this@AndroidTvTorrentPlayerActivity.continuousShuffleEnabled
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val isStremioTvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isStremioTvMode
+            override var isAutoAdvancing: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.isAutoAdvancing
+                set(value) { this@AndroidTvTorrentPlayerActivity.isAutoAdvancing = value }
+            override fun isCleanPlaybackState(): Boolean = this@AndroidTvTorrentPlayerActivity.isCleanPlaybackState()
+            override fun canShuffleWholeShow(): Boolean = this@AndroidTvTorrentPlayerActivity.canShuffleWholeShow()
+            override fun pickShuffleIndex(): Int? = this@AndroidTvTorrentPlayerActivity.pickShuffleIndex()
+            override fun getNextPlayableIndex(i: Int): Int? = this@AndroidTvTorrentPlayerActivity.getNextPlayableIndex(i)
+            override fun playItem(index: Int) = this@AndroidTvTorrentPlayerActivity.playItem(index)
+        },
+    )
     private lateinit var skipSegmentButton: AppCompatButton
-    private var upNextVisible = false
-    private var upNextTargetIndex: Int? = null
-    private var upNextDismissedForIndex = -1
-    private val upNextHandler = Handler(Looper.getMainLooper())
     private val seasonTabs = mutableListOf<android.widget.TextView>()
     private val movieTabs = mutableListOf<MovieTab>()
 
@@ -388,7 +397,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!isIptvMode || isFinishing || isDestroyed) return false
         val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
         if (!entry.isLive) return false
-        if (sleepStopLatched || sleepTimerMode == SleepTimerMode.END_OF_ITEM) return false
+        if (sleepStopLatched || sleepTimerController.sleepTimerMode == SleepTimerMode.END_OF_ITEM) return false
         if (iptvStremioChannelKey != null && !iptvStremioWinnerReported) return false
         if (player?.playWhenReady != true) return false
         return true
@@ -425,7 +434,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // flags off, so it is not evidence about them; without this gate two
         // failed twin trials would flip the whole session strict.
         if (source == "video-stall" && attempt >= 2 &&
-            !isCurrentIptvSegmented() && !iptvStrictTsActive &&
+            !iptvRecordingActionsController.isCurrentIptvSegmented() && !iptvStrictTsActive &&
             iptvStrictTsUrls.add(url)
         ) {
             iptvTuneDiagnostics.onRecovery(source, "strict-ts")
@@ -436,7 +445,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // full story). Only ever from an objectively detected video stall;
         // no twin / already failed / twin known HLS-forced falls through to
         // the plain re-tune below, exactly as before.
-        if (source == "video-stall" && attempt >= 2 && isCurrentIptvSegmented() &&
+        if (source == "video-stall" && attempt >= 2 && iptvRecordingActionsController.isCurrentIptvSegmented() &&
             iptvTwinTrialOriginalUrl == null && !iptvTwinFailedUrls.contains(url)
         ) {
             val twin = xtreamTsTwin(url)
@@ -452,8 +461,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // recovered stream simply isn't recorded further (plan invariant,
         // codex round 2 finding 7).
         if (iptvRecordingController.isActive) {
-            finalizeIptvRecordingIfActive()
-            updateRecordButtonState()
+            iptvRecordingActionsController.finalizeIptvRecordingIfActive()
+            iptvRecordingActionsController.updateRecordButtonState()
         }
         iptvLiveRetuneInFlight = true
         try {
@@ -1145,41 +1154,46 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleEpisode: Int? = null
     private var manualSubtitleDisplayLabel: String? = null
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
-    // Manual community skip actions for the native TV player. Requests are
-    // keyed by provider + episode + exact stream duration so source changes
-    // cannot reuse timestamps from a differently cut release.
-    private data class SkipSegmentRequest(
-        val providerId: String,
-        val imdbId: String,
-        val season: Int,
-        val episode: Int,
-        val durationSeconds: Long,
-        val key: String,
+    private val skipSegmentController = TvSkipSegmentController(
+        this,
+        object : TvSkipSegmentController.Host {
+            override val skipSegmentButtonBound: Boolean get() = this@AndroidTvTorrentPlayerActivity.skipSegmentButtonReady
+            override val skipSegmentButton: AppCompatButton get() = this@AndroidTvTorrentPlayerActivity.skipSegmentButton
+            override val skipSegmentsEnabled: Boolean get() = this@AndroidTvTorrentPlayerActivity.skipSegmentsEnabled
+            override val skipSegmentProviderId: String get() = this@AndroidTvTorrentPlayerActivity.skipSegmentProviderId
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override val hasEverBeenReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasEverBeenReady
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
+            override val controlsMenuVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.controlsMenuVisible
+            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistVisible
+            override val seekbarVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.seekbarVisible
+            override val upNextVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.upNextController.upNextVisible
+            override val subtitlePanel: SubtitlePanelController? get() = this@AndroidTvTorrentPlayerActivity.subtitlePanel
+            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
+            override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
+            override val syncOverlay: SubtitleSyncOverlayController? get() = this@AndroidTvTorrentPlayerActivity.syncOverlay
+            override val linePickerOverlay: SubtitleLinePickerController? get() = this@AndroidTvTorrentPlayerActivity.linePickerOverlay
+            override val seekFeedbackManagerBound: Boolean get() = this@AndroidTvTorrentPlayerActivity.seekFeedbackManagerReady
+            override val seekFeedbackManager: SeekFeedbackManager get() = this@AndroidTvTorrentPlayerActivity.seekFeedbackManager
+            override fun releaseResumeHold() = this@AndroidTvTorrentPlayerActivity.releaseResumeHold()
+        },
     )
-    private val skipSegmentScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var skipSegmentFetchJob: kotlinx.coroutines.Job? = null
-    private var skipSegmentFetchGeneration = 0
-    private var loadedSkipSegmentKey: String? = null
-    private var loadingSkipSegmentKey: String? = null
-    private var skipSegments = TvSkipSegments.EMPTY
-    private var activeSkipSegment: TvSkipSegment? = null
-    private var skipFocusOfferedKey: String? = null
-    private val skipSegmentCache = mutableMapOf<String, TvSkipSegments>()
-
-    // ── Sleep timer ───────────────────────────────────────────────────────────
-    // Stops playback after a countdown, or at the end of the current item.
-    //
-    // The activity adds FLAG_KEEP_SCREEN_ON on create and never clears it, so
-    // pausing alone would leave the TV lit all night — the exact thing this
-    // feature exists to prevent. Firing therefore drops the flag as well, and
-    // any later playback re-arms it (see onIsPlayingChanged).
-    private enum class SleepTimerMode { OFF, COUNTDOWN, END_OF_ITEM }
-    private var sleepTimerMode = SleepTimerMode.OFF
-    private var sleepTimerDeadlineElapsedMs = 0L
-    private val sleepTimerHandler = Handler(Looper.getMainLooper())
-    private var sleepTimerRunnable: Runnable? = null
-    private val sleepTimerMinuteOptions = listOf(15, 30, 45, 60, 90)
+    private val skipSegmentButtonReady: Boolean get() = ::skipSegmentButton.isInitialized
+    private val seekFeedbackManagerReady: Boolean get() = ::seekFeedbackManager.isInitialized
+    private val sleepTimerController = TvSleepTimerController(
+        this,
+        object : TvSleepTimerController.Host {
+            override var sleepStopLatched: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.sleepStopLatched
+                set(value) { this@AndroidTvTorrentPlayerActivity.sleepStopLatched = value }
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override fun sendProgress(completed: Boolean) = this@AndroidTvTorrentPlayerActivity.sendProgress(completed)
+            override fun releaseScreenForSleep() = this@AndroidTvTorrentPlayerActivity.releaseScreenForSleep()
+        },
+    )
 
     /**
      * Latched from a sleep-timer stop until the user explicitly starts playback
@@ -1360,7 +1374,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val progressRunnable = object : Runnable {
         override fun run() {
             sendProgress(completed = false)
-            maybeShowUpNext()
+            upNextController.maybeShowUpNext()
             player?.let {
                 iptvTuneDiagnostics.onProgress(it.currentPosition, it.isPlaying)
                 // playWhenReady, not isPlaying: a buffering wedge reports
@@ -1586,8 +1600,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
                     } else null
                     if (endedLiveEntry != null) {
-                        if (sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
-                            cancelSleepTimer()
+                        if (sleepTimerController.sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
+                            sleepTimerController.cancelSleepTimer()
                             sleepStopLatched = true
                             releaseScreenForSleep()
                             Toast.makeText(
@@ -1621,8 +1635,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     // "Stop at the end of this episode". Playback has already
                     // finished, so this only has to suppress every advance
                     // below and let the screen go to sleep.
-                    if (sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
-                        cancelSleepTimer()
+                    if (sleepTimerController.sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
+                        sleepTimerController.cancelSleepTimer()
                         sleepStopLatched = true
                         releaseScreenForSleep()
                         Toast.makeText(
@@ -1944,7 +1958,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Engine captures start/stop outside this activity (notification Stop,
         // duration cap) — the registry callback keeps the Record button honest.
-        RecordingRegistry.addListener(recordingRegistryListener)
+        RecordingRegistry.addListener(iptvRecordingActionsController.recordingRegistryListener)
 
         // Load default player settings from Flutter's SharedPreferences
         loadPlayerDefaults()
@@ -2425,12 +2439,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nextText = findViewById(R.id.android_tv_next_text)
         nextSubtext = findViewById(R.id.android_tv_next_subtext)
         nextBackdrop = findViewById(R.id.android_tv_next_backdrop)
-        upNextCard = findViewById(R.id.android_tv_upnext_card)
-        upNextPoster = findViewById(R.id.android_tv_upnext_poster)
-        upNextTitle = findViewById(R.id.android_tv_upnext_title)
-        upNextCountdown = findViewById(R.id.android_tv_upnext_countdown)
+        upNextController.upNextCard = findViewById(R.id.android_tv_upnext_card)
+        upNextController.upNextPoster = findViewById(R.id.android_tv_upnext_poster)
+        upNextController.upNextTitle = findViewById(R.id.android_tv_upnext_title)
+        upNextController.upNextCountdown = findViewById(R.id.android_tv_upnext_countdown)
         skipSegmentButton = findViewById(R.id.android_tv_skip_segment_button)
-        skipSegmentButton.setOnClickListener { skipActiveSegment() }
+        skipSegmentButton.setOnClickListener { skipSegmentController.skipActiveSegment() }
         seekbarOverlay = findViewById(R.id.seekbar_overlay)
         seekbarProgress = findViewById(R.id.seekbar_progress)
         seekbarHandle = findViewById(R.id.seekbar_handle)
@@ -2792,7 +2806,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // A write error (disk full, row revoked) ends the recording on the
             // loader thread; without this the dock would keep saying "Stop".
             iptvRecordingController.onAborted = {
-                updateRecordButtonState()
+                iptvRecordingActionsController.updateRecordButtonState()
                 Toast.makeText(
                     this,
                     "Recording stopped — couldn't keep writing to storage",
@@ -4492,8 +4506,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         maxStableDurationMs = 0L
         lastRealPositionMs = 0L
         hideBufferingIndicator()
-        hideUpNextCard()
-        resetSkipSegmentState()
+        upNextController.hideUpNextCard()
+        skipSegmentController.resetSkipSegmentState()
 
         // Cancel any ongoing PikPak retry before starting new item
         cancelPikPakRetry()
@@ -5390,7 +5404,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             showStatusPillTransient("No other playable episode found for shuffle")
             return true
         }
-        hideUpNextCard()
+        upNextController.hideUpNextCard()
         val generation = showShuffleGeneration
         fun fetchTarget() {
             val fetchAttempt = ShufflePlaybackAttempt(mediaPreparationGeneration, generation, autoAdvance,
@@ -6887,18 +6901,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Handle Up Next card: OK plays next now, BACK dismisses it for this
         // episode, any other key soft-hides it (it may reappear near the end)
         // and proceeds with normal playback handling.
-        if (upNextVisible) {
+        if (upNextController.upNextVisible) {
             when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) triggerUpNext()
+                    if (event.action == KeyEvent.ACTION_DOWN) upNextController.triggerUpNext()
                     return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) dismissUpNext()
+                    if (event.action == KeyEvent.ACTION_DOWN) upNextController.dismissUpNext()
                     return true
                 }
                 else -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) hideUpNextCard()
+                    if (event.action == KeyEvent.ACTION_DOWN) upNextController.hideUpNextCard()
                 }
             }
         }
@@ -7373,7 +7387,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // recognised and not scrobbled as a full watch (see maxStableDurationMs).
             if (duration > maxStableDurationMs) maxStableDurationMs = duration
             if (currentPosition in 0..duration) lastRealPositionMs = currentPosition
-            updateSkipSegmentState(currentPosition, duration)
+            skipSegmentController.updateSkipSegmentState(currentPosition, duration)
 
             // Update Cinema Mode split time displays
             debrifyTimeCurrent?.text = formatTime(currentPosition)
@@ -7822,260 +7836,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun currentSkipSegmentRequest(durationMs: Long): SkipSegmentRequest? {
-        if (!skipSegmentsEnabled ||
-            !TvSkipSegmentClients.supports(skipSegmentProviderId) ||
-            isIptvMode ||
-            durationMs <= 0L ||
-            durationMs == C.TIME_UNSET
-        ) {
-            return null
-        }
-
-        val model = payload ?: return null
-        if (model.contentType.lowercase(Locale.US) != "series") return null
-        val imdbId = model.imdbId?.trim()?.takeIf { IMDB_ID_REGEX.matches(it) } ?: return null
-        val item = model.items.getOrNull(currentIndex) ?: return null
-        val season = item.season?.takeIf { it >= 0 } ?: return null
-        val episode = item.episode?.takeIf { it >= 1 } ?: return null
-        val durationSeconds = durationMs / 1_000L
-        if (durationSeconds <= 0L) return null
-
-        return SkipSegmentRequest(
-            providerId = skipSegmentProviderId,
-            imdbId = imdbId,
-            season = season,
-            episode = episode,
-            durationSeconds = durationSeconds,
-            key = "$skipSegmentProviderId:$imdbId:$season:$episode:$durationSeconds",
-        )
-    }
-
-    private fun updateSkipSegmentState(positionMs: Long, durationMs: Long) {
-        if (!::skipSegmentButton.isInitialized) return
-
-        // Between playlist items the player still reports the OUTGOING media's
-        // position and duration for a moment, while currentIndex already names
-        // the incoming episode. Judging the new episode against those makes the
-        // button flash on as soon as next-episode is pressed — the old position
-        // is usually deep in the outgoing episode, which lands inside a segment
-        // — and fetches its segments against a duration that isn't its own,
-        // which can select or validate the wrong release. Wait until the new
-        // media is prepared; resetSkipSegmentState() has already hidden the button.
-        if (!hasEverBeenReady) {
-            presentSkipSegment(null, null)
-            return
-        }
-
-        val request = currentSkipSegmentRequest(durationMs)
-        if (request == null) {
-            presentSkipSegment(null, null)
-            return
-        }
-
-        if (loadedSkipSegmentKey != request.key) {
-            ensureSkipSegments(request)
-            presentSkipSegment(null, request.key)
-            return
-        }
-
-        // The Up Next card owns the same end-of-episode action space. If it is
-        // present, prefer its richer next-episode action; dismissing it reveals
-        // Skip credits again if the outro is still active.
-        val segment = if (upNextVisible) null else skipSegments.segmentAt(positionMs)
-        presentSkipSegment(segment, request.key)
-    }
-
-    private fun ensureSkipSegments(request: SkipSegmentRequest) {
-        if (loadedSkipSegmentKey == request.key || loadingSkipSegmentKey == request.key) return
-
-        skipSegmentCache[request.key]?.let { cached ->
-            skipSegments = cached
-            loadedSkipSegmentKey = request.key
-            return
-        }
-
-        if (loadingSkipSegmentKey != null && loadingSkipSegmentKey != request.key) {
-            skipSegmentFetchGeneration++
-            skipSegmentFetchJob?.cancel()
-            skipSegmentFetchJob = null
-            loadingSkipSegmentKey = null
-        }
-
-        val generation = ++skipSegmentFetchGeneration
-        loadingSkipSegmentKey = request.key
-        skipSegmentFetchJob = skipSegmentScope.launch {
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    TvSkipSegmentClients.fetch(
-                        providerId = request.providerId,
-                        imdbId = request.imdbId,
-                        season = request.season,
-                        episode = request.episode,
-                        durationSeconds = request.durationSeconds,
-                    )
-                }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                // Skip data is optional and must never interrupt playback.
-                android.util.Log.w(
-                    "SkipSegments",
-                    "${request.providerId} request failed",
-                    error,
-                )
-                TvSkipSegments.EMPTY
-            }
-
-            if (generation != skipSegmentFetchGeneration) return@launch
-            val liveDuration = player?.duration ?: C.TIME_UNSET
-            if (currentSkipSegmentRequest(liveDuration)?.key != request.key) return@launch
-
-            if (skipSegmentCache.size >= MAX_SKIP_SEGMENT_CACHE_ENTRIES) {
-                skipSegmentCache.keys.firstOrNull()?.let { skipSegmentCache.remove(it) }
-            }
-            skipSegmentCache[request.key] = result
-            skipSegments = result
-            loadedSkipSegmentKey = request.key
-            loadingSkipSegmentKey = null
-            skipSegmentFetchJob = null
-            val p = player ?: return@launch
-            updateSkipSegmentState(p.currentPosition, p.duration)
-        }
-    }
-
-    private fun presentSkipSegment(segment: TvSkipSegment?, requestKey: String?) {
-        val button = skipSegmentButton
-        activeSkipSegment = segment
-        if (segment == null || requestKey == null) {
-            if (button.visibility != View.GONE) {
-                if (currentFocus == button) playerView.requestFocus()
-                button.animate().cancel()
-                button.visibility = View.GONE
-                button.alpha = 0f
-                button.translationY = 0f
-            }
-            return
-        }
-
-        button.text = when (segment.type) {
-            TvSkipSegmentType.INTRO -> "Skip intro »"
-            TvSkipSegmentType.OUTRO -> "Skip credits »"
-        }
-        if (button.visibility != View.VISIBLE) {
-            button.animate().cancel()
-            button.alpha = 0f
-            button.visibility = View.VISIBLE
-            button.animate().alpha(1f).setDuration(160L).start()
-        }
-
-        val targetTranslationY = if (controlsMenuVisible) {
-            -128f * resources.displayMetrics.density
-        } else {
-            0f
-        }
-        if (kotlin.math.abs(button.translationY - targetTranslationY) > 0.5f) {
-            button.animate().translationY(targetTranslationY).setDuration(180L).start()
-        }
-
-        val focusKey = "$requestKey:${segment.type}:${segment.startMs}"
-        val canOfferFocus = !controlsMenuVisible &&
-            !playlistVisible &&
-            !seekbarVisible &&
-            !upNextVisible &&
-            subtitlePanel?.isVisible != true &&
-            unifiedMenu?.isVisible != true &&
-            sourceBrowser?.isVisible != true &&
-            syncOverlay?.isVisible != true &&
-            linePickerOverlay?.isVisible != true
-        if (canOfferFocus && skipFocusOfferedKey != focusKey) {
-            skipFocusOfferedKey = focusKey
-            button.post { if (button.visibility == View.VISIBLE) button.requestFocus() }
-        }
-    }
-
-    private fun skipActiveSegment() {
-        val p = player ?: return
-        val segment = activeSkipSegment ?: return
-        val position = p.currentPosition
-        if (!segment.contains(position)) {
-            updateSkipSegmentState(position, p.duration)
-            return
-        }
-        val target = if (p.duration > 0L && p.duration != C.TIME_UNSET) {
-            segment.endMs.coerceAtMost(p.duration)
-        } else {
-            segment.endMs
-        }
-        if (target <= position) return
-
-        // Only caller is the on-screen skip button — a viewer choice, so it
-        // outranks any pending resume hold even though the jump is forward.
-        releaseResumeHold()
-        p.seekTo(target)
-        if (::seekFeedbackManager.isInitialized) {
-            val seconds = ((target - position) / 1_000L).coerceAtLeast(1L)
-            seekFeedbackManager.showSeekForward("${seconds}s")
-        }
-        presentSkipSegment(null, null)
-    }
-
-    // ── Sleep timer ───────────────────────────────────────────────────────────
-
-    /** Whole minutes left, rounded up so a fresh 30-minute timer reads "30". */
-    private fun sleepTimerMinutesLeft(): Int {
-        if (sleepTimerMode != SleepTimerMode.COUNTDOWN) return 0
-        val remaining = sleepTimerDeadlineElapsedMs - android.os.SystemClock.elapsedRealtime()
-        return kotlin.math.ceil(remaining / 60_000.0).toInt().coerceAtLeast(0)
-    }
-
-    private fun sleepTimerValueLabel(): String = when (sleepTimerMode) {
-        SleepTimerMode.OFF -> "Off"
-        SleepTimerMode.END_OF_ITEM -> "End of episode"
-        SleepTimerMode.COUNTDOWN -> "${sleepTimerMinutesLeft()} min"
-    }
-
-    private fun startSleepCountdown(minutes: Int) {
-        cancelSleepTimer()
-        val durationMs = minutes * 60_000L
-        sleepTimerMode = SleepTimerMode.COUNTDOWN
-        // elapsedRealtime, not currentTimeMillis: the countdown must survive a
-        // clock adjustment and keep counting while the box is dozing.
-        sleepTimerDeadlineElapsedMs = android.os.SystemClock.elapsedRealtime() + durationMs
-        val runnable = Runnable { fireSleepTimer() }
-        sleepTimerRunnable = runnable
-        sleepTimerHandler.postDelayed(runnable, durationMs)
-        Toast.makeText(this, "Sleep timer set for $minutes minutes", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun armSleepAtEndOfItem() {
-        cancelSleepTimer()
-        sleepTimerMode = SleepTimerMode.END_OF_ITEM
-        Toast.makeText(this, "Sleep timer: stopping at the end of this episode", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun cancelSleepTimer(announce: Boolean = false) {
-        sleepTimerRunnable?.let { sleepTimerHandler.removeCallbacks(it) }
-        sleepTimerRunnable = null
-        sleepTimerMode = SleepTimerMode.OFF
-        sleepTimerDeadlineElapsedMs = 0L
-        if (announce) Toast.makeText(this, "Sleep timer off", Toast.LENGTH_SHORT).show()
-    }
-
-    /**
-     * Stop for the night: persist the position first (losing someone's place
-     * overnight is exactly the moment this feature is supposed to be helping),
-     * pause, then release the screen so the TV can sleep on its own.
-     */
-    private fun fireSleepTimer() {
-        cancelSleepTimer()
-        sleepStopLatched = true
-        sendProgress(completed = false)
-        player?.pause()
-        releaseScreenForSleep()
-        Toast.makeText(this, "Sleep timer ended — paused", Toast.LENGTH_LONG).show()
-    }
-
     /**
      * Let the screen go dark. BOTH holds have to go: the activity adds
      * FLAG_KEEP_SCREEN_ON on create, and the layout independently sets
@@ -8091,18 +7851,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun holdScreenForPlayback() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::playerView.isInitialized) playerView.keepScreenOn = true
-    }
-
-    private fun resetSkipSegmentState() {
-        skipSegmentFetchGeneration++
-        skipSegmentFetchJob?.cancel()
-        skipSegmentFetchJob = null
-        loadingSkipSegmentKey = null
-        loadedSkipSegmentKey = null
-        skipSegments = TvSkipSegments.EMPTY
-        activeSkipSegment = null
-        skipFocusOfferedKey = null
-        if (::skipSegmentButton.isInitialized) presentSkipSegment(null, null)
     }
 
     // Playlist
@@ -8376,115 +8124,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return true
     }
 
-    // Called periodically from the progress loop. Shows the Up Next card when
-    // the current episode is near its end and a playable next item exists.
-    private fun maybeShowUpNext() {
-        if (upNextVisible) return
-        if (continuousShuffleEnabled && canShuffleWholeShow()) return
-        if (isIptvMode || isStremioTvMode) return
-        if (upNextDismissedForIndex == currentIndex) return
-        if (!isCleanPlaybackState()) return
-        val p = player ?: return
-        if (p.playbackState != Player.STATE_READY || !p.isPlaying) return
-        val duration = p.duration
-        if (duration <= UP_NEXT_MIN_DURATION_MS) return
-        val remaining = duration - p.currentPosition
-        if (remaining <= 0 || remaining > UP_NEXT_THRESHOLD_MS) return
-        // Mirror the STATE_ENDED auto-advance: shuffle picks a random eligible
-        // episode, otherwise advance to the linear next.
-        val nextIndex = if (continuousShuffleEnabled) {
-            pickShuffleIndex()
-        } else {
-            getNextPlayableIndex(currentIndex)
-        } ?: return
-        showUpNextCard(nextIndex)
-    }
-
-    private val upNextTicker = object : Runnable {
-        override fun run() {
-            val p = player
-            val target = upNextTargetIndex
-            val duration = p?.duration ?: 0L
-            if (p == null || target == null || duration <= 0) {
-                hideUpNextCard()
-                return
-            }
-            // A panel/controls opened — pull the card; the progress loop can
-            // re-show it later if still near the end.
-            if (!isCleanPlaybackState()) {
-                hideUpNextCard()
-                return
-            }
-            val remaining = duration - p.currentPosition
-            // User seeked back well before the end — drop the card.
-            if (remaining > UP_NEXT_THRESHOLD_MS + 5_000L) {
-                hideUpNextCard()
-                return
-            }
-            if (remaining <= UP_NEXT_TICK_MS + 250L) {
-                triggerUpNext()
-                return
-            }
-            val secs = ((remaining + 999L) / 1000L).toInt()
-            upNextCountdown.text = "Starting in ${secs}s"
-            upNextHandler.postDelayed(this, UP_NEXT_TICK_MS)
-        }
-    }
-
-    private fun showUpNextCard(nextIndex: Int) {
-        val model = payload ?: return
-        if (nextIndex < 0 || nextIndex >= model.items.size) return
-        val item = model.items[nextIndex]
-        upNextTargetIndex = nextIndex
-
-        val badge = item.seasonEpisodeLabel()
-        upNextTitle.text = if (badge.isNotEmpty()) "$badge · ${item.title}" else item.title
-
-        val art = item.artwork
-        if (!art.isNullOrEmpty()) {
-            upNextPoster.visibility = View.VISIBLE
-            com.bumptech.glide.Glide.with(this).load(art).into(upNextPoster)
-        } else {
-            upNextPoster.visibility = View.GONE
-        }
-
-        upNextVisible = true
-        upNextCard.visibility = View.VISIBLE
-        upNextCard.alpha = 0f
-        upNextCard.translationX = 40f
-        upNextCard.animate().alpha(1f).translationX(0f).setDuration(220).start()
-
-        upNextHandler.removeCallbacks(upNextTicker)
-        upNextHandler.post(upNextTicker)
-    }
-
-    private fun triggerUpNext() {
-        // playItem() hides the card (and cancels the ticker) as part of its
-        // per-item reset, so no explicit hide is needed here.
-        val target = upNextTargetIndex ?: return
-        isAutoAdvancing = true
-        playItem(target)
-    }
-
-    private fun dismissUpNext() {
-        upNextDismissedForIndex = currentIndex
-        hideUpNextCard()
-    }
-
-    private fun hideUpNextCard() {
-        upNextHandler.removeCallbacks(upNextTicker)
-        upNextTargetIndex = null
-        if (!upNextVisible) {
-            upNextCard.visibility = View.GONE
-            return
-        }
-        upNextVisible = false
-        upNextCard.animate().alpha(0f).translationX(40f).setDuration(160).withEndAction {
-            upNextCard.visibility = View.GONE
-            upNextCard.translationX = 0f
-        }.start()
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // IPTV MODE
     // ═══════════════════════════════════════════════════════════════
@@ -8624,7 +8263,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         iptvRecordButton?.setOnClickListener {
             hideControlsMenu()
-            toggleIptvRecording()
+            iptvRecordingActionsController.toggleIptvRecording()
         }
 
         iptvPrevButton?.apply {
@@ -8740,406 +8379,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
     }
-
-    // ── IPTV recording ──────────────────────────────────────────────────────
-
-    /**
-     * Engine vs tee. ON (default): Record starts a [LiveRecordingService]
-     * capture over its own connection — it survives zaps, Home, and player
-     * teardown, and stops only from the button, the notification, or its
-     * duration cap. OFF: the original in-player tee ([IptvRecordingController])
-     * with its record-what-you-watch, stops-with-the-player semantics.
-     * Dart owns the setting; fixed per activity launch (like the player
-     * defaults loaded in onCreate).
-     */
-    private val recordingEngineEnabled: Boolean by lazy {
-        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
-            this,
-            "recording_engine_enabled",
-            true,
-        )
-    }
-
-    /** Repaints the Record button whenever an engine capture starts or ends —
-     *  including from the notification's Stop, which the activity never sees. */
-    private val recordingRegistryListener: () -> Unit = {
-        if (!isDestroyed && !isFinishing) updateRecordButtonState()
-    }
-
-    private fun isCurrentIptvSegmented(): Boolean {
-        val url = currentIptvStreamUrl ?: return true
-        return iptvHlsForcedUrls.contains(url) || isSegmentedStreamUrl(url)
-    }
-
-    /** The URL the ENGINE would capture for [url], or null when it can't:
-     *  the URL itself when progressive, its Xtream `.ts` twin when that
-     *  rescues an `.m3u8` channel, nothing for true segmented streams or
-     *  non-HTTP transports (rtmp/rtsp/udp/... — the engine is a plain HTTP
-     *  client and would fail every attempt after reporting a start). */
-    private fun engineRecordableUrl(url: String): String? {
-        if (!url.startsWith("http://", ignoreCase = true) &&
-            !url.startsWith("https://", ignoreCase = true)
-        ) {
-            return null
-        }
-        if (!iptvHlsForcedUrls.contains(url) && !isSegmentedStreamUrl(url)) return url
-        return xtreamTsTwin(url)
-    }
-
-    /**
-     * Stricter gate for SCHEDULING: only URLs affirmatively known to be
-     * progressive TS. At alarm time nobody is watching, so there is no player
-     * probe to catch an extensionless HLS URL — which the raw engine would
-     * "record" as looping playlist text. Explicit `.ts` and Xtream live URLs
-     * (extensionless default IS TS) qualify.
-     */
-    private fun isSchedulableStreamUrl(url: String): Boolean {
-        val recordable = engineRecordableUrl(url) ?: return false
-        val path = recordable.substringBefore('?').substringBefore('#').lowercase()
-        if (path.endsWith(".ts") || path.endsWith(".mts") || path.endsWith(".m2ts")) return true
-        return Regex("^https?://[^/]+/(?:live/)?[^/]+/[^/]+/\\d+(?:\\.ts)?$")
-            .matches(path)
-    }
-
-    /** The live engine capture for the CURRENT channel, if any — matched on
-     *  the playing URL or its recordable twin. */
-    private fun engineTaskIdForCurrentChannel(): String? {
-        val url = currentIptvStreamUrl ?: return null
-        RecordingRegistry.taskIdForUrl(url)?.let { return it }
-        return engineRecordableUrl(url)?.let { RecordingRegistry.taskIdForUrl(it) }
-    }
-
-    private fun recordingResourceFor(entry: IptvChannelEntry?): IptvSourceEntry? {
-        val sourceId = entry?.sourceId ?: iptvSourceId
-        return iptvSources.firstOrNull { it.id == sourceId }
-    }
-
-    /** Record is offered only when the stream AND the OS can support it.
-     *  Pre-Q needs-permission counts as offered: the button is how the user
-     *  triggers the storage grant in the first place. */
-    private fun canRecordCurrentIptv(): Boolean {
-        if (recordingEngineEnabled) {
-            if (!LiveRecordingService.isSupported(this) &&
-                !LiveRecordingService.needsLegacyPermission(this)
-            ) {
-                return false
-            }
-            val url = currentIptvStreamUrl ?: return false
-            return engineRecordableUrl(url) != null
-        }
-        return IptvRecordingController.isSupported && !isCurrentIptvSegmented()
-    }
-
-    /** Reflect record availability + active state on the button. */
-    private fun updateRecordButtonState() {
-        val button = iptvRecordButton ?: return
-        val engineActive = recordingEngineEnabled && engineTaskIdForCurrentChannel() != null
-        if (engineActive || iptvRecordingController.isActive) {
-            button.text = "Stop"
-            button.isEnabled = true
-            button.isFocusable = true
-            button.alpha = 1f
-        } else {
-            val recordable = canRecordCurrentIptv()
-            button.text = "Record"
-            button.isEnabled = recordable
-            // A disabled button can still trap D-pad focus; drop it from the
-            // focus order so segmented channels skip past it cleanly.
-            button.isFocusable = recordable
-            button.alpha = if (recordable) 1f else 0.4f
-        }
-    }
-
-    private fun toggleIptvRecording() {
-        if (recordingEngineEnabled) {
-            toggleEngineRecording()
-            return
-        }
-        if (iptvRecordingController.isActive) {
-            val result = iptvRecordingController.stop()
-            updateRecordButtonState()
-            Toast.makeText(
-                this,
-                if (result.published) {
-                    "Recording saved to Downloads/Debrify/Recordings"
-                } else {
-                    "Recording stopped, but couldn't be added to Downloads"
-                },
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (!IptvRecordingController.isSupported) {
-            Toast.makeText(this, "Recording needs Android 10 or newer", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (isCurrentIptvSegmented()) {
-            Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val url = currentIptvStreamUrl
-        if (url.isNullOrEmpty()) return
-        val entry = iptvChannels.getOrNull(currentIptvIndex)
-        val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
-        if (iptvRecordingController.start(url, fileName, "video/mp2t")) {
-            updateRecordButtonState()
-            Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Couldn't start recording", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /** Android 13+ notification permission, asked contextually on the first
-     *  record/schedule — same asked-once pref the phone activity uses, so
-     *  the user is asked at most once app-wide. Non-blocking: recording
-     *  proceeds while the dialog is up (it works without the grant; only
-     *  the notifications go silent). */
-    private fun maybeAskNotificationPermission() {
-        if (android.os.Build.VERSION.SDK_INT < 33) return
-        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.POST_NOTIFICATIONS,
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (granted) return
-        val prefs = getSharedPreferences("debrify_permissions", MODE_PRIVATE)
-        if (prefs.getBoolean("notification_permission_asked", false)) return
-        prefs.edit().putBoolean("notification_permission_asked", true).apply()
-        androidx.core.app.ActivityCompat.requestPermissions(
-            this,
-            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-            notificationPermissionRequestCode,
-        )
-    }
-
-    private fun toggleEngineRecording() {
-        engineTaskIdForCurrentChannel()?.let { taskId ->
-            // Finalization is async in the service; its "Saved" notification is
-            // the confirmation. The registry listener repaints the button.
-            try {
-                startService(
-                    Intent(this, LiveRecordingService::class.java).apply {
-                        action = LiveRecordingService.ACTION_STOP
-                        putExtra(LiveRecordingService.EXTRA_TASK_ID, taskId)
-                    },
-                )
-                Toast.makeText(this, "Recording stopped — saving…", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Couldn't stop recording", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
-        if (LiveRecordingService.needsLegacyPermission(this)) {
-            // Pre-Q: the grant IS the enable switch. Ask, tell the user to
-            // press Record again once allowed; onRequestPermissionsResult
-            // repaints the button.
-            androidx.core.app.ActivityCompat.requestPermissions(
-                this,
-                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                legacyStoragePermissionRequestCode,
-            )
-            Toast.makeText(
-                this,
-                "Allow storage access, then press Record again",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (!LiveRecordingService.isSupported(this)) {
-            Toast.makeText(this, "Recording isn't available on this device", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val url = currentIptvStreamUrl
-        if (url.isNullOrEmpty()) return
-        val recordUrl = engineRecordableUrl(url)
-        if (recordUrl == null) {
-            Toast.makeText(this, "Recording isn't supported for this stream", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val recordingLimit = LiveRecordingService.maxConcurrent(this)
-        if (RecordingRegistry.live.size >= recordingLimit) {
-            Toast.makeText(
-                this,
-                "Recording limit reached ($recordingLimit at a time) — " +
-                    "stop one, or raise the limit in IPTV settings",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        maybeAskNotificationPermission()
-        val entry = iptvChannels.getOrNull(currentIptvIndex)
-        val resource = recordingResourceFor(entry)
-        val owner = com.debrify.app.profiles.ProfilePreferenceProjection
-            .activeJobContext(this)
-        // Drift-tolerant: the channel's resource revision rode in with the
-        // launch payload and a sources edit since then bumped every revision.
-        // The live grant/feature checks still refuse real revocation.
-        if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
-                this, owner.profileId, owner.authorizationRevision, "recordings",
-                resource?.connectionResourceId, resource?.connectionResourceRevision,
-                allowRevisionDrift = true,
-            )
-        ) {
-            Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
-        try {
-            ContextCompat.startForegroundService(
-                this,
-                LiveRecordingService.buildStartIntent(
-                    context = this,
-                    taskId = "rec-${System.currentTimeMillis()}",
-                    url = recordUrl,
-                    fileName = fileName,
-                    channelName = entry?.name ?: "Live channel",
-                    headers = HashMap(currentIptvHttpHeaders),
-                    maxDurationMs = LiveRecordingService.MAX_DURATION_DEFAULT_MS,
-                    ownerProfileId = owner.profileId,
-                    connectionResourceId = resource?.connectionResourceId,
-                    profileAuthorizationRevision = owner.authorizationRevision,
-                    resourceAuthorizationRevision = resource?.connectionResourceRevision,
-                ),
-            )
-            Toast.makeText(
-                this,
-                "Recording in background — keeps going if you zap or leave",
-                Toast.LENGTH_LONG,
-            ).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Couldn't start recording", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /** Confirm-and-schedule for a FUTURE programme picked in the EPG guide.
-     *  Everything stays native: the schedule store and alarms need no Dart. */
-    private fun promptScheduleRecording(entry: IptvChannelEntry, program: IptvEpgProgram) {
-        if (!recordingEngineEnabled) {
-            Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (LiveRecordingService.needsLegacyPermission(this)) {
-            androidx.core.app.ActivityCompat.requestPermissions(
-                this,
-                arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                legacyStoragePermissionRequestCode,
-            )
-            Toast.makeText(
-                this,
-                "Allow storage access, then pick the programme again",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (!LiveRecordingService.isSupported(this)) {
-            Toast.makeText(this, "Scheduled recording isn't available", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (!RecordingAlarmReceiver.exactAlarmsGranted(this)) {
-            // An inexact fire couldn't legally start the recording service from
-            // the background — refuse rather than schedule something doomed.
-            Toast.makeText(
-                this,
-                "Allow \"Alarms & reminders\" for Debrify in system settings to schedule recordings",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
-        if (!isSchedulableStreamUrl(entry.url)) {
-            Toast.makeText(this, "This channel can't be scheduled", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val recordUrl = engineRecordableUrl(entry.url)
-        if (recordUrl == null) {
-            Toast.makeText(this, "This channel can't be recorded", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (RecordingScheduleStore.findDuplicate(this, recordUrl, program.startMs) != null) {
-            Toast.makeText(this, "Already scheduled", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val timeFormat = android.text.format.DateFormat.getTimeFormat(this)
-        val range = "${timeFormat.format(java.util.Date(program.startMs))} – " +
-            timeFormat.format(java.util.Date(program.stopMs))
-        // Capacity check folded into the confirm dialog: Android's runtime
-        // rule is fire-time skip, so scheduling anyway is honest — but the
-        // user must hear about the conflict NOW, while they can still fix it.
-        val limit = LiveRecordingService.maxConcurrent(this)
-        val peak = RecordingScheduleStore.peakOverlap(this, program.startMs, program.stopMs)
-        val conflictNote = if (peak + 1 > limit) {
-            val names = RecordingScheduleStore
-                .overlappingTitles(this, program.startMs, program.stopMs)
-                .take(3)
-                .joinToString(" · ")
-            "\n\nConflicts with $names — only $limit can record at once, so " +
-                "this may be skipped. Raise the limit in IPTV settings, or " +
-                "cancel another recording."
-        } else {
-            ""
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(if (conflictNote.isEmpty()) "Record programme" else "Recording conflict")
-            .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
-            .setPositiveButton("Record") { _, _ ->
-                maybeAskNotificationPermission()
-                val owner = com.debrify.app.profiles.ProfilePreferenceProjection
-                    .activeJobContext(this)
-                val resource = recordingResourceFor(entry)
-                // Drift-tolerant: the payload's resource revision predates any
-                // sources edit made since launch — see the projection's note.
-                if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
-                        this, owner.profileId, owner.authorizationRevision, "recordings",
-                        resource?.connectionResourceId, resource?.connectionResourceRevision,
-                        allowRevisionDrift = true,
-                    )
-                ) {
-                    Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val scheduleId = "sched-${System.currentTimeMillis()}"
-				try {
-				RecordingScheduleStore.put(
-					this,
-                    RecordingSchedule(
-                        id = scheduleId,
-                        channelName = entry.name,
-                        url = recordUrl,
-                        headers = HashMap(entry.httpHeaders),
-                        startMs = program.startMs,
-                        endMs = program.stopMs,
-                        programmeTitle = program.title,
-                        createdAt = System.currentTimeMillis(),
-                        ownerProfileId = owner.profileId,
-                        connectionResourceId = resource?.connectionResourceId,
-                        profileAuthorizationRevision = owner.authorizationRevision,
-                        resourceAuthorizationRevision = resource?.connectionResourceRevision,
-						sealedExecutionPayload = null,
-					),
-				)
-				RecordingAlarmReceiver.registerAll(this)
-				Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
-				} catch (_: Exception) {
-					Toast.makeText(this, "Could not save the recording schedule", Toast.LENGTH_SHORT).show()
-				}
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /** Finalize any active recording (channel change / exit). Safe when idle.
-     *  Silent on success — the user didn't ask for this stop — but a failed
-     *  publish is worth saying out loud, since the file is invisible. */
-    private fun finalizeIptvRecordingIfActive() {
-        if (!iptvRecordingController.isActive) return
-        val result = iptvRecordingController.stop()
-        updateRecordButtonState()
-        if (result.wasRecording && !result.published && !isFinishing) {
-            Toast.makeText(
-                this,
-                "Recording stopped, but couldn't be added to Downloads",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
-    }
+    private val iptvRecordingActionsController = TvIptvRecordingActionsController(
+        this,
+        object : TvIptvRecordingActionsController.Host {
+            override val currentIptvStreamUrl: String? get() = this@AndroidTvTorrentPlayerActivity.currentIptvStreamUrl
+            override val iptvHlsForcedUrls: Set<String> get() = this@AndroidTvTorrentPlayerActivity.iptvHlsForcedUrls
+            override val iptvChannels: List<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override val iptvSources: List<IptvSourceEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvSources
+            override val iptvSourceId: String? get() = this@AndroidTvTorrentPlayerActivity.iptvSourceId
+            override val currentIptvHttpHeaders: Map<String, String> get() = this@AndroidTvTorrentPlayerActivity.currentIptvHttpHeaders
+            override val iptvRecordingController: IptvRecordingController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingController
+            override val iptvRecordButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvRecordButton
+            override val legacyStoragePermissionRequestCode: Int get() = this@AndroidTvTorrentPlayerActivity.legacyStoragePermissionRequestCode
+        },
+    )
 
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
@@ -9169,7 +8423,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Visibility follows the ACTIVE recorder: the engine records pre-Q
         // once storage is granted (and shows the button so it CAN be
         // granted); the tee remains Q+-only.
-        val recorderAvailable = if (recordingEngineEnabled) {
+        val recorderAvailable = if (iptvRecordingActionsController.recordingEngineEnabled) {
             LiveRecordingService.isSupported(this) ||
                 LiveRecordingService.needsLegacyPermission(this)
         } else {
@@ -9177,7 +8431,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         iptvRecordButton?.visibility =
             if (live && recorderAvailable) View.VISIBLE else View.GONE
-        updateRecordButtonState()
+        iptvRecordingActionsController.updateRecordButtonState()
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
             cinemaSeekMode = false
@@ -9363,7 +8617,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 iptvEpgEntry?.let { entry -> requestIptvCatchup(entry, program) }
             },
             onRecordFuture = { program ->
-                iptvEpgEntry?.let { entry -> promptScheduleRecording(entry, program) }
+                iptvEpgEntry?.let { entry -> iptvRecordingActionsController.promptScheduleRecording(entry, program) }
             },
             tokens = guideTokens,
             style = guideStyle,
@@ -12043,7 +11297,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  combination the Record button paints from. The styled zap banner's
      *  REC tag reads it on show and on every 1s repaint. */
     private fun isRecordingCurrentIptvChannel(): Boolean =
-        (recordingEngineEnabled && engineTaskIdForCurrentChannel() != null) ||
+        (iptvRecordingActionsController.recordingEngineEnabled && iptvRecordingActionsController.engineTaskIdForCurrentChannel() != null) ||
             iptvRecordingController.isActive
 
     private fun zapText(
@@ -13462,7 +12716,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // channel's file before the stream identity flips. An HLS-fallback retry
         // re-enters with the SAME url and is handled via abortAndDelete instead.
         if (iptvRecordingController.isActive && streamUrl != currentIptvStreamUrl) {
-            finalizeIptvRecordingIfActive()
+            iptvRecordingActionsController.finalizeIptvRecordingIfActive()
         }
 
         val metadata = MediaMetadata.Builder()
@@ -13559,7 +12813,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Reflect the new stream's HLS-ness on the record button (progressive →
         // enabled, HLS → disabled).
-        updateRecordButtonState()
+        iptvRecordingActionsController.updateRecordButtonState()
     }
 
     /**
@@ -13635,7 +12889,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         iptvHlsForcedUrls.add(url)
         setIptvMediaItem(entry, url)
-        updateRecordButtonState()
+        iptvRecordingActionsController.updateRecordButtonState()
         // Stremio candidate: give the forced-HLS attempt a FULL stall window
         // (arming re-cancels the one ticking since candidate start — a slow
         // panel can eat most of that window on the failed sniff alone, and
@@ -13657,7 +12911,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // ends here too. Waiting for setIptvMediaItem would strand it whenever
         // a Stremio resolve returns nothing: the row would stay pending while
         // the UI already shows the new channel.
-        finalizeIptvRecordingIfActive()
+        iptvRecordingActionsController.finalizeIptvRecordingIfActive()
 
         iptvStremioToken++
         val token = iptvStremioToken
@@ -14658,19 +13912,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun umPlaybackModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
         val col2 = listOf(
             mrow("Playback speed", value = playbackSpeedLabels.getOrNull(playbackSpeedIndex), tag = "speed"),
-            mrow("Sleep timer", value = sleepTimerValueLabel(), tag = "sleep"),
+            mrow("Sleep timer", value = sleepTimerController.sleepTimerValueLabel(), tag = "sleep"),
             mrow("Shuffle & autoplay", tag = "shuffle")
         )
         val tag = col2.getOrNull(col2Index)?.tag
         val (title, col3) = if (tag == "sleep") {
             "Sleep timer" to buildList {
                 add(
-                    mrow("Off", selected = sleepTimerMode == SleepTimerMode.OFF, onOk = {
-                        cancelSleepTimer(announce = true)
+                    mrow("Off", selected = sleepTimerController.sleepTimerMode == SleepTimerMode.OFF, onOk = {
+                        sleepTimerController.cancelSleepTimer(announce = true)
                     })
                 )
-                sleepTimerMinuteOptions.forEach { minutes ->
-                    add(mrow("$minutes minutes", onOk = { startSleepCountdown(minutes) }))
+                sleepTimerController.sleepTimerMinuteOptions.forEach { minutes ->
+                    add(mrow("$minutes minutes", onOk = { sleepTimerController.startSleepCountdown(minutes) }))
                 }
                 // A live channel has no end to stop at, so only the countdown
                 // applies there — which is the case people actually want it for.
@@ -14678,8 +13932,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     add(
                         mrow(
                             "End of episode",
-                            selected = sleepTimerMode == SleepTimerMode.END_OF_ITEM,
-                            onOk = { armSleepAtEndOfItem() }
+                            selected = sleepTimerController.sleepTimerMode == SleepTimerMode.END_OF_ITEM,
+                            onOk = { sleepTimerController.armSleepAtEndOfItem() }
                         )
                     )
                 }
@@ -18020,7 +17274,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // still eating storage) with no persisted state to recover it from.
         // Nothing is lost by stopping now — the pause below ends the byte flow
         // the recording tees anyway.
-        finalizeIptvRecordingIfActive()
+        iptvRecordingActionsController.finalizeIptvRecordingIfActive()
         // A recovery in flight must not fight the pause below (its re-tunes
         // set playWhenReady=true); onStart's rejoin re-arms recovery anyway.
         // The twin trial goes with it — its timeout re-tunes too, and firing
@@ -18085,7 +17339,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private val legacyStoragePermissionRequestCode = 7402
-    private val notificationPermissionRequestCode = 7403
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -18095,7 +17348,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == legacyStoragePermissionRequestCode) {
             // Granted or not, the button's enabled/label state may change.
-            updateRecordButtonState()
+            iptvRecordingActionsController.updateRecordButtonState()
         }
     }
 
@@ -18194,14 +17447,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             iptvNetworkCallback = null
         }
-        RecordingRegistry.removeListener(recordingRegistryListener)
+        RecordingRegistry.removeListener(iptvRecordingActionsController.recordingRegistryListener)
         // The sleep timer belongs to this playback session — a pending one must
         // not outlive the player and fire against a dead surface.
-        cancelSleepTimer()
+        sleepTimerController.cancelSleepTimer()
         // Finalize any in-progress TEE recording so its MediaStore row isn't
         // left pending (invisible) when the player is torn down. Engine
         // captures deliberately ignore player teardown.
-        finalizeIptvRecordingIfActive()
+        iptvRecordingActionsController.finalizeIptvRecordingIfActive()
 
         // Clean up seek feedback manager
         if (::seekFeedbackManager.isInitialized) {
@@ -18229,7 +17482,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         bufferingHandler.removeCallbacksAndMessages(null)
 
         // Clean up Up Next card
-        upNextHandler.removeCallbacksAndMessages(null)
+        upNextController.upNextHandler.removeCallbacksAndMessages(null)
 
         // Unregister broadcast receiver
         metadataUpdateReceiver?.let {
@@ -18248,11 +17501,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Cancel optional skip-provider work; late network responses must not retain
         // or update a destroyed TV player.
-        skipSegmentFetchGeneration++
-        skipSegmentFetchJob?.cancel()
-        skipSegmentFetchJob = null
-        skipSegmentScope.cancel()
-        skipSegmentCache.clear()
+        skipSegmentController.skipSegmentFetchGeneration++
+        skipSegmentController.skipSegmentFetchJob?.cancel()
+        skipSegmentController.skipSegmentFetchJob = null
+        skipSegmentController.skipSegmentScope.cancel()
+        skipSegmentController.skipSegmentCache.clear()
 
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
@@ -18998,17 +18251,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // (its own worst case is ~10s metadata wait + 2/4/8/16/18s backoff).
         private const val STARTUP_PIKPAK_MAX_WAIT_MS = 120_000L
         private const val PIKPAK_GATE_REPREPARE_DELAY_MS = 4_000L
-        private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
-        private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips
-        private const val UP_NEXT_TICK_MS = 500L
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 4000L
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
         private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
-        private const val MAX_SKIP_SEGMENT_CACHE_ENTRIES = 64
-        private val IMDB_ID_REGEX = Regex("^tt\\d+$")
         private const val PIKPAK_MAX_RETRIES = 5
         private const val PIKPAK_METADATA_TIMEOUT_MS = 10000  // 10 seconds to wait for metadata
         private const val PIKPAK_BASE_DELAY_MS = 2000  // 2 seconds base delay

@@ -168,6 +168,9 @@ def check(manifest, original, current):
         return errors, len(inventory)
     base_spans, base_order = spans(base, split)
     rows = manifest['declarations']
+    added = manifest.get('added', [])
+    if added and manifest['phase'] < 3:
+        errors.append('added declarations require phase 3')
     targets = Counter((source if row['fate'] != 'moved' else row.get('destination'), row.get('target', row['original']))
                       for row in rows for source in [manifest['source']])
     for (path, name), count in targets.items():
@@ -210,7 +213,8 @@ def check(manifest, original, current):
         return errors, len(inventory)
     actual_spans, actual_orders = {}, {}
     for path in current:
-        actual_spans[path], actual_orders[path] = spans(parsed[path], split if path == source else set())
+        destination_split = set(manifest['destinations'].get(path, {}).get('split_containers', []))
+        actual_spans[path], actual_orders[path] = spans(parsed[path], split if path == source else destination_split)
     expected_ids = {path: set() for path in current}
     expected_ids[source].update(k for k in base_spans if k.startswith(':') or k.endswith((':header', ':close', ':tail')))
 
@@ -225,6 +229,11 @@ def check(manifest, original, current):
         else:
             compare_span(key, tokens(base, *base_spans[key]), tokens(parsed[source], *actual_spans[source][key]))
     for path, spec in manifest['destinations'].items():
+        if 'pinned_spans' in spec:
+            from kotlin_move_partition import check_pinned_destination
+            check_pinned_destination(path, spec, parsed[path], actual_spans[path], actual_orders[path],
+                                     expected_ids[path], compare_span, errors)
+            continue
         compare_span('destination imports/package/file annotations: ' + path,
                      tokens(parse({'prefix': spec['prefix']})['prefix']), tokens(parsed[path], *actual_spans[path][':prefix']))
         expected_ids[path].update((':prefix', ':tail'))
@@ -235,6 +244,8 @@ def check(manifest, original, current):
         name, fate = row['original'], row['fate']
         path = source if fate in ('retained', 'patched') else row['destination']
         target = row.get('target', name)
+        if target in expected_ids[path]:
+            errors.append('duplicate destination span ownership: ' + path + ':' + target)
         expected_ids[path].add(target)
         if fate == 'moved' and name in actual_spans[source]:
             errors.append('surviving-after-move: ' + name)
@@ -246,14 +257,24 @@ def check(manifest, original, current):
             errors.append('patched requires exact patches, reason and named test: ' + name)
         expected = substitutions(tokens(base, *base_spans[name]), edits, edited)
         compare_span(name, expected, tokens(parsed[path], *actual_spans[path][target]))
+    if added:
+        from kotlin_move_partition import check_added
+        check_added(manifest, inventory, base_order, actual_spans[source], parsed[source],
+                    expected_ids[source], compare_span, errors)
     for path, actual in actual_spans.items():
         for name in actual.keys() - expected_ids[path]:
             errors.append('unexpected new declaration: ' + path + ':' + name)
     for container, ordered in base_order.items():
-        expected = [name for name in ordered if name in split or any(r['original'] == name and r['fate'] in ('retained', 'patched') for r in rows)]
+        expected = []
+        for name in ordered:
+            expected.extend(row['target'] for row in added if row.get('slot') == name)
+            if name in split or any(r['original'] == name and r['fate'] in ('retained', 'patched') for r in rows):
+                expected.append(name)
         if actual_orders[source].get(container) != expected:
             errors.append('retained declaration order changed: ' + container)
     for path in manifest['destinations']:
+        if 'pinned_spans' in manifest['destinations'][path]:
+            continue
         ordered = sorted((r for r in rows if r['fate'] == 'moved' and r['destination'] == path), key=lambda r: inventory[r['original']]['start'])
         if actual_orders[path][''] != [r.get('target', r['original']) for r in ordered]:
             errors.append('destination declaration order changed: ' + path)
@@ -278,6 +299,8 @@ def main():
     parser.add_argument('--manifest', type=Path, default=MANIFEST)
     parser.add_argument('--self-compare-original', action='store_true')
     parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--at', help='Compare the manifest against this historical revision')
+    parser.add_argument('--check-earlier', action='store_true', help='Check approved earlier destinations in the current tree')
     args = parser.parse_args()
     if args.self_test:
         import test_kotlin_moves
@@ -285,13 +308,25 @@ def main():
         EVIDENCE_PHASE = 'p' + str(json.loads(args.manifest.read_text())['phase'])
         return test_kotlin_moves.run(args.manifest)
     manifest = json.loads(args.manifest.read_text())
+    if args.check_earlier:
+        from kotlin_move_partition import check_earlier
+        errors = check_earlier(manifest, ROOT)
+        for error in errors:
+            print(error)
+        print(f'{"FAIL" if errors else "PASS"}: earlier destinations; {len(errors)} differences')
+        return bool(errors)
     original = subprocess.check_output(['git', '-C', str(ROOT), 'show', manifest['base'] + ':' + manifest['source']]).decode()
     if args.self_compare_original:
         manifest = retained_manifest(manifest['source'], original, manifest['base'])
         current = {manifest['source']: original}
     else:
-        current = {p: (ROOT / p).read_text() for p in [manifest['source'], *manifest['destinations']]}
+        current = {p: (subprocess.check_output(['git', '-C', str(ROOT), 'show', args.at + ':' + p]).decode()
+                       if args.at else (ROOT / p).read_text())
+                   for p in [manifest['source'], *manifest['destinations']]}
     errors, count = check(manifest, original, current)
+    if manifest.get('earlier_destinations') and not args.self_compare_original and not args.at:
+        from kotlin_move_partition import check_earlier
+        errors.extend(check_earlier(manifest, ROOT))
     for error in errors:
         print(error)
     print(f'{"FAIL" if errors else "PASS"}: {count} declarations classified; {len(errors)} differences')

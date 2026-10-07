@@ -64,9 +64,101 @@ internal object TvPlayerOriginalAccess {
         "xtreamTsTwin" to "IptvRecordingUrlRulesKt",
     )
 
+    private val controllerOwners = mapOf(
+        "activeSkipSegment" to "skipSegmentController",
+        "armSleepAtEndOfItem" to "sleepTimerController",
+        "canRecordCurrentIptv" to "iptvRecordingActionsController",
+        "cancelSleepTimer" to "sleepTimerController",
+        "currentSkipSegmentRequest" to "skipSegmentController",
+        "dismissUpNext" to "upNextController",
+        "engineRecordableUrl" to "iptvRecordingActionsController",
+        "engineTaskIdForCurrentChannel" to "iptvRecordingActionsController",
+        "ensureSkipSegments" to "skipSegmentController",
+        "finalizeIptvRecordingIfActive" to "iptvRecordingActionsController",
+        "fireSleepTimer" to "sleepTimerController",
+        "getActiveSkipSegment" to "skipSegmentController",
+        "getLoadedSkipSegmentKey" to "skipSegmentController",
+        "getLoadingSkipSegmentKey" to "skipSegmentController",
+        "getNotificationPermissionRequestCode" to "iptvRecordingActionsController",
+        "getRecordingEngineEnabled" to "iptvRecordingActionsController",
+        "getRecordingRegistryListener" to "iptvRecordingActionsController",
+        "getSkipFocusOfferedKey" to "skipSegmentController",
+        "getSkipSegmentCache" to "skipSegmentController",
+        "getSkipSegmentFetchGeneration" to "skipSegmentController",
+        "getSkipSegmentFetchJob" to "skipSegmentController",
+        "getSkipSegmentScope" to "skipSegmentController",
+        "getSkipSegments" to "skipSegmentController",
+        "getSleepTimerDeadlineElapsedMs" to "sleepTimerController",
+        "getSleepTimerHandler" to "sleepTimerController",
+        "getSleepTimerMinuteOptions" to "sleepTimerController",
+        "getSleepTimerMode" to "sleepTimerController",
+        "getSleepTimerRunnable" to "sleepTimerController",
+        "getUpNextCard" to "upNextController",
+        "getUpNextCountdown" to "upNextController",
+        "getUpNextDismissedForIndex" to "upNextController",
+        "getUpNextHandler" to "upNextController",
+        "getUpNextPoster" to "upNextController",
+        "getUpNextTargetIndex" to "upNextController",
+        "getUpNextTicker" to "upNextController",
+        "getUpNextTitle" to "upNextController",
+        "getUpNextVisible" to "upNextController",
+        "hideUpNextCard" to "upNextController",
+        "isCurrentIptvSegmented" to "iptvRecordingActionsController",
+        "isSchedulableStreamUrl" to "iptvRecordingActionsController",
+        "loadedSkipSegmentKey" to "skipSegmentController",
+        "loadingSkipSegmentKey" to "skipSegmentController",
+        "maybeAskNotificationPermission" to "iptvRecordingActionsController",
+        "maybeShowUpNext" to "upNextController",
+        "notificationPermissionRequestCode" to "iptvRecordingActionsController",
+        "presentSkipSegment" to "skipSegmentController",
+        "promptScheduleRecording" to "iptvRecordingActionsController",
+        "recordingEngineEnabled" to "iptvRecordingActionsController",
+        "recordingRegistryListener" to "iptvRecordingActionsController",
+        "recordingResourceFor" to "iptvRecordingActionsController",
+        "resetSkipSegmentState" to "skipSegmentController",
+        "showUpNextCard" to "upNextController",
+        "skipActiveSegment" to "skipSegmentController",
+        "skipFocusOfferedKey" to "skipSegmentController",
+        "skipSegmentCache" to "skipSegmentController",
+        "skipSegmentFetchGeneration" to "skipSegmentController",
+        "skipSegmentFetchJob" to "skipSegmentController",
+        "skipSegmentScope" to "skipSegmentController",
+        "skipSegments" to "skipSegmentController",
+        "sleepTimerDeadlineElapsedMs" to "sleepTimerController",
+        "sleepTimerHandler" to "sleepTimerController",
+        "sleepTimerMinuteOptions" to "sleepTimerController",
+        "sleepTimerMinutesLeft" to "sleepTimerController",
+        "sleepTimerMode" to "sleepTimerController",
+        "sleepTimerRunnable" to "sleepTimerController",
+        "sleepTimerValueLabel" to "sleepTimerController",
+        "startSleepCountdown" to "sleepTimerController",
+        "toggleEngineRecording" to "iptvRecordingActionsController",
+        "toggleIptvRecording" to "iptvRecordingActionsController",
+        "triggerUpNext" to "upNextController",
+        "upNextCard" to "upNextController",
+        "upNextCountdown" to "upNextController",
+        "upNextDismissedForIndex" to "upNextController",
+        "upNextHandler" to "upNextController",
+        "upNextPoster" to "upNextController",
+        "upNextTargetIndex" to "upNextController",
+        "upNextTicker" to "upNextController",
+        "upNextTitle" to "upNextController",
+        "upNextVisible" to "upNextController",
+        "updateRecordButtonState" to "iptvRecordingActionsController",
+        "updateSkipSegmentState" to "skipSegmentController",
+    )
+
+    private fun memberOwner(owner: Any, name: String): Any {
+        if (owner !is AndroidTvTorrentPlayerActivity) return owner
+        val controller = controllerOwners[name.removeSuffix("\$delegate")] ?: return owner
+        return owner.javaClass.getDeclaredField(controller).apply { isAccessible = true }.get(owner)!!
+    }
+
     fun type(name: String): Class<*> = Class.forName(
         "com.debrify.app.tv." + when (name) {
             "AndroidTvTorrentPlayerActivity\$IptvStremioCandidate" -> "IptvStremioCandidate"
+            "AndroidTvTorrentPlayerActivity\$SleepTimerMode" -> "SleepTimerMode"
+            "AndroidTvTorrentPlayerActivity\$SkipSegmentRequest" -> "SkipSegmentRequest"
             else -> name
         },
     )
@@ -80,18 +172,20 @@ internal object TvPlayerOriginalAccess {
     }
 
     fun call(owner: Any, name: String, vararg arguments: Any?): Any? {
-        val method = owner.javaClass.declaredMethods.single {
+        val actualOwner = memberOwner(owner, name)
+        val method = actualOwner.javaClass.declaredMethods.single {
             it.name == name && it.parameterCount == arguments.size && !it.isBridge
         }
         method.isAccessible = true
-        return unwrap { method.invoke(owner, *arguments) }
+        return unwrap { method.invoke(actualOwner, *arguments) }
     }
 
     /** Exact JVM signatures keep same-arity overloads distinct. */
     fun callTyped(owner: Any, name: String, types: Array<Class<*>>, vararg arguments: Any?): Any? {
         val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
-        val method = (facade ?: owner.javaClass).getDeclaredMethod(name, *types).apply { isAccessible = true }
-        return unwrap { method.invoke(if (facade == null) owner else null, *arguments) }
+        val actualOwner = memberOwner(owner, name)
+        val method = (facade ?: actualOwner.javaClass).getDeclaredMethod(name, *types).apply { isAccessible = true }
+        return unwrap { method.invoke(if (facade == null) actualOwner else null, *arguments) }
     }
 
     fun constructTyped(name: String, types: Array<Class<*>>, vararg arguments: Any?): Any {
@@ -106,9 +200,10 @@ internal object TvPlayerOriginalAccess {
     /** Invoke Kotlin's real omitted-argument dispatcher, including its mask. */
     fun callDefault(owner: Any, name: String, types: Array<Class<*>>, mask: Int, vararg arguments: Any?): Any? {
         val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
-        val receiverTypes = if (facade == null) arrayOf(owner.javaClass) else emptyArray()
-        val receiver = if (facade == null) arrayOf(owner) else emptyArray()
-        val method = (facade ?: owner.javaClass).getDeclaredMethod(
+        val actualOwner = memberOwner(owner, name)
+        val receiverTypes = if (facade == null) arrayOf(actualOwner.javaClass) else emptyArray()
+        val receiver = if (facade == null) arrayOf(actualOwner) else emptyArray()
+        val method = (facade ?: actualOwner.javaClass).getDeclaredMethod(
             name + "\$default", *receiverTypes, *types, Int::class.javaPrimitiveType, Any::class.java,
         ).apply { isAccessible = true }
         return unwrap { method.invoke(null, *receiver, *arguments, mask, null) }
@@ -155,12 +250,20 @@ internal object TvPlayerOriginalAccess {
         return call(owner, getter)
     }
 
-    fun field(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name).apply {
-        isAccessible = true
-    }.get(owner)
+    fun field(owner: Any, name: String): Any? {
+        val actualOwner = memberOwner(owner, name)
+        return actualOwner.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(actualOwner)
+    }
+
+    fun glideTracks(manager: com.bumptech.glide.RequestManager, request: com.bumptech.glide.request.Request): Boolean {
+        val tracker = com.bumptech.glide.RequestManager::class.java.getDeclaredField("requestTracker")
+            .apply { isAccessible = true }.get(manager)!!
+        return (field(tracker, "requests") as Set<*>).contains(request)
+    }
 
     fun set(owner: Any, name: String, value: Any?) {
-        owner.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(owner, value)
+        val actualOwner = memberOwner(owner, name)
+        actualOwner.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(actualOwner, value)
     }
 
     fun source(value: Any, index: Int = 3): Any {

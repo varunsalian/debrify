@@ -12,6 +12,7 @@ internal class TvPlayerRecordingMessenger : BinaryMessenger {
     data class Request(val channel: String, val call: MethodCall, val reply: BinaryMessenger.BinaryReply?)
     val requests = mutableListOf<Request>()
     var throwOnSend = false
+    var onSend: ((Request) -> Unit)? = null
     private val codec = StandardMethodCodec.INSTANCE
     private val main = Handler(Looper.getMainLooper())
 
@@ -20,6 +21,7 @@ internal class TvPlayerRecordingMessenger : BinaryMessenger {
         if (throwOnSend) throw IllegalStateException("messenger unavailable")
         val readable = message!!.duplicate().apply { flip() }
         requests.add(Request(channel, codec.decodeMethodCall(readable), callback))
+        onSend?.invoke(requests.last())
     }
     override fun setMessageHandler(channel: String, handler: BinaryMessenger.BinaryMessageHandler?) = Unit
 
