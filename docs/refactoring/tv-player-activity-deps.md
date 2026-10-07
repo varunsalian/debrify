@@ -2943,3 +2943,57 @@ All other members (≈350) touch 3+ activity members, views, handlers or the pla
 | requestIptvStreamUrls + IptvStremioCandidate (pair) | 50 + 3 |
 | Self-contained nested value types (TvSourceAddon, SkipSegmentRequest, SleepTimerMode, DockSkinSpec) | ≈1 + 8 + 1 + 17 |
 | **Upper bound removable in phase 2 without touching stateful code** | **≈914 lines** (≈4.6% of 19,961). That is well short of the plan's 2,000-line phase-2 estimate, so the remainder must come from the Flutter bridge seam (which wraps state-touching callers) and the "almost-pure" policies after a parameterization step. |
+
+## Phase 2 step 0 preflight — stopped on the opt-in-set check
+
+At original production revision `dcbd9aafe`, the actual cached Media3
+1.8.0 AAR class files derive this required declaration opt-in set:
+
+| Declaration | Annotated API used |
+|---|---|
+| `IptvLiveLoadErrorPolicy` | `DefaultLoadErrorHandlingPolicy`, `LoadErrorHandlingPolicy`, and `InvalidResponseCodeException.headerFields` |
+| `languageOfOverride` | `TrackGroup.getFormat` |
+| `buildAudioTrackLabel` | `Format.bitrate` |
+
+**This differs from the approved four-declaration set.**
+`classifyIptvError` uses the stable `PlaybackException` type, `errorCode`,
+three decoder error constants, and the stable
+`HttpDataSource.InvalidResponseCodeException` type and `responseCode`
+field. None of those symbols has `@UnstableApi` in these artifacts.
+The constructor and `headerFields` of the HTTP exception do have that
+annotation, but the classifier uses neither. The inventory's earlier
+claim that the exception type itself needs opt-in is superseded by this
+artifact audit. `buildSubtitleTrackLabel` uses stable Format fields and
+requires no opt-in. The selected declaration bodies were inspected for
+Media3 references; the other moved helpers have none.
+
+Evidence under the common Git evidence root: `p2/media3_annotations.py`,
+`p2/media3-opt-in-audit.json` (artifact versions, SHA-256 identities, symbol
+annotations, expected/derived sets), `p2/media3-opt-in-audit.log` (the
+required stop assertion), `p2/media3-annotation-inventory.json`, and the
+independent `javap -v` captures `p2/PlaybackException-javap.txt` and
+`p2/HttpDataSource$InvalidResponseCodeException-javap.txt`. The phase-2
+manifest still encodes the approved four opt-ins; no silent design change
+was made. Resolve this mismatch before proceeding with step 0.
+
+The clean original JVM run is archived as
+`junit/baseline-dcbd9aafe/identities.json`: **323 identities, 322 pass,
+one existing `TvSourceBrowserFocusTest` failure, no skips**, JBR 21.0.10,
+zero dirty files and equal before/after tree fingerprints. Gradle exits 1
+for that existing failure; the identity archive is complete, not aborted.
+The command was `python3 dev/tool/android_junit_evidence.py --worktree
+<detached-original> run baseline-dcbd9aafe`.
+
+Original `./gradlew :app:lintDebug --console=plain` also exits 1: **253
+errors, 1,100 warnings**, including **175 `UnsafeOptInUsageError` issues**.
+The complete original issue set and XML/text/HTML reports are archived in
+`p2/lint-baseline-dcbd9aafe/`; raw output is `p2/lint-original.log`. These
+are original findings, not accepted new regressions.
+
+No characterization tests or mutation proofs were added after the
+explicit stop condition. There is no `p2-step0` baseline or additions-only
+comparison yet. Typed selectors, fake messenger, policy/default-dispatch
+coverage, constant-reference grep and the mutation table remain pending.
+The detached original worktree was removed after archiving these runs.
+Production source, `pubspec.lock`, ProGuard and phase-1 manifest are
+unchanged.

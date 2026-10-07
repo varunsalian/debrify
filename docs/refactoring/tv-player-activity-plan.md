@@ -760,3 +760,22 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   declarations, zero differences**. Evidence: `p2/checker-self-tests.log`,
   `p2/original-self-comparison.log`, `p2/phase1-regression.log`,
   `p2/fixtures/`. No production moves.
+
+- 2026-10-07 — **Phase 2 step 0 stopped at the required Media3 opt-in
+  preflight**, before characterization or production moves. Actual cached
+  Media3 1.8.0 class annotations require the policy, `languageOfOverride`
+  and `buildAudioTrackLabel`; **`classifyIptvError` uses stable symbols and
+  drops out of the derived set**. Independent `javap` confirms the
+  exception type and `responseCode` field are stable. The plan expressly
+  says to stop if the set differs, so the manifest retains the approved
+  design pending resolution. Details are in the dependency report's
+  "Phase 2 step 0 preflight" section and `p2/media3-opt-in-audit*`.
+  Clean original JVM baseline **`baseline-dcbd9aafe`** recorded: **323
+  identities, 322 pass, one existing focus failure, no skips**, zero dirty
+  files, stable fingerprints, JBR 21.0.10. Original lint archive: **253
+  errors, 1,100 warnings, 175 UnsafeOptInUsageError issues**, complete
+  issue set and reports in `p2/lint-baseline-dcbd9aafe/`. No `p2-step0`
+  baseline, mutation table or additions-only comparison is claimed.
+  Characterization and its proofs remain pending. Detached original
+  worktree removed; no production source, lockfile, ProGuard or phase-1
+  manifest changes, branch switch, push or device interaction.
