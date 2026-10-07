@@ -2592,6 +2592,8 @@ gate. Review and independent audit evidence: `p1/post-review/`.
 
 ## Phase 2 inventory (pure members, at `dcbd9aafe`)
 
+> Scope note (plan, phase 2 design round 1): the selected phase-2 scope is the ≈900-line set in the plan. Statements below that assign the request functions to a phase-2 bridge *seam*, or propose parameterizing almost-pure functions in phase 2, are superseded: the request functions move verbatim as top-level functions, the seam and any parameterization come with later feature phases.
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` @ dcbd9aafe (19,961 lines; class 136–19961, companion 19914). Read-only survey.
 

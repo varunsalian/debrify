@@ -442,8 +442,13 @@ or tests (none at planning time).
 
 **Opt-in annotations.** Moved code using Media3 `@UnstableApi` APIs loses the
 activity's class-level `@OptIn(UnstableApi::class)`; each such moved
-declaration gains exactly `@OptIn(UnstableApi::class)` (declared
-substitution, listed per declaration in the manifest). No file-level opt-in.
+declaration gains exactly `@OptIn(UnstableApi::class)` using
+`androidx.annotation.OptIn` (declared substitution, listed per declaration in
+the manifest). The required set is fixed now, not lint-driven:
+`classifyIptvError`, `languageOfOverride`, `buildAudioTrackLabel`
+(`Format.bitrate` is `@UnstableApi` in Media3 1.8.0) and
+`IptvLiveLoadErrorPolicy`; step 0 re-derives the set from the Media3 1.8.0
+class annotations and stops if it differs. No file-level opt-in.
 Android lint's `UnsafeOptInUsageError` result for the module must be
 unchanged (run `./gradlew :app:lintDebug` at base and gate and compare the
 issue set).
@@ -455,10 +460,23 @@ issue set).
 single call site (≈2960):
 `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }`.
 The body (713–748) is verbatim: `liveNow()` invokes the function-typed
-property with the same syntax. This is the first **`patched`** use (rule 2):
-the manifest carries the three exact token patches (class header, member
-deletion, call site) and the checker compares the entire resulting
-declarations. Threading, evaluation time (each `getRetryDelayMsFor` /
+property with the same syntax. **Checker encoding** (matches the
+implemented semantics: `patched` rows stay in the original file, `moved`
+rows carry substitutions): the policy class is a `moved` row whose declared
+substitutions are exact token sequences with occurrence counts for (1) the
+annotation/header (`private inner class IptvLiveLoadErrorPolicy :` →
+`@OptIn(UnstableApi::class)` + `internal class IptvLiveLoadErrorPolicy(
+private val liveNow: () -> Boolean,) :`) and (2) deletion of the 2-line
+`liveNow()` member; `setupPlayer` is a `patched` row (retained in the
+activity) with the single call-site patch. The checker compares the entire
+resulting declarations. Step T of phase 2 extends
+`dev/tool/test_kotlin_moves.py`'s fixture materializer to apply `patched`
+rows and moved-row substitutions, and adds a **complete phase-2 extraction
+fixture** (all moves, the companion-constant relocation, the policy's
+substitutions and the caller patch) that must pass, plus negatives: an
+extra edit inside the policy beyond its substitutions, and an extra edit in
+`setupPlayer` beyond its patch. Both must pass/fail before any production
+move. Threading, evaluation time (each `getRetryDelayMsFor` /
 `getMinimumLoadableRetryCount` call reads the fields on the loader thread
 exactly as before), instance count (one per factory build) and captured
 lifetime (the lambda captures the activity as the inner class did) are
@@ -481,16 +499,37 @@ functions.
   diagnostics strings, navigation-map construction).
 - Flutter request functions: a test installs
   `MainActivity.setAndroidTvPlayerChannel(MethodChannel(recordingMessenger,
-  "com.debrify.app/android_tv_player"))` and asserts method names, exact
-  argument maps, the callback mapping of success/error/notImplemented
-  replies, the null-channel path, and the `requestIptvEpg` 45 s watchdog
-  (PAUSED looper: fires `callback(null)` once at 45 s; a reply before it
-  wins and the late timeout does not call back twice) — restoring the static
-  channel in `@After`.
-- `IptvLiveLoadErrorPolicy`: retry delay / minimum loadable retry count for
-  live vs non-live, per HTTP status/exception class, via an activity with
-  `iptvChannels`/`currentIptvIndex` set by reflection (original) — the test
-  helper alone retargets to the constructor supplier after the move.
+  "com.debrify.app/android_tv_player"))` (saving and restoring the previous
+  static channel in `@After`). The fake `BinaryMessenger` decodes the
+  `StandardMethodCodec` envelope (flipping the buffer first) to assert method
+  names and exact argument maps, and **posts replies through a main-looper
+  Handler** (production `MethodChannel` invokes results on the replying
+  thread; a synchronous fake would misrepresent timing). It distinguishes a
+  raw-`null` reply (`notImplemented`) from an encoded-null success envelope,
+  and supports error envelopes and a `send` that throws. Pinned per function:
+  success/error/notImplemented mapping; the null-channel path (stream-URL
+  request fails synchronously; torrent-stream and movie-metadata requests
+  invoke no callback; EPG failure posts asynchronously); send exceptions
+  (stream-result reporting swallows, quick-play next-episode propagates);
+  the `requestIptvEpg` 45 s watchdog under a PAUSED looper (fires
+  `callback(null)` once at 45 s; a reply before it wins; a reply after the
+  timeout does not call back twice); and **real default-argument dispatch**
+  of `requestIptvEpg` with `includeCatchupMetadata` omitted, for
+  `entry.isCurrent` true and false.
+- Reflection access selects members by **parameter types**, not by name and
+  arity (`TvPlayerOriginalAccess` gains typed selectors), so the two
+  one-argument `parseIptvChannels` overloads (`JSONArray`, `List<*>`) are
+  each exercised directly.
+- `IptvLiveLoadErrorPolicy`: one policy instance per test; the activity's
+  `iptvChannels`/`currentIptvIndex` are changed **between calls** (live →
+  non-live → invalid index) and both `getRetryDelayMsFor` and
+  `getMinimumLoadableRetryCount` are exercised each time, proving the state
+  is read per invocation, not snapshotted. Boundaries: retry-count 4/5 and
+  15/16, Retry-After fallback and clamps, per HTTP status/exception class,
+  and non-live delegation to the superclass. After the move the helper
+  retargets to the constructor supplier and additionally asserts the
+  supplier is not evaluated at construction and runs on the invoking
+  thread.
 - Mutation proofs on the original for every test; Claude samples further
   mutations; 0b closes survivors. New JVM baseline `p2-step0`.
 
@@ -695,3 +734,9 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   with mutation proofs for `AutoSyncRingView` colour changes, animator
   updates and stop/reset.
 - Phase 1 complete; merged into `refactor/codebase`.
+- 2026-10-07 — phase 2 design round 1 (Codex): P1 (policy `patched`
+  encoding didn't match the checker → policy `moved` with substitutions,
+  `setupPlayer` `patched`, fixture materializer + full phase-2 extraction
+  fixture first); P2s folded (per-invocation policy reads, async fake
+  messenger + per-function null-channel/exception/default-argument cases,
+  typed reflection selectors); P3s: fixed opt-in set, inventory scope notes.
