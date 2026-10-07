@@ -24,6 +24,13 @@ def main():
         bridge = checker.RECORDINGS_BRIDGE
         facade = checker.RECORDINGS_FACADE
         results = {}
+        completed_tree = json.loads((root / 'dev/tool/recordings_checker_config.json').read_text())['completed_step'] >= 4
+        assert checker.RECORDINGS_COMPLETE == completed_tree
+        if completed_tree:
+            assert facade in checker.COMPOSITION_ROOTS
+            assert checker.RECORDINGS_SIZE_EXCEPTIONS == {}
+            assert len((copy / facade).read_text().splitlines()) == checker.RECORDINGS_FACADE_CAP <= 150
+            results['real completed facade cap and composition root'] = 'PASS'
         # Reuse the real ink scanner without its unconditional CLI entrypoint.
         module = ast.parse((root / 'dev/tool/light_ink_inventory.py').read_text())
         module.body = module.body[:-1]
@@ -97,18 +104,19 @@ def main():
         probe('staged bridge TEMP allowed', bridge + 'temp_probe.dart', '// TEMP(recordings)\n')
         probe('keep-alive forbidden', base + 'presentation/keep_alive_probe.dart', '// KeepAlive\n', 'Recordings adds keep-alive ownership')
 
-        # Until completion the original workflow stays in the facade. A size-only
-        # fixture exercises completion guards without advancing the real tree.
-        completed = '// recordings completion guard fixture\n' * checker.RECORDINGS_FACADE_CAP
+        # Completion probes use the actual facade once complete; earlier stages
+        # use a size-only fixture without advancing the real source tree.
+        completed = ((copy / facade).read_text() if completed_tree else
+                     '// recordings completion guard fixture\n' * checker.RECORDINGS_FACADE_CAP)
         (copy / facade).write_text(completed)
         checker.RECORDINGS_COMPLETE = True
         checker.COMPOSITION_ROOTS = {*checker.COMPOSITION_ROOTS, facade}
         code, output = run()
         assert code == 0, output
-        results['completed facade fixture'] = 'PASS'
+        results['real completed facade' if completed_tree else 'completed facade fixture'] = 'PASS'
         probe('missing completed facade', facade, None, 'missing')
         probe('facade cap plus one', facade, completed + '// extra\n', 'recordings facade limit')
-        probe('completed facade TEMP', facade, completed.replace('guard fixture', 'TEMP(recordings)', 1), 'Recordings temporary cross-call remains in the facade')
+        probe('completed facade TEMP', facade, completed.replace('//', '// TEMP(recordings)', 1), 'Recordings temporary cross-call remains in the facade')
         probe('completed bridge TEMP', bridge + 'temp_probe.dart', '// TEMP(recordings)\n', 'Recordings temporary cross-call outside its exact legacy bridge')
         code, output = run()
         assert code == 0, output

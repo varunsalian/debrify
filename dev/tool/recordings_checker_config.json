@@ -4,7 +4,7 @@
   "feature": "lib/features/recordings",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 3,
+  "completed_step": 4,
   "completion_step": 4,
   "allowed_edits": [
     "receiver",

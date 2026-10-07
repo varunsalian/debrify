@@ -1056,3 +1056,38 @@ Gate 1 was accepted by Claude before this work. Checkpoint subject: `refactor(re
 - No load flake observed. `step3-command-NOTE.txt` records two corrected read-only command arguments (comparison pathname and rendered-set label); neither changed inputs or acceptance. ORIGINAL mutation evidence is unchanged: **94 B / 43 S**, all rejected with no survivors, source-contract excluded from B.
 
 Step 3 is complete. Step 4 completion registration and gate 2 are next; no completion flag was activated in this checkpoint.
+
+### Step 4 — completion registration and local checks (2026-10-07)
+
+Parent `8989e95ee`; checkpoint subject `refactor(recordings): step 4 completion`. Resolved objects are recorded in `step4-checkpoint.json`. Gate 2 runs only after this checkpoint is committed.
+
+- `RECORDINGS_COMPLETE = True`, measured `RECORDINGS_FACADE_CAP = 101`, empty size exceptions, facade in `COMPOSITION_ROOTS` with its lifecycle comment, and the existing conditional facade registration in `main()` now active. `TEMP(recordings)` is rejected in the facade and every feature destination, including the former temporary bridge. The facade's size-baseline entry is removed; all other entries remain unchanged. Explicit `mandatory_qualification: true` remains set.
+- The real architecture test now checks completion/config consistency, the actual facade's measured cap and composition registration, and uses the actual completed facade for cap + 1, missing and TEMP negatives. **7 positives / 18 real-main rejections** pass. Architecture covers **1,531 migrated files**. CI format includes the facade and `test/support/recordings_*.dart`; CI analyze includes the facade **before `| tee analyze.txt`**. Both exact commands pass, as do the analyzer helper, local format/scoped analysis, sizes, storage checks and diff checks.
+- Application/native files are byte-identical to Step 3; services, players, other features and both pubspecs remain unchanged from R. Only five tooling/configuration files change. The completed config selects the frozen Step 3 composition; actual sources pass and the Step 2 specification rejects them by name (`step4-real-composition-selection.json`).
+- Final facade `wc -l`: **101**, equal to the enforced cap. AST physical spans sum to 101: imports **9** + blanks **9** + header **9** + public Widget **6** + State boundary **3** + owners/composition **11** + lifecycle/`_onRevision` **52** + annotated build forwarder **2**. Public Widget bytes equal R; no implementation remains behind a temporary forwarder.
+
+Final application destinations, including all imports, comments and blanks:
+
+| File (`recordings_hub_*.dart`) | Physical lines |
+| --- | ---: |
+| presentation/tokens | 8 |
+| presentation/buttons | 291 |
+| presentation/chrome | 148 |
+| presentation/live_card | 156 |
+| presentation/library_row | 189 |
+| presentation/empty_states | 259 |
+| legacy_recordings/schedule_row | 176 |
+| legacy_recordings/owners | 49 |
+| legacy_recordings/dependencies | 18 |
+| legacy_recordings/sections | 20 |
+| legacy_recordings/data | 160 |
+| legacy_recordings/format | 102 |
+| legacy_recordings/actions | 150 |
+| legacy_recordings/scheduling | 281 |
+| legacy_recordings/layout | 260 |
+
+- All five root tooling commands pass, **7 positives / 116 checker + 116 reader rejections**, inventory **2 positives / 9 rejections**. All **20 other manifests** pass with stdout byte-identical directly to R, isolated parser copies and copied dills deleted (`step4-integrated-direct-R-compare.json`). Final fresh normal-clone execution of every new tool and the 20-manifest matrix follows gate 2, as explicitly requested.
+- **73/73** unchanged characterizations (including strict macOS goldens) and **13/13** shape/theme guards pass, with identical ORIGINAL identities. All six PNG bytes and all characterization inputs remain Step L. Aggregate/floor **12/488**, zero shape calls; theme owned/settings surface **95/657**, primary light ink **27**, white-sweep excluded; rendered walk **13 files / 181 sites**. Post-move Linux replay remains Claude's separate task; no Docker run here.
+- Final whole analyzer after owned AST jobs stopped: **1,719 vs R 1,709**, outside-feature **added [] / removed []**. The ten feature identities remain precisely the nine alias-constructor warnings and recursive getter info predicted by the 0b probe; no new strict identity. Preliminary analyzer output is retained separately. ORIGINAL mutation reports remain **94 B / 43 S**, no survivors; no source-contract evidence counted as B. No load flake or implementation deviation in Steps 3–4, and no regression recording or behavioural allowlist change.
+
+Completion implementation is committed before the full-suite gate. Gate 2 and the final normal-clone proof remain pending in this checkpoint.

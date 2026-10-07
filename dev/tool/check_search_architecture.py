@@ -14,10 +14,10 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launc
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
 FEATURES += ("recordings",)
-RECORDINGS_COMPLETE = False
+RECORDINGS_COMPLETE = True
 RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
 RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"
-# Measured by the compiling Step 0b probe; enforced at completion.
+# Measured on the completed facade, matching the compiling Step 0b probe.
 RECORDINGS_FACADE_CAP = 101
 RECORDINGS_SIZE_EXCEPTIONS = {}
 RECORDINGS_HANDOFF_FILES = {RECORDINGS_BRIDGE + "recordings_hub_actions.dart"}
@@ -221,6 +221,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Recordings composition root holds the live State wiring and lifecycle.
+    RECORDINGS_FACADE,
     # Pure catalog compatibility export surface; feature files own declarations.
     STREMIO_TV_CATALOGS_FACADE,
     # settings_widgets: pure compatibility exports; feature files own every declaration.
