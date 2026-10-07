@@ -3,9 +3,65 @@ package com.debrify.app.tv
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PlaybackItemHeadersTest {
+    @Test fun allLaunchFieldsMapWithoutLosingOptionalValues() {
+        val values = linkedMapOf<String, Any?>(
+            "id" to "id", "title" to "Release", "url" to "https://example.test/file", "index" to 4,
+            "season" to 2, "episode" to 10, "artwork" to "poster", "description" to "description",
+            "resumePositionMs" to 123L, "durationMs" to 456L, "updatedAt" to 789L, "resumeId" to "resume",
+            "sizeBytes" to 1000L, "rating" to 8.5, "provider" to "torbox", "traktProgressPercent" to 21.0,
+            "watched" to true, "allowLocalProgressDisplay" to false, "sourceTitle" to "Original release",
+            "hdVideoUrl" to "video", "audioUrl" to "audio", "httpHeaders" to mapOf("Referer" to "ref"),
+        )
+        val item = PlaybackItem.fromMap(values)
+        assertEquals(PlaybackItem.fromJson(JSONObject(values)), item)
+        assertEquals("id", item.id)
+        assertEquals("Release", item.title)
+        assertEquals("https://example.test/file", item.url)
+        assertEquals(4, item.index)
+        assertEquals("S02E10", item.seasonEpisodeLabel())
+        assertEquals("poster", item.artwork)
+        assertEquals("description", item.description)
+        assertEquals(123L, item.resumePositionMs)
+        assertEquals(456L, item.durationMs)
+        assertEquals(789L, item.updatedAt)
+        assertEquals("resume", item.resumeId)
+        assertEquals(1000L, item.sizeBytes)
+        assertEquals(8.5, item.rating)
+        assertEquals("torbox", item.provider)
+        assertEquals(21.0, item.traktProgressPercent)
+        assertTrue(item.watched)
+        assertEquals(false, item.allowLocalProgressDisplay)
+        assertEquals("Original release", item.sourceTitle)
+        assertEquals("video", item.hdVideoUrl)
+        assertEquals("audio", item.audioUrl)
+        assertEquals(mapOf("Referer" to "ref"), item.httpHeaders)
+    }
+
+    @Test fun absentAndEmptyLaunchKeysKeepOriginalDefaults() {
+        val empty = PlaybackItem.fromMap(emptyMap<String, Any>())
+        assertEquals("", empty.seasonEpisodeLabel())
+        assertEquals("", empty.id)
+        assertEquals(0, empty.index)
+        assertEquals(0L, empty.durationMs)
+        assertNull(empty.season)
+        assertNull(empty.episode)
+        assertNull(empty.artwork)
+        assertNull(empty.rating)
+        assertNull(empty.sourceTitle)
+        assertNull(empty.hdVideoUrl)
+        assertNull(empty.audioUrl)
+        assertTrue(empty.allowLocalProgressDisplay)
+        val titled = PlaybackItem.fromMap(mapOf("title" to "fallback", "hdVideoUrl" to "", "audioUrl" to ""))
+        assertEquals("fallback", titled.sourceTitle)
+        assertNull(titled.hdVideoUrl)
+        assertNull(titled.audioUrl)
+        assertEquals("", titled.copy(season = 2).seasonEpisodeLabel())
+    }
+
     @Test fun methodChannelReplacementPreservesNativeMapHeaders() {
         val map = linkedMapOf<String, Any?>(
             "url" to "https://cdn.test/episode2", "season" to 1, "episode" to 2,

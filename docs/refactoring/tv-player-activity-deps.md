@@ -2235,3 +2235,141 @@ Whole-file `contains` assertions:
 - `trackSelector` and `nightModeIndex` field names exist in both and are pinned by NativePlayerSettingsConsumptionTest.
 
 Note: unifying these duplicates is out of scope for a behavior-preserving split; the duplicates are listed only for awareness.
+
+## Phase 1 step 0
+
+2026-10-07 — characterized the original `39c630303` before any production move.
+The six-part dependency inventory above is retained unchanged. Step T is
+`05dd8a9e9`; all production code, `pubspec.lock`, and ProGuard rules remain
+byte-identical to the original. The activity blob is
+`60dc82cba2b36f09a171c86dc92b0bb385c2ef64` (22,221 lines).
+
+### Coverage and original run
+
+- Added **38 tests**; reused the 4 existing header/progress tests and 4 late
+  metadata merge tests. Reflection, private JVM names and constructor order
+  are confined to `TvPlayerOriginalAccess.kt`; production visibility is unchanged.
+- Models: JSON/map fields and absent/empty keys, protected-stream headers,
+  quality/coverage/title/size/failure identity, payload order/navigation/header
+  inheritance and thresholds, group lookup, subtitle catalog formatting,
+  season labels, watched/rewatch/local/tracker display edges and live metadata merges.
+- Adapters: all seven adapters, counts/view types, numeric season/episode and
+  movie group ordering/filtering, missing→actual→missing recycling, bound text,
+  visibility/status/fallbacks, click/long-click consumption and focus callbacks,
+  remote Select and first-row Up target, skin callbacks, all guide styles.
+- All four payload overloads cover empty, unknown, recognized and mixed lists;
+  playlist progress accepts its marker anywhere, IPTV and Stremio guide accept
+  only the first marker. Tests pin full versus partial text/scale/focus effects,
+  hidden/unchanged active notifications, identity updates, DiffUtil moves/content
+  changes/source identity, EPG freshness eligibility, snapshots, readiness and
+  mutable list membership.
+- Stremio progress posts use attached, measured RecyclerViews. Assertions first
+  require a valid binding position and a positive measured track width; then
+  verify clamping, recycled channel identity and removal/NO_POSITION guards.
+- Ring: PAUSED looper and paused 16 ms frame clock with bounded advances, real
+  animator seeks for deterministic frames after suite-wide vsync clock changes,
+  1,800 ms duration, requested INFINITE via ShadowValueAnimator, repeated-start
+  clock, stop/reset, detach cancellation, arcColor, copied Paint halo/dot
+  snapshots (geometry, style, stroke, RGB and alpha). Legacy Paint exposes alpha
+  separately from packed color; every Canvas drawCircle copies the Paint.
+
+Clean original run: `junit/p1-step0-original-verified/identities.json` at
+`39c630303`, 11 dirty test files, JBR 21.0.10, **297 identities: 296 pass,
+1 pre-existing failure, 0 skips**. The failed identity is still
+`com.debrify.app.tv.TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+Comparison against `baseline-39c630303` passes: all 259 baseline identities
+remain with unchanged statuses; the only 38 additions pass. Input fingerprints
+are equal before/after the run. Initial test-harness calibration logs are kept
+in evidence; their failures were resolved before the verified run.
+
+Post-step-0 phase baseline: `junit/p1-step0/identities.json` at
+`05dd8a9e9`, 12 dirty files (tests + this report), JBR 21.0.10: **297 identities,
+296 pass, the same single known failure, 0 skips**. The run completed with
+equal before/after tree fingerprints. Both comparisons pass: against
+`baseline-39c630303` (exactly 38 passing additions; no removals/status changes)
+and against the verified original run (identical test identities/statuses).
+Later phase-1 JVM runs must compare against `p1-step0`.
+
+The facade-reference search over Kotlin, Java, Dart tests and ProGuard files
+found no explicit `AndroidTvTorrentPlayerActivityKt` or `TvPlaybackItemKt`
+references (exit 1 / no matches); `p1/facade-reference-search.log` records the
+command. Existing direct internal merge-helper tests retain their assertions.
+
+### Original-code mutation table
+
+**49 isolated mutations / 46 named tests**, including every new test and each
+reused header/progress/merge test. Each row ran exactly one named test against
+`39c630303` plus the test files and one original-code mutation. Each compiled
+and failed with `java.lang.AssertionError` or `org.junit.ComparisonFailure`;
+no compile failure/crash qualifies. Ring duration/repeat/start and stop/detach
+have separate proofs. The NO_POSITION mutation clamps an invalid position to
+zero, exercising the forbidden update without producing an indexing crash.
+
+All paths below are relative to `<git-common-dir>/refactor-evidence/tvplayer/`.
+`p1/mutations/<ID>/` contains `mutation.patch`, `gradle.log`, and raw `xml/`.
+`p1/mutations.json` pins exact PSI owner, offsets and before/after text;
+`p1/mutation-results.json` records the assertion and stack for every run;
+`p1/run_mutations.py` reproduces one-at-a-time application and assertion checks.
+`p1/step0-test-inputs/` and `p1/step0-summary.json` archive inputs and hashes.
+The detached evidence worktree is removed after the proofs.
+
+| ID | Named test | Original mutation (before → after) | Failing assertion |
+| --- | --- | --- | --- |
+| 01-allLaunchFieldsMapWithoutLosingOptionalValues | `PlaybackItemHeadersTest.allLaunchFieldsMapWithoutLosingOptionalValues` | `id = obj.optString("id")` → `id = "mutated"` | `org.junit.ComparisonFailure: expected:<[i]d> but was:<[mutate]d>` |
+| 02-absentAndEmptyLaunchKeysKeepOriginalDefaults | `PlaybackItemHeadersTest.absentAndEmptyLaunchKeysKeepOriginalDefaults` | `index = obj.optInt("index", 0)` → `index = obj.optInt("index", 1)` | `java.lang.AssertionError: expected:<0> but was:<1>` |
+| 03-watchedAndRewatchEdgesKeepTheOriginalDisplayPolicy | `PlaybackProgressPolicyTest.watchedAndRewatchEdgesKeepTheOriginalDisplayPolicy` | `if (watched) return 100` → `if (watched) return 99` | `java.lang.AssertionError: expected:<100> but was:<99>` |
+| 04-sourceJsonAndMapKeepFieldsQualityAndFailureIdentity | `TvPlayerModelCharacterizationTest.sourceJsonAndMapKeepFieldsQualityAndFailureIdentity` | `seeders = obj.optInt("seeders", 0)` → `seeders = obj.optInt("seeders", 0) + 1` | `java.lang.AssertionError: expected:<8> but was:<9>` |
+| 05-sourceAbsentKeysAndDisplayFallbacksRemainDistinct | `TvPlayerModelCharacterizationTest.sourceAbsentKeysAndDisplayFallbacksRemainDistinct` | `?: "HD"` → `?: "SD"` | `org.junit.ComparisonFailure: expected:<[H]D> but was:<[S]D>` |
+| 06-payloadParsingKeepsOrderNavigationHeadersAndClampedThresholds | `TvPlayerModelCharacterizationTest.payloadParsingKeepsOrderNavigationHeadersAndClampedThresholds` | `val startIndex = obj.optInt("startIndex", 0).coerceIn(0, items.lastIndex.coerceAtLeast(0))` → `val startIndex = 0` | `java.lang.AssertionError: expected:<1> but was:<0>` |
+| 07-groupLookupAndSubtitleCatalogFormattingKeepOriginalOrder | `TvPlayerModelCharacterizationTest.groupLookupAndSubtitleCatalogFormattingKeepOriginalOrder` | `"$name ($year)"` → `"$name [$year]"` | `org.junit.ComparisonFailure: expected:<Show [(2024)]> but was:<Show [[2024]]>` |
+| 08-seasonsGuideUnionAndFilteringKeepNumericEpisodeOrder | `TvPlaylistAdapterCharacterizationTest.seasonsGuideUnionAndFilteringKeepNumericEpisodeOrder` | `(grouped.keys + guideGrouped.keys).distinct().sorted()` → `(grouped.keys + guideGrouped.keys).distinct().sortedDescending()` | `java.lang.AssertionError: expected:<[0, 1, 0, 1, 1, 1]> but was:<[0, 1, 1, 1, 0, 1]>` |
+| 09-missingAndActualRebindResetDimmingAndClickOwnership | `TvPlaylistAdapterCharacterizationTest.missingAndActualRebindResetDimmingAndClickOwnership` | `itemView.alpha = 0.55f` → `itemView.alpha = 0.65f` | `java.lang.AssertionError: expected:<0.55> but was:<0.65>` |
+| 10-episodeBindKeepsWatchedProgressFallbackAndClassicFocus | `TvPlaylistAdapterCharacterizationTest.episodeBindKeepsWatchedProgressFallbackAndClassicFocus` | `progressText.text = "${progressPercent}%"` → `progressText.text = "${progressPercent}x"` | `org.junit.ComparisonFailure: expected:<40[%]> but was:<40[x]>` |
+| 11-skinBinderAndFocusedItemUseTheCurrentOriginalIndex | `TvPlaylistAdapterCharacterizationTest.skinBinderAndFocusedItemUseTheCurrentOriginalIndex` | `onItemFocused.invoke(item, lastBoundIndex)` → `onItemFocused.invoke(item, lastBoundIndex + 1)` | `Focused callback index: expected 1, got 2 (same item).` |
+| 12-progressPayloadAnywherePreservesTitleButUnknownAndEmptyFullyBind | `TvPlaylistAdapterCharacterizationTest.progressPayloadAnywherePreservesTitleButUnknownAndEmptyFullyBind` | `PAYLOAD_PROGRESS_UPDATE !in payloads` → `payloads.firstOrNull() != PAYLOAD_PROGRESS_UPDATE` | `org.junit.ComparisonFailure: expected:<[Before]> but was:<[After]>` |
+| 13-activeAndProgressNotificationsRespectHiddenAndUnchangedPositions | `TvPlaylistAdapterCharacterizationTest.activeAndProgressNotificationsRespectHiddenAndUnchangedPositions` | `if (previousActivePosition != -1)` → `if (false)` | `Unchanged active position: expected two full changes plus progress; got one full change plus progress.` |
+| 14-groupOrderAndForceRefreshKeepHiddenActiveItems | `TvMovieAdapterCharacterizationTest.groupOrderAndForceRefreshKeepHiddenActiveItems` | `visibleIndices.addAll(currentGroup.fileIndices)` → `visibleIndices.addAll(currentGroup.fileIndices.reversed())` | `java.lang.AssertionError: expected:<[Two, Zero]> but was:<[Zero, Two]>` |
+| 15-movieBindKeepsFallbackStatusClickAndClassicFocus | `TvMovieAdapterCharacterizationTest.movieBindKeepsFallbackStatusClickAndClassicFocus` | `0.4f else 1.0f` → `0.5f else 1.0f` | `java.lang.AssertionError: expected:<0.4> but was:<0.5>` |
+| 16-moviePayloadMatrixAndSkinFocusKeepFullBindSeparate | `TvMovieAdapterCharacterizationTest.moviePayloadMatrixAndSkinFocusKeepFullBindSeparate` | `PAYLOAD_PROGRESS_UPDATE !in payloads` → `payloads.firstOrNull() != PAYLOAD_PROGRESS_UPDATE` | `org.junit.ComparisonFailure: expected:<[Before]> but was:<[After]>` |
+| 17-movieActiveNotificationsKeepDuplicateAndHiddenSemantics | `TvMovieAdapterCharacterizationTest.movieActiveNotificationsKeepDuplicateAndHiddenSemantics` | `if (previousPosition != -1)` → `if (false)` | `Unchanged active position: expected two full changes plus progress; got one full change plus progress.` |
+| 18-channelClassicRowsKeepBadgesFallbackClickLongClickAndFocus | `TvIptvAdapterCharacterizationTest.channelClassicRowsKeepBadgesFallbackClickLongClickAndFocus` | `(entry.channelNumber ?: (entry.index + 1)).toString()` → `(entry.channelNumber ?: (entry.index + 1)).plus(1).toString()` | `org.junit.ComparisonFailure: expected:<[7]> but was:<[8]>` |
+| 19-channelStylesKeepConsoleNumbersAndEditionColors | `TvIptvAdapterCharacterizationTest.channelStylesKeepConsoleNumbersAndEditionColors` | `displayNumber.padStart(3, '0')` → `displayNumber.padStart(4, '0')` | `org.junit.ComparisonFailure: expected:<00[]7> but was:<00[0]7>` |
+| 20-epgPayloadOnlyInFirstSlotPreservesFocusScaleAndName | `TvIptvAdapterCharacterizationTest.epgPayloadOnlyInFirstSlotPreservesFocusScaleAndName` | `payloads[0] == PAYLOAD_EPG` → `PAYLOAD_EPG in payloads` | `org.junit.ComparisonFailure: expected:<[After]> but was:<[Before]>` |
+| 21-staleEpgRequestsOnlyEligibleLiveRowsAndSnapshotsStayIndependent | `TvIptvAdapterCharacterizationTest.staleEpgRequestsOnlyEligibleLiveRowsAndSnapshotsStayIndependent` | `if (!entry.epgLoaded \|\| stale)` → `if (!entry.epgLoaded)` | `EPG callbacks: expected both unfetched and stale rows; got only unfetched.` |
+| 22-identityNotificationsRejectEqualCopiesAndAvoidDuplicateCurrentUpdates | `TvIptvAdapterCharacterizationTest.identityNotificationsRejectEqualCopiesAndAvoidDuplicateCurrentUpdates` | `it === entry` → `it == entry` | `assertTrue(events.isEmpty()) — an equal copy incorrectly notified.` |
+| 23-diffUpdatesDistinguishContentsIdentityMovesAndAliasedInput | `TvIptvAdapterCharacterizationTest.diffUpdatesDistinguishContentsIdentityMovesAndAliasedInput` | `before.sourceId == after.sourceId` → `true` | `assertTrue(events.any { it.kind == "remove" }) — source identity was incorrectly reused.` |
+| 24-categoryOrderSelectionRemoteClickAndFirstRowFocusTarget | `TvIptvPickerAndEpgCharacterizationTest.categoryOrderSelectionRemoteClickAndFirstRowFocusTarget` | `selectedCategory ?: "All categories"` → `selectedCategory ?: "Movies"` | `assertTrue(first.itemView.isSelected) — default category no longer selected.` |
+| 25-listReadinessAndMutableMembershipControlCheckedRowsAndNotifications | `TvIptvPickerAndEpgCharacterizationTest.listReadinessAndMutableMembershipControlCheckedRowsAndNotifications` | `if (ready) lists.size else 0` → `lists.size` | `java.lang.AssertionError: expected:<0> but was:<1>` |
+| 26-epgTimeStatesReplayAndFutureRecordingUseTheBoundProgram | `TvIptvPickerAndEpgCharacterizationTest.epgTimeStatesReplayAndFutureRecordingUseTheBoundProgram` | `"START OVER"` → `"START AGAIN"` | `org.junit.ComparisonFailure: expected:<START [OVER]> but was:<START [AGAIN]>` |
+| 27-styledEpgRecyclingClearsSelectedWhileClassicKeepsItsExistingState | `TvIptvPickerAndEpgCharacterizationTest.styledEpgRecyclingClearsSelectedWhileClassicKeepsItsExistingState` | `holder.itemView.isSelected = airing` → `holder.itemView.isSelected = !airing` | `java.lang.AssertionError: expected:<true> but was:<false>` |
+| 28-guideRowsKeepCurrentFallbackNowNextClickAndFocus | `TvStremioGuideCharacterizationTest.guideRowsKeepCurrentFallbackNowNextClickAndFocus` | `"Next: ${channel.nextUpTitle}"` → `"Later: ${channel.nextUpTitle}"` | `org.junit.ComparisonFailure: expected:<[Next]: Next Film (2025)> but was:<[Later]: Next Film (2025)>` |
+| 29-switchingLoadingAndEmptyDataClearTheRecycledGuideRow | `TvStremioGuideCharacterizationTest.switchingLoadingAndEmptyDataClearTheRecycledGuideRow` | `"Tuning..."` → `"Switching..."` | `org.junit.ComparisonFailure: expected:<[Tun]ing...> but was:<[Switch]ing...>` |
+| 30-guidePayloadFirstSlotMatrixPreservesStaticFieldsAndScale | `TvStremioGuideCharacterizationTest.guidePayloadFirstSlotMatrixPreservesStaticFieldsAndScale` | `val payload = payloads[0]` → `val payload = payloads.firstOrNull { it == PAYLOAD_GUIDE_DATA \|\| it == PAYLOAD_SWITCH_STATE }` | `org.junit.ComparisonFailure: expected:<[After]> but was:<[Before]>` |
+| 31-attachedMeasuredHolderAppliesClampedPostedProgressWidth | `TvStremioGuideCharacterizationTest.attachedMeasuredHolderAppliesClampedPostedProgressWidth` | `coerceIn(0f, 1f)` → `coerceIn(0f, 0.5f)` | `java.lang.AssertionError: expected:<846> but was:<423>` |
+| 32-postedProgressRejectsAReboundChannelAtTheSameAttachedPosition | `TvStremioGuideCharacterizationTest.postedProgressRejectsAReboundChannelAtTheSameAttachedPosition` | `if (currentChannel.id != channelId) return@post` → `// mutation: allow a stale channel id` | `java.lang.AssertionError: expected:<17> but was:<211>` |
+| 33-postedProgressRejectsNoPositionAfterAnAttachedHolderIsRemoved | `TvStremioGuideCharacterizationTest.postedProgressRejectsNoPositionAfterAnAttachedHolderIsRemoved` | `val pos = holder.bindingAdapterPosition` → `val pos = holder.bindingAdapterPosition.coerceAtLeast(0)` | `java.lang.AssertionError: expected:<19> but was:<211>` |
+| 34-guideUpdatesKeepIdLookupsCurrentFallbackAndNotifications | `TvStremioGuideCharacterizationTest.guideUpdatesKeepIdLookupsCurrentFallbackAndNotifications` | `it.id == id` → `it.id != id` | `java.lang.AssertionError: expected:<1> but was:<0>` |
+| 35-ring-duration | `TvAutoSyncRingCharacterizationTest.pulseDurationRepeatRequestAndRepeatedStartKeepTheSameClock` | `duration = 1_800` → `duration = 1_801` | `java.lang.AssertionError: expected:<1800> but was:<1801>` |
+| 36-ring-stop-reset | `TvAutoSyncRingCharacterizationTest.stopResetsPulseAndDetachCancelsTheOwnedAnimator` | `pulse = 0f` → `pulse = 0.5f` | `java.lang.AssertionError: expected:<0.0> but was:<0.5>` |
+| 37-ring-halo-alpha | `TvAutoSyncRingCharacterizationTest.haloAlphaAndArcColorAreSnapshotsBeforePaintReset` | `(82 * (1f - pulse))` → `(80 * (1f - pulse))` | `java.lang.AssertionError: expected:<41> but was:<40>` |
+| 38-ring-halo-stroke | `TvAutoSyncRingCharacterizationTest.haloStrokeGeometryAndSolidDotKeepIndependentPaintSnapshots` | `w * 0.14f` → `w * 0.12f` | `java.lang.AssertionError: expected:<14.0> but was:<12.0>` |
+| 39-ring-infinite-request | `TvAutoSyncRingCharacterizationTest.pulseDurationRepeatRequestAndRepeatedStartKeepTheSameClock` | `repeatCount = ValueAnimator.INFINITE` → `repeatCount = 0` | `java.lang.AssertionError: expected:<-1> but was:<0>` |
+| 40-ring-repeated-start | `TvAutoSyncRingCharacterizationTest.pulseDurationRepeatRequestAndRepeatedStartKeepTheSameClock` | `if (!pulseAnimator.isStarted) pulseAnimator.start()` → `pulseAnimator.start()` | `java.lang.AssertionError: expected:<900> but was:<0>` |
+| 41-ring-detach | `TvAutoSyncRingCharacterizationTest.stopResetsPulseAndDetachCancelsTheOwnedAnimator` | `pulseAnimator.cancel()` → `// mutation: leave animator started` | `assertFalse(animator.isStarted) after detach — animator remained started.` |
+| 42-methodChannelReplacementPreservesNativeMapHeaders | `PlaybackItemHeadersTest.methodChannelReplacementPreservesNativeMapHeaders` | `httpHeaders = ProtectedStreamHttp.headers(obj.opt("httpHeaders"))` → `httpHeaders = emptyMap()` | `java.lang.AssertionError: expected:<episode-2> but was:<null>` |
+| 43-replacementWithoutHeadersDoesNotInheritLaunchCredentials | `PlaybackItemHeadersTest.replacementWithoutHeadersDoesNotInheritLaunchCredentials` | `httpHeaders = ProtectedStreamHttp.headers(obj.opt("httpHeaders"))` → `httpHeaders = emptyMap()` | `java.lang.AssertionError: expected:<Bearer original> but was:<null>` |
+| 44-eachEpisodeRetainsItsHeadersAcrossMetadataAndUrlUpdates | `PlaybackItemHeadersTest.eachEpisodeRetainsItsHeadersAcrossMetadataAndUrlUpdates` | `httpHeaders = ProtectedStreamHttp.headers(obj.opt("httpHeaders"))` → `httpHeaders = emptyMap()` | `java.lang.AssertionError: expected:<episode-1> but was:<null>` |
+| 45-excludedLocalProgressDoesNotOverrideTracker | `PlaybackProgressPolicyTest.excludedLocalProgressDoesNotOverrideTracker` | `allowLocalProgressDisplay && durationMs > 0` → `durationMs > 0` | `java.lang.AssertionError: expected:<20> but was:<40>` |
+| 46-currentRowNeverMovesBehindLivePlayback | `LateEpisodeMetadataMergeTest.currentRowNeverMovesBehindLivePlayback` | `maxOf(snapshotPositionMs, livePositionMs.coerceAtLeast(0L))` → `snapshotPositionMs` | `java.lang.AssertionError: expected:<42000> but was:<20000>` |
+| 47-currentRowCanAdoptFurtherCrossDeviceProgress | `LateEpisodeMetadataMergeTest.currentRowCanAdoptFurtherCrossDeviceProgress` | `maxOf(snapshotPositionMs, livePositionMs.coerceAtLeast(0L))` → `livePositionMs` | `java.lang.AssertionError: expected:<60000> but was:<42000>` |
+| 48-nonCurrentRowHonoursExplicitProgressClear | `LateEpisodeMetadataMergeTest.nonCurrentRowHonoursExplicitProgressClear` | `incomingPositionMs ?: existingPositionMs` → `incomingPositionMs?.takeIf { it > 0 } ?: existingPositionMs` | `java.lang.AssertionError: expected:<0> but was:<60000>` |
+| 49-currentRowKeepsLiveDuration | `LateEpisodeMetadataMergeTest.currentRowKeepsLiveDuration` | `isCurrentItem && liveDurationMs > 0L` → `false` | `java.lang.AssertionError: expected:<3100000> but was:<0>` |
+### Retargets and remaining review
+
+No anchors or reflection consumers have moved in step 0. Existing behavioural
+assertions are preserved. Step 1 must retarget only the original-access helper
+and the previously inventoried Dart source anchors in the move commits.
+Claude’s independent sampling of at least 10 additional mutations and any
+resulting step 0b gaps remain for the independent reviewer. No device interaction
+or production moves were performed. Release/R8/Dart suite phase gates remain
+at their planned later milestone.
