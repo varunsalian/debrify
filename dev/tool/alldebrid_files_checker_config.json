@@ -65,7 +65,8 @@
     "_sections.rootLayout": "AllDebridRootLayout",
     "_sections.toolbar": "AllDebridToolbar",
     "_sections.searchBars": "AllDebridSearchBars",
-    "_sections.listViews": "AllDebridListViews"
+    "_sections.listViews": "AllDebridListViews",
+    "_f": "AllDebridFocusState"
   },
   "receiver_owners": {
     "_library": "AllDebridLibraryState",
@@ -93,7 +94,8 @@
     "_sections.rootLayout": "AllDebridRootLayout",
     "_sections.toolbar": "AllDebridToolbar",
     "_sections.searchBars": "AllDebridSearchBars",
-    "_sections.listViews": "AllDebridListViews"
+    "_sections.listViews": "AllDebridListViews",
+    "_f": "AllDebridFocusState"
   },
   "receiver_members": {
     "AllDebridLibraryState": [
@@ -155,7 +157,8 @@
       "playFile",
       "playMagnet",
       "playVideos",
-      "playLink"
+      "playLink",
+      "findFirstEpisodeIndex"
     ],
     "AllDebridDownloads": [
       "downloadFile",
@@ -243,7 +246,18 @@
     "owners": [
       "_AllDebridFilesScreenState"
     ],
-    "mandatory_qualification": true
+    "mandatory_qualification": true,
+    "state_classes": [
+      "_AllDebridFilesScreenState"
+    ],
+    "field_classes": [
+      "AllDebridFeedbackState",
+      "AllDebridFocusState",
+      "AllDebridLibraryState",
+      "AllDebridNavigationState",
+      "AllDebridSearchState",
+      "AllDebridSelectionState"
+    ]
   },
   "record_owners": [
     "_AllDebridFilesScreenState"
@@ -355,7 +369,8 @@
     "_deps.searchState": "$State._search",
     "_deps.focusState": "$State._focus",
     "_deps.selectionState": "$State._selection",
-    "_deps.feedbackState": "$State._feedback"
+    "_deps.feedbackState": "$State._feedback",
+    "_f": "$State._focus"
   },
   "callback_identities": [
     {
@@ -407,6 +422,1060 @@
           "call": "unregisterTvContentFocusHandler",
           "argument": 1
         }
+      ]
+    }
+  ],
+  "completed_step": 1,
+  "playback_files": [
+    "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
+  ],
+  "download_files": [
+    "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart"
+  ],
+  "require_live_state_callbacks": true,
+  "registered_occurrence_substitutions": [
+    {
+      "before": [
+        "_isAtRoot"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "isAtRoot",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_focusWebDownloads"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "focusWebDownloads"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_focusFirstItem"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "focusFirstItem"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_load"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "load"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_loadLinks"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "loadLinks"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_refresh"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "refresh"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_openMagnet"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "openMagnet"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_navigateUp"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "navigateUp"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_handleBackNavigation"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "handleBackNavigation"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_looksLikeVideo"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "looksLikeVideo"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_unlockStart"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "unlockStart"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_playFile"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "playFile"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_playMagnet"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "playMagnet"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_playVideos"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "playVideos"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_findFirstEpisodeIndex"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "findFirstEpisodeIndex"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_downloadFile"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "downloadFile"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_downloadMagnet"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "downloadMagnet"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_downloadSelectedFiles"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "downloadSelectedFiles"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_showAddMagnetDialog"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "showAddMagnetDialog"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_playLink"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "playLink"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_downloadLink"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "downloadLink"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_copyLink"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "copyLink"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_showAddLinkDialog"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "showAddLinkDialog"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_deleteLinks"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "deleteLinks"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_confirmDeleteAllLinks"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "confirmDeleteAllLinks"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_addMagnetToPlaylist"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "addMagnetToPlaylist"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_deleteMagnets"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "deleteMagnets"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_confirmDeleteAll"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "confirmDeleteAll"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_toggleSelectionMode"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "toggleSelectionMode"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_exitSelectionMode"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "exitSelectionMode"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_toggleSelection"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "toggleSelection"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_isAllSelected"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "isAllSelected",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_toggleSelectAll"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "toggleSelectAll"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_handleDeleteSelected"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "handleDeleteSelected"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_toggleSearch"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "toggleSearch"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_visibleMagnets"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "visibleMagnets",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_visibleFiles"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "visibleFiles",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_visibleLinks"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "visibleLinks",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_showLoading"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "showLoading"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_dismissLoading"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "dismissLoading"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_snack"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "snack"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "build"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "build"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_isBrowsePush"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "isBrowsePush",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildToolbar"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildToolbar"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildViewSelectorBar"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildViewSelectorBar"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildSelectionBar"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildSelectionBar"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_searchDecoration"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "searchDecoration"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_moveFocusTo"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "moveFocusTo"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildSearchBar"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildSearchBar"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildFileSearchBar"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildFileSearchBar"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildBody"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildBody"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildMagnetsView"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildMagnetsView"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildMagnetCard"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildMagnetCard"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildLinksView"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildLinksView"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildLinkCard"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildLinkCard"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildFilesView"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildFilesView"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "_buildFileCard"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "buildFileCard"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "lexical",
+        "read/invocation",
+        "selector",
+        "read/invocation"
+      ]
+    },
+    {
+      "before": [
+        "widget",
+        ".",
+        "isPushedRoute"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "isPushedRoute",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "selector",
+        "read",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "widget",
+        ".",
+        "selectSourceMode"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "selectSourceMode",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "selector",
+        "read",
+        "selector",
+        "invocation"
+      ]
+    },
+    {
+      "before": [
+        "widget",
+        ".",
+        "onSourceSelected"
+      ],
+      "after": [
+        "_deps",
+        ".",
+        "onSourceSelected",
+        "(",
+        ")"
+      ],
+      "binding": "unbound",
+      "role_change": [
+        "selector",
+        "read",
+        "selector",
+        "invocation"
       ]
     }
   ]

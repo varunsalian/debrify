@@ -254,8 +254,8 @@ No method is over 200 lines; no size exception is expected.
 `lib/features/alldebrid_files/`:
 - **`models/`:** `_AdView`, made public under a manifest-registered name
   (values unchanged).
-- **`application/`:** `_findFirstEpisodeIndex` as a pure function, if the
-  dependency report confirms it reads no State. Nothing else is forced pure.
+- **No `application/` folder in this extraction.** `_findFirstEpisodeIndex`
+  remains a method on the playback section in Step 4 (Decision 7).
 - **`presentation/legacy_alldebrid/`:** the bridge (exact path in the guard):
   state owners (library, navigation, search, selection, focus/resources,
   loading dialog), a deps record with live `context`/`mounted`/`setState`
@@ -333,7 +333,7 @@ The same as the PikPak plan's Technique, with these points:
 | --- | --- | --- |
 | 0 | Baseline, dependency report (`docs/refactoring/alldebrid-files-deps.md`), section map, manifest and checker config, test accessor if needed, characterization tests and baselines, playback argument ledger, source-text inventory, CI test list, Linux capture script | Nothing moves. Stop for review. |
 | L | Linux goldens captured by Claude from the step 0 checkpoint in the local Docker image; committed separately | Claude runs it. |
-| 1 | Guard registration; enum and pure helper | |
+| 1 | Guard registration; enum | Pure-function extraction deferred (Decision 7). |
 | 2 | State and resource owners, deps record; lifecycle stays verbatim | |
 | 3 | Library loading, navigation, back handling, refresh, search and selection state actions, loading dialog and snack | Contracts 1, 6, 7. **Full-suite gate 1.** |
 | 4 | Playback, downloads, copy, add magnet/link, delete, playlist | Contracts 3, 4, 5, 10. |
@@ -476,7 +476,9 @@ Items 1–5 were taken before design review; item 6 records Step 0b integration.
 5. **No size exceptions** are planned; any need found in step 0 is recorded
    with an exit milestone before the move.
 
-6. **Step 0b integrator pin:** `occurrence_field_bindings.mandatory_qualification` is explicitly `true` in the AllDebrid config (already pinned at Step 0, retained and now asserted by the real-config self-test). The integrator's unconditional default is not relied on. `state_classes` / `field_classes`, `registered_occurrence_substitutions` and `require_live_state_callbacks` are not present on this branch and are not reimplemented here; any later need for those opt-ins must stop for integration.
+6. **Step 0b integrator pin:** `occurrence_field_bindings.mandatory_qualification` is explicitly `true` in the AllDebrid config (already pinned at Step 0, retained and now asserted by the real-config self-test). The integrator's unconditional default is not relied on. Merge `2ddaefca4` supplies `state_classes` / `field_classes`, `registered_occurrence_substitutions` and `require_live_state_callbacks`; this extraction uses those opt-in keys without reimplementing them.
+
+7. **Pure-function extraction deferred:** moving to a top-level function changes the occurrence-binder scope frame; exit: shared cloud-library plan or binder function-frame support. `_findFirstEpisodeIndex` keeps its method shape and moves verbatim to `AllDebridPlayback.findFirstEpisodeIndex` in Step 4. No `application/` folder is created. Raw `_deps.mounted()`, `_deps.context()` and `_deps.setState` remain at the original call sites; the two formatter brace sites use exact predicate/body/prefix sidecars.
 
 ## End-of-series device checklist
 
@@ -728,3 +730,17 @@ Final full-suite, whole-analyzer, shared-tool and fresh-clone evidence follows i
 - Decisions item 6 requires stopping if the forthcoming occurrence opt-ins are needed. A scratch real-original `_load` fixture passes with the frozen registered section receiver, but the planned PikPak-style `_deps.focusFirstItem()` callback fails the occurrence binder (`39 != 40`). Original `_refresh` uses callbacks on both navigation and library-loading owners. Trying the existing `receiver_paths` / `receiver_owners` `_deps` mapping for either owner fails the other calls (`8 != 10`, or `_load` `39 != 40` plus `_refresh` `8 != 9`); one receiver path cannot identify both section owners. No full-scaffold failure masks these direct binder probes.
 - The required `registered_occurrence_substitutions` support and accompanying `state_classes` opt-in now exist on `refactor/codebase` (edit-profile integration `9f3755b9b`, unconditional bare-field default fix `6a6d26ad3`). They are absent here. Per the explicit Step 0b instruction, they are **not reimplemented or copied** on this branch. Evidence: `post-stepL-wiring-probe.json`, original-method scratch fixtures and probe script. The original facade-with-seam SHA remains `e35a1af1e91b8b997f03106da3a617827749ce740723e2e2ace5629d5fb5b7a0`.
 - **Stop for integrator support.** No extraction has started; Steps 1–6 and full-suite gates 1/2 are pending. No production or shared-tool change, Premiumize edit, Linux recapture, push or device/emulator run. The facade remains the documented original 2,040-line retention (including the frozen seam); no destination-size exception is introduced.
+
+### Merge verification — accepted comparison base
+
+- Clean merge `2ddaefca4`, tested tree `627d175c2f1cc594bc29e1ee7c810e9f0ada83bb`, Flutter 3.44.8 / Dart 3.12.2. All 22 manifest/self-tests pass with private parser packages and deleted copied dill files; the 20 pre-merge peers have byte-identical outputs. All 138 affected identities pass unchanged, and strict Linux replay passes 6/6. Evidence: `merged-all-manifests.json`, `merged-affected.*`, `merged-linux.*`.
+- Whole analyzer: 1,719 records; the ten additions exactly match the accepted edit_profile diagnostic inventory; zero removals. `merged-analyzer-inventory-compare.json` records the correspondence. Subsequent moves compare to `merged-analyze.txt` with facade relocation.
+- Accepted `base3c` full suite: **12,222 success / 13 baseline failure / 28 baseline error / 20 skipped**. Comparison to `base3b`: **PASS**, only 77 added passing edit_profile identities, zero missing or newly failing/skipped identities. Stable tree and SDK are recorded in `base3c.env.json`; raw results and `base3c-compare.txt` are retained. Both gates use base3c. The earlier integration stop is resolved.
+
+### Step 1 — enum and guard registration
+
+- The view enum moves unchanged to `models/alldebrid_view.dart`; all values and uses are manifest-normalized. The episode helper remains in the facade until Step 4 and keeps method scope per Decision 7. The frozen map still contains exactly 98 leaves.
+- Registered the exact legacy bridge, 500-line destination caps, facade back-import rejection, all four bidirectional cloud peer boundaries including models and unregistered Premiumize scans, and exact playback/enqueue placement. The new architecture self-test exercises the real guard with independent positive/negative scratch files, including staged/completed TEMP and facade caps. No other feature rule changes. Theme and zero-shape enum registrations are additive; the facade size ratchet is reduced after formatting.
+- Uses the merged occurrence opt-ins with explicit mandatory qualification and raw live State callbacks; no binder scope-correspondence option is introduced. Verification evidence will be recorded at this checkpoint.
+
+- Step 1 verification: **22/22 manifests and self-tests PASS**, private parser copies with copied dill files deleted; all 21 peer outputs byte-identical to merge verification. **138/138 affected identities PASS unchanged** (113 AllDebrid plus 25 caller tests), comparison to base3c PASS with zero additions/missing/new failures or skips. **Strict Linux originals 6/6 PASS**, no capture/update flags. Whole analyzer comparison to `merged-analyze.txt` with facade relocation PASS: no additions/removals. Stable tested trees and Flutter 3.44.8 / Dart 3.12.2 are recorded in `step1-all-manifests.json`, `step1-affected.*`, `step1-analyze.*` and `step1-linux.*`; architecture, size, format checks pass in `step1-ci.txt`.

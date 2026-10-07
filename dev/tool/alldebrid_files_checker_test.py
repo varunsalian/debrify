@@ -88,8 +88,12 @@ def self_test(package):
         ('wrong refresh branch','await _loadLinks();','await _load();'),
     ]:
         member={'wrong builder State context':'_buildToolbar','wrong add-dialog lexical context':'_showAddMagnetDialog','wrong refresh branch':'_refresh'}[name]
-        # Names remain original at Step 0; future rounds use the unchanged real
-        # fixture contract with their manifest-driven source reader.
+        _, actual = located(state+'.'+member)
+        if before not in actual['text']:
+            before, after = {
+                'wrong builder State context': ('Theme.of(_deps.context())', 'Theme.of(otherContext)'),
+                'wrong refresh branch': ('await _deps.loadLinks();', 'await _deps.load();'),
+            }[name]
         assert complete(replaced(state+'.'+member,before,after)),name
         print('AllDebrid '+name+': rejected')
     key,node=located(state+'.dispose')
@@ -108,7 +112,8 @@ def self_test(package):
     assert complete(changed);print('AllDebrid duplicate field owner: rejected')
     accessor=lookup[(source,'','allDebridFilesTestAccess')]
     assert complete({**sources,source:sources[source][:accessor['start']]+sources[source][accessor['end']:]}), 'missing accessor'
-    bad=accessor['text'].replace("'refresh': s._refresh", "'refresh': () => s._refresh()")
+    refresh = re.search(r"'refresh': (s[\w.]+)", accessor['text']).group(1)
+    bad=accessor['text'].replace("'refresh': "+refresh, "'refresh': () => "+refresh+"()")
     assert bad!=accessor['text']
     assert complete({**sources,source:sources[source][:accessor['start']]+bad+sources[source][accessor['end']:]}), 'wrapped accessor'
     print('AllDebrid frozen accessor absent/wrapped: rejected')
@@ -143,7 +148,7 @@ def self_test(package):
         if o['kind']=='lexical' and o['binding']=='unbound' and o['name'] in by_leaf:
             target=by_leaf[o['name']]
             if target['destination_class'] in config['receiver_members']:
-                path=next(p for p,v in config['receiver_paths'].items() if v==target['destination_class'])
+                path=('_deps' if not target['destination_class'].endswith('State') else next(p for p,v in config['receiver_paths'].items() if v==target['destination_class']))
                 start=o['offset']-before['start'];end=o['end']-before['start']
                 moved=moved[:start]+path+'.'+target['new_name']+moved[end:]
     moved=moved.replace('_load(', 'load(',1).replace('setState(', '_deps.setState(').replace('!mounted', '!_deps.mounted()')

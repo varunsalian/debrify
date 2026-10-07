@@ -65,6 +65,15 @@ STREMIO_TV_HANDOFF_FILES = {
     STREMIO_TV_BRIDGE + "stremio_tv_play_channel.dart",
     STREMIO_TV_BRIDGE + "stremio_tv_player_guide.dart",
 }
+FEATURES += ("alldebrid_files",)
+ALLDEBRID_COMPLETE = False
+ALLDEBRID_FACADE = "lib/screens/alldebrid/alldebrid_files_screen.dart"
+ALLDEBRID_BRIDGE = "lib/features/alldebrid_files/presentation/legacy_alldebrid/"
+# Set to the measured facade when Step 6 completes.
+ALLDEBRID_FACADE_CAP = 300
+ALLDEBRID_PEERS = frozenset(("debrid_downloads", "torbox_downloads", "pikpak_files", "premiumize_files"))
+ALLDEBRID_PLAYBACK_FILES = frozenset((ALLDEBRID_BRIDGE + "alldebrid_playback.dart",))
+ALLDEBRID_DOWNLOAD_FILES = frozenset((ALLDEBRID_BRIDGE + "alldebrid_downloads.dart",))
 FEATURES += ("edit_profile",)
 # Completion activates only the facade checks; feature scans are unconditional.
 EDIT_PROFILE_COMPLETE = True
@@ -465,6 +474,7 @@ PRESENTATION_BRIDGE_IMPORTS = {
 # http, shared_preferences and sqflite stay forbidden. Exit milestone: those
 # calls move behind Sources data contracts and this folder is dissolved.
 LEGACY_PLAYBACK_BRIDGES = (
+    ALLDEBRID_BRIDGE,
     EDIT_PROFILE_BRIDGE,
     "lib/features/sources/presentation/legacy_playback/",
     # Move-only launcher bridge; exit: data contracts replace service calls.
@@ -521,6 +531,20 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/alldebrid_files/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line AllDebrid extraction limit")
+        if "TEMP(alldebrid)" in source and (ALLDEBRID_COMPLETE or not relative.startswith(ALLDEBRID_BRIDGE)):
+            problems.append("AllDebrid temporary cross-call outside its exact legacy bridge")
+        if relative not in ALLDEBRID_PLAYBACK_FILES and re.search(r"\b(?:VideoPlayerLauncher\s*\.\s*push|VideoPlayerScreen)\s*\(", source):
+            problems.append("AllDebrid playback handoff outside its registered section")
+        if relative not in ALLDEBRID_DOWNLOAD_FILES and re.search(r"\bDownloadService\s*\.\s*instance\s*\.\s*enqueueDownload\s*\(", source):
+            problems.append("AllDebrid enqueue outside its registered section")
+    if ALLDEBRID_COMPLETE and relative == ALLDEBRID_FACADE:
+        if lines > ALLDEBRID_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {ALLDEBRID_FACADE_CAP}-line AllDebrid facade limit")
+        if "TEMP(alldebrid)" in source:
+            problems.append("AllDebrid temporary cross-call remains in the facade")
     if relative.startswith("lib/features/stremio_tv_catalogs/"):
         limit = STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS.get(relative, 500)
         if lines > limit:
@@ -830,6 +854,16 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/alldebrid_files/"):
+                if target == ALLDEBRID_FACADE:
+                    problems.append("AllDebrid feature imports its facade")
+                if not relative.startswith(ALLDEBRID_BRIDGE) and (target.startswith(("lib/services/", "package:flutter/services.dart", "package:http")) or "video_player" in target or target.startswith("lib/features/player_launch/")):
+                    problems.append("AllDebrid service/platform/launcher import outside its exact legacy bridge")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_ad, other_ad = relative.split("/")[2], target.split("/")[2]
+                if ((own_ad == "alldebrid_files" and other_ad in ALLDEBRID_PEERS) or
+                        (other_ad == "alldebrid_files" and own_ad in ALLDEBRID_PEERS)):
+                    problems.append("AllDebrid cloud peer cross-import (including models)")
             if relative.startswith("lib/features/stremio_tv_catalogs/"):
                 if target == STREMIO_TV_CATALOGS_FACADE:
                     problems.append("Stremio TV catalogs feature imports its facade")
@@ -987,7 +1021,7 @@ def violations(path: Path) -> list[str]:
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)
-                             and target.startswith("lib/services/"))
+                             and (target.startswith("lib/services/") or (relative.startswith(ALLDEBRID_BRIDGE) and target.startswith("package:http/"))))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
                     "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT, STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT) and target not in (
@@ -1064,6 +1098,10 @@ def main() -> int:
         for p in (ROOT / "lib/features" / feature).rglob("*.dart")
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
+    # Scan the sibling even before its independent feature registration.
+    paths.update((ROOT / "lib/features/premiumize_files").rglob("*.dart"))
+    if ALLDEBRID_COMPLETE:
+        paths.add(ROOT / ALLDEBRID_FACADE)
     # Scan the catalog peer even before its independent feature registration.
     paths.update((ROOT / "lib/features/stremio_tv_catalogs").rglob("*.dart"))
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)

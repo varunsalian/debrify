@@ -1,35 +1,31 @@
 import 'dart:async';
+import 'package:debrify/features/alldebrid_files/models/alldebrid_view.dart';
+import 'package:debrify/models/alldebrid_file.dart';
+import 'package:debrify/models/alldebrid_link.dart';
+import 'package:debrify/models/alldebrid_magnet.dart';
+import 'package:debrify/models/playlist_view_mode.dart';
+import 'package:debrify/screens/video_player_screen.dart'; // re-exports PlaylistEntry
+import 'package:debrify/services/alldebrid_service.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/download_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
+import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/file_utils.dart';
+import 'package:debrify/utils/formatters.dart';
+import 'package:debrify/utils/series_parser.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/cloud/cloud_file_row.dart';
+import 'package:debrify/widgets/cloud/cloud_row_skeleton.dart';
+import 'package:debrify/widgets/cloud/cloud_segmented_tabs.dart';
+import 'package:debrify/widgets/cloud/cloud_theme.dart';
+import 'package:debrify/widgets/file_selection_dialog.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
-import '../../services/alldebrid_service.dart';
-import '../../services/analytics_service.dart';
-import '../../services/download_service.dart';
-import '../../services/video_player_launcher.dart';
-import '../../services/main_page_bridge.dart';
-import '../../services/series_source_service.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../models/alldebrid_magnet.dart';
-import '../../models/alldebrid_file.dart';
-import '../../models/alldebrid_link.dart';
-import '../../models/playlist_view_mode.dart';
-import '../../utils/file_utils.dart';
-import '../../utils/formatters.dart';
-import '../../utils/series_parser.dart';
-import '../../widgets/cloud/cloud_file_row.dart';
-import '../../widgets/cloud/cloud_row_skeleton.dart';
-import '../../widgets/cloud/cloud_segmented_tabs.dart';
-import '../../widgets/cloud/cloud_theme.dart';
-import '../../widgets/file_selection_dialog.dart';
-import '../../widgets/tv_text_field.dart';
-import '../../utils/tv_keys.dart';
-
-/// The two root views, switched via the segmented tabs under the toolbar:
-/// the magnet "cloud" library, and the saved direct-download links library
-/// ("Web Downloads").
-enum _AdView { torrents, webDownloads }
 
 /// Cloud-library browser for AllDebrid. AllDebrid's cloud is a flat list of
 /// magnets (each with files), so this is a two-level browser (magnet list →
@@ -63,7 +59,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   List<AllDebridMagnet> _magnets = [];
 
   // Root view: torrents (magnets) vs saved links (web downloads).
-  _AdView _selectedView = _AdView.torrents;
+  AllDebridView _selectedView = AllDebridView.torrents;
 
   // Saved-links ("Web Downloads") library. Loaded lazily on first switch.
   List<AllDebridLink> _links = [];
@@ -137,10 +133,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     // and consume any pending flag regardless of how we were opened.
     MainPageBridge.focusAllDebridWebDownloads = _focusWebDownloads;
     if (MainPageBridge.getAndClearAllDebridFocusWebDownloads()) {
-      _selectedView = _AdView.webDownloads;
+      _selectedView = AllDebridView.webDownloads;
     }
     _load();
-    if (_selectedView == _AdView.webDownloads) {
+    if (_selectedView == AllDebridView.webDownloads) {
       _loadLinks();
     }
   }
@@ -151,7 +147,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Future<void> _focusWebDownloads() async {
     if (!mounted) return;
     setState(() {
-      _selectedView = _AdView.webDownloads;
+      _selectedView = AllDebridView.webDownloads;
       _currentMagnet = null;
       _currentFiles = [];
       _selectionMode = false;
@@ -196,7 +192,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     if (!_shouldFocusOnLoad) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_shouldFocusOnLoad) return;
-      final hasItems = _selectedView == _AdView.webDownloads
+      final hasItems = _selectedView == AllDebridView.webDownloads
           ? _visibleLinks.isNotEmpty
           : _visibleMagnets.isNotEmpty;
       if (_isAtRoot && hasItems) {
@@ -275,7 +271,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _refresh() async {
-    if (_selectedView == _AdView.webDownloads) {
+    if (_selectedView == AllDebridView.webDownloads) {
       await _loadLinks();
     } else if (_currentMagnet != null) {
       await _openMagnet(_currentMagnet!, force: true);
@@ -1250,7 +1246,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final app = AppThemeScope.of(context);
-    final isWeb = _selectedView == _AdView.webDownloads;
+    final isWeb = _selectedView == AllDebridView.webDownloads;
     final hasItems = isWeb ? _links.isNotEmpty : _magnets.isNotEmpty;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1415,15 +1411,15 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Widget _buildViewSelectorBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: CloudSegmentedTabs<_AdView>(
+      child: CloudSegmentedTabs<AllDebridView>(
         segments: const [
           CloudSegment(
-            _AdView.torrents,
+            AllDebridView.torrents,
             'Torrent Downloads',
             Icons.folder_rounded,
           ),
           CloudSegment(
-            _AdView.webDownloads,
+            AllDebridView.webDownloads,
             'Web Downloads',
             Icons.link_rounded,
           ),
@@ -1441,7 +1437,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             _searchQuery = '';
             _searchController.clear();
           });
-          if (value == _AdView.webDownloads && !_linksLoadedOnce) {
+          if (value == AllDebridView.webDownloads && !_linksLoadedOnce) {
             _loadLinks();
           }
         },
@@ -1560,7 +1556,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               onChanged: (v) => setState(() => _searchQuery = v),
               onSubmitted: (_) => _searchFocusNode.unfocus(),
               decoration: _searchDecoration(
-                _selectedView == _AdView.webDownloads
+                _selectedView == AllDebridView.webDownloads
                     ? 'Search your links...'
                     : 'Search your magnets...',
               ),
@@ -1642,7 +1638,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildBody() {
     final app = AppThemeScope.of(context);
-    if (_selectedView == _AdView.webDownloads) {
+    if (_selectedView == AllDebridView.webDownloads) {
       return _buildLinksView();
     }
     if (_loading) {

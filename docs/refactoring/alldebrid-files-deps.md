@@ -22,7 +22,7 @@ Temporary 1,996-line facade retention is intentional through Steps 1–5; only t
 | PlaylistStorage | Two exact submitted maps; storage adds `addedAt` and dedupes. No service rewrite. |
 | Clipboard | unlocked URL copy; trimmed http/https auto-paste before Add Link dialog. |
 | Widget/platform | live context/mounted/setState, navigator/scaffold effects, ordered disposal; CloudFileRow keys/actions/focus, TV text-field callbacks. |
-| Pure helper | `_findFirstEpisodeIndex` reads only its `infos` parameter/locals. Move to application in Step 1 without added parameters. |
+| Pure helper | `_findFirstEpisodeIndex` reads only its `infos` parameter/locals. Keep it a method on AllDebridPlayback in Step 4 without added parameters; pure-function extraction is deferred because it changes the occurrence-binder scope frame. |
 
 ## Frozen section map
 
@@ -86,7 +86,7 @@ Rows are original declaration → destination file / owner / step. Names in pare
 | `_AllDebridFilesScreenState._playFile` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart` | `AllDebridPlayback.playFile` | 4 |
 | `_AllDebridFilesScreenState._playMagnet` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart` | `AllDebridPlayback.playMagnet` | 4 |
 | `_AllDebridFilesScreenState._playVideos` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart` | `AllDebridPlayback.playVideos` | 4 |
-| `_AllDebridFilesScreenState._findFirstEpisodeIndex` | `lib/features/alldebrid_files/application/find_first_episode_index.dart` | `(top-level).findFirstEpisodeIndex` | 1 |
+| `_AllDebridFilesScreenState._findFirstEpisodeIndex` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart` | `AllDebridPlayback.findFirstEpisodeIndex` | 4 |
 | `_AllDebridFilesScreenState._downloadFile` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart` | `AllDebridDownloads.downloadFile` | 4 |
 | `_AllDebridFilesScreenState._downloadMagnet` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart` | `AllDebridDownloads.downloadMagnet` | 4 |
 | `_AllDebridFilesScreenState._downloadSelectedFiles` | `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart` | `AllDebridDownloads.downloadSelectedFiles` | 4 |
@@ -168,7 +168,7 @@ Each row is one review item. Reads/writes derive from original AST references, i
 | `_AllDebridFilesScreenState._playFile` / 4 | `Future<void> _playFile(AllDebridFile file)` | read _apiKey; write — | `_dismissLoading`, `_showLoading`, `_snack`, `_unlockStart` | ☐ at Step 4 |
 | `_AllDebridFilesScreenState._playMagnet` / 4 | `Future<void> _playMagnet(AllDebridMagnet magnet)` | read _apiKey, _currentFiles, _currentMagnet; write — | `_dismissLoading`, `_playVideos`, `_showLoading`, `_snack` | ☐ at Step 4 |
 | `_AllDebridFilesScreenState._playVideos` / 4 | `Future<void> _playVideos( List<AllDebridFile> files, String collectionName, )` | read _apiKey; write — | `_dismissLoading`, `_findFirstEpisodeIndex`, `_looksLikeVideo`, `_playFile`, `_showLoading`, `_snack`, `_unlockStart` | ☐ at Step 4 |
-| `_AllDebridFilesScreenState._findFirstEpisodeIndex` / 1 | `int _findFirstEpisodeIndex(List<SeriesInfo> infos)` | read —; write — | — | ☐ at Step 1 |
+| `_AllDebridFilesScreenState._findFirstEpisodeIndex` / 4 | `int _findFirstEpisodeIndex(List<SeriesInfo> infos)` | read —; write — | — | ☐ at Step 4 |
 | `_AllDebridFilesScreenState._downloadFile` / 4 | `Future<void> _downloadFile(AllDebridFile file)` | read _apiKey; write — | `_dismissLoading`, `_showLoading`, `_snack`, `_unlockStart` | ☐ at Step 4 |
 | `_AllDebridFilesScreenState._downloadMagnet` / 4 | `Future<void> _downloadMagnet(AllDebridMagnet magnet)` | read _apiKey, _currentFiles, _currentMagnet; write — | `_dismissLoading`, `_downloadSelectedFiles`, `_showLoading`, `_snack` | ☐ at Step 4 |
 | `_AllDebridFilesScreenState._downloadSelectedFiles` / 4 | `Future<void> _downloadSelectedFiles( List<Map<String, dynamic>> selected, List<AllDebridFile> allFiles, String magnetName, )` | read _apiKey; write — | `_snack`, `_unlockStart` | ☐ at Step 4 |
