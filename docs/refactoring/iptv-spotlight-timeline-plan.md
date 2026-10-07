@@ -1300,3 +1300,53 @@ and results goldens pass. Linux timeline 6/6 and unchanged results 4/4 pass
 bytes retain their original hashes. No load-sensitive failure occurs.
 Found-not-fixed 1–6 remain unchanged. Step 2 is complete; completion guards,
 fresh final clone, gate 2, device checks, remote CI and integration remain.
+
+### Step 3 — completion guard input
+
+Step 2 commit: `fcc624aa5975aaf5896078a5a2659a562b3de443`.
+Completion sets the timeline flag true, pins its measured facade cap to
+332, and adds the facade to COMPOSITION_ROOTS with its ownership comment.
+The existing completion branch includes it in main and forbids TEMP in
+both facade and bridge. Application/test/golden bytes are unchanged from
+step 2. Full local verification, a fresh normal clone and full gate 2
+against latest `base2` and accepted `gate1-serial` remain before acceptance.
+
+### Step 3 — local verification and gate 2 input accepted
+
+Completion guards pass through the real checker: measured 332-line facade
+cap, facade inclusion/missing-file guard, TEMP bans and both directions of
+the IPTV boundary. All 103 live leaves, retained forwarders, scaffold,
+context, occurrence qualification and callback checks pass
+(`step3-own-manifest.txt`). All 20 other complete self-tests pass with
+isolated packages; stdout and occurrence digests are byte-identical to
+pre-opt-in evidence (`step3-all-manifests-compatibility.json`). Forty fresh
+raw normal/occurrence comparisons are also byte-identical; adapter source
+remains unchanged (`step3-all-manifests-adapter-raw.json`).
+
+Fresh normal clone (`.git` directory), after its own pub get: complete
+real-config self-test, architecture positives/negatives, source contracts,
+11 review tests and per-symbol inventory pass. It clones step 2 and stages
+only the three owned step-3 config/guard/Progress overlays; executable
+hashes match the final input. The real IPTV CLI positive passes; a physical
+`widget.now()` → `DateTime.now()` mutation in the moved frame's `_dayHeading`
+fails the named auxiliary seam assertion and is restored. No `.git` file
+or parser kernel is copied (`step3-fresh-clone-proof.json`). Original
+mutation-driver and composition-probe fresh-clone proofs recorded in 0b
+remain applicable: those tools are unchanged and all production bytes
+match the accepted probe.
+
+Final CI format, analyzer allowlist, strict 10-info inventory, architecture,
+size, storage references/keys, shape, LF and staged-diff checks pass.
+Outside-slice analyzer identities/locations match latest ORIGINAL; only
+identical repeated diagnostic lines are deduplicated, with raw logs retained.
+Theme output is byte-identical; light-ink remains 774 / 240. All 228 focused
+identities/outcomes match `base2`. Strict macOS scenes and Linux timeline
+6/6 plus results 4/4 pass without image updates. Production/golden hashes
+and facade/destination arithmetic remain exactly as recorded in step 2
+(`step3-unchanged-production.json`). No load-sensitive failure occurs in
+these final checks. Found-not-fixed 1–6 are preserved.
+
+Gate 2 runs next on the clean committed input, with paths `[]`, flags
+`--no-pub --concurrency=2`, against latest `base2` and accepted
+`gate1-serial`. All heavy checker/clone runs finish before the full suite;
+no mutation or dependent edit overlaps its tested tree.

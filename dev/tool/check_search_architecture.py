@@ -75,10 +75,10 @@ STREMIO_TV_TUNER_FACADE_CAP = 299
 STREMIO_TV_TUNER_SIZE_EXCEPTIONS = {}
 
 # Pure UI timeline extraction; destination scans apply before completion.
-IPTV_SPOTLIGHT_TIMELINE_COMPLETE = False
+IPTV_SPOTLIGHT_TIMELINE_COMPLETE = True
 IPTV_SPOTLIGHT_TIMELINE_FACADE = "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart"
 IPTV_SPOTLIGHT_TIMELINE_BRIDGE = "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/"
-IPTV_SPOTLIGHT_TIMELINE_FACADE_CAP = 400
+IPTV_SPOTLIGHT_TIMELINE_FACADE_CAP = 332
 IPTV_SPOTLIGHT_TIMELINE_SIZE_EXCEPTIONS = {}
 
 DEBRIFY_TV_COMPLETE = True
@@ -225,6 +225,8 @@ COMPOSITION_ROOTS = {
     STREMIO_TV_CATALOGS_FACADE,
     # settings_widgets: pure compatibility exports; feature files own every declaration.
     SETTINGS_WIDGETS_FACADE,
+    # Timeline facade wires its State-owned live view, record and cached sections.
+    IPTV_SPOTLIGHT_TIMELINE_FACADE,
     # Tuner facade wires its live widget view, owners and legacy sections.
     STREMIO_TV_TUNER_FACADE,
     # Stremio TV facade wires route-owned records, live State and frozen sections.
