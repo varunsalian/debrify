@@ -770,9 +770,28 @@ handler or cancel a borrowed scope.
 
 **Behaviour to preserve exactly** (from the inventory/survey): manual
 auto-sync catches `Throwable` (the MiBox OOM fix) while the periodic verify
-pass catches only `Exception`; ladder/verify timings; the pill's result
-states and colours; subtitle offset and selection semantics; external
-subtitle ticker cadence on the shared handler; cue-cache bounds.
+pass catches only `Exception`; ladder/verify timings; the pill's
+heartbeat/announce/result UI and colours (there is **no** countdown);
+subtitle offset and selection semantics; external subtitle ticker cadence on
+the shared handler; `SubtitleCueCache` semantics as they are (an unbounded
+map — no bound exists to preserve).
+
+**Step T additions (overload audit).** The phase-3 bytecode auditor is
+extended before any move: (a) resolution of **every constructor
+invocation** whose arguments include the substituted receiver
+(`AutoSyncRingView`, `TextView`, `LinearLayout`, both overlay controllers,
+`Intent`, dialog builders, …), (b) **context aliases** (`val ctx = this`
+and any later use of the alias), collected by the PSI adapter even when not
+under a call expression, (c) an explicit, reviewed list of `this`
+occurrences that are anonymous `Runnable`/object receivers (≈ activity lines
+13607, 13628, 14384 at `eee52b084`) excluded from activity substitution, with
+any unlisted `Runnable`-typed `this` failing. A complete phase-4 audit
+fixture with negatives (wrong receiver classification, constructor resolved
+to a different overload, unlisted alias) must pass first. `test_kotlin_moves.py`
+dispatches a complete phase-4 production-config extraction fixture plus the
+inventory's negatives (multi-block, cross-controller, default-argument,
+shadowed-local), keeps all historical suites, and earlier destinations
+(including the four phase-3 controllers) are frozen against `eee52b084`.
 
 **Deferred with reasons:** progress reporter (needs 6 test retargets and an
 edit to the phase-3 sleep `sendProgress` forwarder → its own phase);
@@ -784,17 +803,28 @@ phase 6 → with them).
 
 ### Step 0 — characterization of the original
 
-Prerequisite (as phase 3's skip HTTP shadow): a deterministic test seam for
-the subtitle aligner, the audio tap and the cue cache, keeping the production
-coroutine/handler dispatch — demonstrated on the original first. If it cannot
-be made reliable, the fallback set is auto-sync + progress reporter (the
-inventory's alternative), re-reviewed before execution.
+Prerequisites, **per feature**, each demonstrated on the original first and
+keeping the production coroutine/handler dispatch:
+- auto-sync: a deterministic seam for the subtitle aligner (alignment can be
+  **blocked** by a latch to test subtitle replacement and destruction while a
+  result is pending) and the audio tap;
+- subtitles: a latch-controlled **uncached** cue fetch (test-only shadow or
+  MockWebServer, as phase 3's skip HTTP shadow) proving IO execution, Main
+  publication, failure fallback, superseded loads (stale token) and destroy
+  during fetch — seeding the cache is not sufficient (hits return
+  synchronously and skip the guarded path).
+Fixtures release and settle their workers during cleanup. **A feature whose
+own prerequisite fails is deferred**; only features whose prerequisites
+pass are moved, and a reduced set (e.g. subtitles only, or subtitles +
+progress reporter) gets revised inbound patches, characterization and a
+design re-review before execution.
 
 - Auto-sync: manual run success/failure/OOM (`Throwable`) paths, ladder
   steps and timings, verify pass (`Exception` only), restore/decline result
-  states, pill transitions (busy/ok/fail colours, label, countdown, ring
-  pulsing on/off), cancellation on stop/destroy, pending ticks after `onStop`
-  (pinned as-is; a recorded follow-up).
+  states, pill transitions (heartbeat/announce/result, busy/ok/fail colours,
+  label, ring pulsing on/off), auto-sync work **continuing across `onStop`**
+  (pinned as-is; a recorded follow-up), and destroy-only subtitle-scope
+  cancellation plus shared-handler clearing.
 - Subtitles: external subtitle load/render ticker cadence, stale-load
   rejection, selection (embedded vs external, off), offset changes, settings
   panel callbacks, the five menu rows' labels and actions, `onStart`/`onStop`
@@ -1232,3 +1262,10 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   (constant / allocation-only, no reads of other state, no side effects);
   otherwise the controller property is split or the slot preserved.
   Decoder verification remains pending-environment. Phase 3 complete; merged.
+- 2026-10-08 — phase 4 design round 1 (Codex): P1s folded (overload auditor
+  extended for constructors, context aliases and reviewed Runnable
+  receivers, with a phase-4 audit fixture; per-feature prerequisite →
+  deferral rule); P2s folded (phase-4 fixture dispatch + earlier destinations
+  frozen at `eee52b084`; uncached latch-controlled cue fetch and blockable
+  alignment; expectations corrected — no countdown, work continues across
+  `onStop`, destroy-only cancellation, unbounded cue cache).

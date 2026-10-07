@@ -4351,6 +4351,8 @@ Deviations: three final message boundary cases/proofs were completed during the 
 
 ## Phase 4 inventory (at `ec365eb80`; re-measure on `eee52b084`)
 
+> Superseded by the plan where they differ (phase 4 design round 1): the fallback is per-feature (a feature whose own prerequisite fails is deferred), cue-cache seeding is not a sufficient fixture, and "cue-cache bounds"/"countdown" do not exist in the original.
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
 `ec365eb80` (19,017 lines; class 136–19017, companion 18976–19016). Read-only survey of the main
