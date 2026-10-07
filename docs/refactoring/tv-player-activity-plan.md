@@ -578,6 +578,14 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   (`p1/flutter-gate-known-failures.json`); all statuses are unchanged at the
   phase-1 gate. Follow up separately; no obsolete allowlist was used.
 
+- Phase-2 characterization preserves query-only subtitle suffix filtering:
+  `.ttml`/`.dfxp` URLs with a fragment can pass `isSideRenderableSubtitle`.
+  Review separately; no filter change is made here.
+- Phase-2 characterization preserves case-sensitive `mypikpak.com` URL
+  matching (provider matching is case-insensitive) and prefix-only catalog
+  IMDB validation (a bare `tt` is accepted). Any normalization/validation
+  change needs its own behavior change and tests.
+
 ## Progress
 
 (appended per step)
@@ -794,3 +802,37 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   matches the corrected design. Evidence: `p2/step0/media3-opt-in-audit.json`
   and `p2/step0/checker-self-tests.log`. Step 0 continues on the original
   production base `dcbd9aafe`; no production moves.
+
+- 2026-10-07 — **Phase 2 step 0 complete** on original production
+  `dcbd9aafe`, following the approved three-declaration opt-in correction
+  (`5bb66a997`). Added **55 named tests in ten classes**, covering all
+  **48 moved function declarations**, the nested candidate and policy, and
+  the four consumed constants. Exact typed reflection selects both channel
+  overloads; real Kotlin default dispatch is exercised for EPG current
+  true/false and menu rows. Fake messenger request/reply buffers and main
+  Handler timing, per-function result/failure/null-channel contracts,
+  reporting swallow/quick-play propagation, exactly-once 45 s EPG delivery,
+  policy per-invocation reads in both methods and retry/header boundaries
+  are pinned. Original focused run: **55/55 pass**.
+  **65 distinct isolated original-code mutations are assertion-killed**,
+  covering every named test, with zero survivors or compile/crash proofs.
+  Four final assertion/isolation proofs were repeated (69 proof runs total).
+  The complete test → mutation → failing assertion table is appended to
+  the dependency report; raw patches/logs/XML and exact mutation strings
+  are in `p2/step0/`. Both policy methods independently reject stale state;
+  EPG before/after-deadline delivery and send-exception contracts have extra
+  controls. All four qualified-constant reference searches return no matches.
+  Re-derived Media3 1.8.0 annotation set matches the approved three; all
+  **32 checker self-tests** pass, including the complete updated fixture.
+  Original lint evidence from the preflight remains valid and archived for
+  the later gate comparison (253 errors, 1,100 warnings, 175 opt-in issues).
+  New full JVM baseline **`p2-step0`** and original-plus-tests verification
+  each have **378 identities: 377 pass, the unchanged known focus failure,
+  no skips**. Versus clean `baseline-dcbd9aafe`: **55 passing additions
+  only**, zero missing identities or changed original statuses; original
+  and current maps match exactly. Stable fingerprints, JBR 21.0.10; current
+  baseline tested `5bb66a997` with the 14 final test files awaiting this
+  commit, whose hashes are archived. File-size and diff checks pass.
+  Detached original worktree removed. **Stopped before production moves**
+  as requested; no source, lockfile or ProGuard changes, push, branch switch,
+  device or emulator interaction. Later phase-2 JVM gates use `p2-step0`.

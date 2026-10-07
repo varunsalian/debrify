@@ -34,6 +34,25 @@ internal object TvPlayerOriginalAccess {
         return unwrap { method.invoke(owner, *arguments) }
     }
 
+    /** Exact JVM signatures keep same-arity overloads distinct. */
+    fun callTyped(owner: Any, name: String, types: Array<Class<*>>, vararg arguments: Any?): Any? {
+        val method = owner.javaClass.getDeclaredMethod(name, *types).apply { isAccessible = true }
+        return unwrap { method.invoke(owner, *arguments) }
+    }
+
+    fun constructTyped(name: String, types: Array<Class<*>>, vararg arguments: Any?): Any {
+        val constructor = type(name).getDeclaredConstructor(*types).apply { isAccessible = true }
+        return unwrap { constructor.newInstance(*arguments) }
+    }
+
+    /** Invoke Kotlin's real omitted-argument dispatcher, including its mask. */
+    fun callDefault(owner: Any, name: String, types: Array<Class<*>>, mask: Int, vararg arguments: Any?): Any? {
+        val method = owner.javaClass.getDeclaredMethod(
+            name + "\$default", owner.javaClass, *types, Int::class.javaPrimitiveType, Any::class.java,
+        ).apply { isAccessible = true }
+        return unwrap { method.invoke(null, owner, *arguments, mask, null) }
+    }
+
     private fun <T> unwrap(action: () -> T): T = try {
         action()
     } catch (error: InvocationTargetException) {

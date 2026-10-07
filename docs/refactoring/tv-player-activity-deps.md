@@ -2946,6 +2946,10 @@ All other members (≈350) touch 3+ activity members, views, handlers or the pla
 
 ## Phase 2 step 0 preflight — stopped on the opt-in-set check
 
+Historical stop at `108afb530`; resolved by approved plan correction
+`861aa13ed` and manifest correction `5bb66a997`. Completed step-0 evidence
+follows below.
+
 At original production revision `dcbd9aafe`, the actual cached Media3
 1.8.0 AAR class files derive this required declaration opt-in set:
 
@@ -2997,3 +3001,174 @@ coverage, constant-reference grep and the mutation table remain pending.
 The detached original worktree was removed after archiving these runs.
 Production source, `pubspec.lock`, ProGuard and phase-1 manifest are
 unchanged.
+
+## Phase 2 step 0 — characterization of `dcbd9aafe`
+
+The approved correction in `861aa13ed` resolves the preflight stop above.
+Manifest correction `5bb66a997` and the complete fixture pin exactly three
+opt-ins: `languageOfOverride`, `buildAudioTrackLabel`, and
+`IptvLiveLoadErrorPolicy`. A fresh annotation audit of the actual cached
+Media3 1.8.0 AARs matches that set; `classifyIptvError` has none.
+
+Added **55 named characterization tests in ten behavior-focused classes**.
+All **48 moved function declarations** (both channel overloads included)
+are called directly via exact parameter-type selectors on an un-created
+Robolectric activity. The nested policy is constructed by its original
+binary name and exact outer-activity constructor type; stream candidates'
+original binary name and typed getters are also pinned. Existing phase-1
+reflection callers and assertions are unchanged. No player is created.
+
+| Coverage class | Tests | Contracts pinned |
+|---|---:|---|
+| `TvIptvParsingCharacterizationTest` | 6 | Null/empty/malformed arrays, source/list defaults and filtering, exact overload selection, raw indexes, complete channel fields, header canonicalization and JSON/map differences |
+| `TvIptvRulesCharacterizationTest` | 10 | Segmented suffixes, strict/token-safe twins, filename limit, local-zone US-digit timestamp, sentinel/prefix/quality rules, archive eligibility/window/retention, remaining-time boundaries and EPG ownership |
+| `TvFormattingCharacterizationTest` | 4 | Second/hour boundaries, number spelling, seek cap, row values/callbacks and actual omitted-argument defaults |
+| `TvSubtitleHelpersCharacterizationTest` | 12 | First override index and failure fallback, track labels/locales/defaults, three subtitle sentinels, supported URL suffixes, catalog validation/order, title patterns/metadata priority, query cleaning and manual labels |
+| `TvGuideDataCharacterizationTest` | 2 | Loading/title/year/rating formatting, section-presence updates, empty/malformed values and loading reset |
+| `TvStartupHelpersCharacterizationTest` | 7 | Origin normalization/deduplication, provider strings, PikPak detection, pre-Q/Q codec flags and lookup failure, structured diagnostic records and Android log levels/tag |
+| `TvNavigationCharacterizationTest` | 1 | Stable chronological series order, missing metadata, collection/raw order, empty/single playlists and stale map/group/IMDB clearing |
+| `TvIptvLoadPolicyCharacterizationTest` | 4 | Error classification; one policy instance with live → non-live → invalid index → replaced-list state; both retry methods per invocation; 4/5 and 15/16 boundaries, Retry-After fallback/clamps, status/exception handling and superclass delegation |
+| `TvFlutterRequestsCharacterizationTest` | 5 | Exact request maps, success/error/notImplemented, encoded-null versus raw-null fake semantics, malformed results, per-function null-channel behavior, reporting swallow versus quick-play propagation |
+| `TvEpgRequestCharacterizationTest` | 4 | Async answers/failures, real Kotlin default dispatcher for current true/false, exactly 45,000 ms, reply-before wins and late reply never redelivers |
+
+The fake messenger flips outgoing buffers before decoding with
+`StandardMethodCodec`; flipped success/error envelopes and raw-null replies
+are posted through a main-looper Handler. It records fire-and-forget calls
+without inventing result callbacks. The previous static MethodChannel is
+saved once and restored after every test; reconnects do not overwrite it.
+Locale/time-zone and diagnostic global state/crash handler are restored.
+Diagnostic assertions drain the real work queue and inspect structured
+records as well as the Android log. Codec-lookup and invalid-override
+exception fallbacks use explicit test-only corrupt-state inputs.
+
+All reachable Kotlin decision paths are exercised. Some defensive arms
+cannot be reached through the original accepted inputs: the origin port
+`else` after the HTTP/HTTPS guard; the provider `ifBlank` after nonblank
+input is replaced with nonblank characters; missing/overflowing numeric
+regex groups after the fixed one-to-three-digit patterns. They remain
+verbatim and covered by the exhaustive checker; no fabricated production
+changes were used to make these arms reachable.
+
+Qualified-constant search across Kotlin, Java, Dart and tests has **zero
+matches** for activity/companion references to the four relocated constants.
+Evidence: `p2/step0/qualified-constant-references.log`; command:
+`rg -n '(AndroidTvTorrentPlayerActivity|Companion)\.(SEARCH_SUBTITLE_LABEL|EXTERNAL_SUBTITLE_PREFIX|STARTUP_FAILOVER_LOG_TAG|PROVIDER_PIKPAK)' android lib test dev --glob '*.kt' --glob '*.java' --glob '*.dart'`.
+
+### Original-code mutation proofs
+
+**65 distinct isolated mutations, all assertion-killed; zero survivors or
+compile/crash proofs. All 55 named tests have a proof.** The detached
+worktree contains original `dcbd9aafe` production code plus these tests;
+only one declared mutation is applied for each clean, named-test Gradle
+run. The original source is restored between runs. Four proofs were
+repeated after final assertion/isolation strengthening (69 proof runs in
+total); their rows below refer to the final runs.
+
+Evidence under `p2/step0/`: `mutation_catalog.py`, `mutation-catalog.json`
+(exact before/after text and original spans), `run_mutations.py`,
+`mutation-summary.json`, and `mutations/<ID>/` (patch, Gradle log, fresh
+XML, mutation and result JSON). IDs `m05`, `m34`, `m41`, `m50` additionally
+use `mutations-final-assertions/<ID>/`; every retained proof is a named
+JUnit assertion failure. Long model-equality messages below show the first
+changed field; XML retains the complete failure and stack trace.
+
+| ID | Named test | Original mutation | Failing assertion |
+|---|---|---|---|
+| m01 | `TvIptvParsingCharacterizationTest.sourcesPreserveDefaultsFlagsFilteringAndRevisionPresence` | `it.id.isNotEmpty() && !it.isContinue → it.id.isNotEmpty() && it.isContinue` | `TvIptvParsingCharacterizationTest.kt:32`: expected [default, full, zero]; observed [skip] |
+| m02 | `TvIptvParsingCharacterizationTest.listsPreserveDefaultsBuiltinAndIgnoreMalformedEntries` | `"List" → "Changed"` | `TvIptvParsingCharacterizationTest.kt:45`: expected [IptvListEntry(id=one, name=List, isBuiltin=false), IptvListEntry(id=two, name=Films, isBuiltin=true)]; observed [IptvListEntry(id=one, name=Changed, isBuiltin=false), IptvListEntry(id=two, name=Films, isBuiltin=true)] |
+| m03 | `TvIptvParsingCharacterizationTest.stringListKeepsWhitespaceAndJsonCoercionButDropsEmptyStrings` | `it.isNotEmpty() → it.isNotBlank()` | `TvIptvParsingCharacterizationTest.kt:51`: expected [a,  , 4, false, null]; observed [a, 4, false, null] |
+| m04 | `TvIptvParsingCharacterizationTest.jsonChannelOverloadKeepsPlaceholdersAndPinsAllOptionalFields` | `key.equals("User-Agent", ignoreCase = true) → key.equals("User-Agent", ignoreCase = false)` | `TvIptvParsingCharacterizationTest.kt:70`: expected …ionMs=5000, httpHeaders={User-Agent=Agent, Referer=r…; observed …ionMs=5000, httpHeaders={uSeR-aGeNt=Agent, Referer=r… |
+| m05 | `TvIptvParsingCharacterizationTest.mapChannelOverloadFiltersByTypesAndKeepsRawIndexesAndNegativeMetadata` | `?.toInt() ?: -1 → ?.toInt() ?: 0` | `TvIptvParsingCharacterizationTest.kt:94`: expected …null, group=null, isLive=true, isCurrent=false, resum…; observed …null, group=null, isLive=false, isCurrent=false, resum… |
+| m06 | `TvIptvParsingCharacterizationTest.channelFactoryInfersLiveOnlyForMissingTypeAndMinusOneDuration` | `if (duration == -1) "live" else "vod" → if (duration == 0) "live" else "vod"` | `TvIptvParsingCharacterizationTest.kt:109`: expected …ogo, group=Group, isLive=true, isCurrent=false, resum…; observed …ogo, group=Group, isLive=false, isCurrent=false, resum… |
+| m07 | `TvIptvRulesCharacterizationTest.segmentedUrlsMatchOnlyKnownPathSuffixesBeforeQueryAndFragment` | `path.endsWith(".ism") → path.endsWith(".ismx")` | `TvIptvRulesCharacterizationTest.kt:16`: expected true; observed false |
+| m08 | `TvIptvRulesCharacterizationTest.xtreamTwinKeepsHostCredentialsIdAndRejectsTokenOrLoosePaths` | `"$host/live/$user/$pass/$id.ts" → "$host/live/$user/$pass/$id.mp4"` | `TvIptvRulesCharacterizationTest.kt:25`: expected .../live/user/pass/123.[ts]; observed .../live/user/pass/123.[mp4] |
+| m09 | `TvIptvRulesCharacterizationTest.recordingNamesStripUnsafeCharactersCollapseSpacesAndBoundLength` | `cleaned.take(60) → cleaned.take(59)` | `TvIptvRulesCharacterizationTest.kt:38`: expected ...aaaaaaaaaaaaaaaaaaaa[a]; observed ...aaaaaaaaaaaaaaaaaaaa[] |
+| m10 | `TvIptvRulesCharacterizationTest.recordingTimestampUsesLocalZoneAndUsDigitsToSecondPrecision` | `"yyyyMMdd_HHmmss" → "yyyyMMdd_HHmm"` | `TvIptvRulesCharacterizationTest.kt:49`: java.lang.AssertionError |
+| m11 | `TvIptvRulesCharacterizationTest.seriesSentinelRecognizesEitherExactTypeOrCaseSensitiveScheme` | `entry.contentType == "series" → entry.contentType == "Series"` | `TvIptvRulesCharacterizationTest.kt:59`: expected true; observed false |
+| m12 | `TvIptvRulesCharacterizationTest.stremioUrlRequiresExactPrefixAtTheBeginning` | `url.startsWith("stremio-tv://") → url.contains("stremio-tv://")` | `TvIptvRulesCharacterizationTest.kt:66`: expected false; observed true |
+| m13 | `TvIptvRulesCharacterizationTest.qualityUsesFirstCaseInsensitiveRecognizedTokenAndLiveFallback` | `-> "4K" → -> "Ultra"` | `TvIptvRulesCharacterizationTest.kt:73`: expected [4K]; observed [Ultra] |
+| m14 | `TvIptvRulesCharacterizationTest.startOverRequiresLiveArchiveAndCurrentWindowWithinRetention` | `entry.tvArchive == "0" → entry.tvArchive == "1"` | `TvIptvRulesCharacterizationTest.kt:81`: expected IptvEpgProgram(title=Show, description=null, startMs=1791384910970, stopMs=1791384930970, hasArchive=true); observed null |
+| m15 | `TvIptvRulesCharacterizationTest.remainingTimeFloorsMinutesAndFormatsHourRemainders` | `minutes < 60 → minutes <= 60` | `TvIptvRulesCharacterizationTest.kt:96`: expected [1 hr]; observed [60 min] |
+| m16 | `TvIptvRulesCharacterizationTest.epgAdoptionCopiesRealDataWithoutOverwritingLoadedOrInFlightOwnership` | `if (!to.epgLoading) to.epgLoaded = true → if (to.epgLoading) to.epgLoaded = true` | `TvIptvRulesCharacterizationTest.kt:107`: expected …extStartMs=30, epgLoaded=true, epgLoading=false, cont…; observed …extStartMs=30, epgLoaded=false, epgLoading=false, cont… |
+| m17 | `TvFormattingCharacterizationTest.playbackTimeFloorsSecondsAndCrossesHourBoundary` | `ms <= 0 → ms <= 1000` | `TvFormattingCharacterizationTest.kt:19`: expected 00:0[1]; observed 00:0[0] |
+| m18 | `TvFormattingCharacterizationTest.spelledNumbersKeepNullDigitsTensHyphensAndFiftyBoundary` | `n >= 50 → n >= 49` | `TvFormattingCharacterizationTest.kt:27`: expected [Forty-Nine]; observed [49] |
+| m19 | `TvFormattingCharacterizationTest.seekAccelerationKeepsBaseNegativeRepeatsAndInclusiveCap` | `120_000L → 119_000L` | `TvFormattingCharacterizationTest.kt:32`: expected 120000; observed 119000 |
+| m20 | `TvFormattingCharacterizationTest.menuRowPassesValuesAndCallbacksAndUsesRealDefaultDispatch` | `Row(title, value, selected, accent, enabled, → Row(title, value, selected, accent, !enabled,` | `TvFormattingCharacterizationTest.kt:42`: expected …ue, accent=true, enabled=false, swatch=1193046, adjust…; observed …ue, accent=true, enabled=true, swatch=1193046, adjust… |
+| m21 | `TvSubtitleHelpersCharacterizationTest.overrideLanguageUsesFirstIndexAndReturnsNullForMissingOrInvalidSelection` | `override.trackIndices.firstOrNull() → override.trackIndices.lastOrNull()` | `TvSubtitleHelpersCharacterizationTest.kt:24`: expected [fr]; observed [en] |
+| m22 | `TvSubtitleHelpersCharacterizationTest.audioLabelsKeepLabelFallbackChannelAndBitrateBoundariesAndDefaultLocale` | `"${format.channelCount}ch" → "${format.channelCount}channels"` | `TvSubtitleHelpersCharacterizationTest.kt:35`: expected Main · 6ch[] · 128kbps; observed Main · 6ch[annels] · 128kbps |
+| m23 | `TvSubtitleHelpersCharacterizationTest.subtitleLabelsKeepNamedLanguageAndUndOrEmptyFallback` | `"$label ($lang)" → "$label [$lang]"` | `TvSubtitleHelpersCharacterizationTest.kt:48`: expected English [(en)]; observed English [[en]] |
+| m24 | `TvSubtitleHelpersCharacterizationTest.searchSubtitleOptionUsesExactLabelEquality` | `label == SEARCH_SUBTITLE_LABEL → label != SEARCH_SUBTITLE_LABEL` | `TvSubtitleHelpersCharacterizationTest.kt:57`: expected true; observed false |
+| m25 | `TvSubtitleHelpersCharacterizationTest.loadingSubtitleOptionUsesOnlyLeadingHourglass` | `label.startsWith("⏳") → label.contains("⏳")` | `TvSubtitleHelpersCharacterizationTest.kt:62`: expected false; observed true |
+| m26 | `TvSubtitleHelpersCharacterizationTest.externalSubtitleOptionUsesOnlyLeadingDownloadPrefix` | `label.startsWith(EXTERNAL_SUBTITLE_PREFIX) → label.contains(EXTERNAL_SUBTITLE_PREFIX)` | `TvSubtitleHelpersCharacterizationTest.kt:67`: expected false; observed true |
+| m27 | `TvSubtitleHelpersCharacterizationTest.renderableSubtitleRejectsTtmlDfxpBeforeQueryButPreservesFragmentBehavior` | `!path.endsWith(".ttml") → path.endsWith(".ttml")` | `TvSubtitleHelpersCharacterizationTest.kt:73`: expected false; observed true |
+| m28 | `TvSubtitleHelpersCharacterizationTest.subtitleCatalogValidatesTypesAndPreservesOrderTrimAndFallbacks` | `it.startsWith("tt") → it.startsWith("TT")` | `TvSubtitleHelpersCharacterizationTest.kt:85`: expected …itleCatalogResult(imdbId=tt1, type=movie, name=Film,…; observed …itleCatalogResult(imdbId=TT1, type=movie, name=TT1, … |
+| m29 | `TvSubtitleHelpersCharacterizationTest.titleEpisodeParsingKeepsPatternPriorityWordBoundariesAndPositiveNumbers` | `season > 0 && episode > 0 → season >= 0 && episode > 0` | `TvSubtitleHelpersCharacterizationTest.kt:94`: S00E01 expected null, but was:<SeasonEpisode(season=0, episode=1)> |
+| m30 | `TvSubtitleHelpersCharacterizationTest.subtitleEpisodePrefersBothPositiveMetadataOtherwiseParsesTitle` | `existingSeason > 0 → existingSeason >= 0` | `TvSubtitleHelpersCharacterizationTest.kt:102`: expected SeasonEpisode(season=1, episode=2); observed SeasonEpisode(season=0, episode=4) |
+| m31 | `TvSubtitleHelpersCharacterizationTest.subtitleQueryRemovesPathExtensionEpisodeAndReleaseTagsOrKeepsOriginal` | `substringBefore('?') → substringBefore('#')` | `TvSubtitleHelpersCharacterizationTest.kt:112`: expected My Show[]; observed My Show[ mkv?token=x] |
+| m32 | `TvSubtitleHelpersCharacterizationTest.manualSubtitleLabelAppendsEpisodeOnlyForSeriesWithBothNumbers` | `type == "series" → type == "movie"` | `TvSubtitleHelpersCharacterizationTest.kt:119`: expected Show (2024)[ S2E3]; observed Show (2024)[] |
+| m33 | `TvGuideDataCharacterizationTest.nowPlayingTextKeepsLoadingYearAndPositiveRatingWithUsDecimal` | `"Loading..." → "Waiting..."` | `TvGuideDataCharacterizationTest.kt:15`: expected [Load]ing...; observed [Wait]ing... |
+| m34 | `TvGuideDataCharacterizationTest.guideDataUpdatesOnlyPresentSectionsAndClearsLoadingOnEveryAnswer` | `channel.isLoadingGuideData = false → channel.isLoadingGuideData = true` | `TvGuideDataCharacterizationTest.kt:31`: expected …true, isLoadingGuideData=false, isSwitchingChannel=fal…; observed …true, isLoadingGuideData=true, isSwitchingChannel=fal… |
+| m35 | `TvStartupHelpersCharacterizationTest.originsRequireHttpHostNormalizeCaseAndPreserveExplicitPorts` | `scheme == "https" -> 443 → scheme == "https" -> 444` | `TvStartupHelpersCharacterizationTest.kt:29`: expected ...ps://example.test:44[3]; observed ...ps://example.test:44[4] |
+| m36 | `TvStartupHelpersCharacterizationTest.protectedOriginsSkipBlankAndNonHttpAndDeduplicateOriginsOnly` | `null ↵                 } else { → "blank" ↵                 } else {` | `TvStartupHelpersCharacterizationTest.kt:35`: expected [https://example.test:443, http://example.test:80, https://example.test:8443]; observed [blank, https://example.test:443, http://example.test:80, https://example.test:8443] |
+| m37 | `TvStartupHelpersCharacterizationTest.diagnosticProviderPinsBlankSanitizationUsCaseAndThirtyTwoLimit` | `.take(32) → .take(31)` | `TvStartupHelpersCharacterizationTest.kt:42`: expected ...aaaaaaaaaaaaaaaaaaaa[a]; observed ...aaaaaaaaaaaaaaaaaaaa[] |
+| m38 | `TvStartupHelpersCharacterizationTest.pikpakDetectionKeepsProviderCaseInsensitiveButUrlSubstringCaseSensitive` | `ignoreCase = true → ignoreCase = false` | `TvStartupHelpersCharacterizationTest.kt:49`: expected true; observed false |
+| m39 | `TvStartupHelpersCharacterizationTest.decoderMarkersAreSoftwareAndPreQUnknownHasNoCodecLookup` | `normalized.contains(".google.") → normalized.contains(".not-google.")` | `TvStartupHelpersCharacterizationTest.kt:54`: expected [software]; observed [unknown] |
+| m40 | `TvStartupHelpersCharacterizationTest.decoderQUsesCaseInsensitiveCodecFlagsAndUnknownFallback` | `if (codecInfo?.isHardwareAccelerated == true) return "hardware" → if (codecInfo?.isHardwareAccelerated == true) return "unknown"` | `TvStartupHelpersCharacterizationTest.kt:64`: expected [hardware]; observed [unknown] |
+| m41 | `TvStartupHelpersCharacterizationTest.startupLogWritesStructuredEventsAndWarningOrDebugTag` | `event = "startup_gate" → event = "other_gate"` | `TvStartupHelpersCharacterizationTest.kt:92`: expected 2; observed 0 |
+| m42 | `TvNavigationCharacterizationTest.navigationSortsSeriesStablyButKeepsCollectionOrderAndClearsStaleGroups` | `model.items[it].episode ?: Int.MAX_VALUE → model.items[it].episode ?: Int.MIN_VALUE` | `TvNavigationCharacterizationTest.kt:22`: expected {3=4, 4=1, 1=5, 5=0, 0=2}; observed {5=3, 3=4, 4=1, 1=0, 0=2} |
+| m43 | `TvIptvLoadPolicyCharacterizationTest.errorClassificationPrioritizesFirstHttpAuthThenDecoderCodesThenTransient` | `http == 403 → http == 402` | `TvIptvLoadPolicyCharacterizationTest.kt:39`: expected AUTH; observed DECODER |
+| m44 | `TvIptvLoadPolicyCharacterizationTest.policyReadsLiveStateBetweenEveryInvocation` | `same policy reads changed live state between invocations (exact text in catalog/patch)` | `TvIptvLoadPolicyCharacterizationTest.kt:55`: expected 2000; observed -9223372036854775807 |
+| m45 | `TvIptvLoadPolicyCharacterizationTest.liveAuthIsFatalAndRateLimitHasFourRetryBoundWithHeaderClamps` | `loadErrorInfo.errorCount > 4 → loadErrorInfo.errorCount >= 4` | `TvIptvLoadPolicyCharacterizationTest.kt:79`: expected 5000; observed -9223372036854775807 |
+| m46 | `TvIptvLoadPolicyCharacterizationTest.liveTransportEscalatesAfterFifteenAndOtherExceptionsDelegate` | `loadErrorInfo.errorCount > 15 → loadErrorInfo.errorCount >= 15` | `TvIptvLoadPolicyCharacterizationTest.kt:90`: expected 1000; observed -9223372036854775807 |
+| m47 | `TvFlutterRequestsCharacterizationTest.torrentRequestsPinArgumentsAsyncResultsNullChannelAndSendFailure` | `callback(url, provider) → callback(null, provider)` | `TvFlutterRequestsCharacterizationTest.kt:25`: expected [(stream, TorBox)]; observed [(null, TorBox)] |
+| m48 | `TvFlutterRequestsCharacterizationTest.movieMetadataPinsFilenameAsyncResultsNullChannelAndSendFailure` | `callback(imdbId) → callback(null)` | `TvFlutterRequestsCharacterizationTest.kt:41`: expected [tt123]; observed [null] |
+| m49 | `TvFlutterRequestsCharacterizationTest.streamUrlsPinCandidateFilteringLabelsMessagesAndSynchronousFailurePaths` | `?: "Source" → ?: "Other"` | `TvFlutterRequestsCharacterizationTest.kt:80`: expected [([(one, Main), (two, Source), (three, Source)], Reason)]; observed [([(one, Main), (two, Other), (three, Other)], Reason)] |
+| m50 | `TvFlutterRequestsCharacterizationTest.streamResultReportPinsFireAndForgetArgumentsAndSwallowsSendExceptions` | `"success" to success → "success" to !success` | `TvFlutterRequestsCharacterizationTest.kt:97`: expected {channelUrl=channel, url=stream, success=true}; observed {channelUrl=channel, success=false, url=stream} |
+| m51 | `TvFlutterRequestsCharacterizationTest.quickPlayPinsFireAndForgetArgumentsNullChannelAndPropagatingSendException` | `"season" to season → "season" to season + 1` | `TvFlutterRequestsCharacterizationTest.kt:106`: expected {imdbId=tt123, season=2, episode=4}; observed {imdbId=tt123, season=3, episode=4} |
+| m52 | `TvEpgRequestCharacterizationTest.epgPinsArgumentsAndAlwaysAnswersAsynchronouslyForEveryResultAndFailure` | `"archiveDisabled" to (entry.tvArchive == "0") → "archiveDisabled" to (entry.tvArchive != "0")` | `TvEpgRequestCharacterizationTest.kt:27`: expected {channelUrl=https://example.test/channel, includeSchedule=true, includeCatchupMetadata=false, archiveDisabled=true, archiveDurationDays=3}; observed {includeSchedule=true, channelUrl=https://example.test/channel, archiveDurationDays=3, includeCatchupMetadata=false, archiveDisabled=false} |
+| m53 | `TvEpgRequestCharacterizationTest.epgDefaultDispatcherReadsCurrentEntryWhenCatchupArgumentIsOmitted` | `includeCatchupMetadata: Boolean = entry.isCurrent → includeCatchupMetadata: Boolean = !entry.isCurrent` | `TvEpgRequestCharacterizationTest.kt:46`: expected {channelUrl=https://example.test/channel, includeSchedule=false, includeCatchupMetadata=true, archiveDisabled=false, archiveDurationDays=null}; observed {includeSchedule=false, channelUrl=https://example.test/channel, archiveDurationDays=null, includeCatchupMetadata=false, archiveDisabled=false} |
+| m54 | `TvEpgRequestCharacterizationTest.epgWatchdogFiresExactlyAtFortyFiveSecondsAndLateReplyCannotRedeliver` | `45_000 → 45_001` | `TvEpgRequestCharacterizationTest.kt:55`: expected [null]; observed [] |
+| m55 | `TvEpgRequestCharacterizationTest.epgReplyBeforeDeadlineWinsAndWatchdogCannotRedeliver` | `delivered.compareAndSet(false, true) → true` | `TvEpgRequestCharacterizationTest.kt:65`: expected [{show=Now}]; observed [{show=Now}, null] |
+| m56 | `TvIptvParsingCharacterizationTest.mapChannelOverloadFiltersByTypesAndKeepsRawIndexesAndNegativeMetadata` | `?.takeIf { it > 0 } → ?.takeIf { it >= 0 }` | `TvIptvParsingCharacterizationTest.kt:100`: expected …y(index=7, channelNumber=null, name=Zero, url=zero, lo…; observed …y(index=7, channelNumber=0, name=Zero, url=zero, lo… |
+| m57 | `TvGuideDataCharacterizationTest.guideDataUpdatesOnlyPresentSectionsAndClearsLoadingOnEveryAnswer` | `(next["poster"] as? String)?.takeIf { it.isNotEmpty() } → (next["poster"] as? String)` | `TvGuideDataCharacterizationTest.kt:37`: expected …Title=null, nextUpPoster=null, nextUpYear=null, nextUp…; observed …Title=null, nextUpPoster=, nextUpYear=null, nextUp… |
+| m58 | `TvIptvLoadPolicyCharacterizationTest.policyReadsLiveStateBetweenEveryInvocation` | `if (liveNow()) 20 else super.getMinimumLoadableRetryCount(dataType) → if (true) 20 else super.getMinimumLoadableRetryCount(dataType)` | `TvIptvLoadPolicyCharacterizationTest.kt:57`: expected 3; observed 20 |
+| m59 | `TvEpgRequestCharacterizationTest.epgPinsArgumentsAndAlwaysAnswersAsynchronouslyForEveryResultAndFailure` | `if (channel == null) { ↵                 handler.post { deliver(null) } → if (channel == null) { ↵                 deliver(null)` | `TvEpgRequestCharacterizationTest.kt:36`: java.lang.AssertionError |
+| m60 | `TvEpgRequestCharacterizationTest.epgWatchdogFiresExactlyAtFortyFiveSecondsAndLateReplyCannotRedeliver` | `delivered.compareAndSet(false, true) → true` | `TvEpgRequestCharacterizationTest.kt:56`: expected [null]; observed [null, {late=true}] |
+| m61 | `TvFlutterRequestsCharacterizationTest.torrentRequestsPinArgumentsAsyncResultsNullChannelAndSendFailure` | `MainActivity.getAndroidTvPlayerChannel()?.invokeMethod( → if (MainActivity.getAndroidTvPlayerChannel() == null) { callback(null, null); return } ↵             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(` | `TvFlutterRequestsCharacterizationTest.kt:31`: java.lang.AssertionError |
+| m62 | `TvFlutterRequestsCharacterizationTest.movieMetadataPinsFilenameAsyncResultsNullChannelAndSendFailure` | `MainActivity.getAndroidTvPlayerChannel()?.invokeMethod( → if (MainActivity.getAndroidTvPlayerChannel() == null) { callback(null); return } ↵             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(` | `TvFlutterRequestsCharacterizationTest.kt:46`: java.lang.AssertionError |
+| m63 | `TvFlutterRequestsCharacterizationTest.streamResultReportPinsFireAndForgetArgumentsAndSwallowsSendExceptions` | `android.util.Log.w("AndroidTvPlayer", "reportIptvStreamResult failed: ${e.message}") → throw e` | `TvFlutterRequestsCharacterizationTest.kt:102`: reporting swallows messenger exceptions expected null, but was:<java.lang.IllegalStateException: messenger unavailable> |
+| m64 | `TvFlutterRequestsCharacterizationTest.quickPlayPinsFireAndForgetArgumentsNullChannelAndPropagatingSendException` | `quick-play propagates send exceptions (exact text in catalog/patch)` | `TvFlutterRequestsCharacterizationTest.kt:111`: expected java.lang.IllegalStateException to be thrown, but nothing was thrown |
+| m65 | `TvFormattingCharacterizationTest.menuRowPassesValuesAndCallbacksAndUsesRealDefaultDispatch` | `enabled: Boolean = true → enabled: Boolean = false` | `TvFormattingCharacterizationTest.kt:46`: expected Row(title=Default, value=null, selected=false, accent=false, enabled=true, swatch=null, adjustable=false, tag=null, onOk=null, onAdjust=null); observed Row(title=Default, value=null, selected=false, accent=false, enabled=false, swatch=null, adjustable=false, tag=null, onOk=null, onAdjust=null) |
+
+### JVM and tooling evidence
+
+Reused the clean original `junit/baseline-dcbd9aafe` archive and original
+lint issue archive recorded before characterization: 323 JVM identities
+(322 pass and the existing focus failure), zero dirty files; original lint
+has 253 errors, 1,100 warnings and 175 UnsafeOptInUsageError issues.
+Production/dependency/SDK inputs are unchanged, so these runs remain valid.
+
+The full original-plus-tests run `junit/p2-step0-original-verified` and
+current-tree baseline **`junit/p2-step0`** each contain **378 identities:
+377 pass, the same existing focus failure, no skips**. Both runs have
+stable before/after fingerprints and are complete, not aborted. Current
+baseline tested `5bb66a997` with the 14 uncommitted test files that this
+step commits, JBR 21.0.10; `test-file-hashes.json` pins their exact content.
+Comparison against `baseline-dcbd9aafe`: **55 passing additions only**,
+zero missing identities and zero changed original statuses. Original and
+current identity/status maps match exactly. Gradle's exit 1 is solely the
+known `TvSourceBrowserFocusTest` failure; the archive helper accepts the
+complete evidence rather than masking it.
+
+Commands: `python3 dev/tool/android_junit_evidence.py [--worktree
+<detached-original>] run <label>`; `compare p2-step0 --against
+baseline-dcbd9aafe`; `compare p2-step0 --against p2-step0-original-verified`.
+Evidence: `p2/step0/{original,current}-full-baseline.log`,
+`jvm-comparison.json`, comparison logs and the three `junit/` archives.
+Final original focused run: 55/55 passing; raw log/XML in
+`p2/step0/original-focused-final-assertions*`. The updated complete fixture
+and all 32 checker tests pass; file-size and diff checks pass.
+
+The detached original worktree is removed after these archives. No
+production moves, ProGuard/lockfile edits, push, branch switch, device or
+emulator work. Later phase-2 JVM gates compare against **`p2-step0`**.
