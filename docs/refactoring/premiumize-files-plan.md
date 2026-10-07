@@ -748,5 +748,89 @@ format/analyzer paths inside both CI commands, nine concrete CI behaviour-test
 paths, and the exact temporary Premiumize facade size-baseline value. Other
 manifest/config/fixture/source bytes and adapter outputs remain unchanged.
 
-Stop here for Claude's independent step-0 review. Step 0b, L, steps 1–7 and both
-full-suite gates remain unstarted.
+Step 0 stopped at checkpoint `f1cfa6f2` for Claude's independent review.
+The resumed step 0b is recorded below; no extraction has begun.
+
+
+### Step 0b — independent review closure on ORIGINAL
+
+The production screen and all existing characterization assertions remain
+unchanged at `f1cfa6f2`. Three new test files add 19 behavioural identities,
+registered as concrete CI paths. Conservative decisions preserve the observed
+clear-key prompt, root server order, empty navigation-stack dropdown rule,
+focus while loading, and null destructive-dialog results.
+
+Ten review survivors now have named-assertion mutation proofs on the ORIGINAL:
+root view mode and root reentry; deep-link versus navigated dropdown visibility;
+parent-row focus after navigating up; no Add Link focus during an empty held
+load, then fallback after completion; Enter activation clearing populated
+search results and returning field focus; selected/transfer delete dismissed
+by Back and barrier; chapter sorting; the seven-day relative-date threshold;
+and reachable zero-item selection showing Select All. Every mutation has an
+original pass, source hashes, named failure and a restored passing control in
+`step0b/targeted-proofs.json` and `mutation-map.json`. Two extra mutations prove
+all seven numeric folder patterns and search-hidden selection visibility.
+
+Bare `Chapter 10` also matches the final letters-plus-number fallback. The
+additional `Story Chapter 10`/`Story Chapter 2` pair isolates the dedicated
+unanchored chapter pattern. Relative-date tests use the existing clock with
+30-second, 30-minute and 12-hour margins, observed synchronously; repeated
+original controls pass. No production clock seam was added. The small wall
+clock risk allowed by the review is retained explicitly.
+
+Replaying the 28 mutations killed in Claude's original audit found **none
+killed only by pixel goldens** (`step0b/audit28-pixel-review.json`). All have
+non-pixel expectations; missing transfer reload and incomplete initial-folder
+settings fail existing completion-predicate assertions, recorded distinctly
+from request/value expectations. The original control passes. Its first
+metadata attempt failed before running tests because `git stash create`
+transiently returned exit 1; that infrastructure attempt is preserved, excluded
+from test verdicts, and retried successfully on the same source.
+
+Collection playback arguments (`play-sort-season`, contract 5) and native
+successful/mixed download messages (`dl-mixed-msg`, contract 6) remain pending
+and source-guard-only. Their frozen full-body guards remain unchanged. All
+12 survivor mutations and these two explicit guards will be replayed after
+the checkpoint, without counting source guards as behavioural coverage.
+
+Integrator decision: Premiumize does not opt into `occurrence_field_bindings`.
+If later wiring needs that existing opt-in, set `mandatory_qualification`
+explicitly to true and justify it here; the future unconditional default from
+edit_profile must not affect this branch's assumptions. Do not rebase.
+
+`original-final-control` passes **158 identities**: 113 behaviour, seven pixel
+comparisons and 38 unchanged frozen source guards. The comparison preserves
+all 139 old identities and adds exactly 19 passing identities. The mutation
+map covers **120/120 behaviour/pixel identities** with **57 accepted unique
+named-assertion mutations** (45 original plus 12 review proofs).
+
+Original full-suite `premiumize/base4` records 12,189 successes / 13 failures /
+29 errors / 20 skips, on stable tested tree
+`b01d4d78cd04ced49a900f048c2b1d431a0fe331`. Paths are `[]`; flags are
+`--no-pub --concurrency=2`. The raw comparison with `base3` is retained as
+**FAIL** for one new MDB missing-snackbar assertion; base3's Xtream failure
+recovers. The exact MDB test passes in isolation on the identical tested tree
+and SDK (`step0b/base4-mdb-isolation`), with a NOTE in
+`step0b/base4-retry-note.json`. The reconciled identity audit is **PASS**:
+exactly 19 additions, all passing; no missing/newly skipped identities; every
+original observed pass, including base3's isolated Xtream control, remains
+passing. Reconciled counts are 12,190 / 13 / 28 / 20. Raw runs and comparators
+are never rewritten, and no assertion or allowlist changes.
+
+Whole analyzer comparison: **PASS, zero added diagnostics**. Premiumize's
+113-leaf manifest and standalone self-test, exact CI format/scoped analyzer /
+analyzer allowlist, new-test analyzer, architecture, sizes and both storage
+checks: **PASS** (`step0b/checks.json`). All **293** pre-existing tool/config /
+fixture blobs remain byte-identical to `49c53e2e`, excluding the approved
+shared inventory edits (`step0b/shared-configuration-proof.json`). All **20 other manifests and their self-tests pass**, each on its own
+explicit local parser package. Every self-test output and adapter fingerprint
+is **byte-identical to step 0** (`step0b/existing-manifest-proof.json`). The normal-clone proof and all twelve survivor replays follow the
+checkpoint commit.
+
+The full suite and analyzer tested the frozen code/test/config inputs before
+this documentation-only result update. The unchanged production source remains
+SHA-256 `93be5f5e4bfe1b5c9dd411adcad616e030b9fe4e478c484ffd2e7b6e96a64476`.
+Linux originals are reserved for the separate step-L provenance/PNG commit.
+Steps L and 1–7 remain unstarted. Found-not-fixed and device-only items are
+unchanged. The integration union adds these three CI behaviour-test paths to
+the nine from step 0; no shared checker implementation edit is introduced.
