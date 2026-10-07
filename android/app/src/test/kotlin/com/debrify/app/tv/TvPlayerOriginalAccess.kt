@@ -14,10 +14,8 @@ import com.bumptech.glide.request.target.DrawableImageViewTarget
  * Move commits retarget this helper; the behavioural assertions stay unchanged.
  */
 internal object TvPlayerOriginalAccess {
-    private val nested = setOf("IptvCategoryAdapter", "IptvListPickerAdapter", "AutoSyncColors", "AutoSyncRingView")
-
     fun type(name: String): Class<*> = Class.forName(
-        "com.debrify.app.tv." + if (name in nested) "AndroidTvTorrentPlayerActivity\$$name" else name,
+        "com.debrify.app.tv." + name,
     )
 
     fun construct(name: String, vararg arguments: Any?): Any {
@@ -132,7 +130,7 @@ internal object TvPlayerOriginalAccess {
         adapter("IptvListPickerAdapter", entries, membership, GuideTokens.of(style), 8f, toggle)
 
     fun ring(outer: AndroidTvTorrentPlayerActivity, context: Context): View =
-        construct("AutoSyncRingView", outer, context) as View
+        construct("AutoSyncRingView", context) as View
 
     fun defaultPayload(): Any {
         val constructor = type("PlaybackPayload").declaredConstructors.single { it.isSynthetic }

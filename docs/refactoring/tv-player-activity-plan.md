@@ -468,3 +468,15 @@ guide; auto-sync ring animates during subtitle auto-sync.
   focus failure, no skips; **26 passing additions only** versus `p1-step0`,
   stable fingerprints, JBR 21.0.10. Production source, lockfile and ProGuard
   remain unchanged. Later phase-1 JVM gates compare against `p1-step0b`.
+
+- 2026-10-07 — **Phase 1 step 1 moves complete**. Extracted the exact 29
+  manifest subtrees into all ten planned files and wired the existing callers
+  through unchanged package references. Only the reflection helper and two
+  Dart source anchors were retargeted; behavior assertions are unchanged.
+  Rule-2 checker: 3,477 declarations, zero differences. Debug Kotlin compile
+  succeeds. Activity: **19,961 lines** (was 22,221); largest
+  destination **572 lines**. Size baseline
+  lowered with `--update` and scoped to this activity. ProGuard and lockfile
+  unchanged. Retarget inventory and legacy native localization prerequisite
+  recorded in the dependency report. Remaining activity duties exit in phases
+  2–7; no new size exception. Phase gate follows on this tree.

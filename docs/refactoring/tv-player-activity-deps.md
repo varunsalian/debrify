@@ -2491,3 +2491,41 @@ known focus failure, zero skips). Comparison with `p1-step0`: **26 passing
 additions only**, all 297 prior identities and statuses retained. Tested HEAD
 `739f9992d`, 8 dirty files, JBR 21.0.10; input fingerprints match before/after.
 The original detached worktree was removed after archiving the proofs.
+
+
+## Phase 1 step 1 — production moves and retargets
+
+All 29 planned subtrees now live in the ten manifest destinations in
+`com.debrify.app.tv`. The exhaustive PSI check classifies 3,477 declarations
+with zero differences, including retained bodies, comments, newlines, order
+and frozen activity imports. Only declared visibility changes and ring
+`inner` removal occur. Existing activity callers resolve the moved package
+types directly; the ring uses the same Context with no outer capture.
+
+| Original test anchor | New anchor | Assertion preservation |
+|---|---|---|
+| `AndroidTvTorrentPlayerActivity$IptvCategoryAdapter` | `IptvCategoryAdapter` | Helper binary-name lookup only; all behavior assertions unchanged. |
+| `AndroidTvTorrentPlayerActivity$IptvListPickerAdapter` | `IptvListPickerAdapter` | Helper binary-name lookup only; all behavior assertions unchanged. |
+| `AndroidTvTorrentPlayerActivity$AutoSyncColors` | `AutoSyncColors` | Helper binary-name lookup only; all palette assertions unchanged. |
+| `AndroidTvTorrentPlayerActivity$AutoSyncRingView(outer, Context)` | `AutoSyncRingView(Context)` | Helper constructor lookup only; test-facing helper signature and all timing/draw/lifetime assertions unchanged. |
+| MDBList source test: synthetic `PlaybackItem` through `bindMissing`, Activity file | Same range in `TvPlaylistAdapter.kt` | All four serialized resume/duration/tracker/watched assertions unchanged. |
+| MDBList source test: `if (watched) return 100`, Activity file | Same assertion in `TvPlaybackItem.kt` | Metadata handler assertions stay anchored to Activity; watched pin reads its new owner. |
+
+All other listed reflection/source anchors remain in the activity: startup
+watchdog, shuffle attempt, subtitle dismiss, native settings/rejected launch,
+Dart auto-advance/manual validation/profile scan and native audio-routing
+source reads. No explicit JVM facade-name consumers exist; normal Kotlin
+references to the two merge functions resolve `TvPlaybackItemKt`.
+
+Existing broad R8 keep rule at `proguard-rules.pro:52` is unchanged and covers
+all package types and facades. Gate verification inventories release bytecode
+for all ten destination SourceFile attributes, including generated nested
+holders/companions/lambdas, and checks every class/field/method identity in
+the release mapping.
+
+The size ratchet was lowered with `--update`, scoped to the activity entry;
+unrelated pre-existing shrinkage entries were restored to avoid scope growth.
+All destinations are below 800 lines. Remaining activity responsibilities
+retain the documented phases 2–7 exit milestones. Existing native English
+labels are preserved as a legacy localization exception: native controls need
+a scoped localization prerequisite in a separate migration.
