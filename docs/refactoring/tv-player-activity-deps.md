@@ -3449,7 +3449,7 @@ umPlaybackModel moves in phase 4; whichever phase runs second re-patches it.
 
 **Proposed shape:**
 ```kotlin
-internal class TvSleepTimerController(private val activity: Activity, private val host: Host) {
+internal class TvSleepTimerController(private val activity: AppCompatActivity, private val host: Host) {
     interface Host {
         var sleepStopLatched: Boolean
         val player: Player?
@@ -3544,7 +3544,7 @@ not verbatim. Prefer the 5 qualified patches.
 
 **Proposed shape:**
 ```kotlin
-internal class TvSkipSegmentController(private val activity: Activity, private val host: Host) {
+internal class TvSkipSegmentController(private val activity: AppCompatActivity, private val host: Host) {
     interface Host {
         val skipSegmentButtonBound: Boolean            // activity: ::skipSegmentButton.isInitialized
         val skipSegmentButton: AppCompatButton
@@ -3640,7 +3640,7 @@ asserts that `isAutoAdvancing = true` comes before `playItem(target)`.
 
 **Proposed shape:**
 ```kotlin
-internal class TvUpNextController(private val activity: Activity, private val host: Host) {
+internal class TvUpNextController(private val activity: AppCompatActivity, private val host: Host) {
     interface Host {
         val player: ExoPlayer?; val payload: PlaybackPayload?; val currentIndex: Int
         val continuousShuffleEnabled: Boolean; val isIptvMode: Boolean; val isStremioTvMode: Boolean
