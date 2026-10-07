@@ -980,3 +980,12 @@ Subject: `test(recordings): step 0b preset durations on ORIGINAL`; resolved comm
 - All **20 other manifests** pass with stdout byte-identical directly to R (`preset-review-integrated-direct-R-compare.json`), using isolated parser copies with copied dills deleted. No shared tooling change in this closure. Whole analyzer **1,709, added [] / removed [], PASS**; scoped analyzer has zero issues. Format/diff checks pass. SDK remains Flutter 3.44.8 / Dart 3.12.2. No load flakes observed in this closure.
 
 The next authorized checkpoint is Step L, followed by Steps 1–2 and gate 1. Step 3 remains outside this authorization.
+
+
+### Step L — verified Linux ORIGINAL goldens (2026-10-07)
+
+Previous checkpoint `2dfcab7e60573335e7ce2d53eb4b3106095ff760`. Subject: `test(recordings): step L verified Linux ORIGINAL goldens`; resolved commit/object attestation is in `stepL-checkpoint.json`.
+
+- Before any change, both the complete golden test and scene fixture were byte-identical to (b) `0eab0f5c`; `stepL-input-verification.json` records their hashes. All three supplied PNGs match `linux-original-sha256-first.txt` exactly and its independent reversed hash list is byte-identical. Committed `test/goldens/recordings/linux/{empty_tv,library_focus_tv,populated_desktop}.png`: `ef808bd11d06fb207c303dae5d77741f2842be4432b333bf247fdd3ab7008a5f`, `aadf74fab4027a59e1d9b1272385a994479b2b1e9e0e335708c6180659a411d3`, `ef0cc354a7445213a35dc2f85110ddbfe82991ee7a49abbc5df490c77ceef22f`.
+- Claude's `linux-original-*` evidence proves a normal clone of (b), application/pubspec objects equal R, calibrated `debrify-flutter:3.44.8` / Dart 3.12.2, two independent reversed captures and **3/3 strict Linux replay**. Docker was not run here. The current test removes the Linux skip and both capture/require overrides: missing or mismatched Linux pixels now fail by default. Its original capture script still clones frozen (b), retaining calibration.
+- Current strict macOS replay **3/3**, unchanged PNG bytes; scoped analyzer zero issues, formatter/diff clean. No application or tooling inputs changed, so the immediately preceding manifest/self-test/normal-clone evidence remains valid. `lib`, `pubspec.yaml`, `pubspec.lock` remain R. This prerequisite is complete; Step 1 may begin. Post-extraction Linux execution remains for Claude under the no-Docker constraint.
