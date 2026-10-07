@@ -869,3 +869,34 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   `junit/p2-gate/`. Release/R8, lint, decoder and full Flutter gates follow.
   The activity retains phase 3–7 responsibilities under its existing
   temporary exception; no new oversized component or localization text.
+
+- 2026-10-07 — **Phase 2 gate checks complete on `0607b0b60`; decoder
+  verification pending-environment.** All 382 JVM identity/status pairs
+  exactly match `p2-step0b` (381 pass, unchanged focus failure, no skips).
+  Checker classifies all 2,839 declarations with zero differences; all
+  32 self-tests pass, including the unchanged phase-1 fixture. Kotlin
+  compilation has no new warnings; size ratchet and source guards pass
+  (the latter retain their one observed historical failure). Android lint
+  issue identities/multiplicities exactly match original `dcbd9aafe`: 1,353
+  issues (253 errors, 1,100 warnings), including all 175 opt-in issues.
+  Both lint runs exit 1 for existing issues; no new lint regression.
+  Release APK builds successfully. R8 verifies all 12 destinations, 18
+  classes (12 new `…Kt` facades plus policy/candidate/request-result
+  classes) and 102 members: 87 explicit identity mappings, 15 implicit
+  identities checked in DEX; three negative controls pass. Decoder script
+  fails identically to phase 1: all three ABI `libmpv` hashes match the
+  unchanged fallback, with the same nine missing subtitle decoders and
+  three filters. Patched-bundle verification remains **pending-environment**;
+  no dependency or ProGuard workaround, and no complete decoder-gate claim.
+  Full Flutter suite via `suite_evidence.py` on the clean Step 1 tree:
+  **all 12,855 identity/status pairs exactly match phase 1** — 12,794
+  successes, 13 existing failures, 28 existing errors, 20 skips; no additions,
+  removals, changed statuses or SDK/tree drift. Extra analyzer comparison
+  has no added diagnostics after exact generated debug/release-copy
+  relocation (1,758 vs 1,767, removed output/duplicate entries); all Dart
+  sources unchanged. Raw evidence under `p2/gate/`, JVM under
+  `junit/p2-gate/`; the dependency report records commands/results and the
+  generated-path comparison details. Lockfile, ProGuard and phase-1
+  manifest protected hashes unchanged. No independent review performed:
+  Claude runs the separate session. **Stopped after phase 2** with no push,
+  branch switch, device/emulator interaction or bug fix.

@@ -2618,7 +2618,7 @@ Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerAc
      - No anchor string is a candidate signature.
 
 **Common to every move:** the functions become `internal fun` in package `com.debrify.app.tv` with an identical body; call sites stay unchanged.
-- The activity's class-level `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn, line 135) will no longer cover moved code. Superseded by the plan's fixed set: exactly `classifyIptvError`, `languageOfOverride`, `buildAudioTrackLabel` and `IptvLiveLoadErrorPolicy` gain `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn); step 0 re-derives the set from Media3 1.8.0 annotations; lint issue sets are compared, not used to decide.
+- The activity's class-level `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn, line 135) will no longer cover moved code. Superseded by the plan's corrected fixed set: exactly `languageOfOverride`, `buildAudioTrackLabel` and `IptvLiveLoadErrorPolicy` gain `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn); step 0 re-derives the set from Media3 1.8.0 annotations; lint issue sets are compared, not used to decide.
 - Each new file needs its own imports (Locale, JSONArray/JSONObject, Uri, MediaCodecList, Format, TrackSelectionOverride, PlaybackException, HttpDataSource, DiagnosticFileLog, MainActivity, MethodChannel are referenced unqualified or partly qualified in the bodies).
 - `dev/tool/check_kotlin_moves.py` with a new manifest (`kotlin_moves/tvplayer_p2.json`) can prove the verbatim moves, as it did for phase 1.
 
@@ -2627,7 +2627,7 @@ Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerAc
 
 | Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
 |---|---|---|---|
-| `fun classifyIptvError(error: PlaybackException): IptvLiveRecovery.ErrorClass` | 683–699 (fun@685) | 664(restoreAcceptedIptvTwinAfterAuth), 1937(class-body) | Pure. Media3 `HttpDataSource.InvalidResponseCodeException` → needs `@OptIn(UnstableApi::class)` (androidx.annotation) on the moved fun/file; currently covered by the activity's class-level @OptIn. Caller 1937 is inside the anonymous Player.Listener. Tests/anchors: none. |
+| `fun classifyIptvError(error: PlaybackException): IptvLiveRecovery.ErrorClass` | 683–699 (fun@685) | 664(restoreAcceptedIptvTwinAfterAuth), 1937(class-body) | Pure. Media3 1.8.0 bytecode confirms all used APIs are stable; the corrected plan specifies **no opt-in** on this function. Caller 1937 is inside the anonymous Player.Listener. Original inventory had no tests/anchors; phase-2 characterization now covers it. |
 
 **Group lines:** 17
 
@@ -3273,3 +3273,52 @@ with no new warning identities. Clean `junit/p2-gate` has exactly the same
 382 identity/status pairs as `p2-step0b` (381 pass, known focus failure, no
 skips), with a stable input fingerprint. Evidence under `p2/step1/`.
 Release, mapping, lint and full Flutter gate evidence follow separately.
+
+## Phase 2 gate — parity evidence and environment limitation
+
+Executed on Step 1 `0607b0b60` (production inputs identical to the clean
+JVM gate run archived before that commit). No independent review was
+performed; Claude runs the separate review session.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Kotlin PSI checker / self-tests | 2,839 declarations classified; zero undeclared differences; all 32 self-tests pass, including the unchanged phase-1 fixture | `p2/step1/checker-final.log`, `checker-self-tests.log` |
+| Kotlin compile / size | Debug production and test compilation pass; no new warning identities. Activity 19,017 lines, new files 7–233, size ratchet passes | `p2/step1/compile-final.log`, `kotlin-warning-comparison.json`, `sizes.log` |
+| Clean JVM identities | All 382 identity/status pairs match `p2-step0b`: 381 pass, known focus failure, zero skips; stable input fingerprint | `junit/p2-gate/`, `p2/step1/jvm-exact-status-comparison.json` |
+| Dart source guards | All 45 identity/status pairs match the phase-1 gate: 44 pass, existing profile-source failure | `p2/step1/dart-source-guards*` |
+| Android lint | Exact issue multiset unchanged: 1,353 issues, 253 errors/1,100 warnings, all 175 `UnsafeOptInUsageError` identities retained | `p2/gate/lint-comparison.json`, raw XML/TXT/HTML, `compare_lint.py` |
+| Release build | `flutter build apk --release` succeeds; no install. APK SHA/provenance archived | `p2/gate/release-build.log`, `release-provenance.json` |
+| R8 | All 12 source destinations, 18 compiled classes (including 12 `…Kt` facades, policy, candidate and four request-result classes), 102 members retain identity names. 87 explicit mappings and 15 omitted mappings verified directly in APK DEX. Three negative controls pass | `p2/gate/check_mapping.py`, `mapping-result.json`, `moved-bytecode-inventory.json`, release mapping/configuration/seeds/usage |
+| Decoder verification | **Pending-environment**: script exits 1 with the same phase-1 fallback-bundle failure; all three ABI `libmpv` SHA-256 values exactly match phase 1 | `p2/gate/decoder.log`, `decoder-provenance.json`, per-ABI FFmpeg configuration |
+| Full Flutter suite | All **12,855 identity/status pairs exactly match phase 1**: 12,794 successes, 13 failures, 28 errors, 20 skips. No new failures, missing identities, changed statuses or additions; tested tree clean/stable and Flutter 3.44.8/Dart 3.12.2 unchanged | `p2/gate/flutter-gate.*`, `flutter-comparison.log`, `flutter-exact-status-comparison.json` |
+
+Lint locations are resolved to their original PSI declaration selectors,
+with unchanged source snippets and columns after indentation normalization;
+all other file/line/column locations stay exact. Relocations do not remove
+any rule, message or multiplicity. Both lint commands exit 1 for the same
+pre-existing issues; lint parity passes, not a clean-lint claim.
+
+Additional `flutter analyze --no-pub` produces 1,758 diagnostics vs 1,767
+in the phase-1 archive. A literal-path comparison initially flags four
+generated release `pubspec.yaml` diagnostics. The helper's two explicit
+`--relocate` pairs match each against an identical existing diagnostic in
+the generated debug copy; no added diagnostic remains. The nine removed
+entries are two generated unit-test asset diagnostics and seven duplicate
+source/package diagnostics. All repository Dart sources are byte-identical
+to the phase-1 gate; no broad location ignoring or allowlist change. See
+`p2/gate/analyze-generated-relocation-comparison.log` and `analyze-summary.json`.
+No Dart formatting was needed because no Dart source changed.
+
+Decoder script stops on arm64's missing nine subtitle decoders and three
+auto-sync filters. The independent APK byte/hash/configuration inventory
+confirms the identical fallback on arm64-v8a, armeabi-v7a and x86_64. The
+patched bundle is unavailable in this local environment; no decoder,
+dependency or ProGuard changes are made to bypass it. This existing
+phase-1 limitation carries forward and the complete decoder gate is not
+claimed passed.
+
+Lockfile, ProGuard and phase-1 manifest hashes match the protected-input
+archive. The original mutation worktree is removed. No push, branch switch,
+device/emulator interaction or bug fix. Gate summary:
+`p2/gate/execution-summary.json`. **Stopped after phase-2 moves and gate
+checks; Claude's separate review and patched-bundle verification remain.**
