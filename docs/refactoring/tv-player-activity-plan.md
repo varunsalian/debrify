@@ -551,3 +551,22 @@ guide; auto-sync ring animates during subtitle auto-sync.
   ended before a report; the completed review used the same verified model
   and read-only session. **Stopped after phase-1 moves and gate checks;
   decoder gate pending. No phase 2, push, device or emulator work.**
+- 2026-10-07 — post-implementation reviews of `f4e83b026..f63d9f297`.
+  Claude: five scratch tampers (retained-code delay, moved literal,
+  newline-only, retained declaration order, invalid literal) all fail the
+  checker; size baseline differs only in the activity count
+  (22,221 → 19,961); `AutoSyncRingView(this)` construction unchanged; new
+  declarations are `internal` in `com.debrify.app.tv` and compile without
+  clashes. Independent Codex review (fresh session): **No P1s**; visibility
+  audit over 92 package files, retargets, 327 mutation patches and gate
+  evidence re-verified. **P2 (pending, environmental):** the decoder
+  verification script fails on all ABIs because local release builds package
+  the pinned fallback media_kit jars (the patched PGS-capable bundle is built
+  only on Linux CI by `dev/scripts/build_android_media_kit_libraries.sh`);
+  native/library/build inputs are unchanged by this phase and the packaged
+  binaries are byte-identical to the fallback jars. Not claimed as passed:
+  the CI release build's decoder verification is on the end-of-series
+  checklist. **P3 → phase 3:** add invalidation (repaint-request) assertions
+  with mutation proofs for `AutoSyncRingView` colour changes, animator
+  updates and stop/reset.
+- Phase 1 complete; merged into `refactor/codebase`.
