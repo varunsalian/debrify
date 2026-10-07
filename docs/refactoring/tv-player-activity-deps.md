@@ -4072,3 +4072,24 @@ Elsewhere:
 - onPause: 19029 `cancelPikPakRetry`.
 - Per-item reset in playItem: 4611 `hideUpNextCard` → 4612 `resetSkipSegmentState` →
   4615 `cancelPikPakRetry`.
+
+## Phase 3 re-measurement and step T (ec365eb80)
+
+The approved phase-2 merge has a 19,017-line activity and 2,671 PSI declarations. The earlier Phase 3 inventory remains historical at dcbd9aafe; the phase-3 manifest now uses ec365eb80 and the following measured declaration starts (including PSI-attached documentation). Status pill remains deferred.
+
+| Feature | Moved subtrees | Original member starts at ec365eb80 |
+| --- | ---: | --- |
+| sleep | 12 | `class SleepTimerMode` 1170; `property sleepTimerMode` 1178; `property sleepTimerDeadlineElapsedMs` 1179; `property sleepTimerHandler` 1180; `property sleepTimerRunnable` 1181; `property sleepTimerMinuteOptions` 1182; `fun sleepTimerMinutesLeft()` 8025; `fun sleepTimerValueLabel()` 8032; `fun startSleepCountdown(Int)` 8038; `fun armSleepAtEndOfItem()` 8051; `fun cancelSleepTimer(Boolean)` 8057; `fun fireSleepTimer()` 8065 |
+| skip | 18 | `class SkipSegmentRequest` 1149; `property skipSegmentScope` 1160; `property skipSegmentFetchJob` 1161; `property skipSegmentFetchGeneration` 1162; `property loadedSkipSegmentKey` 1163; `property loadingSkipSegmentKey` 1164; `property skipSegments` 1165; `property activeSkipSegment` 1166; `property skipFocusOfferedKey` 1167; `property skipSegmentCache` 1168; `fun currentSkipSegmentRequest(Long)` 7825; `fun updateSkipSegmentState(Long,Long)` 7854; `fun ensureSkipSegments(SkipSegmentRequest)` 7889; `fun presentSkipSegment(TvSkipSegment?,String?)` 7947; `fun skipActiveSegment()` 7997; `fun resetSkipSegmentState()` 8096; `property MAX_SKIP_SEGMENT_CACHE_ENTRIES` 19010; `property IMDB_ID_REGEX` 19011 |
+| upnext | 17 | `property upNextCard` 163; `property upNextPoster` 165; `property upNextTitle` 166; `property upNextCountdown` 167; `property upNextVisible` 169; `property upNextTargetIndex` 170; `property upNextDismissedForIndex` 171; `property upNextHandler` 172; `fun maybeShowUpNext()` 8379; `property upNextTicker` 8403; `fun showUpNextCard(Int)` 8434; `fun triggerUpNext()` 8461; `fun dismissUpNext()` 8469; `fun hideUpNextCard()` 8474; `property UP_NEXT_THRESHOLD_MS` 19001; `property UP_NEXT_MIN_DURATION_MS` 19002; `property UP_NEXT_TICK_MS` 19003 |
+| recording | 15 | `property recordingEngineEnabled` 8746; `property recordingRegistryListener` 8763; `fun isCurrentIptvSegmented()` 8769; `fun engineRecordableUrl(String)` 8774; `fun isSchedulableStreamUrl(String)` 8789; `fun engineTaskIdForCurrentChannel()` 8804; `fun recordingResourceFor(IptvChannelEntry?)` 8812; `fun canRecordCurrentIptv()` 8817; `fun updateRecordButtonState()` 8833; `fun toggleIptvRecording()` 8853; `fun maybeAskNotificationPermission()` 8892; `fun toggleEngineRecording()` 8914; `fun promptScheduleRecording(IptvChannelEntry,IptvEpgProgram)` 9013; `fun finalizeIptvRecordingIfActive()` 9128; `property notificationPermissionRequestCode` 18088 |
+
+Manifest: 62 moved subtrees, 22 patched activity declarations (52 exact context occurrences), six slot-anchored additions, four controller destinations. Every destination span is either a moved subtree or pinned structure. All 22 phase-1/2 destinations are unchanged against ec365eb80; the reviewed-change whitelist is empty.
+
+Step-T verification: 53 dispatcher tests passed (24 phase 1, eight phase 2, 17 phase 3, four bytecode-parser checks); the complete phase-3 extraction fixture passes and compiles in the evidence-only detached original worktree. Every required negative fails for its named reason. An initially omitted `Intent` import in the fixture was corrected before acceptance; production files in this worktree are untouched.
+
+Original self-comparison: 2,671 declarations classified, zero differences. Historical checks: p1@dcbd9aafe classifies 3,477 declarations, zero differences; p2@ec365eb80 classifies 2,839, zero differences. Current earlier-destination check: zero differences.
+
+`dev/tool/check_kotlin_overloads.py` audits all 58 substituted activity `this` sites from original and fixture JVM invocation descriptors, including lazy/lambda classes. All match. In particular the poster uses `Glide.with(FragmentActivity)` before and after. A separately compiled fixture with `Activity` injection selects `Glide.with(Activity)` and is rejected by the audit (not by compilation). No Runnable `this` is substituted.
+
+Evidence: `p3/remeasured-inventory.json`, `p3/original-self-comparison.log`, `p3/checker-self-tests-final.log`, `p3/historical-p1.log`, `p3/historical-p2.log`, `p3/earlier-destinations.log`, `p3/fixture-compile.log`, `p3/overload-audit.json`, `p3/overload-negative-compile.log`, `p3/overload-negative.log`, `p3/bytecode/`. Shared offline PSI cache remains under the previously approved `p1/psi`.

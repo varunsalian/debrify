@@ -178,7 +178,20 @@ public final class KotlinPsi {
                 if (!errors.isEmpty()) throw new IllegalArgumentException("PSI syntax error: " + errors.iterator().next().getErrorDescription());
                 int prefix = file.getPackageDirective() == null ? 0 : file.getPackageDirective().getTextRange().getEndOffset();
                 if (file.getImportList() != null) prefix = Math.max(prefix, file.getImportList().getTextRange().getEndOffset());
-                files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
+                List<Object> thisSites = new ArrayList<>();
+                for (KtThisExpression expression : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtThisExpression.class)) {
+                    PsiElement parent = expression.getParent();
+                    while (parent != null && !(parent instanceof KtCallExpression)) parent = parent.getParent();
+                    if (parent instanceof KtCallExpression) {
+                        KtCallExpression call = (KtCallExpression)parent;
+                        thisSites.add(map("start", offset(expression.getTextRange().getStartOffset()),
+                            "call_start", offset(call.getTextRange().getStartOffset()),
+                            "call_end", offset(call.getTextRange().getEndOffset()),
+                            "callee", call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText()));
+                    }
+                }
+                files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
+                    "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));
         } finally {

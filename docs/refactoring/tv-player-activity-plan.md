@@ -1103,3 +1103,14 @@ and engine), scheduled recording confirmation.
   `this`, Glide lifecycle test; P2 cross-feature reads go through the owning
   controller + Skip↔Up Next characterization; P3 scope/title/estimate.
 - 2026-10-07 — phase 3 design round 3 (Codex): **No P1s** (all 58 activity `this` uses audited for overload resolution); P3 sketch types fixed. Phase 3 design approved.
+
+- 2026-10-08 — phase 3 step T complete on `refactor/tvplayer-p3` (base
+  `ec365eb80`), with production code untouched. Re-measured 62 moved subtrees,
+  22 patched declarations / 52 context occurrences, six original-slot additions.
+  Exhaustive pinned destination partitions, computed Host scaffolding, slot/order
+  checks, historical `--at` checks and unchanged earlier destinations are covered
+  by 53 passing dispatcher self-tests. Complete extraction fixture compiles;
+  all 58 activity-this sites retain their compiled overload descriptors. A
+  compiled Activity-injection negative is rejected for the Glide overload
+  change. Raw evidence is under `p3/`; the dependency report records the
+  re-measured inventory and commands/results. No production moves performed.

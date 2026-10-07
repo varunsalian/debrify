@@ -12,6 +12,9 @@ FIXTURES = k.ROOT / 'dev/tool/fixtures/kotlin_moves'
 
 def extraction(manifest, original):
     """Materialize fixtures only: exact declared text edits, no production writes."""
+    if manifest['phase'] >= 3:
+        from kotlin_move_partition import extraction
+        return extraction(manifest, original)
     unit = k.parse({'base': original})['base']
     spans, _ = k.spans(unit, set(manifest['split_containers']))
     destinations = {p: spec['prefix'] for p, spec in manifest['destinations'].items()}
@@ -175,13 +178,23 @@ class KotlinMovesTest(unittest.TestCase):
 def run(manifest_path=k.MANIFEST):
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(KotlinMovesTest)
     manifest = json.loads(Path(manifest_path).read_text())
-    if manifest['phase'] == 2:
+    if manifest['phase'] >= 2:
         import test_kotlin_moves_phase2
-        test_kotlin_moves_phase2.MANIFEST = manifest
+        test_kotlin_moves_phase2.MANIFEST = (manifest if manifest['phase'] == 2 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p2.json').read_text()))
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase2.Phase2MovesTest))
+    if manifest['phase'] == 3:
+        import test_kotlin_moves_phase3
+        test_kotlin_moves_phase3.MANIFEST = manifest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase3.Phase3MovesTest))
+        from test_kotlin_overloads import KotlinOverloadsTest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(KotlinOverloadsTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 
 
 if __name__ == '__main__':
-    raise SystemExit(run())
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--manifest', type=Path, default=k.MANIFEST)
+    raise SystemExit(run(parser.parse_args().manifest))
