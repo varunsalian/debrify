@@ -4346,3 +4346,862 @@ Tested production move: 496a3d481. Final original-only boundary tests: 25f08cfb0
 Evidence: `p3/gate/` (checker/self-tests/history/earlier destinations, compiled overloads/teardown, warnings, JVM metadata/comparison, lint reports/comparison, APK/R8 provenance and mapping/DEX inventory, decoder log/hash verification, full Flutter initial/quiet and focused runs with env/comparisons, analyzer comparison); `p3/step0b/`, `p3/step0b-boundary/`, and `junit/p3-step0b/`, `junit/p3-gate/`.
 
 Deviations: three final message boundary cases/proofs were completed during the gate after moves, correcting the initial stable-dependency assumption; baseline extended on the original first, then moved comparison rerun. Full Flutter required a quiet retry after the isolated timing failure. Production code unchanged after Step 1; complete Flutter/release evidence reused only for later JVM-test/docs changes. No bug fix, branch switch, push, device/emulator interaction, dependency/lockfile/ProGuard edit, or self independent review. Claude runs the separate review session. **Stopped after phase 3**, decoder verification pending-environment.
+
+---
+
+## Phase 4 inventory (at `ec365eb80`; re-measure on `eee52b084`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`ec365eb80` (19,017 lines; class 136–19017, companion 18976–19016). Read-only survey of the main
+checkout (no worktree, no build). The rules are those of the plan's **Phase 3 → Collaborator pattern**
+(from `refactor/tvplayer-p3` at `043dfd1b8`): `internal class TvXController(activity: AppCompatActivity, host: Host)`,
+verbatim moved members with declared substitutions, computed explicitly-qualified Host forwarders,
+slot-anchored controller properties, `::x.isInitialized` through activity-owned getters, braced host
+templates, cross-feature reads through the owning controller, teardown order unchanged, **no delegators**.
+
+Method. A brace/string/comment-aware indexer resolved every depth-1 member of the class (960 members)
+and its line span; a word-boundary scan (string templates included, comments excluded) mapped every
+reference to its enclosing member; every hit list below was then checked by hand. "Patch" = one
+token-level edit in a retained activity declaration (`foo` → `ctl.foo`), i.e. one checker `patched`
+occurrence. "Substitution" = one declared edit inside a moved body (`foo` → `host.foo`, `this` →
+`activity`). Line counts are body lines plus attached KDoc/comments.
+
+**Phase-3 state assumed** (gone into controllers by the time phase 4 starts): sleep timer
+(`TvSleepTimerController`; `SleepTimerMode` top-level), skip segments, Up Next card, IPTV recording
+actions. Consequences for phase 4:
+- `fireSleepTimer` (8070) is in the sleep controller; its `sendProgress(completed = false)` call goes
+  through the activity's phase-3 Host forwarder `override fun sendProgress(completed: Boolean)`. Moving
+  `sendProgress` means **patching a phase-3 pinned `added` span** (needs the checker's reviewed
+  earlier-phase whitelist; none was expected in phase 3).
+- `presentSkipSegment` (7947, now skip controller) reads `syncOverlay`, `linePickerOverlay`,
+  `subtitlePanel`, `unifiedMenu` through phase-3 Host forwarders. **Keeping those four overlay
+  references in the activity** avoids touching phase-3 pinned spans and keeps `SubtitleSyncDismissTest`
+  unchanged (it reflects `syncOverlay`/`linePickerOverlay` on both player activities).
+- `umPlaybackModel` (14658) already carries phase-3 call-site patches (`sleepTimerController.x`), and
+  phase-3 `TvSleepTimerCharacterizationTest.unifiedMenuRowsDispatch…` reflects `umPlaybackModel` on the
+  activity.
+- Status pill was deferred out of phase 3 (no two-output delegators).
+
+### Cross-cutting facts for phase 4
+
+- **Shared handlers stay activity-owned and are borrowed.**
+  - `externalSubtitleHandler` (1202) carries: the side-subtitle ticker (C4), the auto-sync ladder
+    (8 s) and verify (90 s / 120 s) ticks, the auto-sync pill's announce-dismiss (5 s) and card-hide
+    runnables, and the status pill's 1.4 s hide runnable. `onStop` (18040) removes only the ticker;
+    `onDestroy` clears it wholesale at **18292**, *after* `releaseLoudnessEnhancer` (18263), `AudioEffectSession.closeCurrent` (18267), player release (18269–18286) and
+    `subtitleScope.cancel()` (18245). No controller may own or clear it; every moved post/remove becomes
+    `host.externalSubtitleHandler`.
+  - `progressHandler` (1272) carries `progressRunnable` (5 s ticker: progress + Up Next + IPTV
+    recovery + twin trial), the startup/manual-switch timeouts and the PikPak gate reprepare; cleared
+    piecemeal at 18171–18179 and wholesale at **18258**. The progress reporter (feature 5) does **not**
+    take the ticker; `progressRunnable`/`restartProgressUpdates` stay with the activity (phase 7).
+  - `subtitleScope` (1147, Main + SupervisorJob) is shared with the addon-subtitle fetch (5014) and
+    cancelled at **18245**: borrowed.
+- **Overloads.** Every substituted `this` in features 1–6 flows into a parameter typed `Context`
+  (`SubtitleSettings.*`, `ProfilePreferenceProjection.getBoolean`, `AudioEffectSession.open`,
+  `UnifiedMenuSections.appearanceRows`, `AutoSyncRingView`, `TextView`/`LinearLayout`, `Toast.makeText`,
+  `androidx.appcompat.app.AlertDialog.Builder`) or `Activity` (`SubtitleLinePickerController`,
+  `SubtitleSyncOverlayController` — named argument `activity = this`). None is overloaded on
+  Context/Activity/FragmentActivity/LifecycleOwner; no Glide or lifecycle-owner calls. Step T still
+  records the bytecode descriptors (phase-3 audit tool) for each site.
+- **Anonymous-object `this` (never substituted):** 14353 (ladder `Runnable`), 14373/14374 (verify
+  `Runnable`, incl. the `autoSyncVerifyTick === this` identity check), 15130 (ticker `Runnable`).
+  `this@AndroidTvTorrentPlayerActivity` → `activity`: 14247, 14344, 14453 (coroutine/Runnable bodies),
+  13970 (`unifiedMenuCallbacks.stylePreview`).
+- **`::x.isInitialized` in candidate code:** `::playerView` 14871 (`subtitlePanelCallbacks.onHidden`),
+  14903, 14917 (`showSyncOverlay` lambdas); `::subtitleOverlay` 15067, 15081 (`onExternalSubtitleLoaded`),
+  15110 (`stopExternalSubtitleRendering`). → activity getters `playerViewReady`, `subtitleOverlayReady`
+  (`added`, slot-anchored, forwarded by Host).
+- **Host methods with default/named arguments** must repeat the defaults in the Host interface and keep
+  parameter names: `showSyncToast(glyph, accent, title, hint: String? = null, autoHideMs: Long?,
+  uppercase: Boolean = true)` (called with named `autoHideMs`), `recordPlaybackLifecycle(event,
+  details: String = "")` (1-arg calls in `deliverProgress`), `sendProgress(completed)` (named
+  `completed =` at every caller), `runSubtitleAutoSync(auto: Boolean = false)` (0-arg call from the menu).
+- **Volatile/threading:** no candidate field is `@Volatile`; all candidate code runs on the main thread
+  except `withContext(Dispatchers.Default)` (aligner) / `Dispatchers.IO` (cue fetch) blocks, whose
+  results are published back on Main. `TvPlaybackRecoveryStore.stageAsync/acknowledgeAsync` hop
+  threads internally with already-built strings.
+- **Reflection/name mangling:** a moved member that a test reflects by simple name must be `private` or
+  a public member of the `internal` class (never `internal fun`). Affects feature 5 (`sendProgress`,
+  `recoveryCompletedItemKeys`) and feature 6 (`umPlaybackModel`).
+- **Split field blocks.** Every candidate's fields are spread over 2–3 non-adjacent blocks (listed per
+  feature). The phase-3 rule anchors the controller property at the first removed field; the later
+  removed fields have side-effect-free initializers except `subtitleSeekHandler` (1111, a main-looper
+  `Handler`, created a few initializers earlier than today — no observable effect, but declare it).
+
+---
+
+### 1. Subtitle auto-sync engine + pill (rank 1)
+
+**Owned state** (moves; two field blocks → controller slot at 721):
+
+| line | name | type / initializer |
+|---|---|---|
+| 721 | `autoSyncRunning` | `= false` (comment 718–719 stays with `speechTap` 720) |
+| 1211–1213 | `autoSyncPill`, `autoSyncPillRing`, `autoSyncPillLabel` | views, `= null` (comment 1208–1210) |
+| 1214 | `autoSyncPillResultShowing` | `= false` — **write-only** (15327) |
+| 1215–1216 | `autoSyncPillWindowActive`, `autoSyncPillAnnounceShowing` | `= false` |
+| 1219–1224 | `autoSyncPillAnnounceDismissRunnable` | `val Runnable { … hideAutoSyncPillView() }` |
+| 1225 | `autoSyncCardHideRunnable` | `val Runnable { hideAutoSyncCard() }` |
+| 1228–1229 | `autoSyncResultLabel`, `autoSyncResultUrl` | `String? = null` (menu-row memory; written by C4 too) |
+| 1236–1239 | `autoSyncLadderSec` (`intArrayOf(20,45,90,180)`), `autoSyncLadderIdx`, `autoSyncLadderDone`, `autoSyncLadderTick` | |
+| 1246–1248 | `autoSyncAppliedOffsetMs`, `autoSyncVerifyTick`, `autoSyncVerifyMisses` | |
+
+**Stays (host):** `speechTap` 720 (created in `setupPlayer` 2701, used by `playbackListener` 1868/1889,
+nulled in `onDestroy` 18287).
+
+**Owned functions:** `runSubtitleAutoSync@14162` (KDoc 14153), `startAutoSyncLadder@14329` (KDoc 14322),
+`cancelAutoSyncLadder@14361`, `scheduleAutoSyncVerify@14367`, `cancelAutoSyncVerify@14382`,
+`maybeRunAutoSyncVerify@14396` (KDoc 14388), `isAutoSyncPrefEnabled@14488` (KDoc 14481),
+`ensureAutoSyncPill@15235`, `openAutoSyncPillWindow@15287` (KDoc 15282), `stopAutoSyncPillWindow@15300`,
+`showSyncToast@15314` (KDoc 15306), `revealAutoSyncPill@15356`, `hideAutoSyncPillView@15368`,
+`hideAutoSyncCard@15378`. **32 members, 455 body lines, ≈ 516 with comments.**
+
+**Inbound** (every reference outside the moved set):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 14136 | umTimingRows@14118 | `autoSyncRunning` | read |
+| 14139 | umTimingRows@14118 | `autoSyncResultUrl` | read |
+| 14139 | umTimingRows@14118 | `autoSyncResultLabel` | read |
+| 14143 | umTimingRows@14118 | `autoSyncRunning` | read |
+| 14144 | umTimingRows@14118 | `runSubtitleAutoSync` | call |
+| 15082 | onExternalSubtitleLoaded@15021 | `autoSyncResultLabel` | write |
+| 15083 | onExternalSubtitleLoaded@15021 | `autoSyncResultUrl` | write |
+| 15084 | onExternalSubtitleLoaded@15021 | `autoSyncAppliedOffsetMs` | write |
+| 15085 | onExternalSubtitleLoaded@15021 | `scheduleAutoSyncVerify` | call |
+| 15086 | onExternalSubtitleLoaded@15021 | `showSyncToast` | call |
+| 15092 | onExternalSubtitleLoaded@15021 | `startAutoSyncLadder` | call |
+| 15099 | stopExternalSubtitleRendering@15098 | `cancelAutoSyncLadder` | call |
+| 15100 | stopExternalSubtitleRendering@15098 | `cancelAutoSyncVerify` | call |
+| 15101 | stopExternalSubtitleRendering@15098 | `autoSyncAppliedOffsetMs` | write |
+
+TOTAL 14 in 3 decls.
+
+All 14 sit in feature 3 (`onExternalSubtitleLoaded` 6, `stopExternalSubtitleRendering` 3) and feature 6
+(`umTimingRows` 5). Moved together with feature 3 (and the subtitle menu rows), **zero activity patches
+remain** for auto-sync.
+
+**Outbound host needs:**
+- State: `speechTap` ×3 (14164, 14342, 14405), `activeExternalSubtitleUrl` ×4 (14165, 14232, 14406,
+  14447), `externalSubtitleActive` ×2 (14341, 14398), `player` ×3 (14183, 14399, 14408),
+  `subtitleScope` ×2 (14207, 14417, borrowed), `externalSubtitleHandler` ×11 (14353, 14358, 14362, 14374,
+  14379, 14383, 15297, 15301, 15322, 15352, 15379, borrowed).
+- Calls: `applySubtitleSettings()` ×2 (14248, 14454) — feature 3.
+- Android: `this` → `activity` ×6 (14334, 14400, 14490, 15237, 15238, 15245); `this@…Activity` →
+  `activity` ×3 (14247, 14344, 14453); `findViewById` ×1 (15275); `dp(` ×16 (15250–15373, host).
+- Already top-level: `AutoSyncRingView`, `AutoSyncColors` (phase 1). Pure: `SubtitleAligner`,
+  `SubtitleCueCache.get`, `SubtitleSettings.*`.
+
+**Timers / coroutines / teardown:**
+- Ladder tick (first 8 s, re-posted every 8 s while rungs remain), verify tick (90 s then 120 s),
+  announce dismiss (5 s), card hide (`autoHideMs`) — all on borrowed `externalSubtitleHandler`, cleared
+  only wholesale at 18292. `cancelAutoSyncLadder/Verify` are reached only through
+  `stopExternalSubtitleRendering` (no `onStop`/`onDestroy` call). Not removed in `onStop` (pre-existing;
+  follow-up below).
+- Aligner coroutines in borrowed `subtitleScope` (cancelled 18245). Invariant: `runSubtitleAutoSync`
+  catches `Throwable` (MiBox OOM), `maybeRunAutoSyncVerify` catches `Exception`; both rethrow
+  `CancellationException`, both clear `autoSyncRunning` in `finally` — verbatim.
+- Ring pulse animator self-cancels on detach; pill views are never removed.
+
+**Tests:** no reflective or Dart anchor on engine/pill members. `TvAutoSyncRingCharacterizationTest` and
+phase-3 `TvRingRepaintCharacterizationTest` cover the ring only (binary name unchanged). **Characterization
+gap:** the engine is untested. Step 0 prerequisites: a deterministic `SubtitleAligner` Robolectric shadow
+(precedent: phase-3 `TvSkipSegmentHttpShadow`) returning scripted `Synced/Drift/NoMatch/NotEnoughAudio`,
+a `SpeechFeatureTap` built with its two lambdas (or shadowed `snapshot/anchoredDurationMs/hasRecentAudio`),
+`SubtitleCueCache` seeded through its private map (its `fetch` does real HTTP), and the profile projection
+for `subtitle_auto_sync_enabled` (as `NativePlayerSettingsConsumptionTest` does).
+
+**Hazards:** three Runnable `this` (never substituted, identity check 14373); mutual calls with feature 3
+(C4 → `startAutoSyncLadder`/`scheduleAutoSyncVerify`/`showSyncToast`/result writes; auto-sync →
+`applySubtitleSettings`/`activeExternalSubtitleUrl`) — a logical cycle that the Host interfaces break at
+compile time; `showSyncToast` defaults must be declared in the Host interface; `Log.d` (15323) vs
+`android.util.Log` (destination import list).
+
+**Proposed shape:**
+```kotlin
+internal class TvSubtitleAutoSyncController(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val speechTap: SpeechFeatureTap?
+        val player: ExoPlayer?
+        val subtitleScope: CoroutineScope
+        val externalSubtitleHandler: Handler
+        val externalSubtitleActive: Boolean          // → subtitle controller (owner)
+        val activeExternalSubtitleUrl: String?       // → subtitle controller (owner)
+        fun applySubtitleSettings()                  // → subtitle controller
+        fun dp(value: Int): Int
+    }
+}
+```
+**Substitutions ≈ 53** (43 host + 6 `this` + 3 `this@` + 1 `findViewById`). **Activity patches: 14
+standalone, 0 if moved with feature 3 + menu rows.** Size ≈ 516 + ≈ 30 structural ≤ 800.
+**Risk: low–medium** (UI + background aligner; all timers on a borrowed handler; characterization
+needs the aligner shadow).
+
+---
+
+### 2. Status pill (rank 6: defer to the source-switch unit)
+
+**Owned state:** `statusPill` 1205 (`TextView? = null`), `statusPillHideRunnable` 1206
+(`val Runnable { hideStatusPill() }`), inside the external-subtitle field block (1198–1206).
+
+**Owned functions:** `ensureStatusPill@15182`, `showStatusPill@15207`, `showStatusPillTransient@15220`
+(KDoc 15219; 1,400 ms), `hideStatusPill@15225`, banner 15178–15180. **6 members, 50 body lines, ≈ 55.**
+
+**Inbound** (40 call sites, 18 declarations):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 1730 | playbackListener@1408 | `showStatusPillTransient` | call |
+| 5390 | playShowShuffle@5353 | `showStatusPillTransient` | call |
+| 15005 | loadStremioSubtitle@14995 | `showStatusPill` | call |
+| 15029 | onExternalSubtitleLoaded@15021 | `showStatusPillTransient` | call |
+| 15093 | onExternalSubtitleLoaded@15021 | `showStatusPillTransient` | call |
+| 15121 | stopExternalSubtitleRendering@15098 | `hideStatusPill` | call |
+| 15981 | requestEpisodeFetch@15968 | `showStatusPillTransient` | call |
+| 15986 | requestEpisodeFetch@15968 | `showStatusPillTransient` | call |
+| 16001 | requestEpisodeFetch@15968 | `showStatusPillTransient` | call |
+| 16023 | requestEpisodeFetch@15968 | `showStatusPillTransient` | call |
+| 16030 | requestEpisodeFetch@15968 | `showStatusPillTransient` | call |
+| 16049 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16055 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16075 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16081 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16111 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16118 | requestAdjacentEpisodeFetch@16039 | `showStatusPillTransient` | call |
+| 16309 | commitManualSourceCandidate@16250 | `showStatusPillTransient` | call |
+| 16367 | failManualSourceCandidate@16316 | `showStatusPillTransient` | call |
+| 16369 | failManualSourceCandidate@16316 | `hideStatusPill` | call |
+| 16506 | commitStartupCandidate@16446 | `hideStatusPill` | call |
+| 16584 | failStartupCandidate@16515 | `hideStatusPill` | call |
+| 16780 | watchSourceSwitchOutcome@16771 | `hideStatusPill` | call |
+| 16789 | watchSourceSwitchOutcome@16771 | `showStatusPillTransient` | call |
+| 16796 | watchSourceSwitchOutcome@16771 | `hideStatusPill` | call |
+| 16799 | watchSourceSwitchOutcome@16771 | `showStatusPillTransient` | call |
+| 16824 | dropStaleSourceSwitchFeedback@16821 | `hideStatusPill` | call |
+| 16902 | onStremioSourceSelected@16869 | `showStatusPill` | call |
+| 16967 | resolveStremioSourceViaFlutter@16928 | `showStatusPillTransient` | call |
+| 16980 | resolveStremioSourceViaFlutter@16928 | `showStatusPillTransient` | call |
+| 16992 | resolveStremioSourceViaFlutter@16928 | `showStatusPillTransient` | call |
+| 17003 | resolveStremioSourceViaFlutter@16928 | `showStatusPillTransient` | call |
+| 17057 | resolveSourceToPlaylistViaFlutter@17008 | `showStatusPillTransient` | call |
+| 17070 | resolveSourceToPlaylistViaFlutter@17008 | `showStatusPillTransient` | call |
+| 17082 | resolveSourceToPlaylistViaFlutter@17008 | `showStatusPillTransient` | call |
+| 17093 | resolveSourceToPlaylistViaFlutter@17008 | `showStatusPillTransient` | call |
+| 17319 | failMoreTorrentSources@17314 | `showStatusPillTransient` | call |
+| 17388 | switchToSourcePlaylist@17329 | `showStatusPillTransient` | call |
+| 17406 | switchToSourcePlaylist@17329 | `showStatusPillTransient` | call |
+| 17433 | switchToSourcePlaylist@17329 | `showStatusPillTransient` | call |
+
+TOTAL 40 in 18 decls.
+
+**Callers by future owner:**
+
+| owner (planned phase) | declarations | sites |
+|---|---|---|
+| feature 3 (this phase, if selected) | `loadStremioSubtitle`, `onExternalSubtitleLoaded`, `stopExternalSubtitleRendering` | 4 |
+| episode fetch (C9; with the source unit or phase 7) | `requestEpisodeFetch`, `requestAdjacentEpisodeFetch` | 11 |
+| startup gate / manual switch (phase 6) | `commitManualSourceCandidate`, `failManualSourceCandidate`, `commitStartupCandidate`, `failStartupCandidate`, `watchSourceSwitchOutcome`, `dropStaleSourceSwitchFeedback` | 10 |
+| source switcher (phase 6) | `onStremioSourceSelected`, `resolveStremioSourceViaFlutter`, `resolveSourceToPlaylistViaFlutter`, `failMoreTorrentSources`, `switchToSourcePlaylist` | 13 |
+| playback core (phase 7) | `playbackListener`, `playShowShuffle` | 2 |
+
+**Outbound:** Android only — `this` → `activity` ×1 (15184), `findViewById` ×1 (15202), `dp(` ×8
+(15190–15200); borrowed `externalSubtitleHandler` ×3 (15208, 15222, 15226).
+
+**Timers/teardown:** the hide runnable lives on the borrowed handler, cleared only at 18292; view never
+removed, fade animators never cancelled. **Tests:** none (no reflection, no Dart anchor).
+
+**Per-site patching — is it acceptable?** Mechanically yes: each site is one exact token edit
+(`showStatusPillTransient(` → `statusPill.showStatusPillTransient(`) with an occurrence count, no
+delegator, no second output — within the checker's `patched` model. But it costs **40 patches in 18
+declarations for ≈ 55 lines** (ratio ≈ 0.73, the worst of all candidates), and 34 of those 40 sites sit
+in declarations that phase 6 will move anyway, where each would be re-edited (patch → host substitution).
+If feature 3 moves first, its 4 calls become 3 Host forwarders (`showStatusPill`,
+`showStatusPillTransient`, `hideStatusPill`) to the activity — a later status-pill move then patches
+those phase-4 forwarders (pinned `added` spans, needs the earlier-phase whitelist).
+
+**Recommendation:** do **not** move in phase 4. Move it inside the phase-6 source-switch unit
+(`TvStatusPillController(activity, host)` with Host `externalSubtitleHandler`, `dp`): there the 23
+source/gate sites (+ 11 episode-fetch sites if C9 rides along) become intra-unit or host substitutions
+and only `playbackListener`, `playShowShuffle` and the feature-3 forwarders remain as patches (≈ 2 + 3).
+**Substitutions: 13. Activity patches: 40 now (36 + 3 forwarders after feature 3) vs ≈ 5 in phase 6.
+Risk: low** (UI only).
+
+---
+
+### 3. External (Stremio) subtitle rendering + subtitle track selection + settings-panel wiring (rank 2; with feature 1)
+
+**Owned state** (moves; three field blocks → controller slot at 1105):
+
+| line | name | type / initializer |
+|---|---|---|
+| 1105 | `subtitleSettingsVisible` | `= false` |
+| 1111 | `subtitleSeekHandler` | `val Handler(Looper.getMainLooper())` (owned timer) |
+| 1112–1117 | `subtitleSeekRunnable` | `val Runnable { player?.let { … seekTo(pos) } }` (reads host `player` at run time) |
+| 1118–1119 | `subtitleTracks`, `currentSubtitleTrackIndex` | flat Off/embedded/external/loading list + index |
+| 1193–1198 | `externalSubtitleCues` (+ comment 1193–1197) | `List<SubtitleCue> = emptyList()` |
+| 1199–1201 | `externalSubtitleActive`, `activeExternalSubtitleUrl`, `externalSubtitleLoadToken` | |
+| 1203–1204 | `externalSubtitleTicker`, `lastExternalCueText` | |
+| companion 19008–19009 | `SUBTITLE_LOADING_LABEL`, `EXTERNAL_SUBTITLE_TICK_MS` | single-feature consts → file-private |
+
+**Stays in the activity (host), with reasons:**
+- `externalSubtitleHandler` 1202 — shared with auto-sync, both pills; cleared wholesale at 18292.
+- `syncOverlay` 1107 / `linePickerOverlay` 1108 — read by `dispatchKeyEvent` (6727–6733),
+  `setupBackPressHandler` (18047–18052), `isCleanPlaybackState` (8371), phase-3 skip Host
+  (`presentSkipSegment` 7989–7990), `onDestroy` (18288–18290); reflected by `SubtitleSyncDismissTest`.
+  Moving them would cost 15 patches + 2 phase-3 forwarder edits + a test retarget.
+- `subtitlePanel` 1106, `subtitleSettingsRoot` 1104, `unifiedMenu` 1109 — view binding (`bindViews`).
+- Addon-subtitle state (`stremioSubtitles`, `addonSubtitleResults`, `currentStremioSubtitleIndex`,
+  `userManuallySelectedSubtitle`, `failedSubtitleUrls`, `isLoadingStremioSubtitles` …) — owned by the
+  addon fetch/auto-select cluster (chunk B C6), a later phase.
+- `subtitleScope` 1147 (borrowed), `subtitleOverlay`/`subtitleControlsLift` (lateinit views),
+  `offsetRenderersFactory`, `trackSelector`, `player`, `payload`, `currentIndex`.
+
+**Owned functions:** `rebuildSubtitleTrackList@14800` (banner 14796–14798), `subtitlePanelCallbacks@14851`
+(object property), `showSubtitleSettingsPanel@14875`, `hideSubtitleSettingsPanel@14881` (no callers),
+`showSyncOverlay@14885`, `refreshSubtitlePanelForLoading@14927` (KDoc 14923), `applySelectedSubtitleTrack@14932`,
+`loadStremioSubtitle@14995` (KDoc 14989), `onExternalSubtitleLoaded@15021`, `stopExternalSubtitleRendering@15098`
+(KDoc 15097), `startExternalSubtitleTicker@15124`, `renderExternalSubtitleCue@15137`,
+`currentSubtitleIdentity@15394` (KDoc 15384), `applySubtitleSettings@15410`,
+`applyAndPersistSubtitleSettings@15439`, plus the dead `showSubtitleTrackDialog@14756` (its local
+`subtitleTracks` shadows the field — no substitution may touch it). **27 members, 460 body lines, ≈ 490.**
+
+**Optional add-on (recommended): the five subtitle menu-row builders** `umEmbeddedTrackRows@14066`,
+`umAppearanceRows@14113`, `umTimingRows@14118`, `umSelectSubtitleRowIndex@14538`,
+`umSelectStremioSubtitleByUrl@14546` (≈ 81 lines). They touch only feature 1/3 state plus `unifiedMenu`,
+`userManuallySelectedSubtitle`, `stremioSubtitles` (host); moving them turns 21 menu-side patches into 4
+(`umSubsModel` 14044/14045/14046 and `umAddonTrackRows` 14107). **With them: 32 members, ≈ 571 lines.**
+
+**Inbound** (feature 3 alone, overlays excluded):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2454 | bindViews@2395 | `subtitlePanelCallbacks` | read |
+| 2959 | setupPlayer@2620 | `externalSubtitleActive` | read |
+| 2973 | setupPlayer@2620 | `currentSubtitleIdentity` | call |
+| 2974 | setupPlayer@2620 | `applySubtitleSettings` | call |
+| 4350 | setupControls@4139 | `showSubtitleSettingsPanel` | call |
+| 4682 | resetSubtitleState@4681 | `stopExternalSubtitleRendering` | call |
+| 4684 | resetSubtitleState@4681 | `subtitleTracks` | read |
+| 4860 | fetchStremioSubtitles@4824 | `subtitleSettingsVisible` | read |
+| 4861 | fetchStremioSubtitles@4824 | `refreshSubtitlePanelForLoading` | call |
+| 5097 | refreshSubtitleUiForLoading@5095 | `subtitleSettingsVisible` | read |
+| 5097 | refreshSubtitleUiForLoading@5095 | `refreshSubtitlePanelForLoading` | call |
+| 5107 | clearStremioLoadingState@5103 | `subtitleSettingsVisible` | read |
+| 5108 | clearStremioLoadingState@5103 | `refreshSubtitlePanelForLoading` | call |
+| 6298 | applyManualSubtitleIdentity@6267 | `stopExternalSubtitleRendering` | call |
+| 6312 | applyManualSubtitleIdentity@6267 | `subtitleSettingsVisible` | read |
+| 6313 | applyManualSubtitleIdentity@6267 | `refreshSubtitlePanelForLoading` | call |
+| 6677 | tryAutoSelectAddonSubtitle@6614 | `externalSubtitleActive` | read |
+| 6678 | tryAutoSelectAddonSubtitle@6614 | `stopExternalSubtitleRendering` | call |
+| 6709 | tryAutoSelectAddonSubtitle@6614 | `loadStremioSubtitle` | call |
+| 14071 | umEmbeddedTrackRows@14066 | `subtitleTracks` | read |
+| 14071 | umEmbeddedTrackRows@14066 | `rebuildSubtitleTrackList` | call |
+| 14073 | umEmbeddedTrackRows@14066 | `subtitleTracks` | read |
+| 14079 | umEmbeddedTrackRows@14066 | `currentSubtitleTrackIndex` | read |
+| 14116 | umAppearanceRows@14113 | `applyAndPersistSubtitleSettings` | call |
+| 14135 | umTimingRows@14118 | `externalSubtitleActive` | read |
+| 14139 | umTimingRows@14118 | `activeExternalSubtitleUrl` | read |
+| 14143 | umTimingRows@14118 | `externalSubtitleActive` | read |
+| 14148 | umTimingRows@14118 | `showSyncOverlay` | call |
+| 14165 | runSubtitleAutoSync@14162 | `activeExternalSubtitleUrl` | read |
+| 14232 | runSubtitleAutoSync@14162 | `activeExternalSubtitleUrl` | read |
+| 14248 | runSubtitleAutoSync@14162 | `applySubtitleSettings` | call |
+| 14341 | startAutoSyncLadder@14329 | `externalSubtitleActive` | read |
+| 14398 | maybeRunAutoSyncVerify@14396 | `externalSubtitleActive` | read |
+| 14406 | maybeRunAutoSyncVerify@14396 | `activeExternalSubtitleUrl` | read |
+| 14447 | maybeRunAutoSyncVerify@14396 | `activeExternalSubtitleUrl` | read |
+| 14454 | maybeRunAutoSyncVerify@14396 | `applySubtitleSettings` | call |
+| 14539 | umSelectSubtitleRowIndex@14538 | `subtitleTracks` | read |
+| 14540 | umSelectSubtitleRowIndex@14538 | `currentSubtitleTrackIndex` | write |
+| 14542 | umSelectSubtitleRowIndex@14538 | `applySelectedSubtitleTrack` | call |
+| 14547 | umSelectStremioSubtitleByUrl@14546 | `rebuildSubtitleTrackList` | call |
+| 14552 | umSelectStremioSubtitleByUrl@14546 | `subtitleTracks` | read |
+| 14559 | umSelectStremioSubtitleByUrl@14546 | `currentSubtitleTrackIndex` | write |
+| 14561 | umSelectStremioSubtitleByUrl@14546 | `applySelectedSubtitleTrack` | call |
+| 18001 | onStart@17965 | `externalSubtitleActive` | read |
+| 18001 | onStart@17965 | `startExternalSubtitleTicker` | call |
+| 18040 | onStop@18004 | `externalSubtitleTicker` | read |
+| 18291 | onDestroy@18152 | `subtitleSeekHandler` | read |
+| 18291 | onDestroy@18152 | `subtitleSeekRunnable` | read |
+
+TOTAL 48 in 20 decls.
+
+Breakdown of the 48: **24 in 12 activity declarations** (bindViews 1, setupPlayer 3, setupControls 1,
+resetSubtitleState 2, fetchStremioSubtitles 2, refreshSubtitleUiForLoading 2, clearStremioLoadingState 2,
+applyManualSubtitleIdentity 3, tryAutoSelectAddonSubtitle 3, onStart 2, onStop 1, onDestroy 2); **16 in
+the subtitle menu rows** (vanish with the add-on, replaced by 4 patches); **8 in feature 1** (vanish when
+moved together). Notable sites:
+- `setupPlayer` 2959 — inside the `subtitleListener` object (`if (externalSubtitleActive) return` in
+  `onCues`); 2973 — `SubtitleSettings.setActiveSubtitleIdentityProvider(this) { currentSubtitleIdentity() }`:
+  the **owner stays the activity** (`clearActiveSubtitleIdentityProvider(this)` at 18296 must still match),
+  only the lambda body is patched.
+- `onStop` 18040 — `externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }`: one
+  token (`externalSubtitleTicker`), handler stays.
+- `onDestroy` 18291 — `subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)`: two tokens, same
+  position (after player release, before the 18292 wholesale clear).
+
+**Outbound host needs** (feature 3 + rows): `player` ×6, `trackSelector` ×5, `stremioSubtitles` ×5,
+`currentStremioSubtitleIndex` ×7 (r/w), `isLoadingStremioSubtitles` ×1, `showSearchSubtitleDialog()` ×3,
+`userManuallySelectedSubtitle` ×3 (w), `currentSubtitleIdentityLabel()` ×1, `playerView` ×3 (+3 via
+`playerViewReady`), `subtitlePanel` ×3, `linePickerOverlay` ×4 (r/w), `syncOverlay` ×3 (r/w),
+`offsetRenderersFactory` ×3, `subtitleScope` ×1, `failedSubtitleUrls` ×1, `tryAutoSelectAddonSubtitle()`
+×1, `subtitleOverlay` ×5 (+3 via `subtitleOverlayReady`), `subtitleControlsLift` ×1, `payload` ×1,
+`currentIndex` ×2 (1 inside a template), `externalSubtitleHandler` ×3, status pill ×4 (`showStatusPill`,
+`showStatusPillTransient` ×2, `hideStatusPill`), `unifiedMenu` ×2; auto-sync (feature 1 owner) ×14
+(`autoSyncResultLabel`/`Url`/`AppliedOffsetMs` writes, `scheduleAutoSyncVerify`, `showSyncToast`,
+`start/cancelAutoSyncLadder`, `cancelAutoSyncVerify`, and from `umTimingRows` `autoSyncRunning` ×2,
+`autoSyncResultUrl`, `autoSyncResultLabel`, `runSubtitleAutoSync`).
+Android: `this` → `activity` ×14 (14775, 14780, 14897, 14914, 15074, 15076, 15142, 15413, 15415, 15416,
+15423, 15443, plus rows 14116, 14119); Runnable `this` 15130 not substituted; `findViewById` ×1 (14886).
+
+**Templates:** `currentSubtitleIdentity` 15395 `"idx:$currentIndex"` → `"idx:${host.currentIndex}"`
+(braced; mutation-prove the unbraced form as phase 3 did). `"$EXTERNAL_SUBTITLE_PREFIX …"` (14826) is a
+phase-2 top-level const — unchanged.
+
+**Timers/teardown:** owned `subtitleSeekHandler` (150 ms debounce in `applySubtitleSettings`), removed at
+18291 in place; ticker (`EXTERNAL_SUBTITLE_TICK_MS` 250 ms) on the borrowed handler (stopped 18040 in
+`onStop`, restarted 18001 in `onStart`, wholesale-cleared 18292); cue download in borrowed `subtitleScope`
+(`Dispatchers.IO` fetch, token-guarded by `externalSubtitleLoadToken`).
+
+**Tests:** no reflective/Dart anchor on moved members (`SubtitleSyncDismissTest` reflects the overlays,
+which stay; `TvSubtitleHelpersCharacterizationTest` targets phase-2 top-level helpers;
+`NativePlayerSettingsConsumptionTest` asserts `trackSelector` text-disable defaults through `create()` —
+behavioural, unchanged). **Zero retargets.** Characterization needed: track-list construction (embedded,
+external `⬇` rows, loading row, Off), selection apply for embedded/external/Off incl. sync-offset reset,
+panel callbacks, side-render ticker cue lookup with offset and overlapping cues, load success/failure
+fallback (previous index, re-enable text), token staleness, recall/announce, stop semantics, identity key,
+`applySubtitleSettings` renderer offset vs re-render vs 150 ms debounced seek, persistence channel call
+`saveSubtitleAppearance`.
+
+**Hazards:** 6 `::x.isInitialized` → 2 activity getters; `subtitlePanelCallbacks` is an anonymous object
+property (its unqualified names resolve to controller members after the move — verify `onHidden`'s
+`subtitleSettingsVisible`); `showSyncOverlay` writes host vars from inside `Runnable` lambdas
+(`linePickerOverlay = null`); field blocks split over three slots; logical cycle with feature 1 (two
+Host interfaces, no class-level import cycle).
+
+**Proposed shape:**
+```kotlin
+internal class TvSubtitleTrackController(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val player: ExoPlayer?; val trackSelector: DefaultTrackSelector?
+        val stremioSubtitles: MutableList<StremioSubtitle>; var currentStremioSubtitleIndex: Int
+        val isLoadingStremioSubtitles: Boolean; var userManuallySelectedSubtitle: Boolean
+        val failedSubtitleUrls: MutableSet<String>; val subtitleScope: CoroutineScope
+        val subtitlePanel: SubtitlePanelController?; val unifiedMenu: UnifiedMenuController?
+        var syncOverlay: SubtitleSyncOverlayController?; var linePickerOverlay: SubtitleLinePickerController?
+        val playerView: PlayerView; val playerViewReady: Boolean
+        val subtitleOverlay: SubtitleView; val subtitleOverlayReady: Boolean
+        val subtitleControlsLift: SubtitleControlsLiftController; val offsetRenderersFactory: OffsetRenderersFactory?
+        val payload: PlaybackPayload?; val currentIndex: Int; val externalSubtitleHandler: Handler
+        fun showSearchSubtitleDialog(); fun currentSubtitleIdentityLabel(): String; fun tryAutoSelectAddonSubtitle()
+        fun showStatusPill(message: String); fun showStatusPillTransient(message: String); fun hideStatusPill()
+        // auto-sync, read/written through the owning controller:
+        var autoSyncResultLabel: String?; var autoSyncResultUrl: String?; var autoSyncAppliedOffsetMs: Long?
+        val autoSyncRunning: Boolean
+        fun runSubtitleAutoSync(auto: Boolean = false); fun scheduleAutoSyncVerify(); fun startAutoSyncLadder()
+        fun cancelAutoSyncLadder(); fun cancelAutoSyncVerify()
+        fun showSyncToast(glyph: String, accent: Int, title: String, hint: String? = null, autoHideMs: Long?, uppercase: Boolean = true)
+    }
+}
+```
+(Exact types re-derived at step T; ≈ 34 Host members.)
+**Substitutions ≈ 103** (≈ 87 host incl. 1 braced template, 14 `this`, 1 `findViewById`, plus 6
+readiness-getter substitutions counted in host). **Activity patches: 24 (12 decls) + 4 menu-row callers
+= 28 with the rows; 45 (17 decls) without them; +8 if feature 1 is not moved with it.** Plus `added`:
+controller property + Host object, `playerViewReady`, `subtitleOverlayReady`. Size ≈ 571 + ≈ 70
+structural ≈ 640 ≤ 800. **Risk: medium** (user-visible subtitle selection; but single-threaded,
+token-guarded, no lifecycle reordering, no test retargets).
+
+---
+
+### 4. Audio track selection + display (aspect) / speed / night mode / system audio effects (rank 5: defer to phase 7)
+
+There is **no video-track selection** in this activity (no `TRACK_TYPE_VIDEO` override anywhere).
+"Display mode" splits in two: the **aspect/resize** cycle (this feature) and **display-mode matching**
+(`displayMatchMode` 266 / `displayModeController` 267, `TvDisplayModeController`), which is built in
+`loadPlayerDefaults`, fed from `decoderAnalyticsListener.onVideoFormatChanged` (288), consulted in
+`setupPlayer` (2860) and cleared first in `onDestroy` (18154–18155) — playback-core state, not movable here.
+
+**Owned state** (two field blocks → slot 749):
+
+| line | name | initializer |
+|---|---|---|
+| 749–752 | `resizeModeIndex` (`= 1`), `playbackSpeedIndex` (`= 2`), `nightModeIndex` (`= 0`), `loudnessEnhancer` (`LoudnessEnhancer? = null`, **native AudioEffect**) | |
+| 754–756 | `systemAudioEffectsEnabled` (`= false`, KDoc 754–755) | |
+| 1256–1269 | `resizeModes`, `resizeModeLabels`, `playbackSpeeds`, `playbackSpeedLabels`, `nightModeGains`, `nightModeLabels` | `val` arrays |
+
+(`skipSegmentsEnabled`/`skipSegmentProviderId` 757–758 sit inside the first block but belong to skip — phase 3.)
+
+**Owned functions:** `showAudioTrackDialog@14714`, `cycleAspectRatio@15448`, `applyResizeMode@15455`,
+`cyclePlaybackSpeed@15465`, `applyPlaybackSpeed@15470`, `syncAudioEffectSession@15494` (KDoc 15488),
+`initializeLoudnessEnhancer@15504`, `releaseLoudnessEnhancer@15522`, `showNightModeDialog@15583`,
+`applyNightMode@15594`. **21 members, 165 body lines, ≈ 176.** `loadPlayerDefaults@15535` (47 + KDoc) is
+**mixed**: it also writes `displayMatchMode`, `displayModeController` (`TvDisplayModeController(this, …)`,
+`Activity`-typed), `skipSegmentsEnabled`, `skipSegmentProviderId` and logs `controlsSkin` — keep it in the
+activity (it becomes 9 patches) or split it in a later behaviour-free step. `umAudioTracks`/
+`umAudioSelectedIndex` belong to the menu (feature 6). Labels/tints `updateAspectButtonLabel@7341`,
+`updateNightModeButtonLabel@7346` belong to the dock (phase 7).
+
+**Inbound:**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 278 | decoderAnalyticsListener@269 | `nightModeIndex` | read |
+| 278 | decoderAnalyticsListener@269 | `initializeLoudnessEnhancer` | call |
+| 279 | decoderAnalyticsListener@269 | `syncAudioEffectSession` | call |
+| 1422 | playbackListener@1408 | `playbackSpeeds` | read |
+| 1422 | playbackListener@1408 | `playbackSpeedIndex` | read |
+| 1541 | playbackListener@1408 | `loudnessEnhancer` | read |
+| 1541 | playbackListener@1408 | `nightModeIndex` | read |
+| 1542 | playbackListener@1408 | `initializeLoudnessEnhancer` | call |
+| 1549 | playbackListener@1408 | `syncAudioEffectSession` | call |
+| 1904 | playbackListener@1408 | `releaseLoudnessEnhancer` | call |
+| 1909 | playbackListener@1408 | `syncAudioEffectSession` | call |
+| 1911 | playbackListener@1408 | `nightModeIndex` | read |
+| 1912 | playbackListener@1408 | `releaseLoudnessEnhancer` | call |
+| 1913 | playbackListener@1408 | `initializeLoudnessEnhancer` | call |
+| 2702 | setupPlayer@2620 | `nightModeIndex` | read |
+| 2702 | setupPlayer@2620 | `systemAudioEffectsEnabled` | read |
+| 2702 | setupPlayer@2620 | `playbackSpeeds` | read |
+| 2702 | setupPlayer@2620 | `playbackSpeedIndex` | read |
+| 2944 | setupPlayer@2620 | `playbackSpeeds` | read |
+| 2944 | setupPlayer@2620 | `playbackSpeedIndex` | read |
+| 2977 | setupPlayer@2620 | `applyResizeMode` | call |
+| 4312 | setupControls@4139 | `showNightModeDialog` | call |
+| 4339 | setupControls@4139 | `showAudioTrackDialog` | call |
+| 4358 | setupControls@4139 | `cycleAspectRatio` | call |
+| 4368 | setupControls@4139 | `cyclePlaybackSpeed` | call |
+| 7342 | updateAspectButtonLabel@7341 | `resizeModeLabels` | read |
+| 7342 | updateAspectButtonLabel@7341 | `resizeModeIndex` | read |
+| 7347 | updateNightModeButtonLabel@7346 | `nightModeLabels` | read |
+| 7347 | updateNightModeButtonLabel@7346 | `nightModeIndex` | read |
+| 13991 | umAudioModel@13988 | `nightModeLabels` | read |
+| 13991 | umAudioModel@13988 | `nightModeIndex` | read |
+| 13995 | umAudioModel@13988 | `nightModeLabels` | read |
+| 13996 | umAudioModel@13988 | `nightModeIndex` | read |
+| 13996 | umAudioModel@13988 | `applyNightMode` | call |
+| 14645 | umDisplayModel@14643 | `resizeModeLabels` | read |
+| 14645 | umDisplayModel@14643 | `resizeModeIndex` | read |
+| 14647 | umDisplayModel@14643 | `resizeModeLabels` | read |
+| 14648 | umDisplayModel@14643 | `resizeModeIndex` | read |
+| 14649 | umDisplayModel@14643 | `resizeModeIndex` | write |
+| 14649 | umDisplayModel@14643 | `resizeModes` | read |
+| 14650 | umDisplayModel@14643 | `applyResizeMode` | call |
+| 14660 | umPlaybackModel@14658 | `playbackSpeedLabels` | read |
+| 14660 | umPlaybackModel@14658 | `playbackSpeedIndex` | read |
+| 14705 | umPlaybackModel@14658 | `playbackSpeedLabels` | read |
+| 14706 | umPlaybackModel@14658 | `playbackSpeedIndex` | read |
+| 14707 | umPlaybackModel@14658 | `applyPlaybackSpeed` | call |
+| 15539 | loadPlayerDefaults@15535 | `resizeModeIndex` | write |
+| 15541 | loadPlayerDefaults@15535 | `resizeModes` | read |
+| 15544 | loadPlayerDefaults@15535 | `nightModeIndex` | write |
+| 15546 | loadPlayerDefaults@15535 | `nightModeGains` | read |
+| 15549 | loadPlayerDefaults@15535 | `systemAudioEffectsEnabled` | write |
+| 15575 | loadPlayerDefaults@15535 | `resizeModeIndex` | read |
+| 15575 | loadPlayerDefaults@15535 | `nightModeIndex` | read |
+| 15575 | loadPlayerDefaults@15535 | `systemAudioEffectsEnabled` | read |
+| 15576 | loadPlayerDefaults@15535 | `nightModeIndex` | read |
+| 15851 | sendProgress@15776 | `playbackSpeeds` | read |
+| 15851 | sendProgress@15776 | `playbackSpeedIndex` | read |
+| 15852 | sendProgress@15776 | `resizeModeLabels` | read |
+| 15852 | sendProgress@15776 | `resizeModeIndex` | read |
+| 15893 | sendIptvProgress@15877 | `playbackSpeeds` | read |
+| 15893 | sendIptvProgress@15877 | `playbackSpeedIndex` | read |
+| 15894 | sendIptvProgress@15877 | `resizeModeLabels` | read |
+| 15894 | sendIptvProgress@15877 | `resizeModeIndex` | read |
+| 18263 | onDestroy@18152 | `releaseLoudnessEnhancer` | call |
+
+TOTAL 64 in 13 decls.
+
+By owner: **39 in 8 activity declarations** — `decoderAnalyticsListener` 3 (object property; 278–279),
+`playbackListener` 10 (1422, 1541–1549, 1904–1913), `setupPlayer` 7 (2702, 2944, 2977), `setupControls`
+4, `updateAspectButtonLabel`/`updateNightModeButtonLabel` 4, `loadPlayerDefaults` 10, `onDestroy` 1
+(18263); **17 in the menu** (`umAudioModel` 5, `umDisplayModel` 7 incl. a write, `umPlaybackModel` 5);
+**8 in progress** (`sendProgress`/`sendIptvProgress` speed + aspect).
+
+**Outbound:** `trackSelector` ×1, `player` ×5, `onIptvSeriesAudioPicked()` ×1, `updateAspectButtonLabel()`
+×1, `updateNightModeButtonLabel()` ×1, `playerView` ×3, `nativeAudioRouting` ×4, `ottSkinInstalled` ×1,
+`speedButton` ×2, `refreshOttCaptionFor()` ×1; `this` → `activity` ×7 (14733, 14738, 15452, 15467,
+15500, 15584, 15622). No templates on host state (the Toast templates read owned arrays).
+
+**Timers/resources/teardown:** no handlers. `LoudnessEnhancer` (native AudioEffect) is created on
+audio-track init (278), READY (1542), session change (1913) and night-mode apply; released on media
+transition (1904), session change (1912), route change, and in `onDestroy` at **18263** — after the
+handler clears, before `AudioEffectSession.closeCurrent(this)` (18267) and player release; that slot must
+stay. `AudioEffectSession.open(this, id)` uses the activity context. All callbacks on the main/
+application looper.
+
+**Tests:** `NativePlayerSettingsConsumptionTest.assertDefaults` reflects **`nightModeIndex`** by name on
+both player activities (shared helper) → retarget (moving the field) for the Android TV branch only.
+`NativeAudioRoutingTest` reads activity source for `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)`
+(in `setupPlayer`, unaffected). Phase-3 tests: none.
+
+**Hazards:** `decoderAnalyticsListener` and `playbackListener` are anonymous-object properties — patches
+inside them resolve through the activity; LoudnessEnhancer lifetime ordering across 5 call paths;
+`nativeAudioRouting.update(...)` / `reprepare(...)` ordering in `applyPlaybackSpeed`/`applyNightMode`
+(audio route + reprepare), all verbatim; two field slots.
+
+**Shapes considered:**
+- 4a — move state + behaviour: **≈ 176 lines, 39 activity patches + 17 menu + 8 progress = 64**, one
+  test retarget. Ratio ≈ 0.36.
+- 4b — state (indices/arrays) stays on the activity, behaviour + `loudnessEnhancer` move: ≈ 150 lines,
+  **≈ 18 call patches** (278, 279, 1541, 1542, 1549, 1904, 1909, 1912, 1913, 2977, 4312, 4339, 4358, 4368,
+  13996, 14650, 14707, 18263), ≈ 55 host substitutions, no retarget. Ratio ≈ 0.12, and it splits one
+  feature's state from its behaviour.
+
+**Recommendation:** defer to phase 7 with `playbackListener`/`setupPlayer`/`decoderAnalyticsListener`
+(where 20 of the 39 patches disappear), after the menu (feature 6) and progress (feature 5) own their
+reads. **Substitutions (4a): ≈ 27. Activity patches: 39 (+25 elsewhere). Risk: medium–high** (native
+audio-effect lifetime and audio-route reprepare on the playback-listener paths).
+
+---
+
+### 5. Progress reporting + recovery staging (rank 3: next unit after phase 4, or a small phase 4b)
+
+`sendProgress` is reached from six paths: the 5 s ticker (`progressRunnable` 1362), STATE_ENDED
+completion (`playbackListener` 1619), the sleep fire (phase-3 controller, via the activity's Host
+forwarder), `finish()` (15656), `onStop` (18014) and `onDestroy` (18165). It is gated by
+`isIptvMode`, `isStremioTvMode && startupSourcesExhausted`, the startup cursor, the manual-switch snapshot
+and restore flag, and writes the current item's progress back into the shared `payload`.
+
+**Owned state** (three field blocks → slot 1037):
+
+| line | name | initializer |
+|---|---|---|
+| 1037 | `recoverySequence` | `= 0L` (only `deliverProgress`) |
+| 1349–1356 | `locallyCompletedItemKeys`, `recoveryCompletedItemKeys` (comment 1349–1354) | `mutableSetOf<String>()` |
+| 15631–15635 | `progressSentCount`, `progressAckCount`, `lastProgressLogAt`, `lastProgressAckAt`, `lastProgressBridgeAvailable` | |
+
+**Stays in the activity (host), with reasons:**
+- `finalProgressSnapshot` 15636 — written around `sendProgress` in `finish` (15654/15658), `onStop`
+  (18013/18015) and `onDestroy` (18163/18167, inside try/finally); read only by `deliverProgress`
+  (15675, 15679). Moving it = 6 patches in lifecycle methods; keeping it = 2 host reads (phase-3
+  `sleepStopLatched` precedent).
+- `finishProgressAttempted` 15637 — used only by `finish()`.
+- `recordPlaybackLifecycle@15639` — 11 lifecycle callers (`onStart/Stop/Resume/Pause/Destroy`, `finish`,
+  back exit, ENDED); uses `System.identityHashCode(this)`, `isFinishing`, `isChangingConfigurations`. Keeping
+  it costs 2 patches (its reads of `progressSentCount`/`progressAckCount`); moving it would cost 11.
+- `progressHandler`, `progressRunnable`, `restartProgressUpdates@15626` — the shared 5 s ticker (Up Next,
+  IPTV recovery, twin trial): playback core, phase 7.
+- `finish()` override (cannot leave the activity).
+
+**Owned functions:** `deliverProgress@15669` (KDoc 15667), `stageRecoveryCheckpoint@15719`,
+`acknowledgeRecoveryCheckpoint@15772`, `sendProgress@15776`, `sendIptvProgress@15877` (KDoc 15868),
+`sendPlaybackMaintenanceState@15902`, `sendPlaybackActivityState@15912`, `sendFinished@15926`.
+**16 members, 267 body lines, ≈ 284.**
+
+**Inbound:**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 1362 | progressRunnable@1360 | `sendProgress` | call |
+| 1411 | playbackListener@1408 | `sendPlaybackMaintenanceState` | call |
+| 1619 | playbackListener@1408 | `sendProgress` | call |
+| 8073 | fireSleepTimer@8070 | `sendProgress` | call |
+| 15645 | recordPlaybackLifecycle@15639 | `progressSentCount` | read |
+| 15645 | recordPlaybackLifecycle@15639 | `progressAckCount` | read |
+| 15656 | finish@15649 | `sendProgress` | call |
+| 17936 | parsePayload@17794 | `locallyCompletedItemKeys` | read |
+| 17937 | parsePayload@17794 | `recoveryCompletedItemKeys` | read |
+| 17968 | onStart@17965 | `sendPlaybackActivityState` | call |
+| 18010 | onStop@18004 | `sendPlaybackActivityState` | call |
+| 18014 | onStop@18004 | `sendProgress` | call |
+| 18165 | onDestroy@18152 | `sendProgress` | call |
+| 18317 | onDestroy@18152 | `sendFinished` | call |
+
+TOTAL 14 in 9 decls.
+
+After phase 3, row 8073 is not in the activity: it is the phase-3 Host forwarder
+`override fun sendProgress(completed: Boolean)` (an `added`, pinned span) that must be repointed to the
+reporter — **1 edit to a phase-3 pinned span** (checker whitelist) instead of a `fireSleepTimer` patch.
+**Activity patches: 13 in 8 declarations + 1 phase-3 forwarder.** (Moving the whole C8 incl.
+`recordPlaybackLifecycle`, `finalProgressSnapshot`, `finishProgressAttempted` would be 31 patches in 11.)
+
+**Outbound host needs** (all reads except the payload item write): `sourcePersistenceSessionId` ×7,
+`finalProgressSnapshot` ×2, `recordPlaybackLifecycle()` ×5 (1-arg calls → Host default `details = ""`),
+`isIptvMode` ×2, `recoveryProfileId`, `recoveryDataGeneration` ×2, `recoveryStartedAtMs`, `recoveryTitle`,
+`recoverySeriesTitle`, `recoveryImdbId`, `isStremioTvMode`, `startupSourcesExhausted` ×2,
+`startupFailoverCursor`, `manualSourceSwitchSnapshot`, `manualSourceRestoreInProgress`,
+`startupRecoveryConsumed`, `payload` (mutated: `model.items[currentIndex] = updatedItem`), `currentIndex`
+×4 (one in template `"index:$currentIndex"` 15818 → braced), `player` ×9, `maxStableDurationMs`,
+`heldResumePositionMs()`, `playlistVisible`, `playlistAdapter`, `currentStremioSourceIndex`,
+`playbackSpeeds`/`playbackSpeedIndex` ×2 each, `resizeModeLabels`/`resizeModeIndex` ×2 each (feature-4
+state; forwarders repoint when display moves), `iptvChannels`, `currentIptvIndex` ×2. Android:
+`filesDir` → `activity.filesDir` ×3 (15766, 15769, 15773). No `this`. ≈ 30 Host members, read-only
+(no `var`).
+
+**Timers/teardown:** none owned. Order constraints are all at call sites, preserved in place:
+`onStop` (activity-state false → final snapshot → `super.onStop()` → tee finalize), `onDestroy` (final
+snapshot at 18165 before any teardown; `sendFinished` at 18317 after everything, just before
+`super.onDestroy()`), `finish()` (once-only snapshot before `PlaybackReturnHandoff.markReturning`).
+MethodChannel names/maps (`torrentPlaybackProgress` with result callback,
+`torrentPlaybackMaintenanceState`, `torrentPlaybackActivityState`, `torrentPlaybackFinished`) and the
+sync-vs-async staging rule (`TvPlaybackRecoveryStore.stage` when final/completed/localCompleted, else
+`stageAsync`) are verbatim. Single-threaded (result callbacks on main).
+
+**Tests / anchors (retargets required):**
+- `StremioTvStartupWatchdogTest` — `call(activity, "sendProgress", true)` (108, 119), `call(activity,
+  "sendProgress", false)` (120); `read(activity, "recoveryCompletedItemKeys")` (122, 141). Retarget to
+  the reporter; **`sendProgress` must be a public member of the internal class** (an `internal fun` is
+  name-mangled) — a declared visibility substitution; `recoveryCompletedItemKeys` stays `private`.
+- Dart `test/manual_source_validation_contract_test.dart` (≈ 333–346): `_between(nativePlayer,
+  'private fun sendProgress(', 'private fun commitStartupCandidate(')` asserting
+  `manualSourceSwitchSnapshot != null` and `manualSourceRestoreInProgress`. Breaks on the start marker →
+  retarget to the reporter file with `fun sendProgress(` … `fun sendIptvProgress(` (narrower, so stronger;
+  the asserted substrings survive as `host.manualSourceSwitchSnapshot != null`).
+- Behavioural observers (no change): phase-3 sleep tests (progress-before-pause via the fake messenger),
+  `PlaybackProgressPolicyTest`, `TvPlaybackRecoveryStoreTest`.
+
+**Proposed shape:** `internal class TvProgressReporter(activity: AppCompatActivity, host: Host)` with a
+≈ 30-member read-only Host. **Substitutions ≈ 63** (60 host incl. 1 braced template, 3 `filesDir`) + 1
+visibility. **Activity patches: 13 (8 decls) + 1 phase-3 forwarder; 6 test anchors retargeted.** Size ≈
+284 + ≈ 45 structural. **Risk: medium** — read on six paths incl. three lifecycle teardowns and the
+Trakt false-watch guards; mitigated by no timers, no threading change and existing coverage.
+
+---
+
+### 6. Unified-menu model (`um*`) (rank 4: defer; split per section later)
+
+**Owned state:** `subtitleSearchResults` 13898, `subtitleSearchStatus` 13899, `pendingSeriesResult` 13900,
+`pendingSeason` 13901, `pendingEpisode` 13902 (comment 13897), `unifiedSectionIds` 13905 (`listOf("audio",
+"subs", "display", "playback")` — "sources" is absent, so `umSourcesModel`/`umSourceRows`/`umAddLoadMoreRow`
+and the `onSectionActivated` "sources" branch are unreachable), `unifiedMenuCallbacks` 13921 (object
+property). Single block 13858–14712 → slot 13898.
+
+**Owned functions:** `umAudioTracks@13865`, `umAudioSelectedIndex@13883`, `umSectionRows@13907`,
+`umAudioModel@13988`, `umSubsModel@14022`, `umEmbeddedTrackRows@14066`, `umAddonTrackRows@14087`,
+`umAppearanceRows@14113`, `umTimingRows@14118`, `umSearchRows@14495`, `umPickSearchResult@14518`,
+`umSelectSubtitleRowIndex@14538`, `umSelectStremioSubtitleByUrl@14546`, `umSourceRows@14565`,
+`umAddLoadMoreRow@14583`, `umSourcesModel@14597`, `umDisplayModel@14643`, `umPlaybackModel@14658`.
+Note the block is **interleaved** with auto-sync (14153–14493) — the um members are not contiguous.
+**25 members, 472 body lines, ≈ 491.**
+
+**Inbound:**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2469 | bindViews@2395 | `unifiedMenuCallbacks` | read |
+| 2470 | bindViews@2395 | `unifiedSectionIds` | read |
+| 4688 | resetSubtitleState@4681 | `subtitleSearchResults` | write |
+| 4689 | resetSubtitleState@4681 | `subtitleSearchStatus` | write |
+| 4690 | resetSubtitleState@4681 | `pendingSeriesResult` | write |
+
+TOTAL 5 in 2 decls.
+
+(`bindViews` passes `callbacks = unifiedMenuCallbacks, sectionIds = unifiedSectionIds` to
+`UnifiedMenuController`; `resetSubtitleState` clears the search state on every item.)
+
+**Outbound host needs: 61 distinct members, ≈ 116 references** — essentially every other feature:
+`unifiedMenu` ×15, subtitle state (`stremioSubtitles` ×5, `addonSubtitleResults` ×3,
+`currentStremioSubtitleIndex` ×2, `isLoadingStremioSubtitles`, `subtitleTracks` ×4,
+`currentSubtitleTrackIndex` ×3 (w), `userManuallySelectedSubtitle` ×2 (w), `manualSubtitleSeason/Episode`,
+`rebuildSubtitleTrackList` ×2, `applySelectedSubtitleTrack` ×2, `showSyncOverlay`,
+`currentSubtitleIdentityLabel`, `retryAddonSubtitles`, `applyManualSubtitleIdentity` ×3,
+`getCurrentSubtitleSearchItem` ×3, `requestSubtitleCatalogSearchFromFlutter`), auto-sync (5), display/
+audio (`nightModeLabels/Index` ×4, `applyNightMode`, `resizeModeLabels/Index/Modes` ×6 (1 write),
+`applyResizeMode`, `updateAspectButtonLabel`, `playbackSpeedLabels/Index` ×4, `applyPlaybackSpeed`,
+`trackSelector`, `onIptvSeriesAudioPicked`, `player` ×2), sleep (phase-3 controller: value label, mode ×2,
+cancel, options, countdown, end-of-item), sources (`stremioSources` ×4, `sourceBrowser`,
+`currentStremioSourceIndex` ×2, `onStremioSourceSelected`, `moreSourcesLoadingMode`,
+`requestMoreTorrentSources`, `seriesSourceTabs`, `seriesPacksFetched`, `seriesEpisodesFetched`,
+`movieMoreSources`, `movieSourcesFetched`), shuffle (`continuousShuffleEnabled` ×5 (w), `resetShuffle` ×2,
+`playRandom` ×2), IPTV (`iptvChannels`, `currentIptvIndex`). Android: `this@…Activity` 13970
+(`stylePreview`), `this` 14116, 14119, 14698 (Toast in an `onOk` lambda). Labels
+`return@requestSubtitleCatalogSearchFromFlutter` survive `host.` qualification.
+
+**Timers/teardown:** none. **Tests:** phase-3 `TvSleepTimerCharacterizationTest.unifiedMenuRows…` reflects
+`umPlaybackModel(List, Int)` on the activity → retarget (keep it `private` in the controller to avoid
+mangling). `UnifiedMenuControllerTest` targets the controller class, not the model.
+
+**Assessment:** only **5 activity patches**, but a **61-member Host** (against the narrow-host rule) and
+every later phase that moves a menu source (display/audio, sources, shuffle, addon subtitles) would have
+to edit this Host's pinned forwarders. It is a pure sink: move it **last**, or split it per section into
+the owning controllers as they move — subtitle rows now (feature 3 add-on), audio/display/playback rows
+with the phase-7 display unit, sources rows with phase 6. **Substitutions ≈ 120. Activity patches 5;
+1 test retarget. Risk: low behaviourally, high churn.**
+
+---
+
+### Ranking (activity patches per moved line, then risk)
+
+| rank | feature | lines out | activity patches (decls) | edits to phase-3 pinned spans | test retargets | risk |
+|---|---|---|---|---|---|---|
+| 1 | Auto-sync engine + pill | ≈ 516 | **14 (3)** alone; **0** with rank 2 | 0 | 0 | low–med |
+| 2 | Subtitle render / selection / panel wiring (+ 5 subtitle menu rows) | ≈ 490 (+ 81 = 571) | **24 (12) + 4 (2) = 28** with rows; 45 (17) without; +8 without rank 1 | 0 | 0 | med |
+| 3 | Progress reporter | ≈ 284 | **13 (8)** | 1 (sleep `sendProgress` forwarder) | 5 Kotlin + 1 Dart | med |
+| 4 | Unified-menu model | ≈ 491 | 5 (2), but 61-member Host | (every later phase) | 1 Kotlin (phase-3 test) | low / high churn |
+| 5 | Audio track / aspect / speed / night / effects | ≈ 176 | 39 (8) + 17 menu + 8 progress | 0 | 1 Kotlin | med–high |
+| 6 | Status pill | ≈ 55 | 40 (18) | 0 now; 3 forwarders later | 0 | low |
+
+### Recommended phase 4 set
+
+**Auto-sync engine + pill (1) and subtitle rendering/selection/panel wiring (2), including the five
+subtitle menu-row builders**, as two controllers:
+
+| controller | members | lines (moved + structural) |
+|---|---|---|
+| `TvSubtitleAutoSyncController` | 32 | ≈ 516 + 30 ≈ 546 |
+| `TvSubtitleTrackController` | 32 (+ 2 companion consts) | ≈ 571 + 70 ≈ 640 |
+
+- **≈ 1,087 moved lines for 28 activity patches in 14 declarations** (≈ 0.026 patches/line, better than
+  phase 3's ≈ 0.067), **zero test retargets, zero edits to phase-3 pinned spans**, ≈ 156 declared
+  substitutions (≈ 23 `this`/`this@` sites for the overload audit, 6 `::isInitialized` via 2 new activity
+  getters, 1 braced template), two companion consts moved file-private.
+- Lifecycle edits are in-place token patches only: `onStart` 18001 (2), `onStop` 18040 (1), `onDestroy`
+  18291 (2). `externalSubtitleHandler` (18292), `subtitleScope` (18245) and
+  `SubtitleSettings.clear…Provider(this)` (18296) are untouched.
+- If the reviewer rejects menu rows inside the subtitle controller: same two controllers without them,
+  **≈ 1,006 lines / 45 patches (17 decls)**.
+- Step-0 cost is the main risk: a deterministic `SubtitleAligner` shadow, a `SpeechFeatureTap`/cue-cache
+  fixture and the profile pref projection, plus full characterization of the side renderer and track list.
+  Step-T additions: multi-block field ownership with one slot anchor (and a negative), cross-controller
+  Host forwarders (`this@AndroidTvTorrentPlayerActivity.subtitleAutoSync.x`), Host-interface default
+  parameters (`showSyncToast`, `runSubtitleAutoSync`), a negative for rewriting the shadowed local
+  `subtitleTracks` in `showSubtitleTrackDialog`, and the overload audit for the new `this` sites.
+
+**Alternative** if engine characterization proves unreliable (like the phase-3 skip fallback): auto-sync
+(1) + progress (3) ≈ 800 lines, 27 patches + 1 phase-3 forwarder + 6 retargets; or subtitle (2) +
+progress (3) ≈ 855 lines, 49 patches.
+
+**Deferred, with reasons:**
+- **Progress reporter** → first item of the next phase (or a 4b mini-batch): good ratio, but it needs a
+  reviewed edit to the phase-3 sleep forwarder, 5 reflective + 1 Dart anchor retargets, a visibility
+  substitution for reflection, and it reads display state that later moves. Keeping it out keeps phase 4
+  free of retargets.
+- **Status pill** → phase 6 (34 of 40 call sites are in episode fetch / startup gate / source switcher);
+  per-site patching is legal but the worst ratio (40 patches / 55 lines) and would be re-edited in phase 6.
+- **Audio/display/speed/night/effects** → phase 7 with `playbackListener`, `setupPlayer` and
+  `decoderAnalyticsListener` (20 of its 39 patches live there; native `LoudnessEnhancer` lifetime;
+  `loadPlayerDefaults` mixed ownership; `nightModeIndex` reflection).
+- **Unified-menu model** → last, or dissolved section-by-section into owning controllers (subtitle rows
+  already in phase 4); moving it now creates a 61-member Host that every later phase would edit.
+
+### onDestroy/onStop/onStart positions touched by any candidate (current lines)
+
+| line | statement | candidate | phase-4 recommended? |
+|---|---|---|---|
+| 17967–17968 | `recordPlaybackLifecycle` / `sendPlaybackActivityState(true)` | 5 | no |
+| 18001 | `if (externalSubtitleActive) startExternalSubtitleTicker()` | 2 | **yes (2 tokens)** |
+| 18010, 18013–18015 | activity state false; final snapshot `sendProgress` | 5 | no |
+| 18040 | `externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }` | 2 | **yes (1 token)** |
+| 18163–18167 | final snapshot `sendProgress` (try/finally) | 5 | no |
+| 18245 | `subtitleScope.cancel()` (borrowed by 1, 2) | — | unchanged |
+| 18258 | `progressHandler.removeCallbacksAndMessages(null)` | — | unchanged |
+| 18263 | `releaseLoudnessEnhancer()` | 4 | no |
+| 18288–18290 | `syncOverlay`/`linePickerOverlay` cleanup | (stay in activity) | unchanged |
+| 18291 | `subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)` | 2 | **yes (2 tokens)** |
+| 18292 | `externalSubtitleHandler.removeCallbacksAndMessages(null)` (pills, ladder, verify, ticker) | 1, 2, 6 | unchanged (borrowed) |
+| 18317 | `sendFinished()` | 5 | no |
+
+### Follow-ups found while mapping (not fixed)
+
+- `onStop` removes only the side-subtitle ticker from `externalSubtitleHandler`; the auto-sync ladder
+  (8 s, exits when no external subtitle) and verify (120 s, skipped while paused) ticks and pill runnables
+  keep being posted while the activity is stopped.
+- `autoSyncPillResultShowing` is write-only.
+- Auto-sync pill and status pill views are never removed and their fade animators are never cancelled.
+- `loadPlayerDefaults` mixes display/night/effects defaults with display-mode matching and skip-segment
+  preferences.
+- `showSubtitleTrackDialog` (dead) declares a local `subtitleTracks` that shadows the field.

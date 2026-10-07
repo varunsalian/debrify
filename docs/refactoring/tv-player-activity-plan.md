@@ -734,6 +734,80 @@ near the end of an episode (auto-advance and dismiss), status pill messages
 during source switching and subtitle loads, IPTV recording start/stop (tee
 and engine), scheduled recording confirmation.
 
+## Phase 4 — subtitle rendering/selection and the auto-sync engine
+
+Branch `refactor/tvplayer-p4` off the phase-3 merge `eee52b084` (activity 18,265 lines). The phase-3 initializer-timing rule applies (moved initializers running earlier must be listed and proven inert, else slots preserved). Evidence under
+`refactor-evidence/tvplayer/p4/`. The feasibility inventory (ranked
+candidates, every inbound reference, ownership choices, hazards) is the
+"Phase 4 inventory" section of the deps report; its line numbers are at
+`ec365eb80` and are re-measured on the phase-3 merge before the manifest is
+written.
+
+**Selected:** two controllers following the phase-3 collaborator pattern
+(all its rules apply unchanged: `AppCompatActivity` injection with the
+overload audit, computed explicitly-qualified Host forwarders, slot-anchored
+controller properties, activity-owned readiness getters, braced host
+templates, cross-feature reads via the owning controller, no delegators,
+teardown order unchanged):
+
+- `TvAutoSyncController` — the auto-sync engine (manual run, ladder, verify
+  pass, cue cache, audio-tap use) and its pill/ring UI wiring (≈ 516 lines).
+- `TvSubtitleController` — external (Stremio) subtitle loading/rendering,
+  subtitle track selection, the subtitle settings panel wiring and the five
+  subtitle unified-menu row builders (≈ 571 lines).
+
+≈ 1,087 moved lines for ≈ 28 activity call-site patches in 14 declarations;
+no existing-test retargets expected. Lifecycle edits are in-place token
+patches in `onStart`/`onStop`/`onDestroy`; statement order unchanged.
+
+**Ownership.** `externalSubtitleHandler`, `subtitleScope`, the two sync
+overlays (`syncOverlay`, `linePickerOverlay`) and `speechTap` stay in the
+activity and are **borrowed** by the controllers through the Host (the
+activity remains their owner and keeps clearing/cancelling them exactly
+where it does today; `SubtitleSyncDismissTest` reflects the overlays on the
+activity and stays unchanged). The controllers never clear a borrowed
+handler or cancel a borrowed scope.
+
+**Behaviour to preserve exactly** (from the inventory/survey): manual
+auto-sync catches `Throwable` (the MiBox OOM fix) while the periodic verify
+pass catches only `Exception`; ladder/verify timings; the pill's result
+states and colours; subtitle offset and selection semantics; external
+subtitle ticker cadence on the shared handler; cue-cache bounds.
+
+**Deferred with reasons:** progress reporter (needs 6 test retargets and an
+edit to the phase-3 sleep `sendProgress` forwarder → its own phase);
+display/audio/speed/night mode (20 patches inside `playbackListener`/
+`setupPlayer`/analytics listener, native audio-effect lifetime → with the
+playback core); unified-menu model (Host would need 61 members → split into
+owning controllers as they move); status pill (34 of 40 callers move in
+phase 6 → with them).
+
+### Step 0 — characterization of the original
+
+Prerequisite (as phase 3's skip HTTP shadow): a deterministic test seam for
+the subtitle aligner, the audio tap and the cue cache, keeping the production
+coroutine/handler dispatch — demonstrated on the original first. If it cannot
+be made reliable, the fallback set is auto-sync + progress reporter (the
+inventory's alternative), re-reviewed before execution.
+
+- Auto-sync: manual run success/failure/OOM (`Throwable`) paths, ladder
+  steps and timings, verify pass (`Exception` only), restore/decline result
+  states, pill transitions (busy/ok/fail colours, label, countdown, ring
+  pulsing on/off), cancellation on stop/destroy, pending ticks after `onStop`
+  (pinned as-is; a recorded follow-up).
+- Subtitles: external subtitle load/render ticker cadence, stale-load
+  rejection, selection (embedded vs external, off), offset changes, settings
+  panel callbacks, the five menu rows' labels and actions, `onStart`/`onStop`
+  resume/suspend behaviour.
+- Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus every phase-3 gate addition. Device checklist (end of
+series): external subtitles (load, timing, offset), subtitle track switching
+incl. off, subtitle settings panel, auto-sync manual run + automatic verify
+(incl. a long file on a low-RAM box), the auto-sync pill states.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
