@@ -77,8 +77,13 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
      base SHA (top-level, class members incl. property initializers and
      `init` blocks, nested types, companion members) is assigned exactly one
      fate in the manifest: `retained` (stays in the original file),
-     `moved` (destination file + declared substitutions) or `rewritten`
-     (only with a reason and a named test). Unassigned, doubly assigned,
+     `moved` (destination file + declared substitutions) or `patched`.
+     **`patched` is forbidden in phase 1.** In later phases it is allowed
+     only for wiring edits and is expressed as exact before→after token
+     patches with occurrence counts; the checker applies the patches to the
+     original declaration and compares the **entire** resulting declaration
+     token-for-token (a reason and a named test supplement, never replace,
+     that comparison). Unassigned, doubly assigned,
      surviving-after-move (original and destination both present) and
      unexpected new declarations in the original file or any destination are
      errors.
@@ -87,8 +92,38 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
      call that now targets a collaborator), and retained members keep their
      relative order, so property-initializer and `init` order cannot change
      silently. File-level items are validated: `package`, file annotations
-     (`@file:`), the class-level `@OptIn`, and the import list (only removals
-     of imports proven unused, and additions in destinations).
+     (`@file:`), the class-level `@OptIn`, and the import lists: **the
+     activity's imports are frozen in phase 1** (any leftover unused import
+     is harmless and is cleaned up later as its own reviewed step with an
+     explicit removal list in the manifest); every destination's import list
+     must equal an exact reviewed list in the manifest. (Kotlin 2.2.20 emits
+     no unused-import diagnostic, so compiler warnings cannot prove an import
+     unused.)
+   - **Partitioning.** A split container (the activity class, whose nested
+     types leave) is not compared whole. The checked spans are disjoint and
+     together cover the whole original file: whole moved subtrees; for each
+     split container its header, its opening/closing braces and its ordered
+     list of children; every intervening comment/blank-line/token run between
+     children (attached to the following child, or to the container's
+     closing brace). Declarations are identified by overload-safe selectors
+     (kind + name + parameter type list as written + container path, e.g.
+     `fun parseIptvChannels(JSONArray)` vs `fun parseIptvChannels(String)`;
+     `init#n` for the n-th `init` block; property by name; companion and
+     anonymous objects by container path). Expression bodies, delegated
+     properties, constructor properties, anonymous objects and nested `init`
+     blocks are handled; anything the parser cannot classify is an error, never
+     silently skipped.
+   - **Parser.** Declaration structure comes from the real Kotlin PSI pinned to
+     the project's Kotlin **2.2.20** (`kotlin-compiler-embeddable:2.2.20`,
+     already resolvable from the Gradle cache used by the app build), via a
+     small JVM adapter under `dev/tool/kotlin_psi/` that dumps the declaration
+     tree (kinds, selectors, exact offsets) and the token stream as JSON;
+     Python orchestrates the manifest logic. If the adapter cannot be built
+     offline, stop and report rather than fall back to a hand-written parser.
+     Before any production move the checker must (a) self-compare the
+     original file at the base SHA with an all-`retained` manifest (zero
+     diffs, every declaration classified) and (b) pass a complete phase-1
+     extraction fixture.
    - **Lexing.** A real Kotlin lexer for Kotlin 2.2.20 syntax: nested block
      comments, KDoc, string templates `$x`/`${…}` with nesting, raw strings,
      char literals, backtick identifiers, annotations with use-site targets,
@@ -106,8 +141,9 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
      change, undeclared visibility change, missing declaration, duplicate
      move, original+destination both present, unexpected new declaration,
      retained-body edit, property-initializer reorder, template-content
-     change, import change in the original that is not an unused-import
-     removal.
+     change, any import change in the original, a destination import list
+     differing from the manifest, an overloaded-function mix-up, and a
+     `patched` declaration with one extra edit beyond its declared patches.
 3. **Characterize the original first (step 0).** Before any move in a phase,
    add Robolectric/JVM tests that pin the phase's observable behaviour on the
    **original** code, prove each with an assertion-failing mutation of the
@@ -238,8 +274,8 @@ name + constructor order — moves with shuffle in phase 7);
 
 - Destination files import exactly what they need (`com.debrify.app.R`,
   Glide, Media3 `UnstableApi`, views); imports are not part of the token
-  comparison but unused imports must not be added. The activity's import list
-  only loses imports that become unused (checked by compile warnings diff).
+  comparison; each destination's import list is pinned exactly in the
+  manifest. The activity's import list is frozen in phase 1 (rule 2).
 - R8: covered by the existing broad `-keep class com.debrify.app.** { *; }`
   (rule 5); no rule changes. The gate's mapping check covers all ten
   destination files' classes, nested holders (`ViewHolder`s, companions,
@@ -276,9 +312,14 @@ the original file and then unchanged after the moves:
   handling the adapter installs. In addition, explicitly:
   - season/group ordering and filtering, and a recycled holder going from a
     missing-episode row to an actual row (and back) leaves no stale state;
-  - payload (partial) binds: the progress payload path and active-position
-    notifications of `PlaylistAdapter` (≈20698), Stremio TV guide partial
-    binds (≈21982);
+  - all four payload (partial) bind overloads — `PlaylistAdapter` (≈20698),
+    `MoviePlaylistAdapter` (≈21151, progress payload accepted anywhere in the
+    list), `IptvChannelAdapter` (≈21573, EPG payload recognised only as the
+    first payload, focus/scale preserved) and `StremioTvGuideAdapter`
+    (≈21982) — each with empty, unknown and mixed payload lists, asserting
+    partial-versus-full bind effects; plus the active-position and progress
+    notifications of both playlist adapters, including hidden items and an
+    unchanged active position;
   - IPTV channel identity-based notifications, DiffUtil updates, list
     readiness / mutable membership and stale-EPG request eligibility
     (≈21637, ≈21722);
@@ -294,11 +335,18 @@ the original file and then unchanged after the moves:
   Robolectric 4.15.1 runs `INFINITE` as one repeat, which is not production
   behaviour and must not be asserted as such), the repeated-start guard,
   stop/reset, cancellation on detach, `arcColor` changes, and non-pixel draw
-  assertions (circle/arc calls and paint colour/stroke/alpha) via legacy
-  canvas recording.
+  assertions through a test-only recording `Canvas` subclass that **copies
+  the `Paint` inside each `drawCircle` call** (Robolectric's legacy
+  recording stores the live `Paint`, which the ring mutates after the halo
+  — alpha reset, style → `FILL` — so post-hoc inspection is wrong). Assert
+  the halo and dot snapshots (radius, colour, style, stroke width, alpha);
+  mutations prove the halo alpha/stroke assertions. (The view draws circles
+  only — no arcs.)
 - Mutation proofs on the original for every test; Claude samples ≥ 10 more.
 
-**Access to private originals.** Every phase-1 target is file-private or a
+**Access to private originals.** `PlaybackItem` and both
+`mergeLateMetadata*` functions are already `internal` and keep their existing
+direct test access. Every other phase-1 target is file-private or a
 private nested type today (`StremioSource`, `PlaybackPayload`, all five
 top-level adapters and their entry/model classes, the two nested picker
 adapters, `AutoSyncColors`, the `inner` `AutoSyncRingView`, whose
@@ -355,3 +403,10 @@ guide; auto-sync ring animates during subtitle auto-sync.
   rules 2, 5, 6 and phase-1 step 0. Clean JVM baseline recorded:
   `junit/baseline-39c630303/identities.json` at `8bb284e3c` (docs-only over
   `39c630303`): 259 identities, 258 pass, 1 known failure.
+- 2026-10-07 — design round 2 (Codex): baseline P1 resolved; new P1
+  (`rewritten` fate bypassed exact comparison → `patched` forbidden in
+  phase 1, exact token patches + whole-declaration compare later); P2s
+  folded: PSI-backed partitioning with overload-safe selectors and
+  original self-comparison, frozen activity imports + exact destination
+  import lists, Paint-copying recording canvas, all four payload-bind
+  overloads.
