@@ -569,8 +569,10 @@ phases than the original seven.
 
 **Selected features** (ranked by patch count and risk in the inventory):
 sleep timer (≈ 68 lines, 13 call-site patches), skip segments (≈ 230, 8),
-Up Next card (≈ 118, 12), status pill (≈ 58, delegating members),
-IPTV recording actions (≈ 395, 21). **Deferred, with reasons:** PikPak
+Up Next card (≈ 118, 12), IPTV recording actions (≈ 395, 21). **Status pill
+deferred** (design round 1): keeping its 40 call sites verbatim needs
+delegators, i.e. one original declaration with two verified outputs, which
+the checker does not model; it moves later together with its callers. **Deferred, with reasons:** PikPak
 retry (shares `pikPakRetryId` with the startup gate → phase 6), auto-sync
 pill (belongs with the auto-sync engine → phase 4), "Next" overlay (one
 patch per line; reflected by a test → phase 6/7).
@@ -582,8 +584,9 @@ patch per line; reflected by a test → phase 6/7).
   into the class body, in original order, with only declared substitutions:
   `this` (when it means the activity/Context) → `activity`; inherited
   Activity members (`isFinishing`, `isDestroyed`, `runOnUiThread`,
-  `findViewById`, `getSharedPreferences`, `MODE_PRIVATE`, `resources`,
-  `window`, `currentFocus`, `startService`) → `activity.` qualified; host
+  `findViewById`, `getSharedPreferences`, `resources`, `window`,
+  `currentFocus`, `startService`) → `activity.` qualified; inherited
+  *static* members (`MODE_PRIVATE`) → `Context.MODE_PRIVATE`; host
   state and calls → `host.x`. A `this` that refers to an anonymous
   `Runnable`/`object` (inventory lists them, e.g. the Up Next ticker) is
   never substituted; the checker gets each substitution with an exact token
@@ -592,17 +595,29 @@ patch per line; reflected by a test → phase 6/7).
 - **Host interfaces** are narrow (only the members the moved bodies use) and
   are implemented by an `object : Tv<Feature>Controller.Host { … }` inside the
   controller's property initializer in the activity. Host members are
-  one-line forwarders to existing activity members (no logic). The activity's
-  class header does not change.
+  one-line forwarders to existing activity members (no logic), and their
+  binding is fixed: properties are **computed** (`override val player get()
+  = this@AndroidTvTorrentPlayerActivity.player`, `override var x get() = … set(v)
+  { this@AndroidTvTorrentPlayerActivity.x = v }`), never initialized `val`s
+  (no snapshot, no premature `lateinit` read); every forwarder targets
+  `this@AndroidTvTorrentPlayerActivity` explicitly (a same-name unqualified
+  reference inside the object would recurse); no Host member is read during
+  construction. The activity's class header does not change.
 - **Construction order.** The controller property is declared exactly where
   the feature's field block was, so property-initializer order and creation
   time of Handlers/scopes are unchanged (Handlers and the skip coroutine
   scope are created in the controller's own initializers, in the same
   relative order).
 - **`::x.isInitialized`** cannot be qualified across objects. Each such check
-  in moved code becomes a host getter with the identical expression
-  (`val skipSegmentButtonReady: Boolean get() = ::skipSegmentButton.isInitialized`)
-  evaluated at the same moment; each is a declared substitution.
+  becomes an **activity-owned** private getter with the identical expression
+  (`private val skipSegmentButtonReady: Boolean get() =
+  ::skipSegmentButton.isInitialized`, an `added` declaration), which the Host
+  forwards explicitly; it is evaluated at the same moment as before; the
+  moved-code use is a declared substitution.
+- **String templates.** A host-qualified name inside a template must use the
+  braced form: `$skipSegmentProviderId` → `${host.skipSegmentProviderId}` (a
+  bare `$host.x` would interpolate the Host object). Declared per occurrence;
+  a checker negative proves the unbraced form fails.
 - **State not cleanly ownable stays** in the activity behind the host (e.g.
   `sleepStopLatched`, written in 5 places, read on 7 playback paths).
 - **Teardown order is unchanged**: `onDestroy`/`onStop`/`onPause` keep their
@@ -610,13 +625,6 @@ patch per line; reflected by a test → phase 6/7).
   same position (a declared call-site patch). Borrowed handlers (e.g.
   `externalSubtitleHandler` for the status pill) stay owned and cleared by
   the activity; the controller never clears a borrowed handler.
-- **Status pill delegators.** The 40 status-pill call sites stay verbatim:
-  `showStatusPill`, `showStatusPillTransient`, `hideStatusPill` remain as
-  one-line `private` activity members that delegate to `TvStatusPill`
-  (declared `patched` rows whose whole body is the delegation). This is the
-  only delegator use in phase 3; it is recorded as a temporary structure with
-  an exit (the call sites move with their features in phases 4–6, after which
-  the delegators are removed).
 - **Companion constants** used by one feature only move with it as
   file-private constants (Up Next ×3, skip ×2 incl. `IMDB_ID_REGEX`).
 - **Reflection.** Kotlin mangles JVM names of `internal` members; tests that
@@ -624,19 +632,32 @@ patch per line; reflected by a test → phase 6/7).
   `internal` class, never an `internal fun`. Dart source-text anchors on
   `triggerUpNext`/`dismissUpNext` are retargeted to the new file with equal
   assertions.
-- **Checker extensions (step T).** New fates: `moved` into a class body
-  (destination selector = class + order), `added` for the declared new
-  activity declarations (each controller property incl. its host object,
-  and host getters) pinned by exact token text in the manifest, and
-  delegator `patched` rows. New negatives: an extra `this`→`activity`
+- **Checker extensions (step T).** Destinations are partitioned
+  exhaustively like the original: every span of every destination file is
+  owned — moved members (selector = class + order, compared to the original
+  plus substitutions) or **pinned structural spans** (class header,
+  constructor and its defaults, `Host` interface, any other new declaration,
+  file-level items), each compared to exact token text in the manifest; any
+  unowned destination declaration fails. In the activity, `added` declarations
+  (controller properties incl. their Host object, readiness getters) are
+  pinned by exact text **and anchored to an original slot** (the position of
+  the feature's first removed field), so a controller property cannot move
+  among the initializers. Phase-3 fixtures are wired into
+  `test_kotlin_moves.py`'s dispatcher; a complete phase-3 positive extraction
+  fixture must pass before production moves. New negatives: an extra `this`→`activity`
   rewrite at an undeclared position, a host forwarder containing logic
   beyond its pinned text, a moved field reordered inside the controller, an
   `added` declaration differing from its pinned text, teardown statement
-  reordering in `onDestroy`. Also: manifests are phase-scoped (each
+  reordering in `onDestroy`, an added constructor side effect, an unexpected
+  `init` block in a controller, a changed Host declaration, a relocated
+  controller property, an unbraced host template. Also: manifests are phase-scoped (each
   describes the activity at its own phase's completion), so the checker
   gains `--at <sha>` to verify a historical manifest against its phase's
   merge commit (phase 1 at `dcbd9aafe`, phase 2 at `ec365eb80`), and the
-  integration checks run every manifest that way.
+  integration checks run every manifest that way. In addition, every earlier
+  phase's destination file is compared in the current tree against its
+  approved revision (`ec365eb80`), with an explicit, reviewed whitelist for
+  any later change (none expected in phase 3).
 
 ### Step 0 — characterization of the original
 
@@ -649,7 +670,14 @@ Flutter channel where needed), mutation-proved:
   false)` → pause → release screen → toast), playbackListener interactions
   (end-of-item consumes and cancels), `onDestroy` cancellation, unified-menu
   rows wiring.
-- **Skip segments:** request construction (IMDb extraction, season/episode),
+- **Skip segments** (prerequisite: a deterministic network fixture — a
+  test-only Robolectric shadow of the private `SkipSegmentHttpClient` with
+  latch-controlled responses, keeping the production coroutine body and
+  IO/Main dispatch — demonstrated on the original first; if it cannot be made
+  reliable, skip segments are **deferred** out of phase 3): the complete
+  request key incl. provider id and stream duration (provider changes,
+  different durations; mutation-prove the unbraced-template mistake),
+  request construction (IMDb extraction, season/episode),
   cache bound (`MAX_SKIP_SEGMENT_CACHE_ENTRIES`), stale-result rejection
   (request identity), button visibility vs `hasEverBeenReady`, skip action
   seek target, reset on `playItem` (order: `hasEverBeenReady` reset → Up
@@ -660,9 +688,18 @@ Flutter channel where needed), mutation-proved:
 - **Status pill:** lazy creation (view tree position, dp sizes), show/
   transient (1,400 ms) /hide, hide runnable on the borrowed handler.
 - **IPTV recording actions:** gating (engine on, recordable URL, permissions
-  path), start/stop toggles for tee and engine recording, file naming
-  (phase-2 helpers), `RecordingRegistry` listener add/remove order, finalize
-  in `onStop`/`onDestroy`, scheduled-recording confirmation path.
+  path incl. SDK 28/29/33 branches), start/stop toggles for tee and engine
+  recording (service-intent payloads), file naming (phase-2 helpers),
+  `RecordingRegistry` listener add/remove order and a queued notification
+  followed by listener removal before the looper drains (membership is
+  evaluated when the posted notification runs), finalize/publication in
+  `onStop`/`onDestroy` through a fake MediaStore provider, first-access timing
+  of the lazy `recordingEngineEnabled` (preference changed before vs after
+  first access) and the retained lazy tee, and profile/resource authorization
+  evaluated **when the confirmation is clicked** (change while the dialog is
+  open) followed by the persisted schedule payload.
+- **Host liveness:** player replacement and view binding after controller
+  construction are observed by the controllers (forwarding is live).
 - **Carried from phase 1:** `AutoSyncRingView` repaint requests
   (invalidate on colour change, animator update, stop/reset).
 - Claude's independent mutation sample; 0b closes survivors.
@@ -1033,3 +1070,10 @@ and engine), scheduled recording confirmation.
   d01 closed in 0b. Independent Codex review (fresh session): **No P1s, no
   findings**. Decoder verification remains pending-environment (CI release
   build, end-of-series checklist). Phase 2 complete; merged.
+- 2026-10-07 — phase 3 design round 1 (Codex): P1s folded (status pill
+  deferred — no two-output delegator in the checker; exhaustive destination
+  partitioning with pinned structural spans and slot-anchored `added`
+  controller properties, phase-3 fixtures first); P2s folded (computed,
+  explicitly-qualified Host forwarders; braced host templates; skip network
+  fixture prerequisite or deferral; recording evaluation-time cases;
+  current-tree check of earlier destinations); P3 `Context.MODE_PRIVATE`.
