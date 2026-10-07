@@ -900,3 +900,10 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   manifest protected hashes unchanged. No independent review performed:
   Claude runs the separate session. **Stopped after phase 2** with no push,
   branch switch, device/emulator interaction or bug fix.
+- 2026-10-07 — phase 2 post-implementation reviews of `2df3c1a9f..dec50b884`.
+  Claude: activity diff is removals plus the single patched call site;
+  footprint limited to tv/ Kotlin, tests, dev/tool and docs; size baseline
+  only 19,961 → 19,017; Claude's 16-mutation sample 15/16 killed, survivor
+  d01 closed in 0b. Independent Codex review (fresh session): **No P1s, no
+  findings**. Decoder verification remains pending-environment (CI release
+  build, end-of-series checklist). Phase 2 complete; merged.
