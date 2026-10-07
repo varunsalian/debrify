@@ -397,6 +397,10 @@ guide; auto-sync ring animates during subtitle auto-sync.
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
 - Revisit the per-class R8 keep rules after the series.
+- Independent post-review P3 coverage follow-up before phase 3: characterize
+  ring repaint requests after color changes, animator updates and stop/reset,
+  with original-code assertion-killed `invalidate()` removal mutations. Current
+  calls are preserved by the exact checker; no production bug was found.
 - Phase-1 local decoder gate: the unchanged upstream fallback MediaKit jars
   omit `pgssub`, `xsub`, `ccaption`, `jacosub`, `microdvd`, `mpl2`, `pjs`,
   `realtext`, `sami` and the `astats`/`aspectralstats`/`ametadata` filters.
@@ -530,3 +534,20 @@ guide; auto-sync ring animates during subtitle auto-sync.
   `release-provenance.json`, `release-{mapping,configuration,seeds,usage}.txt`,
   `decoder-verification.log`, `decoder-provenance.json`,
   `decoder-missing-all-abis.json`, `flutter-gate*`, `junit/p1-gate/`.
+
+- 2026-10-07 — **Independent phase-1 post-review complete** using
+  `~/bin/codex-run`, gpt-6.1-sol / xhigh, session
+  `01a1166b-1dce-7c23-a4e0-1f4684ac7888`. **No P1s; no production-source
+  regression found**. Independently verified zero-diff PSI comparison, all
+  24 self-tests, all 278 patches/XML archives, all 27 named proofs, the seven
+  exact survivors, helper/anchor retargets, sizes, protected inputs, complete
+  mapping/DEX coverage and exact JVM/Flutter comparisons. R8 representation
+  refinement is accepted as preserving rule 5 without weakening it. Review
+  flags P2: required patched-library decoder gate remains unmet (existing
+  local environment limitation), and P3: explicit ring repaint-request tests
+  before phase 3. Both are recorded in Follow-ups; no source edits requested
+  for this move batch. Evidence: `p1/post-review/review.md` and independent
+  audit JSON/logs. Launcher was resumed once after its background process
+  ended before a report; the completed review used the same verified model
+  and read-only session. **Stopped after phase-1 moves and gate checks;
+  decoder gate pending. No phase 2, push, device or emulator work.**

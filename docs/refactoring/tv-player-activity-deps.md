@@ -2575,8 +2575,15 @@ success event, which the identity comparison correctly deduplicates. Evidence:
 `flutter-gate-identity-delta.json`, `flutter-gate-known-failures.json`.
 
 The first concurrent source-anchor run changed its untracked-path fingerprint
-when release compilation created an ignored-build Kotlin session artifact;
+when release compilation created a generated Kotlin session artifact;
 it was rejected. The session file was archived/removed, and the source tests
 were rerun after release build (`flutter-source-anchors-verified*`). Original
 raw calibration and first mapping-parser attempt are retained, not counted
 as passing evidence. No device, emulator, install or push occurred.
+
+Independent post-review: **No P1s / no production-source regression**. Review
+accepted complete mapping/DEX verification and independently matched all
+mutation patches/XML, named proof coverage and gate comparisons. Required
+decoder verification remains a P2 environment prerequisite; explicit repaint
+coverage is a P3 follow-up before phase 3. Neither is represented as a passing
+gate. Review and independent audit evidence: `p1/post-review/`.
