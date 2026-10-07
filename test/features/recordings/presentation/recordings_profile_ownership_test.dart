@@ -1,4 +1,5 @@
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/live_recording_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -54,6 +55,79 @@ void main() {
       );
     });
   });
+
+  testWidgets(
+    'mounted profile revision replaces schedules and captures in the same State',
+    (t) async {
+      await recordingsCase(t, (f) async {
+        final profiles = await t.runAsync(f.profiles);
+        final b = await t.runAsync(() async {
+          final actor = await profiles!.registry.getProfile(profiles.a);
+          return profiles.registry.createProfile(
+            name: 'B',
+            role: UserProfileRole.admin,
+            actingProfileId: profiles.a,
+            actingAuthorizationRevision: actor!.authorizationRevision,
+            actingSessionEpoch: 1,
+          );
+        });
+        await f.seedSchedules([
+          f.schedule('A', owner: profiles!.a),
+          f.schedule('B', owner: b!.id),
+        ]);
+        await t.runAsync(f.capture);
+        ProfileRuntime.publish(
+          ProfileScope(profileId: b.id, dataGeneration: 1, sessionEpoch: 2),
+        );
+        await t.runAsync(f.capture);
+        ProfileRuntime.publish(
+          ProfileScope(
+            profileId: profiles.a,
+            dataGeneration: 1,
+            sessionEpoch: 3,
+          ),
+        );
+        await f.mount(t);
+        final state = f.pageKey.currentState!;
+        expect(find.text('Channel A'), findsOneWidget);
+        expect(find.text('Channel B'), findsNothing);
+        expect(find.text('Live 0'), findsOneWidget);
+        expect(find.text('Live 1'), findsNothing);
+
+        ProfileRuntime.publish(
+          ProfileScope(profileId: b.id, dataGeneration: 1, sessionEpoch: 4),
+        );
+        LiveRecordingService.schedulesRevision.value++;
+        await f.settle(t);
+        expect(
+          f.pageKey.currentState,
+          same(state),
+          reason: 'profile revision retains the mounted recordings State',
+        );
+        expect(
+          find.text('Channel B'),
+          findsOneWidget,
+          reason: 'profile revision exposes the incoming schedule',
+        );
+        expect(
+          find.text('Channel A'),
+          findsNothing,
+          reason: 'profile revision removes the outgoing schedule',
+        );
+        expect(
+          find.text('Live 1'),
+          findsOneWidget,
+          reason: 'profile revision exposes the incoming desktop capture',
+        );
+        expect(
+          find.text('Live 0'),
+          findsNothing,
+          reason: 'profile revision removes the outgoing desktop capture',
+        );
+        expect(recordingsType('_LiveCard'), findsOneWidget);
+      });
+    },
+  );
 
   testWidgets(
     'battery dismissal preference is device-wide across committed profiles',

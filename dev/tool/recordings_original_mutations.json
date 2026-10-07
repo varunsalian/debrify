@@ -2741,5 +2741,26 @@
         "after": "('3 hours', Duration(hours: 2))"
       }
     ]
+  },
+  {
+    "label": "confirmed-long-recording-rejected",
+    "kind": "B",
+    "tests": [
+      "recordings_manual_schedule"
+    ],
+    "must_fail": [
+      "confirmed long recording persists its full window and result"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "if (confirmed != true || !mounted) return null;",
+        "after": "if (confirmed != true || length > const Duration(hours: 6) || !mounted) return null;",
+        "count": 1
+      }
+    ],
+    "assertion_reasons": [
+      "confirmed long recording persists a desktop schedule"
+    ]
   }
 ]

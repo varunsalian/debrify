@@ -282,9 +282,12 @@ hosts, so the desktop paths are **B**.
       `DevicePreferences` value survives a profile switch.
     - Desktop schedules and captures shown are exactly what the services return
       for the active profile at load time: with schedules owned by two profiles
-      seeded, only the active profile's appear; after a profile switch and a
-      `schedulesRevision` bump the other profile's appear. No page-side filtering
-      or caching exists to preserve beyond that.
+      seeded, only the active profile's appear. The mounted-handoff test publishes
+      the incoming profile, bumps `schedulesRevision` and checks that incoming
+      schedules and real desktop captures replace outgoing ones in the **same
+      State instance**. The earlier ownership test separately covers remounting;
+      publishing a profile alone is not claimed to refresh the page. No page-side
+      filtering or caching exists to preserve beyond the service/load contract.
     - Deletion only calls the platform delete service with the entry's URI; the
       desktop library comes from the recordings folder.
 11. **No new responsibilities.** No feature or facade file adds `http`,
@@ -771,7 +774,10 @@ Every step: this manifest plus every integrated manifest's self-tests (isolated
 parser packages); the architecture test; sizes (lowering
 `file_size_baseline.txt:36` as the facade shrinks, removed at step 4); shape
 (bare-radius aggregate and floor) and theme surface count; CI format and scoped
-analyzer with `check_analyzer_allowlist.py`; strict comparison by identity; the
+analyzer with `check_analyzer_allowlist.py` plus `check_recordings_analyzer.py`
+on the same output (isolated `--parser-package`; exact nine alias warnings by
+constructor/parameter and count, with its `--self-test` negatives locally);
+strict comparison by identity; the
 focused characterization set and goldens. Gates are full-suite on committed
 trees vs `recordings/base`; gate 2 also vs gate 1. Never `--record` a
 regression.
@@ -1104,3 +1110,18 @@ Implementation checkpoints: Step 3 **`8989e95ee`**, Step 4 **`598ac492e0e1bd2366
 - `gate2-protected-source-attestation.json` proves Step 4 application files equal Step 3, only the planned recordings destinations/facade differ from R, and services, players, native code, other feature application files and both pubspec objects remain unchanged. No new implementation deviation in Steps 3–4. `gate2-command-NOTE.txt` records a corrected read-only golden audit argument (repository-relative git object path); no input or acceptance criterion changed.
 
 **STOP after gate 2 evidence is committed.** Steps 3–4 and completion checks are finished; no further extraction, Docker, emulator/device, flutter run, push, merge, rebase or branch switch.
+
+### Independent review closure — rec-rev of c77b34f7 (2026-10-07)
+
+The independent read-only review found no behaviour drift (**No P1s — mergeable**) and identified three test/tooling gaps. Checkpoint subject: `fix(recordings): close independent review findings`; resolved objects and final committed-input equivalence will be in `review-closure-checkpoint.json`. All evidence remains under the common-directory `refactor-evidence/recordings/`.
+
+- **Constructor allowances:** `check_recordings_analyzer.py` uses the existing AST parser to bind diagnostic locations to constructor parameter declarations and compares an exact nine-entry Counter (severity, rule, file, constructor, parameter, message). The two `onDown` entries belong to different constructors and each must occur once. It runs beside the shared allowlist helper on the same CI analyze output; the per-step local checks are updated above. The shared helper and allowlist entries are byte-identical to the accepted checkpoint. Self-test **2 positives / 5 rejections** covers missing, duplicate, wrong-constructor, parameter/message disagreement and field-versus-parameter location. Three additional real CLI negatives modify the actual CI output: the unchanged shared helper accepts each, while the new check rejects each by identity/count (`review-closure-analyzer-real-cli-negatives.json`).
+- **Accepted long recording:** one new behavioural identity presses **Record** on the confirmation for a 23:00 start and next-day 22:30 end, asserts the real persisted desktop schedule's exact start/end milliseconds, and asserts **Recording scheduled**. Both whole changed files pass **10/10** on untouched ORIGINAL application files at R and **10/10** on the moved tree, with exact identity/outcome equality (`review-original-targeted*`, `review-current-targeted*`, `review-closure-targeted-comparison.txt`). The compile-valid `confirmed-long-recording-rejected` B mutant returns null after every confirmed duration over six hours and fails **confirmed long recording persists a desktop schedule**, with no other failures. Source-contract/reader/checker evidence is excluded.
+- **Mounted profile handoff:** one new identity seeds both profiles' schedules and starts real desktop captures for both through the public service. It mounts once, publishes the incoming profile, bumps `LiveRecordingService.schedulesRevision`, and checks incoming schedule/capture visibility, outgoing removal, and **the same State instance**. It passes on ORIGINAL and current code. Contract 10 now distinguishes this revision-driven mounted handoff from the earlier remount test and does not claim that publication alone refreshes the page.
+- Focused current and fresh normal-clone characterizations both pass **75/75**, preserving all prior 73 outcomes and strict macOS goldens. Added-only ORIGINAL evidence for the two new identities is the explicitly labelled event projection `review-closure-base2*` from the whole-file positive run; earlier baseline artifacts remain unchanged. The B report now has **95/95 named behavioural rejections**, no survivors: **eight** whole-file proofs rerun for every B case whose test file changed, including the new case; **87** proofs reused only after checking identical case definitions and relevant test/harness bytes. S remains **43/43**, unchanged. `review-closure-mutation-input-audit.json` records this distinction and proves scratch application/pubspec files restored to R.
+- **Full suite not required or run:** this closure changes only tests, feature-specific tooling, the additive CI command and documentation. Application files, dependencies, services, players, native code, other features, both pubspec objects and all six PNGs remain the accepted gate 2 inputs. Gate 2 evidence is reused for those unchanged production inputs; the two new tests have independent ORIGINAL/current/clone proofs.
+- **Final checks PASS:** all five recordings tooling commands pass in both the root and fresh normal clone, with stdout and fixture reports byte-identical: **7 positives / 116 checker + 116 reader rejections**, inventory **2 positives / 9 rejections**. The actual checker CLI, architecture main and **7 positives / 18 real-main architecture rejections**, sizes, storage checks, exact CI/local format and scoped analyzer commands, unchanged shared allowlist helper, tuner analyzer guard, and new exact-count allowance check pass (**14 quality commands per tree**). All **20 other manifests** pass with stdout byte-identical directly to R, each using an isolated parser-package copy under `.dart_tool` with copied `*.dill` files deleted (`review-closure-integrated-direct-R-compare.json`). No timeout or load flake was observed in these checks or the new behavioural proofs.
+- **Fresh normal clone proof:** cloned the accepted parent `c77b34f7a` with `.git` a directory, ran `flutter pub get` with unchanged lockfile, then copied the exact review inputs into that normal clone; no checkout or branch switch. All new checker/self-test commands and the existing recordings tool/architecture checks pass, alongside **75/75** clone characterizations. Root/clone non-documentation input bytes, all five stdout hashes, both fixture reports and the new allowance report match. `review-closure-normal-clone-input-attestation.json` records this input-overlay method explicitly; `review-closure-checkpoint.json` binds the tested bytes to the final commit after it is made. Evidence logs are in the original common-directory recordings evidence, with no clone-local evidence directory. SDK remains Flutter **3.44.8** / Dart **3.12.2**.
+- Read-only orchestration corrections are retained in `review-closure-command-NOTE.txt`; no executable repository input, assertion or acceptance criterion changed to accommodate them. `review-closure-protected-inputs.json` proves the unchanged production/dependency/golden/shared-helper inputs. Facade remains **101 lines / 101 cap**, explicit `mandatory_qualification: true`, completed Step 3 composition and completion guards unchanged. Linux post-move/device replay remains the integrator's separate task; no Docker or device execution is claimed.
+
+**STOP after the independent review closure commit.** No application changes, full-suite rerun, regression recording, behavioural allowlist change, push, merge, rebase or branch switch.

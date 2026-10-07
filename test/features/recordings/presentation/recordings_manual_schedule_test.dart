@@ -247,4 +247,41 @@ void main() {
       );
     });
   });
+
+  testWidgets('confirmed long recording persists its full window and result', (
+    t,
+  ) async {
+    await recordingsCase(t, (f) async {
+      await t.runAsync(f.profiles);
+      await f.mount(t);
+      final day = DateTime.now().add(const Duration(days: 2));
+      final start = DateTime(day.year, day.month, day.day, 23);
+      final end = DateTime(day.year, day.month, day.day + 1, 22, 30);
+      final driver = RecordingsManualDriver(t, f);
+      await driver.untilLength(
+        day: day,
+        time: const TimeOfDay(hour: 23, minute: 0),
+      );
+      await f.tap(t, find.text('Pick end time…'));
+      await driver.time(const TimeOfDay(hour: 22, minute: 30));
+      expect(find.text("That's a long recording"), findsOneWidget);
+      await f.tap(t, find.widgetWithText(TextButton, 'Record'));
+      final rows = await DesktopScheduleService.instance.list();
+      expect(
+        rows.length,
+        1,
+        reason: 'confirmed long recording persists a desktop schedule',
+      );
+      expect(
+        [rows.single.startMs, rows.single.endMs],
+        [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+        reason: 'confirmed long recording preserves the picked start and end',
+      );
+      expect(
+        find.text('Recording scheduled'),
+        findsOneWidget,
+        reason: 'confirmed long recording reports the scheduling result',
+      );
+    });
+  });
 }
