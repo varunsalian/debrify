@@ -936,3 +936,12 @@ expression, statement, comment or branch condition. The feature does not opt
 into occurrence-field bindings; no qualification default is assumed. Resource
 creation, timer cancellation, callback identity and borrowed implementations
 remain exactly as characterized.
+
+
+### Step 3 — catalog, selection, feedback and focus sections
+
+Seven plain sections now own the step-3 methods. The five deferred callbacks (performSearch, getCurrentViewMode, applyViewMode, toggleSearch and navigateUp) are pinned in PremiumizeScope and the State composition getter, and recorded in step3/deferred-scaffolds.json with their step-4 exit. Composition only constructs sections; it starts no work. State lifecycle tear-offs and the stored TV closure retain their receiver identity. Context, mounted and all six widget inputs remain live callbacks/getters at the original use sites.
+
+Evidence: `premiumize/step3/`. All 113 verbatim leaves and feature self-tests, architecture/self-test, sizes, storage keys/references, exact CI format/scoped analyzer/allowlist and whole-analyzer comparison pass with zero added diagnostics. All 158 frozen Premiumize identities and three shape checks pass. Every other manifest/self-test passes (20), with output and adapter bytes identical to the original proof and explicit isolated parser packages. The facade is 1917 formatted lines. Every destination and the facade are registered in the shape manifest (floor 488, zero slack).
+
+Conservative decisions: typed narrow dependency records contain only the original field reads and calls; composition callbacks preserve parameter defaults. Only registered receiver/rename substitutions, live callbacks, imports and exactly pinned formatter brace pairs/trailing commas are admitted. Comments in moved leaves remain verbatim. No occurrence-field-binding opt-in or checker default is assumed. Found-not-fixed remains unchanged.

@@ -113,7 +113,16 @@
     "PremiumizeFocusState",
     "PremiumizeSelectionState",
     "PremiumizeSearchState",
-    "PremiumizeLinkState"
+    "PremiumizeLinkState",
+    "PremiumizeSelectionActions",
+    "PremiumizeCatalogLoading",
+    "PremiumizeBackNavigation",
+    "PremiumizeDeleteActions",
+    "PremiumizeTransferActions",
+    "PremiumizeFeedback",
+    "PremiumizeFocusActions",
+    "_deps",
+    "deps"
   ],
   "receiver_paths": {
     "_catalog": "PremiumizeCatalogState",
@@ -122,7 +131,21 @@
     "_focus": "PremiumizeFocusState",
     "_selection": "PremiumizeSelectionState",
     "_search": "PremiumizeSearchState",
-    "_link": "PremiumizeLinkState"
+    "_link": "PremiumizeLinkState",
+    "_sections.selectionActions": "PremiumizeSelectionActions",
+    "_sections.catalogLoading": "PremiumizeCatalogLoading",
+    "_sections.backNavigation": "PremiumizeBackNavigation",
+    "_sections.deleteActions": "PremiumizeDeleteActions",
+    "_sections.transferActions": "PremiumizeTransferActions",
+    "_sections.feedback": "PremiumizeFeedback",
+    "_sections.focusActions": "PremiumizeFocusActions",
+    "_deps.catalogState": "PremiumizeCatalogState",
+    "_deps.navigationState": "PremiumizeNavigationState",
+    "_deps.viewState": "PremiumizeViewState",
+    "_deps.focusState": "PremiumizeFocusState",
+    "_deps.selectionState": "PremiumizeSelectionState",
+    "_deps.searchState": "PremiumizeSearchState",
+    "_deps.linkState": "PremiumizeLinkState"
   },
   "receiver_owners": {
     "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState",
@@ -132,9 +155,52 @@
     "_focus": "PremiumizeFocusState",
     "_selection": "PremiumizeSelectionState",
     "_search": "PremiumizeSearchState",
-    "_link": "PremiumizeLinkState"
+    "_link": "PremiumizeLinkState",
+    "_sections.selectionActions": "PremiumizeSelectionActions",
+    "_sections.catalogLoading": "PremiumizeCatalogLoading",
+    "_sections.backNavigation": "PremiumizeBackNavigation",
+    "_sections.deleteActions": "PremiumizeDeleteActions",
+    "_sections.transferActions": "PremiumizeTransferActions",
+    "_sections.feedback": "PremiumizeFeedback",
+    "_sections.focusActions": "PremiumizeFocusActions",
+    "_deps.catalogState": "PremiumizeCatalogState",
+    "_deps.navigationState": "PremiumizeNavigationState",
+    "_deps.viewState": "PremiumizeViewState",
+    "_deps.focusState": "PremiumizeFocusState",
+    "_deps.selectionState": "PremiumizeSelectionState",
+    "_deps.searchState": "PremiumizeSearchState",
+    "_deps.linkState": "PremiumizeLinkState"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_actions.dart",
+      "owner": "PremiumizeSelectionActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_loading.dart",
+      "owner": "PremiumizeCatalogLoading"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_back_navigation.dart",
+      "owner": "PremiumizeBackNavigation"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart",
+      "owner": "PremiumizeDeleteActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_actions.dart",
+      "owner": "PremiumizeTransferActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart",
+      "owner": "PremiumizeFeedback"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart",
+      "owner": "PremiumizeFocusActions"
+    }
+  ],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
   "callback_identities": [
     {
@@ -212,7 +278,14 @@
     "PremiumizeFocusState": "$State._focus",
     "PremiumizeSelectionState": "$State._selection",
     "PremiumizeSearchState": "$State._search",
-    "PremiumizeLinkState": "$State._link"
+    "PremiumizeLinkState": "$State._link",
+    "PremiumizeSelectionActions": "$State._sections.selectionActions",
+    "PremiumizeCatalogLoading": "$State._sections.catalogLoading",
+    "PremiumizeBackNavigation": "$State._sections.backNavigation",
+    "PremiumizeDeleteActions": "$State._sections.deleteActions",
+    "PremiumizeTransferActions": "$State._sections.transferActions",
+    "PremiumizeFeedback": "$State._sections.feedback",
+    "PremiumizeFocusActions": "$State._sections.focusActions"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",
@@ -221,7 +294,14 @@
     "_focus": "$State._focus",
     "_selection": "$State._selection",
     "_search": "$State._search",
-    "_link": "$State._link"
+    "_link": "$State._link",
+    "_deps.catalogState": "$State._catalog",
+    "_deps.navigationState": "$State._nav",
+    "_deps.viewState": "$State._view",
+    "_deps.focusState": "$State._focus",
+    "_deps.selectionState": "$State._selection",
+    "_deps.searchState": "$State._search",
+    "_deps.linkState": "$State._link"
   },
   "original_activation": {
     "_PremiumizeFilesScreenState._navigateIntoFolder": "lib/screens/premiumize/premiumize_files_screen.dart"

@@ -36,6 +36,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart':
+      0,
 
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
       1,
@@ -280,7 +282,19 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
   'lib/features/premiumize_files/models/folder_view_mode.dart': 0,
   'lib/features/premiumize_files/models/premiumize_view.dart': 0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_back_navigation.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_loading.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_data_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart':
       0,
@@ -290,7 +304,13 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_state.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_sections.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_actions.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart':
       0,

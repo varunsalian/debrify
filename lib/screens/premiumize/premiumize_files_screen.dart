@@ -1,3 +1,4 @@
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_composition.dart';
 import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_state.dart';
 import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart';
 import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart';
@@ -11,7 +12,6 @@ import 'package:debrify/features/premiumize_files/application/premiumize_sort_po
 import 'package:debrify/features/premiumize_files/application/premiumize_playlist_titles.dart';
 import 'dart:async';
 import 'package:debrify/services/storage/playlist_storage.dart';
-import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
@@ -67,6 +67,36 @@ class PremiumizeFilesScreen extends StatefulWidget {
 }
 
 class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
+  PremiumizeSections? _sectionCache;
+  PremiumizeSections get _sections =>
+      _sectionCache ??= createPremiumizeSections(
+        (
+          context: () => context,
+          mounted: () => mounted,
+          setState: setState,
+          initialFolderId: () => widget.initialFolderId,
+          initialFolderName: () => widget.initialFolderName,
+          initialSearchQuery: () => widget.initialSearchQuery,
+          isPushedRoute: () => widget.isPushedRoute,
+          selectSourceMode: () => widget.selectSourceMode,
+          onSourceSelected: () => widget.onSourceSelected,
+          performSearch: _performSearch,
+          getCurrentViewMode: _getCurrentViewMode,
+          applyViewMode: _applyViewMode,
+          toggleSearch: _toggleSearch,
+          navigateUp: _navigateUp,
+        ),
+        (
+          catalogState: _catalog,
+          navigationState: _nav,
+          viewState: _view,
+          focusState: _focus,
+          selectionState: _selection,
+          searchState: _search,
+          linkState: _link,
+        ),
+      );
+
   final _catalog = PremiumizeCatalogState();
   final _nav = PremiumizeNavigationState();
   final _view = PremiumizeViewState();
@@ -78,28 +108,26 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   // Premiumize tab index in main.dart's page list (for TV focus + back handler).
   static const int _tabIndex = 11;
 
-  bool get _isAllSelected =>
-      _selection.selectedIds.length == _catalog.items.length &&
-      _catalog.items.isNotEmpty;
-
   bool get _isAtRoot => _nav.currentFolderId == null;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('premiumize_files');
-    _loadSettings();
+    _sections.catalogLoading.loadSettings();
 
     if (widget.isPushedRoute) {
-      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.pushRouteBackHandler(
+        _sections.backNavigation.handleBackNavigation,
+      );
     } else {
       MainPageBridge.registerTabBackHandler(
         'premiumize',
-        _handleBackNavigation,
+        _sections.backNavigation.handleBackNavigation,
       );
       _focus.tvContentFocusHandler = () {
         _focus.shouldFocusOnLoad = true;
-        _focusFirstItemOrFallback();
+        _sections.focusActions.focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(
         _tabIndex,
@@ -111,7 +139,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   @override
   void dispose() {
     if (widget.isPushedRoute) {
-      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.popRouteBackHandler(
+        _sections.backNavigation.handleBackNavigation,
+      );
     } else {
       MainPageBridge.unregisterTabBackHandler('premiumize');
       if (_focus.tvContentFocusHandler != null) {
@@ -139,133 +169,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadSettings() async {
-    final enabled = await PremiumizeStorage.getPremiumizeIntegrationEnabled();
-    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
-
-    if (!mounted) return;
-    setState(() {
-      _catalog.premiumizeEnabled =
-          enabled && apiKey != null && apiKey.isNotEmpty;
-      _catalog.apiKey = apiKey;
-      if (widget.initialFolderId != null && widget.initialFolderName != null) {
-        _nav.currentFolderId = widget.initialFolderId;
-        _nav.currentFolderName = widget.initialFolderName!;
-      }
-      final initialQuery = widget.initialSearchQuery?.trim() ?? '';
-      if (initialQuery.isNotEmpty) {
-        _search.isSearchActive = true;
-        _search.searchController.text = initialQuery;
-      }
-    });
-
-    if (_catalog.premiumizeEnabled) {
-      _loadFolder();
-      final initialQuery = widget.initialSearchQuery?.trim() ?? '';
-      if (initialQuery.isNotEmpty) _performSearch(initialQuery);
-    } else {
-      setState(() => _catalog.initialLoad = false);
-    }
-  }
-
-  // ── Loading ──────────────────────────────────────────────────────────────
-
-  Future<void> _loadFolder() async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty || _catalog.isLoading) return;
-
-    setState(() {
-      _catalog.isLoading = true;
-      _catalog.errorMessage = '';
-    });
-
-    try {
-      final listing = await PremiumizeService.listFolder(
-        apiKey,
-        folderId: _nav.currentFolderId,
-      );
-      if (!mounted) return;
-
-      final mode = _getCurrentViewMode();
-      final ordered = _applyViewMode(mode, listing.items);
-
-      setState(() {
-        _catalog.items
-          ..clear()
-          ..addAll(ordered);
-        _catalog.isLoading = false;
-        _catalog.initialLoad = false;
-      });
-      _focusFirstItemOrFallback();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _catalog.errorMessage = e.toString();
-        _catalog.isLoading = false;
-        _catalog.initialLoad = false;
-      });
-    }
-  }
-
-  Future<void> _loadTransfers() async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty || _catalog.isLoadingTransfers) return;
-
-    setState(() {
-      _catalog.isLoadingTransfers = true;
-      _catalog.errorMessage = '';
-    });
-
-    try {
-      final transfers = await PremiumizeService.listTransfers(apiKey);
-      if (!mounted) return;
-      setState(() {
-        _catalog.transfers
-          ..clear()
-          ..addAll(transfers);
-        _catalog.isLoadingTransfers = false;
-        _catalog.initialLoad = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _catalog.errorMessage = e.toString();
-        _catalog.isLoadingTransfers = false;
-        _catalog.initialLoad = false;
-      });
-    }
-  }
-
-  Future<void> _refresh() async {
-    _exitSelectionMode();
-    if (_view.selectedView == PremiumizeView.transfers) {
-      await _loadTransfers();
-    } else {
-      await _loadFolder();
-    }
-  }
-
-  void _switchView(PremiumizeView view) {
-    if (_view.selectedView == view) return;
-    _exitSelectionMode();
-    // Reset the Files list offset so a Files→Transfers→Files round-trip
-    // doesn't land back on a stale scroll position.
-    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
-    setState(() {
-      _view.selectedView = view;
-      _catalog.errorMessage = '';
-    });
-    if (view == PremiumizeView.transfers) {
-      _loadTransfers();
-    } else {
-      _loadFolder();
-    }
-  }
-
   // ── Folder navigation ──────────────────────────────────────────────────────
 
   void _navigateIntoFolder(PremiumizeFolderItem folder) {
-    _exitSelectionMode();
+    _sections.selectionActions.exitSelectionMode();
     _focus.shouldFocusOnLoad = true;
     // Reset scroll while the outgoing list is still attached, so the new
     // folder never inherits the old offset.
@@ -284,11 +191,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       _search.searchController.clear();
       _search.searchResults = [];
     });
-    _loadFolder();
+    _sections.catalogLoading.loadFolder();
   }
 
   void _navigateUp() {
-    _exitSelectionMode();
+    _sections.selectionActions.exitSelectionMode();
     if (_nav.navigationStack.isEmpty) return;
     // Refocus the first row once the parent listing loads — clearing _items
     // disposes the focused row and nothing else reclaims DPAD focus.
@@ -300,34 +207,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       _nav.currentFolderName = previous.name;
       _catalog.items.clear();
     });
-    _loadFolder();
-  }
-
-  bool _handleBackNavigation() {
-    if (_selection.isSelectionMode) {
-      _exitSelectionMode();
-      return true;
-    }
-    if (_search.isSearchActive) {
-      _toggleSearch();
-      return true;
-    }
-    if (_nav.navigationStack.isNotEmpty) {
-      _navigateUp();
-      return true;
-    }
-    // At this folder's root (no deeper stack). If opened as a pushed route
-    // (e.g. deep-linked into a specific folder), pop back to the caller.
-    if (widget.isPushedRoute) {
-      Navigator.of(context).pop();
-      return true;
-    }
-    if (MainPageBridge.returnToTorrentSearchOnBack) {
-      MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
-      return true;
-    }
-    return false;
+    _sections.catalogLoading.loadFolder();
   }
 
   // ── View modes ─────────────────────────────────────────────────────────────
@@ -426,7 +306,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _search.isSearching = false);
-      _showSnackBar('Search failed: $e', isError: true);
+      _sections.feedback.showSnackBar('Search failed: $e', isError: true);
     }
   }
 
@@ -436,14 +316,14 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
-    _showLoadingDialog(
+    _sections.feedback.showLoadingDialog(
       item.isFolder ? 'Checking folder for videos...' : 'Checking file...',
     );
     var checkingDialogOpen = true;
     void closeCheckingDialog() {
       if (!checkingDialogOpen) return;
       checkingDialogOpen = false;
-      _dismissDialog();
+      _sections.feedback.dismissDialog();
     }
 
     try {
@@ -456,7 +336,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         final videos = files.where((f) => f.isVideo).toList();
         if (videos.isEmpty) {
           closeCheckingDialog();
-          _showSnackBar('This folder has no playable videos', isError: true);
+          _sections.feedback.showSnackBar(
+            'This folder has no playable videos',
+            isError: true,
+          );
           return;
         }
         final first = videos.first;
@@ -466,7 +349,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         if (!mounted) return;
         if (!firstReady) {
           closeCheckingDialog();
-          _showSnackBar(
+          _sections.feedback.showSnackBar(
             'This folder has no ready video streams',
             isError: true,
           );
@@ -475,7 +358,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       } else {
         if (!item.isVideo) {
           closeCheckingDialog();
-          _showSnackBar('Only video files can be bound', isError: true);
+          _sections.feedback.showSnackBar(
+            'Only video files can be bound',
+            isError: true,
+          );
           return;
         }
         final resolved = await PremiumizeService.resolveItemById(
@@ -484,7 +370,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         );
         if (resolved == null || resolved.link.isEmpty) {
           closeCheckingDialog();
-          _showSnackBar('This file is not ready to stream', isError: true);
+          _sections.feedback.showSnackBar(
+            'This file is not ready to stream',
+            isError: true,
+          );
           return;
         }
       }
@@ -507,7 +396,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     } catch (e) {
       closeCheckingDialog();
       if (mounted) {
-        _showSnackBar(
+        _sections.feedback.showSnackBar(
           'Could not bind this Premiumize source: $e',
           isError: true,
         );
@@ -528,7 +417,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       url = resolved?.link;
     }
     if (url == null || url.isEmpty) {
-      _showSnackBar('No playable URL for this file', isError: true);
+      _sections.feedback.showSnackBar(
+        'No playable URL for this file',
+        isError: true,
+      );
       return;
     }
     final sizeBytes = file.size > 0 ? file.size : null;
@@ -561,24 +453,30 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
-    _showLoadingDialog('Scanning folder for videos...');
+    _sections.feedback.showLoadingDialog('Scanning folder for videos...');
     try {
       final all = await PremiumizeService.listFolderRecursive(
         apiKey,
         folder.id,
       );
-      _dismissDialog();
+      _sections.feedback.dismissDialog();
       if (!mounted) return;
 
       final videos = all.where((f) => f.isVideo).toList();
       if (videos.isEmpty) {
-        _showSnackBar('This folder doesn\'t contain any videos', isError: true);
+        _sections.feedback.showSnackBar(
+          'This folder doesn\'t contain any videos',
+          isError: true,
+        );
         return;
       }
       await _playPremiumizeVideos(videos, folder.name);
     } catch (e) {
-      _dismissDialog();
-      _showSnackBar('Failed to scan folder: $e', isError: true);
+      _sections.feedback.dismissDialog();
+      _sections.feedback.showSnackBar(
+        'Failed to scan folder: $e',
+        isError: true,
+      );
     }
   }
 
@@ -593,7 +491,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       final v = videos.first;
       final url = v.playableUrl;
       if (url == null || url.isEmpty) {
-        _showSnackBar('No playable URL for this file', isError: true);
+        _sections.feedback.showSnackBar(
+          'No playable URL for this file',
+          isError: true,
+        );
         return;
       }
       final sizeBytes = v.size > 0 ? v.size : null;
@@ -707,7 +608,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   Future<void> _downloadFile(PremiumizeFolderItem file) async {
     final url = file.link;
     if (url == null || url.isEmpty) {
-      _showSnackBar('No download URL for this file', isError: true);
+      _sections.feedback.showSnackBar(
+        'No download URL for this file',
+        isError: true,
+      );
       return;
     }
     try {
@@ -717,9 +621,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         fileName: file.name,
         context: mounted ? context : null,
       );
-      _showSnackBar('Download queued: ${file.name}', isError: false);
+      _sections.feedback.showSnackBar(
+        'Download queued: ${file.name}',
+        isError: false,
+      );
     } catch (e) {
-      _showSnackBar('Failed to download: $e', isError: true);
+      _sections.feedback.showSnackBar('Failed to download: $e', isError: true);
     }
   }
 
@@ -727,18 +634,21 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
-    _showLoadingDialog('Scanning folder for files...');
+    _sections.feedback.showLoadingDialog('Scanning folder for files...');
     try {
       final all = await PremiumizeService.listFolderRecursive(
         apiKey,
         folder.id,
       );
-      _dismissDialog();
+      _sections.feedback.dismissDialog();
       if (!mounted) return;
 
       final files = all.where((f) => !f.isFolder).toList();
       if (files.isEmpty) {
-        _showSnackBar('This folder doesn\'t contain any files', isError: true);
+        _sections.feedback.showSnackBar(
+          'This folder doesn\'t contain any files',
+          isError: true,
+        );
         return;
       }
 
@@ -762,8 +672,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         ),
       );
     } catch (e) {
-      _dismissDialog();
-      _showSnackBar('Failed to scan folder: $e', isError: true);
+      _sections.feedback.dismissDialog();
+      _sections.feedback.showSnackBar(
+        'Failed to scan folder: $e',
+        isError: true,
+      );
     }
   }
 
@@ -801,14 +714,20 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     if (!mounted) return;
     if (success > 0 && fail == 0) {
-      _showSnackBar(
+      _sections.feedback.showSnackBar(
         'Queued $success file${success == 1 ? '' : 's'}',
         isError: false,
       );
     } else if (success > 0) {
-      _showSnackBar('Queued $success, $fail failed', isError: true);
+      _sections.feedback.showSnackBar(
+        'Queued $success, $fail failed',
+        isError: true,
+      );
     } else {
-      _showSnackBar('Failed to queue any files', isError: true);
+      _sections.feedback.showSnackBar(
+        'Failed to queue any files',
+        isError: true,
+      );
     }
   }
 
@@ -824,7 +743,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Future<void> _addFileToPlaylist(PremiumizeFolderItem file) async {
     if (!file.isVideo) {
-      _showSnackBar('Only video files can be added to playlist', isError: true);
+      _sections.feedback.showSnackBar(
+        'Only video files can be added to playlist',
+        isError: true,
+      );
       return;
     }
     final added = await PlaylistStorage.addPlaylistItemRaw({
@@ -835,7 +757,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       'premiumizeFile': {'id': file.id, 'name': file.name, 'size': file.size},
       'sizeBytes': file.size > 0 ? file.size : null,
     });
-    _showSnackBar(
+    _sections.feedback.showSnackBar(
       added ? 'Added to playlist' : 'Already in playlist',
       isError: !added,
     );
@@ -845,18 +767,21 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
-    _showLoadingDialog('Scanning folder for videos...');
+    _sections.feedback.showLoadingDialog('Scanning folder for videos...');
     try {
       final all = await PremiumizeService.listFolderRecursive(
         apiKey,
         folder.id,
       );
-      _dismissDialog();
+      _sections.feedback.dismissDialog();
       if (!mounted) return;
 
       final videos = all.where((f) => f.isVideo).toList();
       if (videos.isEmpty) {
-        _showSnackBar('This folder doesn\'t contain any videos', isError: true);
+        _sections.feedback.showSnackBar(
+          'This folder doesn\'t contain any videos',
+          isError: true,
+        );
         return;
       }
 
@@ -870,7 +795,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           'premiumizeFile': {'id': v.id, 'name': v.name, 'size': v.size},
           'sizeBytes': v.size > 0 ? v.size : null,
         });
-        _showSnackBar(
+        _sections.feedback.showSnackBar(
           added ? 'Added to playlist' : 'Already in playlist',
           isError: !added,
         );
@@ -890,168 +815,18 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         'premiumizeItemIds': fileIds,
         'count': videos.length,
       });
-      _showSnackBar(
+      _sections.feedback.showSnackBar(
         added
             ? 'Added ${videos.length} videos to playlist'
             : 'Already in playlist',
         isError: !added,
       );
     } catch (e) {
-      _dismissDialog();
-      _showSnackBar('Failed to scan folder: $e', isError: true);
-    }
-  }
-
-  // ── Delete ─────────────────────────────────────────────────────────────────
-
-  void _showDeleteDialog(PremiumizeFolderItem item) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${item.isFolder ? 'Folder' : 'File'}'),
-        content: Text(
-          'Permanently delete "${item.name}"? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () {
-              Navigator.of(context).pop();
-              _executeDelete([item]);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleDeleteSelected() async {
-    if (_selection.selectedIds.isEmpty) return;
-    final selected = _catalog.items
-        .where((i) => _selection.selectedIds.contains(i.id))
-        .toList();
-    final count = selected.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete $count item${count == 1 ? '' : 's'}'),
-        content: Text(
-          'Permanently delete $count selected item${count == 1 ? '' : 's'}? '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await _executeDelete(selected);
-    }
-  }
-
-  Future<void> _executeDelete(List<PremiumizeFolderItem> items) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    _showSnackBar(
-      'Deleting ${items.length} item${items.length == 1 ? '' : 's'}...',
-      isError: false,
-    );
-    final deletedIds = <String>{};
-    int fail = 0;
-    for (final item in items) {
-      try {
-        if (item.isFolder) {
-          await PremiumizeService.deleteFolder(apiKey, item.id);
-        } else {
-          await PremiumizeService.deleteItem(apiKey, item.id);
-        }
-        deletedIds.add(item.id);
-      } catch (_) {
-        fail++;
-      }
-    }
-    if (!mounted) return;
-    setState(() {
-      _catalog.items.removeWhere((i) => deletedIds.contains(i.id));
-      _search.searchResults.removeWhere((i) => deletedIds.contains(i.id));
-      _selection.selectedIds.clear();
-      _selection.isSelectionMode = false;
-    });
-    if (fail == 0) {
-      _showSnackBar(
-        'Deleted ${deletedIds.length} item${deletedIds.length == 1 ? '' : 's'}',
-        isError: false,
-      );
-    } else {
-      _showSnackBar(
-        'Deleted ${deletedIds.length}, $fail failed',
+      _sections.feedback.dismissDialog();
+      _sections.feedback.showSnackBar(
+        'Failed to scan folder: $e',
         isError: true,
       );
-    }
-  }
-
-  // ── Transfers ────────────────────────────────────────────────────────────────
-
-  Future<void> _deleteTransfer(PremiumizeTransfer transfer) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Transfer'),
-        content: Text('Remove "${transfer.name}" from your transfers?'),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await PremiumizeService.deleteTransfer(apiKey, transfer.id);
-      if (!mounted) return;
-      setState(
-        () => _catalog.transfers.removeWhere((t) => t.id == transfer.id),
-      );
-      _showSnackBar('Transfer removed', isError: false);
-    } catch (e) {
-      _showSnackBar('Failed to remove transfer: $e', isError: true);
-    }
-  }
-
-  Future<void> _clearFinishedTransfers() async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    try {
-      await PremiumizeService.clearFinishedTransfers(apiKey);
-      _showSnackBar('Cleared finished transfers', isError: false);
-      await _loadTransfers();
-    } catch (e) {
-      _showSnackBar('Failed to clear: $e', isError: true);
     }
   }
 
@@ -1158,13 +933,16 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   Future<void> _addLink() async {
     final link = _link.linkController.text.trim();
     if (link.isEmpty) {
-      _showSnackBar('Please enter a link', isError: true);
+      _sections.feedback.showSnackBar('Please enter a link', isError: true);
       return;
     }
     if (!(link.startsWith('http://') ||
         link.startsWith('https://') ||
         link.startsWith('magnet:'))) {
-      _showSnackBar('Please enter a valid URL or magnet link', isError: true);
+      _sections.feedback.showSnackBar(
+        'Please enter a valid URL or magnet link',
+        isError: true,
+      );
       return;
     }
     final apiKey = _catalog.apiKey;
@@ -1172,7 +950,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     Navigator.of(context).pop();
     setState(() => _link.isAddingLink = true);
-    _showLoadingDialog('Adding to Premiumize...');
+    _sections.feedback.showLoadingDialog('Adding to Premiumize...');
 
     try {
       await PremiumizeService.createTransfer(
@@ -1180,139 +958,17 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         link,
         folderId: _nav.currentFolderId,
       );
-      _dismissDialog();
+      _sections.feedback.dismissDialog();
       if (!mounted) return;
       _link.linkController.clear();
-      _showSnackBar('Added to Premiumize', isError: false);
-      await _refresh();
+      _sections.feedback.showSnackBar('Added to Premiumize', isError: false);
+      await _sections.catalogLoading.refresh();
     } catch (e) {
-      _dismissDialog();
-      _showSnackBar('Failed to add: $e', isError: true);
+      _sections.feedback.dismissDialog();
+      _sections.feedback.showSnackBar('Failed to add: $e', isError: true);
     } finally {
       if (mounted) setState(() => _link.isAddingLink = false);
     }
-  }
-
-  // ── Multi-select helpers ─────────────────────────────────────────────────────
-
-  void _toggleSelectionMode() {
-    setState(() {
-      if (_selection.isSelectionMode) _selection.selectedIds.clear();
-      _selection.isSelectionMode = !_selection.isSelectionMode;
-    });
-  }
-
-  void _exitSelectionMode() {
-    if (!_selection.isSelectionMode) return;
-    setState(() {
-      _selection.isSelectionMode = false;
-      _selection.selectedIds.clear();
-    });
-  }
-
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selection.selectedIds.contains(id)) {
-        _selection.selectedIds.remove(id);
-      } else {
-        _selection.selectedIds.add(id);
-      }
-    });
-  }
-
-  void _toggleSelectAll() {
-    setState(() {
-      if (_isAllSelected) {
-        _selection.selectedIds.clear();
-      } else {
-        _selection.selectedIds
-          ..clear()
-          ..addAll(_catalog.items.map((i) => i.id));
-      }
-    });
-  }
-
-  // ── Misc helpers ─────────────────────────────────────────────────────────────
-
-  void _showLoadingDialog(String message) {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(message, style: const TextStyle(color: Colors.white)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _dismissDialog() {
-    if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
-
-  void _focusFirstItemOrFallback() {
-    if (!_focus.shouldFocusOnLoad) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focus.shouldFocusOnLoad) return;
-      if (_catalog.items.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (!_catalog.isLoading) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.addLinkButtonFocusNode.requestFocus();
-      }
-    });
-  }
-
-  void _showSnackBar(
-    String message, {
-    bool isError = true,
-    Duration? duration,
-  }) {
-    if (!mounted) return;
-    final app = AppThemeScope.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isError
-                    ? const Color(0xFFEF4444)
-                    : const Color(0xFF22C55E),
-                borderRadius: app.shape.br(8),
-              ),
-              child: Icon(
-                isError ? Icons.error : Icons.check_circle,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: app.cloud.dialogSurface,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
-        margin: const EdgeInsets.all(16),
-        duration: duration ?? const Duration(seconds: 3),
-      ),
-    );
   }
 
   String _formatUnixDate(int seconds) {
@@ -1401,7 +1057,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 child: IconButton(
                   focusNode: _focus.backButtonFocusNode,
                   icon: const Icon(Icons.arrow_back),
-                  onPressed: _handleBackNavigation,
+                  onPressed: _sections.backNavigation.handleBackNavigation,
                   tooltip: 'Back',
                 ),
               )
@@ -1433,7 +1089,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     ? Icons.close
                     : Icons.checklist_outlined,
               ),
-              onPressed: _toggleSelectionMode,
+              onPressed: _sections.selectionActions.toggleSelectionMode,
               tooltip: _selection.isSelectionMode
                   ? 'Exit selection'
                   : 'Select items',
@@ -1472,7 +1128,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: (_catalog.isLoading || _catalog.isLoadingTransfers)
                 ? null
-                : _refresh,
+                : _sections.catalogLoading.refresh,
             tooltip: 'Refresh',
             iconSize: iconSize,
             padding: iconPadding,
@@ -1491,7 +1147,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
-              child: RefreshIndicator(onRefresh: _refresh, child: _buildBody()),
+              child: RefreshIndicator(
+                onRefresh: _sections.catalogLoading.refresh,
+                child: _buildBody(),
+              ),
             ),
           ),
         ],
@@ -1527,7 +1186,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           ),
         ],
         selected: _view.selectedView,
-        onSelected: _switchView,
+        onSelected: _sections.catalogLoading.switchView,
       ),
     );
   }
@@ -1617,13 +1276,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           ),
           const Spacer(),
           TextButton(
-            onPressed: _toggleSelectAll,
-            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+            onPressed: _sections.selectionActions.toggleSelectAll,
+            child: Text(
+              _sections.selectionActions.isAllSelected
+                  ? 'Deselect All'
+                  : 'Select All',
+            ),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
             focusNode: _focus.deleteButtonFocusNode,
-            onPressed: count > 0 ? _handleDeleteSelected : null,
+            onPressed: count > 0
+                ? _sections.deleteActions.handleDeleteSelected
+                : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
             style: FilledButton.styleFrom(
@@ -1864,7 +1529,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _showDeleteDialog(item),
+        onSelected: () => _sections.deleteActions.showDeleteDialog(item),
       ),
     ];
 
@@ -1884,7 +1549,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedIds.contains(item.id),
-      onToggleSelected: () => _toggleSelection(item.id),
+      onToggleSelected: () =>
+          _sections.selectionActions.toggleSelection(item.id),
       focusNode: (autofocusFirst && index == 0)
           ? _focus.firstItemFocusNode
           : null,
@@ -1935,7 +1601,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: TextButton.icon(
-                onPressed: _clearFinishedTransfers,
+                onPressed: _sections.transferActions.clearFinishedTransfers,
                 icon: const Icon(Icons.cleaning_services_outlined, size: 18),
                 label: const Text('Clear finished'),
               ),
@@ -2001,7 +1667,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     color: Colors.red,
                   ),
                   tooltip: 'Delete transfer',
-                  onPressed: () => _deleteTransfer(transfer),
+                  onPressed: () =>
+                      _sections.transferActions.deleteTransfer(transfer),
                 ),
               ],
             ),
@@ -2092,7 +1759,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 FilledButton.icon(
                   focusNode: _focus.settingsButtonFocusNode,
                   autofocus: true,
-                  onPressed: () => _showSnackBar(
+                  onPressed: () => _sections.feedback.showSnackBar(
                     'Open Settings > Premiumize to configure',
                     isError: false,
                   ),
@@ -2134,7 +1801,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 FilledButton.icon(
                   focusNode: _focus.retryButtonFocusNode,
                   autofocus: true,
-                  onPressed: _refresh,
+                  onPressed: _sections.catalogLoading.refresh,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry'),
                 ),
@@ -2174,7 +1841,7 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'isAddingLink': s._link.isAddingLink,
     'isSelectionMode': s._selection.isSelectionMode,
     'selectedIds': s._selection.selectedIds,
-    'isAllSelected': s._isAllSelected,
+    'isAllSelected': s._sections.selectionActions.isAllSelected,
     'isSearchActive': s._search.isSearchActive,
     'isSearching': s._search.isSearching,
     'searchDebounce': s._search.searchDebounce,
@@ -2192,14 +1859,14 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'searchButtonFocusNode': s._focus.searchButtonFocusNode,
     'searchClearFocusNode': s._focus.searchClearFocusNode,
     'isAtRoot': s._isAtRoot,
-    'loadSettings': s._loadSettings,
-    'loadFolder': s._loadFolder,
-    'loadTransfers': s._loadTransfers,
-    'refresh': s._refresh,
-    'switchView': s._switchView,
+    'loadSettings': s._sections.catalogLoading.loadSettings,
+    'loadFolder': s._sections.catalogLoading.loadFolder,
+    'loadTransfers': s._sections.catalogLoading.loadTransfers,
+    'refresh': s._sections.catalogLoading.refresh,
+    'switchView': s._sections.catalogLoading.switchView,
     'navigateIntoFolder': s._navigateIntoFolder,
     'navigateUp': s._navigateUp,
-    'handleBackNavigation': s._handleBackNavigation,
+    'handleBackNavigation': s._sections.backNavigation.handleBackNavigation,
     'getCurrentViewMode': s._getCurrentViewMode,
     'setViewMode': s._setViewMode,
     'applyViewMode': s._applyViewMode,
@@ -2219,22 +1886,24 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'addToPlaylist': s._addToPlaylist,
     'addFileToPlaylist': s._addFileToPlaylist,
     'addFolderToPlaylist': s._addFolderToPlaylist,
-    'showDeleteDialog': s._showDeleteDialog,
-    'handleDeleteSelected': s._handleDeleteSelected,
-    'executeDelete': s._executeDelete,
-    'deleteTransfer': s._deleteTransfer,
-    'clearFinishedTransfers': s._clearFinishedTransfers,
+    'showDeleteDialog': s._sections.deleteActions.showDeleteDialog,
+    'handleDeleteSelected': s._sections.deleteActions.handleDeleteSelected,
+    'executeDelete': s._sections.deleteActions.executeDelete,
+    'deleteTransfer': s._sections.transferActions.deleteTransfer,
+    'clearFinishedTransfers':
+        s._sections.transferActions.clearFinishedTransfers,
     'showAddLinkDialog': s._showAddLinkDialog,
     'autoPasteLink': s._autoPasteLink,
     'addLink': s._addLink,
-    'toggleSelectionMode': s._toggleSelectionMode,
-    'exitSelectionMode': s._exitSelectionMode,
-    'toggleSelection': s._toggleSelection,
-    'toggleSelectAll': s._toggleSelectAll,
-    'showLoadingDialog': s._showLoadingDialog,
-    'dismissDialog': s._dismissDialog,
-    'focusFirstItemOrFallback': s._focusFirstItemOrFallback,
-    'showSnackBar': s._showSnackBar,
+    'toggleSelectionMode': s._sections.selectionActions.toggleSelectionMode,
+    'exitSelectionMode': s._sections.selectionActions.exitSelectionMode,
+    'toggleSelection': s._sections.selectionActions.toggleSelection,
+    'toggleSelectAll': s._sections.selectionActions.toggleSelectAll,
+    'showLoadingDialog': s._sections.feedback.showLoadingDialog,
+    'dismissDialog': s._sections.feedback.dismissDialog,
+    'focusFirstItemOrFallback':
+        s._sections.focusActions.focusFirstItemOrFallback,
+    'showSnackBar': s._sections.feedback.showSnackBar,
     'formatUnixDate': s._formatUnixDate,
     'formatPlaylistTitle': formatPlaylistTitle,
     'composeEntryTitle': composeEntryTitle,
