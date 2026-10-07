@@ -41,7 +41,7 @@
     {
       "original_name": "_PremiumizeFilesScreenState._navigateIntoFolder",
       "allowed_edit": "formatter_navigation_record_comma",
-      "difference_prefix": "formatter_navigation_record_comma:",
+      "difference_prefix": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
       "before": [
         "navigationStack",
         ".",
@@ -122,7 +122,11 @@
     "PremiumizeFeedback",
     "PremiumizeFocusActions",
     "_deps",
-    "deps"
+    "deps",
+    "PremiumizeFolderNavigation",
+    "PremiumizeViewModes",
+    "PremiumizeSearchActions",
+    "PremiumizeSourceBinding"
   ],
   "receiver_paths": {
     "_catalog": "PremiumizeCatalogState",
@@ -145,7 +149,11 @@
     "_deps.focusState": "PremiumizeFocusState",
     "_deps.selectionState": "PremiumizeSelectionState",
     "_deps.searchState": "PremiumizeSearchState",
-    "_deps.linkState": "PremiumizeLinkState"
+    "_deps.linkState": "PremiumizeLinkState",
+    "_sections.folderNavigation": "PremiumizeFolderNavigation",
+    "_sections.viewModes": "PremiumizeViewModes",
+    "_sections.searchActions": "PremiumizeSearchActions",
+    "_sections.sourceBinding": "PremiumizeSourceBinding"
   },
   "receiver_owners": {
     "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState",
@@ -169,12 +177,20 @@
     "_deps.focusState": "PremiumizeFocusState",
     "_deps.selectionState": "PremiumizeSelectionState",
     "_deps.searchState": "PremiumizeSearchState",
-    "_deps.linkState": "PremiumizeLinkState"
+    "_deps.linkState": "PremiumizeLinkState",
+    "_sections.folderNavigation": "PremiumizeFolderNavigation",
+    "_sections.viewModes": "PremiumizeViewModes",
+    "_sections.searchActions": "PremiumizeSearchActions",
+    "_sections.sourceBinding": "PremiumizeSourceBinding"
   },
   "plain_sections": [
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_actions.dart",
       "owner": "PremiumizeSelectionActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_navigation.dart",
+      "owner": "PremiumizeFolderNavigation"
     },
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_loading.dart",
@@ -183,6 +199,18 @@
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_back_navigation.dart",
       "owner": "PremiumizeBackNavigation"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_modes.dart",
+      "owner": "PremiumizeViewModes"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_actions.dart",
+      "owner": "PremiumizeSearchActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_source_binding.dart",
+      "owner": "PremiumizeSourceBinding"
     },
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart",
@@ -285,7 +313,11 @@
     "PremiumizeDeleteActions": "$State._sections.deleteActions",
     "PremiumizeTransferActions": "$State._sections.transferActions",
     "PremiumizeFeedback": "$State._sections.feedback",
-    "PremiumizeFocusActions": "$State._sections.focusActions"
+    "PremiumizeFocusActions": "$State._sections.focusActions",
+    "PremiumizeFolderNavigation": "$State._sections.folderNavigation",
+    "PremiumizeViewModes": "$State._sections.viewModes",
+    "PremiumizeSearchActions": "$State._sections.searchActions",
+    "PremiumizeSourceBinding": "$State._sections.sourceBinding"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",

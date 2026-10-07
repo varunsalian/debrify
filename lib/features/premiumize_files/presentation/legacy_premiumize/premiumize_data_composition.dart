@@ -1,3 +1,6 @@
+import 'package:debrify/models/premiumize_folder_item.dart';
+
+import '../../models/folder_view_mode.dart';
 import 'premiumize_back_navigation.dart';
 import 'premiumize_catalog_loading.dart';
 import 'premiumize_delete_actions.dart';
@@ -26,9 +29,12 @@ void wirePremiumizeDataSections(
     navigationState: owners.navigationState,
     initialSearchQuery: scope.initialSearchQuery,
     searchState: owners.searchState,
-    performSearch: scope.performSearch,
-    getCurrentViewMode: scope.getCurrentViewMode,
-    applyViewMode: scope.applyViewMode,
+    performSearch: (String query) =>
+        sections.searchActions.performSearch(query),
+    getCurrentViewMode: () => sections.viewModes.getCurrentViewMode(),
+    applyViewMode:
+        (PremiumizeFolderViewMode mode, List<PremiumizeFolderItem> items) =>
+            sections.viewModes.applyViewMode(mode, items),
     focusFirstItemOrFallback: () =>
         sections.focusActions.focusFirstItemOrFallback(),
     exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
@@ -39,9 +45,9 @@ void wirePremiumizeDataSections(
     selectionState: owners.selectionState,
     exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
     searchState: owners.searchState,
-    toggleSearch: scope.toggleSearch,
+    toggleSearch: () => sections.searchActions.toggleSearch(),
     navigationState: owners.navigationState,
-    navigateUp: scope.navigateUp,
+    navigateUp: () => sections.folderNavigation.navigateUp(),
     isPushedRoute: scope.isPushedRoute,
     context: scope.context,
   ));

@@ -80,11 +80,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           isPushedRoute: () => widget.isPushedRoute,
           selectSourceMode: () => widget.selectSourceMode,
           onSourceSelected: () => widget.onSourceSelected,
-          performSearch: _performSearch,
-          getCurrentViewMode: _getCurrentViewMode,
-          applyViewMode: _applyViewMode,
-          toggleSearch: _toggleSearch,
-          navigateUp: _navigateUp,
         ),
         (
           catalogState: _catalog,
@@ -107,8 +102,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   // Premiumize tab index in main.dart's page list (for TV focus + back handler).
   static const int _tabIndex = 11;
-
-  bool get _isAtRoot => _nav.currentFolderId == null;
 
   @override
   void initState() {
@@ -167,241 +160,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     _focus.searchButtonFocusNode.dispose();
     _focus.searchClearFocusNode.dispose();
     super.dispose();
-  }
-
-  // ── Folder navigation ──────────────────────────────────────────────────────
-
-  void _navigateIntoFolder(PremiumizeFolderItem folder) {
-    _sections.selectionActions.exitSelectionMode();
-    _focus.shouldFocusOnLoad = true;
-    // Reset scroll while the outgoing list is still attached, so the new
-    // folder never inherits the old offset.
-    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
-    setState(() {
-      _nav.navigationStack.add((
-        id: _nav.currentFolderId,
-        name: _nav.currentFolderName,
-      ));
-      _nav.currentFolderId = folder.id;
-      _nav.currentFolderName = folder.name;
-      // Clear stale rows so the loading skeleton shows instead of the
-      // outgoing folder's contents sitting frozen while the fetch runs.
-      _catalog.items.clear();
-      _search.isSearchActive = false;
-      _search.searchController.clear();
-      _search.searchResults = [];
-    });
-    _sections.catalogLoading.loadFolder();
-  }
-
-  void _navigateUp() {
-    _sections.selectionActions.exitSelectionMode();
-    if (_nav.navigationStack.isEmpty) return;
-    // Refocus the first row once the parent listing loads — clearing _items
-    // disposes the focused row and nothing else reclaims DPAD focus.
-    _focus.shouldFocusOnLoad = true;
-    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
-    setState(() {
-      final previous = _nav.navigationStack.removeLast();
-      _nav.currentFolderId = previous.id;
-      _nav.currentFolderName = previous.name;
-      _catalog.items.clear();
-    });
-    _sections.catalogLoading.loadFolder();
-  }
-
-  // ── View modes ─────────────────────────────────────────────────────────────
-
-  PremiumizeFolderViewMode _getCurrentViewMode() {
-    if (_isAtRoot) return PremiumizeFolderViewMode.raw;
-    return _view.folderViewModes[_nav.currentFolderId!] ??
-        PremiumizeFolderViewMode.raw;
-  }
-
-  void _setViewMode(PremiumizeFolderViewMode mode) {
-    if (_isAtRoot) return;
-    setState(() {
-      _view.folderViewModes[_nav.currentFolderId!] = mode;
-      final reordered = _applyViewMode(mode, _catalog.items);
-      _catalog.items
-        ..clear()
-        ..addAll(reordered);
-    });
-  }
-
-  List<PremiumizeFolderItem> _applyViewMode(
-    PremiumizeFolderViewMode mode,
-    List<PremiumizeFolderItem> items,
-  ) {
-    if (mode == PremiumizeFolderViewMode.raw) return List.of(items);
-    return applySortedView(items);
-  }
-
-  // ── Search ─────────────────────────────────────────────────────────────────
-
-  void _toggleSearch() {
-    setState(() {
-      _search.isSearchActive = !_search.isSearchActive;
-      if (!_search.isSearchActive) {
-        _search.searchDebounce?.cancel();
-        _search.searchController.clear();
-        _search.searchResults = [];
-        _search.isSearching = false;
-      } else {
-        // Search and multi-select are mutually exclusive: selection bar actions
-        // operate on _items, not search results.
-        _selection.isSelectionMode = false;
-        _selection.selectedIds.clear();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _focus.searchFocusNode.requestFocus();
-        });
-      }
-    });
-  }
-
-  void _performSearch(String query) {
-    final q = query.trim();
-    if (q.isEmpty) {
-      _search.searchDebounce?.cancel();
-      setState(() {
-        _search.searchResults = [];
-        _search.isSearching = false;
-      });
-      return;
-    }
-
-    // Root: server-side cloud search (recursive), debounced to limit calls.
-    if (_isAtRoot) {
-      _search.searchDebounce?.cancel();
-      setState(() => _search.isSearching = true);
-      _search.searchDebounce = Timer(
-        const Duration(milliseconds: 350),
-        () => _runCloudSearch(q),
-      );
-      return;
-    }
-
-    // Inside a folder: filter the currently-loaded items locally.
-    final lower = q.toLowerCase();
-    setState(() {
-      _search.isSearching = false;
-      _search.searchResults = _catalog.items
-          .where((i) => !i.isFolder && i.name.toLowerCase().contains(lower))
-          .toList();
-    });
-  }
-
-  Future<void> _runCloudSearch(String query) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    try {
-      final results = await PremiumizeService.searchCloud(apiKey, query);
-      if (!mounted) return;
-      // Drop stale results if the query changed while the request was in flight.
-      if (_search.searchController.text.trim() != query) return;
-      setState(() {
-        _search.searchResults = results;
-        _search.isSearching = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _search.isSearching = false);
-      _sections.feedback.showSnackBar('Search failed: $e', isError: true);
-    }
-  }
-
-  // ── Playback ───────────────────────────────────────────────────────────────
-
-  Future<void> _selectBoundSource(PremiumizeFolderItem item) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    _sections.feedback.showLoadingDialog(
-      item.isFolder ? 'Checking folder for videos...' : 'Checking file...',
-    );
-    var checkingDialogOpen = true;
-    void closeCheckingDialog() {
-      if (!checkingDialogOpen) return;
-      checkingDialogOpen = false;
-      _sections.feedback.dismissDialog();
-    }
-
-    try {
-      if (item.isFolder) {
-        final files = await PremiumizeService.listFolderRecursive(
-          apiKey,
-          item.id,
-        );
-        if (!mounted) return;
-        final videos = files.where((f) => f.isVideo).toList();
-        if (videos.isEmpty) {
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'This folder has no playable videos',
-            isError: true,
-          );
-          return;
-        }
-        final first = videos.first;
-        final firstReady =
-            first.playableUrl?.isNotEmpty == true ||
-            await PremiumizeService.resolveItemById(apiKey, first.id) != null;
-        if (!mounted) return;
-        if (!firstReady) {
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'This folder has no ready video streams',
-            isError: true,
-          );
-          return;
-        }
-      } else {
-        if (!item.isVideo) {
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'Only video files can be bound',
-            isError: true,
-          );
-          return;
-        }
-        final resolved = await PremiumizeService.resolveItemById(
-          apiKey,
-          item.id,
-        );
-        if (resolved == null || resolved.link.isEmpty) {
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'This file is not ready to stream',
-            isError: true,
-          );
-          return;
-        }
-      }
-
-      closeCheckingDialog();
-      await widget.onSourceSelected?.call(
-        SeriesSource(
-          torrentHash: '',
-          torrentName: item.name,
-          debridService: 'premiumize',
-          debridTorrentId: item.id,
-          cloudSourceKind: item.isFolder
-              ? SeriesSource.cloudKindFolder
-              : SeriesSource.cloudKindFile,
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop();
-    } catch (e) {
-      closeCheckingDialog();
-      if (mounted) {
-        _sections.feedback.showSnackBar(
-          'Could not bind this Premiumize source: $e',
-          isError: true,
-        );
-      }
-    }
   }
 
   Future<void> _playFile(PremiumizeFolderItem file) async {
@@ -999,7 +757,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isPushedRoute && _isAtRoot && _catalog.initialLoad) {
+    if (widget.isPushedRoute &&
+        _sections.folderNavigation.isAtRoot &&
+        _catalog.initialLoad) {
       return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -1043,7 +803,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     return CloudScaffold(
       appBar: AppBar(
-        leading: (!_isAtRoot)
+        leading: (!_sections.folderNavigation.isAtRoot)
             ? Focus(
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
@@ -1073,7 +833,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         title: Text(
           widget.selectSourceMode
               ? 'Select Premiumize Source'
-              : (_isAtRoot ? 'Premiumize' : _nav.currentFolderName),
+              : (_sections.folderNavigation.isAtRoot
+                    ? 'Premiumize'
+                    : _nav.currentFolderName),
         ),
         actions: [
           // Keep the button mounted while a navigation fetch runs (_items is
@@ -1105,7 +867,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             IconButton(
               focusNode: _focus.searchButtonFocusNode,
               icon: Icon(_search.isSearchActive ? Icons.close : Icons.search),
-              onPressed: _toggleSearch,
+              onPressed: _sections.searchActions.toggleSearch,
               tooltip: _search.isSearchActive ? 'Close search' : 'Search files',
               iconSize: iconSize,
               padding: iconPadding,
@@ -1139,7 +901,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       ),
       body: Column(
         children: [
-          if (_isAtRoot && !_search.isSearchActive && !widget.selectSourceMode)
+          if (_sections.folderNavigation.isAtRoot &&
+              !_search.isSearchActive &&
+              !widget.selectSourceMode)
             _buildViewSelector(),
           if (_selection.isSelectionMode) _buildSelectionBar(),
           if (showViewModeDropdown) _buildViewModeDropdown(),
@@ -1193,7 +957,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildViewModeDropdown() {
     final theme = Theme.of(context);
-    final mode = _getCurrentViewMode();
+    final mode = _sections.viewModes.getCurrentViewMode();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -1245,7 +1009,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             ),
           ],
           onChanged: (value) {
-            if (value != null) _setViewMode(value);
+            if (value != null) _sections.viewModes.setViewMode(value);
           },
         ),
       ),
@@ -1328,7 +1092,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   ? () => _focus.searchClearFocusNode.requestFocus()
                   : null,
               decoration: InputDecoration(
-                hintText: _isAtRoot
+                hintText: _sections.folderNavigation.isAtRoot
                     ? 'Search your Premiumize cloud...'
                     : 'Search files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -1343,7 +1107,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   vertical: 12,
                 ),
               ),
-              onChanged: _performSearch,
+              onChanged: _sections.searchActions.performSearch,
               onSubmitted: (_) => _focus.searchFocusNode.unfocus(),
             ),
           ),
@@ -1404,7 +1168,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     if (_search.searchController.text.trim().isEmpty) {
       return Center(
         child: Text(
-          _isAtRoot ? 'Type to search your cloud' : 'Type to search files',
+          _sections.folderNavigation.isAtRoot
+              ? 'Type to search your cloud'
+              : 'Type to search files',
           style: const TextStyle(color: Colors.grey),
         ),
       );
@@ -1471,14 +1237,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         title: item.name,
         meta: metaParts.isEmpty ? null : metaParts.join(' · '),
         onTap: (item.isFolder || isVideo)
-            ? () => _selectBoundSource(item)
+            ? () => _sections.sourceBinding.selectBoundSource(item)
             : null,
         actions: item.isFolder
             ? [
                 CloudRowAction(
                   icon: Icons.folder_open_rounded,
                   label: 'Browse folder',
-                  onSelected: () => _navigateIntoFolder(item),
+                  onSelected: () =>
+                      _sections.folderNavigation.navigateIntoFolder(item),
                 ),
               ]
             : const [],
@@ -1542,7 +1309,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       title: item.name,
       meta: metaParts.isEmpty ? null : metaParts.join(' · '),
       onTap: item.isFolder
-          ? () => _navigateIntoFolder(item)
+          ? () => _sections.folderNavigation.navigateIntoFolder(item)
           : isVideo
           ? () => _playFile(item)
           : null,
@@ -1701,7 +1468,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildEmpty() {
-    final isInFolder = !_isAtRoot;
+    final isInFolder = !_sections.folderNavigation.isAtRoot;
     return ListView(
       children: [
         const SizedBox(height: 120),
@@ -1858,25 +1625,25 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'searchFocusNode': s._focus.searchFocusNode,
     'searchButtonFocusNode': s._focus.searchButtonFocusNode,
     'searchClearFocusNode': s._focus.searchClearFocusNode,
-    'isAtRoot': s._isAtRoot,
+    'isAtRoot': s._sections.folderNavigation.isAtRoot,
     'loadSettings': s._sections.catalogLoading.loadSettings,
     'loadFolder': s._sections.catalogLoading.loadFolder,
     'loadTransfers': s._sections.catalogLoading.loadTransfers,
     'refresh': s._sections.catalogLoading.refresh,
     'switchView': s._sections.catalogLoading.switchView,
-    'navigateIntoFolder': s._navigateIntoFolder,
-    'navigateUp': s._navigateUp,
+    'navigateIntoFolder': s._sections.folderNavigation.navigateIntoFolder,
+    'navigateUp': s._sections.folderNavigation.navigateUp,
     'handleBackNavigation': s._sections.backNavigation.handleBackNavigation,
-    'getCurrentViewMode': s._getCurrentViewMode,
-    'setViewMode': s._setViewMode,
-    'applyViewMode': s._applyViewMode,
+    'getCurrentViewMode': s._sections.viewModes.getCurrentViewMode,
+    'setViewMode': s._sections.viewModes.setViewMode,
+    'applyViewMode': s._sections.viewModes.applyViewMode,
     'applySortedView': applySortedView,
     'extractSeasonNumber': extractSeasonNumber,
     'extractLeadingNumber': extractLeadingNumber,
-    'toggleSearch': s._toggleSearch,
-    'performSearch': s._performSearch,
-    'runCloudSearch': s._runCloudSearch,
-    'selectBoundSource': s._selectBoundSource,
+    'toggleSearch': s._sections.searchActions.toggleSearch,
+    'performSearch': s._sections.searchActions.performSearch,
+    'runCloudSearch': s._sections.searchActions.runCloudSearch,
+    'selectBoundSource': s._sections.sourceBinding.selectBoundSource,
     'playFile': s._playFile,
     'playFolder': s._playFolder,
     'playPremiumizeVideos': s._playPremiumizeVideos,

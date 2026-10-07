@@ -298,9 +298,15 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_navigation.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_composition.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_state.dart':
       0,
@@ -310,7 +316,11 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_state.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_source_binding.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_modes.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart':
       0,
