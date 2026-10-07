@@ -54,7 +54,9 @@ settings layout used on TV, desktop and wide tablets: a D-pad rail of sources
 and settings, where focusing an entry previews its pane and RIGHT/OK enters it.
 
 Split it into a new feature, `lib/features/iptv_settings_two_pane/`, **moving
-code verbatim**. Unchanged: the element tree, keys (the per-destination
+code verbatim** (registered receiver rewrites and renames aside, plus
+`dart format`'s optional trailing commas in the rewritten leaves — 18 commas
+across five leaves, behaviour-neutral; independent review P3). Unchanged: the element tree, keys (the per-destination
 `ListView` key), `const` placement, focus nodes and their debug labels,
 traversal policy, key handling, build order and the State lifecycle.
 
