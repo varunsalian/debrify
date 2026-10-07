@@ -18,6 +18,7 @@ from android_junit_evidence import evidence_root, JBR
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = 'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt'
 MANIFEST = ROOT / 'dev/tool/kotlin_moves/tvplayer_p1.json'
+EVIDENCE_PHASE = 'p1'
 PARSE_CACHE = {}
 
 
@@ -280,7 +281,9 @@ def main():
     args = parser.parse_args()
     if args.self_test:
         import test_kotlin_moves
-        return test_kotlin_moves.run()
+        global EVIDENCE_PHASE
+        EVIDENCE_PHASE = 'p' + str(json.loads(args.manifest.read_text())['phase'])
+        return test_kotlin_moves.run(args.manifest)
     manifest = json.loads(args.manifest.read_text())
     original = subprocess.check_output(['git', '-C', str(ROOT), 'show', manifest['base'] + ':' + manifest['source']]).decode()
     if args.self_compare_original:

@@ -744,3 +744,19 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   typed reflection selectors); P3s: fixed opt-in set, inventory scope notes.
 - 2026-10-07 — phase 2 design round 2 (Codex): **No P1s**; two P3 wording
   fixes applied. Phase 2 design approved for execution.
+
+- 2026-10-07 — **Phase 2 step T complete**, based on `dcbd9aafe` at
+  starting branch revision `2df3c1a9f`. The checker accepts the selected
+  manifest for normal checks and self-tests; phase fixture evidence uses the
+  selected phase, while the offline Kotlin 2.2.20 PSI build cache remains
+  shared. The fixture materializer applies moved-row substitutions and
+  retained `patched` rows. Added `tvplayer_p2.json`: 54 moved subtrees,
+  12 destinations, one `setupPlayer` patch, with companion-constant
+  relocation and exact policy substitutions. Complete phase-2 extraction
+  passes; all **32 checker self-tests** pass (the unchanged 24 phase-1
+  checks plus eight phase-2 checks, including both required extra-edit
+  negatives). Original all-retained self-comparison: **2,839 declarations,
+  zero differences**. Unchanged phase-1 manifest on this tree: **3,477
+  declarations, zero differences**. Evidence: `p2/checker-self-tests.log`,
+  `p2/original-self-comparison.log`, `p2/phase1-regression.log`,
+  `p2/fixtures/`. No production moves.
