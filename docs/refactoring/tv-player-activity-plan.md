@@ -1269,3 +1269,4 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   frozen at `eee52b084`; uncached latch-controlled cue fetch and blockable
   alignment; expectations corrected — no countdown, work continues across
   `onStop`, destroy-only cancellation, unbounded cue cache).
+- 2026-10-08 — phase 4 design round 2 (Codex): **No P1s**, no further findings. Phase 4 design approved.
