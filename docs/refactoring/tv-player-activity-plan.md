@@ -1292,3 +1292,22 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   its bytes equal the existing historical fixture. Earlier step-T runs had
   regenerated those same historical fixture bytes in `p3/`; this evidence
   path deviation is recorded here. Production and manifests unchanged.
+
+- 2026-10-08 — phase 4 step 0: both per-feature prerequisites passed on
+  `eee52b084` first (seven tests, 20 blocked alignments and 20 uncached loads;
+  Main publication, stale work, failure fallback and destroy covered).
+  No feature deferred. Added 61 original characterizations for auto-sync
+  outcomes/OOM, ladder/verify boundaries and timings, pill UI/animations,
+  continued work across onStop, destroy cancellation/shared-handler cleanup,
+  renderer/ticker/offset/selection, panel callbacks, all five menu builders,
+  external/embedded overlay routing and the legacy track dialog. Every new
+  test has an original-code assertion mutation proof: 61/61 killed, no
+  compile failures or incidental crashes accepted. Table appended to deps;
+  exact mutations, logs/XML/assertions and final test sources under `p4/`.
+  Clean `baseline-eee52b084`: 459 (458 pass, existing focus failure 1).
+  `p4-step0`: 520 (519 pass, same failure); identity comparison passes,
+  additions only (61), all prior statuses identical. Original lint archived:
+  1,352 issues (253 Error / 1,099 Warning), unchanged baseline issue set for
+  the later gate. Production/protected inputs unchanged; temporary original
+  worktree removed. STOP before production moves; Claude's independent
+  mutation sample/review and any 0b follow later.
