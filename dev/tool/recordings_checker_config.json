@@ -4,7 +4,7 @@
   "feature": "lib/features/recordings",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 2,
+  "completed_step": 3,
   "completion_step": 4,
   "allowed_edits": [
     "receiver",
@@ -321,6 +321,18 @@
     {
       "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
       "owner": "RecordingsHubFormat"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout"
     }
   ],
   "planned_type_aliases": [
