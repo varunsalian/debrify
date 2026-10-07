@@ -368,3 +368,11 @@ test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_te
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart
 test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart
+
+# Edit profile ORIGINAL characterization (step 0).
+test/profiles/edit_profile_screen_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_access_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_avatar_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_goldens_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_save_test.dart
+test/features/edit_profile/presentation/legacy_edit_profile/edit_profile_review_closure_test.dart

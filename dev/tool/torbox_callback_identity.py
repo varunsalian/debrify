@@ -322,6 +322,8 @@ def check_callback_identities(lookup, rows, source_path, config):
                             # conditions remain covered by the whole-leaf check.
                             target = node_for(site['conditional_member'])['name']
                             positions = member_occurrences(expr, target)
+                            if config.get('callback_terminal_members'):
+                                positions = [i for i in positions if expr[i+1:i+2] not in (['.'], ['?.'])]
                             branch = site.get('branch_occurrence', 0)
                             if len(positions) != site.get('branch_count', 1):
                                 raise ValueError('conditional tear-off occurrence count changed: ' + target)

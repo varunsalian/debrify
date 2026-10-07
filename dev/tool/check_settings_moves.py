@@ -264,6 +264,9 @@ def receiver_path_match(values, index):
 
 
 def normalize(values, rows, row=None):
+    if CONFIG.get('registered_occurrence_substitutions'):
+        from registered_occurrence_substitutions import canonical_tokens
+        values = canonical_tokens(values, CONFIG['registered_occurrence_substitutions'])
     mapping = names(rows, row['original_name'].rsplit('.', 1)[0] if row else None)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
     if row:
@@ -916,6 +919,33 @@ def check_live_widget_factory(lookup, config):
     return errors
 
 
+def leading_line_comment_block(source, node):
+    prefix = source[:node['start']]
+    match = re.search(r'((?:^[ \t]*//[^\r\n]*\r?\n)+)[ \t]*\Z', prefix, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def check_leading_field_comments(original_source, sources, original, lookup, rows, source_path):
+    errors = []
+    by_name = {row['original_name']: row for row in rows}
+    for name in sidecar('leading_field_comments', 'leading_field_comments', []):
+        row, before = by_name.get(name), original.get(name)
+        if row is None or before is None or not before.get('variables'):
+            errors.append('Leading field comment registration is not a manifest field: ' + name)
+            continue
+        expected = leading_line_comment_block(original_source, before)
+        if expected is None:
+            errors.append('Leading field comment registration has no original block: ' + name)
+            continue
+        destination = (row['destination_file'], row['destination_class'], row['new_name'])
+        retained = (source_path, *name.rsplit('.', 1))
+        key = destination if destination in lookup else retained
+        after = lookup.get(key)
+        if after is None or leading_line_comment_block(sources[key[0]], after) != expected:
+            errors.append('Leading field comment bytes or placement changed: ' + name)
+    return errors
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -1052,12 +1082,20 @@ def lifecycle_tokens(node, rows):
 
 def _check(original_source, sources, rows, source_path, package=None,
            partition=False, context_guard=False):
+    required_source_step = CONFIG.get('required_facade_source_step')
+    if (required_source_step is not None
+            and CONFIG.get('completed_step', 0) >= required_source_step
+            and source_path not in sources):
+        return ['Missing required facade source: ' + source_path]
     from check_verbatim_moves import parse, original_leaves, split_names, missing_line_comments, ROOT
     parsed = parse({'<original>': original_source, **sources}, package,
                    occurrence_bindings=bool(CONFIG.get('occurrence_field_bindings')
                                             or CONFIG.get('lexical_state_setters')))
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     errors = missing_line_comments(original_source, sources, rows)
+    if CONFIG.get('sidecars', {}).get('leading_field_comments'):
+        errors.extend(check_leading_field_comments(original_source, sources, original,
+                                                   all_nodes(parsed), rows, source_path))
     if CONFIG.get('source_validator_module'):
         import importlib
         validator = importlib.import_module(CONFIG['source_validator_module'])

@@ -61,3 +61,11 @@ warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_t
 warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'hideBackButton' isn't used. Try removing the variable or using it
 # _DebrifyTVScreenState._buildSettingsCard
 warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setHideBackButton' isn't referenced. Try removing the declaration of 'setHideBackButton'
+
+# 2026-10-06 edit_profile step 1: R f9ffe16d5e7ee9a94402950d7debdb359d1fc8f8.
+# Private enum retained verbatim behind its typedef; five destination-probe warnings.
+warning | unused_field | lib/features/edit_profile/models/edit_profile_tv_section.dart | The value of the field 'profile' isn't used. Try removing the field, or using it
+warning | unused_field | lib/features/edit_profile/models/edit_profile_tv_section.dart | The value of the field 'pages' isn't used. Try removing the field, or using it
+warning | unused_field | lib/features/edit_profile/models/edit_profile_tv_section.dart | The value of the field 'access' isn't used. Try removing the field, or using it
+warning | unused_field | lib/features/edit_profile/models/edit_profile_tv_section.dart | The value of the field 'lock' isn't used. Try removing the field, or using it
+warning | unused_field | lib/features/edit_profile/models/edit_profile_tv_section.dart | The value of the field 'data' isn't used. Try removing the field, or using it
