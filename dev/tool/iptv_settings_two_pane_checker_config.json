@@ -4,7 +4,7 @@
   "feature": "lib/features/iptv_settings_two_pane",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 2,
+  "completed_step": 3,
   "allowed_edits": [
     "receiver",
     "rename",

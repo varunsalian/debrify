@@ -40,10 +40,10 @@ SETTINGS_WIDGETS_FACADE_CAP = 63  # settings_widgets: 63 export lines, 0 comment
 SETTINGS_WIDGETS_PUBLIC_NAMES = frozenset(['ConnectionCard', 'ConnectionInfo', 'ConnectionsSummary', 'SettingsBackground', 'SettingsBannerTone', 'SettingsHeader', 'SettingsInfoBanner', 'SettingsInfoTile', 'SettingsLookHero', 'SettingsPageHeader', 'SettingsPageScaffold', 'SettingsRowContent', 'SettingsRows', 'SettingsSection', 'SettingsSectionLabel', 'SettingsSelectDropdown', 'SettingsSelectOption', 'SettingsSkeleton', 'SettingsTile', 'SettingsToggleTile', 'TvRenderQualityChoice', 'TvUiScaleChoice', 'WebDavSyncPendingBadge', 'kSettingsAccent', 'kSettingsAccent2', 'kSettingsAmber', 'kSettingsBg', 'kSettingsDim', 'kSettingsDim2', 'kSettingsGreen', 'kSettingsLine', 'kSettingsMaxWidth', 'kSettingsPanel', 'kSettingsPanel2', 'kSettingsRed', 'kTvRenderQualityChoices', 'kTvUiScaleChoices', 'launchSettingsUrl', 'pushSettingsPage', 'settingsConnectionIsReady', 'settingsConnectionNeedsAttention', 'settingsInitialsFor', 'settingsPageTheme', 'showLegacyModeInfoDialog', 'showSettingsDialog', 'tvRenderQualityLabel', 'tvUiScaleLabel'])
 # Pure UI two-pane move: feature checks are unconditional from step 1.
 FEATURES += ("iptv_settings_two_pane",)
-IPTV_SETTINGS_TWO_PANE_COMPLETE = False
+IPTV_SETTINGS_TWO_PANE_COMPLETE = True
 IPTV_SETTINGS_TWO_PANE_FACADE = "lib/screens/settings/iptv_settings_two_pane.dart"
 IPTV_SETTINGS_TWO_PANE_BRIDGE = "lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/"
-IPTV_SETTINGS_TWO_PANE_FACADE_CAP = 0  # Measured and activated at completion.
+IPTV_SETTINGS_TWO_PANE_FACADE_CAP = 7  # Measured and activated at completion.
 IPTV_SETTINGS_TWO_PANE_PUBLIC_NAMES = frozenset([
     "IptvAutoRefreshDialog", "IptvSettingsTwoPane", "IptvSettingsTwoPaneState",
     "iptvAutoRefreshExplanation", "iptvAutoRefreshLabel",

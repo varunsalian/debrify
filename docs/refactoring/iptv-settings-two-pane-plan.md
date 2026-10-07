@@ -1067,3 +1067,55 @@ real-main diagnostic intact. This changes only completion-negative inputs;
 step-2's completion-false checks are unaffected and were rerun explicitly.
 The preliminary clone result is retained/discarded as preliminary, and the
 corrected completion probe is rerun before activating root completion.
+
+
+### Step 3 — completion checks (2026-10-07)
+
+Step 2 is `9cee8acf1`. Completion is activated with
+`IPTV_SETTINGS_TWO_PANE_COMPLETE = True`, measured facade cap 7 and checker
+`completed_step = 3`. The unconditional feature scan remains active even
+with completion disabled. The real-main proof passes 94 cases, including
+facade presence/purity/exact names and destinations, exact per-file imports,
+501-line caps, wrappers, peer boundaries and completion-false scanning. The
+step-1 CI paths remain inside format/analyze commands before `| tee`, and its
+quick-job architecture proof remains after pub get.
+
+All final checked source/tool/config input bytes match the fresh normal-clone
+proof exactly (`step3-fresh-clone-current-input-parity.json`). That clone has
+a directory `.git`, ran pub get with an unchanged lock, and passed the full
+own manifest/self-tests, source reader, strict analyzer inventory, capture
+script syntax and completion architecture proof. Original-only mutation
+proofs already passed in a separate normal clone in step 0b; their unchanged
+inputs/evidence remain valid. No `.git` file or parser package was copied.
+Every parser/kernel package is isolated under this worktree's `.dart_tool`.
+
+Step-3 focused checks again pass against `base2`: 357 successes, the same
+pre-existing profile guard failure, zero missing/new/skipped identities and
+stable tested inputs. macOS and Linux strict goldens pass 13/13 each.
+Architecture, sizes, storage references, CI formatter/analyzer, strict
+19-info per-symbol maxima, ink/theme/shape parity, source reader, scope and
+staged-diff checks pass. No new errors, warnings, suppression or allowlist
+change. The seven-line facade and all 14 destinations retain exact step-2
+production bytes. Found-not-fixed and temporary legacy exceptions are
+unchanged. All 21 integrated manifests/self-tests pass with isolated parser packages;
+the 20 pre-existing outputs are byte-identical to originals. Committed-tree
+full-suite gate 2 now follows, comparing with latest `base2` and gate 1. The
+existing tuner analyzer also passes with nine infos and zero additions.
+
+Integrator union is limited to seven existing shared files:
+`check_search_architecture.py`, `shape_manifest_test.dart`,
+`ci_behavior_tests.txt`, `checks.yml`, `file_size_baseline.txt`,
+`theme_surface_manifest.txt` and `light_ink_inventory.py`. Shared checker
+engines, occurrence binder, AST adapter/parser inputs, analyzer allowlist and
+known-failure list remain original bytes. The 20 pre-existing manifests'
+complete actual adapter proofs remain valid because their adapter and every
+source input still match R exactly, rechecked at step 3 and recorded in
+`step3-shared-union-and-immutability.json`. No future edit_profile keys or
+parallel mechanism was added. Explicit mandatory qualification continues to
+pass/fail its positives/bare-field negative under both in-memory defaults.
+
+Pending after local completion: Android TV repeat/hold/escape/entry/return
+and Add deep-link checks, weak-box stats performance, tvOS focus and desktop
+input/device checks, remote CI and semantic integration with sibling
+refactors. No push, rebase, branch switch or edit of a forbidden application
+file has occurred.
