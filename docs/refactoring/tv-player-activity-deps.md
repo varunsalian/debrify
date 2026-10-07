@@ -1,0 +1,2237 @@
+# Android TV player activity — dependency map
+
+Read-only survey at `39c630303` (six parts, A–F). Line numbers refer to that revision of `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt — responsibility map, chunk A (lines 136–3000)
+
+File: android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
+Note: the chunk boundary at 3000 falls INSIDE `setupPlayer()` (2736–3134). Its tail
+(3001–3134: LoadControl presets, player build, listener attach, subtitle listener,
+SubtitleSettings wiring, IPTV network callback) is included in this map because it
+cannot be separated from the head. "Subtitle language prefs" in this chunk exist only
+as the DefaultTrackSelector parameters in setupPlayer (2737–2806); the rest of the
+subtitle subsystem only has FIELD declarations here (1194–1340).
+
+Shape of the chunk: ~65% field declarations for clusters whose logic lives elsewhere
+(lines 136–1377 interleave fields with ~5 small logic clusters), then
+`playbackListener` (1499–2007), `onCreate` (2014–2186), metadata receiver
+(2188–2484), `bindViews` (2486–2676), origin helpers (2678–2701), codec selector
+(2715–2734), `setupPlayer` (2736–3134).
+
+---------------------------------------------------------------------------------
+## 1. Responsibility clusters
+
+### C1 View references (fields only)
+Lines 138–259 (+ 993–1007 IPTV guide views, 1057–1066 EPG views, 1091–1092 Stremio
+badge, 1179–1188 Stremio TV guide views, 1195 subtitleSettingsRoot, 1296 statusPill,
+1302–1304 autoSync pill, 1374–1376 buffering/PikPak indicators).
+- lateinit (bound in bindViews 2486): playerView@139, startupGateView@140,
+  startupGateStatus@141, titleContainer@142, titleView@143, titleOttContainer@145,
+  ottEpisodeBadge@146, ottEpisodeTitle@147, ottRatingContainer@148, ottRating@149,
+  channelBadge@150, subtitleOverlay@151, subtitleControlsLift@152, playlistOverlay@153,
+  playlistView@154, seasonTabsContainer@155, nextOverlay@156, nextText@157,
+  nextSubtext@158, nextBackdrop@161, upNextCard@164, upNextPoster@165, upNextTitle@166,
+  upNextCountdown@167, skipSegmentButton@168, seekbar*@177–182, bufferingIndicator@1374,
+  pikPakReactivationIndicator@1375, pikPakReactivationText@1376,
+  seekFeedbackManager@815 (built in onCreate 2176).
+- nullable controls (bound in setupControls@4255, outside chunk): controlsOverlay@187,
+  pauseButton@188, iptv*Button@189–195, audio/subtitle/aspect/speed/nightModeButton
+  @201–205, debrifyTime*@208–212, cinemaProgress*@215–218, ott*@224–250.
+- Mixed state living among views: upNextVisible@169, upNextTargetIndex@170,
+  upNextDismissedForIndex@171, upNextHandler@172, seasonTabs@173, movieTabs@174,
+  seekbarBackgroundWidth@183, currentSeekSpeed@184, iptvUpPressActive@198,
+  iptvUpLongPressHandled@199, originalControlDockOrder@200, dockTagsCacheKey@242,
+  dockTagsCache@243, ottShowName@254 (@Volatile), cinemaProgressTrackWidth@255,
+  cinemaSeekMode@256, cinemaSeekWasPlaying@257, cinemaProgressAnimator@258,
+  cinemaLastAnimatedProgress@259.
+- Lazy owned object: iptvRecordingController@197 (`by lazy { IptvRecordingController(this) }`).
+
+### C2 Player core / decoder diagnostics
+Lines 261–340.
+- Fields: player@262, nativeAudioRouting@263, trackSelector@264, subtitleListener@265,
+  displayMatchMode@266, displayModeController@267, offsetRenderersFactory@340.
+- decoderAnalyticsListener@269–316 (anon AnalyticsListener; private inputFormat@270):
+  onAudioTrackInitialized@272, onVideoInputFormatChanged@282, onVideoDecoderInitialized@291.
+- androidDecoderStatus@318 (pure-ish: string rules + MediaCodecList query).
+- Reads: nightModeIndex@842 (C9), displayModeController, player.
+- Calls (outside chunk): initializeLoudnessEnhancer@16529, syncAudioEffectSession@16519.
+
+### C3 IPTV live recovery + twin trial
+Lines 342–807 logic, 852–1054 state (interleaved). Members:
+iptvLiveRecovery@369 (lazy, IptvLiveRecovery.Callbacks anon impl 372–402),
+iptvLiveRecoveryEligible@410, performIptvLiveRetune@424, beginIptvTwinTrial@494,
+judgeIptvTwinTrial@517, acceptIptvTwinTrial@544, failIptvTwinTrial@558,
+onIptvTwinTrialTimeout@581, scheduleIptvTwinTrialTimeout@589,
+rearmIptvTwinTrialDeadline@603, parkIptvTwinTrialRestore@618,
+restoreParkedIptvTwinIfNeeded@630, clearParkedIptvTwinRestore@641,
+clearIptvTwinTrial@650, restoreAcceptedIptvTwinAfterAuth@663, classifyIptvError@685,
+inner class IptvLiveLoadErrorPolicy@709–749 (liveNow@710, getRetryDelayMsFor@713,
+getMinimumLoadableRetryCount@747), showIptvReconnectPill@751, hideIptvReconnectPill@777,
+dpToPx@781, iptvDiagAnalyticsListener@784–807 (onRenderedFirstFrame@785,
+onLoadCompleted@800).
+- Owned fields: iptvTuneDiagnostics@344, iptvLiveRetuneInFlight@354,
+  iptvStoppedAtRealtime@359, IPTV_LIVE_REJOIN_AFTER_MS@361, iptvNetworkCallback@363,
+  iptvReconnectPill@367, iptvHlsForcedUrls@888, iptvStrictTsUrls@897,
+  iptvStrictTsActive@901 (@Volatile), iptvStartsWithStrictTs@906 (lazy),
+  iptvTwinTrialOriginalUrl@928, iptvTwinTrialUrl@936, iptvTwinFailedUrls@939,
+  iptvTwinPreferredUrls@944, iptvTwinTrialTimeout@946, iptvTwinTrialHandler@947,
+  iptvTwinTrialRestoreOriginal@955, iptvTwinTrialRestoreTwin@959,
+  iptvTwinTrialLastFrames@964, iptvTwinTrialAdvanceSince@965,
+  iptvTwinTrialStartedRealtime@966, IPTV_TWIN_TRIAL_STABLE_MS@972,
+  IPTV_TWIN_TRIAL_TIMEOUT_MS@979, IPTV_TWIN_TRIAL_POST_READY_MS@986,
+  IPTV_TWIN_TRIAL_MAX_MS@990.
+- Reads other clusters: isIptvMode@862, iptvChannels@863, currentIptvIndex@864,
+  currentIptvStreamUrl@992, iptvStremioChannelKey@1079, iptvStremioWinnerReported@1082,
+  sleepStopLatched@1282, sleepTimerMode@1269, player, playerView, isFinishing/isDestroyed.
+- Writes other clusters: iptvStartOverActive@865, iptvStartOverLoading@866,
+  iptvStartOverTimelineVisible@867, iptvCatchupToken@868 (performIptvLiveRetune 429–434);
+  manualSourceRestoreInProgress@1142 (iptvDiagAnalyticsListener 793).
+- iptvDiagAnalyticsListener is actually MIXED: also drives VOD startup/manual-source
+  commit (mediaServerPlaybackLog, restartProgressUpdates, commitManualSourceCandidate,
+  commitStartupCandidate) — belongs to C11 as much as C3.
+- Out-of-chunk users: hideIptvReconnectPill@14342/19153, restoreParkedIptvTwinIfNeeded
+  @7421/19105, clearParkedIptvTwinRestore@14315, parkIptvTwinTrialRestore@19151,
+  clearIptvTwinTrial@14307/19151/19305, iptvLiveRecovery.*@3112/3116/3125/7431/7434/
+  14340–14341/19113/19152/19306; setIptvMediaItem@14284 reads iptvStrictTsUrls,
+  iptvStartsWithStrictTs, iptvTwinPreferredUrls, iptvHlsForcedUrls, iptvLiveRetuneInFlight.
+
+### C4 Playback session / resume state
+Lines 818–859, 1378–1449.
+- Fields: payload@818, currentIndex@819, activeVodHeaders@820 (@Volatile),
+  protectedStreamClient@821, mediaPreparationScope@822, mediaPreparationGeneration@823,
+  pendingSeekMs@824, percentSeekApplied@825, pendingItemTraktPercent@830,
+  isAutoAdvancing@834, controlsMenuVisible@835, playlistVisible@836, seekbarVisible@837,
+  seekbarPosition@838, videoDuration@839, playlistMode@850, playlistAdapter@851,
+  seriesPlaylistAdapter@852, moviePlaylistAdapter@853, movieGroups@854,
+  continuousShuffleEnabled@855, shuffleBag@856, showShuffle@857,
+  showShuffleGeneration@858, lastBackPressTime@859, hasEverBeenReady@1377,
+  resumeHoldTargetMs@1388, resumeHoldArmedAtMs@1389, maxStableDurationMs@1438,
+  lastRealPositionMs@1439, locallyCompletedItemKeys@1446, recoveryCompletedItemKeys@1447.
+- Resume-hold functions: armResumeHold@1391, releaseResumeHold@1408,
+  heldResumePositionMs@1416 (constants RESUME_HOLD_TOLERANCE_MS/SETTLE_MS @20135–20136).
+  Out-of-chunk callers: armResumeHold@19899; releaseResumeHold@4632/7907/8031/8123/
+  8324/19900; heldResumePositionMs@16832/17249/18440/18776.
+
+### C5 IPTV mode / guide / zap / EPG / Stremio-IPTV state (fields only)
+Lines 861–883, 992–1087. isIptvMode@862 … iptvStremioStallRunnable@1086,
+iptvSeriesAudioKey@875, iptvPreferredAudioLang@876, currentIptvHttpHeaders@883
+(@Volatile, read on loader threads by setupPlayer resolver 2892), iptvBrowseHandler@1022,
+iptvZapPendingInputs@1033. No logic in chunk.
+
+### C6 Stremio sources / startup failover / manual source switch (fields only)
+Lines 1088–1175. stremioSources@1089, currentStremioSourceIndex@1090,
+startupFailoverCursor@1100 … manualSourceRestoreInProgress@1142, networkPatience@1147,
+networkBuffer@1148, iptvDecoderMode@1152, seriesSourceTabs@1158 … moreSourcesLoadingMode
+@1165, data class TvSourceAddon@1171, sourceAddons@1172, addonFetchState@1173,
+addonPackProbing@1174, recovery*@1120–1128, sourcePersistenceSessionId@1119.
+
+### C7 Stremio TV guide (fields only) Lines 1176–1192.
+
+### C8 Subtitles (fields only) Lines 1194–1238, 1284–1340.
+subtitlePanel@1197, syncOverlay@1198, linePickerOverlay@1199, unifiedMenu@1200,
+sourceBrowser@1201, subtitleSeekHandler@1202 + subtitleSeekRunnable@1203 (logic:
+`player.seekTo(currentPosition)`), stremio subtitle state 1209–1237,
+subtitleScope@1238 (CoroutineScope Main+SupervisorJob), external subtitle renderer
+1289–1297 (externalSubtitleHandler@1293, statusPillHideRunnable@1297), auto-sync
+1302–1339 (autoSyncPillAnnounceDismissRunnable@1310, autoSyncCardHideRunnable@1316,
+ladder 1327–1330, verify 1337–1339), speechTap@811, autoSyncRunning@812.
+
+### C9 Skip segments / sleep timer / display presets / focus (fields only)
+Skip: SkipSegmentRequest@1243, skipSegmentScope@1251, skipSegmentFetchJob@1252 …
+skipSegmentCache@1259. Sleep: SleepTimerMode enum@1268, sleepTimerMode@1269,
+sleepTimerDeadlineElapsedMs@1270, sleepTimerHandler@1271, sleepTimerRunnable@1272,
+sleepTimerMinuteOptions@1273, sleepStopLatched@1282. Presets: resizeModeIndex@840,
+playbackSpeedIndex@841, nightModeIndex@842, loudnessEnhancer@843,
+systemAudioEffectsEnabled@847, skipSegmentsEnabled@848, skipSegmentProviderId@849,
+resizeModes@1347, resizeModeLabels@1354, playbackSpeeds@1356, playbackSpeedLabels@1357,
+nightModeGains@1359, nightModeLabels@1360. Focus: isNavigating@1342,
+navigationTargetPosition@1343, focusRecoveryHandler@1344, focusRecoveryRunnable@1345.
+PikPak retry: isPikPakRetrying@1368, pikPakRetryCount@1369, pikPakRetryId@1370,
+pikPakRetryHandler@1371. Buffering debounce: bufferingHandler@1448,
+bufferingDebounceRunnable@1449.
+
+### C10 Periodic tickers
+Lines 1362–1365 handlers (progressHandler, controlsHandler, seekbarHandler), 1451–1497.
+- progressRunnable@1451: sendProgress(false), maybeShowUpNext(), iptvTuneDiagnostics
+  .onProgress, IPTV: iptvLiveRecovery.onProgress/onVideoFrames, judgeIptvTwinTrial(frames);
+  re-posts every PROGRESS_INTERVAL_MS (5000, @20144).
+- hideControlsRunnable@1484: isFocusInControlsOverlay / hideControlsMenu /
+  scheduleHideControlsMenu.
+- seekbarProgressRunnable@1492: updateSeekbarProgress, re-post 100 ms on seekbarHandler.
+
+### C11 Player event dispatch — `playbackListener` (1499–2007)
+onEvents@1500, onPlaybackStateChanged@1512 (READY 1515–1641, BUFFERING 1642–1647,
+ENDED 1648–1795), onIsPlayingChanged@1800, onPlayerError@1812, onPositionDiscontinuity
+@1952, onMediaItemTransition@1976, onAudioSessionIdChanged@1998.
+This is a router touching nearly every cluster:
+- READY: pendingShufflePlayback (field @5403) clear, hasEverBeenReady, C3
+  (iptvLiveRecovery.onReady, rearmIptvTwinTrialDeadline), reportIptvStremioWinnerIfNeeded,
+  hideBufferingIndicator, startup commit for torrent rows (startupFailoverCursor,
+  stremioSources, currentPlaybackItemIsPikPak, commitStartupCandidate), RESUME SEEK
+  POLICY 1545–1630 (reads payload.startAtPercent/traktProgressPercent, writes
+  percentSeekApplied/pendingSeekMs/pendingItemTraktPercent, armResumeHold, seekTo),
+  night mode init, syncAudioEffectSession.
+- ENDED: Stremio-TV pre-commit guard → failStartupCandidate; manual switch guard →
+  failManualSourceCandidate; live EOF → sleep END_OF_ITEM stop or iptvLiveRecovery.onEnded;
+  spurious-end guard (maxStableDurationMs/lastRealPositionMs 1699–1708);
+  recordPlaybackLifecycle + sendProgress(true); sleep stop; IPTV next episode;
+  shuffle (playShowShuffle, pickShuffleIndex, showNextOverlay + 1500 ms postDelayed
+  playItem); getNextPlayableIndex; Stremio TV requestStremioTvNext; series
+  requestEpisodeFetch / requestAdjacentEpisodeFetch / requestQuickPlayNextEpisode; finish().
+- onPlayerError: priority ladder (order is load-bearing, see comments 1862–1930):
+  shuffle → manual restore → manual switch (PikPak defer) → startup cursor (PikPak defer)
+  → iptvTuneDiagnostics.onError → start-over (retryIptvAsHlsIfUnrecognized,
+  cancelPendingIptvCatchupRequest, beginIptvPlayback) → twin-trial owns error →
+  restoreAcceptedIptvTwinAfterAuth → HLS-force retry → BEHIND_LIVE_WINDOW rejoin →
+  tryNextIptvStremioCandidate → iptvLiveRecovery.onFatalError(classifyIptvError) →
+  log + reportDecoderFailure.
+- onPositionDiscontinuity: speechTap.notifyDiscontinuity; backward seek >3 s → releaseResumeHold.
+- onMediaItemTransition: speechTap.reset; releaseLoudnessEnhancer unless REPEAT.
+- onAudioSessionIdChanged: syncAudioEffectSession; re-init LoudnessEnhancer.
+
+### C12 Launch / onCreate (2014–2186)
+Order: DiagnosticFileLog.initialize → sourcePersistenceSessionId from intent →
+recordCritical(activity_create) → super.onCreate → NativePlayerPreferences.fromIntent
+(failure: Toast + finish + return, 2025–2032) → setContentView → FLAG_KEEP_SCREEN_ON →
+RecordingRegistry.addListener(recordingRegistryListener@9254) → loadPlayerDefaults@16560
+→ payload file read+delete (2044–2069, fallback PAYLOAD_KEY extra) → missing → finish →
+JSON pre-scan (continuousShuffleEnabled, sourcePersistenceSessionId, recovery*,
+useAddonTextFormatting, showSourceAddonLogos) → mode=="iptv" → initIptvMode@8802 and
+RETURN (IPTV skips everything below) → parsePayload@18912 → empty → finish →
+currentIndex → custom font (SubtitleFontManager) → bindViews → setupPlayer →
+setupSeekbar@3135 → setupPlaylist@3523 → setupControls@4255 → setupStremioSources@17814
+→ stremioTvGuide → initStremioTvGuide@19445 + updateCatalogEpisodeControls →
+initialSubtitles → injectedSubtitles → SeekFeedbackManager → setupBackPressHandler@19161
+→ setupMetadataReceiver → StremioSubtitleService(this) → beginStartupFailoverIfEligible
+@17180 → playItem(currentIndex)@4556.
+- Owns field playerPreferences@2012 (lateinit). rawPayload is re-parsed as JSONObject 4×
+  (2082, 2126, 2148, 2161).
+
+### C13 Episode-metadata receiver (2009–2010, 2188–2484)
+setupMetadataReceiver@2188, readStagedExtra@2229, handleMetadataUpdate@2250,
+requestMetadataFromFlutter@2454. Owns metadataUpdateReceiver@2010.
+- Reads/writes: ottShowName (C1), ottSkinInstalled, payload.imdbId (mutates model),
+  payload.guideEpisodes (clear/addAll), payload.items[i] (copy replace), currentIndex,
+  player.currentPosition/duration, seriesPlaylistAdapter, moviePlaylistAdapter.
+- Calls: updateOttIdentity@5641, fetchStremioSubtitles@4940, rebuildPlaylistContent@3600,
+  updateCatalogEpisodeControls@5317, updateTitle@5597, mergeLateMetadataResumePosition
+  @20365 / mergeLateMetadataDuration (top-level internal funs).
+- Threading: receiver runs on main; handleMetadataUpdate wraps UI in runOnUiThread
+  (2263, 2321, 2430) — redundant but present; payload mutation happens on main.
+- requestMetadataFromFlutter called again out-of-chunk @18666.
+
+### C14 View binding + sub-controller construction — bindViews (2486–2676)
+findViewById for C1; startup_back/startup_details click listeners (AlertDialog 2492);
+SubtitleControlsLiftController(subtitleOverlay, dp(24)); installGuideOverlaySkin@3200
+BEFORE playlist bind, bindGuideSkinViews@3210 after; skipSegmentButton→skipActiveSegment
+@8307; SubtitlePanelController(callbacks = subtitlePanelCallbacks@15784);
+UnifiedMenuController(callbacks = unifiedMenuCallbacks@14828, sectionIds =
+unifiedSectionIds@14806); TvSourceBrowserController with an INLINE anon Callbacks
+(2577–2665) reading stremioSources, payload, currentIndex, currentStremioSourceIndex,
+useAddonTextFormatting, showSourceAddonLogos, seriesSourceTabs, seriesPacksFetched,
+seriesEpisodesFetched, movieMoreSources, movieSourcesFetched, moreSourcesLoadingMode,
+sourceAddons, addonFetchState, addonPackProbing; calls sourceVisibleForEpisode
+(TvSourceBrowserController.kt:14), requestMoreTorrentSources@18181,
+requestAddonTorrentSources@18272, sourceSelectionLog@17804, onStremioSourceSelected@17944.
+
+### C15 Media-pipeline construction — setupPlayer (2736–3134) + helpers
+buildProtectedMediaOrigins@2678 (callers 4568/4620/4773), originKey@2690 (also 18782),
+iptvMediaCodecSelector@2715 (reads isIptvMode, iptvDecoderMode at codec-query time).
+setupPlayer steps: DefaultTrackSelector + language/text params (2737–2806; prefs keys
+player_default_audio_language, player_default_subtitle_language,
+subtitle_only_foreign_audio, subtitle_forced_only; pt-BR special case 2803;
+IPTV setAllowVideoNonSeamlessAdaptiveness(false) 2757) → SpeechFeatureTap → speechTap
+→ nativeAudioRouting.update → NativeAudioRenderersFactory (EXTENSION_RENDERER_MODE_PREFER,
+decoder fallback, codec selector) → OffsetRenderersFactory → DefaultHttpDataSource
+(timeouts from networkPatience, VOD only; Chrome UA in default props) →
+protectedStreamClient → VodHttpDataSource.Factory → DefaultDataSource → Resolving
+(activeVodHeaders by origin) → IPTV Resolving (currentIptvHttpHeaders) → IPTV
+RecordingDataSource (sets iptvRecordingController.onAborted) → MediaSourceFactory (IPTV:
+aggressive/strict TS extractors switched per-call on iptvStrictTsActive +
+IptvLiveLoadErrorPolicy) → ExoPlayer.Builder (handle noisy, WAKE_MODE_NETWORK,
+displayMatchMode frame-rate strategy) → LoadControl: YouTube-merge preset 2998–3012, else
+VOD networkBuffer preset with heap budget 3013–3056 → build, setPlaybackSpeed, add
+playbackListener + 2 analytics listeners, playerView.player → subtitleListener (onCues
+→ subtitleOverlay unless externalSubtitleActive) → SubtitleSettings sync/resetSyncOffset/
+setActiveSubtitleIdentityProvider(currentSubtitleIdentity) → applySubtitleSettings →
+applyResizeMode → requestFocus → IPTV: setKeepContentOnPlayerReset(true) +
+registerDefaultNetworkCallback → iptvLiveRecovery.setOffline.
+
+---------------------------------------------------------------------------------
+## 2. External effects per cluster
+
+| Cluster | Effects |
+|---|---|
+| C2 | Media3 AnalyticsListener; MediaCodecList query (API≥29); DiagnosticFileLog.record("decoder_initialized"); Log.i(DECODER_LOG_TAG); LoudnessEnhancer/AudioEffectSession via helpers. |
+| C3 | Handler(main) inside IptvLiveRecovery@371; iptvTwinTrialHandler.postDelayed (589–594); setIptvMediaItem (ExoPlayer re-prepare) @483/504/571/637/676; playerView.setKeepContentOnPlayerReset; addContentView reconnect pill (770); IptvRecordingController finalize; Media3 LoadErrorHandlingPolicy (runs on loader thread, reads iptvChannels/currentIptvIndex unsynchronised 711). |
+| C4 | mediaPreparationScope (coroutines, cancelled onDestroy); SystemClock for resume hold. |
+| C8 | subtitleScope coroutines; subtitleSeekHandler; externalSubtitleHandler (status pill + auto-sync runnables). |
+| C9 | sleepTimerHandler; skipSegmentScope coroutine; pikPakRetryHandler; bufferingHandler; focusRecoveryHandler. |
+| C10 | progressHandler.postDelayed 5 s; seekbarHandler 100 ms; controlsHandler. sendProgress → MethodChannel (outside chunk). |
+| C11 | ExoPlayer seekTo/seekToDefaultPosition/prepare/play; Toasts (1684, 1719); progressHandler.postDelayed 1500 ms auto-advance (1743, 1755); finish(); DiagnosticFileLog("player_error"); window keep-screen via holdScreenForPlayback/releaseScreenForSleep. |
+| C12 | DiagnosticFileLog init/recordCritical/record/recordError; file read + delete of payloadPath; window FLAG_KEEP_SCREEN_ON; RecordingRegistry.addListener; SharedPreferences via loadPlayerDefaults/NativePlayerPreferences; SubtitleFontManager.applyCustomFontIfValid; Toast + finish on rejected prefs. |
+| C13 | registerReceiver("com.debrify.app.tv.UPDATE_EPISODE_METADATA", RECEIVER_NOT_EXPORTED on API≥33); file read of staged cacheDir JSON (prefix-validated, read-only — no delete by design 2222–2225); MethodChannel `requestEpisodeMetadata` via MainActivity.getAndroidTvPlayerChannel() posted to main (2473–2475). |
+| C14 | findViewById; AlertDialog; MethodChannel `requestStreamBadges` {sourcePersistenceSessionId, name, description} (2607); focus: playerView requestFocus on browser hide (2663). |
+| C15 | SharedPreferences reads via playerPreferences (4 keys); ExoPlayer/Media3 construction; OkHttp-backed ProtectedStreamHttp client; ActivityManager.largeMemoryClass; ConnectivityManager.registerDefaultNetworkCallback; SubtitleSettings / SubtitleFontManager singletons (identity provider captures `this`). |
+
+---------------------------------------------------------------------------------
+## 3. Coupling (outgoing calls outside chunk)
+
+- C2 → initializeLoudnessEnhancer@16529, syncAudioEffectSession@16519.
+- C3 → setIptvMediaItem@14284, isCurrentIptvSegmented@9274, xtreamTsTwin@9286,
+  finalizeIptvRecordingIfActive@9654, updateRecordButtonState@9357,
+  updateIptvControlPresentation@9678, mediaServerPlaybackLog@17795,
+  restartProgressUpdates@16651, commitManualSourceCandidate@17301,
+  commitStartupCandidate@17497. Callers into C3: C11, C10, onStart@19083, onStop@19122,
+  onDestroy@19270, setIptvMediaItem, play button @7421/7431.
+- C10 → sendProgress@16801, maybeShowUpNext@8691, judgeIptvTwinTrial (C3),
+  isFocusInControlsOverlay@7381, hideControlsMenu@7535, scheduleHideControlsMenu@7614,
+  updateSeekbarProgress@7662.
+- C11 → sendPlaybackMaintenanceState@16927, tryAutoSelectAddonSubtitle@6915,
+  reportIptvStremioWinnerIfNeeded@14684, hideBufferingIndicator@19260,
+  showBufferingIndicatorDebounced@19247, currentPlaybackItemIsPikPak@17702,
+  commitStartupCandidate, failStartupCandidate@17566, failManualSourceCandidate@17367,
+  recordPlaybackLifecycle@16664, sendProgress, cancelSleepTimer@8367,
+  releaseScreenForSleep@8395, holdScreenForPlayback@8401, noteLiveChannelPlaying@12429,
+  nextIptvEpisode@14201, switchToIptvChannel@12340, playShowShuffle@5469,
+  pickShuffleIndex@5574, failShufflePlayback@5421, showNextOverlay@8650,
+  hideNextOverlay@8663, playItem@4556, getNextPlayableIndex@8484,
+  requestStremioTvNext@19947, guideAdjacent@16971, requestEpisodeFetch@16993,
+  requestAdjacentEpisodeFetch@17064, requestQuickPlayNextEpisode@17150,
+  updatePauseButtonLabel@7626, showStatusPillTransient@16176, startupLog@17784,
+  schedulePikPakGateReprepare@17715, retryIptvAsHlsIfUnrecognized@14431,
+  cancelPendingIptvCatchupRequest@11394, beginIptvPlayback@14479,
+  tryNextIptvStremioCandidate@14613, reportDecoderFailure@14411,
+  initializeLoudnessEnhancer, releaseLoudnessEnhancer@16547, syncAudioEffectSession.
+- C12 → loadPlayerDefaults, initIptvMode, parsePayload, diagnosticProvider@17775,
+  bindViews/setupPlayer (in chunk), setupSeekbar, setupPlaylist, setupControls,
+  setupStremioSources, initStremioTvGuide, updateCatalogEpisodeControls,
+  setupBackPressHandler, beginStartupFailoverIfEligible, playItem, startupLog.
+- C13 → updateOttIdentity, fetchStremioSubtitles, rebuildPlaylistContent,
+  updateCatalogEpisodeControls, updateTitle, mergeLateMetadata*@20365.
+- C14 → installGuideOverlaySkin, bindGuideSkinViews, skipActiveSegment, dp@6644,
+  requestMoreTorrentSources, requestAddonTorrentSources, sourceSelectionLog,
+  onStremioSourceSelected; consumes subtitlePanelCallbacks@15784,
+  unifiedMenuCallbacks@14828, unifiedSectionIds@14806.
+- C15 → applySubtitleSettings, applyResizeMode, currentSubtitleIdentity,
+  updateRecordButtonState; IptvLiveLoadErrorPolicy + iptvLiveRecovery (C3).
+- Note duplicate helpers: dpToPx@781 (C3) vs dp@6644 used by bindViews.
+
+---------------------------------------------------------------------------------
+## 4. Extraction candidates (low → high risk)
+
+1. **Pure functions → top-level/internal object** (lowest). androidDecoderStatus@318,
+   classifyIptvError@685 (only needs PlaybackException), originKey@2690,
+   buildProtectedMediaOrigins@2678, readStagedExtra@2229 (needs cacheDir: pass File),
+   resume-seek target computation 1574–1603 (pure given duration/pos/launchTrakt/
+   pendingItemTraktPercent/pendingSeekMs). No host interface. Enables plain JVM tests.
+2. **ResumeHold** (1388–1430): two Longs + 3 fns, injectable clock. Host: none
+   (callers just call methods). Constants already in companion. 11 out-of-chunk call
+   sites to repoint.
+3. **TrackSelectorParameters builder** (2737–2806): pure function of
+   (prefs getString/getBoolean, isIptvMode) → Parameters. Robolectric already asserts
+   TEXT disabled under forcedOnly (NativePlayerSettingsConsumptionTest) — reflection reads
+   field `trackSelector`, so keep that field on the activity.
+4. **EpisodeMetadataReceiver** (C13): owns receiver registration/unregistration and
+   staged-file reading. Host/Callbacks needs: `payload()`, `currentIndex()`,
+   `livePositionMs()/liveDurationMs()`, `onShowName(String)`, `onImdbDiscovered(item)`,
+   `onGuideAdopted()`, `onItemsUpdated()`, `methodChannel()` provider. Must keep
+   register-then-request ordering (2207–2216) and unregister in onDestroy (~19365).
+5. **IptvMediaPipelineFactory** (C15 data-source/extractor/load-error part 2828–2964):
+   needs suppliers for `activeVodHeaders`, `currentIptvHttpHeaders`, `iptvStrictTsActive`
+   (all read on loader threads — must stay @Volatile reads via lambdas), plus
+   `liveNow()` for IptvLiveLoadErrorPolicy (currently non-volatile cross-thread read of
+   iptvChannels/currentIptvIndex — preserve as-is, don't "fix" incidentally),
+   iptvRecordingController, networkPatience. Medium risk: invariant comments
+   (UA in default props, "standard" = stock) must survive; no tests cover it.
+6. **IptvTwinTrialController** (C3 twin part 489–681 + fields 914–990): own handler +
+   state. Callbacks: `currentStreamUrl()`, `currentLiveEntry()`, `retune(entry, url)`
+   (wrapping iptvLiveRetuneInFlight + setIptvMediaItem), `wantsPlayback()`,
+   `sleepLatched()`, `isTornDown()`, `diagnostics`. setIptvMediaItem@14284 reads
+   iptvTwinPreferredUrls/clearParkedIptvTwinRestore/clearIptvTwinTrial; onStop/onStart
+   use park/restore. Medium-high: subtle ordering, session-memory sets shared with
+   strict-TS (iptvStrictTsUrls, iptvHlsForcedUrls), zero tests.
+7. **IptvLiveRecoveryHost** (performIptvLiveRetune, eligibility, reconnect pill): the
+   IptvLiveRecovery class already exists; moving the anon Callbacks + retune policy out
+   requires access to start-over state, recording controller, sleep state, Stremio-IPTV
+   ladder state. High coupling — do after C5 IPTV state has a home.
+8. **PlaybackEventRouter** (C11, playbackListener) — HIGHEST. It is a priority-ordered
+   dispatcher over ~45 activity functions across 8 clusters; onPlayerError ordering and
+   STATE_ENDED live/sleep/spurious guards are behaviour contracts. Extract last, after
+   the clusters it calls have narrow interfaces; consider splitting READY resume policy
+   (candidate 1) and ENDED advance policy first. Tests reflect on field
+   `playbackListener` (StremioTvStartupWatchdogTest) — keep the name or update tests.
+- onCreate (C12) should stay as composition root; extraction = shrinking it by moving
+  the JSON pre-scan + font/guide/subtitle parsing into a launch-parser (parse once,
+  not 4×) — behaviour-preserving only if each try/catch scope is preserved (a failure
+  in one block currently doesn't abort the others).
+- bindViews (C14): extract the inline TvSourceBrowserController.Callbacks (2577–2665)
+  into a named object/val like subtitlePanelCallbacks — low risk, pure move.
+
+---------------------------------------------------------------------------------
+## 5. Lifecycle / teardown facts (as implemented)
+
+- onCreate early exits (prefs rejected 2030, payload missing 2076, invalid 2112) happen
+  BEFORE bindViews, so onDestroy@19270 must tolerate unbound lateinit views — it guards
+  with `::x.isInitialized` (subtitleControlsLift, startupGateView, seekFeedbackManager,
+  pikPakReactivationIndicator, bufferingIndicator, playlistView, seekbarOverlay).
+  Covered by NativePlayerRejectedLaunchTest. Any extracted collaborator must be
+  nullable/lazy-safe in teardown for the same reason. Note RecordingRegistry.addListener
+  (2038) runs only after the prefs check, but removeListener always runs in onDestroy.
+- IPTV launch returns at 2099 → no setupMetadataReceiver, no stremioSubtitleService,
+  no SeekFeedbackManager from this path (initIptvMode does its own setup).
+- onStop@19122 order: cancelPendingIptvCatchupRequest → recordPlaybackLifecycle →
+  sendPlaybackActivityState(false) → final sendProgress snapshot → super.onStop →
+  finalizeIptvRecordingIfActive → `if (!parkIptvTwinTrialRestore()) clearIptvTwinTrial()`
+  → iptvLiveRecovery.cancel() → hideIptvReconnectPill → iptvStoppedAtRealtime = now →
+  player.pause → remove externalSubtitleTicker.
+- onStart@19083: if !sleepStopLatched: restoreParkedIptvTwinIfNeeded() for live entry,
+  else rejoin if away > IPTV_LIVE_REJOIN_AFTER_MS (iptvLiveRecovery.userRetry
+  ("lifecycle-rejoin") after playWhenReady=true), else player.play(); then restart
+  external subtitle ticker.
+- onPause@19237: ActivityTracker clear + cancelPikPakRetry. onResume@19220: retry
+  pending recording publish.
+- onDestroy@19270 relevant to this chunk, in order: cancelPendingIptvCatchupRequest →
+  displayModeController.clear → mediaPreparationScope.cancel + generation++ →
+  sourceBrowser.destroy → final sendProgress → subtitleControlsLift.cancel →
+  iptvTuneDiagnostics.onSessionEnd → startup/manual/pikPakGate runnables off
+  progressHandler → clearIptvTwinTrial → iptvLiveRecovery.cancel →
+  unregisterNetworkCallback(iptvNetworkCallback) → RecordingRegistry.removeListener →
+  cancelSleepTimer → finalizeIptvRecordingIfActive → seekFeedbackManager.destroy →
+  iptvBrowseHandler clear + IPTV tokens++ → PikPak retry cancel + handler clear →
+  bufferingHandler clear → upNextHandler clear → unregisterReceiver(metadataUpdateReceiver)
+  → subtitleScope.cancel → skipSegmentScope.cancel → progress/controls/seekbar handlers
+  clear → releaseLoudnessEnhancer → AudioEffectSession.closeCurrent → player
+  removeListener(playbackListener, subtitleListener) + release (analytics listeners NOT
+  removed explicitly; released with player) → null player/trackSelector/
+  offsetRenderersFactory/speechTap → subtitleSeekHandler.removeCallbacks(
+  subtitleSeekRunnable) → externalSubtitleHandler clear →
+  SubtitleSettings.clearActiveSubtitleIdentityProvider(this) → adapters null →
+  focusRecoveryHandler clear → cancelSourceSwitchWait → sendFinished → super.onDestroy.
+- finish()@16674 overrides: one-shot final sendProgress snapshot + PlaybackReturnHandoff
+  .markReturning before super.finish (relevant because C11 ENDED and C14 startup_back
+  call finish()).
+- Not explicitly cleared in onDestroy: iptvTwinTrialHandler (only its one runnable via
+  clearIptvTwinTrial), sleepTimerHandler (via cancelSleepTimer), iptvReconnectPill view,
+  iptvRecordingController.onAborted lambda (2910). Preserve, don't silently change.
+- Auto-advance runnables in C11 (1743, 1755) post on progressHandler → cancelled by
+  progressHandler.removeCallbacksAndMessages(null) in onDestroy.
+
+---------------------------------------------------------------------------------
+## 6. Existing JVM tests (android/app/src/test/kotlin/com/debrify/app/…)
+
+Robolectric 4.15.1 is already a testImplementation (build.gradle.kts:139).
+- tv/StremioTvStartupWatchdogTest.kt (Robolectric, sdk 28, PAUSED looper): drives the
+  activity by REFLECTION. Field/method names from this chunk it depends on:
+  startupGateView, startupGateStatus, titleView, nextOverlay, pikPakReactivationIndicator,
+  payload, isIptvMode, player, playbackListener, currentIndex, stremioSources,
+  currentStremioSourceIndex, startupFailoverCursor, startupFailoverTimeout,
+  startupMaxAttempts, startupTryNextOnFailure, startupSourcesExhausted,
+  manualSourceSwitchSnapshot, manualSourceSwitchTimeout, mediaPreparationGeneration,
+  pikPakGateReprepare, recoveryCompletedItemKeys. Exercises playbackListener ENDED/error
+  paths for Stremio TV + PikPak deferral (tests @101–286).
+- tv/ShufflePlaybackFlowTest.kt (Robolectric, reflection): showShuffleGeneration etc.
+- tv/SubtitleSyncDismissTest.kt: reflects `linePickerOverlay`, `syncOverlay`,
+  `setupBackPressHandler`.
+- profiles/NativePlayerSettingsConsumptionTest.kt: full `create()` of this activity
+  → onCreate → setupPlayer; reads field `trackSelector` and asserts TEXT disabled under
+  subtitle_forced_only; moviePlayerConsumesDefaultsAndCustomSettings (getControlsSkin).
+- profiles/NativePlayerRejectedLaunchTest.kt: create() with empty Intent → finish before
+  bindViews, then full start/resume/pause/stop/destroy (guards onDestroy isInitialized).
+- tv/LateEpisodeMetadataMergeTest.kt: top-level mergeLateMetadata* only (not the receiver).
+- tv/IptvDeviceQuirksTest.kt: IptvDeviceQuirks (iptvStartsWithStrictTs source).
+- tv/StartupFailoverCursorTest.kt, audio/NativeAudioRoutingTest.kt,
+  tv/SubtitleControlsLiftControllerTest.kt, profiles/NativePlayerPreferencesTest.kt:
+  collaborators, not chunk logic. tv/TvSourceBrowserFocusTest.kt: sourceVisibleForEpisode
+  + controller, not the activity's inline Callbacks.
+- NO test for: IptvLiveRecovery class itself, IPTV twin trial, performIptvLiveRetune,
+  classifyIptvError, IptvLiveLoadErrorPolicy, resume hold, READY resume-seek policy,
+  onPlayerError IPTV ladder order, STATE_ENDED live/sleep/spurious guards,
+  metadata receiver (handleMetadataUpdate/readStagedExtra/requestMetadataFromFlutter),
+  bindViews' TvSourceBrowser callbacks, setupPlayer data-source/header resolvers,
+  iptvMediaCodecSelector, LoadControl presets, androidDecoderStatus.
+
+Gaps needing characterization before extraction (Robolectric where Activity needed):
+1. Resume: READY seek-target matrix (startAtPercent retry when duration unknown;
+   launchTrakt vs pendingItemTraktPercent vs pendingSeekMs; anti-yank 5 s/15 s gates;
+   hold arming ≥80% rejection) — plain JVM once extracted; Robolectric + proxy player
+   (StremioTvStartupWatchdogTest's ColdPlayer pattern) before.
+2. Twin trial state machine: begin → judge baseline/streak/reset → accept; error/timeout
+   → fail+blacklist; timeout while paused → park; onStop park / onStart restore; zap
+   supersession (no blacklist). Use PAUSED looper + ShadowLooper.idleFor.
+3. onPlayerError precedence for IPTV (twin-owned, auth revoke, HLS-force, behind-live,
+   Stremio candidate, machine) with stale-delivery gate (playerError == null).
+4. STATE_ENDED: live EOF never sends completed progress; spurious-end < 90 % ignored;
+   sleep END_OF_ITEM latches.
+5. Metadata receiver: staged-path validation (outside cacheDir / wrong prefix rejected,
+   file not deleted), season/episode re-match of originalIndex, current-item live
+   position merge, guide adoption triggers rebuild only for series.
+6. IptvLiveLoadErrorPolicy retry delays (401/403/404 → TIME_UNSET, 429/503 Retry-After
+   clamp 1–15 s and >4 errors cutoff, transport >15 cutoff, non-live defaults).
+7. setupPlayer resolvers: activeVodHeaders applied only to matching origin (default
+   port normalization), IPTV headers override UA; networkPatience timeouts VOD-only;
+   heap-budget LoadControl (<48 MiB keeps stock).
+8. onDestroy teardown after an IPTV launch (network callback unregistered, twin timeout
+   removed) — only the rejected-launch path is covered today.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt — responsibility map, chunk B (lines 3000–7020)
+
+File: android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
+Chunk boundaries: starts INSIDE `setupPlayer()` (decl @2736; body runs to 3133) and ends at the
+start of `dispatchKeyEvent` @7018 (belongs to the next chunk). Constants used here live in the
+companion object: USE_UNIFIED_MENU@20143, PROVIDER_PIKPAK@20170, PIKPAK_MAX_RETRIES=5@20171,
+PIKPAK_METADATA_TIMEOUT_MS=10000@20172, PIKPAK_BASE_DELAY_MS=2000@20173, PIKPAK_MAX_DELAY_MS=18000@20174.
+Top-level types used: PlaylistMode@20178, MovieTab@20214, SubtitleCatalogResult@20518 (+titleLine@20525,
+detailLine@20529), PlaylistAdapter (setActiveIndex@20221, filterBySeason@20576), MoviePlaylistAdapter
+(showGroup@21119). Lazy props outside chunk: controlsSkin@12713, dockSkinSpec@12742.
+
+## 1. Responsibility clusters
+
+### C0. setupPlayer tail (3000–3133) — player construction, part 2
+- Load control: YouTube-merge buffers (3001–3013); network buffer preset "large"/"huge" with
+  heap-budgeted `setTargetBufferBytes` (= min(96/192 MiB, largeMemoryClass/4), skip if <48 MiB) (3014–3058).
+- `player = playerBuilder.build()` @3060; speed, listeners: playbackListener, decoderAnalyticsListener,
+  iptvDiagAnalyticsListener; `playerView.player = player`.
+- Creates `subtitleListener` (field @265) @3071 — onCues → `subtitleOverlay.setCues` unless `externalSubtitleActive`(@1290).
+- Subtitle appearance sync: SubtitleSettings.synchronizeProjectedAppearance / SubtitleFontManager /
+  resetSyncOffset / setActiveSubtitleIdentityProvider(this){currentSubtitleIdentity()}; applySubtitleSettings@16435.
+- `applyResizeMode()`@16480, `playerView.requestFocus()`.
+- IPTV only: `setKeepContentOnPlayerReset(true)`; registers `ConnectivityManager` default network callback →
+  `iptvLiveRecovery.setOffline(..)`; stores `iptvNetworkCallback` (field @363) @3121.
+- Reads: networkBuffer, isIptvMode@862, playbackSpeeds/playbackSpeedIndex, player@262, trackSelector@264.
+
+### C1. Seekbar overlay key setup (3135–3144)
+- setupSeekbar@3135. Field: seekbarOverlay@177. Calls hideSeekbar@8014. Callers: 2141, 8853.
+
+### C2. Guide skin (per-dock-skin Episodes overlay) (3146–3521)
+- Functions: installGuideOverlaySkin@3200, bindGuideSkinViews@3210, applyGuideLayoutManager@3229,
+  applyGuideKeyOverride@3259, applyGuideTabStyle@3324, guideSkinBind@3379, updateGuideDetail@3441,
+  loadGuideArt@3485, seedGuideSkinChrome@3498; props guideOverlayLayoutRes@3173, guideItemLayoutRes@3184.
+- Owns (declared IN chunk): guideSkinInstalled@3157, guideGridSpan=5@3158, gdShowTitle..gdPopDesc @3159–3171.
+- Reads: controlsSkin@12713, playlistView@154, playlistMode@850, playlistVisible@836,
+  navigationTargetPosition@1343, payload@818, currentIndex@819, ottShowName@254.
+- Calls: movePlaylistFocus, findNextFocusablePosition (C3), dp@6644, PlaybackItem.displayProgressPercent@20464.
+- External callers: installGuideOverlaySkin@2510, bindGuideSkinViews@2514 (bindViews), seedGuideSkinChrome@8429 (showPlaylist).
+
+### C3. Playlist overlay: adapters, tabs, DPAD focus engine (3523–4142)
+- Functions: setupPlaylist@3523, rebuildPlaylistContent@3600, setupSeriesPlaylist@3634,
+  setupCollectionPlaylist@3663, setupSeasonTabs@3684, createSeasonTab@3716, selectSeasonTab@3747,
+  setupCollectionTabs@3763, setupPlaylistNavigation@3792, findNextFocusablePosition@3860,
+  ensureFocusInPlaylist@3895, transferFocusToPosition@3948, movePlaylistFocus@3999,
+  createMovieTab@4092, selectMovieTab@4120.
+- Owns (declared outside chunk): playlistOverlay@153, playlistView@154, seasonTabsContainer@155,
+  seasonTabs@173, movieTabs@174, playlistMode@850, playlistAdapter@851, seriesPlaylistAdapter@852,
+  moviePlaylistAdapter@853, movieGroups@854, isNavigating@1342, navigationTargetPosition@1343,
+  focusRecoveryHandler@1344, focusRecoveryRunnable@1345.
+- Reads: payload, currentIndex, hasPlaylistResolver@1094, playlistVisible@836 (written by show/hidePlaylist outside),
+  guideSkinInstalled/guideItemLayoutRes (C2).
+- Calls out: hidePlaylist@8643, playItem (C5), requestEpisodeFetch@16993, computeMovieGroups@8555,
+  applyGuide* / guideSkinBind / updateGuideDetail (C2).
+- External callers: setupPlaylist@2142; rebuildPlaylistContent@2323,17414,18658; selectSeasonTab@8471;
+  selectMovieTab@8480. movieGroups/playlistMode also read by C7 getShuffleEligibleIndices.
+
+### C4. Dock (controls) skin + control button wiring (4144–4550)
+- Functions: installOttControlsSkin@4144, setOttTrackHeight@4212, updateOttCaption@4230,
+  clearOttCaption@4241, refreshOttCaptionFor@4250, setupControls@4255.
+- Owns: ottSkinInstalled@224, ottCaptionLabel@225, ottCaptionOwner@226, ottIdentity*@227–234,
+  ottQualityChips@239, ottRatingChip@240, ottMetaLine@241, ottScrubPreviewChip/Text@244–245,
+  ottProgressTrackContainer@246, ottSourcesButton@250, controlsOverlay@187, pauseButton@188,
+  iptvPrevButton@189, iptvNextButton@190, iptvGuideButton@191, iptvJumpButton@192,
+  iptvStartOverButton@193, iptvStartOverSeekButton@194, iptvRecordButton@195,
+  originalControlDockOrder@200, audio/subtitle/aspect/speed/nightMode buttons @201–205,
+  debrifyTime*/debrifyProgressLine/cinemaProgress* @208–215 (bound here, driven elsewhere).
+- Reads: dockSkinSpec@12742, isIptvMode, controlsMenuVisible@835, unifiedMenu@1200, sourceBrowser@1201,
+  subtitleControlsLift@152, player.
+- Calls out: seekBy@8113, scheduleHideControlsMenu@7614, cancelScheduledHideControlsMenu@7622,
+  hideControlsMenu@7535, setupCinemaProgressBar@7735, startSeekbarProgressUpdates@7653,
+  togglePlayPause@7411, showNightModeDialog@16608, updateNightModeButtonLabel@7647,
+  showIptvChannelJumpDialog@11816, toggleIptvStartOver@11378, showIptvStartOverTimeline@11362,
+  showAudioTrackDialog@15621, showSubtitleSettingsPanel@15808, cycleAspectRatio@16473,
+  updateAspectButtonLabel@7642, cyclePlaybackSpeed@16490, showPlaylist@8419,
+  nextIptvEpisode@14201, prevIptvEpisode@14206, switchToIptvChannel@12340, playNext/playPrevious/
+  updateCatalogEpisodeControls (C7), showRandomPlaybackDialog (C7).
+- External callers: setupControls@2143,8854,8901,9103 (re-run on reconfigure); setOttTrackHeight@7854,7893;
+  refreshOttCaptionFor@7639,7644,7649,16509.
+- Behaviour fact: a view holds ONE focus listener; every `extendTimerOnFocus` assignment overwrites the
+  classic scale animation (comment @4527–4531); OTT re-applies its treatment LAST (4532–4549). Order is load-bearing.
+
+### C5. Playback start pipeline (4556–4936)
+- Functions: playItem@4556, resolveAndPlay@4649, discoverProtectedMime@4737, startPlayback@4754,
+  playMediaDirect@4842, buildMergedSourceOrNull@4888, buildMergedSource@4919.
+- Owns/writes: currentIndex@819, mediaPreparationGeneration@823 (incremented in playItem@4574 and
+  discoverProtectedMime@4739), activeVodHeaders@820 (@Volatile; read by data source factory @2867),
+  pendingSeekMs@824, pendingItemTraktPercent@830, isAutoAdvancing@834, hasEverBeenReady@1377,
+  maxStableDurationMs@1438, lastRealPositionMs@1439, payload.items[i] (in-place URL/mime updates).
+- Reads other clusters: sleepStopLatched@1282 (writes false on manual pick), pendingShufflePlayback (C7),
+  startupFailoverCursor@1100, startupFailoverGeneration@1101, manualSourceSwitchIndex@1134,
+  manualSourceSwitchSnapshot@1133, manualSourceCandidateUrl@1141 (write), stremioResolutionToken@1093,
+  currentStremioSourceIndex@1090, protectedStreamClient@821, mediaPreparationScope@822, isIptvMode.
+- Calls out: dropStaleSourceSwitchFeedback@17896, hideBufferingIndicator@19260, hideUpNextCard@8784,
+  resetSkipSegmentState@8406, releaseResumeHold@1408, buildProtectedMediaOrigins@2678,
+  startupLog@17784, startupSourceFields@17761, isCurrentStartupGeneration (StartupFailoverCursor.kt:23),
+  failManualSourceCandidate@17367, failStartupResolution@17681, restartProgressUpdates@16651,
+  ProtectedStreamHttp.needsDiscovery/discoverMimeType; in-chunk: cancelPikPakRetry (C10), shuffle guards (C7),
+  requestStreamFromFlutter (C9), setResolvingState (C8), resetSubtitleState/fetchStremioSubtitles (C6),
+  updateTitle (C8), playPikPakVideoWithRetry (C10).
+- External callers: playItem@1746,1758,2185,8772,8776,17415,18654,18694; playMediaDirect@14379;
+  buildMergedSource@18802 (YouTube quality switch).
+- Fact: PikPak path (6680–6691) builds MediaItem WITHOUT setMimeType and never uses the merged
+  YouTube source; direct path (4853–4873) sets mimeType and playWhenReady.
+
+### C6. Addon/Stremio subtitle fetch + auto-select + manual identity search (4797–4840, 4940–5226, 6025–6642, 6915–7015)
+- Functions: resetSubtitleState@4797, fetchStremioSubtitles@4940, seedInjectedSubtitles@5070,
+  fetchStremioSubtitlesWithImdb@5098, launchAddonSubtitleFetch@5117, setAddonSubtitleSlot@5162,
+  rebuildFlatStremioSubtitles@5177, retryAddonSubtitles@5192, refreshSubtitleUiForLoading@5211,
+  clearStremioLoadingState@5219, showSearchSubtitleDialog@6025, getCurrentSubtitleSearchItem@6239,
+  requestSubtitleCatalogSearchFromFlutter@6294, parseSubtitleCatalogResults@6334,
+  createSubtitleCatalogResultAdapter@6358, showSeasonEpisodePrompt@6406, applyManualSubtitleIdentity@6506,
+  resolveSeasonEpisodeForSubtitle@6565, parseSeasonEpisodeFromTitle@6575,
+  buildSubtitleSearchInitialQuery@6594, buildManualSubtitleDisplayLabel@6613,
+  currentSubtitleIdentityLabel@6627, tryAutoSelectAddonSubtitle@6915.
+- Owns: subtitleTracks@1209, stremioSubtitleService@1213, stremioSubtitles@1214,
+  addonSubtitleResults@1215, injectedSubtitles@1220, suppressSubtitleAutoSelect@1224,
+  addonFetchTokens@1225, failedSubtitleUrls@1226, currentStremioSubtitleIndex@1227,
+  subtitleAddonDiscoveryReady@1228, isLoadingStremioSubtitles@1229, subtitleTrackReadiness@1230,
+  userManuallySelectedSubtitle@1231, addonSubtitleFetchToken@1232, manualSubtitle{ImdbId,Type,
+  Season,Episode,DisplayLabel}@1233–1237, subtitleScope@1238, subtitleSearchResults/Status/
+  pendingSeriesResult @14799–14801.
+- Reads: payload (incl. perItemImdbIds map — WRITTEN @5051), currentIndex, trackSelector@264,
+  playerPreferences@2012, offsetRenderersFactory@340, subtitleSettingsVisible@1196, unifiedMenu@1200,
+  externalSubtitleActive@1290, isIptvMode, iptvChannels@863, currentIptvIndex@864, player.
+- Calls out: stopExternalSubtitleRendering@16054, refreshSubtitlePanelForLoading@15860,
+  isSideRenderableSubtitle@15940, loadStremioSubtitle@15951, SubtitleAutoSelection.kt pure fns
+  (chooseAutomaticSubtitle, isUndeclaredHlsCaption, audioAllowsAutomaticSubtitles, selectedAudioLanguage),
+  LanguageMapper, SubtitleSettings.getSubtitleSourcePriority/resetSyncOffset, requestMovieMetadataFromFlutter (C9).
+- External callers: resetSubtitleState@11386,11475,11507,12389,14177,19880; fetchStremioSubtitles@2283,19938;
+  clearStremioLoadingState@19881; retryAddonSubtitles@15000; tryAutoSelectAddonSubtitle@1507,16001;
+  showSearchSubtitleDialog@15791,15798,15885; getCurrentSubtitleSearchItem@14872,15427,15432;
+  applyManualSubtitleIdentity@15412,15429,15439; currentSubtitleIdentityLabel@14968,15799.
+
+### C7. Navigation: next/prev + shuffle (5228–5588)
+- Functions: playNext@5228, playPrevious@5283, updateCatalogEpisodeControls@5317, playRandom@5332,
+  showRandomPlaybackDialog@5345, resetShuffle@5385, shuffleAttemptCurrent@5407,
+  shuffleAttemptOwned@5410, restoreShufflePreparation@5415, failShufflePlayback@5421,
+  watchShufflePlayback@5435, clearQueuedShuffle@5447, yieldEpisodeFetchToQueuedShuffle@5456,
+  canShuffleWholeShow@5461, playShowShuffle@5469, getShuffleEligibleIndices@5550, pickShuffleIndex@5574.
+- Owns: nested `private class ShufflePlaybackAttempt`@5394 (7 ctor params), pendingShufflePlayback@5403,
+  queuedShuffleGeneration@5404, queuedShuffleNavigation@5405, shuffleWatchGeneration@5433 (all IN chunk);
+  continuousShuffleEnabled@855, shuffleBag@856, showShuffle@857 (ShowShuffle.kt), showShuffleGeneration@858.
+- Reads: payload, currentIndex, mediaPreparationGeneration (C5), sleepStopLatched, isFinishing/isDestroyed,
+  episodeFetchInFlight@16988, customShuffleEpisodes@1096, hasPlaylistResolver@1094,
+  hasAdjacentEpisodeResolver@1095, isStremioTvMode@1177, stremioTvChannels@1178, iptvPrevButton@189 (write visibility),
+  playlistMode/movieGroups (C3), isPikPakRetrying (C10), progressHandler@1363.
+- Calls out: getNextPlayableIndex@8484, getPrevPlayableIndex@8522, guideAdjacent@16971,
+  requestEpisodeFetch@16993, requestAdjacentEpisodeFetch@17064, requestQuickPlayNextEpisode@17150 + finish(),
+  requestStremioTvNext@19947, showStatusPillTransient@16176, hideUpNextCard@8784,
+  currentPlaybackItemIsPikPak@17702, playItem/requestStreamFromFlutter (C5/C9).
+- External callers: playShowShuffle/pickShuffleIndex@1739–1740 (playbackListener auto-advance), pickShuffleIndex@8706,
+  failShufflePlayback@1818 (onPlayerError), watchShufflePlayback@17031, yieldEpisodeFetchToQueuedShuffle@17020,17095,17124,
+  playRandom/resetShuffle@15597–15608 (unified menu), updateCatalogEpisodeControls@2152,2325,18427.
+  playNext has only in-chunk callers (@4500 next button, @6781 PikPak exhaustion).
+
+### C8. Title / dock identity / loading overlay (5590–5925)
+- Functions: guideTitleFor@5590, updateTitle@5597, updateOttIdentity@5641, updateOttExtras@5760,
+  dockTagsFor@5857, spellNumber@5882, setResolvingState@5899, setNextOverlayBackdrop@5911.
+- Owns: dockTagsCacheKey@242, dockTagsCache@243. Writes views: titleView@143, ottEpisodeBadge@146,
+  ottEpisodeTitle@147, ottRatingContainer@148, ottRating@149, channelBadge@150, nextText@157,
+  nextSubtext@158, nextBackdrop@161, ottIdentity*/ottQualityChips/ottRatingChip/ottMetaLine (bound by C4).
+- Reads: payload, currentIndex, controlsSkin, ottShowName@254, ottSkinInstalled.
+- Calls out: fadeInNextOverlay@8656, hideNextOverlay@8663, DockFormatTags.detect, seasonEpisodeLabel@20448.
+- External callers: updateTitle@2326,2443,19937; updateOttIdentity@2263,7475; setResolvingState@17381,17589;
+  updateOttExtras also referenced @236 (comment) / 20444.
+
+### C9. Flutter MethodChannel requests (5927–6023)
+- requestStreamFromFlutter@5927 ("requestTorrentStream"), reportValidatedSourceCommit@5966
+  ("commitStremioSource"; reads stremioSources@1089, sourcePersistenceSessionId@1119),
+  requestMovieMetadataFromFlutter@5988 ("requestMovieMetadata"). (C6 also has
+  requestSubtitleCatalogSearchFromFlutter "searchSubtitleCatalogs".) Stateless besides those reads.
+- External callers: reportValidatedSourceCommit@17358,17559.
+
+### C10. PikPak cold-storage retry engine (6648–6912)
+- Functions: playPikPakVideoWithRetry@6652, attemptPikPakPlaybackLoop@6707, waitForPikPakMetadata@6803,
+  showPikPakRetryOverlay@6873, hidePikPakRetryOverlay@6891, cancelPikPakRetry@6900.
+- Owns: isPikPakRetrying@1368, pikPakRetryCount@1369, pikPakRetryId@1370, pikPakRetryHandler@1371,
+  pikPakReactivationIndicator@1375, pikPakReactivationText@1376.
+- Reads: player, isStremioTvMode, startupFailoverCursor, startupGateStatus@141, subtitleOverlay@151.
+- Calls out: cancelPikPakGateReprepare@17705, schedulePikPakGateReprepare@17715, failManualSourceCandidate@17367,
+  failStartupCandidate@17566, failShufflePlayback/playNext (C7), resetSubtitleState/fetchStremioSubtitles/
+  tryAutoSelectAddonSubtitle (C6), updateTitle (C8), restartProgressUpdates@16651.
+- External callers: cancelPikPakRetry@17970,18639,18793,19244(onPause),19338(onDestroy),19882; hidePikPakRetryOverlay@18843.
+
+### Misc: dp@6644 — used ~200 times across the file (2507…16398); keep on host or make a util.
+
+## 2. External effects per cluster
+- C0: Media3 ExoPlayer build/LoadControl/listeners; ConnectivityManager.registerDefaultNetworkCallback (API≥24);
+  SubtitleSettings static singletons (identity provider bound to `this`).
+- C1: key listener only.
+- C2: view inflation into R.id.android_tv_playlist_overlay (removeAllViews+inflate); Glide load/clear; key listener; LayoutManager swap.
+- C3: RecyclerView adapters/layout managers; focusRecoveryHandler.postDelayed(100ms); playlistView.postDelayed(50/100ms);
+  ViewTreeObserver OnGlobalLayoutListener (self-removing) and OnGlobalFocusChangeListener (debug log, ADDED ON EVERY
+  setupPlaylistNavigation call, never removed); TextView tab creation; Log "PlaylistNav".
+- C4: LayoutInflater swap of debrify_controls_root at same index inside PlayerControlView; PaintDrawable shader;
+  PlayerView.setControllerVisibilityListener; View.animate() focus animations; Media3 controller.
+- C5: ExoPlayer setMediaItem/setMediaSource/prepare/play; MergingMediaSource + DefaultHttpDataSource (network);
+  coroutine `mediaPreparationScope.launch` + Dispatchers.IO HTTP MIME probe; MethodChannel via C9; Toast.
+- C6: `subtitleScope.launch` per addon (stremioSubtitleService network); trackSelector parameter writes;
+  SharedPreferences reads (playerPreferences: player_default_subtitle_language, subtitle_only_foreign_audio,
+  subtitle_forced_only, player_default_audio_language); MethodChannel "searchSubtitleCatalogs"/"requestMovieMetadata";
+  AlertDialogs (R.style.Theme_Debrify_SubtitleDialog) with EditText/ListView; Toasts; offsetRenderersFactory.setOffsetUs(0).
+- C7: progressHandler.postDelayed (15 s shuffle watchdog; 50 ms queued-shuffle poll; post onUnavailable);
+  AlertDialog; Toasts; status pill; MethodChannel via requestStreamFromFlutter; may `finish()` (quick-play hand-back).
+- C8: Glide into nextBackdrop (guarded isFinishing/isDestroyed); spans; overlay fades.
+- C9: MainActivity.getAndroidTvPlayerChannel()?.invokeMethod — "requestTorrentStream", "commitStremioSource",
+  "requestMovieMetadata" (callbacks on Result; no runOnUiThread except searchSubtitleCatalogs).
+- C10: per-call `Handler(Looper.getMainLooper())` polling every 500 ms (local, not a field); pikPakRetryHandler.postDelayed
+  1500 ms → playNext; runOnUiThread overlay animations; ExoPlayer setMediaItem/prepare/play; Toast.
+
+## 3. Coupling (cluster → cluster, in-chunk)
+- C3 → C2 (layout manager, key override, tab style, row binder, detail), C3 → C5 (playItem on click).
+- C2 → C3 (movePlaylistFocus, findNextFocusablePosition).
+- C4 → C7 (playNext, playPrevious, updateCatalogEpisodeControls, showRandomPlaybackDialog), C4 → C8 via OTT views it binds.
+- C5 → C7 (shuffleAttemptCurrent, watchShufflePlayback, restoreShufflePreparation, failShufflePlayback, pendingShufflePlayback),
+  C5 → C9, C5 → C8 (setResolvingState, updateTitle), C5 → C6 (resetSubtitleState, fetchStremioSubtitles), C5 → C10.
+- C7 → C5 (playItem, mediaPreparationGeneration), C7 → C9, C7 → C10 (isPikPakRetrying), C7 → C3 (playlistMode, movieGroups).
+- C10 → C6, C8, C7 (playNext, failShufflePlayback).
+- C6 → C9 (requestMovieMetadataFromFlutter).
+- Heavy shared state: payload, currentIndex, mediaPreparationGeneration, sleepStopLatched, isAutoAdvancing.
+
+## 4. Extraction candidates (low → high risk)
+1. Pure helpers (LOW): parseSeasonEpisodeFromTitle@6575, buildSubtitleSearchInitialQuery@6594,
+   buildManualSubtitleDisplayLabel@6613, parseSubtitleCatalogResults@6334, spellNumber@5882,
+   dockTagsFor@5857 (needs the 2-field cache), findNextFocusablePosition logic, PikPak backoff formula (6729–6734),
+   heap-budget LoadControl math (3038–3058). No host needed; directly JVM-testable.
+2. C9 Flutter bridge adapter (LOW): wrap three invokeMethod calls in a `TvPlayerFlutterBridge(channelProvider)`;
+   keep callback threading identical (no runOnUiThread added).
+3. C2 Guide skin (LOW-MED): `TvGuideSkinController(activity/layoutInflater, controlsSkin, playlistView, glide)`;
+   Host needs: payload/currentIndex snapshot, ottShowName, playlistMode, playlistVisible, navigationTargetPosition,
+   movePlaylistFocus(delta), findNextFocusablePosition, dp(). Owns gd* fields. Must still run before playlist findViewById (bindViews@2510).
+4. C8 identity/dock text (MED): `TvDockIdentityPresenter`; host: current item, contentType, ottShowName, controlsSkin,
+   guideTitleFor, view refs (from C4). setResolvingState/backdrop needs isFinishing/isDestroyed + fade fns.
+5. C10 PikPak retry engine (MED): `PikPakColdStorageRetry` owning retryId/count/flag/handler + polling handler.
+   Callbacks: player(), isStremioTvMode, onPlaybackStart(item) (setMediaItem/prepare/play + title/progress/subtitle side effects),
+   onLoaded() (tryAutoSelect), onExhausted() returning routing (shuffle → manual → startup → toast+1.5s playNext),
+   schedule/cancelPikPakGateReprepare, show/hide overlay, startupGate status mirror.
+   Tests reflect on `cancelPikPakRetry`, `waitForPikPakMetadata`, `pikPakReactivationIndicator` — must keep activity shims.
+6. C3 Playlist focus engine (MED-HIGH): `TvPlaylistController(playlistView, seasonTabsContainer, Callbacks)`;
+   Callbacks: onPlay(index), onFetchEpisode(s,e), hidePlaylist(), isVisible, guide-skin hooks, computeMovieGroups.
+   Timing-sensitive (50/100 ms posts, isNavigating, global layout listener); playlistMode/movieGroups read by shuffle.
+7. C6 Addon subtitles + search dialog (HIGH): many token guards (addonSubtitleFetchToken, addonFetchTokens),
+   trackSelector writes, shared with ~30 functions outside chunk (panel/unified menu/loadStremioSubtitle).
+   Natural seam = existing SubtitlePanelController/UnifiedMenuController neighbours; search dialog (6025–6505) is the
+   lowest-risk sub-piece (needs getCurrentSubtitleSearchItem + applyManualSubtitleIdentity callbacks).
+8. C4 setupControls (HIGH): focus-listener last-wins ordering, re-entrant (4 callers), binds ~30 fields used everywhere.
+9. C5 + C7 playback start + shuffle (HIGHEST): interleaved generation guards (mediaPreparationGeneration,
+   showShuffleGeneration, stremioResolutionToken, startupFailoverGeneration, manual token), sleep-latch, resume
+   policy; Robolectric reflection tests and Dart source-text tests pin names/locations. Extract last, as one unit.
+
+## 5. Lifecycle / teardown facts
+- onPause@19237: cancelPikPakRetry() (bumps pikPakRetryId, clears pikPakRetryHandler, cancels gate reprepare, hides overlay).
+- onDestroy@19270 (in this order): mediaPreparationScope.cancel()@19274; pikPakGateReprepare removed from
+  progressHandler@19297; iptvLiveRecovery.cancel()@19306; iptvNetworkCallback unregister@19310 / =null@19313;
+  pikPakRetryHandler.removeCallbacksAndMessages(null)@19339 (+ indicator animate().cancel()/GONE right after);
+  subtitleScope.cancel()@19363; progressHandler.removeCallbacksAndMessages(null)@19376 (kills shuffle watchdog +
+  queued-shuffle polls); player.removeListener(playbackListener)@19391, subtitleListener removed, release()@19393;
+  focusRecoveryHandler.removeCallbacksAndMessages(null)@19423 + focusRecoveryRunnable=null@19424.
+- NOT cancelled on destroy: waitForPikPakMetadata's local Handler (self-terminates only via pikPakRetryId mismatch or
+  timeout ≤ 10 s+18 s; cancelPikPakRetry bumps the id so the next tick exits); playlistView.postDelayed lambdas;
+  OnGlobalFocusChangeListener instances accumulated per rebuildPlaylistContent.
+- Guards relying on lifecycle: discoverProtectedMime checks isFinishing/isDestroyed/sleepStopLatched; shuffleAttemptOwned
+  checks isFinishing/isDestroyed; setNextOverlayBackdrop/showPikPakRetryOverlay/hidePikPakRetryOverlay check
+  isFinishing/isDestroyed (Glide crash guard); MethodChannel callbacks (C9) have NO lifecycle guard themselves — callers
+  rely on mediaPreparationGeneration / addonSubtitleFetchToken / dialog.isShowing.
+- playItem ordering (must be preserved): shuffle-attempt check → restorePreparation capture → pendingShufflePlayback=null →
+  ++mediaPreparationGeneration → watchShufflePlayback → sleep latch gate → bounds → dropStaleSourceSwitchFeedback →
+  buffering/upnext/skip resets → cancelPikPakRetry → currentIndex/controls/activeVodHeaders → releaseResumeHold →
+  pendingSeekMs/pendingItemTraktPercent → resolve or start.
+- PikPak exhaustion order: cancelPikPakGateReprepare → clear state → failShufflePlayback → failManualSourceCandidate →
+  failStartupCandidate (if uncommitted) → toast + 1.5 s playNext.
+
+## 6. Existing JVM tests touching this chunk (android/app/src/test/kotlin/com/debrify/app/…)
+- tv/ShufflePlaybackFlowTest.kt (Robolectric, reflection): watchShufflePlayback, failShufflePlayback,
+  shuffleAttemptCurrent, resetShuffle, yieldEpisodeFetchToQueuedShuffle, clearQueuedShuffle; fields
+  queuedShuffleGeneration/Navigation, episodeFetchInFlight, mediaPreparationGeneration, showShuffleGeneration;
+  nested class simpleName "ShufflePlaybackAttempt" with a 7-arg ctor. Renames/moves break it.
+- tv/StremioTvStartupWatchdogTest.kt (Robolectric, reflection): cancelPikPakRetry, waitForPikPakMetadata(item,0,0,0L,cb),
+  schedulePikPakGateReprepare, fields payload, currentIndex, pikPakReactivationIndicator, pikPakGateReprepare, player,
+  titleView, startupGateStatus.
+- profiles/NativePlayerSettingsConsumptionTest.kt: reads `trackSelector`, `payload`, `getControlsSkin` on this activity
+  (resetSubtitleState reflection is on TorboxTvPlayerActivity, not this one); verifies forced-only disables text tracks at create.
+- audio/NativeAudioRoutingTest.kt: source-text check of this file for setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true) (outside chunk).
+- Pure-helper tests already covering called code: SubtitleAutoSelectionTest, SubtitleSourcePriorityTest,
+  ForcedSubtitlePolicyTest, SubtitleAudioPolicyTest, ShowShuffleTest, ProtectedStreamHttpTest, StartupFailoverCursorTest,
+  TvControlsSkinTest, PlaybackItemHeadersTest.
+- Dart source-text tests that pin THIS chunk's text/location (repo test/):
+  - test/android_tv_auto_advance_resume_test.dart: `_between('private fun playItem(', 'private fun resolveAndPlay(')`
+    must contain the pendingSeekMs/pendingItemTraktPercent expressions.
+  - test/manual_source_validation_contract_test.dart: `_between('private fun resolveAndPlay(', 'private fun startPlayback(')`
+    must contain 'reason=stale_manual_token' and 'failManualSourceCandidate("initial-resolve")'.
+  Moving playItem/resolveAndPlay/startPlayback out of the file or reordering them breaks these.
+
+### Gaps needing Robolectric characterization before extraction
+- C3 focus engine: movePlaylistFocus boundary/rapid-press (navigationTargetPosition), header skipping, season/movie tab
+  selection + scroll, ensureFocusInPlaylist middle-out recovery, guide-skin vertical/grid key remap (escape to tabs/rail).
+- C2: guideItemLayoutRes/overlay per skin, guideSkinBind status text (BROADCAST FETCH/ON AIR/CLEARED/% IN), seedGuideSkinChrome captions.
+- C4: setupControls focus-listener final state per skin (classic vs OTT), button click routing (unified menu vs dialogs, IPTV vs catalog next/prev),
+  controller-visibility reconcile → hideControlsMenu + subtitle lift restore.
+- C5: playItem sleep-latch suppression, resume suppression matrix (auto-advance/suppressResume/suppressTrakt), stale resolve
+  rejection (generation/startup/manual token), PikPak vs direct routing, MIME discovery re-entry, merged-source fallback.
+- C6: addon fan-out token supersession (content switch vs single-addon retry), rebuildFlatStremioSubtitles re-pinning,
+  perItemImdbIds caching incl. null, injected captions path, manual identity search flow, resetSubtitleState fields.
+- C7: playNext fallback ladder (shuffle → next index → Stremio TV → guide fetch → adjacent fetch → quick-play finish → toast),
+  playPrevious suppressResume, updateCatalogEpisodeControls visibility, pickShuffleIndex bag behaviour, playShowShuffle
+  queued-while-fetching and 3-attempt cap.
+- C8: updateOttIdentity per skin text, updateOttExtras chips/meta/TICKET overline, dockTagsFor URL fallback.
+- C10: retry schedule (0, 2, 4, 8, 16, 18 s caps) and exhaustion routing order; success clears overlay; onPause cancel.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt — responsibility map, chunk C (lines 7017–10600)
+
+File: android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt (revision 39c630303).
+The chunk ends at 10600, the closing brace of `showIptvCategoryPicker`. The nested `IptvCategoryAdapter` starts at 10602, outside the chunk.
+Companion constants are at 20155–20167: UP_NEXT_THRESHOLD_MS, UP_NEXT_MIN_DURATION_MS, UP_NEXT_TICK_MS, CONTROLS_AUTO_HIDE_DELAY_MS, SEEK_STEP_MS, SEEK_LONG_PRESS_THRESHOLD=3, MAX_SKIP_SEGMENT_CACHE_ENTRIES=64 and IMDB_ID_REGEX.
+Some fields are declared mid-file, not in 136–1400: gdPop@3168, iptvZapBannerDocked@12681, guideStyle@12698 (lazy), guideTokens@12706 (lazy), dockSkinSpec@12742 (lazy), legacyStoragePermissionRequestCode@19205, notificationPermissionRequestCode@19206. Several fields/vals are also declared inside this chunk; they are listed per cluster below.
+
+---------------------------------------------------------------------------
+## 1. Responsibility clusters
+
+### A. Key dispatcher + focus probes — 7017–7401
+- Members: dispatchKeyEvent@7018 (to 7379), isFocusInControlsOverlay@7381, isFocusInIptvChannelList@7392.
+- Owns: iptvUpPressActive@198 and iptvUpLongPressHandled@199. Only this cluster writes them (7293–7309).
+- Reads: startupGateView@140, linePickerOverlay@1199, syncOverlay@1198, subtitlePanel@1197, sourceBrowser@1201, unifiedMenu@1200, isIptvMode@862, iptvChannels@863, currentIptvIndex@864, iptvZapPagingActive@1024, iptvGuideVisible@1008, iptvEpgVisible@1070, iptvEpgEntry@1071, iptvChannelAdapter@1007, iptvGuideList@994, iptvGuideSearch@995, stremioTvGuideVisible@1189, stremioTvGuideSearch@1181, seekbarVisible@837, playlistVisible@836, upNextVisible@169, controlsMenuVisible@835, skipSegmentButton@168, stremioSourceBadge@1091, cinemaProgressContainer@215, pauseButton@188, player@262, stremioSources (field), cinemaSeekMode@256, isStremioTvMode@1177, stremioTvChannels, playlistMode@850, controlsOverlay@187.
+- External reference: isFocusInControlsOverlay is also called by hideControlsRunnable@1484.
+
+### B. Controls overlay / dock presentation + play/pause — 7403–7650
+- Members: handlePlayPauseToggleFromCenter@7403, togglePlayPause@7411, showControlsMenu@7443, hideControlsMenu@7535, updateSubtitleControlsLift@7589, hideTitleImmediately@7605, scheduleHideControlsMenu@7614, cancelScheduledHideControlsMenu@7622, updatePauseButtonLabel@7626, updateAspectButtonLabel@7642, updateNightModeButtonLabel@7647.
+- Owns:
+  - controlsMenuVisible@835. Written only at 7506 and 7555.
+  - controlsHandler@1364 and hideControlsRunnable@1484 (shared with D at 7730).
+  - Title views: titleContainer@142, titleView@143, titleOttContainer@145.
+- Writes:
+  - sleepStopLatched@1282 (G; reset at 7417).
+  - subtitleControlsLift@152 (liftAbove/restore).
+- Reads: payload@818, currentIndex@819, ottSkinInstalled@224, dockSkinSpec@12742, iptvZapBanner@12662, iptvZapBannerDocked@12681, startupGateView, resizeModeLabels@1354/resizeModeIndex@840, nightModeLabels@1360/nightModeIndex@842, iptvLiveRecovery@369, aspectButton@203, nightModeButton@205.
+
+### C. Progress ticker (premium seekbar progress) — 7652–7719
+- Members: startSeekbarProgressUpdates@7653, stopSeekbarProgressUpdates@7658 (no callers anywhere), updateSeekbarProgress@7662.
+- Owns: seekbarHandler@1365 and seekbarProgressRunnable@1492, which re-posts itself every 100 ms.
+- Writes:
+  - maxStableDurationMs@1438 and lastRealPositionMs@1439. playItem@4606–4609 also resets these. They feed scrobble/completion logic outside the chunk.
+  - debrifyTimeCurrent@209, debrifyTimeTotal@210, debrifyTimeDisplay@208, debrifyProgressLine@211, cinemaProgressBuffered@212.
+- Reads: cinemaSeekMode (D), ottSkinInstalled.
+- Calls F: updateSkipSegmentState on every tick.
+
+### D. Cinema interactive progress bar (scrub) — 7721–7979
+- Members: showControlsAndFocusProgressBar@7725, setupCinemaProgressBar@7735 (installs focus and key listeners), enterCinemaSeekMode@7790, exitCinemaSeekMode@7868, confirmCinemaSeek@7905, updateCinemaSeekSpeed@7913, updateCinemaProgressUI@7918.
+- Owns: cinemaSeekMode@256, cinemaSeekWasPlaying@257, cinemaLastAnimatedProgress@259, cinemaProgressAnimator@258, cinemaProgressTrackWidth@255, cinemaProgressThumb@217, cinemaSpeedIndicator@218, cinemaProgressBackground@216, ottScrubPreviewChip@244, ottScrubPreviewText@245.
+- Shares with E: seekbarPosition@838, videoDuration@839, currentSeekSpeed@184.
+- External writes to D state: updateIptvControlPresentation@9717–9720 (cluster L) writes cinemaSeekMode, cinemaSeekWasPlaying, the thumb and the speed indicator directly. It does not call exitCinemaSeekMode, so playback is not resumed there.
+
+### E. Legacy seekbar overlay + quick seek — 7981–8133
+- Members: showSeekbar@7982, hideSeekbar@8014, confirmSeekPosition@8029, getAcceleratedSeekStep@8036 (also used by D), seekBackward@8045, seekForward@8054, updateSeekSpeed@8063, updateSeekbarUI@8074, updateSeekbarPosition@8094, seekBy@8113.
+- Owns: seekbarVisible@837, seekbarOverlay@177, seekbarProgress@178, seekbarHandle@179, seekbarCurrentTime@180, seekbarTotalTime@181, seekbarSpeedIndicator@182, seekbarBackgroundWidth@183.
+- Dead code: **showSeekbar has no caller** (its only occurrence is 7982), and it is the only writer that sets `seekbarVisible = true` (8005). As a result, dispatcher branch A6 and seekBackward, seekForward and confirmSeekPosition are unreachable. hideSeekbar has one external caller (setupSeekbar@3139) and returns early because seekbarVisible is never true.
+- seekBy is live code. Its callers are dispatcher LEFT/RIGHT (A) and installOttControlsSkin@4195/4199. It uses seekFeedbackManager@815.
+
+### F. Skip intro/credits segments — 8135–8331 and 8406–8416
+- Members: currentSkipSegmentRequest@8135, updateSkipSegmentState@8164, ensureSkipSegments@8199, presentSkipSegment@8257, skipActiveSegment@8307, resetSkipSegmentState@8406.
+- Owns: skipSegmentScope@1251 (Main + SupervisorJob), skipSegmentFetchJob@1252, skipSegmentFetchGeneration@1253, loadedSkipSegmentKey@1254, loadingSkipSegmentKey@1255, skipSegments@1256, activeSkipSegment@1257, skipFocusOfferedKey@1258, skipSegmentCache@1259 (bounded at 64, evicts the first key), and the SkipSegmentRequest data class@1243.
+- Reads:
+  - skipSegmentsEnabled@848, skipSegmentProviderId@849, hasEverBeenReady@1377, isIptvMode, payload, currentIndex.
+  - upNextVisible (J), controlsMenuVisible (B), playlistVisible (H), seekbarVisible (E).
+  - Visibility of all five overlay controllers (subtitlePanel, unifiedMenu, sourceBrowser, syncOverlay, linePickerOverlay).
+- View: skipSegmentButton@168. Its click handler, skipActiveSegment, is bound in bindViews@2524.
+
+### G. Sleep timer + screen hold — 8333–8404
+- Members: sleepTimerMinutesLeft@8336, sleepTimerValueLabel@8342, startSleepCountdown@8348, armSleepAtEndOfItem@8361, cancelSleepTimer@8367, fireSleepTimer@8380, releaseScreenForSleep@8395, holdScreenForPlayback@8401.
+- Owns: the SleepTimerMode enum@1268, sleepTimerMode@1269, sleepTimerDeadlineElapsedMs@1270, sleepTimerHandler@1271, sleepTimerRunnable@1272, sleepTimerMinuteOptions@1273, sleepStopLatched@1282.
+  - B writes sleepStopLatched at 7417.
+  - playbackListener writes sleepStopLatched at 1682/1717, which are the END_OF_ITEM handling in STATE_ENDED.
+- External callers:
+  - umPlaybackModel@15565 calls sleepTimerValueLabel at 15568, cancelSleepTimer at 15576, startSleepCountdown at 15580 and armSleepAtEndOfItem at 15589.
+  - playbackListener calls cancelSleepTimer at 1681/1716, releaseScreenForSleep at 1683/1718 and holdScreenForPlayback at 1805.
+  - onDestroy calls cancelSleepTimer at 19318.
+
+### H. Playlist overlay + item navigation — 8418–8647
+- Members: showPlaylist@8419, alignSeriesTabsForCurrentEpisode@8464, alignMovieTabsForCurrentItem@8475, getNextPlayableIndex@8484, getPrevPlayableIndex@8522, computeMovieGroups@8555 (pure apart from reading payload.collectionGroups), hidePlaylist@8643.
+- Owns: playlistVisible@836, playlistOverlay@153, playlistView@154.
+- Reads: playlistMode@850, playlistAdapter@851, seriesPlaylistAdapter@852, moviePlaylistAdapter@853, movieGroups@854, seasonTabs@173, payload (nextEpisodeMap/prevEpisodeMap/collectionGroups/items), currentIndex, gdPop@3168 (written GONE).
+- External callers:
+  - getNextPlayableIndex: playbackListener@1752, playNext@5239.
+  - getPrevPlayableIndex: playPrevious@5285, updateCatalogEpisodeControls@5323.
+  - computeMovieGroups: setupCollectionPlaylist@3664.
+  - hidePlaylist: setupSeriesPlaylist@3645/3652, 3672, setupBackPressHandler@19181.
+  - showPlaylist: setupControls@4492.
+
+### I. "Next" overlay (auto-advance toast) — 8649–8670
+- Members: showNextOverlay@8650, fadeInNextOverlay@8656, hideNextOverlay@8663.
+- Owns the views nextOverlay@156, nextText@157 and nextSubtext@158.
+- External callers:
+  - playbackListener@1742–1756 shows the overlay, then progressHandler.postDelayed 1500 hides it and calls playItem.
+  - setResolvingState@5903/5905.
+  - requestStremioTvNext@19970–20033.
+
+### J. Up Next card — 8672–8796
+- Members: isCleanPlaybackState@8677, maybeShowUpNext@8691, the upNextTicker val@8713 (a Runnable), showUpNextCard@8744, triggerUpNext@8771, dismissUpNext@8779, hideUpNextCard@8784.
+- Owns: upNextVisible@169, upNextTargetIndex@170, upNextDismissedForIndex@171, upNextHandler@172, upNextCard@164, upNextPoster@165, upNextTitle@166, upNextCountdown@167.
+- Writes isAutoAdvancing@834 (in triggerUpNext).
+- Reads:
+  - The visibility flags of B, E, H and O (controlsMenuVisible, seekbarVisible, playlistVisible, iptvGuideVisible, stremioTvGuideVisible).
+  - The five overlay controllers, nextOverlay (I) and pikPakReactivationIndicator@1375.
+  - continuousShuffleEnabled@855, isIptvMode, isStremioTvMode, currentIndex, payload.
+- External callers:
+  - maybeShowUpNext: progressRunnable@1451/1454, about every PROGRESS_INTERVAL_MS.
+  - hideUpNextCard: playItem@4611, playShowShuffle@5509.
+
+### K. IPTV mode bootstrap + payload parsing — 8798–9096
+- Members: initIptvMode@8802, parseIptvSources@8919, parseIptvLists@8939, parseStringList@8951, parseIptvChannels(JSONArray)@8957, parseIptvChannels(List<*>)@9004, iptvChannelEntry@9047.
+- initIptvMode writes:
+  - Mode and decoder: isIptvMode@862, iptvDecoderMode@1152.
+  - Source context: iptvSourceId@1016, iptvSourceName@1017, iptvContentType@1018, iptvSelectedCategory@1019, iptvSources@1010, iptvLists@1014, iptvCategories@1015.
+  - Zap context: iptvZapSourceId@1026, iptvZapSourceName@1027, iptvZapContentType@1028, iptvZapCategory@1025, iptvZapCategories@1029, iptvZapOwnsUiContext@1037.
+  - Channels: iptvChannels@863 (mutates channel.sourceId/sourceName and isCurrent), iptvBrowseChannels@1009, currentIptvIndex@864.
+  - Audio memory: iptvSeriesAudioKey@875, iptvPreferredAudioLang@876.
+  - Services: seekFeedbackManager@815, stremioSubtitleService@1213.
+  - About 22 guide/EPG view refs (iptvGuideOverlay@993 … iptvEpgList@1065; full list at 8874–8896).
+- Caller: onCreate@2098 (`mode=="iptv"` returns early before parsePayload).
+- parseIptvChannels(List) external callers: requestIptvBrowse@10948, requestIptvChannelJump@11901, requestIptvZapPage@12043. The parsers are pure apart from the class context.
+
+### L. IPTV live/VOD control dock skin — 9098–9231 and 9678–9811
+- Members: setupIptvControls@9098, liveIptvDockButtons@9138, applyLiveIptvControlStyle@9168, restoreCinemaDockIconTints@9218, updateIptvControlPresentation@9678, arrangeLiveIptvControlDock@9733, restoreOriginalControlDockOrder@9756, replaceControlDockOrder@9765, restoreCinemaIptvControlStyle@9778.
+- Owns: cinemaIconTints@9157 and cinemaButtonTypefaces@9158, both declared in the chunk.
+- Reads: originalControlDockOrder@200 (populated elsewhere), guideTokens/guideStyle, iptvStartOverActive@865, iptvStartOverTimelineVisible@867.
+- Dock buttons it re-styles: audio@201, subtitle@202, aspect@203, speed@204, night@205, pause@188, iptvPrev@189, iptvNext@190, iptvGuide@191, iptvJump@192, iptvStartOver@193, iptvStartOverSeek@194, iptvRecord@195.
+- Writes D state (see D).
+- updateIptvControlPresentation external callers: performIptvLiveRetune@434, playbackListener@1880, showIptvStartOverTimeline@11370, toggleIptvStartOver@11385, updateIptvEpisodeControls@14215.
+
+### M. IPTV recording (engine/tee/scheduling) — 9233–9676
+- Members:
+  - Availability and state: recordingEngineEnabled (lazy val@9244), recordingRegistryListener (val@9254), canRecordCurrentIptv@9343, updateRecordButtonState@9357.
+  - URL classification: isSegmentedStreamUrl@9264, isCurrentIptvSegmented@9274, xtreamTsTwin@9286, engineRecordableUrl@9302, isSchedulableStreamUrl@9319, engineTaskIdForCurrentChannel@9329, recordingResourceFor@9335.
+  - Actions: toggleIptvRecording@9376, maybeAskNotificationPermission@9420, toggleEngineRecording@9437, promptScheduleRecording@9538, finalizeIptvRecordingIfActive@9654.
+  - Naming helpers: sanitizeRecordingName@9667, recordingTimestamp@9674.
+- Owns: iptvRecordingController@197 (lazy tee) and iptvRecordButton@195 state.
+- Reads: currentIptvStreamUrl@992, iptvHlsForcedUrls@888, currentIptvHttpHeaders@883, iptvChannels, currentIptvIndex, iptvSources, iptvSourceId.
+- The pure candidates are isSegmentedStreamUrl, xtreamTsTwin and sanitizeRecordingName. engineRecordableUrl and isSchedulableStreamUrl are pure given iptvHlsForcedUrls.
+- External callers:
+  - updateRecordButtonState: 479, setupPlayer@2911, setIptvMediaItem@14386, retryIptvAsHlsIfUnrecognized@14462, onRequestPermissionsResult@19216, recordingRegistryListener.
+  - finalizeIptvRecordingIfActive: 478, setIptvMediaItem@14289, beginIptvPlayback@14484, onStop@19141, onDestroy@19322.
+  - isCurrentIptvSegmented: performIptvLiveRetune@451/462.
+
+### N. IPTV guide overlay construction + styling — 9813–10183
+- Members: setupIptvOverlay@9813 (to 10037), applyGuideStyle@10044.
+- Creates iptvChannelAdapter@1007 and iptvEpgAdapter@1066, and installs the RecyclerView layout managers and scroll listener, the search TextWatcher/focus/editor listeners and 14 nav/day-tab click listeners.
+- Reads: iptvZapPagingActive, iptvGuideUsesZapWindow@1035, iptvZapRequestInFlight@1032, iptvLists, iptvSources, iptvContentType, iptvEpgEntry, guideTokens, guideStyle.
+- Caller: initIptvMode only (8898).
+
+### O. IPTV guide visibility + browse/search context — 10185–10600
+- Members: isIptvSeriesSentinel@10185, showIptvGuide@10188, hideIptvGuide@10214, beginIptvAllCategorySearch@10230, restoreIptvCategoryAfterSearch@10260, commitIptvAllCategorySearch@10294, clearIptvAllCategorySearchState@10299, focusCurrentIptvGuideRow@10308, toggleIptvGuide@10319, refreshIptvBrowserChrome@10323, updateIptvCatalogControlVisibility@10343, iptvGuideItemCountLabel@10357, selectIptvContentType@10369, selectIptvSource@10382, showIptvSourcePicker@10404, showIptvCategoryPicker@10416.
+- Owns: iptvGuideVisible@1008, iptvAllCategorySearchActive@1041, iptvSearchSaved{Category@1042, Channels@1043, Categories@1044, UsesZapWindow@1045, ZapOwnsUiContext@1046}.
+- Writes zap/browse state that belongs outside the chunk:
+  - iptvUiContextToken@1036, iptvBrowseToken@1020, iptvZapRequestToken@1031 (all bumped).
+  - iptvZapRequestInFlight@1032, iptvZapPendingInputs@1033 (cleared).
+  - iptvZapOwnsUiContext@1037, iptvGuideUsesZapWindow@1035, iptvSelectedCategory, iptvCategories, iptvBrowseChannels, iptvSourceId, iptvSourceName, iptvContentType.
+- Reads: iptvZapCategoryTotal@1030, iptvZapPagingActive.
+- External callers:
+  - hideIptvGuide: requestIptvCatchup@11461/11506, setupBackPressHandler@19175, and L@9715.
+  - commitIptvAllCategorySearch: 11460, 11505, beginIptvCategoryZapSession@11683, zapIptvChannel@12553.
+  - refreshIptvBrowserChrome: 10834, 10967, 11692, 11755, 11813, 12131, 12166, 12543.
+
+---------------------------------------------------------------------------
+## 2. External effects per cluster
+
+- **MethodChannel:** no cluster calls `invokeMethod` directly; the chunk reaches Flutter only through out-of-chunk functions.
+  - O and N reach it through requestIptvBrowse@10912, which calls `MainActivity.getAndroidTvPlayerChannel().invokeMethod` at 10919/10936.
+  - G reaches it through sendProgress@16801 (fireSleepTimer@8383).
+  - J and H reach it through playItem@4556.
+- **Broadcasts:** none in the chunk.
+- **A:** focus traversal; `super.dispatchKeyEvent`; delegates to the overlay controllers' `dispatchKey`; `unifiedMenu.handleEditModeKey`.
+- **B:**
+  - Media3: `player.pause/play/playWhenReady`, `iptvLiveRecovery.userRetry("play-press")` (7434), `playerView.showController()` (7449).
+  - Timers: `controlsHandler.postDelayed(hideControlsRunnable, 4000)`.
+  - View work: ViewPropertyAnimator (300/250 ms with withEndAction), `pauseButton.post{requestFocus}`, and `dock.post` re-measure in updateSubtitleControlsLift.
+- **C:** `seekbarHandler.post` loop every 100 ms; reads `player.currentPosition/duration/bufferedPosition`; LayoutParams relayout.
+- **D:**
+  - Media3: `player.pause/play/seekTo`; `releaseResumeHold()` (1408) before seeking.
+  - Animation: a ValueAnimator (80 ms) is stored in cinemaProgressAnimator, plus thumb ViewPropertyAnimators.
+  - Timer: `controlsHandler.postDelayed({focus}, 100)` (7730) is not cancelled by cancelScheduledHideControlsMenu.
+- **E:**
+  - Media3: `player.seekTo`; releaseResumeHold.
+  - UI: Toast (7989, dead path); `seekFeedbackManager.showSeekForward/Backward`; `findViewById(R.id.seekbar_background).post`.
+- **F:**
+  - Network: a coroutine on skipSegmentScope with `withContext(IO) TvSkipSegmentClients.fetch(...)`. Errors are logged at warning level and the result is EMPTY. A generation check plus a request-key check then rejects stale results.
+  - Media3: `player.seekTo`; releaseResumeHold.
+  - Focus: `button.post{requestFocus}`, and `playerView.requestFocus()` when hiding a focused button.
+- **G:**
+  - Timer: `sleepTimerHandler.postDelayed` (minutes). Uses `SystemClock.elapsedRealtime`.
+  - Window: `FLAG_KEEP_SCREEN_ON` clear/add plus `playerView.keepScreenOn`.
+  - Toasts. fireSleepTimer calls sendProgress, then `player.pause()`.
+- **H:** `playlistView.post` then `postDelayed(100)` focus; Log.d lines (tags PlaylistNav and AndroidTvPlayer); selectSeasonTab@3747 / selectMovieTab@4120.
+- **I:** ViewPropertyAnimator only.
+- **J:** `upNextHandler` ticker every UP_NEXT_TICK_MS (500 ms); `Glide.with(this)` poster load (8756); playItem (Media3 prepare, outside the chunk).
+- **K:** Calls bindViews@2486, setupPlayer@2736 (creates ExoPlayer), setupSeekbar@3135, setupControls@4255, setupBackPressHandler@19161 and setupMetadataReceiver@2188 (a receiver, outside the chunk). Also constructs SeekFeedbackManager and StremioSubtitleService, and calls playIptvChannel@14170 and bootstrapInitialIptvZapPaging@11749.
+- **L:** View re-parenting (`dock.removeAllViews` / `addView`), background drawables and TextViewCompat tints.
+- **M:**
+  - Preferences:
+    - `ProfilePreferenceProjection.getBoolean("recording_engine_enabled")` (lazy, fixed per launch).
+    - `getSharedPreferences("debrify_permissions").notification_permission_asked` (read and write).
+    - `ProfilePreferenceProjection.activeJobContext` / `jobAuthorizationValid(..."recordings", allowRevisionDrift=true)`.
+  - Services: `startService(ACTION_STOP)`, `ContextCompat.startForegroundService(LiveRecordingService.buildStartIntent…)`.
+  - Recording state: `RecordingRegistry.taskIdForUrl` / `.live`; `RecordingScheduleStore.findDuplicate/peakOverlap/overlappingTitles/put`; `RecordingAlarmReceiver.exactAlarmsGranted/registerAll`.
+  - Permissions: `ActivityCompat.requestPermissions` (POST_NOTIFICATIONS, WRITE_EXTERNAL_STORAGE).
+  - Dialog: AlertDialog (9602).
+  - Tee recorder: `iptvRecordingController.start/stop` (the tee; file IO inside the controller).
+- **N:** Creates the RecyclerView adapters; the scroll listener calls prefetchIptvZapPage@12190 (zap paging network via the bridge). The adapter callbacks route to:
+  - requestIptvBrowse, switchToIptvChannel@12340, beginIptvCategoryZapSession@11682, disableIptvZapPaging@12247;
+  - showIptvListPicker@10682, toggleIptvFavorite@11008, ensureIptvChannelEpg@11049;
+  - requestIptvCatchup@11401, selectIptvEpgDay@11245.
+- **O:** `iptvBrowseHandler.post{trimHiddenIptvZapWindow()}` (10222); `iptvGuideList.postDelayed(150)` focus; AlertDialogs (10408, 10578) with a programmatic view tree and SOFT_INPUT_STATE_ALWAYS_VISIBLE; requestIptvBrowse.
+
+---------------------------------------------------------------------------
+## 3. Coupling
+
+### dispatchKeyEvent@7018 branches, in evaluation order
+| # | Lines | Condition | Routes to |
+|---|---|---|---|
+| A1 | 7020–7025 | startupGateView visible and a D-pad/OK/Enter key | super (startup gate, outside the chunk) |
+| A2 | 7028–7030 | linePickerOverlay visible | linePickerOverlay.dispatchKey (subtitle controller) |
+| A3 | 7033–7035 | syncOverlay visible | syncOverlay.dispatchKey |
+| A4 | 7038–7040 | subtitlePanel visible | subtitlePanel.dispatchKey (SubtitlePanelController) |
+| A4b | 7042–7044 | sourceBrowser visible | sourceBrowser.dispatchKey |
+| A5 | 7050–7057 | unifiedMenu visible | edit mode: handleEditModeKey, otherwise super; else dispatchKey, otherwise super |
+| A5b | 7064–7074 | live IPTV, CH_UP/DOWN, (>1 channel or zap paging) | zapIptvChannel@12549 (first press only); always consumes |
+| A5c | 7077–7126 | iptvGuideVisible | see guide sub-branches below; otherwise super |
+| A5d | 7129–7150 | stremioTvGuideVisible | BACK: hideStremioTvGuide@19568; LEFT in list: consumed; long-UP: stremioTvGuideSearch focus; otherwise super |
+| A6 | 7153–7177 | seekbarVisible | E: seekBackward/seekForward/confirmSeekPosition/hideSeekbar; consumes all keys. **Unreachable (see E).** |
+| A7 | 7180–7186 | playlistVisible | BACK: hidePlaylist (H); otherwise super |
+| A8 | 7191–7205 | upNextVisible | OK: triggerUpNext; BACK: dismissUpNext; any other key: hideUpNextCard and **falls through** (J) |
+| A9 | 7207–7210 | controlsMenuVisible and BACK | hideControlsMenu (B) |
+| A10 | 7215–7231 | CENTER/ENTER | focus on skipSegmentButton, stremioSourceBadge or in the controls: super. Otherwise handlePlayPauseToggleFromCenter (B) on the first press |
+| A11 | 7234–7259 | DOWN | on the badge with controls open: focus cinemaProgressContainer or pauseButton. Controls hidden, or focus outside them: showControlsMenu + scheduleHideControlsMenu. Otherwise super |
+| A12 | 7262–7329 | UP | see UP sub-branches below |
+| A13 | 7332–7355 | RIGHT | in controls: super. isLiveIptvZapContext@12522: zapIptvChannel(1). repeat≥3: showControlsAndFocusProgressBar (D). First press: seekBy(+10 s) (E) |
+| A14 | 7357–7376 | LEFT | mirror of A13 with -1 / -10 s |
+| A15 | 7378 | anything else | super |
+
+A5c (iptvGuideVisible) sub-branches:
+- BACK: hideIptvEpgPane@11293 and list focus, or hideIptvGuide (O).
+- LEFT in the EPG panel (isFocusInIptvEpgPanel@11539): hideIptvEpgPane and refocus the channel row. LEFT in the channel list: consumed.
+- RIGHT in the channel list (first press): showIptvSchedulePane@11153 for focusedIptvGuideEntry@11140.
+- UP long-press (repeat≥3) in the list: focus iptvGuideSearch.
+
+A12 (UP) sub-branches:
+1. Progress bar focused, Stremio sources present: badge focus.
+2. Non-live context and focus in the dock while not scrubbing: cinemaProgressContainer, or badge focus.
+3. Live IPTV:
+   - First press: arms iptvUpPressActive.
+   - repeat≥3: hideControlsMenu + showIptvChannelJumpDialog@11816.
+   - ACTION_UP without a long press: showIptvGuide (O).
+   - Always consumed.
+4. Stremio TV with channels: showStremioTvGuide@19543.
+5. playlistMode NONE: super.
+6. Otherwise showPlaylist (H).
+
+### Outgoing calls to functions outside the chunk, by cluster
+- **A:** zapIptvChannel@12549, hideIptvEpgPane@11293, isFocusInIptvEpgPanel@11539, focusedIptvGuideEntry@11140, showIptvSchedulePane@11153, hideStremioTvGuide@19568, isFocusInStremioTvGuideList@19648, showIptvChannelJumpDialog@11816, showStremioTvGuide@19543, isLiveIptvZapContext@12522.
+- **B:** restoreParkedIptvTwinIfNeeded@630, showIptvZapBanner@13587, hideIptvZapBanner@13731, updateOttIdentity@5641, hideStremioSourceBadgeImmediately@18905, showStremioSourceBadge@18866, hideStremioSourceBadge@18888, refreshOttCaptionFor@4250.
+- **C:** formatTime@17163.
+- **D:** setOttTrackHeight@4212, releaseResumeHold@1408, formatTime.
+- **E:** releaseResumeHold, formatTime.
+- **F:** releaseResumeHold, TvSkipSegmentClients (external object).
+- **G:** sendProgress@16801.
+- **H:** seedGuideSkinChrome@3498, selectSeasonTab@3747, selectMovieTab@4120.
+- **J:** canShuffleWholeShow@5461, pickShuffleIndex@5574, playItem@4556.
+- **K:** bindViews, setupPlayer, setupSeekbar, setupControls, setIptvPreferredAudioLang@14240, updateIptvEpisodeControls@14213, setupBackPressHandler, setupMetadataReceiver, playIptvChannel@14170, bootstrapInitialIptvZapPaging@11749.
+- **L:** dp@6644, guideTypeface@12802, updateIptvStartOverButton@11329, updateIptvStartOverSeekButton@11350.
+- **M:** none in the activity; it uses only singletons and services.
+- **N:** requestIptvBrowse@10912, disableIptvZapPaging@12247, switchToIptvChannel@12340, beginIptvCategoryZapSession@11682, showIptvListPicker@10682, toggleIptvFavorite@11008, ensureIptvChannelEpg@11049, prefetchIptvZapPage@12190, requestIptvCatchup@11401, selectIptvEpgDay@11245, updateIptvGuideCurrentName@11619, dp, guideTypeface.
+- **O:** trimHiddenIptvZapWindow@12180, hideIptvEpgPane, hideIptvZapBanner, updateIptvGuideCurrentName, bootstrapInitialIptvZapPaging, requestIptvBrowse, dp.
+
+### Intra-chunk edges
+- A calls B, D, E, H, J and O.
+- B calls hideIptvZapBanner, which belongs to the zap banner outside the chunk.
+- C calls F every 100 ms.
+- F reads J (upNextVisible) and B/E/H visibility.
+- J reads B, E, H, I and O visibility; it calls H (getNextPlayableIndex).
+- K calls L, N and B (via the "Guide" button). The playlist button click calls hideControlsMenu + toggleIptvGuide (8905–8908).
+- L calls M (updateRecordButtonState) and O (hideIptvGuide), and writes D state.
+- N calls O and M (promptScheduleRecording).
+- O calls nothing in L.
+
+---------------------------------------------------------------------------
+## 4. Extraction candidates, low to high risk
+
+1. **Recording URL policy** (M pure part: isSegmentedStreamUrl, xtreamTsTwin, engineRecordableUrl(url, hlsForced), isSchedulableStreamUrl, sanitizeRecordingName, recordingTimestamp).
+   - Pure functions, so they can become a top-level `object IptvRecordingUrlPolicy` with plain JVM tests and no host interface.
+   - Risk: lowest. Preserve the regex text exactly.
+2. **IPTV payload parsing** (K parsers 8919–9096).
+   - Pure apart from the private data-class types (IptvChannelEntry@21413, IptvSourceEntry@21790, IptvListEntry@21805).
+   - The data classes are file-private, so they must become `internal` in the same move.
+   - Behaviour to keep:
+     - User-Agent key normalisation.
+     - `contentType` defaults to "live" when duration is -1.
+     - `isContinue` sources are filtered out.
+     - The two overloads differ on season/episode: the JSONArray overload treats -1 as null, while the List overload passes raw values.
+3. **Playlist navigation policy** (getNextPlayableIndex, getPrevPlayableIndex, computeMovieGroups).
+   - Pure given (payload, playlistMode, movieGroups). Move them to a `PlaylistNavigator` taking those as parameters.
+   - Watch the payload read inside computeMovieGroups at 8561.
+   - Low risk, high test value.
+4. **Sleep timer** (G).
+   - A `SleepTimerController(handler, clock)` with callbacks: onFire → host sendProgress(false) then pause(); then releaseScreen(); toast(text).
+   - sleepStopLatched is shared: B resets it (7417) and playbackListener sets it (1682, 1717). The controller must own it with an explicit API (latch/clear).
+   - Low-to-medium risk.
+5. **Skip-segment controller** (F).
+   - Already self-contained state and an owned scope; it can mirror SubtitlePanelController.
+   - Host interface: `player position/duration`, `hasEverBeenReady`, `isIptvMode`, `payload/currentIndex` (or a request supplier), `isUpNextVisible`, `controlsMenuVisible`, `canOfferFocus()` (aggregates the overlay states), `releaseResumeHold()`, `seekTo`, `showSeekForward`, `requestPlayerFocus`.
+   - Must keep the generation/key staleness guard and the cancel in onDestroy@19370–19372.
+   - Medium risk.
+6. **Up Next card** (J) plus the next overlay (I).
+   - Host interface: `isCleanPlaybackState()` (reads about 12 flags across clusters), `nextIndex()` (shuffle or linear), `playItem(index, autoAdvance=true)`, `currentIndex`, `payload items`, Glide load.
+   - The ticker and the hide-in-playItem contract (4611) must stay.
+   - Medium risk.
+7. **IPTV recording actions** (M stateful part).
+   - Host interface: currentStreamUrl, currentHeaders, currentEntry, sources, hlsForcedUrls, `requestPermissions(code)`, `showDialog`, toast.
+   - The registry listener add/remove ordering in onCreate@2038 / onDestroy@19315 must move with it.
+   - Medium risk: profile authorisation and foreground-service start.
+8. **Cinema scrub + progress ticker** (C+D, plus E's seekBy).
+   - Shared mutable seekbarPosition/videoDuration/currentSeekSpeed with the dead legacy E, plus direct writes from L (9717–9720).
+   - Needs an explicit `resetForLive()` API. The host must supply ottSkinInstalled, setOttTrackHeight, releaseResumeHold and the skip-segment tick.
+   - Medium-high risk.
+   - Delete legacy E only as a separate, evidenced removal: showSeekbar has no callers. Even then, setupSeekbar@3135 still references hideSeekbar.
+9. **IPTV guide (N+O)** and **live dock skin (L)**.
+   - They share about 25 zap/browse tokens and windows with the out-of-chunk zap pager (11682–12600) and browse bridge (10912).
+   - Extracting O alone would need a host exposing every token bump and the zap-window state. Do this only together with the zap/browse cluster (another chunk).
+   - High risk.
+10. **Key dispatcher (A)** and **controls overlay (B)**.
+    - A reads visibility from every cluster, so it should be extracted last, as a `TvKeyRouter` over a host interface of about 15 predicates and actions.
+    - Branch order is behaviour: A8 falls through, A6 consumes all keys, and repeat-count gates apply.
+    - B is called from about 30 external sites (hideControlsMenu has 17 external references).
+    - Highest risk.
+
+---------------------------------------------------------------------------
+## 5. Lifecycle and teardown ordering facts
+
+- **onCreate:**
+  - `RecordingRegistry.addListener(recordingRegistryListener)` at 2038, before the `mode=="iptv"` branch at 2097–2099, which calls initIptvMode and returns.
+  - The listener guards with `!isDestroyed && !isFinishing` (9255).
+- **onStop@19122:** cancelPendingIptvCatchupRequest at 19126, then finalizeIptvRecordingIfActive at 19141 (tee only; engine captures survive by design), then iptvLiveRecovery.cancel.
+- **setupBackPressHandler@19161:** hides overlays in order — linePicker/sync, then hideIptvGuide at 19175, then hidePlaylist at 19181.
+- **onDestroy@19270:**
+  - Order: removeListener(recordingRegistryListener) 19315, then cancelSleepTimer 19318, then finalizeIptvRecordingIfActive 19322, then iptvBrowseHandler.removeCallbacksAndMessages 19329, then upNextHandler.removeCallbacksAndMessages 19350, then skipSegmentFetchJob.cancel 19370 + skipSegmentScope.cancel 19372, then progressHandler / controlsHandler / seekbarHandler removeCallbacksAndMessages 19376–19378, then player.release at 19393.
+  - Handler and coroutine teardown precedes player release. C, F and J callbacks touch `player`.
+- **Not cancelled in onDestroy:** cinemaProgressAnimator (cancelled only in exitCinemaSeekMode and updateCinemaProgressUI), view ViewPropertyAnimators with withEndAction, View.post/postDelayed focus lambdas (playlistView 8444, iptvGuideList 10207), and AlertDialogs from O and M. An extraction must not silently add or drop any of these cancellations.
+- **Per-item reset in playItem@4556:**
+  - hasEverBeenReady=false, maxStableDurationMs=0 and lastRealPositionMs=0 (4607–4609), then hideUpNextCard (4611), then resetSkipSegmentState (4612).
+  - F depends on hasEverBeenReady=false hiding the button until the new media is ready (8175).
+- **Sleep fire ordering:** fireSleepTimer runs cancelSleepTimer, sets sleepStopLatched=true, calls sendProgress(false) **before** pause, then releases the screen. holdScreenForPlayback re-arms on onIsPlayingChanged(true) at 1805.
+- **Controls auto-hide:** hideControlsRunnable re-schedules if focus is still in the overlay. scheduleHideControlsMenu posts only while `isPlaying`. showControlsMenu always cancels first.
+- **Cinema scrub:** enter pauses only when playWhenReady was true; exit resumes only then. L's live reset clears cinemaSeekWasPlaying without resuming.
+- **IPTV guide hide:** trimHiddenIptvZapWindow is deliberately posted (10222), because hide can run inside a row's click dispatch. Keep the deferral.
+- **Skip-segment fetch:** the result is rejected unless both the generation (8240) and the recomputed request key (8242) still match.
+
+---------------------------------------------------------------------------
+## 6. Existing JVM tests touching this chunk, and gaps
+
+android/app/src/test has about 40 files. None names a function from this chunk.
+- **Indirect coverage:**
+  - StremioTvStartupWatchdogTest injects `nextOverlay`, `isIptvMode` and `titleView` by reflection (54, 70). It drives `playbackListener` STATE_ENDED (117, 138), which can reach showNextOverlay, getNextPlayableIndex or the sleep END_OF_ITEM branch. Coverage is incidental; nothing is asserted about them.
+  - SubtitleSyncDismissTest@59–81 invokes `setupBackPressHandler`, whose callback reaches hideIptvGuide and hidePlaylist, but asserts only overlay dismissal.
+  - SubtitleControlsLiftControllerTest covers the lift controller that B drives, not B's calls into it.
+  - TvControlsSkinTest covers skin specs (dockSkinSpec), not updatePauseButtonLabel.
+  - ShufflePlaybackFlowTest covers shuffle state, not maybeShowUpNext.
+- **Gaps:**
+  - Pure-JVM tests could cover candidates 1–3 after extraction, but they need a characterization pass first. Robolectric reflection on the activity is the existing house pattern (`Robolectric.buildActivity(AndroidTvTorrentPlayerActivity::class.java).get()` plus a field helper).
+  - dispatchKeyEvent routing table A1–A15: the order of precedence, A8 fall-through, the repeat-count gates (CH zap first press only, long-press threshold 3), and the live-IPTV UP press/long-press/ACTION_UP guide state machine.
+  - togglePlayPause dead-live path (userRetry versus play) and the sleepStopLatched reset.
+  - Skip segments: the hasEverBeenReady gate, a stale generation/key rejecting a result, cache eviction at 64, focus offered once per key, suppression while upNextVisible.
+  - Up Next: threshold and minimum duration, the upNextDismissedForIndex latch, the ticker hiding when not clean or on a seek back, and the trigger at ≤ TICK+250 ms.
+  - Sleep timer: countdown fire order (sendProgress before pause), END_OF_ITEM, and screen flags.
+  - Cinema scrub: pause/resume intent, the live reset from L, and the OTT preview chip.
+  - Recording: engine versus tee gating, Xtream twin, schedule gating, the notification permission asked once, and profile authorization refusal.
+  - IPTV search context: begin, restore and commit token bumps and saved-window restore. Category picker filtering.
+  - initIptvMode parsing round-trip (both overloads) and the start index clamp.
+  - Dead code to record in the plan: showSeekbar, stopSeekbarProgressUpdates, and the dispatcher seekbar branch A6.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt — responsibility map, chunk D (lines 10600–14760)
+
+File: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` (revision: refactor/codebase @ 39c630303).
+Chunk starts at the tail of the category-picker dialog (10593–10600 belongs to the previous function) and ends at 14757
+(14759+ is "Track selection / UNIFIED MENU backing", not in this chunk).
+
+Supporting types (outside chunk, all `private` top-level in the same file — extraction to another file requires
+widening to `internal`): `StremioSource`@20230, `IptvChannelEntry`@21413 (mutable data class: `index`, `isCurrent`,
+`isFavorite`, `epg*` fields, `resumePositionMs`), `IptvChannelAdapter`@21472, `IptvSourceEntry`@21790,
+`IptvListEntry`@21805, `IptvEpgProgram`@21811, `IptvEpgAdapter`@21819. Style types live in `IptvGuideStyle.kt`
+(`GuideStyle`, `GuideTokens`) and `TvControlsSkin.kt`.
+
+Shared IPTV state almost every cluster touches (declared in the activity field block):
+`isIptvMode`@862, `iptvChannels`@863, `currentIptvIndex`@864, `iptvChannelAdapter`@1007, `iptvGuideVisible`@1008,
+`iptvBrowseHandler`@1022, `progressHandler`@1363, `player`@262, `titleView`@143, `controlsMenuVisible`@835.
+
+---
+
+## 1. Responsibility clusters
+
+### C1 — Guide list adapters (nested static classes) — 10602–10672, 10837–10909
+- `IptvCategoryAdapter`@10602 (ctor: selectedCategory, searchViewId, tokens, rowRadiusPx, onSelected; `update`@10667).
+- `IptvListPickerAdapter`@10837 (ctor: lists, membership Set, tokens, rowRadiusPx, onToggle; `setReady`@10848;
+  `getItemCount` returns 0 until ready @10908).
+- Own only their own fields; no activity state (they are `private class`, not `inner`). Pure view code.
+- External caller: `IptvCategoryAdapter` constructed @10495 (category dialog, outside chunk).
+
+### C2 — Channel list membership / favourites — 10682–10835, 11008–11041
+- `showIptvListPicker`@10682, `removeIptvGuideRow`@10825, `toggleIptvFavorite`@11008.
+- Owns no fields. Reads: `guideTokens`@12706 (C9), `iptvLists`@1014, `iptvSources`@1010, `iptvSourceId`@1016,
+  `iptvAllCategorySearchActive`@1041. Writes: `entry.isFavorite`, `iptvBrowseChannels`@1009,
+  `iptvSearchSavedChannels`@1043 (removeAll), adapter notify.
+- External callers: `showIptvListPicker`@9855, `toggleIptvFavorite`@9857 (guide long-click wiring).
+
+### C3 — Guide browse request — 10912–11006
+- `requestIptvBrowse`@10912.
+- Writes C6 zap-context fields: `iptvUiContextToken`@1036 (++), `iptvZapOwnsUiContext`@1037=false,
+  `iptvZapRequestToken`@1031 (++), `iptvZapRequestInFlight`@1032=false, `iptvZapPendingInputs`@1033.clear().
+- Owns/writes: `iptvBrowseToken`@1020, `iptvBrowseLoading`@1000, `iptvGuideUsesZapWindow`@1035,
+  `iptvBrowseChannels`@1009, `iptvSourceId/Name/ContentType/SelectedCategory`@1016–1019, `iptvCategories`@1015.
+- Reads: `iptvGuideSearch`@995, `iptvGuideList`@994, `iptvChannels`, `currentIptvIndex`, `iptvGuideVisible`.
+- Stale guard: token + uiContext + `!iptvZapOwnsUiContext` on success/error/notImplemented.
+- External callers: 9830, 9974, 9989, 10379, 10401, 10506.
+
+### C4 — EPG now/next + schedule pane — 11043–11306, 11539–11675, 14136–14148
+- `ensureIptvChannelEpg`@11049, `updateIptvGuideEpgHeader`@11125, `focusedIptvGuideEntry`@11140,
+  `formatEpgTime`@11149, `showIptvSchedulePane`@11153, `paintIptvEpgLogo`@11204, `selectIptvEpgDay`@11245,
+  `hideIptvEpgPane`@11293, `isFocusInIptvEpgPanel`@11539, `requestIptvEpg`@11557 (bridge + 45 s watchdog),
+  `updateIptvGuideCurrentName`@11619, `adoptIptvEpg`@14136.
+- Owns: `iptvEpgPanel`@1057, `iptvEpgLogo`@1058, `iptvEpgLetter`@1059, `iptvEpgChannelName`@1060,
+  `iptvEpgChannelGroup`@1061, `iptvEpgDate`@1062, `iptvEpgLoading`@1063, `iptvEpgEmpty`@1064, `iptvEpgList`@1065,
+  `iptvEpgAdapter`@1066, `iptvEpgPrograms`@1067, `iptvEpgDayOffset`@1068, `iptvEpgToken`@1069,
+  `iptvEpgVisible`@1070, `iptvEpgEntry`@1071; guide header views `iptvGuideCurrentName`@1001,
+  `iptvGuideCurrentGroup`@1002, `iptvGuideCurrentEpg`@1003, `iptvGuideNowPlaying`@1004, `iptvGuideNowLogo`@1005,
+  `iptvGuideNowLetter`@1006. Per-entry EPG state lives on `IptvChannelEntry` (epgLoading/epgLoaded/epgNow*/epgNext*/
+  epgCatchupMetadataLoaded).
+- Reads other clusters: `iptvZapBanner`@12662 (C8) in `ensureIptvChannelEpg`@11113 → calls C8 `paintIptvZapBannerEpg`;
+  calls C5 `updateIptvStartOverButton`@11111; `iptvGuideVisible`, `iptvChannels`, `currentIptvIndex`.
+- `selectIptvEpgDay` does `findViewById` for 6 day buttons on every call (11270–11277).
+- External callers: `ensureIptvChannelEpg`@9860 (row bind), `focusedIptvGuideEntry`@7109, `showIptvSchedulePane`@7110,
+  `selectIptvEpgDay`@10014–10029, `hideIptvEpgPane`@7082,7092,10199,10223, `isFocusInIptvEpgPanel`@7090,
+  `updateIptvGuideCurrentName`@10033,10201,10285.
+
+### C5 — Start Over / catch-up — 11308–11537
+- `currentIptvStartOverProgramme`@11308 (pure over entry + clock), `updateIptvStartOverButton`@11329,
+  `updateIptvStartOverSeekButton`@11350, `showIptvStartOverTimeline`@11362, `toggleIptvStartOver`@11378,
+  `cancelPendingIptvCatchupRequest`@11394, `requestIptvCatchup`@11401.
+- Owns: `iptvStartOverButton`@193, `iptvStartOverSeekButton`@194, `iptvStartOverActive`@865,
+  `iptvStartOverLoading`@866, `iptvStartOverTimelineVisible`@867, `iptvCatchupToken`@868.
+- Reads/writes others: `iptvEpgToken` (C4, relevance check), `iptvGuideVisible`; on VOD replay rewrites
+  `iptvChannels`, `currentIptvIndex`, `iptvSeriesAudioKey`@875 (11498–11501); `player.duration`.
+- Calls out: `updateIptvControlPresentation`@9678, `resetSubtitleState`@4797, `showControlsAndFocusProgressBar`@7725,
+  `commitIptvAllCategorySearch`@10294, `hideIptvGuide`@10214; in-chunk: `beginIptvPlayback`, `switchToIptvChannel`,
+  `setIptvMediaItem`, `checkpointCurrentIptvPosition`, `updateIptvEpisodeControls`.
+- External callers: `toggleIptvStartOver`@4442, `showIptvStartOverTimeline`@4447, `updateIptvStartOverButton`@9701,
+  `updateIptvStartOverSeekButton`@9702, `requestIptvCatchup`@9897, `cancelPendingIptvCatchupRequest`@1875,19126,19271.
+- Note: `switchToIptvChannel`@12346–12349 also resets all four start-over fields (C7 writes C5 state).
+
+### C6 — Zap paging engine (category window, CH+/−, jump, boundary cache) — 11677–12338, 12517–12650
+- `beginIptvCategoryZapSession`@11682, `bootstrapInitialIptvZapPaging`@11749, `restoreIptvZapBootstrapFallback`@11787,
+  `showIptvChannelJumpDialog`@11816, `requestIptvChannelJump`@11870, `requestIptvZapPage`@11977,
+  `installIptvZapWindow`@12088, `mergeIptvZapPage`@12136, `boundedHiddenIptvZapWindow`@12170,
+  `trimHiddenIptvZapWindow`@12180, `prefetchIptvZapPage`@12190, `queuePendingIptvZapInput`@12215,
+  `drainPendingIptvZapInputs`@12221, `clearIptvZapBoundaryCache`@12235, `disableIptvZapPaging`@12247,
+  `adjacentIptvCategory`@12255 (pure), `prefetchAdjacentIptvCategory`@12267, `consumeCachedAdjacentIptvCategory`@12308,
+  `isLiveIptvZapContext`@12522, `activateIptvZapUiContext`@12527, `zapIptvChannel`@12549,
+  `requestAdjacentIptvCategory`@12586.
+- Owns: `iptvZapPageSize`@1023 (const-like), `iptvZapPagingActive`@1024, `iptvZapCategory`@1025,
+  `iptvZapSourceId`@1026, `iptvZapSourceName`@1027, `iptvZapContentType`@1028, `iptvZapCategories`@1029,
+  `iptvZapCategoryTotal`@1030, `iptvZapRequestToken`@1031, `iptvZapRequestInFlight`@1032,
+  `iptvZapPendingInputs`@1033 (cap 24 @12216), `iptvZapDrainingInputs`@1034, `iptvGuideUsesZapWindow`@1035,
+  `iptvUiContextToken`@1036, `iptvZapOwnsUiContext`@1037, `iptvZapMaxHiddenWindow`@1047,
+  `iptvZapCached*`@1048–1054.
+- Writes shared/guide state: `iptvChannels`, `currentIptvIndex`, `iptvBrowseChannels`, `iptvBrowseToken` (C3),
+  `iptvSourceId/Name/ContentType/SelectedCategory`, `iptvCategories`, `iptvGuideSearch.setText("")`, entry `index`/`isCurrent`.
+- Reads: `iptvSources` (jump/favourites gate), `iptvGuideVisible` (hidden-window bound), `controlsMenuVisible`.
+- Calls out: `commitIptvAllCategorySearch`@10294, `refreshIptvBrowserChrome`@10323, `parseIptvChannels`@9004,
+  `iptvChannelAdapter.entriesSnapshot/updateChannels`; in-chunk: C7 `switchToIptvChannel`, C4
+  `updateIptvGuideCurrentName`, C8 `refreshIptvZapBannerPosition`, C10 `checkpointCurrentIptvPosition`,
+  `updateIptvEpisodeControls`.
+- External callers: `beginIptvCategoryZapSession`@9844, `bootstrapInitialIptvZapPaging`@8915,10288,
+  `showIptvChannelJumpDialog`@4436,7301, `trimHiddenIptvZapWindow`@10222, `prefetchIptvZapPage`@9886,9887,
+  `disableIptvZapPaging`@9839, `isLiveIptvZapContext`@7340,7361, `zapIptvChannel`@7071,7342,7363,9123,9130.
+- Recursion/re-entrancy: `drainPendingIptvZapInputs` → `zapIptvChannel` → `prefetch*` → `requestIptvZapPage`;
+  guarded by `iptvZapDrainingInputs` and early break on `iptvZapRequestInFlight` (12228).
+  `bootstrapInitialIptvZapPaging` recurses for the newly-playing entry (12764).
+
+### C7 — Channel switch + watch registration + startup-channel memory — 12340–12515
+- `switchToIptvChannel`@12340, `noteLiveChannelPlaying`@12429, `beginIptvPlaybackAfterWatchRegistration`@12468.
+- Owns: `lastLiveChannelSettleMs`@12424 (val 1000), `lastLiveChannelArmedUrl`@12426, `lastLiveChannelRunnable`@12427
+  (declared inside the chunk, not in the field block); `iptvWatchRegistrationToken`@1021.
+- Writes: C5 start-over fields + `iptvCatchupToken`; `iptvChannels`, `currentIptvIndex`, `iptvSeriesAudioKey`@875,
+  `titleView.text`.
+- Calls out: `dropStaleSourceSwitchFeedback`@17896, `resetSubtitleState`@4797; in-chunk: `checkpointCurrentIptvPosition`,
+  `beginIptvPlayback` (C11), `showIptvZapBanner`/`hideIptvZapBanner` (C8), `updateIptvGuideCurrentName` (C4),
+  `updateIptvEpisodeControls` (C10).
+- External callers: `switchToIptvChannel`@1733,4500,4510,9840; `noteLiveChannelPlaying`@1809 (player listener).
+
+### C8 — Zap banner (classic + styled trees) — 12652–12693, 12815–12876, 12877–13079, 13081–14124
+- `isRecordingCurrentIptvChannel`@12818, `zapText`@12822, `zapHint`@12841, `ensureIptvZapBanner`@12877,
+  `styledZapText`@13097, `styledZapHint`@13122, `buildStyledIptvZapBanner`@13158, `showIptvZapBanner`@13587,
+  `applyIptvZapBannerMode`@13673, `scheduleIptvZapBannerTick`@13716, `hideIptvZapBanner`@13731,
+  `applyStyledZapBannerMode`@13745, `paintIptvZapBannerIdentity`@13812, `paintIptvZapBannerPosition`@13877,
+  `paintStyledZapBannerIdentity`@13910, `paintStyledZapBannerEpg`@13972, `paintIptvZapBannerEpg`@14046,
+  `formatIptvRemaining`@14101 (pure), `refreshIptvZapBannerPosition`@14112.
+- Owns (declared in chunk): `iptvZapBanner`..`iptvZapBannerRail`@12662–12675, `iptvZapBannerDocked`@12681,
+  `iptvDockLayoutListenerAttached`@12682, `iptvZapBannerLayoutListenerAttached`@12683, `iptvZapBannerEntry`@12688,
+  `iptvZapBannerHideToken`@12689, `iptvZapBannerTickToken`@12690, `iptvZapAccent`@12692,
+  `iptvZapStyledScrim/Card/GlassCardWidth/Rule/Live/Rec/End/MeterRow`@13088–13095.
+- Reads: `guideTokens`/`guideStyle`/`guideTypeface` (C9), `controlsMenuVisible`@835, `controlsOverlay`@187,
+  `iptvGuideVisible`, `iptvZapPagingActive`/`iptvZapCategoryTotal`/`iptvZapSourceId` (C6), `iptvSources`,
+  `iptvChannels`, `currentIptvIndex`, `recordingEngineEnabled`@9244, `iptvRecordingController`@197; calls C4
+  `ensureIptvChannelEpg`, `formatEpgTime`, `adoptIptvEpg`; `engineTaskIdForCurrentChannel`@9329,
+  `updateSubtitleControlsLift`@7589, `dp`@6644.
+- External callers/readers: `showIptvZapBanner`@7456, `hideIptvZapBanner`@7458,7540,10192, `iptvZapBannerDocked`
+  read @7540,7593,7599, `iptvZapBanner` read @7592,7598 (subtitle-lift code).
+
+### C9 — Style/skin configuration (read-once lazies) — 12694–12813
+- `guideStyle`@12698 (lazy, pref `iptv_player_guide_style`), `guideTokens`@12706, `controlsSkin`@12713
+  (pref `TvControlsSkin.PREF_KEY`, default "ott"), `DockSkinSpec`@12727, `dockSkinSpec`@12742, `guideTypefaces`@12800,
+  `guideTypeface`@12802.
+- Reads `playerPreferences`@2012 (lateinit `NativePlayerPreferences`), `assets`.
+- Not IPTV-specific: `controlsSkin`/`dockSkinSpec` drive the whole controls dock — external readers
+  3174–3512, 4145–4355, 5658–5838, 7632, 16601; `guideTokens`/`guideStyle`/`guideTypeface` read at 9169–10427.
+
+### C10 — VOD position + episode navigation + series audio — 14150–14274
+- `checkpointCurrentIptvPosition`@14158, `playIptvChannel`@14170, `isIptvEpisodeMode`@14195, `nextIptvEpisode`@14201,
+  `prevIptvEpisode`@14206, `updateIptvEpisodeControls`@14213, `setIptvPreferredAudioLang`@14240,
+  `onIptvSeriesAudioPicked`@14254, `languageOfOverride`@14266 (pure).
+- Owns: `iptvSeriesAudioKey`@875 (shared with C5/C7), `iptvPreferredAudioLang`@876; buttons `iptvPrevButton`@189,
+  `iptvNextButton`@190.
+- Reads: `player.duration/currentPosition`, `trackSelector`@264, `iptvZapPagingActive` (C6).
+- External callers: `playIptvChannel`@8914, `nextIptvEpisode`@1733,4499, `prevIptvEpisode`@4510,
+  `updateIptvEpisodeControls`@8863, `setIptvPreferredAudioLang`@8860, `onIptvSeriesAudioPicked`/`languageOfOverride`@14920,15658.
+
+### C11 — Tune pipeline (media item, HLS fallback, decoder error) — 14276–14534
+- `isStremioIptvUrl`@14278, `IptvStremioCandidate`@14281, `setIptvMediaItem`@14284, `reportDecoderFailure`@14411
+  (not IPTV-specific; KDoc above it @14389–14397 actually documents `retryIptvAsHlsIfUnrecognized`),
+  `retryIptvAsHlsIfUnrecognized`@14431, `beginIptvPlayback`@14479.
+- Writes: `currentIptvHttpHeaders`@883, `currentIptvStreamUrl`@992, `iptvStrictTsActive`@901, `iptvHlsForcedUrls`@888,
+  `iptvLiveRecovery.expectRetune`; reads `iptvStartsWithStrictTs`@906, `iptvStrictTsUrls`@897,
+  `iptvTwinTrialUrl`@936, `iptvTwinTrialRestoreOriginal/Twin`@955/959, `iptvTwinPreferredUrls`@944,
+  `iptvLiveRetuneInFlight`@354, `subtitleTrackReadiness`@1230, `playerView`@139.
+- Calls out: `finalizeIptvRecordingIfActive`@9654, `clearIptvTwinTrial`@650, `clearParkedIptvTwinRestore`@641,
+  `iptvTuneDiagnostics.onTuneStart/note`@344, `iptvLiveRecovery.onTuneStarted`@369, `hideIptvReconnectPill`@777,
+  `restartProgressUpdates`@16651, `updateRecordButtonState`@9357, `iptvRecordingController.abortAndDelete`.
+- External callers: `setIptvMediaItem` @483,504,571,637,676 (twin trial / restore / live recovery; other textual
+  hits 352–934 and 19106/19124 are comments), `beginIptvPlayback`@1881, `retryIptvAsHlsIfUnrecognized`@1872,1911,
+  `reportDecoderFailure`@1939,1949.
+
+### C12 — Stremio-addon IPTV candidate ladder — 14536–14757
+- `populateIptvStremioSources`@14542, `iptvQualityFromLabel`@14563 (pure), `clearIptvStremioSources`@14575,
+  `switchToIptvStremioSource`@14588, `tryNextIptvStremioCandidate`@14613, `armIptvStremioStallWatchdog`@14660,
+  `cancelIptvStremioStallWatchdog`@14678, `reportIptvStremioWinnerIfNeeded`@14684, `requestIptvStreamUrls`@14698,
+  `reportIptvStreamResult`@14746. (beginIptvPlayback@14479 initialises this cluster's state.)
+- Owns: `iptvStremioToken`@1078, `iptvStremioChannelKey`@1079, `iptvStremioCandidates`@1080,
+  `iptvStremioCandidateIndex`@1081, `iptvStremioWinnerReported`@1082, `iptvStremioStallRunnable`@1086.
+- Writes movie-source state: `stremioSources`@1089, `currentStremioSourceIndex`@1090, `stremioSourceBadge`@1091;
+  calls `setupStremioSources`@17814, `updateStremioQualityBadge`@17832, `sourceBrowser.render()`@1201,
+  `watchSourceSwitchOutcome`@17846, `dropStaleSourceSwitchFeedback`@17896.
+- External callers: `switchToIptvStremioSource`@18757, `tryNextIptvStremioCandidate`@1930,
+  `reportIptvStremioWinnerIfNeeded`@1523.
+
+---
+
+## 2. External effects per cluster
+
+| Cluster | MethodChannel (`MainActivity.getAndroidTvPlayerChannel()`) | Handlers / timers | Views / focus / other |
+|---|---|---|---|
+| C1 | — | — | creates TextViews; `animate()` scale 120 ms on focus |
+| C2 | `setIptvChannelInList` (fire-and-forget), `getIptvChannelListMembership` (Result), `setIptvFavorite`; falls back to `toggleIptvFavorite` when channel null | `listView.post` focus | AlertDialog (`Theme_Debrify_SubtitleDialog`), Toasts |
+| C3 | `requestIptvBrowse` (Result) | `iptvGuideSearch.post`, `iptvGuideList.post` focus | Toast on error |
+| C4 | `requestIptvEpg` (Result) | `iptvBrowseHandler.postDelayed` 60 s archive-metadata retry (11080); local `Handler(mainLooper)` 45 s watchdog + `post` for null delivery (11576–11615) | Glide into `iptvEpgLogo` / `iptvGuideNowLogo` (`iptvGuideNowLogo!!` @11666); `findViewById` day buttons; `iptvEpgList.post` focus; `DateFormat`/`SimpleDateFormat` with default locale |
+| C5 | `requestIptvCatchup` (Result) | — | Toasts (hardcoded English); `player.duration`; focus `iptvStartOverSeekButton` |
+| C6 | `requestIptvBrowse` with action `channelNumber` / `zapPage` (Result) | — | jump AlertDialog + EditText (IME ALWAYS_VISIBLE); Toasts |
+| C7 | `noteIptvLiveChannel` (fire-and-forget), `recordIptvWatch` (Result) | `iptvBrowseHandler.postDelayed` settle 1 s (12465) and 2 s registration fallback (12492) | `titleView.text`; `player.isPlaying` |
+| C8 | — | `progressHandler.postAtTime` hide (token, 4.5 s) and tick (token, 1 s, self-rescheduling) | builds view trees, `addView` to `android.R.id.content`; two `addOnLayoutChangeListener` (banner, `controlsOverlay`), never removed; Glide clear/load; `animate()` alpha/translation |
+| C9 | — | — | `NativePlayerPreferences.getString`; `Typeface.createFromAsset(flutter_assets/assets/fonts/…)` memoized |
+| C10 | `saveIptvSeriesAudio` (fire-and-forget) | — | `trackSelector.parameters` (Media3 preferred audio languages via `LanguageMapper`) |
+| C11 | — | — | Media3: `setMediaItem(item[,startAt])`, `prepare`, `playWhenReady`, `play`, `stop`; `MimeTypes.APPLICATION_M3U8`; `playerView.setKeepContentOnPlayerReset(true)`; Toasts |
+| C12 | `requestIptvStreamUrls` (Result, delivered via `runOnUiThread` in caller), `reportIptvStreamResult` (fire-and-forget) | `progressHandler.postDelayed` 20 s stall watchdog | Media3 `setMediaItem/prepare/play` in manual-pick fallback; Toasts |
+
+No broadcasts, no direct network, no coroutines in this chunk. No SharedPreferences writes (only C9 reads).
+
+---
+
+## 3. Coupling (in-chunk cluster graph + outgoing calls)
+
+- C3 → C6 state (resets zap tokens/inputs). C6 → C3 state (`iptvBrowseToken++` @11696, 12530).
+- C4 → C5 (`updateIptvStartOverButton`), C4 → C8 (`paintIptvZapBannerEpg` when banner visible).
+- C5 → C7 (`switchToIptvChannel`), C11 (`setIptvMediaItem`, `beginIptvPlayback`), C10 (`checkpointCurrentIptvPosition`,
+  `updateIptvEpisodeControls`); reads C4 `iptvEpgToken`.
+- C6 → C7, C4 (`updateIptvGuideCurrentName`), C8 (`refreshIptvZapBannerPosition`), C10.
+- C7 → C10, C11 (`beginIptvPlayback`), C8 (show/hide), C4; writes C5 fields.
+- C8 → C4 (`ensureIptvChannelEpg`, `formatEpgTime`, `adoptIptvEpg`), C9, C6 state reads.
+- C10 → C11 (`playIptvChannel` → `beginIptvPlayback`), C8 (`showIptvZapBanner`).
+- C11 ↔ C12 (`beginIptvPlayback` resets ladder; `retryIptvAsHlsIfUnrecognized` re-arms watchdog; C12 calls `setIptvMediaItem`).
+- Outgoing (outside chunk): `dp`, `parseIptvChannels`, `refreshIptvBrowserChrome`, `commitIptvAllCategorySearch`,
+  `hideIptvGuide`, `updateIptvControlPresentation`, `resetSubtitleState`, `showControlsAndFocusProgressBar`,
+  `dropStaleSourceSwitchFeedback`, `finalizeIptvRecordingIfActive`, `clearIptvTwinTrial`, `clearParkedIptvTwinRestore`,
+  `hideIptvReconnectPill`, `restartProgressUpdates`, `updateRecordButtonState`, `engineTaskIdForCurrentChannel`,
+  `updateSubtitleControlsLift`, `setupStremioSources`, `updateStremioQualityBadge`, `watchSourceSwitchOutcome`,
+  `iptvTuneDiagnostics`, `iptvLiveRecovery`, `iptvRecordingController`, `subtitleTrackReadiness`, `sourceBrowser`.
+
+---
+
+## 4. Extraction candidates (low → high risk)
+
+1. **Pure helpers** — `formatIptvRemaining`@14101, `iptvQualityFromLabel`@14563, `adjacentIptvCategory` math @12255
+   (take categories/current/delta/attempt), `currentIptvStartOverProgramme`@11308 (take entry + nowMs),
+   `boundedHiddenIptvZapWindow` @12170 (take list, guideVisible, max), `languageOfOverride`@14266, `isStremioIptvUrl`.
+   No host needed; plain JVM unit tests. Needs `IptvChannelEntry`/`IptvEpgProgram` widened to `internal`.
+2. **C1 adapters** → own file(s) (`IptvCategoryAdapter`, `IptvListPickerAdapter`). Already static; only depend on
+   `GuideTokens`, `R`. No host interface.
+3. **C9 style config** → `TvPlayerStyleConfig(prefs, assets)` holding `guideStyle`, `guideTokens`, `controlsSkin`,
+   `dockSkinSpec`, `guideTypeface`. Must stay lazy: `playerPreferences` is `lateinit` (@2012) and `controlsSkin` is
+   evaluated at `setupControls` time. Many external readers (dock code) — mechanical rename only.
+4. **C8 zap banner** → `IptvZapBannerController(activity/root, styleConfig, progressHandler, callbacks)`. Self-contained
+   view ownership; Callbacks: `isControlsMenuVisible()`, `isGuideVisible()`, `controlsOverlay(): View?`,
+   `zapPosition(): {pagingActive, categoryTotal, channelCount}`, `activeSourceIsFavorites()`, `playingEntry()`,
+   `ensureEpg(entry)`, `isRecordingCurrentChannel()`, `onDockedLayoutChanged()` (→ `updateSubtitleControlsLift`).
+   Must expose `isVisible`, `isDocked`, `view` for 7540/7592–7599. Risk: ~1,450 lines of view building (the styled
+   builder alone 13158–13577 is >400 lines — likely needs its own classic/styled split to meet the 800-line rule);
+   tokens on shared `progressHandler` must keep identity semantics.
+5. **C12 Stremio ladder** → `IptvStremioLadder(bridge, handler, callbacks)`; Callbacks: `tune(url)` (→ `setIptvMediaItem`
+   for current entry), `mirrorSources(candidates, index)`, `clearSources()`, `renderSourceBrowser()`,
+   `dropStaleSourceSwitchFeedback()`, `currentChannelName()`, `toast()`, `isAlive()`. Medium: shares `progressHandler`
+   with onDestroy's `removeCallbacksAndMessages(null)`; `stremioSources` is movie-mode state shared with sources panel.
+6. **C4 EPG** → `IptvEpgController` (requestIptvEpg + ensure/stale/retry policy + schedule pane). Callbacks:
+   `bridge()`, `onCurrentEntryEpgUpdated(entry)` (header + start-over + banner), `notifyRowEpg(entry)`,
+   `isGuideVisible()`, `isAlive()`. Medium: per-entry mutable EPG fields, 45 s watchdog Handler not owned by any
+   teardown, RecyclerView-layout re-entrancy invariant (async delivery comment @11550–11556).
+7. **C5 start over / catch-up** → small controller with token; needs C7/C11 callbacks (`switchTo`, `tune`, `beginPlayback`,
+   `replaceWithReplay`). Medium-high: replay path rewrites `iptvChannels`/`currentIptvIndex`.
+8. **C3 + C6 + C7 browse/zap engine** → highest risk. Tightly coupled token protocol (`iptvUiContextToken`,
+   `iptvBrowseToken`, `iptvZapRequestToken`, `iptvZapOwnsUiContext`, `iptvZapRequestInFlight`) spans browse, zap,
+   jump, onDestroy (19330–19335). Owns the canonical `iptvChannels`/`currentIptvIndex` list also mutated by C5, C11
+   callers and guide code outside the chunk. Extract only as one unit (a `IptvZapSession` owning channels+index+tokens)
+   with Callbacks: `switchTo(entry, checkpoint)`, `onWindowInstalled()` (adapter/chrome/banner/header refresh),
+   `commitSearch()`, `bridge()`, `toast()`.
+9. **C11 tune pipeline** → highest risk; entangled with twin-trial, strict-TS, live recovery, recording finalisation
+   and Media3 ordering. Leave in activity until those subsystems (outside this chunk) are extracted.
+
+---
+
+## 5. Lifecycle / teardown facts
+
+- `onDestroy`@19270: `cancelPendingIptvCatchupRequest()`@19271 (bumps `iptvCatchupToken`);
+  `iptvBrowseHandler.removeCallbacksAndMessages(null)`@19329 (retires C4 60 s retry, C7 settle + 2 s registration
+  fallback); then `iptvEpgToken++`, `iptvUiContextToken++`, `iptvBrowseToken++`, `iptvZapRequestToken++`,
+  `iptvZapRequestInFlight=false`, `iptvZapPendingInputs.clear()` (19330–19335);
+  `progressHandler.removeCallbacksAndMessages(null)`@19376 (retires C8 hide/tick tokens and C12 stall watchdog) — all
+  before player release (~19388). `finalizeIptvRecordingIfActive()`@19322 precedes them.
+- `onStop`@19122 calls `cancelPendingIptvCatchupRequest()`@19126.
+- Not covered by teardown: `requestIptvEpg`'s private `Handler(Looper.getMainLooper())` 45 s watchdog (11576) is never
+  removed — after destroy it still delivers `null` into `ensureIptvChannelEpg`'s callback (mutates entry fields,
+  calls adapter/header/banner painters on a dead activity; the schedule-pane callback checks `isDestroyed`, the
+  now/next callback does not). `iptvStremioToken` is not bumped in onDestroy; the `runOnUiThread` resolve callback
+  @14515 guards only `isFinishing`.
+- C8 layout listeners (12598, 13700, 13805) and the banner view added to `android.R.id.content` are never removed
+  (die with the window). Glide requests use `Glide.with(this)` (activity-scoped, auto-cleared).
+- Ordering invariants to preserve: `checkpointCurrentIptvPosition` before `currentIptvIndex` moves (12354, 12101);
+  `finalizeIptvRecordingIfActive` at the start of `beginIptvPlayback` (14484) and before stream identity flips in
+  `setIptvMediaItem` (14288); `currentIptvHttpHeaders` set before `setMediaItem` (14300);
+  `subtitleTrackReadiness.onMediaReplacement()` before each `setMediaItem`; `currentIptvStreamUrl=null` + `player.stop()`
+  before async Stremio resolve (14500, 14512); `consumeCachedAdjacentIptvCategory` copies cache before clearing (12316);
+  in-flight flag reset keyed on request token not UI context (12016–12020); banner tick only rescheduled on
+  (re)entry (13662).
+
+---
+
+## 6. JVM tests (android/app/src/test)
+
+- No test references any function or field of this chunk by name (grep of all chunk function names, `iptv*`,
+  `guideStyle`, `guideTokens`, `dockSkinSpec`, `controlsSkin`, `lastLiveChannel*` across `src/test`: zero hits).
+- Indirect only: `tv/StremioTvStartupWatchdogTest.kt` (Robolectric, builds the activity, sets `isIptvMode` by reflection
+  @70; `iptvStillBypassesTheVodWatchdog`@278 — VOD watchdog, not this chunk). `tv/TvControlsSkinTest.kt` tests
+  `TvControlsSkin.fromPref` only (the parse C9 calls). `tv/IptvDeviceQuirksTest.kt` covers `iptvStartsWithStrictTs`
+  input to C11. `profiles/NativePlayerRejectedLaunchTest.kt` / `NativePlayerSettingsConsumptionTest.kt` launch the
+  activity (would catch lazy-init crashes in C9 only if reached). `GuideStyle`/`GuideTokens` have no tests.
+- Gaps needing characterization before extraction (Robolectric with a fake MethodChannel/bridge, since all bridge
+  access is static `MainActivity.getAndroidTvPlayerChannel()` — a seam must be introduced first):
+  - C6: zap within window / page boundary queueing (cap 24) / adjacent-category crossing with cache hit & miss /
+    empty-category skip / stale response after `requestIptvBrowse` (uiContext token) / in-flight reset on superseded
+    token / hidden-window trimming / bootstrap fallback restore.
+  - C3: stale browse result rejected when zap owns UI context; search-focus retention.
+  - C4: stale/no-now retry deadline (`epgNowStopMs` reuse), catch-up metadata upgrade for current entry, 45 s watchdog
+    null delivery, `adoptIptvEpg` only-real-data rule, day filtering in `selectIptvEpgDay`.
+  - C5: archive eligibility matrix in `currentIptvStartOverProgramme`; airing vs replay paths; relevance check after
+    guide closed / schedule token change.
+  - C7: settle-window dedupe (pause/resume doesn't restart; zap supersedes) and `noteIptvLiveChannel` payload;
+    2 s watch-registration fallback fires playback exactly once; VOD checkpoint banding 0.02–0.95.
+  - C8: show/alreadyUp/sameChannel repaint rules, docked vs floating auto-hide, tick self-reschedule, styled vs classic
+    selection by `guideTokens`, hint gating (single channel / favourites source).
+  - C12: ladder advance on error, exhaustion keeps key + rows and reports failure, stall watchdog token/index guard,
+    winner reported once, manual pick re-arms.
+  - C11: HLS-forced retry only once per URL and only for `UnrecognizedInputFormatException` in cause chain; startAt only
+    for non-live; strict-TS decision inputs.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt — responsibility map, chunk E (lines 14759–20177)
+
+File: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`.
+All line numbers are from the current HEAD (39c630303). "(w)" = written, otherwise read.
+Fields declared *inside* this chunk are flagged "in-chunk".
+
+---------------------------------------------------------------------------------------------------
+## 1. Responsibility clusters
+
+### C1. Unified menu model builder — 14759–15058, 15402–15619
+Functions: umAudioTracks@14766, umAudioSelectedIndex@14784, mrow@14808, umSectionRows@14814,
+unifiedMenuCallbacks@14828 (object: buildModel, onSectionActivated, onSearchSubmit, searchInitialQuery,
+stylePreview, onHidden), umAudioModel@14895, umSubsModel@14929, umEmbeddedTrackRows@14973,
+umAddonTrackRows@14994, umAppearanceRows@15020, umTimingRows@15025, umSearchRows@15402,
+umPickSearchResult@15425, umSelectSubtitleRowIndex@15445, umSelectStremioSubtitleByUrl@15453,
+umSourceRows@15472, umAddLoadMoreRow@15490, umSourcesModel@15504, umDisplayModel@15550, umPlaybackModel@15565.
+Owns (in-chunk): subtitleSearchResults@14799, subtitleSearchStatus@14800, pendingSeriesResult@14801,
+pendingSeason@14802, pendingEpisode@14803, unifiedSectionIds@14806. Also uses unifiedMenu@1200 (built at 2549–2562 with
+`callbacks = unifiedMenuCallbacks, sectionIds = unifiedSectionIds`). Outside writers of C1 state: 4804/4806 (resetSubtitleState clears search state).
+Fact: unifiedSectionIds = [audio, subs, display, playback]; the "sources" branches at 14834 and 14842 are unreachable via index
+(umSourcesModel@15504 is only reachable through that branch).
+Reads other clusters: player@262, trackSelector@264 (w params), subtitleTracks@1209, currentSubtitleTrackIndex@1210 (w),
+userManuallySelectedSubtitle@1231 (w), stremioSubtitles@1214, addonSubtitleResults@1215, currentStremioSubtitleIndex@1227,
+isLoadingStremioSubtitles@1229, manualSubtitleSeason@1235/Episode@1236, externalSubtitleActive@1290, activeExternalSubtitleUrl@1291,
+autoSyncRunning@812, autoSyncResultLabel@1319, autoSyncResultUrl@1320, nightModeIndex@842, nightModeLabels@1360,
+resizeModeIndex@840 (w), resizeModes@1347, resizeModeLabels@1354, playbackSpeedIndex@841, playbackSpeedLabels@1357,
+sleepTimerMode@1269, sleepTimerMinuteOptions@1273, iptvChannels@863, currentIptvIndex@864, continuousShuffleEnabled@855 (w),
+stremioSources@1089, currentStremioSourceIndex@1090, seriesSourceTabs@1158, seriesPacksFetched@1159, seriesEpisodesFetched@1160,
+movieMoreSources@1163, movieSourcesFetched@1164, moreSourcesLoadingMode@1165, sourceBrowser@1201.
+
+### C2. Legacy track dialogs + labels — 15621–15727
+showAudioTrackDialog@15621 (caller 4455), showSubtitleTrackDialog@15663 (NO callers — dead), buildAudioTrackLabel@15703,
+buildSubtitleTrackLabel@15718 (also used by C1 and C3). No owned fields. Reads player, trackSelector (w params).
+
+### C3. Subtitle track list, settings panel, selection apply, style/offset apply — 15729–15943, 16409–16470
+rebuildSubtitleTrackList@15733, subtitlePanelCallbacks@15784 (object; wired at 2545), showSubtitleSettingsPanel@15808 (caller 4466),
+hideSubtitleSettingsPanel@15814 (NO callers — dead), showSyncOverlay@15818, refreshSubtitlePanelForLoading@15860
+(callers 4977, 5213, 5224, 6552), isSearchSubtitleOption@15865, isLoadingSubtitleOption@15869, isExternalSubtitleOption@15873,
+applySelectedSubtitleTrack@15877, isSideRenderableSubtitle@15940 (callers 5087, 5138), currentSubtitleIdentity@16419 (caller 3089),
+applySubtitleSettings@16435 (caller 3090), applyAndPersistSubtitleSettings@16464.
+Owns (declared outside): subtitleTracks@1209, currentSubtitleTrackIndex@1210, subtitleSettingsVisible@1196, subtitlePanel@1197,
+syncOverlay@1198, linePickerOverlay@1199, subtitleSeekHandler@1202, subtitleSeekRunnable@1203.
+Reads/writes other: stremioSubtitles@1214, currentStremioSubtitleIndex@1227 (w), isLoadingStremioSubtitles@1229,
+userManuallySelectedSubtitle@1231 (w), externalSubtitleActive@1290, activeExternalSubtitleUrl@1291, lastExternalCueText@1295 (w),
+offsetRenderersFactory@340, subtitleOverlay@151, subtitleControlsLift@152, payload@818, currentIndex@819, player, trackSelector, playerView@139.
+
+### C4. External side-rendered subtitle engine — 15945–16132
+loadStremioSubtitle@15951 (caller 7010), onExternalSubtitleLoaded@15977, stopExternalSubtitleRendering@16054 (callers 4798, 6537, 6979),
+startExternalSubtitleTicker@16080, renderExternalSubtitleCue@16093.
+Owns: externalSubtitleCues@1289, externalSubtitleActive@1290, activeExternalSubtitleUrl@1291, externalSubtitleLoadToken@1292,
+externalSubtitleHandler@1293, externalSubtitleTicker@1294, lastExternalCueText@1295. Uses subtitleScope@1238.
+Writes other: failedSubtitleUrls@1226, currentStremioSubtitleIndex@1227, trackSelector params, autoSyncResultLabel/Url,
+autoSyncAppliedOffsetMs@1337. Reads subtitleSettingsVisible@1196, payload/currentIndex (via currentSubtitleIdentity).
+
+### C5. Subtitle auto-sync (aligner, ladder, verify, pill UI) — 15060–15400, 16191–16407
+runSubtitleAutoSync@15069, startAutoSyncLadder@15236, cancelAutoSyncLadder@15268, scheduleAutoSyncVerify@15274,
+cancelAutoSyncVerify@15289, maybeRunAutoSyncVerify@15303, isAutoSyncPrefEnabled@15395, AutoSyncColors@16200 (private object),
+AutoSyncRingView@16207 (private inner class View), ensureAutoSyncPill@16260, openAutoSyncPillWindow@16312,
+stopAutoSyncPillWindow@16325, showSyncToast@16339, revealAutoSyncPill@16381, hideAutoSyncPillView@16393 (field-runnable 1313),
+hideAutoSyncCard@16403 (field-runnable 1316).
+Owns: autoSyncRunning@812, autoSyncPill@1302, autoSyncPillRing@1303, autoSyncPillLabel@1304, autoSyncPillResultShowing@1305,
+autoSyncPillWindowActive@1306, autoSyncPillAnnounceShowing@1307, autoSyncPillAnnounceDismissRunnable@1310,
+autoSyncCardHideRunnable@1316, autoSyncResultLabel@1319, autoSyncResultUrl@1320, autoSyncLadderSec@1327, autoSyncLadderIdx@1328,
+autoSyncLadderDone@1329, autoSyncLadderTick@1330, autoSyncAppliedOffsetMs@1337, autoSyncVerifyTick@1338, autoSyncVerifyMisses@1339.
+Reads other: speechTap@811 (assigned elsewhere), externalSubtitleActive, activeExternalSubtitleUrl, externalSubtitleHandler (shared
+Handler with C4/C6), subtitleScope@1238, player position/isPlaying.
+Invariant to preserve: runSubtitleAutoSync catches `Throwable` (15120, MiBox OOM) while maybeRunAutoSyncVerify catches `Exception` (15348);
+both rethrow CancellationException; both clear autoSyncRunning in `finally`.
+
+### C6. Status pill — 16134–16189
+ensureStatusPill@16138, showStatusPill@16163, showStatusPillTransient@16176 (1400 ms; callers 1821, 5506 + many in-chunk),
+hideStatusPill@16181 (field runnable 1297). Owns statusPill@1296, statusPillHideRunnable@1297. Uses externalSubtitleHandler@1293 and dp@6644.
+Shared sink for C4, C9, C10, C11.
+
+### C7. Display / speed / audio-effects / player defaults — 16472–16648
+cycleAspectRatio@16473 (caller 4474), applyResizeMode@16480 (caller 3093), cyclePlaybackSpeed@16490 (4484), applyPlaybackSpeed@16495,
+syncAudioEffectSession@16519 (279, 1640, 2000), initializeLoudnessEnhancer@16529 (278, 1633, 2004), releaseLoudnessEnhancer@16547
+(1995, 2003), loadPlayerDefaults@16560 (2041), showNightModeDialog@16608 (4428), applyNightMode@16619.
+Owns: resizeModeIndex@840, playbackSpeedIndex@841, nightModeIndex@842, loudnessEnhancer@843, systemAudioEffectsEnabled@847,
+resizeModes@1347, resizeModeLabels@1354, playbackSpeeds@1356, playbackSpeedLabels@1357, nightModeGains@1359, nightModeLabels@1360.
+loadPlayerDefaults ALSO writes non-display state: displayMatchMode@266, displayModeController@267, skipSegmentsEnabled@848,
+skipSegmentProviderId@849 (mixed responsibility). Reads playerPreferences@2012, nativeAudioRouting@263, ottSkinInstalled@224,
+speedButton@204, playerView@139, controlsSkin@12713 (log only).
+
+### C8. Progress reporting, recovery checkpoints, lifecycle diagnostics — 16650–16968
+restartProgressUpdates@16651 (794, 4880, 6698, 14382), recordPlaybackLifecycle@16664 (1709), finish@16674 (override),
+deliverProgress@16694, stageRecoveryCheckpoint@16744, acknowledgeRecoveryCheckpoint@16797, sendProgress@16801 (1453, 1710, 8383),
+sendIptvProgress@16902, sendPlaybackMaintenanceState@16927 (1502), sendPlaybackActivityState@16937, sendFinished@16951.
+Owns (in-chunk): progressSentCount@16656, progressAckCount@16657, lastProgressLogAt@16658, lastProgressAckAt@16659,
+lastProgressBridgeAvailable@16660, finalProgressSnapshot@16661, finishProgressAttempted@16662.
+Owns (outside): progressHandler@1363 (shared!), progressRunnable@1451, recoverySequence@1128 (w), locallyCompletedItemKeys@1446 (w),
+recoveryCompletedItemKeys@1447 (w).
+Reads other: sourcePersistenceSessionId@1119, recoveryProfileId@1120, recoveryDataGeneration@1121, recoveryTitle@1122,
+recoverySeriesTitle@1123, recoveryImdbId@1126, recoveryStartedAtMs@1127, isIptvMode@862, iptvChannels@863, currentIptvIndex@864,
+isStremioTvMode@1177, startupSourcesExhausted@1118, startupRecoveryConsumed@1113, startupFailoverCursor@1100,
+manualSourceSwitchSnapshot@1133, manualSourceRestoreInProgress@1142, payload@818 (w: items[currentIndex] = copy at 16860),
+currentIndex@819, currentStremioSourceIndex@1090, maxStableDurationMs@1438, playlistVisible@836, playlistAdapter@851,
+playbackSpeeds/Index, resizeModeLabels/Index, player.
+
+### C9. Episode fetch / adjacent navigation — 16970–17174
+guideAdjacent@16971 (1771, 5257, 5295, 5325), requestEpisodeFetch@16993 (1773, 3646, 5259, 5297, 5515),
+requestAdjacentEpisodeFetch@17064 (1781, 5263, 5302), requestQuickPlayNextEpisode@17150 (1790, 5269), formatTime@17163 (utility;
+callers 7680–8076 only). Owns (in-chunk): episodeFetchInFlight@16988 (also read at 5474/5486 by shuffle).
+Writes other: stremioResolutionToken@1093 (shared token with C11!), isAutoAdvancing@834. Reads hasAdjacentEpisodeResolver@1095, payload.
+
+### C10. Startup failover gate + manual source-switch transaction + PikPak gate reprepare + diagnostics — 17176–17812
+beginStartupFailoverIfEligible@17180 (2184), beginManualSourceCandidate@17238, commitManualSourceCandidate@17301 (796),
+failManualSourceCandidate@17367 (1662, 1836, 4716, 6767), armStartupCandidate@17431, commitStartupCandidate@17497 (797, 1537),
+failStartupCandidate@17566 (1655, 1856, 6771), failStartupResolution@17681 (4717), startupCandidateElapsedMs@17694,
+isPikPakPlaybackItem@17698, currentPlaybackItemIsPikPak@17702 (1535, 1818, 1826, 1845, 5440), cancelPikPakGateReprepare@17705
+(6754, 6830, 6905), schedulePikPakGateReprepare@17715 (1834, 1854, 6860), startupWatchdogShouldExtend@17747,
+startupSourceFields@17761, diagnosticProvider@17775 (2121), startupLog@17784, mediaServerPlaybackLog@17795 (790, 1813),
+sourceSelectionLog@17804 (2657).
+Owns: startupFailoverCursor@1100, startupFailoverGeneration@1101, startupFailoverTimeout@1102, startupCommitCheck@1103,
+startupFirstFrameAtElapsedMs@1104, startupCandidateStartedElapsedMs@1105, startupFailoverDispatching@1106, startupTryNextOnFailure@1107,
+startupMaxAttempts@1108, startupResolverProvider@1109, startupRecoveryAvailable@1110, startupHasRemainingSavedSources@1111,
+startupRecoveryFetching@1112, startupRecoveryConsumed@1113, startupRecoveryProducedCandidates@1114, startupRecoveryNextMode@1115,
+startupRecoveryCandidateIndices@1116, startupFailedReleases@1117, startupSourcesExhausted@1118, startupPikPakTorrentAcquisitionAttempted@1129,
+manualSourceSwitchSnapshot@1133, manualSourceSwitchIndex@1134, manualSourceSwitchTimeout@1135, manualSourceCommitCheck@1136,
+manualSourceFirstFrameAtElapsedMs@1137, manualSourceCandidateStartedElapsedMs@1138, pikPakGateReprepare@1139,
+manualSourceMediaReplaced@1140, manualSourceCandidateUrl@1141, manualSourceRestoreInProgress@1142, startupGateView@140, startupGateStatus@141.
+Reads/writes other: stremioSources, currentStremioSourceIndex (w), stremioResolutionToken (w), payload (w restore 17385–17392),
+currentIndex (w), titleView@143 (w), isStremioTvMode, isIptvMode, controlsMenuVisible@835, moreSourcesLoadingMode, seriesSourceTabs,
+movieMoreSources, pikPakRetryId@1370, mediaPreparationGeneration@823, sourceBrowser, progressHandler (shared).
+
+### C11. Stremio source switcher + source list/fetch — 17814–17900, 17944–18910
+setupStremioSources@17814 (2144, 14560), updateStremioQualityBadge@17832 (14593), watchSourceSwitchOutcome@17846 (14605),
+cancelSourceSwitchWait@17883, dropStaleSourceSwitchFeedback@17896 (4604, 12356, 14619), onStremioSourceSelected@17944 (2659),
+resolveStremioSourceViaFlutter@18003, resolveSourceToPlaylistViaFlutter@18083, requestMoreTorrentSources@18181 (2636),
+applyMoreTorrentSources@18224, requestAddonTorrentSources@18272 (2651), applyAddonEpisodeSources@18312, failAddonFetch@18363,
+adoptSourceList@18370, failMoreTorrentSources@18389, switchToSourcePlaylist@18404, rebuildNavigationMaps@18709,
+switchToStremioSource@18752, showStremioSourceBadge@18866 (7500), hideStremioSourceBadge@18888 (7549, 7571),
+hideStremioSourceBadgeImmediately@18905 (7498).
+Owns (in-chunk): sourceSwitchReadyListener@17837, sourceSwitchTimeoutRunnable@17838.
+Owns (outside): stremioSources@1089, currentStremioSourceIndex@1090, stremioSourceBadge@1091, stremioSourceBadgeText@1092,
+stremioResolutionToken@1093, hasPlaylistResolver@1094, seriesSourceTabs@1158, seriesPacksFetched@1159, seriesEpisodesFetched@1160,
+movieMoreSources@1163, movieSourcesFetched@1164, moreSourcesLoadingMode@1165, sourceAddons@1172, addonFetchState@1173, addonPackProbing@1174.
+Writes other: payload items/maps (18421–18428 restore lambda, 18642–18647, 18710–18747, 18784), currentIndex, shuffleBag@856 (clear),
+percentSeekApplied@825, resumeHoldArmedAtMs@1389, activeVodHeaders@820, mediaPreparationGeneration@823 (++ at 18767),
+pikPakRetryId@1370, pikPakRetryCount@1369, isPikPakRetrying@1368, titleView, manualSourceMediaReplaced/CandidateUrl (C10),
+startupRecoveryFetching/ProducedCandidates/CandidateIndices/NextMode (C10, in 18254–18264, 18398–18401), isAutoAdvancing (via C9).
+Reads ottSkinInstalled@224, ottSourcesButton@250, isIptvMode, iptvStremioChannelKey@1079, subtitleTrackReadiness@1230.
+
+### C12. Payload parsing — 18912–19081
+parsePayload@18912 (caller 2105; reflection-called by StremioTvStartupWatchdogTest). Returns PlaybackPayload but ALSO writes:
+stremioSources/currentStremioSourceIndex (only if JSON array non-empty), hasPlaylistResolver@1094, hasAdjacentEpisodeResolver@1095,
+customShuffleEpisodes@1096, startupTryNextOnFailure@1107, startupMaxAttempts@1108, startupResolverProvider@1109,
+startupRecoveryAvailable@1110, startupHasRemainingSavedSources@1111, sourcePersistenceSessionId@1119, networkPatience@1147,
+networkBuffer@1148, iptvDecoderMode@1152, seriesSourceTabs..movieSourcesFetched@1158–1164, moreSourcesLoadingMode=null,
+sourceAddons@1172, clears addonFetchState/addonPackProbing/locallyCompletedItemKeys/recoveryCompletedItemKeys; startupLog.
+
+### C13. Activity lifecycle overrides + back handling + buffering indicator — 19083–19438
+onStart@19083, onStop@19122, setupBackPressHandler@19161 (2177, 8867), legacyStoragePermissionRequestCode@19205 (in-chunk; used
+9461, 9547), notificationPermissionRequestCode@19206 (in-chunk; used 9433), onRequestPermissionsResult@19208, onResume@19220,
+onPause@19237, showBufferingIndicatorDebounced@19247 (1645), hideBufferingIndicator@19260 (1524, 1659, 4610), onDestroy@19270.
+Buffering sub-cluster owns bufferingHandler@1448, bufferingDebounceRunnable@1449; reads bufferingIndicator@1374, hasEverBeenReady@1377,
+nextOverlay@156, pikPakReactivationIndicator@1375 (800 ms debounce).
+onStart reads sleepStopLatched@1282, iptvStoppedAtRealtime@359, iptvStartOverActive@865, iptvLiveRecovery@369.
+Back handler reads linePickerOverlay, syncOverlay, iptvGuideVisible@1008, playlistOverlay@153, lastBackPressTime@859 (w).
+
+### C14. Stremio TV channel guide + guide-ready wait — 17902–17942, 19441–20123
+guidePanelReadyListener@17902 (in-chunk), guidePanelTimeoutRunnable@17903 (in-chunk), hideGuideWhenReady@17905, cancelGuideWait@17937,
+initStremioTvGuide@19445 (2151), setupStremioTvGuide@19488, showStremioTvGuide@19543 (7317), hideStremioTvGuide@19568 (7133),
+toggleStremioTvGuide@19578, filterStremioTvChannels@19582, updateStremioTvGuideHeader@19596, buildNowPlayingText@19638,
+isFocusInStremioTvGuideList@19648 (7137, 7142), requestGuideDataForVisibleChannels@19659, updateStremioTvGuideChannelData@19763,
+updateStremioSourcesFromPlaybackMap@19788, replacePayloadWithStremioTvItem@19805, playStremioTvPlaybackMap@19857,
+requestStremioTvNext@19947 (1762, 5245), switchToStremioTvChannel@20038.
+Owns: isStremioTvMode@1177 (w in init), stremioTvChannels@1178, stremioTvGuideOverlay@1179, stremioTvGuideList@1180,
+stremioTvGuideSearch@1181, stremioTvGuideCountText@1182, stremioTvGuideNowPlaying@1183, stremioTvGuideNowPoster@1184,
+stremioTvGuideNowLetter@1185, stremioTvGuideCurrentName@1186, stremioTvGuideCurrentTitle@1187, stremioTvChannelAdapter@1188,
+stremioTvGuideVisible@1189, stremioTvChannelSwitchInProgress@1190, stremioTvNextInProgress@1191, stremioTvSwitchToken@1192.
+Writes other: stremioSources/currentStremioSourceIndex (19792–19800), payload (19844–19853, startAtPercent 19888), currentIndex,
+ottShowName@254, percentSeekApplied@825, pendingSeekMs@824, pendingItemTraktPercent@830, hasEverBeenReady@1377, nextText@157,
+nextSubtext@158, stremioSourceBadge visibility. Reads playlistMode@850, ottSkinInstalled, ottSourcesButton, playerView.
+
+### C15. companion object constants — 20129–20175 (PROGRESS_INTERVAL_MS 5_000, STARTUP_FAILOVER_TIMEOUT_MS 12_000,
+STARTUP_WATCHDOG_RECHECK_MS 3_000, STARTUP_SLOW_SOURCE_MAX_WAIT_MS 45_000, STARTUP_PIKPAK_MAX_WAIT_MS 120_000,
+PIKPAK_GATE_REPREPARE_DELAY_MS 4_000, EXTERNAL_SUBTITLE_TICK_MS 250, BACK_PRESS_INTERVAL_MS 2000, labels/prefixes, PikPak retry consts).
+
+---------------------------------------------------------------------------------------------------
+## 2. External effects per cluster
+
+| Cluster | MethodChannel (MainActivity.getAndroidTvPlayerChannel) | Prefs / storage / network | Media3 | Timers / async | Views / focus |
+|---|---|---|---|---|---|
+| C1 | indirect: requestSubtitleCatalogSearchFromFlutter@6294 | SubtitleSettings reads (stylePreview 14876–14889) | trackSelector.parameters (audio override/disable 14911–14918); currentTracks | — | unifiedMenu render/hide; sourceBrowser.show; Toast 15604 |
+| C2 | — | — | currentTracks; trackSelector params (AUDIO/TEXT) | — | AlertDialog 15645, 15687; Toast |
+| C3 | `saveSubtitleAppearance` (16466) | SubtitleSettings.resetSyncOffset (15930), getFontSizeSp/buildCaptionStyle/getElevationPaddingFraction/getSyncOffsetMs | trackSelector clearOverridesOfType/setOverrideForType/setTrackTypeDisabled(TEXT); offsetRenderersFactory.setOffsetUs | subtitleSeekHandler.postDelayed(subtitleSeekRunnable,150) 16460 | Creates SubtitleLinePickerController/SubtitleSyncOverlayController on content root (15829, 15846); playerView.requestFocus; subtitlePanel show/hide/refresh |
+| C4 | — | network+parse: SubtitleCueCache.fetch on Dispatchers.IO (15970); SubtitleSettings.recallSyncOffset/setSyncOffsetMs (16030–16032) | trackSelector TEXT disable/enable (15994, 16008, 16071); player.currentPosition | subtitleScope.launch; externalSubtitleHandler ticker 250 ms (16086) | subtitleOverlay.setCues |
+| C5 | — | ProfilePreferenceProjection.getBoolean("subtitle_auto_sync_enabled", false) (15396); SubtitleSettings.setSyncOffsetMs (15154, 15360); SubtitleCueCache.get | player.isPlaying/currentPosition | subtitleScope.launch + Dispatchers.Default SubtitleAligner.alignTiered/align; externalSubtitleHandler: ladder 8_000 (15260, 15265), verify 90_000 then 120_000 (15286, 15281), announce dismiss 5_000 (16322), autoHideMs (16377) | pill LinearLayout added to android.R.id.content (16300); ValueAnimator pulse; non-focusable |
+| C6 | — | — | — | externalSubtitleHandler 1400 ms (16178) | TextView added to android.R.id.content (16158); alpha animations |
+| C7 | — | playerPreferences keys: player_default_aspect_index_tv, player_night_mode_index, player_system_audio_effects, content_display_match_mode, skip_segments_enabled, skip_segment_provider, player_default_subtitle_language (log) | playerView.resizeMode + content scale; nativeAudioRouting.update/setPlaybackSpeed/reprepare; LoudnessEnhancer(sessionId); AudioEffectSession.open | — | Toasts; AlertDialog 16609; speedButton text; refreshOttCaptionFor |
+| C8 | `torrentPlaybackProgress` (with Result → ack) 16721; `torrentPlaybackMaintenanceState` 16928; `torrentPlaybackActivityState` 16939; `torrentPlaybackFinished` 16962 | TvPlaybackRecoveryStore.stage (sync)/stageAsync/acknowledgeAsync on filesDir; DiagnosticFileLog.recordCritical/recordError; PlaybackReturnHandoff.markReturning (16687) | duration/currentPosition/isPlaying/playbackState | progressHandler remove+postDelayed(progressRunnable, 5_000) | playlistAdapter.updateCurrentProgress |
+| C9 | `requestEpisodeFetch` (17012, 17081 — two arg shapes); `requestQuickPlayNextEpisode` (17152) | — | — | runOnUiThread callbacks; token = ++stremioResolutionToken | status pill |
+| C10 | `startupSourceFailed` (17575) | DiagnosticFileLog.record (startup_gate, media_server, source_selection) | player.stop (17413, 17590), prepare/play (17731–17732), playerError/playbackState/totalBufferedDuration | progressHandler: 12_000 timeouts (17294, 17460), 3_000 recheck (17287, 17452), 200 ms commit check (17326, 17528), 30_000 recovery guard (17621), 4_000 PikPak reprepare (17735), post (17674) | startupGateView visibility; R.id.startup_title animation; R.id.startup_back.requestFocus (17478); R.id.startup_explanation; Toast; finish() (17645) |
+| C11 | `requestStremioSourceResolve` 18009; `requestSourcePlaylistResolve` 18092; `requestMoreTorrentSources` 18200; `requestAddonTorrentSources` 18287 (mode episodes) + 18335 (mode packs) | — | addListener/removeListener (17880, 17884); setMediaSource/setMediaItem/prepare/seekTo/play (18810–18821); subtitleTrackReadiness.onMediaReplacement | progressHandler 10_000 switch timeout (17858); runOnUiThread | badge animations; titleView; Toasts (18372, 18609); sourceBrowser render/showError |
+| C12 | — | JSON only | — | — | — |
+| C13 | via C8 | ActivityTracker.currentActivity; RecordingRegistry.removeListener; ConnectivityManager.unregisterNetworkCallback; unregisterReceiver(metadataUpdateReceiver) | player play/pause/release; iptvLiveRecovery | bufferingHandler 800 ms; handler purges in onDestroy | Back dispatcher; Toasts |
+| C14 | `requestStremioTvGuideData` 19689; `requestStremioTvNext` 19974; `requestStremioTvChannelSwitch` 20055 | Glide poster load 19607 | addListener/removeListener (17934, 17938); setMediaItem/prepare/play (19911–19917) | progressHandler 10_000 guide timeout (17917), 1500 hideNextOverlay (20002); list.postDelayed 150 focus (19560) | findViewById R.id.stremio_tv_guide_*; RecyclerView + scroll listener; TextWatcher; R.id.debrify_playlist_button repurposed |
+
+No BroadcastReceiver registration in this chunk (only unregister in onDestroy 19353–19360).
+
+---------------------------------------------------------------------------------------------------
+## 3. Coupling — outgoing calls to functions outside the chunk (name@definition line)
+
+- C1: requestSubtitleCatalogSearchFromFlutter@6294, getCurrentSubtitleSearchItem@6239, buildSubtitleSearchInitialQuery@6594,
+  currentSubtitleIdentityLabel@6627, retryAddonSubtitles@5192, applyManualSubtitleIdentity@6506, resolveSeasonEpisodeForSubtitle@6565,
+  languageOfOverride@14266, onIptvSeriesAudioPicked@14254, updateAspectButtonLabel@7642, sleepTimerValueLabel@8342,
+  startSleepCountdown@8348, armSleepAtEndOfItem@8361, cancelSleepTimer@8367, playRandom@5332, resetShuffle@5385.
+  In-chunk: C2 labels, C3 apply/rebuild, C5 runSubtitleAutoSync, C3 showSyncOverlay, C7 applyNightMode/applyResizeMode/applyPlaybackSpeed,
+  C11 onStremioSourceSelected/requestMoreTorrentSources.
+- C2: languageOfOverride@14266, onIptvSeriesAudioPicked@14254.
+- C3: showSearchSubtitleDialog@6025, currentSubtitleIdentityLabel@6627. In-chunk: C4 loadStremioSubtitle/stopExternalSubtitleRendering/renderExternalSubtitleCue.
+- C4: tryAutoSelectAddonSubtitle@6915. In-chunk: C3 (currentSubtitleIdentity, applySubtitleSettings, refreshSubtitlePanelForLoading),
+  C5 (startAutoSyncLadder, scheduleAutoSyncVerify, cancel*, showSyncToast), C6.
+- C5: in-chunk only: C3 applySubtitleSettings; dp@6644.
+- C6: dp@6644.
+- C7: updateAspectButtonLabel@7642, refreshOttCaptionFor@4250, updateNightModeButtonLabel@7647.
+- C8: heldResumePositionMs@1416. In-chunk: none besides itself (sendProgress → deliverProgress → stageRecoveryCheckpoint).
+- C9: watchShufflePlayback@5435, yieldEpisodeFetchToQueuedShuffle@5456. In-chunk: C11 adoptSourceList/switchToSourcePlaylist, C6.
+- C10: heldResumePositionMs@1416, reportValidatedSourceCommit@5966, setResolvingState@5899, rebuildPlaylistContent@3600,
+  playItem@4556. In-chunk: C11 (cancelSourceSwitchWait, onStremioSourceSelected, requestMoreTorrentSources, failMoreTorrentSources,
+  updateStremioQualityBadge, showStremioSourceBadge, hideStremioSourceBadgeImmediately), C8 restartProgressUpdates, C6.
+  Pure helpers in StartupFailoverCursor.kt: isAioStreamsSource@26, isAioStreamsErrorSlate@35, startupRecoveryIsConsumed@15, StartupFailoverCursor.
+- C11: cancelPikPakRetry@6900, heldResumePositionMs@1416, playItem@4556, rebuildPlaylistContent@3600, requestMetadataFromFlutter@2454,
+  updateCatalogEpisodeControls@5317, attemptPikPakPlaybackLoop@6707, buildMergedSource@4919, discoverProtectedMime@4737,
+  hidePikPakRetryOverlay@6891, originKey@2690, switchToIptvStremioSource@14588, hideControlsMenu@7535.
+  In-chunk: C10 (armStartupCandidate, beginManualSourceCandidate, failManualSourceCandidate, failStartupResolution,
+  failStartupCandidate, startupLog, startupSourceFields), C6. Pure: startupPlaylistSatisfiesEpisode@StartupFailoverCursor.kt:62,
+  resolveSwitchedEpisodeTitle@SwitchedEpisodeTitle.kt:4, StremioSource.fromMap, PlaybackItem.fromMap.
+- C12: in-chunk startupLog (C10). Pure: PlaybackItem.fromJson, StremioSource.fromJson.
+- C13: restoreParkedIptvTwinIfNeeded@630, cancelPendingIptvCatchupRequest@11394, finalizeIptvRecordingIfActive@9654,
+  parkIptvTwinTrialRestore@618, clearIptvTwinTrial@650, hideIptvReconnectPill@777, hideIptvGuide@10214, hidePlaylist@8643,
+  updateRecordButtonState@9357, cancelPikPakRetry@6900, cancelSleepTimer@8367. In-chunk: C8, C4 ticker, C7 releaseLoudnessEnhancer, C11 cancelSourceSwitchWait.
+- C14: hideControlsMenu@7535, cancelPikPakRetry@6900, clearStremioLoadingState@5219, fetchStremioSubtitles@4940,
+  releaseResumeHold@1408, resetSubtitleState@4797, updateTitle@5597, fadeInNextOverlay@8656, hideNextOverlay@8663.
+  In-chunk: C11 setupStremioSources/updateStremioQualityBadge.
+
+Shared-resource hazards: (a) progressHandler@1363 is used by C8, C10, C11, C14 and purged wholesale in onDestroy (19376);
+(b) externalSubtitleHandler@1293 is shared by C4, C5, C6 and purged wholesale (19410); (c) stremioResolutionToken@1093 is
+incremented by C9 (17010, 17078), C10 (17379, 17587) and C11 (17973) — one token invalidates resolver callbacks AND episode fetches.
+
+---------------------------------------------------------------------------------------------------
+## 4. Extraction candidates (low → high risk)
+
+1. **TvPayloadParser (C12)** — LOW. Pure JSON → return a `ParsedLaunchPayload` (PlaybackPayload + launch flags + sources) and have the
+   activity assign fields in the same order. Needs no Callbacks. Risk: field assignment ordering (sources assigned only when array
+   non-empty; sourcePersistenceSessionId defaulting to the current value 19014) and the startupLog line. Reflection test calls
+   `parsePayload` by name — keep a private delegating method or update the test.
+2. **Status pill (C6)** — LOW. `TvStatusPill(contentRoot, handler, dp)`; must keep using the SAME Handler as C4/C5 or onDestroy's
+   `externalSubtitleHandler.removeCallbacksAndMessages(null)` (19410) stops covering it — give it a `release()` called at that point.
+3. **Auto-sync pill view (C5 UI half: 16191–16407)** — LOW-MED. `AutoSyncPillView` with showToast/hide/openWindow/stopWindow; host
+   needs content root, handler, dp. AutoSyncRingView is an inner class (captures activity only for nothing beyond Context) — movable.
+4. **Track/display/audio settings (C2 + C7)** — LOW-MED. Labels (buildAudio/SubtitleTrackLabel) are pure. LoudnessEnhancer/night mode/
+   speed need host: `player`, `nativeAudioRouting`, prefs, `updateNightModeButtonLabel`, `updateAspectButtonLabel`, `refreshOttCaptionFor`,
+   `speedButton`. Split loadPlayerDefaults: display-match + skip-segment prefs belong elsewhere. Delete dead showSubtitleTrackDialog only
+   as a separate, intentional change.
+5. **Progress reporter (C8)** — MED. `TvPlaybackProgressReporter` owning the 7 counters, ack/recovery-store logic. Host: payload,
+   currentIndex, player snapshot, startup/manual gate predicates (`isProgressSuppressed()`), heldResumePositionMs, recovery identity
+   fields, channel accessor, filesDir, playlist refresh. Must keep `finalProgressSnapshot` toggling semantics (synchronous stage) in
+   finish (16679–16683), onStop (19131–19133) and onDestroy (19281–19286) and `finishProgressAttempted` once-only latch.
+6. **Stremio TV guide (C14 + guide-wait)** — MED. `StremioTvGuideController` with Callbacks: playStremioTvPlaybackMap pieces that touch
+   payload/resume/subtitle state (resetSubtitleState, clearStremioLoadingState, releaseResumeHold, updateTitle, fetchStremioSubtitles,
+   setMediaItem), hideControlsMenu, next-overlay fade, setupStremioSources. Shares progressHandler for 10_000/1500 runnables — needs
+   own cancel in onDestroy.
+7. **Unified menu model (C1)** — MED. `UnifiedMenuModelBuilder` implementing UnifiedMenuController.Callbacks. Host interface is wide
+   (≈40 reads across subtitles, sources, audio, sleep, shuffle) — risk of "giant interface"; consider per-section providers
+   (audio/subs/display/playback). The unreachable "sources" section must be preserved or removed deliberately.
+8. **Subtitle engine (C3 + C4 + C5 logic)** — MED-HIGH. Natural `ExternalSubtitleRenderer` + `SubtitleAutoSyncCoordinator`. Host:
+   player position, trackSelector TEXT params, subtitleOverlay, offsetRenderersFactory, subtitleControlsLift, identity content key,
+   tryAutoSelectAddonSubtitle, subtitleScope. Hazards: load-token invalidation in stopExternalSubtitleRendering (16058); offset restore
+   ordering in onExternalSubtitleLoaded (recall → apply → schedule verify → toast → ladder, 16029–16048); `::subtitleOverlay.isInitialized`
+   guards; onStart/onStop ticker pause/resume; Throwable-vs-Exception catch asymmetry.
+9. **Source switcher + list fetch (C11) and C9** — HIGH. Writes payload, currentIndex, playlist, resume hold, PikPak retry, media
+   generation, shuffle restore lambda; shares the resolution token with C9/C10.
+10. **Startup failover gate + manual transaction (C10)** — HIGHEST. Re-entrancy guard startupFailoverDispatching (17568–17678),
+    generation counters, rollback restore of payload (17383–17416), finish() on exhaustion, recovery-fetch handshake with C11
+    (requestMoreTorrentSources ↔ applyMoreTorrentSources/failMoreTorrentSources → failStartupCandidate("recovery-results")).
+    Extract C10 and C11 together or behind one `SourceSwitchHost` interface: payload/currentIndex access, player, playItem,
+    rebuildPlaylistContent, setResolvingState, reportValidatedSourceCommit, heldResumePositionMs, cancelPikPakRetry, status pill, finish.
+11. **Lifecycle (C13)** — stays in the activity; only delegate (`controller.onStop()` etc.) once collaborators exist, preserving §5 order.
+
+---------------------------------------------------------------------------------------------------
+## 5. Lifecycle / teardown ordering (preserve verbatim)
+
+finish() override 16674–16690: (1) if !finishProgressAttempted: finalProgressSnapshot=true → sendProgress(false) → finally
+finalProgressSnapshot=false; finishProgressAttempted=true (16678–16686) (2) PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
+16687 (3) recordPlaybackLifecycle("finish_requested") 16688 (4) super.finish() 16689.
+
+onStart 19083–19120: super.onStart 19084 → recordPlaybackLifecycle("activity_start") 19085 → sendPlaybackActivityState(true) 19086
+(which also sends maintenance state 16943) → if !sleepStopLatched: live-IPTV twin restore (19105) / live rejoin via
+playWhenReady=true + iptvLiveRecovery.userRetry("lifecycle-rejoin") when away > IPTV_LIVE_REJOIN_AFTER_MS (19107–19113) / else
+player.play() 19115 → if externalSubtitleActive startExternalSubtitleTicker() 19119.
+
+onResume 19220–19235: super.onResume → recordPlaybackLifecycle("activity_resume") → ActivityTracker.currentActivity=this → retry
+unpublished recording publish + Toast.
+
+onPause 19237–19245:
+1. recordPlaybackLifecycle("activity_pause") 19238 (BEFORE super)
+2. super.onPause() 19239
+3. if ActivityTracker.currentActivity == this → null 19240–19242
+4. cancelPikPakRetry() 19244
+
+onStop 19122–19159:
+1. cancelPendingIptvCatchupRequest() 19126 (before anything — blocks late catch-up restart)
+2. recordPlaybackLifecycle("activity_stop") 19127
+3. sendPlaybackActivityState(false) 19128
+4. finalProgressSnapshot=true 19131; sendProgress(completed=false) 19132; finalProgressSnapshot=false 19133 (no try/finally here)
+5. super.onStop() 19134
+6. finalizeIptvRecordingIfActive() 19141
+7. if (!parkIptvTwinTrialRestore()) clearIptvTwinTrial() 19151
+8. iptvLiveRecovery.cancel() 19152
+9. hideIptvReconnectPill() 19153
+10. iptvStoppedAtRealtime = SystemClock.elapsedRealtime() 19154
+11. player?.pause() 19155
+12. externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) } 19158 (ticker field kept; onStart restarts)
+
+onDestroy 19270–19438:
+1. cancelPendingIptvCatchupRequest() 19271
+2. displayModeController?.clear(); = null 19272–19273
+3. mediaPreparationScope.cancel() 19274; mediaPreparationGeneration++ 19275
+4. sourceBrowser?.destroy(); = null 19276–19277
+5. recordPlaybackLifecycle("activity_destroy_begin") 19278
+6. finalProgressSnapshot=true; try sendProgress(false) finally finalProgressSnapshot=false 19281–19286 (player still alive)
+7. if initialized subtitleControlsLift.cancel() 19287
+8. iptvTuneDiagnostics.onSessionEnd() 19288
+9. remove+null: startupFailoverTimeout 19289–19290, startupCommitCheck 19291–19292, manualSourceSwitchTimeout 19293–19294,
+   manualSourceCommitCheck 19295–19296, pikPakGateReprepare 19297–19298 (all from progressHandler)
+10. manualSourceSwitchSnapshot=null, manualSourceSwitchIndex=null, manualSourceRestoreInProgress=false 19299–19301
+11. startupFailoverGeneration++ 19302; startupFailoverCursor=null 19303
+12. if initialized startupGateView GONE 19304
+13. clearIptvTwinTrial() 19305; iptvLiveRecovery.cancel() 19306
+14. unregister iptvNetworkCallback (ConnectivityManager, swallow) + null 19307–19314
+15. RecordingRegistry.removeListener(recordingRegistryListener) 19315
+16. cancelSleepTimer() 19318
+17. finalizeIptvRecordingIfActive() 19322
+18. if initialized seekFeedbackManager.destroy() 19325–19327
+19. iptvBrowseHandler.removeCallbacksAndMessages(null) 19329; iptvEpgToken++, iptvUiContextToken++, iptvBrowseToken++,
+    iptvZapRequestToken++ 19330–19333; iptvZapRequestInFlight=false 19334; iptvZapPendingInputs.clear() 19335
+20. cancelPikPakRetry() 19338; pikPakRetryHandler.removeCallbacksAndMessages(null) 19339
+21. if initialized pikPakReactivationIndicator: animate().cancel(), GONE 19342–19345
+22. if initialized bufferingIndicator.animate().cancel() 19346; bufferingHandler.removeCallbacksAndMessages(null) 19347
+23. upNextHandler.removeCallbacksAndMessages(null) 19350
+24. unregisterReceiver(metadataUpdateReceiver) (catch+log) 19353–19359; = null 19360
+25. subtitleScope.cancel() 19363; stremioSubtitles.clear() 19364; stremioSubtitleService=null 19365
+26. skipSegmentFetchGeneration++ 19369; skipSegmentFetchJob?.cancel(); =null 19370–19371; skipSegmentScope.cancel() 19372; skipSegmentCache.clear() 19373
+27. progressHandler / controlsHandler / seekbarHandler .removeCallbacksAndMessages(null) 19376–19378
+28. releaseLoudnessEnhancer() 19381
+29. AudioEffectSession.closeCurrent(this) 19385
+30. player: recordPlaybackLifecycle("player_release_begin") → removeListener(playbackListener) → removeListener(subtitleListener) →
+    release() → recordPlaybackLifecycle("player_release_complete"); RuntimeException → DiagnosticFileLog.recordError 19388–19400
+31. player=null, subtitleListener=null, trackSelector=null, offsetRenderersFactory=null, speechTap=null, syncOverlay=null 19401–19406
+32. linePickerOverlay?.hide(); =null 19407–19408
+33. subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable) 19409; externalSubtitleHandler.removeCallbacksAndMessages(null) 19410
+34. SubtitleSettings.clearActiveSubtitleIdentityProvider(this) 19414
+35. playlistView.adapter=null (if initialized); playlistAdapter/seriesPlaylistAdapter/moviePlaylistAdapter=null 19417–19420
+36. focusRecoveryHandler.removeCallbacksAndMessages(null); focusRecoveryRunnable=null 19423–19424
+37. cancelSourceSwitchWait() 19425 (NB: player already null → its removeListener is a no-op; timeout removal already done by step 27)
+38. stremioSources.clear() 19426
+39. seasonTabs.clear(); movieTabs.clear() 19429–19430
+40. if initialized seekbarOverlay.setOnKeyListener(null) 19433
+41. sendFinished() 19435 (MethodChannel `torrentPlaybackFinished`, after full teardown)
+42. super.onDestroy() 19436
+43. recordPlaybackLifecycle("activity_destroy_complete") 19437
+Not cancelled explicitly in onDestroy: guidePanelReadyListener/guidePanelTimeoutRunnable (timeout covered by step 27; listener dropped with
+player release), autoSync ladder/verify ticks and pill runnables (covered by step 33), autoSyncPill views (not removed).
+
+Back handling (setupBackPressHandler 19161–19203) priority: linePickerOverlay → syncOverlay → iptvGuideVisible → playlistOverlay →
+double-back within 2000 ms (records "back_exit", disables callback, re-dispatches) else Toast.
+
+---------------------------------------------------------------------------------------------------
+## 6. Existing JVM tests (android/app/src/test/kotlin) touching this chunk
+
+Robolectric, reflection by private member NAME (extraction renames/moves will break them unless delegates are kept):
+- tv/StremioTvStartupWatchdogTest.kt — parsePayload, initStremioTvGuide, beginStartupFailoverIfEligible (x12), commitStartupCandidate (x6),
+  beginManualSourceCandidate, commitManualSourceCandidate, schedulePikPakGateReprepare, sendProgress (x3), cancelPikPakRetry,
+  waitForPikPakMetadata; fields startupGateView, startupGateStatus, titleView, nextOverlay, pikPakReactivationIndicator, payload,
+  isIptvMode, player, playbackListener, startupFailoverCursor, startupFailoverTimeout, startupSourcesExhausted, recoveryCompletedItemKeys,
+  currentIndex, pikPakGateReprepare, manualSourceSwitchSnapshot, manualSourceSwitchTimeout, currentStremioSourceIndex. Covers C10, C12, part of C8.
+- tv/ShufflePlaybackFlowTest.kt — field episodeFetchInFlight (C9), yieldEpisodeFetchToQueuedShuffle, watchShufflePlayback,
+  mediaPreparationGeneration (outside-chunk shuffle logic).
+- tv/SubtitleSyncDismissTest.kt — setupBackPressHandler + fields linePickerOverlay/syncOverlay; ON_STOP/ON_DESTROY lifecycle (C13).
+- profiles/NativePlayerRejectedLaunchTest.kt — create→finish before views bound, then start/resume/pause/stop/destroy: exercises
+  finish(), onStart/onStop/onDestroy `isInitialized` guards (C8, C13).
+- profiles/NativePlayerSettingsConsumptionTest.kt — create() reads nightModeIndex/trackSelector after loadPlayerDefaults (C7);
+  applySubtitleTrack/ensureDefaultSubtitleSelected/resetSubtitleState are outside this chunk.
+- audio/NativeAudioRoutingTest.kt — source-text check only (setAllowInvalidateSelectionsOnRendererCapabilitiesChange), not this chunk;
+  routing policy used by C7 applyNightMode/applyPlaybackSpeed.
+Pure helper tests used by this chunk: StartupFailoverCursorTest (cursor, isAioStreams*, startupRecoveryIsConsumed,
+startupPlaylistSatisfiesEpisode), SwitchedEpisodeTitleTest, TvPlaybackRecoveryStoreTest, PlaybackReturnHandoffTest, SubtitleAlignerTest,
+UnifiedMenuControllerTest (controller only, fake callbacks — not the activity's model builder), SubtitleControlsLiftControllerTest,
+TvSourceBrowserFocusTest, PlaybackItemHeadersTest.
+
+Gaps needing Robolectric characterization before extraction:
+- C1: no test of umAudioModel/umSubsModel/umSourcesModel/umPlaybackModel row shapes, selected flags, addon badge states, search flow
+  (pendingSeriesResult season/episode clamp 1..99 / 1..999), "Load more" row states.
+- C3: rebuildSubtitleTrackList index derivation (embedded + ⬇ external + loading row), applySelectedSubtitleTrack external-index math
+  and sync-offset reset; applySubtitleSettings offset push only when identity != null + 150 ms debounce; currentSubtitleIdentity keys.
+- C4: load-token staleness, failure fallback to previous index + TEXT re-enable, recall→verify ordering, stop re-enables TEXT, cue lookup
+  (overlapping cues, offset subtraction, dedupe of identical text).
+- C5: ladder rung gating (anchored seconds 20/45/90/180, offset==0), verify escalation after 2 misses, >400 ms residual re-sync,
+  stale-URL discard, pref-off no-op, Throwable guard.
+- C6/C5 UI: pill visibility timing (1400 ms, 5_000 announce, autoHide).
+- C7: speed/night-mode route change → releaseLoudnessEnhancer; loadPlayerDefaults clamping & provider fallback; resize index 3 scale 4/3.
+- C8: deliverProgress ack counting/log sampling, synchronous vs async recovery staging, completion-key latching, IPTV live skip,
+  finish() once-only latch, sendFinished payload (startupSourcesExhausted/startupRecoveryConsumed).
+- C9: requestEpisodeFetch / requestAdjacentEpisodeFetch result handling incl. episode_guide_unavailable fallback via guideAdjacent.
+- C10: failStartupCandidate next-index filtering (externalUrl, failed release keys, PikPak acquisition), recovery-fetch handshake +
+  30 s guard, exhaustion → finish(); failManualSourceCandidate rollback (payload/title/currentIndex restore, restore-in-progress replay).
+- C11: switchToSourcePlaylist target matching (single/S-E/title/fallback first real episode), metadata carry-over, startup missing-episode
+  reject, resume carry; switchToStremioSource held-resume + merged audio + PikPak path; applyMoreTorrentSources flags; adoptSourceList
+  preferredSourceMissing toast; addon two-phase fetch; watchSourceSwitchOutcome READY/IDLE pills.
+- C12: parsePayload field side-effects & defaults (only one fixture today).
+- C13: exact onStop/onDestroy ordering (no test asserts order: progress-before-release, sendFinished last, catch-up cancel first).
+- C14: channel switch revert on failure, token staleness, next-in-progress mutual exclusion, guide data merge.
+
+---
+
+## AndroidTvTorrentPlayerActivity.kt: split map F (read-only survey)
+
+File: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`, 22,221 lines.
+Package `com.debrify.app.tv`. Imports 1-133. `@OptIn(UnstableApi::class)` at 135. Class 136-20177.
+Companion object 20129-20176. Top-level declarations 20178-22221.
+Revision: HEAD 39c630303 (clean tree).
+
+---------------------------------------------------------------------------------------------------
+## A. Top-level declarations (20178-22221)
+
+General finding: none of the top-level declarations can reference activity instance members. They also
+don't reference the companion's private consts. A grep for PAYLOAD_KEY, IMDB_ID_REGEX, PROVIDER_PIKPAK
+and `AndroidTvTorrentPlayerActivity` in 20178-22221 returns 0 hits. Their only coupling is:
+- **File-private visibility.** Most declarations are `private` top-level, which makes them file-private.
+  If one moves to another file, it must become `internal` (or move together with every user in the same file).
+- **R resources.** `com.debrify.app.R` comes from import line 108. A new file needs `import com.debrify.app.R`.
+- **Other package-level helpers in tv/.** These already live in other files:
+  - `SourceQualityParser`
+  - `ProtectedStreamHttp`
+  - `GuideTokens` and `GuideStyle` (IptvGuideStyle.kt)
+  - `sourceBadgeDescription` (TvSourceBadgeText.kt)
+  - `sourceAddonPresentation` (SourceAddonPresentation.kt)
+  - `startupFailureKey` (StartupFailoverCursor.kt)
+  - `nullableString` (NullableJsonString.kt)
+  - Glide, media3 `UnstableApi`
+
+Use counts below are `grep -w` line counts: "act" = lines 1-20177, "top" = lines 20178+.
+
+| Decl | Lines | Vis | R refs | Deps / notes | Users |
+|---|---|---|---|---|---|
+| `PlaylistMode` enum | 20178 | private | - | - | act 16 |
+| `ManualSourceSwitchSnapshot` | 20180-20190 | private | - | PlaybackItem, JSONObject | act 2. Field name `manualSourceSwitchSnapshot` is reflected by a test (C) |
+| `CollectionGroup` | 20192-20195 | private | - | - | act 4, MovieGroups |
+| `MovieGroups` | 20197-20212 | private | - | CollectionGroup | act 6, MoviePlaylistAdapter |
+| `MovieTab` | 20214-20218 | private | - | TextView | act 2 |
+| `PlaylistOverlayAdapter` iface | 20220-20224 | private | - | - | act 1, PlaylistAdapter, MoviePlaylistAdapter |
+| `StremioSource` (+companion `fromJson` 20280 / `fromMap` 20305 / `parseQuality`) | 20230-20334 | private | - | startupFailureKey, sourceBadgeDescription, sourceAddonPresentation, nullableString, SourceQualityParser, TvSourceBadgeResult | act 10 |
+| `PlaybackPayload` | 20336-20358 | private | - | PlaybackItem, GuideEpisode, JSONObject | act 5. **Test reflects field `items`** on it (C) |
+| `mergeLateMetadataResumePosition` | 20365-20377 | internal | - | pure | act 1 (metadata handler); LateEpisodeMetadataMergeTest; Dart source test |
+| `mergeLateMetadataDuration` | 20380-20391 | internal | - | pure | same as above |
+| `GuideEpisode` | 20394-20407 | private | - | - | act 2, PlaybackPayload, PlaylistAdapter |
+| `PlaybackItem` (+`seasonEpisodeLabel` 20448, `displayProgressPercent` 20464, companion `fromJson` 20480 / `fromMap` 20508) | 20409-20516 | **internal** | - | ProtectedStreamHttp.headers | act 42; PlaybackItemHeadersTest; PlaybackProgressPolicyTest (`fromJson`, `fromMap`, `copy`, `httpHeaders`, `episode`, `resumePositionMs`, `displayProgressPercent`, `traktProgressPercent`, `allowLocalProgressDisplay`). Dart test pins `if (watched) return 100` (20465) |
+| `SubtitleCatalogResult` | 20518-20535 | private | - | - | act 14. Torbox has its OWN Java copy (TorboxTvPlayerActivity.java:4790), not shared |
+| `SeasonEpisode` | 20537-20540 | private | - | - | act 6 |
+| `PlaylistListItem` sealed (SeasonHeader / Episode / MissingEpisode) | 20543-20549 | private | - | - | PlaylistAdapter only (act 0) |
+| `PlaylistAdapter` (+SeasonHeaderViewHolder 20752, EpisodeViewHolder 20771, companion 21094) | 20551-21099 | private | layouts `item_android_tv_playlist_entry_horizontal`, `item_android_tv_season_header`; ~25 ids `android_tv_playlist_item_*`, `season_header_*`, `now_playing_*`, `focus_border`, `shimmer_overlay`, `fallback_*`, `card_content`, `meta_separator` | PlaybackItem, GuideEpisode, PlaylistListItem, Glide | act 5. Dart test anchors at 20671 / 20691 (C) |
+| `MoviePlaylistAdapter` (+MovieViewHolder 21198, companion 21186, inner companion 21390) | 21101-21408 | private | same row layout; ids incl. `selection_overlay`, `*_playing`, `*_progress_container`; `R.color.transparent` | MovieGroups, PlaybackItem, PlaylistAdapter ref (1 hit) | act 5 |
+| `IptvChannelEntry` | 21413-21469 | private | - | - | act 52, IptvChannelAdapter. Comment banner at 21409-21412 |
+| `IptvChannelAdapter` (`@androidx.annotation.OptIn` at 21471, companion 21494, ViewHolder 21500) | 21471-21788 | private | `item_iptv_channel` + 13 `iptv_channel_*` ids | GuideTokens, GuideStyle, IptvChannelEntry | act 2 |
+| `IptvSourceEntry` | 21790-21802 | private | - | - | act 5 |
+| `IptvListEntry` | 21805-21809 | private | - | - | act 5; nested IptvListPickerAdapter |
+| `IptvEpgProgram` | 21811-21817 | private | - | - | act 6 |
+| `IptvEpgAdapter` (ViewHolder 21833) | 21819-21920 | private | `item_iptv_epg_program` + 5 `iptv_epg_program_*` ids | GuideTokens, GuideStyle | act 2 |
+| `StremioTvGuideChannel` | 21926-21946 | private | - | - | act 7 |
+| `StremioTvGuideAdapter` (`@OptIn` at 21948, companion 21954, ViewHolder 21960) | 21948-22221 | private | `item_stremio_tv_guide_channel` + 14 `stremio_tv_guide_*` ids | StremioTvGuideChannel | act 3 |
+
+No other main-source file references any of these names. The only exception is SubtitleCatalogResult,
+and Torbox's is a same-named private Java class.
+
+Extraction notes:
+- The adapters are already outer-free. Every activity interaction goes through constructor lambdas,
+  which makes them the lowest-risk move: a model file plus adapter files.
+- Moving `PlaybackItem` or the merge funs keeps tests compiling as long as they stay
+  `internal` in package `com.debrify.app.tv`.
+- The Dart source test for PlaylistAdapter (C2) needs its anchors to stay in AndroidTvTorrentPlayerActivity.kt.
+  Otherwise that test must be retargeted.
+
+### A2. Nested types inside the activity
+
+| Type | Lines | Kind | Captures outer? | Users (lines) | Notes |
+|---|---|---|---|---|---|
+| `IptvLiveLoadErrorPolicy` | 709-749 | `private inner class` extends DefaultLoadErrorHandlingPolicy | **YES**. `liveNow()` reads `iptvChannels` and `currentIptvIndex` | 2960 (installed on media source factory) | To extract, pass a `() -> Boolean` liveNow lambda. All other logic is pure |
+| `TvSourceAddon` | 1171 | **public** `data class` (nested, static) | No | 1172, 19047 | Only public nested type. Binary name `AndroidTvTorrentPlayerActivity$TvSourceAddon`; no external users |
+| `SkipSegmentRequest` | 1243-1250 | private data class (static) | No | 8135, 8154, 8199 | Pure |
+| `SleepTimerMode` | 1268 | private enum | No | 414, 1269, 1680, 1715, 8337-8370, 15575, 15588 | - |
+| `ShufflePlaybackAttempt` | 5394-5402 | private class (static) | No (pure holder; lambdas supplied by caller) | 4560, 5403-5528, 16998, 18411 | **Reflected by test by simpleName + 7-arg ctor order** (C). Keep it nested in the activity, or update ShufflePlaybackFlowTest |
+| `IptvCategoryAdapter` (+ViewHolder 10611) | 10602-10672 | private class (static) | No | 10495 | Uses GuideTokens, `R.color.iptv_premium_button_text`, `R.drawable.iptv_premium_button_bg` |
+| `IptvListPickerAdapter` (+ViewHolder 10854) | 10837-10909 | private class (static) | No | 10729 | Same R refs; uses IptvListEntry (top-level) |
+| `DockSkinSpec` | 12727-12738 | private data class | No | 12742-12786 (`dockSkinSpec` lazy `when(controlsSkin)`) | Pure value; the lazy builder stays with the activity |
+| `IptvStremioCandidate` | 14281 | private data class | No | 1080, 14701, 14723 | - |
+| `AutoSyncColors` | 16200-16204 | private object | No | 15076-15367, 16043, 16208, 16316 | consts OK / FAIL / BUSY |
+| `AutoSyncRingView` | 16207-16258 | `private inner class` : View | **Nominally** (inner holds `this@Activity`), but the body uses only its own fields (`arcColor`, `pulse`, `paint`, `pulseAnimator`) and `AutoSyncColors`. No outer member use | 1303 (field), 16262 (construct) | Can be made a non-inner top-level class with no behavior change |
+
+---------------------------------------------------------------------------------------------------
+## B. External contract surface (must stay byte-identical)
+
+### B1. Manifest
+
+`AndroidManifest.xml:186-192` declares `.tv.AndroidTvTorrentPlayerActivity` with:
+- `exported="false"`
+- `hardwareAccelerated="true"`
+- `configChanges="keyboard|keyboardHidden|navigation|screenSize|screenLayout|smallestScreenSize|orientation|uiMode"`
+- `screenOrientation="landscape"`
+- theme `Theme.AppCompat.DayNight.NoActionBar`
+
+The class FQN must not change.
+
+### B2. Launch (Flutter → MainActivity → activity)
+
+- **Dart channel.** `com.debrify.app/android_tv_player` is declared at MainActivity.kt:101 and wired at 2477.
+  - `setAndroidTvPlayerChannel` is called at 2480.
+  - Handler cases: `launchTorboxPlayback`, `launchRealDebridPlayback`, `launchTorrentPlayback`, `updateEpisodeMetadata`.
+- **Launch method.** `MainActivity.handleLaunchTorrentPlayback` (MainActivity.kt:2930-3001):
+  - It stages the payload JSON as `cacheDir/torrent_payload_<ms>.json`.
+  - It starts the activity by string: `setClassName(this, "com.debrify.app.tv.AndroidTvTorrentPlayerActivity")` (MainActivity.kt:2979).
+  - Before `startActivity`, it calls `TvPlaybackRecoveryStore.begin(filesDir, sessionId)` and `PlaybackReturnHandoff.begin(sessionId, ownerProfileId, generation)`.
+- **Intent extras read by the activity:**
+  - `"playbackSessionId"` (Int) at 2016, assigned to `sourcePersistenceSessionId`.
+  - `"payloadPath"` at 2020 (diagnostic `hasExtra`) and 2044. The activity reads the file and **deletes** it.
+  - Legacy fallback `PAYLOAD_KEY = "payload"` (companion 20130, public const) at 2068. **NativePlayerSettingsConsumptionTest uses this inline `"payload"` extra**, so the fallback is load-bearing for tests.
+  - `NativePlayerPreferences.EXTRA` is read via `NativePlayerPreferences.fromIntent(this, intent)` at 2026. On exception the activity shows a Toast and calls `finish()` before `setContentView`. NativePlayerRejectedLaunchTest relies on finishing before views are bound.
+- **Payload JSON schema.** `parsePayload(raw)` at 18912 builds `PlaybackPayload`, with `PlaybackItem.fromJson` at 20480 and `StremioSource.fromJson` at 20280.
+  - `payloadCheck.optInt("sourcePersistenceSessionId", ...)` at 2088.
+  - Dart producer: `lib/features/player_launch/data/android_tv_payload_builder.dart` and `lib/services/android_tv_player_bridge.dart`.
+
+### B3. Broadcast (received; none sent by the activity)
+
+- **Receiver.** `setupMetadataReceiver()` at 2188, which is called from onCreate at 2178 and from the IPTV-mode init path at 8868; each path also calls setupBackPressHandler().
+  - Action: `"com.debrify.app.tv.UPDATE_EPISODE_METADATA"` (2207).
+  - API ≥33 registers with `RECEIVER_NOT_EXPORTED` (2209); otherwise plain `registerReceiver` (2211).
+  - `unregisterReceiver` at 19355 (onDestroy).
+- **Extras read:**
+  - `metadataUpdatesPath` (prefix `episode_metadata_`), with fallback `metadataUpdates`.
+  - `imdbId`
+  - `guideEpisodesPath` (prefix `episode_guide_`), with fallback `guideEpisodes`.
+  - `showName`
+- **Staged-file reads.** `readStagedExtra` (2229-2248) is read-only: it never deletes, and it rejects any file outside `cacheDir` or without the expected prefix.
+- **Sender.** `MainActivity.handleUpdateEpisodeMetadata` at 2875-2928 (`sendBroadcast` with `setPackage`). It sweeps old staged files.
+- **Handler.** `handleMetadataUpdate` at 2250. A Dart test anchors the section from `// Handle episode metadata updates` (2335) to `private fun requestMetadataFromFlutter()` (2454).
+
+### B4. Activity → Flutter MethodChannel calls
+
+All calls go through `MainActivity.getAndroidTvPlayerChannel()`, the `@JvmStatic` companion at MainActivity.kt:975-983. Every name below has a `case` in `lib/services/android_tv_player_bridge.dart` (bridge line in brackets). That bridge is shared with Torbox.
+
+| Line | Method | Bridge line |
+|---|---|---|
+| 2475 | `requestEpisodeMetadata` | 1318 |
+| 2607 | `requestStreamBadges` | 335 |
+| 5936 | `requestTorrentStream` | 1288 |
+| 5969 | `commitStremioSource` | 695 |
+| 5996 | `requestMovieMetadata` | 1350 |
+| 6306 | `searchSubtitleCatalogs` (also used by Torbox) | 1381 |
+| 10753 | `setIptvChannelInList` | 1238 |
+| 10788 | `getIptvChannelListMembership` | 1259 |
+| 10936, 11878, 12000 | `requestIptvBrowse` | 1071 |
+| 11035 | `setIptvFavorite` | 1219 |
+| 11430 | `requestIptvCatchup` | 1086 |
+| 11595 | `requestIptvEpg` | 1020 |
+| 12449 | `noteIptvLiveChannel` | 1203 |
+| 12493 | `recordIptvWatch` | 1171 |
+| 14259 | `saveIptvSeriesAudio` | 433 |
+| 14713 | `requestIptvStreamUrls` | 978 |
+| 14753 | `reportIptvStreamResult` | 1269 |
+| 16466 | `saveSubtitleAppearance` | 449 |
+| 16721 | `torrentPlaybackProgress` | 510 |
+| 16928 | `torrentPlaybackMaintenanceState` | 480 |
+| 16939 | `torrentPlaybackActivityState` | 492 |
+| 16962 | `torrentPlaybackFinished` | 891 |
+| 17012, 17081 | `requestEpisodeFetch` | 827 |
+| 17152 | `requestQuickPlayNextEpisode` | 1554 |
+| 17575 | `startupSourceFailed` | 726 |
+| 18008 | `requestStremioSourceResolve` | 524 |
+| 18091 | `requestSourcePlaylistResolve` | 652 |
+| 18199 | `requestMoreTorrentSources` | 742 |
+| 18286, 18334 | `requestAddonTorrentSources` | 790 |
+| 19689 | `requestStremioTvGuideData` | 559 |
+| 19974 | `requestStremioTvNext` | 622 |
+| 20055 | `requestStremioTvChannelSwitch` | 590 |
+
+The activity **handles no inbound MethodChannel calls**. Flutter reaches it only through the launch intent and the
+broadcast in B3. It also receives remote key and text injection through `ActivityTracker.currentActivity`:
+- `onResume` at 19220-19223 sets it, and `onPause` at 19237-19242 clears it.
+- MainActivity.kt:2561-2614 then calls `targetActivity.dispatchKeyEvent(...)`.
+- That makes the `dispatchKeyEvent` override (7018) part of the remote-control contract.
+
+Key payload keys pinned by tests:
+- `"sourcePersistenceSessionId" to sourcePersistenceSessionId` (2608, 5973, 16931, 16941, 16953, 17576)
+- `result["startupSourcesExhausted"] = true` (16956, inside `sendFinished` 16951)
+- `"automaticRecovery" to (...)` (18087)
+- `map["recoveryCandidateCount"]` (18260)
+
+### B5. Other process and global touchpoints
+
+- Lifecycle overrides: `onCreate` 2014, `dispatchKeyEvent` 7018, `finish` 16674, `onStart` 19083, `onStop` 19122, `onRequestPermissionsResult` 19208, `onResume` 19220, `onPause` 19237, `onDestroy` 19270.
+- `finish()` calls `PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)` at 16687. `TvPlaybackRecoveryStore.stage`, `stageAsync` and `acknowledgeAsync` are called at 16791-16798.
+- Recording:
+  - `RecordingRegistry.addListener` (2040)
+  - `LiveRecordingService` `ACTION_STOP` / `EXTRA_TASK_ID` via `startService` (9442-9445)
+  - `ContextCompat.startForegroundService` (9510)
+  - `RecordingAlarmReceiver`, `RecordingScheduleStore`
+- Prefs:
+  - `getSharedPreferences("debrify_permissions")` key `notification_permission_asked` (9427-9429)
+  - `requestPermissions` with `notificationPermissionRequestCode` and `legacyStoragePermissionRequestCode`
+  - `loadPlayerDefaults()` (16560) reads `player_night_mode_index`, `player_default_aspect_index_tv`, `player_system_audio_effects`, `content_display_match_mode`, `skip_segments_enabled` via NativePlayerPreferences
+- Diagnostics: `DiagnosticFileLog` source `"android_tv_player"`, with events `activity_create`, `payload_read`, `payload_read_failed`, `payload_missing`, and others. Logcat tags include `AndroidTvPlayer`, `TVMazeUpdate`, `DebrifyStartupGate`, `DEBRIFY_PLAYER_DECODER`, `AutoSync`.
+- Companion: the only public member is `PAYLOAD_KEY`. Everything else is private const and used only inside the activity. No `@JvmStatic` statics and no other external references.
+
+---------------------------------------------------------------------------------------------------
+## C. Tests coupled to internals (all break or need edits if code moves)
+
+### C1. Kotlin reflection tests (android/app/src/test/kotlin/com/debrify/app/...)
+
+`getDeclaredField` and `declaredMethods` are looked up on `activity.javaClass`. Any member that moves to a
+helper class, or is renamed, breaks these tests. Methods are matched by **name + parameterCount** (`first { }`).
+
+**tv/StremioTvStartupWatchdogTest.kt** (297 lines; Robolectric `buildActivity(...).get()`, no create). Helpers are at 31-40.
+- Fields set:
+  - `startupGateView`, `startupGateStatus`, `titleView`, `nextOverlay`, `pikPakReactivationIndicator`
+  - `payload`, `isIptvMode`, `player`
+- Fields read:
+  - `startupFailoverCursor` (cast to `StartupFailoverCursor`, checks `.committed`)
+  - `startupFailoverTimeout`, `startupSourcesExhausted`
+  - `playbackListener` (cast to `Player.Listener`)
+  - `recoveryCompletedItemKeys` (Set), `currentIndex`, `payload`, `pikPakGateReprepare`
+  - `manualSourceSwitchSnapshot`, `manualSourceSwitchTimeout`, `currentStremioSourceIndex`
+  - `startupGateView` (visibility)
+- Reflected on the PlaybackPayload instance: `read(payload, "items")`, which requires a backing field named `items`.
+- Methods called (name / arg count):
+  - `parsePayload`/1, `initStremioTvGuide`/1(JSONObject)
+  - `beginStartupFailoverIfEligible`/0, `sendProgress`/1(Boolean), `commitStartupCandidate`/0
+  - `waitForPikPakMetadata`/5(item, Int, Int, Long, (Boolean)->Unit), `cancelPikPakRetry`/0
+  - `beginManualSourceCandidate`/1(Int), `commitManualSourceCandidate`/0, `schedulePikPakGateReprepare`/1(null)
+
+**tv/ShufflePlaybackFlowTest.kt** (118 lines; `buildActivity(...).get()`)
+- Fields set: `queuedShuffleGeneration`, `queuedShuffleNavigation`, `episodeFetchInFlight`, `mediaPreparationGeneration`, `showShuffleGeneration`.
+- Methods called: `yieldEpisodeFetchToQueuedShuffle`/0, `clearQueuedShuffle`/1, `watchShufflePlayback`/1, `failShufflePlayback`/0, `shuffleAttemptCurrent`/1, `resetShuffle`/0.
+- Nested class lookup: `activity.javaClass.declaredClasses.first { it.simpleName == "ShufflePlaybackAttempt" }`, then the ctor with **7 params in order** `(navigation:Int, generation:Int, autoAdvance:Boolean, onUnavailable:()->Unit, mediaStarted:Boolean, restorePreparation:(()->Unit)?, finished:Boolean)`. This must remain a nested class of the activity.
+
+**tv/SubtitleSyncDismissTest.kt** (90 lines; both ATV and Torbox)
+- Fields set: `type.getDeclaredField("linePickerOverlay")` and `type.getDeclaredField("syncOverlay")`.
+- Method: `getDeclaredMethod("setupBackPressHandler")` (no args), defined at 19161.
+
+**profiles/NativePlayerSettingsConsumptionTest.kt** (149 lines; `buildActivity(..., intent).create()`)
+- Intent extras: `NativePlayerPreferences.EXTRA`, `initialUrl`, `initialTitle`, `provider`, and an inline `payload` JSON (the legacy PAYLOAD_KEY path).
+- ATV fields: `nightModeIndex`, `trackSelector` (DefaultTrackSelector).
+- ATV method: `getDeclaredMethod("getControlsSkin")`, the getter of a Kotlin property `controlsSkin`. Its `toString()` must be `"OTT"` by default or `"FROST"` for custom. The other methods in this test (`applySubtitleTrack`, `ensureDefaultSubtitleSelected`, `resetSubtitleState`, `playerStyle`) target Torbox only.
+
+**profiles/NativePlayerRejectedLaunchTest.kt** (39 lines): no reflection. `buildActivity(..., Intent()).create()` must leave `isFinishing == true` without views being bound (2026-2032).
+
+**audio/NativeAudioRoutingTest.kt:66-79**: a source-text check, not reflection. It locates appDir by finding `src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` and reads that exact file. It asserts the file contains `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` (now at 2747) and does not contain `(false)`. The same check runs on TorboxTvPlayerActivity.java. The reflection names in that file (`bypassEnabled`, `initBypass`, `FfmpegAudioRenderer`) target other classes.
+
+**Tests of top-level internals** (compile-level; safe if package and `internal` are kept):
+- `tv/LateEpisodeMetadataMergeTest.kt`: mergeLateMetadataResumePosition and mergeLateMetadataDuration
+- `tv/PlaybackItemHeadersTest.kt`: `PlaybackItem.fromMap`, `fromJson`, `copy`, `httpHeaders`, `episode`
+- `tv/PlaybackProgressPolicyTest.kt`: `PlaybackItem.fromJson`, `displayProgressPercent()`, `copy(traktProgressPercent=, allowLocalProgressDisplay=)`, `resumePositionMs`
+
+### C2. Dart source-text tests
+
+All three Dart tests read `'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt'` from the repo root.
+`_between(src, start, end)` requires **start to occur first and end after it in the SAME file**. Moving either
+anchor method or reordering them breaks the test.
+
+**test/android_tv_auto_advance_resume_test.dart** (file at :15)
+- `_between('private fun playItem(' [4556], 'private fun resolveAndPlay(' [4649])` contains:
+  - `if (autoAdvance || suppressResume) 0L else item.resumePositionMs` (4634)
+  - `if (autoAdvance || suppressTrakt || suppressResume) 0.0` (4636)
+- `_between('private fun triggerUpNext()' [8771], 'private fun dismissUpNext()' [8779])`: `isAutoAdvancing = true` must appear before `playItem(target)`.
+
+**test/android_tv_mdblist_progress_source_test.dart** (file at :179, :198)
+- `_between('val synthetic = PlaybackItem(' [20671], '(holder as EpisodeViewHolder).bindMissing(synthetic)' [20691])`. This range is inside the top-level PlaylistAdapter. It contains:
+  - `resumePositionMs = g.resumePositionMs`
+  - `durationMs = g.durationMs`
+  - `traktProgressPercent = g.trackerProgressPercent`
+  - `watched = g.watched`
+- `_between('// Handle episode metadata updates' [2335], 'private fun requestMetadataFromFlutter()' [2454])` contains:
+  - `hasWatchedUpdate`
+  - `model.items.indexOfFirst`
+  - `it.season == updateSeason`
+  - `mergeLateMetadataResumePosition`
+  - `mergeLateMetadataDuration`
+  - `traktProgressPercent = newTrackerProgress`
+- Whole file contains `if (watched) return 100` (20465, in PlaybackItem).
+
+**test/manual_source_validation_contract_test.dart** (`nativePlayer` defined at :17-18)
+
+Whole-file `contains` assertions:
+- `"automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null)` (18087)
+- `startupResolverProvider.equals("pikpak", ignoreCase = true)` (17222 / 17599 / 17648)
+- `startupPikPakTorrentAcquisitionAttempted = true` (17653)
+- `map["recoveryCandidateCount"]` (18260)
+- `startupRecoveryIsConsumed(` (17604)
+- `(requireExactStartupEpisode || manualSourceSwitchSnapshot != null)` (18486)
+- `result["startupSourcesExhausted"] = true` (16956)
+- `"sourcePersistenceSessionId" to sourcePersistenceSessionId` (6 sites)
+- `payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)` (2088)
+
+`_between` ranges:
+
+| Range (start → end) | Asserted content |
+|---|---|
+| `private fun onStremioSourceSelected(` [17944] → `private fun resolveStremioSourceViaFlutter(` [18003] | contains `maxAttempts = 1` |
+| `private fun failManualSourceCandidate(` [17367] → `private fun armStartupCandidate(` [17431] | contains `manualSourceRestoreInProgress = true`, `playItem(currentIndex, suppressTrakt = true)`, `putAll(snapshot.perItemImdbIds)`, `This source is unavailable — choose another source`. Must NOT contain `nextIndex(` or `onStremioSourceSelected(` |
+| `private fun resolveAndPlay(` [4649] → `private fun startPlayback(` [4754] | contains `reason=stale_manual_token`, `failManualSourceCandidate("initial-resolve")` |
+| `private fun sendProgress(` [16801] → `private fun commitStartupCandidate(` [17497] | contains `manualSourceSwitchSnapshot != null`, `manualSourceRestoreInProgress`. This range spans ~700 lines: sendProgress, sendFinished, episode fetch, failManual, armStartup and more |
+| `private fun failStartupCandidate(` [17566] → `private fun failStartupResolution(` [17681] | must NOT contain `reportRejectedSource`; contains `startupSourcesExhausted = true` |
+
+### C3. Size gate
+
+- `dev/tool/file_size_baseline.txt:3` reads `22221 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`. The baseline is shrink-only and is updated with `check_file_sizes.py --update`.
+- `check_file_sizes.py` has `LIMIT = 800` and covers `android/app/src/.+\.(kt|java)`. Every new extracted Kotlin file must be ≤800 lines.
+- CI: `.github/workflows/checks.yml`.
+
+---------------------------------------------------------------------------------------------------
+## D. TorboxTvPlayerActivity.java (6,478 lines) — shared vs duplicated
+
+**Shared helper files used by BOTH players.** Keep the APIs stable:
+- tv/:
+  - `SeekFeedbackManager`
+  - `SubtitleControlsLiftController`, `SubtitleLinePickerController`, `SubtitlePanelController`, `SubtitleSyncOverlayController`
+  - `SubtitleAutoSelection` (AddonSubtitleCandidate, EmbeddedSubtitleCandidate, chooseAutomaticSubtitle, audioAllowsAutomaticSubtitles, isUndeclaredHlsCaption, selectedAudioLanguage, SubtitleTrackReadiness)
+  - `TvDisplayModeController` / `TvDisplayModeSelector` / `TvContentDisplayMatchMode`
+  - `UnifiedMenuController`, `UnifiedMenuSections`
+- audio/: `AudioEffectSession`, `NativeAudioRenderersFactory`, `NativeAudioRouting`
+- profiles/: `NativePlayerPreferences`
+- subtitle/: `StremioSubtitle`, `StremioSubtitleService`
+- util/: `LanguageMapper`, `OffsetRenderersFactory`, `SubtitleCue`, `SubtitleCueCache`, `SubtitleFontManager`, `SubtitleSettings`
+- MainActivity: `getAndroidTvPlayerChannel()` (Torbox has 9 call sites).
+
+**Torbox-only:** `DebrifyTvPlayerStyle`. Torbox's methods are `analyticsHeartbeat`, `lookupDebrifyTvIdentity`, `lookupMovieImdb`, `requestChannelById`, `requestNextChannel`, and the shared `searchSubtitleCatalogs`.
+
+**ATV-only tv/ helpers:**
+- `DockFormatTags`, `TvControlsSkin`, `SourceQualityParser`, `SourceAddonPresentation`
+- `TvSourceBadgeResult`, `TvSourceBadgeText`, `TvSourceBrowserController`
+- `StartupFailoverCursor`, `ShowShuffle`, `SkipDbSegmentClient`, `SwitchedEpisodeTitle`, `SpeechFeatureTap`
+- `ProtectedStreamHttp`, `VodHttpDataSource`, `RecordingDataSource`
+- `IptvDeviceQuirks`, `IptvGuideStyle`, `IptvLiveRecovery`, `IptvRecordingController`, `IptvTuneDiagnostics`
+- `PlaybackReturnHandoff`, `TvPlaybackRecoveryStore`, `NullableJsonString`
+- `diagnostics.DiagnosticFileLog`, `subtitle.AddonSubtitleResult/Status/StremioAddon`, `util.SubtitleAligner/AlignResult/CueSpan`
+- the recording package
+- `BadgeArtworkSize`, `StreamBadgeSvg`, `TvStreamBadgeStrip` and `TvTrailerTexturePlayer` aren't referenced by either activity.
+
+**Duplicated, not shared:**
+- `SubtitleCatalogResult`: Kotlin private data class at ATV 20518, Java `private static final class` at Torbox 4790. Same "searchSubtitleCatalogs" flow, implemented twice.
+- The external-subtitle download flow: Torbox comment at 496 says "Mirrors AndroidTvTorrentPlayerActivity".
+- The back-press / overlay dismissal shape (`setupBackPressHandler`, `linePickerOverlay`, `syncOverlay` field names). It is identical in both because SubtitleSyncDismissTest reflects the same names on both classes.
+- `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` exists in both and is pinned by NativeAudioRoutingTest.
+- `trackSelector` and `nightModeIndex` field names exist in both and are pinned by NativePlayerSettingsConsumptionTest.
+
+Note: unifying these duplicates is out of scope for a behavior-preserving split; the duplicates are listed only for awareness.
