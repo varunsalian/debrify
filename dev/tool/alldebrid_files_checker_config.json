@@ -315,6 +315,26 @@
       "owner": "AllDebridLibraryLoading"
     },
     {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart",
+      "owner": "AllDebridPlayback"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart",
+      "owner": "AllDebridDownloads"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_actions.dart",
+      "owner": "AllDebridAddActions"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_actions.dart",
+      "owner": "AllDebridDeleteActions"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playlist_actions.dart",
+      "owner": "AllDebridPlaylistActions"
+    },
+    {
       "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection.dart",
       "owner": "AllDebridSelection"
     },
@@ -448,7 +468,7 @@
       ]
     }
   ],
-  "completed_step": 3,
+  "completed_step": 4,
   "playback_files": [
     "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
   ],

@@ -86,7 +86,7 @@ String allDebridOriginalMember(String originalName) {
         values.map((value) => RegExp.escape(value as String)).join(gap);
     final recorded = RegExp(
       '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
-      '\\{$gap(${pattern(site['body_tokens'] as List<dynamic>)})$gap\\}',
+      '\\{($gap${pattern(site['body_tokens'] as List<dynamic>)}$gap)\\}',
     );
     final matches = recorded.allMatches(member).toList();
     if (matches.length != 1) {

@@ -189,6 +189,7 @@ void main() {
     if (!rejected) throw StateError('Reader masked $label');
     print('$label: rejected independently');
   }
+  reject('formatter edge comment', 'if (_deps.mounted()) {', 'if (_deps.mounted()) { /* unregistered edge */');
   reject('formatter predicate', 'if (_deps.mounted()) {', 'if (true) {');
   reject('formatter body', 'rootNavigator: true).pop()', 'rootNavigator: false).pop()');
   reject('formatter prefix', '_feedback.loadingDialogOpen = false;', '_feedback.loadingDialogOpen = true;');

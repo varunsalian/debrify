@@ -10,25 +10,17 @@ import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/a
 import 'package:debrify/models/alldebrid_file.dart';
 import 'package:debrify/models/alldebrid_link.dart';
 import 'package:debrify/models/alldebrid_magnet.dart';
-import 'package:debrify/models/playlist_view_mode.dart';
-import 'package:debrify/screens/video_player_screen.dart'; // re-exports PlaylistEntry
-import 'package:debrify/services/alldebrid_service.dart';
 import 'package:debrify/services/analytics_service.dart';
-import 'package:debrify/services/download_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/series_source_service.dart';
-import 'package:debrify/services/storage/playlist_storage.dart';
-import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/file_utils.dart';
 import 'package:debrify/utils/formatters.dart';
-import 'package:debrify/utils/series_parser.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/cloud/cloud_file_row.dart';
 import 'package:debrify/widgets/cloud/cloud_row_skeleton.dart';
 import 'package:debrify/widgets/cloud/cloud_segmented_tabs.dart';
 import 'package:debrify/widgets/cloud/cloud_theme.dart';
-import 'package:debrify/widgets/file_selection_dialog.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -161,718 +153,6 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     _f.toolbarSearchFocusNode.dispose();
     _f.firstItemFocusNode.dispose();
     super.dispose();
-  }
-
-  // ── Playback ─────────────────────────────────────────────────────────────
-
-  bool _looksLikeVideo(AllDebridFile f) => FileUtils.isVideoFile(f.fileName);
-
-  Future<String> _unlockStart(String apiKey, String lockedLink) async {
-    try {
-      return await AllDebridService.unlockLink(apiKey, lockedLink);
-    } catch (e) {
-      debugPrint('AllDebridFiles: unlock failed: $e');
-      return '';
-    }
-  }
-
-  Future<void> _playFile(AllDebridFile file) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    _sections.feedback.showLoading('Unlocking…');
-    final url = await _unlockStart(apiKey, file.link);
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (url.isEmpty) {
-      _sections.feedback.snack('Failed to unlock this file.', isError: true);
-      return;
-    }
-    MainPageBridge.notifyPlayerLaunching();
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: url,
-        title: file.fileName,
-        subtitle: file.size > 0 ? Formatters.formatFileSize(file.size) : null,
-        playlist: [
-          PlaylistEntry(
-            url: url,
-            title: file.fileName,
-            relativePath: file.fileName,
-            provider: 'alldebrid',
-            allDebridLink: file.link,
-            sizeBytes: file.size > 0 ? file.size : null,
-          ),
-        ],
-        startIndex: 0,
-        viewMode: PlaylistViewMode.sorted,
-      ),
-    );
-  }
-
-  Future<void> _playMagnet(AllDebridMagnet magnet) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    if (!magnet.isReady) {
-      _sections.feedback.snack('This magnet is not ready yet.', isError: true);
-      return;
-    }
-    List<AllDebridFile> files = _navigation.currentFiles;
-    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
-      _sections.feedback.showLoading('Scanning magnet…');
-      try {
-        files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
-      } catch (e) {
-        _sections.feedback.dismissLoading();
-        _sections.feedback.snack('Failed to scan magnet: $e', isError: true);
-        return;
-      }
-      _sections.feedback.dismissLoading();
-    }
-    await _playVideos(files, magnet.name);
-  }
-
-  Future<void> _playVideos(
-    List<AllDebridFile> files,
-    String collectionName,
-  ) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    final videos = files.where(_looksLikeVideo).toList();
-    if (videos.isEmpty) {
-      _sections.feedback.snack('No playable video files found.', isError: true);
-      return;
-    }
-
-    if (videos.length == 1) {
-      await _playFile(videos.first);
-      return;
-    }
-
-    // Multi-file: build a series-aware playlist, unlocking only the start file
-    // up front. The rest carry their stable locked link and are unlocked on
-    // demand by the player's lazy AllDebrid resolver.
-    final infos = videos
-        .map((v) => SeriesParser.parseFilename(v.fileName))
-        .toList();
-    final filenames = videos.map((v) => v.fileName).toList();
-    final bool isSeries =
-        videos.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
-
-    final order = List<int>.generate(videos.length, (i) => i);
-    if (isSeries) {
-      order.sort((a, b) {
-        final sa = infos[a].season ?? 0, sb = infos[b].season ?? 0;
-        if (sa != sb) return sa.compareTo(sb);
-        final ea = infos[a].episode ?? 0, eb = infos[b].episode ?? 0;
-        if (ea != eb) return ea.compareTo(eb);
-        return videos[a].fileName.toLowerCase().compareTo(
-          videos[b].fileName.toLowerCase(),
-        );
-      });
-    } else {
-      order.sort(
-        (a, b) => videos[a].fileName.toLowerCase().compareTo(
-          videos[b].fileName.toLowerCase(),
-        ),
-      );
-    }
-
-    final sortedVideos = [for (final i in order) videos[i]];
-    final sortedInfos = [for (final i in order) infos[i]];
-    int startIndex = isSeries ? _findFirstEpisodeIndex(sortedInfos) : 0;
-    if (startIndex < 0 || startIndex >= sortedVideos.length) startIndex = 0;
-
-    _sections.feedback.showLoading('Unlocking…');
-    String startUrl = await _unlockStart(apiKey, sortedVideos[startIndex].link);
-    if (startUrl.isEmpty) {
-      for (int i = 0; i < sortedVideos.length; i++) {
-        if (i == startIndex) continue;
-        final u = await _unlockStart(apiKey, sortedVideos[i].link);
-        if (u.isNotEmpty) {
-          startUrl = u;
-          startIndex = i;
-          break;
-        }
-      }
-    }
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (startUrl.isEmpty) {
-      _sections.feedback.snack(
-        'Failed to resolve playable links from AllDebrid.',
-        isError: true,
-      );
-      return;
-    }
-
-    final entries = <PlaylistEntry>[];
-    for (int i = 0; i < sortedVideos.length; i++) {
-      final v = sortedVideos[i];
-      String relativePath = v.path;
-      final firstSlash = relativePath.indexOf('/');
-      if (firstSlash > 0) {
-        relativePath = relativePath.substring(firstSlash + 1);
-      }
-      entries.add(
-        PlaylistEntry(
-          url: i == startIndex ? startUrl : '',
-          title: v.fileName,
-          relativePath: relativePath,
-          provider: 'alldebrid',
-          allDebridLink: v.link,
-          sizeBytes: v.size > 0 ? v.size : null,
-        ),
-      );
-    }
-
-    final totalBytes = sortedVideos.fold<int>(0, (s, v) => s + v.size);
-    final subtitle =
-        '${entries.length} ${isSeries ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
-
-    if (!mounted) return;
-    MainPageBridge.notifyPlayerLaunching();
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: startUrl,
-        title: collectionName,
-        subtitle: subtitle,
-        playlist: entries,
-        startIndex: startIndex,
-        viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
-      ),
-    );
-  }
-
-  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
-    int startIndex = 0;
-    int? bestSeason;
-    int? bestEpisode;
-    for (int i = 0; i < infos.length; i++) {
-      final info = infos[i];
-      final season = info.season;
-      final episode = info.episode;
-      if (!info.isSeries || season == null || episode == null) continue;
-      final betterSeason = bestSeason == null || season < bestSeason;
-      final betterEpisode =
-          bestSeason != null &&
-          season == bestSeason &&
-          (bestEpisode == null || episode < bestEpisode);
-      if (betterSeason || betterEpisode) {
-        bestSeason = season;
-        bestEpisode = episode;
-        startIndex = i;
-      }
-    }
-    return startIndex;
-  }
-
-  // ── Download ─────────────────────────────────────────────────────────────
-
-  Future<void> _downloadFile(AllDebridFile file) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    _sections.feedback.showLoading('Preparing download…');
-    final url = await _unlockStart(apiKey, file.link);
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (url.isEmpty) {
-      _sections.feedback.snack('Failed to unlock this file.', isError: true);
-      return;
-    }
-    try {
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'alldebrid_api_key',
-        url: url,
-        fileName: file.fileName,
-        context: mounted ? context : null,
-      );
-      _sections.feedback.snack(
-        'Download queued: ${file.fileName}',
-        isError: false,
-      );
-    } catch (e) {
-      _sections.feedback.snack('Failed to download: $e', isError: true);
-    }
-  }
-
-  Future<void> _downloadMagnet(AllDebridMagnet magnet) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    List<AllDebridFile> files = _navigation.currentFiles;
-    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
-      _sections.feedback.showLoading('Scanning magnet…');
-      try {
-        files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
-      } catch (e) {
-        _sections.feedback.dismissLoading();
-        _sections.feedback.snack('Failed to scan magnet: $e', isError: true);
-        return;
-      }
-      _sections.feedback.dismissLoading();
-    }
-    if (!mounted) return;
-    if (files.isEmpty) {
-      _sections.feedback.snack('This magnet has no files.', isError: true);
-      return;
-    }
-    final dialogFiles = <Map<String, dynamic>>[];
-    for (int i = 0; i < files.length; i++) {
-      dialogFiles.add({
-        'name': files[i].path,
-        '_fullPath': files[i].path,
-        'size': files[i].size.toString(),
-        '_adIndex': i,
-      });
-    }
-    await showDialog(
-      context: context,
-      builder: (ctx) => FileSelectionDialog(
-        files: dialogFiles,
-        torrentName: magnet.name,
-        onDownload: (selected) =>
-            _downloadSelectedFiles(selected, files, magnet.name),
-      ),
-    );
-  }
-
-  Future<void> _downloadSelectedFiles(
-    List<Map<String, dynamic>> selected,
-    List<AllDebridFile> allFiles,
-    String magnetName,
-  ) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    if (selected.isEmpty) return;
-    int success = 0, fail = 0;
-    for (final f in selected) {
-      final idx = f['_adIndex'] as int? ?? -1;
-      if (idx < 0 || idx >= allFiles.length) {
-        fail++;
-        continue;
-      }
-      final target = allFiles[idx];
-      final url = await _unlockStart(apiKey, target.link);
-      if (url.isEmpty) {
-        fail++;
-        continue;
-      }
-      try {
-        await DownloadService.instance.enqueueDownload(
-          credentialKey: 'alldebrid_api_key',
-          url: url,
-          fileName: target.fileName,
-          torrentName: magnetName,
-          context: mounted ? context : null,
-        );
-        success++;
-      } catch (_) {
-        fail++;
-      }
-    }
-    if (!mounted) return;
-    if (success > 0 && fail == 0) {
-      _sections.feedback.snack(
-        'Queued $success file${success == 1 ? '' : 's'}',
-        isError: false,
-      );
-    } else if (success > 0) {
-      _sections.feedback.snack('Queued $success, $fail failed', isError: true);
-    } else {
-      _sections.feedback.snack('Failed to queue any files', isError: true);
-    }
-  }
-
-  // ── Add magnet ─────────────────────────────────────────────────────────────
-
-  Future<void> _showAddMagnetDialog() async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    final controller = TextEditingController();
-    final magnet = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add magnet'),
-        content: Focus(
-          // D-pad: let arrow-down leave the field for the Cancel/Add buttons.
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              node.nextFocus();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            minLines: 1,
-            decoration: const InputDecoration(
-              hintText: 'Paste a magnet link or infohash',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    if (magnet == null || magnet.isEmpty) return;
-    _sections.feedback.showLoading('Adding…');
-    try {
-      await AllDebridService.uploadMagnet(apiKey, magnet);
-      _sections.feedback.dismissLoading();
-      _sections.feedback.snack('Magnet added', isError: false);
-      await _sections.libraryLoading.load();
-    } catch (e) {
-      _sections.feedback.dismissLoading();
-      _sections.feedback.snack('Failed to add magnet: $e', isError: true);
-    }
-  }
-
-  // ── Web Downloads (saved links) ──────────────────────────────────────────
-
-  Future<void> _playLink(AllDebridLink l) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    _sections.feedback.showLoading('Unlocking…');
-    final url = await _unlockStart(apiKey, l.link);
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (url.isEmpty) {
-      _sections.feedback.snack('Failed to unlock this link.', isError: true);
-      return;
-    }
-    MainPageBridge.notifyPlayerLaunching();
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: url,
-        title: l.fileName,
-        subtitle: l.size > 0 ? Formatters.formatFileSize(l.size) : null,
-        playlist: [
-          PlaylistEntry(
-            url: url,
-            title: l.fileName,
-            relativePath: l.fileName,
-            provider: 'alldebrid',
-            allDebridLink: l.link,
-            sizeBytes: l.size > 0 ? l.size : null,
-          ),
-        ],
-        startIndex: 0,
-        viewMode: PlaylistViewMode.sorted,
-      ),
-    );
-  }
-
-  Future<void> _downloadLink(AllDebridLink l) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    _sections.feedback.showLoading('Preparing download…');
-    final url = await _unlockStart(apiKey, l.link);
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (url.isEmpty) {
-      _sections.feedback.snack('Failed to unlock this link.', isError: true);
-      return;
-    }
-    try {
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'alldebrid_api_key',
-        url: url,
-        fileName: l.fileName,
-        context: mounted ? context : null,
-      );
-      _sections.feedback.snack(
-        'Download queued: ${l.fileName}',
-        isError: false,
-      );
-    } catch (e) {
-      _sections.feedback.snack('Failed to download: $e', isError: true);
-    }
-  }
-
-  Future<void> _copyLink(AllDebridLink l) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    _sections.feedback.showLoading('Unlocking…');
-    final url = await _unlockStart(apiKey, l.link);
-    _sections.feedback.dismissLoading();
-    if (!mounted) return;
-    if (url.isEmpty) {
-      _sections.feedback.snack('Failed to unlock this link.', isError: true);
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!mounted) return;
-    _sections.feedback.snack('Link copied', isError: false);
-  }
-
-  Future<void> _showAddLinkDialog() async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    final controller = TextEditingController();
-    // Auto-paste a URL from the clipboard, matching the Real-Debrid page.
-    final clip = await Clipboard.getData(Clipboard.kTextPlain);
-    final clipText = clip?.text?.trim() ?? '';
-    if (clipText.startsWith('http://') || clipText.startsWith('https://')) {
-      controller.text = clipText;
-    }
-    if (!mounted) return;
-    final link = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add link'),
-        content: Focus(
-          // D-pad: let arrow-down leave the field for the Cancel/Add buttons.
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              node.nextFocus();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            minLines: 1,
-            decoration: const InputDecoration(
-              hintText: 'Paste a download link',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    if (link == null || link.isEmpty) return;
-    if (!link.startsWith('http://') && !link.startsWith('https://')) {
-      _sections.feedback.snack(
-        'Enter a valid URL (must start with http:// or https://)',
-        isError: true,
-      );
-      return;
-    }
-    _sections.feedback.showLoading('Adding…');
-    try {
-      // Unlock first to validate the host is supported, then persist it to the
-      // saved-links library so it shows up in this view.
-      await AllDebridService.unlockLink(apiKey, link);
-      await AllDebridService.saveLink(apiKey, link);
-      _sections.feedback.dismissLoading();
-      _sections.feedback.snack('Link added', isError: false);
-      await _sections.libraryLoading.loadLinks();
-    } catch (e) {
-      _sections.feedback.dismissLoading();
-      _sections.feedback.snack('Failed to add link: $e', isError: true);
-    }
-  }
-
-  Future<void> _deleteLinks(List<AllDebridLink> links, {String? title}) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty || links.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          title ??
-              (links.length == 1
-                  ? 'Delete link?'
-                  : 'Delete ${links.length} links?'),
-        ),
-        content: Text(
-          links.length == 1
-              ? 'Remove "${links.first.fileName}" from your AllDebrid saved links?'
-              : 'Remove these ${links.length} links from your AllDebrid saved links?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    _sections.feedback.showLoading('Deleting…');
-    int fail = 0;
-    for (final l in links) {
-      try {
-        await AllDebridService.deleteSavedLink(apiKey, l.link);
-      } catch (_) {
-        fail++;
-      }
-    }
-    _sections.feedback.dismissLoading();
-    await _sections.libraryLoading.loadLinks();
-    if (!mounted) return;
-    if (fail == 0) {
-      _sections.feedback.snack(
-        links.length == 1 ? 'Link deleted' : '${links.length} links deleted',
-        isError: false,
-      );
-    } else {
-      _sections.feedback.snack(
-        'Failed to delete $fail link${fail == 1 ? '' : 's'}',
-        isError: true,
-      );
-    }
-  }
-
-  void _confirmDeleteAllLinks() {
-    if (_library.links.isEmpty) return;
-    _deleteLinks(List.of(_library.links), title: 'Delete all links?');
-  }
-
-  // ── Add to playlist ─────────────────────────────────────────────────────
-
-  /// Saves a magnet to the playlist (RD-manner: keyed by infohash). Single
-  /// video → 'single' with its locked link; multiple → 'collection' re-resolved
-  /// by hash at play time.
-  Future<void> _addMagnetToPlaylist(AllDebridMagnet magnet) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-    if (magnet.hash.isEmpty) {
-      _sections.feedback.snack(
-        'This magnet has no infohash to save.',
-        isError: true,
-      );
-      return;
-    }
-    List<AllDebridFile> files = _navigation.currentFiles;
-    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
-      _sections.feedback.showLoading('Scanning magnet…');
-      try {
-        files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
-      } catch (e) {
-        _sections.feedback.dismissLoading();
-        _sections.feedback.snack('Failed to scan magnet: $e', isError: true);
-        return;
-      }
-      _sections.feedback.dismissLoading();
-    }
-    final videos = files.where(_looksLikeVideo).toList();
-    if (videos.isEmpty) {
-      _sections.feedback.snack('No video files to add.', isError: true);
-      return;
-    }
-    bool added;
-    if (videos.length == 1) {
-      added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'alldebrid',
-        'title': FileUtils.cleanPlaylistTitle(magnet.name),
-        'kind': 'single',
-        'torrent_hash': magnet.hash,
-        'allDebridLink': videos.first.link,
-        'sizeBytes': videos.first.size,
-      });
-    } else {
-      added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'alldebrid',
-        'title': FileUtils.cleanPlaylistTitle(magnet.name),
-        'kind': 'collection',
-        'torrent_hash': magnet.hash,
-        'count': videos.length,
-      });
-    }
-    if (!mounted) return;
-    _sections.feedback.snack(
-      added ? 'Added to playlist' : 'Already in playlist',
-      isError: !added,
-    );
-  }
-
-  // ── Delete ─────────────────────────────────────────────────────────────
-
-  Future<void> _deleteMagnets(
-    List<AllDebridMagnet> magnets, {
-    String? title,
-  }) async {
-    final apiKey = _library.apiKey;
-    if (apiKey == null || apiKey.isEmpty || magnets.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          title ??
-              (magnets.length == 1
-                  ? 'Delete magnet?'
-                  : 'Delete ${magnets.length} magnets?'),
-        ),
-        content: Text(
-          magnets.length == 1
-              ? 'Remove "${magnets.first.name}" from your AllDebrid account?'
-              : 'Remove these ${magnets.length} magnets from your AllDebrid account?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    _sections.feedback.showLoading('Deleting…');
-    for (final m in magnets) {
-      await AllDebridService.deleteMagnet(apiKey, m.id);
-    }
-    _sections.feedback.dismissLoading();
-    _sections.selection.exitSelectionMode();
-    await _sections.libraryLoading.load();
-    if (mounted) {
-      _sections.feedback.snack(
-        magnets.length == 1
-            ? 'Magnet deleted'
-            : '${magnets.length} magnets deleted',
-        isError: false,
-      );
-    }
-  }
-
-  void _confirmDeleteAll() {
-    if (_library.magnets.isEmpty) return;
-    _deleteMagnets(List.of(_library.magnets), title: 'Delete all magnets?');
-  }
-
-  Future<void> _handleDeleteSelected() async {
-    final targets = _library.magnets
-        .where((m) => _selection.selectedIds.contains(m.id))
-        .toList();
-    if (targets.isEmpty) return;
-    await _deleteMagnets(targets);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────
@@ -1015,8 +295,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   message: isWeb ? 'Delete all links' : 'Delete all magnets',
                   child: IconButton(
                     onPressed: isWeb
-                        ? _confirmDeleteAllLinks
-                        : _confirmDeleteAll,
+                        ? _sections.deleteActions.confirmDeleteAllLinks
+                        : _sections.deleteActions.confirmDeleteAll,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -1074,8 +354,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   message: isWeb ? 'Add link' : 'Add magnet link',
                   child: IconButton(
                     onPressed: isWeb
-                        ? _showAddLinkDialog
-                        : _showAddMagnetDialog,
+                        ? _sections.addActions.showAddLinkDialog
+                        : _sections.addActions.showAddMagnetDialog,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -1175,7 +455,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           const SizedBox(width: 8),
           FilledButton.icon(
             focusNode: _f.deleteButtonFocusNode,
-            onPressed: count > 0 ? _handleDeleteSelected : null,
+            onPressed: count > 0
+                ? _sections.deleteActions.handleDeleteSelected
+                : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
             style: FilledButton.styleFrom(
@@ -1446,14 +728,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _playMagnet(m),
+          onSelected: () => _sections.playback.playMagnet(m),
         ),
       if (m.isReady)
         CloudRowAction(
           icon: Icons.download,
           label: 'Download to device',
           showInStrip: true,
-          onSelected: () => _downloadMagnet(m),
+          onSelected: () => _sections.downloads.downloadMagnet(m),
         ),
       if (m.isReady)
         CloudRowAction(
@@ -1465,13 +747,13 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         CloudRowAction(
           icon: Icons.playlist_add,
           label: 'Add to Playlist',
-          onSelected: () => _addMagnetToPlaylist(m),
+          onSelected: () => _sections.playlistActions.addMagnetToPlaylist(m),
         ),
       CloudRowAction(
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _deleteMagnets([m]),
+        onSelected: () => _sections.deleteActions.deleteMagnets([m]),
       ),
     ];
 
@@ -1602,24 +884,24 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _playLink(l),
+          onSelected: () => _sections.playback.playLink(l),
         ),
       CloudRowAction(
         icon: Icons.download_rounded,
         label: isVideo ? 'Download to device' : 'Download',
         showInStrip: true,
-        onSelected: () => _downloadLink(l),
+        onSelected: () => _sections.downloads.downloadLink(l),
       ),
       CloudRowAction(
         icon: Icons.link,
         label: 'Copy link',
-        onSelected: () => _copyLink(l),
+        onSelected: () => _sections.downloads.copyLink(l),
       ),
       CloudRowAction(
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _deleteLinks([l]),
+        onSelected: () => _sections.deleteActions.deleteLinks([l]),
       ),
     ];
 
@@ -1627,7 +909,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       kind: isVideo ? CloudRowKind.video : CloudRowKind.file,
       title: l.fileName,
       meta: subtitle.isEmpty ? null : subtitle,
-      onTap: isVideo ? () => _playLink(l) : null,
+      onTap: isVideo ? () => _sections.playback.playLink(l) : null,
       actions: actions,
       focusNode: index == 0 ? _f.firstItemFocusNode : null,
     );
@@ -1664,7 +946,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildFileCard(AllDebridFile f, int index) {
-    final isVideo = _looksLikeVideo(f);
+    final isVideo = _sections.playback.looksLikeVideo(f);
 
     // Parity with the old card: files inside a magnet only offer Play (video)
     // and Download — no delete or playlist at file granularity.
@@ -1674,13 +956,13 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _playFile(f),
+          onSelected: () => _sections.playback.playFile(f),
         ),
       CloudRowAction(
         icon: Icons.download_rounded,
         label: 'Download',
         showInStrip: true,
-        onSelected: () => _downloadFile(f),
+        onSelected: () => _sections.downloads.downloadFile(f),
       ),
     ];
 
@@ -1688,7 +970,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       kind: isVideo ? CloudRowKind.video : CloudRowKind.file,
       title: f.fileName,
       meta: Formatters.formatFileSize(f.size),
-      onTap: isVideo ? () => _playFile(f) : null,
+      onTap: isVideo ? () => _sections.playback.playFile(f) : null,
       actions: actions,
       focusNode: index == 0 ? _f.firstItemFocusNode : null,
     );
