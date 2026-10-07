@@ -317,7 +317,8 @@
   "seams": [],
   "sidecars": {
     "scaffolding": "dev/tool/alldebrid_files_scaffolding.json",
-    "context_exceptions": "dev/tool/alldebrid_files_context_exceptions.json"
+    "context_exceptions": "dev/tool/alldebrid_files_context_exceptions.json",
+    "leading_field_comments": "dev/tool/alldebrid_files_field_comments.json"
   },
   "self_test_module": "alldebrid_files_checker_test",
   "callback_instances": {
@@ -425,7 +426,7 @@
       ]
     }
   ],
-  "completed_step": 1,
+  "completed_step": 2,
   "playback_files": [
     "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
   ],

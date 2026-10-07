@@ -1,3 +1,160 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_library",
+      "tokens": [
+        "final",
+        "_library",
+        "=",
+        "AllDebridLibraryState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_navigation",
+      "tokens": [
+        "final",
+        "_navigation",
+        "=",
+        "AllDebridNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_search",
+      "tokens": [
+        "final",
+        "_search",
+        "=",
+        "AllDebridSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "AllDebridFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_selection",
+      "tokens": [
+        "final",
+        "_selection",
+        "=",
+        "AllDebridSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_feedback",
+      "tokens": [
+        "final",
+        "_feedback",
+        "=",
+        "AllDebridFeedbackState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/alldebrid/alldebrid_files_screen.dart",
+      "owner": "_AllDebridFilesScreenState",
+      "name": "_f",
+      "tokens": [
+        "AllDebridFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_focus",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_scope.dart",
+      "owner": "",
+      "name": "AllDebridScope",
+      "tokens": [
+        "typedef",
+        "AllDebridScope",
+        "=",
+        "(",
+        "{",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ",",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ",",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ",",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "isPushedRoute",
+        ",",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "selectSourceMode",
+        ",",
+        "Future",
+        "<",
+        "void",
+        ">",
+        "Function",
+        "(",
+        "SeriesSource",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onSourceSelected",
+        "}",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

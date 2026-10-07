@@ -1,5 +1,11 @@
 import 'dart:async';
 import 'package:debrify/features/alldebrid_files/models/alldebrid_view.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback_state.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_state.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_state.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_state.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_state.dart';
+import 'package:debrify/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection_state.dart';
 import 'package:debrify/models/alldebrid_file.dart';
 import 'package:debrify/models/alldebrid_link.dart';
 import 'package:debrify/models/alldebrid_magnet.dart';
@@ -50,56 +56,16 @@ class AllDebridFilesScreen extends StatefulWidget {
 }
 
 class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
+  final _library = AllDebridLibraryState();
+  final _navigation = AllDebridNavigationState();
+  final _search = AllDebridSearchState();
+  final _focus = AllDebridFocusState();
+  final _selection = AllDebridSelectionState();
+  final _feedback = AllDebridFeedbackState();
+  AllDebridFocusState get _f => _focus;
   static const int _tabIndex = 12;
 
-  String? _apiKey;
-  bool _loading = true;
-  String? _error;
-
-  List<AllDebridMagnet> _magnets = [];
-
-  // Root view: torrents (magnets) vs saved links (web downloads).
-  AllDebridView _selectedView = AllDebridView.torrents;
-
-  // Saved-links ("Web Downloads") library. Loaded lazily on first switch.
-  List<AllDebridLink> _links = [];
-  bool _loadingLinks = false;
-  bool _linksLoadedOnce = false;
-  String? _linksError;
-
-  // When non-null, we are viewing this magnet's files.
-  AllDebridMagnet? _currentMagnet;
-  List<AllDebridFile> _currentFiles = [];
-  bool _loadingFiles = false;
-
-  bool get _isAtRoot => _currentMagnet == null;
-
-  // Root search.
-  bool _searchActive = false;
-  String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _searchClearFocusNode = FocusNode();
-
-  // In-folder (files) search.
-  bool _fileSearchActive = false;
-  String _fileSearchQuery = '';
-  final TextEditingController _fileSearchController = TextEditingController();
-  final FocusNode _fileSearchFocusNode = FocusNode();
-
-  // Multi-select (magnet ids) for bulk delete.
-  bool _selectionMode = false;
-  final Set<String> _selectedIds = {};
-
-  final ScrollController _scrollController = ScrollController();
-  final FocusNode _backButtonFocusNode = FocusNode();
-  final FocusNode _deleteButtonFocusNode = FocusNode();
-  final FocusNode _toolbarSearchFocusNode = FocusNode();
-  VoidCallback? _tvContentFocusHandler;
-
-  // TV: focus the first magnet card when the user moves focus into content.
-  bool _shouldFocusOnLoad = false;
-  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'ad-first-item');
+  bool get _isAtRoot => _navigation.currentMagnet == null;
 
   @override
   void initState() {
@@ -107,9 +73,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     AnalyticsService.screenView('alldebrid_files');
     final initialQuery = widget.initialSearchQuery?.trim() ?? '';
     if (initialQuery.isNotEmpty) {
-      _searchActive = true;
-      _searchQuery = initialQuery;
-      _searchController.text = initialQuery;
+      _search.searchActive = true;
+      _search.searchQuery = initialQuery;
+      _search.searchController.text = initialQuery;
     }
     if (widget.isPushedRoute) {
       // Pushed as a route (e.g. from the consolidated Cloud hub) — register a
@@ -118,13 +84,13 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.registerTabBackHandler('alldebrid', _handleBackNavigation);
-      _tvContentFocusHandler = () {
-        _shouldFocusOnLoad = true;
+      _f.tvContentFocusHandler = () {
+        _f.shouldFocusOnLoad = true;
         _focusFirstItem();
       };
       MainPageBridge.registerTvContentFocusHandler(
         _tabIndex,
-        _tvContentFocusHandler!,
+        _f.tvContentFocusHandler!,
       );
     }
     // The "shared web link → open on Web Downloads" deep link works in BOTH tab
@@ -133,10 +99,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     // and consume any pending flag regardless of how we were opened.
     MainPageBridge.focusAllDebridWebDownloads = _focusWebDownloads;
     if (MainPageBridge.getAndClearAllDebridFocusWebDownloads()) {
-      _selectedView = AllDebridView.webDownloads;
+      _navigation.selectedView = AllDebridView.webDownloads;
     }
     _load();
-    if (_selectedView == AllDebridView.webDownloads) {
+    if (_navigation.selectedView == AllDebridView.webDownloads) {
       _loadLinks();
     }
   }
@@ -147,14 +113,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Future<void> _focusWebDownloads() async {
     if (!mounted) return;
     setState(() {
-      _selectedView = AllDebridView.webDownloads;
-      _currentMagnet = null;
-      _currentFiles = [];
-      _selectionMode = false;
-      _selectedIds.clear();
-      _searchActive = false;
-      _searchQuery = '';
-      _searchController.clear();
+      _navigation.selectedView = AllDebridView.webDownloads;
+      _navigation.currentMagnet = null;
+      _navigation.currentFiles = [];
+      _selection.selectionMode = false;
+      _selection.selectedIds.clear();
+      _search.searchActive = false;
+      _search.searchQuery = '';
+      _search.searchController.clear();
     });
     await _loadLinks();
   }
@@ -165,116 +131,119 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('alldebrid');
-      if (_tvContentFocusHandler != null) {
+      if (_f.tvContentFocusHandler != null) {
         MainPageBridge.unregisterTvContentFocusHandler(
           _tabIndex,
-          _tvContentFocusHandler!,
+          _f.tvContentFocusHandler!,
         );
       }
     }
     if (MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads) {
       MainPageBridge.focusAllDebridWebDownloads = null;
     }
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _searchClearFocusNode.dispose();
-    _fileSearchController.dispose();
-    _fileSearchFocusNode.dispose();
-    _scrollController.dispose();
-    _backButtonFocusNode.dispose();
-    _deleteButtonFocusNode.dispose();
-    _toolbarSearchFocusNode.dispose();
-    _firstItemFocusNode.dispose();
+    _search.searchController.dispose();
+    _f.searchFocusNode.dispose();
+    _f.searchClearFocusNode.dispose();
+    _search.fileSearchController.dispose();
+    _f.fileSearchFocusNode.dispose();
+    _f.scrollController.dispose();
+    _f.backButtonFocusNode.dispose();
+    _f.deleteButtonFocusNode.dispose();
+    _f.toolbarSearchFocusNode.dispose();
+    _f.firstItemFocusNode.dispose();
     super.dispose();
   }
 
   void _focusFirstItem() {
-    if (!_shouldFocusOnLoad) return;
+    if (!_f.shouldFocusOnLoad) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_shouldFocusOnLoad) return;
-      final hasItems = _selectedView == AllDebridView.webDownloads
+      if (!mounted || !_f.shouldFocusOnLoad) return;
+      final hasItems = _navigation.selectedView == AllDebridView.webDownloads
           ? _visibleLinks.isNotEmpty
           : _visibleMagnets.isNotEmpty;
       if (_isAtRoot && hasItems) {
-        _shouldFocusOnLoad = false;
-        _firstItemFocusNode.requestFocus();
+        _f.shouldFocusOnLoad = false;
+        _f.firstItemFocusNode.requestFocus();
       }
     });
   }
 
   Future<void> _load() async {
     setState(() {
-      _loading = true;
-      _error = null;
+      _library.loading = true;
+      _library.error = null;
     });
     final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Add your AllDebrid API key in Settings first.';
+        _library.loading = false;
+        _library.error = 'Add your AllDebrid API key in Settings first.';
       });
       return;
     }
-    _apiKey = apiKey;
+    _library.apiKey = apiKey;
     try {
       final magnets = await AllDebridService.listMagnets(apiKey);
       if (!mounted) return;
       setState(() {
-        _magnets = magnets.where((m) => m.isReady).toList();
-        _loading = false;
-        _selectedIds.removeWhere((id) => !_magnets.any((m) => m.id == id));
+        _library.magnets = magnets.where((m) => m.isReady).toList();
+        _library.loading = false;
+        _selection.selectedIds.removeWhere(
+          (id) => !_library.magnets.any((m) => m.id == id),
+        );
       });
       _focusFirstItem();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _error = 'Failed to load your AllDebrid library: $e';
+        _library.loading = false;
+        _library.error = 'Failed to load your AllDebrid library: $e';
       });
     }
   }
 
   Future<void> _loadLinks() async {
     setState(() {
-      _loadingLinks = true;
-      _linksError = null;
+      _library.loadingLinks = true;
+      _library.linksError = null;
     });
-    final apiKey = _apiKey ?? await AllDebridStorage.getAllDebridApiKey();
+    final apiKey =
+        _library.apiKey ?? await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       setState(() {
-        _loadingLinks = false;
-        _linksLoadedOnce = true;
-        _linksError = 'Add your AllDebrid API key in Settings first.';
+        _library.loadingLinks = false;
+        _library.linksLoadedOnce = true;
+        _library.linksError = 'Add your AllDebrid API key in Settings first.';
       });
       return;
     }
-    _apiKey = apiKey;
+    _library.apiKey = apiKey;
     try {
       final links = await AllDebridService.listSavedLinks(apiKey);
       if (!mounted) return;
       setState(() {
-        _links = links;
-        _loadingLinks = false;
-        _linksLoadedOnce = true;
+        _library.links = links;
+        _library.loadingLinks = false;
+        _library.linksLoadedOnce = true;
       });
       _focusFirstItem();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadingLinks = false;
-        _linksLoadedOnce = true;
-        _linksError = 'Failed to load your saved links: $e';
+        _library.loadingLinks = false;
+        _library.linksLoadedOnce = true;
+        _library.linksError = 'Failed to load your saved links: $e';
       });
     }
   }
 
   Future<void> _refresh() async {
-    if (_selectedView == AllDebridView.webDownloads) {
+    if (_navigation.selectedView == AllDebridView.webDownloads) {
       await _loadLinks();
-    } else if (_currentMagnet != null) {
-      await _openMagnet(_currentMagnet!, force: true);
+    } else if (_navigation.currentMagnet != null) {
+      await _openMagnet(_navigation.currentMagnet!, force: true);
     } else {
       await _load();
     }
@@ -283,7 +252,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   // ── Navigation ─────────────────────────────────────────────────────────────
 
   Future<void> _openMagnet(AllDebridMagnet magnet, {bool force = false}) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     if (!magnet.isReady) {
       _snack(
@@ -295,23 +264,23 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       return;
     }
     setState(() {
-      _currentMagnet = magnet;
-      _loadingFiles = true;
-      _fileSearchActive = false;
-      _fileSearchQuery = '';
-      _fileSearchController.clear();
-      if (!force) _currentFiles = [];
+      _navigation.currentMagnet = magnet;
+      _navigation.loadingFiles = true;
+      _search.fileSearchActive = false;
+      _search.fileSearchQuery = '';
+      _search.fileSearchController.clear();
+      if (!force) _navigation.currentFiles = [];
     });
     try {
       final files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
       if (!mounted) return;
       setState(() {
-        _currentFiles = files;
-        _loadingFiles = false;
+        _navigation.currentFiles = files;
+        _navigation.loadingFiles = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loadingFiles = false);
+      setState(() => _navigation.loadingFiles = false);
       _snack('Failed to load files: $e', isError: true);
     }
   }
@@ -321,37 +290,37 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     // (already-loaded) magnet list — the file row that binds
     // _firstItemFocusNode is disposed here and nothing else reclaims DPAD
     // focus. No reload fires, so do it directly.
-    _shouldFocusOnLoad = true;
-    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    _f.shouldFocusOnLoad = true;
+    if (_f.scrollController.hasClients) _f.scrollController.jumpTo(0);
     setState(() {
-      _currentMagnet = null;
-      _currentFiles = [];
-      _loadingFiles = false;
-      _fileSearchActive = false;
-      _fileSearchQuery = '';
-      _fileSearchController.clear();
+      _navigation.currentMagnet = null;
+      _navigation.currentFiles = [];
+      _navigation.loadingFiles = false;
+      _search.fileSearchActive = false;
+      _search.fileSearchQuery = '';
+      _search.fileSearchController.clear();
     });
     _focusFirstItem();
   }
 
   bool _handleBackNavigation() {
-    if (_selectionMode) {
+    if (_selection.selectionMode) {
       _exitSelectionMode();
       return true;
     }
-    if (_fileSearchActive) {
+    if (_search.fileSearchActive) {
       setState(() {
-        _fileSearchActive = false;
-        _fileSearchQuery = '';
-        _fileSearchController.clear();
+        _search.fileSearchActive = false;
+        _search.fileSearchQuery = '';
+        _search.fileSearchController.clear();
       });
       return true;
     }
-    if (_searchActive) {
+    if (_search.searchActive) {
       _toggleSearch();
       return true;
     }
-    if (_currentMagnet != null) {
+    if (_navigation.currentMagnet != null) {
       _navigateUp();
       return true;
     }
@@ -372,7 +341,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _playFile(AllDebridFile file) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     _showLoading('Unlocking…');
     final url = await _unlockStart(apiKey, file.link);
@@ -406,14 +375,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _playMagnet(AllDebridMagnet magnet) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     if (!magnet.isReady) {
       _snack('This magnet is not ready yet.', isError: true);
       return;
     }
-    List<AllDebridFile> files = _currentFiles;
-    if (_currentMagnet?.id != magnet.id || files.isEmpty) {
+    List<AllDebridFile> files = _navigation.currentFiles;
+    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
       _showLoading('Scanning magnet…');
       try {
         files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
@@ -431,7 +400,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     List<AllDebridFile> files,
     String collectionName,
   ) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     final videos = files.where(_looksLikeVideo).toList();
     if (videos.isEmpty) {
@@ -563,7 +532,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   // ── Download ─────────────────────────────────────────────────────────────
 
   Future<void> _downloadFile(AllDebridFile file) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     _showLoading('Preparing download…');
     final url = await _unlockStart(apiKey, file.link);
@@ -587,10 +556,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _downloadMagnet(AllDebridMagnet magnet) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
-    List<AllDebridFile> files = _currentFiles;
-    if (_currentMagnet?.id != magnet.id || files.isEmpty) {
+    List<AllDebridFile> files = _navigation.currentFiles;
+    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
       _showLoading('Scanning magnet…');
       try {
         files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
@@ -631,7 +600,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     List<AllDebridFile> allFiles,
     String magnetName,
   ) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     if (selected.isEmpty) return;
     int success = 0, fail = 0;
@@ -673,7 +642,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   // ── Add magnet ─────────────────────────────────────────────────────────────
 
   Future<void> _showAddMagnetDialog() async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     final controller = TextEditingController();
     final magnet = await showDialog<String>(
@@ -729,7 +698,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   // ── Web Downloads (saved links) ──────────────────────────────────────────
 
   Future<void> _playLink(AllDebridLink l) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     _showLoading('Unlocking…');
     final url = await _unlockStart(apiKey, l.link);
@@ -763,7 +732,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _downloadLink(AllDebridLink l) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     _showLoading('Preparing download…');
     final url = await _unlockStart(apiKey, l.link);
@@ -787,7 +756,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _copyLink(AllDebridLink l) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     _showLoading('Unlocking…');
     final url = await _unlockStart(apiKey, l.link);
@@ -803,7 +772,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _showAddLinkDialog() async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     final controller = TextEditingController();
     // Auto-paste a URL from the clipboard, matching the Real-Debrid page.
@@ -874,7 +843,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Future<void> _deleteLinks(List<AllDebridLink> links, {String? title}) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty || links.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -930,8 +899,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   void _confirmDeleteAllLinks() {
-    if (_links.isEmpty) return;
-    _deleteLinks(List.of(_links), title: 'Delete all links?');
+    if (_library.links.isEmpty) return;
+    _deleteLinks(List.of(_library.links), title: 'Delete all links?');
   }
 
   // ── Add to playlist ─────────────────────────────────────────────────────
@@ -940,14 +909,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   /// video → 'single' with its locked link; multiple → 'collection' re-resolved
   /// by hash at play time.
   Future<void> _addMagnetToPlaylist(AllDebridMagnet magnet) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     if (magnet.hash.isEmpty) {
       _snack('This magnet has no infohash to save.', isError: true);
       return;
     }
-    List<AllDebridFile> files = _currentFiles;
-    if (_currentMagnet?.id != magnet.id || files.isEmpty) {
+    List<AllDebridFile> files = _navigation.currentFiles;
+    if (_navigation.currentMagnet?.id != magnet.id || files.isEmpty) {
       _showLoading('Scanning magnet…');
       try {
         files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
@@ -995,7 +964,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     List<AllDebridMagnet> magnets, {
     String? title,
   }) async {
-    final apiKey = _apiKey;
+    final apiKey = _library.apiKey;
     if (apiKey == null || apiKey.isEmpty || magnets.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1043,57 +1012,59 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   void _confirmDeleteAll() {
-    if (_magnets.isEmpty) return;
-    _deleteMagnets(List.of(_magnets), title: 'Delete all magnets?');
+    if (_library.magnets.isEmpty) return;
+    _deleteMagnets(List.of(_library.magnets), title: 'Delete all magnets?');
   }
 
   // ── Selection ─────────────────────────────────────────────────────────────
 
   void _toggleSelectionMode() {
     setState(() {
-      _selectionMode = !_selectionMode;
-      if (!_selectionMode) _selectedIds.clear();
+      _selection.selectionMode = !_selection.selectionMode;
+      if (!_selection.selectionMode) _selection.selectedIds.clear();
     });
   }
 
   void _exitSelectionMode() {
-    if (!_selectionMode && _selectedIds.isEmpty) return;
+    if (!_selection.selectionMode && _selection.selectedIds.isEmpty) return;
     setState(() {
-      _selectionMode = false;
-      _selectedIds.clear();
+      _selection.selectionMode = false;
+      _selection.selectedIds.clear();
     });
   }
 
   void _toggleSelection(String id) {
     setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
+      if (_selection.selectedIds.contains(id)) {
+        _selection.selectedIds.remove(id);
       } else {
-        _selectedIds.add(id);
+        _selection.selectedIds.add(id);
       }
     });
   }
 
   bool get _isAllSelected =>
       _visibleMagnets.isNotEmpty &&
-      _visibleMagnets.every((m) => _selectedIds.contains(m.id));
+      _visibleMagnets.every((m) => _selection.selectedIds.contains(m.id));
 
   void _toggleSelectAll() {
     setState(() {
       if (_isAllSelected) {
         for (final m in _visibleMagnets) {
-          _selectedIds.remove(m.id);
+          _selection.selectedIds.remove(m.id);
         }
       } else {
         for (final m in _visibleMagnets) {
-          _selectedIds.add(m.id);
+          _selection.selectedIds.add(m.id);
         }
       }
     });
   }
 
   Future<void> _handleDeleteSelected() async {
-    final targets = _magnets.where((m) => _selectedIds.contains(m.id)).toList();
+    final targets = _library.magnets
+        .where((m) => _selection.selectedIds.contains(m.id))
+        .toList();
     if (targets.isEmpty) return;
     await _deleteMagnets(targets);
   }
@@ -1102,36 +1073,38 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   void _toggleSearch() {
     setState(() {
-      _searchActive = !_searchActive;
-      if (!_searchActive) {
-        _searchQuery = '';
-        _searchController.clear();
+      _search.searchActive = !_search.searchActive;
+      if (!_search.searchActive) {
+        _search.searchQuery = '';
+        _search.searchController.clear();
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _searchFocusNode.requestFocus();
+          if (mounted) _f.searchFocusNode.requestFocus();
         });
       }
     });
   }
 
   List<AllDebridMagnet> get _visibleMagnets {
-    if (_searchQuery.trim().isEmpty) return _magnets;
-    final q = _searchQuery.trim().toLowerCase();
-    return _magnets.where((m) => m.name.toLowerCase().contains(q)).toList();
+    if (_search.searchQuery.trim().isEmpty) return _library.magnets;
+    final q = _search.searchQuery.trim().toLowerCase();
+    return _library.magnets
+        .where((m) => m.name.toLowerCase().contains(q))
+        .toList();
   }
 
   List<AllDebridFile> get _visibleFiles {
-    if (_fileSearchQuery.trim().isEmpty) return _currentFiles;
-    final q = _fileSearchQuery.trim().toLowerCase();
-    return _currentFiles
+    if (_search.fileSearchQuery.trim().isEmpty) return _navigation.currentFiles;
+    final q = _search.fileSearchQuery.trim().toLowerCase();
+    return _navigation.currentFiles
         .where((f) => f.fileName.toLowerCase().contains(q))
         .toList();
   }
 
   List<AllDebridLink> get _visibleLinks {
-    if (_searchQuery.trim().isEmpty) return _links;
-    final q = _searchQuery.trim().toLowerCase();
-    return _links
+    if (_search.searchQuery.trim().isEmpty) return _library.links;
+    final q = _search.searchQuery.trim().toLowerCase();
+    return _library.links
         .where(
           (l) =>
               l.fileName.toLowerCase().contains(q) ||
@@ -1140,13 +1113,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         .toList();
   }
 
-  // ── Dialog / snack helpers ───────────────────────────────────────────────
-
-  bool _loadingDialogOpen = false;
-
   void _showLoading(String message) {
-    if (_loadingDialogOpen || !mounted) return;
-    _loadingDialogOpen = true;
+    if (_feedback.loadingDialogOpen || !mounted) return;
+    _feedback.loadingDialogOpen = true;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1173,8 +1142,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   void _dismissLoading() {
-    if (!_loadingDialogOpen) return;
-    _loadingDialogOpen = false;
+    if (!_feedback.loadingDialogOpen) return;
+    _feedback.loadingDialogOpen = false;
     if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 
@@ -1198,25 +1167,27 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           ? null
           : AppBar(
               leading: IconButton(
-                focusNode: _backButtonFocusNode,
+                focusNode: _f.backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
                 onPressed: _navigateUp,
                 tooltip: 'Back',
               ),
-              title: Text(_currentMagnet!.name),
+              title: Text(_navigation.currentMagnet!.name),
               actions: [
-                if (_currentFiles.isNotEmpty)
+                if (_navigation.currentFiles.isNotEmpty)
                   IconButton(
-                    icon: Icon(_fileSearchActive ? Icons.close : Icons.search),
+                    icon: Icon(
+                      _search.fileSearchActive ? Icons.close : Icons.search,
+                    ),
                     onPressed: () {
                       setState(() {
-                        _fileSearchActive = !_fileSearchActive;
-                        if (!_fileSearchActive) {
-                          _fileSearchQuery = '';
-                          _fileSearchController.clear();
+                        _search.fileSearchActive = !_search.fileSearchActive;
+                        if (!_search.fileSearchActive) {
+                          _search.fileSearchQuery = '';
+                          _search.fileSearchController.clear();
                         } else {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) _fileSearchFocusNode.requestFocus();
+                            if (mounted) _f.fileSearchFocusNode.requestFocus();
                           });
                         }
                       });
@@ -1230,9 +1201,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
           if (_isAtRoot) _buildViewSelectorBar(),
-          if (_isAtRoot && _searchActive) _buildSearchBar(),
-          if (_isAtRoot && _selectionMode) _buildSelectionBar(),
-          if (!_isAtRoot && _fileSearchActive) _buildFileSearchBar(),
+          if (_isAtRoot && _search.searchActive) _buildSearchBar(),
+          if (_isAtRoot && _selection.selectionMode) _buildSelectionBar(),
+          if (!_isAtRoot && _search.fileSearchActive) _buildFileSearchBar(),
           Expanded(child: _buildBody()),
         ],
       ),
@@ -1246,8 +1217,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final app = AppThemeScope.of(context);
-    final isWeb = _selectedView == AllDebridView.webDownloads;
-    final hasItems = isWeb ? _links.isNotEmpty : _magnets.isNotEmpty;
+    final isWeb = _navigation.selectedView == AllDebridView.webDownloads;
+    final hasItems = isWeb
+        ? _library.links.isNotEmpty
+        : _library.magnets.isNotEmpty;
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
@@ -1298,16 +1271,20 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               // Selection mode is torrents-only (it bulk-deletes magnets).
               if (!widget.selectSourceMode && !isWeb && hasItems)
                 Tooltip(
-                  message: _selectionMode ? 'Exit selection' : 'Select items',
+                  message: _selection.selectionMode
+                      ? 'Exit selection'
+                      : 'Select items',
                   child: IconButton(
                     onPressed: _toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                      _selectionMode ? Icons.close : Icons.checklist_outlined,
+                      _selection.selectionMode
+                          ? Icons.close
+                          : Icons.checklist_outlined,
                     ),
-                    color: _selectionMode
+                    color: _selection.selectionMode
                         ? theme.colorScheme.error
                         : theme.colorScheme.onSurface,
                     visualDensity: VisualDensity.compact,
@@ -1329,21 +1306,21 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   ),
                 ),
                 Tooltip(
-                  message: _searchActive
+                  message: _search.searchActive
                       ? 'Close search'
                       : (isWeb ? 'Search links' : 'Search magnets'),
                   child: IconButton(
-                    focusNode: _toolbarSearchFocusNode,
+                    focusNode: _f.toolbarSearchFocusNode,
                     onPressed: _toggleSearch,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                      _searchActive
+                      _search.searchActive
                           ? Icons.search_off_rounded
                           : Icons.search_rounded,
                     ),
-                    color: _searchActive
+                    color: _search.searchActive
                         ? theme.colorScheme.primary
                         : theme.colorScheme.onSurface,
                     visualDensity: VisualDensity.compact,
@@ -1352,21 +1329,21 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               ],
               if (widget.selectSourceMode && hasItems)
                 Tooltip(
-                  message: _searchActive
+                  message: _search.searchActive
                       ? 'Close search'
                       : (isWeb ? 'Search links' : 'Search magnets'),
                   child: IconButton(
-                    focusNode: _toolbarSearchFocusNode,
+                    focusNode: _f.toolbarSearchFocusNode,
                     onPressed: _toggleSearch,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                      _searchActive
+                      _search.searchActive
                           ? Icons.search_off_rounded
                           : Icons.search_rounded,
                     ),
-                    color: _searchActive
+                    color: _search.searchActive
                         ? theme.colorScheme.primary
                         : theme.colorScheme.onSurface,
                     visualDensity: VisualDensity.compact,
@@ -1424,20 +1401,21 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             Icons.link_rounded,
           ),
         ],
-        selected: _selectedView,
+        selected: _navigation.selectedView,
         onSelected: (value) {
-          if (value == _selectedView) return;
+          if (value == _navigation.selectedView) return;
           _exitSelectionMode();
           // Both root lists share _scrollController; reset so the incoming
           // view doesn't inherit the outgoing list's scroll offset.
-          if (_scrollController.hasClients) _scrollController.jumpTo(0);
+          if (_f.scrollController.hasClients) _f.scrollController.jumpTo(0);
           setState(() {
-            _selectedView = value;
-            _searchActive = false;
-            _searchQuery = '';
-            _searchController.clear();
+            _navigation.selectedView = value;
+            _search.searchActive = false;
+            _search.searchQuery = '';
+            _search.searchController.clear();
           });
-          if (value == AllDebridView.webDownloads && !_linksLoadedOnce) {
+          if (value == AllDebridView.webDownloads &&
+              !_library.linksLoadedOnce) {
             _loadLinks();
           }
         },
@@ -1447,7 +1425,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildSelectionBar() {
     final theme = Theme.of(context);
-    final count = _selectedIds.length;
+    final count = _selection.selectedIds.length;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1474,7 +1452,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            focusNode: _deleteButtonFocusNode,
+            focusNode: _f.deleteButtonFocusNode,
             onPressed: count > 0 ? _handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
@@ -1533,30 +1511,30 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildSearchBar() {
     final app = AppThemeScope.of(context);
-    final hasText = _searchController.text.isNotEmpty;
+    final hasText = _search.searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
             child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
+              controller: _search.searchController,
+              focusNode: _f.searchFocusNode,
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 14),
               // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the
               // toolbar, down into the results, right to the clear button.
               onUpArrow: () =>
-                  _moveFocusTo(_toolbarSearchFocusNode, _searchFocusNode),
+                  _moveFocusTo(_f.toolbarSearchFocusNode, _f.searchFocusNode),
               onDownArrow: () =>
-                  _moveFocusTo(_firstItemFocusNode, _searchFocusNode),
+                  _moveFocusTo(_f.firstItemFocusNode, _f.searchFocusNode),
               onRightArrow: hasText
-                  ? () => _searchClearFocusNode.requestFocus()
+                  ? () => _f.searchClearFocusNode.requestFocus()
                   : null,
-              onChanged: (v) => setState(() => _searchQuery = v),
-              onSubmitted: (_) => _searchFocusNode.unfocus(),
+              onChanged: (v) => setState(() => _search.searchQuery = v),
+              onSubmitted: (_) => _f.searchFocusNode.unfocus(),
               decoration: _searchDecoration(
-                _selectedView == AllDebridView.webDownloads
+                _navigation.selectedView == AllDebridView.webDownloads
                     ? 'Search your links...'
                     : 'Search your magnets...',
               ),
@@ -1566,18 +1544,18 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Focus(
-                focusNode: _searchClearFocusNode,
+                focusNode: _f.searchClearFocusNode,
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
                   if (isActivateKey(key)) {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                    _searchFocusNode.requestFocus();
+                    _search.searchController.clear();
+                    setState(() => _search.searchQuery = '');
+                    _f.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   if (key == LogicalKeyboardKey.arrowLeft) {
-                    _searchFocusNode.requestFocus();
+                    _f.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -1595,9 +1573,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                       ),
                       child: IconButton(
                         onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                          _searchFocusNode.requestFocus();
+                          _search.searchController.clear();
+                          setState(() => _search.searchQuery = '');
+                          _f.searchFocusNode.requestFocus();
                         },
                         icon: Icon(
                           Icons.clear_rounded,
@@ -1619,18 +1597,18 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: TvTextField(
-        controller: _fileSearchController,
-        focusNode: _fileSearchFocusNode,
+        controller: _search.fileSearchController,
+        focusNode: _f.fileSearchFocusNode,
         textInputAction: TextInputAction.search,
         style: const TextStyle(fontSize: 14),
         // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the back
         // button, down into the results.
         onUpArrow: () =>
-            _moveFocusTo(_backButtonFocusNode, _fileSearchFocusNode),
+            _moveFocusTo(_f.backButtonFocusNode, _f.fileSearchFocusNode),
         onDownArrow: () =>
-            _moveFocusTo(_firstItemFocusNode, _fileSearchFocusNode),
-        onChanged: (v) => setState(() => _fileSearchQuery = v),
-        onSubmitted: (_) => _fileSearchFocusNode.unfocus(),
+            _moveFocusTo(_f.firstItemFocusNode, _f.fileSearchFocusNode),
+        onChanged: (v) => setState(() => _search.fileSearchQuery = v),
+        onSubmitted: (_) => _f.fileSearchFocusNode.unfocus(),
         decoration: _searchDecoration('Search files...'),
       ),
     );
@@ -1638,13 +1616,13 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildBody() {
     final app = AppThemeScope.of(context);
-    if (_selectedView == AllDebridView.webDownloads) {
+    if (_navigation.selectedView == AllDebridView.webDownloads) {
       return _buildLinksView();
     }
-    if (_loading) {
+    if (_library.loading) {
       return const CloudRowSkeletonList();
     }
-    if (_error != null) {
+    if (_library.error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1657,7 +1635,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 color: app.fade(app.core.tx, 0x62 / 0xFF),
               ),
               const SizedBox(height: 16),
-              Text(_error!, textAlign: TextAlign.center),
+              Text(_library.error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton(onPressed: _load, child: const Text('Retry')),
             ],
@@ -1682,7 +1660,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             const SizedBox(height: 120),
             Center(
               child: Text(
-                _searchQuery.isNotEmpty
+                _search.searchQuery.isNotEmpty
                     ? 'No magnets match your search.'
                     : 'Your AllDebrid library is empty.',
                 style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
@@ -1695,7 +1673,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        controller: _scrollController,
+        controller: _f.scrollController,
         padding: const EdgeInsets.all(16),
         itemCount: magnets.length,
         itemBuilder: (context, index) {
@@ -1735,7 +1713,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           if (!mounted) return;
           Navigator.of(context).pop();
         },
-        focusNode: index == 0 ? _firstItemFocusNode : null,
+        focusNode: index == 0 ? _f.firstItemFocusNode : null,
       );
     }
 
@@ -1794,19 +1772,19 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       // fallback, which here would be a Delete-only menu.
       onTap: () => _openMagnet(m),
       actions: actions,
-      selectionMode: _selectionMode,
-      selected: _selectedIds.contains(m.id),
+      selectionMode: _selection.selectionMode,
+      selected: _selection.selectedIds.contains(m.id),
       onToggleSelected: () => _toggleSelection(m.id),
-      focusNode: index == 0 ? _firstItemFocusNode : null,
+      focusNode: index == 0 ? _f.firstItemFocusNode : null,
     );
   }
 
   Widget _buildLinksView() {
     final app = AppThemeScope.of(context);
-    if (_loadingLinks) {
+    if (_library.loadingLinks) {
       return const CloudRowSkeletonList();
     }
-    if (_linksError != null) {
+    if (_library.linksError != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1819,7 +1797,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 color: app.fade(app.core.tx, 0x62 / 0xFF),
               ),
               const SizedBox(height: 16),
-              Text(_linksError!, textAlign: TextAlign.center),
+              Text(_library.linksError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton(onPressed: _loadLinks, child: const Text('Retry')),
             ],
@@ -1836,7 +1814,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             const SizedBox(height: 120),
             Center(
               child: Text(
-                _searchQuery.isNotEmpty
+                _search.searchQuery.isNotEmpty
                     ? 'No links match your search.'
                     : 'No saved links yet.',
                 style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
@@ -1849,7 +1827,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     return RefreshIndicator(
       onRefresh: _loadLinks,
       child: ListView.builder(
-        controller: _scrollController,
+        controller: _f.scrollController,
         padding: const EdgeInsets.all(16),
         itemCount: links.length,
         itemBuilder: (context, index) {
@@ -1890,7 +1868,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 Navigator.of(context).pop();
               }
             : null,
-        focusNode: index == 0 ? _firstItemFocusNode : null,
+        focusNode: index == 0 ? _f.firstItemFocusNode : null,
       );
     }
 
@@ -1927,20 +1905,20 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       meta: subtitle.isEmpty ? null : subtitle,
       onTap: isVideo ? () => _playLink(l) : null,
       actions: actions,
-      focusNode: index == 0 ? _firstItemFocusNode : null,
+      focusNode: index == 0 ? _f.firstItemFocusNode : null,
     );
   }
 
   Widget _buildFilesView() {
     final app = AppThemeScope.of(context);
-    if (_loadingFiles) {
+    if (_navigation.loadingFiles) {
       return const CloudRowSkeletonList();
     }
     final files = _visibleFiles;
     if (files.isEmpty) {
       return Center(
         child: Text(
-          _fileSearchQuery.isNotEmpty
+          _search.fileSearchQuery.isNotEmpty
               ? 'No files match your search.'
               : 'No files in this magnet.',
           style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
@@ -1952,7 +1930,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       itemCount: files.length,
       itemBuilder: (context, index) {
         return KeyedSubtree(
-          key: ValueKey('${_currentMagnet!.id}:${files[index].path}:$index'),
+          key: ValueKey(
+            '${_navigation.currentMagnet!.id}:${files[index].path}:$index',
+          ),
           child: _buildFileCard(files[index], index),
         );
       },
@@ -1986,7 +1966,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       meta: Formatters.formatFileSize(f.size),
       onTap: isVideo ? () => _playFile(f) : null,
       actions: actions,
-      focusNode: index == 0 ? _firstItemFocusNode : null,
+      focusNode: index == 0 ? _f.firstItemFocusNode : null,
     );
   }
 }
@@ -1998,39 +1978,41 @@ Map<String, Object?> allDebridFilesTestAccess(
 ) {
   final s = state as _AllDebridFilesScreenState;
   return {
-    'apiKey': s._apiKey,
-    'loading': s._loading,
-    'error': s._error,
-    'magnets': List<AllDebridMagnet>.unmodifiable(s._magnets),
-    'selectedView': s._selectedView.name,
-    'links': List<AllDebridLink>.unmodifiable(s._links),
-    'loadingLinks': s._loadingLinks,
-    'linksLoadedOnce': s._linksLoadedOnce,
-    'linksError': s._linksError,
-    'currentMagnet': s._currentMagnet,
-    'currentFiles': List<AllDebridFile>.unmodifiable(s._currentFiles),
-    'loadingFiles': s._loadingFiles,
+    'apiKey': s._library.apiKey,
+    'loading': s._library.loading,
+    'error': s._library.error,
+    'magnets': List<AllDebridMagnet>.unmodifiable(s._library.magnets),
+    'selectedView': s._navigation.selectedView.name,
+    'links': List<AllDebridLink>.unmodifiable(s._library.links),
+    'loadingLinks': s._library.loadingLinks,
+    'linksLoadedOnce': s._library.linksLoadedOnce,
+    'linksError': s._library.linksError,
+    'currentMagnet': s._navigation.currentMagnet,
+    'currentFiles': List<AllDebridFile>.unmodifiable(
+      s._navigation.currentFiles,
+    ),
+    'loadingFiles': s._navigation.loadingFiles,
     'isAtRoot': s._isAtRoot,
-    'searchActive': s._searchActive,
-    'searchQuery': s._searchQuery,
-    'fileSearchActive': s._fileSearchActive,
-    'fileSearchQuery': s._fileSearchQuery,
-    'selectionMode': s._selectionMode,
-    'selectedIds': Set<String>.unmodifiable(s._selectedIds),
+    'searchActive': s._search.searchActive,
+    'searchQuery': s._search.searchQuery,
+    'fileSearchActive': s._search.fileSearchActive,
+    'fileSearchQuery': s._search.fileSearchQuery,
+    'selectionMode': s._selection.selectionMode,
+    'selectedIds': Set<String>.unmodifiable(s._selection.selectedIds),
     'isAllSelected': s._isAllSelected,
     'visibleMagnets': List<AllDebridMagnet>.unmodifiable(s._visibleMagnets),
     'visibleFiles': List<AllDebridFile>.unmodifiable(s._visibleFiles),
     'visibleLinks': List<AllDebridLink>.unmodifiable(s._visibleLinks),
-    'loadingDialogOpen': s._loadingDialogOpen,
-    'scrollController': s._scrollController,
-    'searchFocusNode': s._searchFocusNode,
-    'searchClearFocusNode': s._searchClearFocusNode,
-    'fileSearchFocusNode': s._fileSearchFocusNode,
-    'backButtonFocusNode': s._backButtonFocusNode,
-    'deleteButtonFocusNode': s._deleteButtonFocusNode,
-    'toolbarSearchFocusNode': s._toolbarSearchFocusNode,
-    'firstItemFocusNode': s._firstItemFocusNode,
-    'shouldFocusOnLoad': s._shouldFocusOnLoad,
+    'loadingDialogOpen': s._feedback.loadingDialogOpen,
+    'scrollController': s._f.scrollController,
+    'searchFocusNode': s._f.searchFocusNode,
+    'searchClearFocusNode': s._f.searchClearFocusNode,
+    'fileSearchFocusNode': s._f.fileSearchFocusNode,
+    'backButtonFocusNode': s._f.backButtonFocusNode,
+    'deleteButtonFocusNode': s._f.deleteButtonFocusNode,
+    'toolbarSearchFocusNode': s._f.toolbarSearchFocusNode,
+    'firstItemFocusNode': s._f.firstItemFocusNode,
+    'shouldFocusOnLoad': s._f.shouldFocusOnLoad,
     'refresh': s._refresh,
   };
 }

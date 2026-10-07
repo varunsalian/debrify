@@ -51,6 +51,24 @@ void main() {
             print('AllDebrid source reader ' + line)
 
 
+def field_comments_self_test(config, sources, rows, lookup, complete):
+    if not config.get('sidecars', {}).get('leading_field_comments'):
+        return
+    from check_settings_moves import sidecar, leading_line_comment_block
+    for identity in sidecar('leading_field_comments', 'leading_field_comments', [], config=config):
+        row=next(r for r in rows if r['original_name']==identity)
+        key=(row['destination_file'],row['destination_class'],row['new_name'])
+        node=lookup[key];block=leading_line_comment_block(sources[key[0]],node)
+        assert block is not None
+        at=sources[key[0]].rfind(block,0,node['start']);assert at>=0
+        changed=dict(sources);changed[key[0]]=sources[key[0]][:at]+sources[key[0]][at+len(block):]
+        # The same comment bytes survive; their ownership/placement changes.
+        changed[key[0]]+=block
+        errors=complete(changed)
+        assert any('Leading field comment bytes or placement changed: '+identity in e for e in errors),(identity,errors)
+        print('AllDebrid leading field comment '+identity+': misplaced bytes rejected independently')
+
+
 def self_test(package):
     from check_verbatim_moves import ROOT, parse, original_leaves, split_names
     from check_settings_moves import all_nodes, check, configured, tokens, normalize
@@ -70,6 +88,7 @@ def self_test(package):
     assert not complete(sources), 'real-config positive failed'
     assert not check_callback_identities(lookup,rows,source,config)
     print('AllDebrid real-config positive (no scaffold masking): PASS')
+    field_comments_self_test(config, sources, rows, lookup, complete)
     def located(identity):
         row=next(r for r in rows if r['original_name']==identity)
         key=(row['destination_file'],row['destination_class'],row['new_name'])

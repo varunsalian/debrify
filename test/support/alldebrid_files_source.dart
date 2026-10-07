@@ -24,7 +24,7 @@ String allDebridOriginalMember(String originalName) {
   final String source;
   final String indent;
   if (owner.isEmpty) {
-    source = fileSource; // The Step 1 first-episode helper is top-level.
+    source = fileSource; // A manifest-registered top-level declaration.
     indent = '';
   } else {
     final ownerMarker = RegExp(
