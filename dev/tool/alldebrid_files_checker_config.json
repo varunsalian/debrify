@@ -13,7 +13,8 @@
     "unchanged",
     "live_getter_callback",
     "root_build_forwarder",
-    "retained_forwarder"
+    "retained_forwarder",
+    "formatter_if_braces"
   ],
   "receivers": [
     "AllDebridLibraryState",
@@ -304,7 +305,28 @@
   "additional_owners": [],
   "required_nodes": [],
   "forwarders": {},
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation.dart",
+      "owner": "AllDebridNavigation"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_loading.dart",
+      "owner": "AllDebridLibraryLoading"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection.dart",
+      "owner": "AllDebridSelection"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search.dart",
+      "owner": "AllDebridSearch"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart",
+      "owner": "AllDebridFeedback"
+    }
+  ],
   "annotation_exceptions": {},
   "named_exceptions": {},
   "test_accessors": [
@@ -426,7 +448,7 @@
       ]
     }
   ],
-  "completed_step": 2,
+  "completed_step": 3,
   "playback_files": [
     "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
   ],
@@ -1479,5 +1501,7 @@
         "invocation"
       ]
     }
-  ]
+  ],
+  "alldebrid_formatter_brace_occurrences": true,
+  "context_exception_difference": "context/formatter exceptions: only exact predicate/body/raw prefix sites in alldebrid_files_context_exceptions.json; original guards and statement order unchanged; plain build retains its exact annotated facade forwarder"
 }

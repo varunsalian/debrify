@@ -274,6 +274,18 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_sections.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_loading.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart':
+      0,
   'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection_state.dart':
       0,
   'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_state.dart':

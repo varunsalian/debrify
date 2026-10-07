@@ -74,7 +74,8 @@ String allDebridOriginalMember(String originalName) {
           )
           as Map<String, dynamic>;
   for (final site in formatting['sites'] as List<dynamic>) {
-    if (site['file'] != row['destination_file'] ||
+    if (!moved ||
+        site['file'] != row['destination_file'] ||
         site['owner'] != row['destination_class'] ||
         site['method'] != row['new_name'] ||
         site['kind'] != 'formatter_if_braces') {
@@ -85,7 +86,7 @@ String allDebridOriginalMember(String originalName) {
         values.map((value) => RegExp.escape(value as String)).join(gap);
     final recorded = RegExp(
       '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
-      '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
+      '\\{$gap(${pattern(site['body_tokens'] as List<dynamic>)})$gap\\}',
     );
     final matches = recorded.allMatches(member).toList();
     if (matches.length != 1) {
@@ -95,7 +96,7 @@ String allDebridOriginalMember(String originalName) {
     member = member.replaceRange(
       match.start,
       match.end,
-      '${match[1]}${(site['body_tokens'] as List<dynamic>).join(' ')}',
+      '${match[1]}${match[2]}',
     );
   }
   final config =
@@ -159,5 +160,25 @@ String allDebridOriginalMember(String originalName) {
     RegExp(r'\$\{(_[A-Za-z][A-Za-z0-9]*)\}'),
     (match) => '\$${match[1]}',
   );
-  return member;
+  // Receiver qualification can make the formatter wrap an unchanged call.
+  // Reformat the restored original syntax; bindings and literal tokens remain
+  // untouched, and exact sidecar matching above is still mandatory.
+  final directory = Directory.systemTemp.createTempSync(
+    'alldebrid-original-member-',
+  );
+  try {
+    final file = File('${directory.path}/member.dart')
+      ..writeAsStringSync('class _AllDebridOriginalMember {\n$member\n}\n');
+    final result = Process.runSync('dart', ['format', file.path]);
+    if (result.exitCode != 0) {
+      throw StateError('Original syntax cannot be formatted: ${result.stderr}');
+    }
+    final formatted = file.readAsStringSync();
+    return formatted.substring(
+      formatted.indexOf('{') + 1,
+      formatted.lastIndexOf('}'),
+    );
+  } finally {
+    directory.deleteSync(recursive: true);
+  }
 }

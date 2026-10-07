@@ -1,1 +1,62 @@
-{"sites": []}
+{
+  "sites": [
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart",
+      "owner": "AllDebridFeedback",
+      "method": "dismissLoading",
+      "kind": "formatter_if_braces",
+      "body_tokens": [
+        "Navigator",
+        ".",
+        "of",
+        "(",
+        "_deps",
+        ".",
+        "context",
+        "(",
+        ")",
+        ",",
+        "rootNavigator",
+        ":",
+        "true",
+        ")",
+        ".",
+        "pop",
+        "(",
+        ")",
+        ";"
+      ],
+      "prefix_mode": "raw",
+      "prefix_tokens": [
+        "void",
+        "dismissLoading",
+        "(",
+        ")",
+        "{",
+        "if",
+        "(",
+        "!",
+        "_feedback",
+        ".",
+        "loadingDialogOpen",
+        ")",
+        "return",
+        ";",
+        "_feedback",
+        ".",
+        "loadingDialogOpen",
+        "=",
+        "false",
+        ";",
+        "if",
+        "(",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ")"
+      ]
+    }
+  ]
+}

@@ -17,15 +17,20 @@ def source_reader_self_test(ROOT, original):
         source.parent.mkdir(parents=True)
         source.write_text(original)
         (fixture / 'dev/tool').mkdir(parents=True)
-        for name in ['alldebrid_files_manifest.tsv', 'alldebrid_files_checker_config.json', 'alldebrid_files_context_exceptions.json']:
+        for name in ['alldebrid_files_manifest.tsv', 'alldebrid_files_checker_config.json', 'alldebrid_files_context_exceptions.json', 'alldebrid_files_original_bodies.json']:
             (fixture / 'dev/tool' / name).write_bytes((ROOT / 'dev/tool' / name).read_bytes())
         reader = (ROOT / 'test/support/alldebrid_files_source.dart').as_uri()
         probe = fixture / 'probe.dart'
-        probe.write_text("import 'dart:io';\nimport '" + reader + "';\n" + r'''
+        probe.write_text("import 'dart:io';\nimport 'dart:convert';\nimport '" + reader + "';\n" + r'''
 String lines(String s) => s.split('\n').map((s) => s.trim()).join('\n').trim();
 void main() {
   final file = File('lib/screens/alldebrid/alldebrid_files_screen.dart');
   final original = file.readAsStringSync();
+  final frozen = jsonDecode(File('dev/tool/alldebrid_files_original_bodies.json').readAsStringSync()) as Map<String, dynamic>;
+  for (final entry in frozen.entries) {
+    if (lines(allDebridOriginalMember(entry.key)) != lines(entry.value as String)) throw StateError('Original declaration altered: ${entry.key}');
+  }
+  print('all 18 ORIGINAL declarations: PASS');
   final expected = allDebridOriginalMember('_AllDebridFilesScreenState._showLoading');
   if (!original.contains(expected)) throw StateError('Original body altered by normalization');
   final qualified = expected.replaceAll('_loadingDialogOpen', '_feedback.loadingDialogOpen').replaceAll('!mounted', '!_deps.mounted()').replaceAll('context: context', 'context: _deps.context()');
@@ -67,6 +72,134 @@ def field_comments_self_test(config, sources, rows, lookup, complete):
         errors=complete(changed)
         assert any('Leading field comment bytes or placement changed: '+identity in e for e in errors),(identity,errors)
         print('AllDebrid leading field comment '+identity+': misplaced bytes rejected independently')
+
+
+def formatter_occurrence_self_test(package, config, sources, rows, original_nodes, lookup):
+    """Real moved methods: exact braces never grant a scope exemption."""
+    if not config.get('alldebrid_formatter_brace_occurrences'):
+        return
+    from check_verbatim_moves import parse
+    from check_settings_moves import all_nodes, configured, sidecar
+    from occurrence_field_bindings import failures
+    import copy
+    from alldebrid_files_formatter_braces import canonical_lookup
+    source = config['source']
+    with configured(config):
+        assert not failures(original_nodes, lookup, rows, source, config, package=package)
+        sites = sidecar('context_exceptions', 'sites', [], config=config)
+    print('AllDebrid exact formatter occurrence positive: PASS')
+    for site in sites:
+        key = (site['file'], site['owner'], site['method'])
+        node = lookup[key]
+        body = 'Navigator.of(_deps.context(), rootNavigator: true).pop();' if site['method']=='dismissLoading' else '_f.fileSearchFocusNode.requestFocus();'
+        for label, old, new in [
+            ('predicate', 'if (_deps.mounted()) {', 'if (true) {'),
+            ('body', body, body.replace('pop()', 'maybePop()').replace('requestFocus()', 'unfocus()')),
+            ('prefix', 'if (_deps.mounted()) {', "debugPrint('unregistered prefix'); if (_deps.mounted()) {"),
+            ('bare State callback', '_deps.mounted()', 'mounted'),
+        ]:
+            assert old in node['text'],(site,label)
+            changed=dict(sources);changed[key[0]]=sources[key[0]][:node['start']]+node['text'].replace(old,new,1)+sources[key[0]][node['end']:]
+            actual=all_nodes(parse(changed,package,occurrence_bindings=True))
+            with configured(config):
+                errors=failures(original_nodes,actual,rows,source,config,package=package)
+            assert any('AllDebrid formatter occurrence evidence:' in e for e in errors),(site,label,errors)
+            print('AllDebrid formatter '+site['method']+' '+label+': rejected independently')
+    row=next(r for r in rows if r['original_name']=='_AllDebridFilesScreenState._focusFirstItem')
+    key=(row['destination_file'],row['destination_class'],row['new_name']);node=lookup[key]
+    old='_f.shouldFocusOnLoad = false;';assert old in node['text']
+    changed=dict(sources);changed[key[0]]=sources[key[0]][:node['start']]+node['text'].replace(old,'{ '+old+' }',1)+sources[key[0]][node['end']:]
+    actual=all_nodes(parse(changed,package,occurrence_bindings=True))
+    with configured(config):errors=failures(original_nodes,actual,rows,source,config,package=package)
+    assert any('Occurrence name/scope changed:' in e for e in errors),errors
+    assert not any('AllDebrid formatter occurrence evidence:' in e for e in errors),errors
+    print('AllDebrid unregistered scope block: rejected by unchanged occurrence alignment')
+    bad=copy.deepcopy(config);bad['feature']='lib/features/foreign'
+    try:
+        canonical_lookup(lookup,rows,source,bad,package)
+    except ValueError as error:
+        assert 'outside AllDebrid' in str(error)
+    else:
+        raise AssertionError('AllDebrid formatter option escaped its feature key')
+    print('AllDebrid formatter option on another feature: rejected independently')
+    from unittest.mock import patch
+    foreign = copy.deepcopy(sites[0]);foreign['file']='lib/features/foreign/formatter.dart'
+    changed_rows=copy.deepcopy(rows)
+    altered=next(r for r in changed_rows if r['destination_file']==sites[0]['file'] and r['new_name']==sites[0]['method'])
+    altered['destination_file']=foreign['file']
+    with patch('check_settings_moves.sidecar', return_value=[foreign]):
+        try:
+            canonical_lookup(lookup,changed_rows,source,config,package)
+        except ValueError as error:
+            assert 'Unregistered AllDebrid' in str(error)
+        else:
+            raise AssertionError('Formatter occurrence option accepted a foreign destination')
+    print('AllDebrid formatter foreign destination: rejected independently')
+    unregistered = copy.deepcopy(sites[0]);unregistered.update(file=config['feature']+'/presentation/legacy_alldebrid/alldebrid_navigation.dart',owner='AllDebridNavigation',method='focusFirstItem')
+    with patch('check_settings_moves.sidecar', return_value=[unregistered]):
+        try:
+            canonical_lookup(lookup,rows,source,config,package)
+        except ValueError as error:
+            assert 'Unregistered AllDebrid' in str(error)
+        else:
+            raise AssertionError('Formatter occurrence option accepted an unregistered method')
+    print('AllDebrid formatter unregistered method: rejected independently')
+
+
+def source_reader_checkpoint_self_test(ROOT):
+    """Read every frozen real declaration; exact formatter evidence stays strict."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='alldebrid-reader-checkpoint-', dir=ROOT / '.dart_tool') as directory:
+        fixture = Path(directory)
+        paths = [ROOT / 'lib/screens/alldebrid/alldebrid_files_screen.dart',
+                 *sorted((ROOT / 'lib/features/alldebrid_files').rglob('*.dart'))]
+        paths += [ROOT / 'dev/tool' / name for name in [
+            'alldebrid_files_manifest.tsv', 'alldebrid_files_checker_config.json',
+            'alldebrid_files_context_exceptions.json', 'alldebrid_files_original_bodies.json']]
+        for path in paths:
+            target = fixture / path.relative_to(ROOT)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(path.read_bytes())
+        reader = (ROOT / 'test/support/alldebrid_files_source.dart').as_uri()
+        probe = fixture / 'probe.dart'
+        probe.write_text("import 'dart:io';\nimport 'dart:convert';\nimport '" + reader + "';\n" + r'''
+String lines(String s) => s.split('\n').map((s) => s.trim()).join('\n').trim();
+void main() {
+  final frozen = jsonDecode(File('dev/tool/alldebrid_files_original_bodies.json').readAsStringSync()) as Map<String, dynamic>;
+  for (final entry in frozen.entries) {
+    if (lines(allDebridOriginalMember(entry.key)) != lines(entry.value as String)) {
+      throw StateError('Frozen real declaration changed: ${entry.key}');
+    }
+  }
+  print('all 18 frozen real declarations: PASS');
+  final file = File('lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart');
+  final before = file.readAsStringSync();
+  const identity = '_AllDebridFilesScreenState._dismissLoading';
+  void reject(String label, String old, String replacement) {
+    if (old.allMatches(before).length != 1) throw StateError('Negative fixture is not exact: $label');
+    file.writeAsStringSync(before.replaceFirst(old, replacement));
+    var rejected = false;
+    try {
+      rejected = lines(allDebridOriginalMember(identity)) != lines(frozen[identity] as String);
+    } on StateError {
+      rejected = true;
+    } finally {
+      file.writeAsStringSync(before);
+    }
+    if (!rejected) throw StateError('Reader masked $label');
+    print('$label: rejected independently');
+  }
+  reject('formatter predicate', 'if (_deps.mounted()) {', 'if (true) {');
+  reject('formatter body', 'rootNavigator: true).pop()', 'rootNavigator: false).pop()');
+  reject('formatter prefix', '_feedback.loadingDialogOpen = false;', '_feedback.loadingDialogOpen = true;');
+  reject('formatter cached context', 'Navigator.of(_deps.context(),', 'Navigator.of(savedContext,');
+  reject('formatter receiver swap', '_feedback.loadingDialogOpen = false;', '_navigation.loadingDialogOpen = false;');
+}
+''')
+        result = subprocess.run(['dart', str(probe)], cwd=fixture, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        for line in result.stdout.splitlines():
+            print('AllDebrid checkpoint source reader ' + line)
 
 
 def self_test(package):
@@ -201,3 +334,5 @@ def self_test(package):
             assert normalize(current,rows,row)==normalize(site['member_tokens'],rows,row),site['member']
     print('AllDebrid all three playback ledgers token-exact: PASS')
     source_reader_self_test(ROOT, original)
+    source_reader_checkpoint_self_test(ROOT)
+    formatter_occurrence_self_test(package, config, sources, rows, original_nodes, lookup)
