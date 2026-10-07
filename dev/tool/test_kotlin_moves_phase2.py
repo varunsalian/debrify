@@ -43,6 +43,9 @@ class Phase2MovesTest(unittest.TestCase):
         self.assertEqual(54, sum(row['fate'] == 'moved' for row in self.manifest['declarations']))
         self.assertEqual(1, sum(row['fate'] == 'patched' for row in self.manifest['declarations']))
         source = self.current[self.manifest['source']]
+        policy = self.current[self.destination('IptvLoadErrorPolicy.kt')]
+        self.assertNotIn('@OptIn(UnstableApi::class)\n    internal fun classifyIptvError', policy)
+        self.assertEqual(3, sum(text.count('@OptIn(UnstableApi::class)') for path, text in self.current.items() if path != self.manifest['source']))
         self.assertIn('IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }', source)
         for name in ('SEARCH_SUBTITLE_LABEL', 'STARTUP_FAILOVER_LOG_TAG', 'EXTERNAL_SUBTITLE_PREFIX', 'PROVIDER_PIKPAK'):
             self.assertNotIn('const val ' + name, source)

@@ -670,7 +670,7 @@
       "substitutions": [
         {
           "before": "private fun classifyIptvError",
-          "after": "@OptIn(UnstableApi::class)\n    internal fun classifyIptvError",
+          "after": "internal fun classifyIptvError",
           "count": 1
         }
       ]

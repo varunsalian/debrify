@@ -785,3 +785,12 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   bytecode shows `classifyIptvError` uses only stable APIs; the required
   opt-in set is the three declarations above (Claude approved the
   correction). Step 0 resumes.
+
+- 2026-10-07 — **Phase 2 opt-in manifest correction complete** after the
+  approved plan update `861aa13ed`. `classifyIptvError` now has only the
+  private-to-internal visibility substitution. The complete extraction
+  fixture explicitly pins the three annotations and absence of one on the
+  classifier; all 32 checker self-tests pass. Re-derived Media3 1.8.0 set
+  matches the corrected design. Evidence: `p2/step0/media3-opt-in-audit.json`
+  and `p2/step0/checker-self-tests.log`. Step 0 continues on the original
+  production base `dcbd9aafe`; no production moves.
