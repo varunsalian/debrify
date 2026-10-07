@@ -4,7 +4,7 @@
   "feature": "lib/features/recordings",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 1,
+  "completed_step": 2,
   "completion_step": 4,
   "allowed_edits": [
     "receiver",
@@ -313,7 +313,16 @@
       "kind": "widget"
     }
   ],
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
+      "owner": "RecordingsHubFormat"
+    }
+  ],
   "planned_type_aliases": [
     {
       "original_name": "_HubBar",

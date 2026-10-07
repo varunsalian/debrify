@@ -33,7 +33,7 @@
 2197 lib/screens/video_player/widgets/tracks_sheet.dart
 2187 lib/theme/app_theme.dart
 2153 lib/services/android_tv_player_bridge.dart
-977 lib/screens/settings/recordings_page.dart
+740 lib/screens/settings/recordings_page.dart
 2038 lib/services/debrify_tv_database.dart
 1996 lib/screens/alldebrid/alldebrid_files_screen.dart
 1991 lib/screens/trakt_calendar_screen.dart

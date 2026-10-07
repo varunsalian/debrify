@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart';
+import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
+import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart';
+import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_buttons.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_chrome.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_empty_states.dart';
@@ -17,7 +21,6 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/iptv/iptv_startup_channel_picker.dart';
 import 'package:debrify/widgets/recording_limit_dialogs.dart';
 import 'package:debrify/widgets/tv_time_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // The DVR's front door — three zones on one page:
@@ -44,67 +47,33 @@ class RecordingsPage extends StatefulWidget {
 
 class _RecordingsPageState extends State<RecordingsPage>
     with WidgetsBindingObserver {
-  List<LiveRecordingStatus> _live = const [];
-  List<ScheduledRecording> _schedules = const [];
-  List<RecordingLibraryEntry> _library = const [];
-  bool _loading = true;
-  bool _exactAlarms = true;
-
-  /// Wall clock for elapsed/countdown text. Only ticks while something needs
-  /// it; listeners are scoped ValueListenableBuilders around the text alone.
-  final ValueNotifier<DateTime> _now = ValueNotifier<DateTime>(DateTime.now());
-  Timer? _ticker;
-
-  /// Android: live captures mutate natively (bytes grow, alarms fire, the
-  /// engine finalizes) with no in-process signal — poll while anything is
-  /// live or could go live, idle otherwise.
-  Timer? _poll;
-
-  /// False while the app is paused/hidden. _syncTimers refuses to arm
-  /// anything in that state — otherwise a revision bump arriving while
-  /// covered (a desktop capture ending with the window minimized) would
-  /// silently re-start the clocks the lifecycle handler just stopped.
-  bool _appVisible = true;
-
-  /// Battery-optimization nudge: shown only on EVIDENCE — an interrupted
-  /// recording newer than the last dismissal, while the app is not excluded
-  /// from optimization. TV boxes have no battery; the nudge never shows
-  /// there.
-  bool _batteryExempt = true;
-  int _batteryNudgeDismissedAtMs = 0;
-  static const String _batteryNudgeDismissedPref =
-      'recording_battery_nudge_dismissed_at';
-
-  /// The first library row's main (play) focus. The folder button sits on
-  /// the same right edge as the rows' delete icons, so geometric DOWN from
-  /// it would land on the first DELETE — this node lets the button send
-  /// DOWN to the card instead.
-  final FocusNode _firstLibraryFocus = FocusNode(
-    debugLabel: 'recordings_first_library_row',
+  final _owners = RecordingsHubOwners();
+  RecordingsHubSections? _composition;
+  RecordingsHubSections get _sections => _composition ??= RecordingsHubSections(
+    RecordingsHubDependencies(
+      owners: _owners,
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      sections: () => _sections,
+    ),
   );
-
-  bool get _isAndroid => !kIsWeb && Platform.isAndroid;
-  bool get _desktop => DesktopScheduleService.instance.isSupported;
-
-  List<DesktopRecordingCapture> get _desktopCaptures =>
-      _desktop ? DesktopRecordingService.instance.captures : const [];
-
-  bool get _anythingLive => _live.isNotEmpty || _desktopCaptures.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     LiveRecordingService.schedulesRevision.addListener(_onRevision);
-    if (_desktop) {
+    if (_sections.data.desktop) {
       DesktopRecordingService.instance.revision.addListener(_onRevision);
     }
-    unawaited(_loadAll());
+    unawaited(_sections.data.loadAll());
     unawaited(
       DevicePreferences.instance().then((prefs) {
         if (!mounted) return;
-        final at = prefs.getInt(_batteryNudgeDismissedPref) ?? 0;
-        if (at != 0) setState(() => _batteryNudgeDismissedAtMs = at);
+        final at =
+            prefs.getInt(RecordingsHubData.batteryNudgeDismissedPref) ?? 0;
+        if (at != 0) setState(() => _owners.batteryNudgeDismissedAtMs = at);
       }),
     );
   }
@@ -113,161 +82,37 @@ class _RecordingsPageState extends State<RecordingsPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     LiveRecordingService.schedulesRevision.removeListener(_onRevision);
-    if (_desktop) {
+    if (_sections.data.desktop) {
       DesktopRecordingService.instance.revision.removeListener(_onRevision);
     }
-    _ticker?.cancel();
-    _poll?.cancel();
-    _now.dispose();
-    _firstLibraryFocus.dispose();
+    _owners.ticker?.cancel();
+    _owners.poll?.cancel();
+    _owners.now.dispose();
+    _owners.firstLibraryFocus.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _appVisible = true;
+      _owners.appVisible = true;
       // _loadAll re-arms the ticker and poll via _syncTimers.
-      unawaited(_loadAll());
+      unawaited(_sections.data.loadAll());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       // Nothing here is visible while the app isn't — on TV that includes
       // the whole time the native player plays a recording over Flutter, so
       // the 1s clock and the 3s native poll must not keep burning under it.
-      _appVisible = false;
-      _ticker?.cancel();
-      _ticker = null;
-      _poll?.cancel();
-      _poll = null;
+      _owners.appVisible = false;
+      _owners.ticker?.cancel();
+      _owners.ticker = null;
+      _owners.poll?.cancel();
+      _owners.poll = null;
     }
   }
 
   void _onRevision() {
-    if (mounted) unawaited(_loadAll());
-  }
-
-  bool get _showBatteryNudge =>
-      _isAndroid &&
-      !PlatformUtil.isAndroidTvCached &&
-      !_batteryExempt &&
-      _library.any(
-        (e) =>
-            e.interrupted &&
-            (e.interruptedAtMs ?? e.recordedAtMs) > _batteryNudgeDismissedAtMs,
-      );
-
-  void _dismissBatteryNudge() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    setState(() => _batteryNudgeDismissedAtMs = now);
-    unawaited(
-      DevicePreferences.instance().then(
-        (prefs) => prefs.setInt(_batteryNudgeDismissedPref, now),
-      ),
-    );
-  }
-
-  Future<void> _loadAll() async {
-    final results = await Future.wait<Object>([
-      _isAndroid
-          ? LiveRecordingService.query()
-          : Future.value(const <LiveRecordingStatus>[]),
-      _desktop
-          ? DesktopScheduleService.instance.list().then(
-              (list) => list
-                  .map((s) => s.toScheduledRecording())
-                  .toList(growable: false),
-            )
-          : (_isAndroid
-                ? LiveRecordingService.listSchedules()
-                : Future.value(const <ScheduledRecording>[])),
-      _isAndroid
-          ? LiveRecordingService.queryLibrary()
-          : DesktopRecordingService.listLibrary(),
-      _isAndroid
-          ? LiveRecordingService.exactAlarmsGranted()
-          : Future.value(true),
-      _isAndroid
-          ? LiveRecordingService.isIgnoringBatteryOptimizations()
-          : Future.value(true),
-    ]);
-    if (!mounted) return;
-    final live = (results[0] as List<LiveRecordingStatus>)
-        .where((r) => r.isRecording)
-        .toList(growable: false);
-    final schedules = (results[1] as List<ScheduledRecording>).toList()
-      ..sort((a, b) => a.startMs.compareTo(b.startMs));
-    final library = (results[2] as List<RecordingLibraryEntry>).toList()
-      ..sort(
-        (a, b) =>
-            _displayFor(b).recordedAt.compareTo(_displayFor(a).recordedAt),
-      );
-    setState(() {
-      _live = live;
-      _schedules = schedules;
-      _library = library;
-      _exactAlarms = results[3] as bool;
-      _batteryExempt = results[4] as bool;
-      _loading = false;
-    });
-    _syncTimers();
-  }
-
-  void _syncTimers() {
-    if (!_appVisible) return;
-    final needTick = _anythingLive || _schedules.isNotEmpty;
-    if (needTick && _ticker == null) {
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        _now.value = DateTime.now();
-      });
-    } else if (!needTick && _ticker != null) {
-      _ticker?.cancel();
-      _ticker = null;
-    }
-    // Android live poll: 3s while capturing (bytes + finalize detection),
-    // 15s while merely scheduled (an alarm can fire any minute), off idle.
-    // The poll is the LIGHT query — the library (whose native call walks the
-    // store against the filesystem) only reloads when the live/scheduled
-    // sets actually change.
-    _poll?.cancel();
-    _poll = null;
-    if (_isAndroid && (_live.isNotEmpty || _schedules.isNotEmpty)) {
-      _poll = Timer.periodic(
-        Duration(seconds: _live.isNotEmpty ? 3 : 15),
-        (_) => unawaited(_pollLive()),
-      );
-    }
-  }
-
-  /// The poll body: refresh live captures + schedules only. A membership
-  /// change (a capture started or finished, a schedule fired) escalates to a
-  /// full [_loadAll] so the library picks up the new file too.
-  Future<void> _pollLive() async {
-    if (!_isAndroid) return;
-    final results = await Future.wait<Object>([
-      LiveRecordingService.query(),
-      LiveRecordingService.listSchedules(),
-    ]);
-    if (!mounted) return;
-    final live = (results[0] as List<LiveRecordingStatus>)
-        .where((r) => r.isRecording)
-        .toList(growable: false);
-    final schedules = (results[1] as List<ScheduledRecording>).toList()
-      ..sort((a, b) => a.startMs.compareTo(b.startMs));
-    final sameSets =
-        live.map((r) => r.taskId).toSet().length == _live.length &&
-        _live.every((old) => live.any((r) => r.taskId == old.taskId)) &&
-        schedules.length == _schedules.length &&
-        _schedules.every((old) => schedules.any((s) => s.id == old.id));
-    if (!sameSets) {
-      await _loadAll();
-      return;
-    }
-    // Same membership: bytes/elapsed only — no timer re-arm (the cadence is
-    // a function of membership, which didn't change).
-    setState(() {
-      _live = live;
-      _schedules = schedules;
-    });
+    if (mounted) unawaited(_sections.data.loadAll());
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -281,7 +126,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     // The engine finalizes and publishes off-process; give it a beat, then
     // let the regular poll settle whatever this misses.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
-    if (mounted) await _loadAll();
+    if (mounted) await _sections.data.loadAll();
   }
 
   Future<void> _stopDesktop(DesktopRecordingCapture capture) async {
@@ -291,12 +136,12 @@ class _RecordingsPageState extends State<RecordingsPage>
       SnackBar(
         content: Text(
           bytes > 0
-              ? 'Recording saved (${_fmtBytes(bytes)})'
+              ? 'Recording saved (${_sections.format.fmtBytes(bytes)})'
               : 'Recording stopped — nothing was captured',
         ),
       ),
     );
-    await _loadAll();
+    await _sections.data.loadAll();
   }
 
   Future<void> _cancelSchedule(ScheduledRecording schedule) async {
@@ -323,7 +168,7 @@ class _RecordingsPageState extends State<RecordingsPage>
       ),
     );
     if (confirmed != true || !mounted) return;
-    if (_desktop) {
+    if (_sections.data.desktop) {
       await DesktopScheduleService.instance.cancel(schedule.id);
     } else {
       await LiveRecordingService.cancelSchedule(schedule.id);
@@ -332,7 +177,7 @@ class _RecordingsPageState extends State<RecordingsPage>
   }
 
   Future<void> _play(RecordingLibraryEntry entry) async {
-    final display = _displayFor(entry);
+    final display = _sections.format.displayFor(entry);
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -342,19 +187,19 @@ class _RecordingsPageState extends State<RecordingsPage>
         // Android recordings are content:// / file:// URIs other apps were
         // never granted — an external-player intent would just fail to read
         // them. Desktop passes plain paths, which external players handle.
-        disableExternalPlayer: _isAndroid,
+        disableExternalPlayer: _sections.data.isAndroid,
       ),
     );
   }
 
   Future<void> _delete(RecordingLibraryEntry entry) async {
-    final display = _displayFor(entry);
+    final display = _sections.format.displayFor(entry);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete recording?'),
         content: Text(
-          '${display.title} (${_fmtBytes(entry.bytes)}) will be removed '
+          '${display.title} (${_sections.format.fmtBytes(entry.bytes)}) will be removed '
           'from this device.',
         ),
         actions: [
@@ -374,7 +219,7 @@ class _RecordingsPageState extends State<RecordingsPage>
       ),
     );
     if (confirmed != true || !mounted) return;
-    final ok = _isAndroid
+    final ok = _sections.data.isAndroid
         ? await LiveRecordingService.deleteRecordingFile(entry.uri)
         : await DesktopRecordingService.deleteRecordingFile(entry.uri);
     if (!mounted) return;
@@ -383,7 +228,7 @@ class _RecordingsPageState extends State<RecordingsPage>
         const SnackBar(content: Text("Couldn't delete the recording")),
       );
     }
-    await _loadAll();
+    await _sections.data.loadAll();
   }
 
   Future<void> _openFolder() async {
@@ -409,7 +254,8 @@ class _RecordingsPageState extends State<RecordingsPage>
   /// saved channel, a start time and a duration; a start in the past (or
   /// "now") late-joins within seconds.
   Future<void> _createManualSchedule() async {
-    if (!_desktop && !await LiveRecordingService.ensureEngineReady()) {
+    if (!_sections.data.desktop &&
+        !await LiveRecordingService.ensureEngineReady()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -482,7 +328,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     }
     if (!mounted) return;
 
-    final result = _desktop
+    final result = _sections.data.desktop
         ? await DesktopScheduleService.instance.add(
             url: recordUrl,
             channelName: choice.name,
@@ -534,7 +380,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
-    await _loadAll();
+    await _sections.data.loadAll();
   }
 
   /// Material's time picker can't be driven by a remote — its dial isn't
@@ -665,110 +511,18 @@ class _RecordingsPageState extends State<RecordingsPage>
     return length;
   }
 
-  // ── Formatting ────────────────────────────────────────────────────────────
-
-  String _fmtBytes(int bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-    }
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
-    }
-    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    return '$bytes B';
-  }
-
-  String _fmtElapsed(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
-  String _fmtCountdown(Duration untilStart) {
-    if (untilStart.inSeconds <= 60) return 'starting…';
-    if (untilStart.inMinutes < 60) return 'in ${untilStart.inMinutes}m';
-    final h = untilStart.inHours;
-    final m = untilStart.inMinutes.remainder(60);
-    if (h < 24) return m == 0 ? 'in ${h}h' : 'in ${h}h ${m}m';
-    return 'in ${untilStart.inDays}d ${h.remainder(24)}h';
-  }
-
-  String _fmtDuration(int ms) {
-    final d = Duration(milliseconds: ms);
-    if (d.inMinutes < 1) return '${d.inSeconds}s';
-    if (d.inHours < 1) return '${d.inMinutes} min';
-    final m = d.inMinutes.remainder(60);
-    return m == 0 ? '${d.inHours}h' : '${d.inHours}h ${m}m';
-  }
-
-  String _clock(int ms) => MaterialLocalizations.of(context).formatTimeOfDay(
-    TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(ms)),
-  );
-
-  String _dayLabel(DateTime day) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(day.year, day.month, day.day);
-    if (d == today) return 'Today';
-    if (d == today.add(const Duration(days: 1))) return 'Tomorrow';
-    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${weekdays[d.weekday - 1]} ${d.day}/${d.month}';
-  }
-
-  static final RegExp _stampSuffix = RegExp(
-    r'_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?$',
-  );
-
-  /// Presentation facts for a library entry, derived once per build:
-  /// title (file name minus stamp/extension, or the channel name), the best
-  /// recorded-at moment (embedded stamp beats file mtime — mtime is the END
-  /// of a capture), and a duration (store truth, else mtime − stamp).
-  ({String title, String? channel, DateTime recordedAt, int? durationMs})
-  _displayFor(RecordingLibraryEntry entry) {
-    var base = entry.name;
-    final dot = base.lastIndexOf('.');
-    if (dot > 0) base = base.substring(0, dot);
-    DateTime? stamp;
-    final match = _stampSuffix.firstMatch(base);
-    if (match != null) {
-      base = base.substring(0, match.start);
-      stamp = DateTime(
-        int.parse(match.group(1)!),
-        int.parse(match.group(2)!),
-        int.parse(match.group(3)!),
-        int.parse(match.group(4)!),
-        int.parse(match.group(5)!),
-        int.parse(match.group(6)!),
-      );
-    }
-    final title = base.replaceAll('_', ' ').trim();
-    final fallback = DateTime.fromMillisecondsSinceEpoch(entry.recordedAtMs);
-    final recordedAt = stamp ?? fallback;
-    var durationMs = entry.durationMs;
-    if (durationMs == null && stamp != null) {
-      final gap = fallback.difference(stamp).inMilliseconds;
-      // Only when mtime is plausibly the capture's end.
-      if (gap > 1000 && gap < 12 * 60 * 60 * 1000) durationMs = gap;
-    }
-    return (
-      title: title.isEmpty ? 'Recording' : title,
-      channel: entry.channelName,
-      recordedAt: recordedAt,
-      durationMs: durationMs,
-    );
-  }
-
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final desktopCaptures = _desktopCaptures;
-    final liveCount = _live.length + desktopCaptures.length;
-    final totalBytes = _library.fold<int>(0, (sum, e) => sum + e.bytes);
+    final desktopCaptures = _sections.data.desktopCaptures;
+    final liveCount = _owners.live.length + desktopCaptures.length;
+    final totalBytes = _owners.library.fold<int>(0, (sum, e) => sum + e.bytes);
     final empty =
-        !_loading && liveCount == 0 && _schedules.isEmpty && _library.isEmpty;
+        !_owners.loading &&
+        liveCount == 0 &&
+        _owners.schedules.isEmpty &&
+        _owners.library.isEmpty;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -782,16 +536,16 @@ class _RecordingsPageState extends State<RecordingsPage>
               // library delete icon: no alarm banner, no live Stop, no
               // schedule rows, and no desktop folder button in between.
               onScheduleDown:
-                  (!_desktop &&
-                      !(_isAndroid && !_exactAlarms) &&
+                  (!_sections.data.desktop &&
+                      !(_sections.data.isAndroid && !_owners.exactAlarms) &&
                       liveCount == 0 &&
-                      _schedules.isEmpty &&
-                      _library.isNotEmpty)
-                  ? () => _firstLibraryFocus.requestFocus()
+                      _owners.schedules.isEmpty &&
+                      _owners.library.isNotEmpty)
+                  ? () => _owners.firstLibraryFocus.requestFocus()
                   : null,
             ),
             Expanded(
-              child: _loading
+              child: _owners.loading
                   ? const Center(
                       child: CircularProgressIndicator(
                         color: kRecordingsHubAccent,
@@ -800,7 +554,8 @@ class _RecordingsPageState extends State<RecordingsPage>
                   : empty
                   ? RecordingsHubEmptyDvr(
                       onSchedule: () => unawaited(_createManualSchedule()),
-                      showAlarmBanner: _isAndroid && !_exactAlarms,
+                      showAlarmBanner:
+                          _sections.data.isAndroid && !_owners.exactAlarms,
                       onOpenAlarmSettings: () => unawaited(
                         LiveRecordingService.openExactAlarmSettings(),
                       ),
@@ -808,7 +563,8 @@ class _RecordingsPageState extends State<RecordingsPage>
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
                       children: [
-                        if (_isAndroid && !_exactAlarms) ...[
+                        if (_sections.data.isAndroid &&
+                            !_owners.exactAlarms) ...[
                           RecordingsHubAlarmBanner(
                             onTap: () => unawaited(
                               LiveRecordingService.openExactAlarmSettings(),
@@ -816,12 +572,12 @@ class _RecordingsPageState extends State<RecordingsPage>
                           ),
                           const SizedBox(height: 14),
                         ],
-                        if (_showBatteryNudge) ...[
+                        if (_sections.data.showBatteryNudge) ...[
                           RecordingsHubBatteryBanner(
                             onFix: () => unawaited(
                               LiveRecordingService.requestIgnoreBatteryOptimizations(),
                             ),
-                            onDismiss: _dismissBatteryNudge,
+                            onDismiss: _sections.data.dismissBatteryNudge,
                           ),
                           const SizedBox(height: 14),
                         ],
@@ -835,14 +591,14 @@ class _RecordingsPageState extends State<RecordingsPage>
                             RecordingsHubLiveCard(
                               channelName: capture.channelName,
                               startedAt: capture.startedAt,
-                              now: _now,
+                              now: _owners.now,
                               bytesOf: () => capture.bytes,
-                              fmtBytes: _fmtBytes,
-                              fmtElapsed: _fmtElapsed,
+                              fmtBytes: _sections.format.fmtBytes,
+                              fmtElapsed: _sections.format.fmtElapsed,
                               autofocus: PlatformUtil.isTelevision && i == 0,
                               onStop: () => unawaited(_stopDesktop(capture)),
                             ),
-                          for (final (i, rec) in _live.indexed)
+                          for (final (i, rec) in _owners.live.indexed)
                             RecordingsHubLiveCard(
                               channelName: rec.channelName.isEmpty
                                   ? rec.fileName
@@ -850,10 +606,10 @@ class _RecordingsPageState extends State<RecordingsPage>
                               startedAt: DateTime.fromMillisecondsSinceEpoch(
                                 rec.startedAtMs,
                               ),
-                              now: _now,
+                              now: _owners.now,
                               bytesOf: () => rec.bytes,
-                              fmtBytes: _fmtBytes,
-                              fmtElapsed: _fmtElapsed,
+                              fmtBytes: _sections.format.fmtBytes,
+                              fmtElapsed: _sections.format.fmtElapsed,
                               autofocus:
                                   PlatformUtil.isTelevision &&
                                   i == 0 &&
@@ -864,12 +620,12 @@ class _RecordingsPageState extends State<RecordingsPage>
                         ],
                         RecordingsHubSectionHeader(
                           label: 'SCHEDULED',
-                          chip: _schedules.isEmpty
+                          chip: _owners.schedules.isEmpty
                               ? null
-                              : '${_schedules.length} UPCOMING',
+                              : '${_owners.schedules.length} UPCOMING',
                           chipColor: kRecordingsHubAccent,
                         ),
-                        if (_schedules.isEmpty)
+                        if (_owners.schedules.isEmpty)
                           const RecordingsHubEmptyHint(
                             text:
                                 'Nothing scheduled — pick an upcoming '
@@ -877,15 +633,15 @@ class _RecordingsPageState extends State<RecordingsPage>
                                 'press Schedule above.',
                           )
                         else
-                          for (final (i, schedule) in _schedules.indexed)
+                          for (final (i, schedule) in _owners.schedules.indexed)
                             RecordingsHubScheduleRow(
                               schedule: schedule,
-                              now: _now,
+                              now: _owners.now,
                               timeText:
-                                  '${_dayLabel(DateTime.fromMillisecondsSinceEpoch(schedule.startMs))} · '
-                                  '${_clock(schedule.startMs)} – '
-                                  '${_clock(schedule.endMs)}',
-                              fmtCountdown: _fmtCountdown,
+                                  '${_sections.format.dayLabel(DateTime.fromMillisecondsSinceEpoch(schedule.startMs))} · '
+                                  '${_sections.format.clock(schedule.startMs)} – '
+                                  '${_sections.format.clock(schedule.endMs)}',
+                              fmtCountdown: _sections.format.fmtCountdown,
                               autofocus:
                                   PlatformUtil.isTelevision &&
                                   liveCount == 0 &&
@@ -896,22 +652,23 @@ class _RecordingsPageState extends State<RecordingsPage>
                         const SizedBox(height: 18),
                         RecordingsHubSectionHeader(
                           label: 'LIBRARY',
-                          chip: _library.isEmpty
+                          chip: _owners.library.isEmpty
                               ? null
-                              : '${_library.length} · ${_fmtBytes(totalBytes)}',
+                              : '${_owners.library.length} · ${_sections.format.fmtBytes(totalBytes)}',
                           chipColor: Colors.white38,
-                          action: _desktop
+                          action: _sections.data.desktop
                               ? RecordingsHubHubIconButton(
                                   icon: Icons.folder_open_rounded,
                                   tooltip: 'Show in folder',
                                   onPressed: () => unawaited(_openFolder()),
-                                  onDown: _library.isEmpty
+                                  onDown: _owners.library.isEmpty
                                       ? null
-                                      : () => _firstLibraryFocus.requestFocus(),
+                                      : () => _owners.firstLibraryFocus
+                                            .requestFocus(),
                                 )
                               : null,
                         ),
-                        if (_library.isEmpty)
+                        if (_owners.library.isEmpty)
                           const RecordingsHubEmptyHint(
                             text:
                                 'No recordings yet. Focus a live channel '
@@ -920,23 +677,29 @@ class _RecordingsPageState extends State<RecordingsPage>
                                 'to play.',
                           )
                         else
-                          for (final (i, entry) in _library.indexed)
+                          for (final (i, entry) in _owners.library.indexed)
                             Builder(
                               builder: (context) {
-                                final display = _displayFor(entry);
+                                final display = _sections.format.displayFor(
+                                  entry,
+                                );
                                 return RecordingsHubLibraryRow(
-                                  focusNode: i == 0 ? _firstLibraryFocus : null,
+                                  focusNode: i == 0
+                                      ? _owners.firstLibraryFocus
+                                      : null,
                                   title: display.title,
                                   subtitle: [
                                     if (display.channel != null &&
                                         display.channel!.isNotEmpty &&
                                         display.channel != display.title)
                                       display.channel!,
-                                    '${_dayLabel(display.recordedAt)} '
-                                        '${_clock(display.recordedAt.millisecondsSinceEpoch)}',
-                                    _fmtBytes(entry.bytes),
+                                    '${_sections.format.dayLabel(display.recordedAt)} '
+                                        '${_sections.format.clock(display.recordedAt.millisecondsSinceEpoch)}',
+                                    _sections.format.fmtBytes(entry.bytes),
                                     if (display.durationMs != null)
-                                      _fmtDuration(display.durationMs!),
+                                      _sections.format.fmtDuration(
+                                        display.durationMs!,
+                                      ),
                                   ].join(' · '),
                                   monogramName:
                                       display.channel?.isNotEmpty == true
@@ -945,7 +708,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                                   autofocus:
                                       PlatformUtil.isTelevision &&
                                       liveCount == 0 &&
-                                      _schedules.isEmpty &&
+                                      _owners.schedules.isEmpty &&
                                       i == 0,
                                   onPlay: () => unawaited(_play(entry)),
                                   onDelete: () => unawaited(_delete(entry)),
@@ -954,7 +717,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                             ),
                         const SizedBox(height: 20),
                         Text(
-                          _desktop
+                          _sections.data.desktop
                               ? 'Recordings run while Debrify is open and '
                                     'the computer is awake · saved in '
                                     'Downloads/Debrify/Recordings'
