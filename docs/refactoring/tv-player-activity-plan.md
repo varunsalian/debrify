@@ -1270,3 +1270,17 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   alignment; expectations corrected — no countdown, work continues across
   `onStop`, destroy-only cancellation, unbounded cue cache).
 - 2026-10-08 — phase 4 design round 2 (Codex): **No P1s**, no further findings. Phase 4 design approved.
+
+- 2026-10-08 — phase 4 step T: re-measured `eee52b084` (2,629 PSI
+  declarations); manifest owns 66 moved subtrees / 1,131 partition lines,
+  31 references patched in 14 retained declarations, four added declarations
+  and 28 exact initializer-timing proofs. Earlier destinations (26 files,
+  including all four phase-3 controllers) frozen at `eee52b084`; no whitelist.
+  Original all-retained comparison and complete production-config extraction
+  fixture: zero differences. Fixture compiles; all 23 direct/alias/constructor
+  invocation descriptors unchanged; four reviewed Runnable self receivers.
+  Phase-4 constructor/alias/receiver audit fixture and move-checker negatives
+  added; all historical phase suites/checks retained. Evidence: `p4/`;
+  production unchanged. Checker self-tests: 73/73 pass (historical suites
+  included; each negative fails for its stated reason). Explicit controller property types resolve the Host
+  cycle without construction-time reads.

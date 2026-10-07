@@ -178,9 +178,37 @@ public final class KotlinPsi {
                 if (!errors.isEmpty()) throw new IllegalArgumentException("PSI syntax error: " + errors.iterator().next().getErrorDescription());
                 int prefix = file.getPackageDirective() == null ? 0 : file.getPackageDirective().getTextRange().getEndOffset();
                 if (file.getImportList() != null) prefix = Math.max(prefix, file.getImportList().getTextRange().getEndOffset());
-                List<Object> thisSites = new ArrayList<>();
+                List<Object> thisSites = new ArrayList<>(), allThis = new ArrayList<>(), aliases = new ArrayList<>();
                 for (KtThisExpression expression : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtThisExpression.class)) {
                     PsiElement parent = expression.getParent();
+                    String receiver = "activity";
+                    if (expression.getLabelName() == null) {
+                        PsiElement scope = parent;
+                        while (scope != null) {
+                            if (scope instanceof KtObjectDeclaration) {
+                                receiver = ((KtObjectDeclaration)scope).getSuperTypeListEntries().stream()
+                                    .anyMatch(entry -> entry.getText().equals("Runnable")) ? "Runnable" : "object";
+                                break;
+                            }
+                            if (scope instanceof KtClass) break;
+                            scope = scope.getParent();
+                        }
+                    }
+                    // Calls must contain the argument, rather than merely contain
+                    // a lambda/property in which an unrelated this appears.
+                    PsiElement callParent = parent;
+                    while (callParent != null && !(callParent instanceof KtCallExpression) &&
+                           !(callParent instanceof KtProperty) && !(callParent instanceof KtNamedFunction)) callParent = callParent.getParent();
+                    Map<String, Object> site = map("start", offset(expression.getTextRange().getStartOffset()),
+                        "end", offset(expression.getTextRange().getEndOffset()), "text", expression.getText(), "receiver", receiver);
+                    if (callParent instanceof KtCallExpression) {
+                        KtCallExpression call = (KtCallExpression)callParent;
+                        site.put("call_start", offset(call.getTextRange().getStartOffset()));
+                        site.put("call_end", offset(call.getTextRange().getEndOffset()));
+                        site.put("callee", call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText());
+                    }
+                    allThis.add(site);
+                    // Historical call-site output remains byte-for-byte compatible.
                     while (parent != null && !(parent instanceof KtCallExpression)) parent = parent.getParent();
                     if (parent instanceof KtCallExpression) {
                         KtCallExpression call = (KtCallExpression)parent;
@@ -189,8 +217,29 @@ public final class KotlinPsi {
                             "call_end", offset(call.getTextRange().getEndOffset()),
                             "callee", call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText()));
                     }
+                    if (expression.getParent() instanceof KtProperty && receiver.equals("activity")) {
+                        KtProperty property = (KtProperty)expression.getParent();
+                        if (property.getInitializer() == expression) {
+                            List<Object> uses = new ArrayList<>();
+                            for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(property.getParent(), KtNameReferenceExpression.class)) {
+                                if (!ref.getReferencedName().equals(property.getName()) || ref.getTextOffset() <= property.getTextOffset()) continue;
+                                PsiElement enclosing = ref.getParent();
+                                while (enclosing != null && !(enclosing instanceof KtCallExpression) && enclosing != property.getParent()) enclosing = enclosing.getParent();
+                                Map<String, Object> use = map("start", offset(ref.getTextRange().getStartOffset()), "end", offset(ref.getTextRange().getEndOffset()));
+                                if (enclosing instanceof KtCallExpression) {
+                                    KtCallExpression call = (KtCallExpression)enclosing;
+                                    use.put("call_start", offset(call.getTextRange().getStartOffset()));
+                                    use.put("call_end", offset(call.getTextRange().getEndOffset()));
+                                    use.put("callee", call.getCalleeExpression().getText());
+                                }
+                                uses.add(use);
+                            }
+                            aliases.add(map("start", offset(expression.getTextRange().getStartOffset()), "name", property.getName(), "uses", uses));
+                        }
+                    }
                 }
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
+                    "all_this_sites", allThis, "context_aliases", aliases,
                     "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));

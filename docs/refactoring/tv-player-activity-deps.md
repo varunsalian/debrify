@@ -5207,3 +5207,35 @@ progress (3) ≈ 855 lines, 49 patches.
 - `loadPlayerDefaults` mixes display/night/effects defaults with display-mode matching and skip-segment
   preferences.
 - `showSubtitleTrackDialog` (dead) declares a local `subtitleTracks` that shadows the field.
+
+
+## Phase 4 step T — re-measured on `eee52b084`
+
+The approved scope contains 66 moved original subtrees and 1,131 partition
+lines including attached comments (32 auto-sync, 32 subtitle members plus two
+companion constants), 31 inbound reference patches
+in 14 retained declarations, and four added declarations. Controller slots
+are `autoSyncRunning` at line 730 and `subtitleSettingsVisible` at line 1114.
+`SUBTITLE_LOADING_LABEL` and `EXTERNAL_SUBTITLE_TICK_MS` move file-private.
+The complete measured selector/line inventory is archived in
+`p4/remeasured-inventory.json`; `tvplayer_p4.json` pins the exact partition,
+Host interfaces, computed activity/owning-controller forwarders, readiness
+getters, defaults and imports. The controllers' mutually referring property
+initializers have explicit controller types to avoid Kotlin inference cycles.
+
+The receiver audit covers 23 invocations, including constructors and the
+`ctx = this` alias in `umTimingRows` (13373; use 13374). Four reviewed Runnable
+receivers remain unchanged: ladder repost 13607, verify identity 13627,
+verify repost 13628 and external ticker repost 14384. All 28 moved property
+initializers after the first owned slot are listed with exact original text
+and an inert proof: literals, array/collection allocations, main-looper Handler
+allocation without posts, or Runnable/callback object allocation with deferred
+bodies. Shared `externalSubtitleHandler`, `subtitleScope`, overlays and
+`speechTap` remain activity-owned. Earlier destinations, including all four
+phase-3 controllers, are frozen at `eee52b084` with an empty whitelist.
+
+The production-config extraction fixture is evidence only; production in this
+branch remains unchanged. It compiles and all 23 before/after invocation
+descriptors match. The separate offline audit fixture exercises seven
+constructors, an alias use, and Runnable self receivers; negatives reject a
+changed constructor overload, missing alias/use and wrong receiver list.

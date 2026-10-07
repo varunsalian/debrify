@@ -108,10 +108,7 @@ def extraction(manifest, original):
             continue
         start, end = spans[row['original']]
         text = original[start:end]
-        for edit in row.get('substitutions', []) + row.get('patches', []):
-            if text.count(edit['before']) != edit['count']:
-                raise ValueError('fixture text substitution occurrence count')
-            text = text.replace(edit['before'], edit['after'])
+        text = apply_text_edits(text, row.get('substitutions', []) + row.get('patches', []))
         source_edits[row['original']] = text if row['fate'] == 'patched' else ''
         if row['fate'] == 'moved':
             moved[row['destination'], row['target']] = text
@@ -134,3 +131,45 @@ def extraction(manifest, original):
             return text
         files[path] = render('')
     return files
+
+
+def check_initializer_timing(manifest, inventory, original, errors):
+    """All later property initializers require an exact, reviewed inert proof."""
+    import re
+    fields = [r for r in manifest['declarations'] if r['fate'] == 'moved'
+              and inventory[r['original']]['selector'].startswith('property ')
+              and '/companion ' not in r['original']]
+    slots = {r['destination']: min((x['original'] for x in fields if x['destination'] == r['destination']),
+                                   key=lambda name: inventory[name]['start']) for r in fields}
+    expected = {r['original']: slots[r['destination']] for r in fields if r['original'] != slots[r['destination']]}
+    rows = manifest.get('initializer_timing', [])
+    if len(rows) != len(expected) or {r['original']: r['slot'] for r in rows} != expected:
+        errors.append('initializer timing coverage differs from all later moved fields')
+        return
+    for row in rows:
+        node = inventory[row['original']]
+        text = original[node['start']:node['end']]
+        if row.get('text') != text or row.get('line') != original.count('\n', 0, node['start']) + 1 or not row.get('proof'):
+            errors.append('initializer timing requires original text/line and inert proof: ' + row['original'])
+        expression = text.split(' = ', 1)[-1].split(' //', 1)[0].strip()
+        kind = ('constant' if re.fullmatch(r'(?:null|false|true|0|0L)', expression) else
+                'handler-allocation' if expression == 'Handler(Looper.getMainLooper())' else 'allocation')
+        inert = kind != 'allocation' or bool(re.fullmatch(
+            r'(?:intArrayOf\([\d, ]+\)|emptyList\(\)|mutableListOf<[^\n]+>\(\)|Runnable \{[\s\S]*\}|object : SubtitlePanelController.Callbacks \{[\s\S]*\})', expression))
+        if row.get('kind') != kind or not inert:
+            errors.append('initializer timing not proven inert: ' + row['original'])
+
+
+def apply_text_edits(text, edits):
+    """Pin complete physical-line contexts without relying on indentation."""
+    import re
+    for edit in edits:
+        if edit['before'].startswith('\n') and '\n' not in edit['before'][1:]:
+            pattern = re.compile(r'\n([ \t]*)' + re.escape(edit['before'][1:]) + r'(?=\n|$)')
+            text, count = pattern.subn(lambda match: '\n' + match[1] + edit['after'].lstrip('\n'), text)
+        else:
+            count = text.count(edit['before'])
+            text = text.replace(edit['before'], edit['after'])
+        if count != edit['count']:
+            raise ValueError('fixture text substitution occurrence count')
+    return text
