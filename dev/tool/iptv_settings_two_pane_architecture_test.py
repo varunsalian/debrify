@@ -143,10 +143,10 @@ def main():
                 ('facade declaration', facade + 'class Extra {}\n', 'only export'),
                 ('facade import', "import 'package:flutter/material.dart';\n" + facade, 'only export'),
                 ('facade cap', facade + '// negative cap\n', 'facade limit'),
-                ('missing export', facade.replace('IptvAutoRefreshDialog, ', ''), 'original five names'),
-                ('extra export', facade.replace('IptvAutoRefreshDialog, ', 'Extra, IptvAutoRefreshDialog, '), 'original five names'),
+                ('missing export', facade.replace('IptvAutoRefreshDialog,', ''), 'original five names'),
+                ('extra export', facade.replace('IptvAutoRefreshDialog,', 'Extra, IptvAutoRefreshDialog, '), 'original five names'),
                 ('wrong destination', facade.replace('iptv_auto_refresh_dialog.dart', 'iptv_two_pane_destination.dart'), 'exact destination'),
-                ('swapped destinations', facade.replace('IptvAutoRefreshDialog, ', 'IptvSettingsTwoPane, ').replace('show IptvSettingsTwoPane, IptvSettingsTwoPaneState', 'show IptvAutoRefreshDialog, IptvSettingsTwoPaneState'), 'exact destination'),
+                ('swapped destinations', facade.replace('IptvAutoRefreshDialog,', 'IptvSettingsTwoPane, ').replace('show IptvSettingsTwoPane, IptvSettingsTwoPaneState', 'show IptvAutoRefreshDialog, IptvSettingsTwoPaneState'), 'exact destination'),
                 ('facade marker', facade + '// TEMP(iptv_settings_two_pane) negative\n', 'temporary IPTV settings two-pane'),
             ]:
                 negative(name, FACADE, changed, expected)

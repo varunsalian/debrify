@@ -892,7 +892,7 @@ viewport, with entries away from either clamp boundary.
 - Full step-2 compiling composition: real CLI accepts all 73 leaves; strict
   analyzer has 19 inventoried infos, zero errors/warnings/additions; runtime
   and strict macOS golden checks pass 128/128. Probe facade is seven physical
-  lines, 14 destinations are at most 351 lines. Source hashes, measurements
+  lines, 14 destinations are at most 352 lines. Source hashes, measurements
   and commands are in `step0b-composition-verification.json` and companion
   logs. Original widget bytes, lifecycle, comments, constructors, consts,
   inherited/lexical contexts and live callbacks remain pinned.
@@ -998,3 +998,72 @@ has nine inventoried infos and zero additions. Gate 1 now follows on the
 committed step-1 tree against accepted `base2`, with paths `[]` and the same
 three recorded flags. Gate evidence and its commit will be recorded after
 completion before step 2.
+
+
+### Gate 1 — identity comparison and timing notes (2026-10-07)
+
+Step 1 / gate commit is `bf11bc92f`. The full run records paths `[]` and
+`--no-pub --concurrency=2 --timeout=3m`, unchanged committed HEAD/tree, and
+12,202 successes, 13 failures, 32 errors and 20 skips. Against latest
+`base2`, no identity/suite is missing or added and no new skip occurs. The
+raw helper comparison is **FAIL** for four transient errors, preserved in
+`gate1-vs-base2.txt`; it is not represented as an all-green helper run.
+
+NOTE: search's keyword-cache focus case had not issued its expected request
+after the fixture's fixed 150 ms initialization wait. Two MDB duplicate-guard
+cases and the MDB category-directory case lacked their mocked choices/results
+after bounded async pumps. First failure was investigated before extraction
+continued. Entire affected application and fixture files are byte-identical
+to original (b); all four failed identities pass unchanged in serialized
+isolation (search 4/4, MDB dialog suite 35/35), and both scoped comparisons
+with `base2` pass. `gate1-identity-audit.json` and `gate1-NOTE.txt` retain
+identities, original hashes, commands and decision. The gate is accepted with
+these timing notes and zero unexplained new failures. No timeout, assertion,
+allowlist or raw evidence was changed. Step 2 starts only after these reruns.
+
+### Step 2 — atomic widget/State wiring (2026-10-07)
+
+The whole widget and State now use the eight bridge destinations in one move;
+all 73 original leaves are wired, and no original declaration or forwarder
+remains in the seven-line pure-export facade. Its exact five public names
+and original importers are retained. Owners are created eagerly as a State
+field initializer; the 24 pane nodes, grow-only rail nodes, scroll controller,
+notifier and cached stats retain their ownership and disposal order. The five
+sections are cached once, their constructors only store dependencies, and the
+widget/context callbacks read live State values. Callback identity, lexical
+contexts, comments, consts and constructor bodies remain pinned.
+
+All 15 production facade/destination files are byte-identical to the accepted
+step-0b compiling probe (`step2-compiling-probe-byte-parity.json`). Actual
+probe/production maximum is 352 lines; the earlier prose figure 351 was a
+transcription error, corrected from the retained measurement artifact. Bridge
+sizes: dependencies 36, owners 36, navigation 184, rail 304, panes 352, list
+panes 169, preference panes 306 and widget/State 309. Six pieces retain step-1
+sizes. Every destination is below its unconditional 500-line cap. All eight
+new bridge files enter `kExtractedShapeResidue` at 0; the obsolete facade size
+baseline entry is removed. Temporary 1,510-line facade retention has exited.
+
+Focused behavior/source/compatibility/unchanged-IPTV checks finish with 357
+successes and the same pre-existing profile SharedPreferences source-guard
+failure, zero new failures/missing identities/skips versus `base2`, and stable
+inputs. Strict macOS and Linux goldens pass 13/13 each. Architecture real-main
+negatives, sizes, storage references, CI format/analyze, strict per-symbol
+inventory (19 infos, zero errors/warnings/additions), original ink/theme/shape
+parity, source reader, scope and diff checks pass. Existing tuner analyzer
+inventory also passes with nine infos and zero additions. Forbidden files and
+all importers remain byte-identical to R. All five found-not-fixed items and
+every documented legacy exception/exit remain unchanged. All 21 integrated manifest/self-test runs pass with isolated parser packages;
+the 20 pre-existing outputs remain byte-identical to originals. The normal
+clone also passes every current new checker/self-test, including completion
+architecture negatives, after pub get with a directory `.git`. Step 2 is
+committed before root completion flags are activated.
+
+
+The fresh normal-clone step-3 completion probe caught three no-op negative
+fixtures: their comma-space token expected a one-line facade show list, while
+the actual seven-line facade has comma-newline. The replacements now match
+the comma token, with every named assertion, no-op rejection and required
+real-main diagnostic intact. This changes only completion-negative inputs;
+step-2's completion-false checks are unaffected and were rerun explicitly.
+The preliminary clone result is retained/discarded as preliminary, and the
+corrected completion probe is rerun before activating root completion.

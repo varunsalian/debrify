@@ -275,6 +275,22 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_rail.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_preference_panes.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_panes.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_navigation.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_list_panes.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_dependencies.dart':
+      0,
   'lib/features/iptv_settings_two_pane/presentation/iptv_auto_refresh_dialog.dart':
       0,
   'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_destination.dart':
