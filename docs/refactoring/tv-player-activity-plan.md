@@ -415,3 +415,42 @@ guide; auto-sync ring animates during subtitle auto-sync.
   overloads.
 - 2026-10-07 — design round 3 (Codex): **No P1s**; two P3 wording fixes
   applied. Design approved for phase 1 execution.
+- 2026-10-07 — **Phase 1 step T complete**, commit `05dd8a9e9` on
+  `refactor/tvplayer-p1`. Added `android_junit_evidence.py` run/compare with
+  reference-compatible archives and 3 passing self-tests (including the
+  rule-6 rejection cases). Kotlin 2.2.20 PSI adapter builds offline from the
+  Gradle cache; no fallback parser or application dependency changes.
+  Original `39c630303` all-retained self-comparison: **3,477 declarations
+  classified, zero differences**. Phase-1 manifest pins 29 moved subtrees
+  across 10 destinations and retained ownership/imports. **24 checker
+  self-tests pass**, including a complete extraction of the original into
+  the planned destinations and every required negative with its expected
+  rejection reason. Evidence: `p1/original-all-retained.json`,
+  `p1/original-self-comparison.log`, `p1/checker-self-tests.log`,
+  `p1/junit-helper-self-tests.log`, `p1/complete-extraction-fixture/`.
+- 2026-10-07 — **Phase 1 step 0 complete**, commit `04540666d`.
+  Added **38 characterization tests** and the private-original reflection
+  helper; reused 8 header/progress/metadata-merge tests. All seven adapters,
+  all four payload overloads, ordering/filtering/recycling, notifications,
+  IPTV identity/DiffUtil/EPG eligibility, picker readiness/membership,
+  attached measured guide posts, guide styles, and ring timing/draw/lifetime
+  contracts are covered. **49 isolated original-code mutations** across
+  **46 named tests** each compiled and failed on the named assertion.
+  Full table and evidence references are appended to the dependency report's
+  “Phase 1 step 0” section. The detached mutation worktree at `39c630303`
+  was removed after the proofs; raw patches/logs/XML remain in `p1/mutations/`.
+  Clean original run `junit/p1-step0-original-verified` and post-step-0
+  baseline **`junit/p1-step0`** each have **297 identities: 296 pass, the
+  same known focus failure, no skips**. Compared with
+  `baseline-39c630303`: **38 passing additions only**, all 259 original
+  identities/statuses preserved. Original/current comparisons also match;
+  run fingerprints are stable. Baseline tested revision `05dd8a9e9` with
+  12 dirty files (the committed tests/report); JBR 21.0.10. File-size and
+  diff checks pass; facade-name search found no explicit consumers.
+- 2026-10-07 — **Stopped after step 0 as requested, before step 1**.
+  Production source, `pubspec.lock`, and ProGuard rules are unchanged; no
+  device interaction, branch switch, or push. Claude's independent ≥10
+  additional mutation samples and any step 0b work remain for the reviewer.
+  Moves, anchor/helper retargets, release/R8 and full Flutter phase gates
+  remain at their planned milestones. Later JVM runs compare against
+  **`p1-step0`**, not the pre-characterization baseline.
