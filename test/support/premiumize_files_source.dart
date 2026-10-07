@@ -73,11 +73,26 @@ String premiumizeOriginalMember(String originalName) {
       continue;
     }
     const gap = r'(?:\s|//[^\n]*\n|/\*[\s\S]*?\*/)*';
-    String pattern(List<dynamic> values) =>
-        values.map((value) => RegExp.escape(value as String)).join(gap);
+    String pattern(List<dynamic> values) {
+      final result = StringBuffer();
+      for (var index = 0; index < values.length; index++) {
+        if (index != 0) result.write(gap);
+        // The checker excludes optional argument/parameter format commas.
+        // Match those commas while retaining every recorded prefix token.
+        if (values[index] == ')' &&
+            index != 0 &&
+            values[index - 1] != '(' &&
+            values[index - 1] != ',') {
+          result.write('(?:,$gap)?');
+        }
+        result.write(RegExp.escape(values[index] as String));
+      }
+      return result.toString();
+    }
+
     final recorded = RegExp(
       '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
-      '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
+      '\\{$gap(${pattern(site['body_tokens'] as List<dynamic>)})$gap\\}',
     );
     final matches = recorded.allMatches(member).toList();
     if (matches.length != 1) {
@@ -87,7 +102,7 @@ String premiumizeOriginalMember(String originalName) {
     member = member.replaceRange(
       match.start,
       match.end,
-      '${match[1]}${(site['body_tokens'] as List<dynamic>).join(' ')}',
+      '${match[1]}${match[2]}',
     );
   }
   final config =

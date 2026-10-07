@@ -26,7 +26,7 @@
 2304 lib/widgets/iptv/spotlight/spotlight_live_timeline.dart
 2300 lib/services/iptv_media_store.dart
 2294 lib/services/trakt/trakt_service.dart
-1684 lib/screens/premiumize/premiumize_files_screen.dart
+1095 lib/screens/premiumize/premiumize_files_screen.dart
 2231 lib/screens/settings/iptv_settings_two_pane.dart
 2228 lib/widgets/tv_sidebar_nav.dart
 2208 lib/widgets/series_browser.dart

@@ -35,7 +35,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/premiumize/premiumize_files_screen.dart': 6,
+  'lib/screens/premiumize/premiumize_files_screen.dart': 2,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart':
       0,
 
@@ -282,6 +282,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
   'lib/features/premiumize_files/models/folder_view_mode.dart': 0,
   'lib/features/premiumize_files/models/premiumize_view.dart': 0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_actions_composition.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_back_navigation.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_loading.dart':
@@ -292,19 +294,33 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_data_composition.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_date_format.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_download.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_playback.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_download.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_navigation.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_playback.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_actions.dart':
+      4,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_composition.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_playlist_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_actions.dart':
       0,

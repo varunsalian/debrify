@@ -11,26 +11,19 @@ import 'package:debrify/features/premiumize_files/models/premiumize_view.dart';
 import 'package:debrify/features/premiumize_files/application/premiumize_sort_policy.dart';
 import 'package:debrify/features/premiumize_files/application/premiumize_playlist_titles.dart';
 import 'dart:async';
-import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
+// re-exports PlaylistEntry
 import '../../services/analytics_service.dart';
-import '../../services/premiumize_service.dart';
-import '../../services/download_service.dart';
-import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/series_source_service.dart';
 import '../../models/premiumize_folder_item.dart';
 import '../../models/premiumize_transfer.dart';
-import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
-import '../../utils/series_parser.dart';
 import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_segmented_tabs.dart';
 import '../../widgets/cloud/cloud_theme.dart';
-import '../../widgets/file_selection_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../theme/app_theme.dart';
@@ -160,590 +153,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     _focus.searchButtonFocusNode.dispose();
     _focus.searchClearFocusNode.dispose();
     super.dispose();
-  }
-
-  Future<void> _playFile(PremiumizeFolderItem file) async {
-    String? url = file.playableUrl;
-    // Search hits (folder/search) may omit the direct link — resolve by id.
-    if ((url == null || url.isEmpty) &&
-        _catalog.apiKey != null &&
-        _catalog.apiKey!.isNotEmpty) {
-      final resolved = await PremiumizeService.resolveItemById(
-        _catalog.apiKey!,
-        file.id,
-      );
-      url = resolved?.link;
-    }
-    if (url == null || url.isEmpty) {
-      _sections.feedback.showSnackBar(
-        'No playable URL for this file',
-        isError: true,
-      );
-      return;
-    }
-    final sizeBytes = file.size > 0 ? file.size : null;
-    if (!mounted) return;
-    MainPageBridge.notifyPlayerLaunching();
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: url,
-        title: file.name,
-        subtitle: sizeBytes != null
-            ? Formatters.formatFileSize(sizeBytes)
-            : null,
-        playlist: [
-          PlaylistEntry(
-            url: url,
-            title: file.name,
-            relativePath: file.relativePath ?? file.name,
-            provider: 'premiumize',
-            premiumizeItemId: file.id,
-            sizeBytes: sizeBytes,
-          ),
-        ],
-        startIndex: 0,
-      ),
-    );
-  }
-
-  Future<void> _playFolder(PremiumizeFolderItem folder) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    _sections.feedback.showLoadingDialog('Scanning folder for videos...');
-    try {
-      final all = await PremiumizeService.listFolderRecursive(
-        apiKey,
-        folder.id,
-      );
-      _sections.feedback.dismissDialog();
-      if (!mounted) return;
-
-      final videos = all.where((f) => f.isVideo).toList();
-      if (videos.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any videos',
-          isError: true,
-        );
-        return;
-      }
-      await _playPremiumizeVideos(videos, folder.name);
-    } catch (e) {
-      _sections.feedback.dismissDialog();
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _playPremiumizeVideos(
-    List<PremiumizeFolderItem> videos,
-    String collectionName,
-  ) async {
-    if (videos.isEmpty) return;
-
-    // Single video.
-    if (videos.length == 1) {
-      final v = videos.first;
-      final url = v.playableUrl;
-      if (url == null || url.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'No playable URL for this file',
-          isError: true,
-        );
-        return;
-      }
-      final sizeBytes = v.size > 0 ? v.size : null;
-      if (!mounted) return;
-      MainPageBridge.notifyPlayerLaunching();
-      await VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: url,
-          title: v.name,
-          subtitle: sizeBytes != null
-              ? Formatters.formatFileSize(sizeBytes)
-              : null,
-          playlist: [
-            PlaylistEntry(
-              url: url,
-              title: v.name,
-              relativePath: v.relativePath ?? v.name,
-              provider: 'premiumize',
-              premiumizeItemId: v.id,
-              sizeBytes: sizeBytes,
-            ),
-          ],
-          startIndex: 0,
-        ),
-      );
-      return;
-    }
-
-    // Collection.
-    final infos = videos
-        .map((v) => SeriesParser.parseFilename(v.name))
-        .toList();
-    final filenames = videos.map((v) => v.name).toList();
-    final bool isSeries =
-        videos.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
-
-    final indexed = List.generate(videos.length, (i) => i);
-    if (isSeries) {
-      indexed.sort((a, b) {
-        final sa = infos[a].season ?? 0, sb = infos[b].season ?? 0;
-        if (sa != sb) return sa.compareTo(sb);
-        final ea = infos[a].episode ?? 0, eb = infos[b].episode ?? 0;
-        if (ea != eb) return ea.compareTo(eb);
-        return videos[a].name.toLowerCase().compareTo(
-          videos[b].name.toLowerCase(),
-        );
-      });
-    } else {
-      indexed.sort(
-        (a, b) => videos[a].name.toLowerCase().compareTo(
-          videos[b].name.toLowerCase(),
-        ),
-      );
-    }
-
-    final sortedVideos = [for (final i in indexed) videos[i]];
-    final sortedInfos = [for (final i in indexed) infos[i]];
-
-    int startIndex = isSeries ? findFirstEpisodeIndex(sortedInfos) : 0;
-    if (startIndex < 0 || startIndex >= sortedVideos.length) startIndex = 0;
-
-    final entries = <PlaylistEntry>[];
-    for (int i = 0; i < sortedVideos.length; i++) {
-      final v = sortedVideos[i];
-      final info = sortedInfos[i];
-      final episodeLabel = formatPlaylistTitle(
-        info: info,
-        fallback: v.name,
-        isSeriesCollection: isSeries,
-      );
-      final title = composeEntryTitle(
-        seriesTitle: info.title,
-        episodeLabel: episodeLabel,
-        isSeriesCollection: isSeries,
-        fallback: v.name,
-      );
-      entries.add(
-        PlaylistEntry(
-          // folder/list already returns direct links, so fill all up front.
-          url: v.playableUrl ?? '',
-          title: title,
-          relativePath: v.relativePath ?? v.name,
-          provider: 'premiumize',
-          premiumizeItemId: v.id,
-          sizeBytes: v.size > 0 ? v.size : null,
-        ),
-      );
-    }
-
-    final totalBytes = sortedVideos.fold<int>(0, (s, v) => s + v.size);
-    final subtitle =
-        '${entries.length} ${isSeries ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
-
-    if (!mounted) return;
-    MainPageBridge.notifyPlayerLaunching();
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: entries[startIndex].url,
-        title: collectionName,
-        subtitle: subtitle,
-        playlist: entries,
-        startIndex: startIndex,
-      ),
-    );
-  }
-
-  // ── Download ───────────────────────────────────────────────────────────────
-
-  Future<void> _downloadFile(PremiumizeFolderItem file) async {
-    final url = file.link;
-    if (url == null || url.isEmpty) {
-      _sections.feedback.showSnackBar(
-        'No download URL for this file',
-        isError: true,
-      );
-      return;
-    }
-    try {
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'premiumize_api_key',
-        url: url,
-        fileName: file.name,
-        context: mounted ? context : null,
-      );
-      _sections.feedback.showSnackBar(
-        'Download queued: ${file.name}',
-        isError: false,
-      );
-    } catch (e) {
-      _sections.feedback.showSnackBar('Failed to download: $e', isError: true);
-    }
-  }
-
-  Future<void> _downloadFolder(PremiumizeFolderItem folder) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    _sections.feedback.showLoadingDialog('Scanning folder for files...');
-    try {
-      final all = await PremiumizeService.listFolderRecursive(
-        apiKey,
-        folder.id,
-      );
-      _sections.feedback.dismissDialog();
-      if (!mounted) return;
-
-      final files = all.where((f) => !f.isFolder).toList();
-      if (files.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any files',
-          isError: true,
-        );
-        return;
-      }
-
-      final dialogFiles = <Map<String, dynamic>>[];
-      for (int i = 0; i < files.length; i++) {
-        dialogFiles.add({
-          'name': files[i].relativePath ?? files[i].name,
-          '_fullPath': files[i].relativePath ?? files[i].name,
-          'size': files[i].size.toString(),
-          '_premiumizeIndex': i,
-        });
-      }
-
-      await showDialog(
-        context: context,
-        builder: (context) => FileSelectionDialog(
-          files: dialogFiles,
-          torrentName: folder.name,
-          onDownload: (selected) =>
-              _downloadSelectedFiles(selected, files, folder.name),
-        ),
-      );
-    } catch (e) {
-      _sections.feedback.dismissDialog();
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _downloadSelectedFiles(
-    List<Map<String, dynamic>> selected,
-    List<PremiumizeFolderItem> allFiles,
-    String folderName,
-  ) async {
-    if (selected.isEmpty) return;
-    int success = 0, fail = 0;
-    for (final f in selected) {
-      try {
-        final idx = f['_premiumizeIndex'] as int? ?? -1;
-        if (idx < 0 || idx >= allFiles.length) {
-          fail++;
-          continue;
-        }
-        final target = allFiles[idx];
-        final url = target.link;
-        if (url == null || url.isEmpty) {
-          fail++;
-          continue;
-        }
-        await DownloadService.instance.enqueueDownload(
-          credentialKey: 'premiumize_api_key',
-          url: url,
-          fileName: target.name,
-          torrentName: folderName,
-          context: mounted ? context : null,
-        );
-        success++;
-      } catch (_) {
-        fail++;
-      }
-    }
-    if (!mounted) return;
-    if (success > 0 && fail == 0) {
-      _sections.feedback.showSnackBar(
-        'Queued $success file${success == 1 ? '' : 's'}',
-        isError: false,
-      );
-    } else if (success > 0) {
-      _sections.feedback.showSnackBar(
-        'Queued $success, $fail failed',
-        isError: true,
-      );
-    } else {
-      _sections.feedback.showSnackBar(
-        'Failed to queue any files',
-        isError: true,
-      );
-    }
-  }
-
-  // ── Add to playlist ──────────────────────────────────────────────────────────
-
-  Future<void> _addToPlaylist(PremiumizeFolderItem item) async {
-    if (item.isFolder) {
-      await _addFolderToPlaylist(item);
-    } else {
-      await _addFileToPlaylist(item);
-    }
-  }
-
-  Future<void> _addFileToPlaylist(PremiumizeFolderItem file) async {
-    if (!file.isVideo) {
-      _sections.feedback.showSnackBar(
-        'Only video files can be added to playlist',
-        isError: true,
-      );
-      return;
-    }
-    final added = await PlaylistStorage.addPlaylistItemRaw({
-      'provider': 'premiumize',
-      'title': FileUtils.cleanPlaylistTitle(file.name),
-      'kind': 'single',
-      'premiumizeItemId': file.id,
-      'premiumizeFile': {'id': file.id, 'name': file.name, 'size': file.size},
-      'sizeBytes': file.size > 0 ? file.size : null,
-    });
-    _sections.feedback.showSnackBar(
-      added ? 'Added to playlist' : 'Already in playlist',
-      isError: !added,
-    );
-  }
-
-  Future<void> _addFolderToPlaylist(PremiumizeFolderItem folder) async {
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    _sections.feedback.showLoadingDialog('Scanning folder for videos...');
-    try {
-      final all = await PremiumizeService.listFolderRecursive(
-        apiKey,
-        folder.id,
-      );
-      _sections.feedback.dismissDialog();
-      if (!mounted) return;
-
-      final videos = all.where((f) => f.isVideo).toList();
-      if (videos.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any videos',
-          isError: true,
-        );
-        return;
-      }
-
-      if (videos.length == 1) {
-        final v = videos.first;
-        final added = await PlaylistStorage.addPlaylistItemRaw({
-          'provider': 'premiumize',
-          'title': FileUtils.cleanPlaylistTitle(v.name),
-          'kind': 'single',
-          'premiumizeItemId': v.id,
-          'premiumizeFile': {'id': v.id, 'name': v.name, 'size': v.size},
-          'sizeBytes': v.size > 0 ? v.size : null,
-        });
-        _sections.feedback.showSnackBar(
-          added ? 'Added to playlist' : 'Already in playlist',
-          isError: !added,
-        );
-        return;
-      }
-
-      final fileIds = videos.map((v) => v.id).toList();
-      final filesMeta = videos
-          .map((v) => {'id': v.id, 'name': v.name, 'size': v.size})
-          .toList();
-      final added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'premiumize',
-        'title': FileUtils.cleanPlaylistTitle(folder.name),
-        'kind': 'collection',
-        'premiumizeItemId': folder.id,
-        'premiumizeFiles': filesMeta,
-        'premiumizeItemIds': fileIds,
-        'count': videos.length,
-      });
-      _sections.feedback.showSnackBar(
-        added
-            ? 'Added ${videos.length} videos to playlist'
-            : 'Already in playlist',
-        isError: !added,
-      );
-    } catch (e) {
-      _sections.feedback.dismissDialog();
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
-  // ── Add link ───────────────────────────────────────────────────────────────
-
-  Future<void> _showAddLinkDialog() async {
-    await _autoPasteLink();
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Add to Premiumize',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter a magnet or link to add to your cloud:',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Focus(
-              // D-pad: let arrow-down move focus out of the field to the buttons.
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  node.nextFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _link.linkController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'magnet:?xt=... or https://...',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFFB923C)),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Adding to cloud spends fair-use points (~1pt/GB).',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _link.linkController.clear();
-              Navigator.of(context).pop();
-            },
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFB923C),
-            ),
-            onPressed: _link.isAddingLink ? null : _addLink,
-            child: const Text('Add', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _autoPasteLink() async {
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = data?.text?.trim();
-      if (text != null &&
-          (text.startsWith('http://') ||
-              text.startsWith('https://') ||
-              text.startsWith('magnet:'))) {
-        _link.linkController.text = text;
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _addLink() async {
-    final link = _link.linkController.text.trim();
-    if (link.isEmpty) {
-      _sections.feedback.showSnackBar('Please enter a link', isError: true);
-      return;
-    }
-    if (!(link.startsWith('http://') ||
-        link.startsWith('https://') ||
-        link.startsWith('magnet:'))) {
-      _sections.feedback.showSnackBar(
-        'Please enter a valid URL or magnet link',
-        isError: true,
-      );
-      return;
-    }
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    Navigator.of(context).pop();
-    setState(() => _link.isAddingLink = true);
-    _sections.feedback.showLoadingDialog('Adding to Premiumize...');
-
-    try {
-      await PremiumizeService.createTransfer(
-        apiKey,
-        link,
-        folderId: _nav.currentFolderId,
-      );
-      _sections.feedback.dismissDialog();
-      if (!mounted) return;
-      _link.linkController.clear();
-      _sections.feedback.showSnackBar('Added to Premiumize', isError: false);
-      await _sections.catalogLoading.refresh();
-    } catch (e) {
-      _sections.feedback.dismissDialog();
-      _sections.feedback.showSnackBar('Failed to add: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _link.isAddingLink = false);
-    }
-  }
-
-  String _formatUnixDate(int seconds) {
-    if (seconds <= 0) return '';
-    try {
-      final date = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
-      final diff = DateTime.now().difference(date);
-      if (diff.inDays == 0) {
-        if (diff.inHours == 0) return '${diff.inMinutes}m ago';
-        return '${diff.inHours}h ago';
-      } else if (diff.inDays < 7) {
-        return '${diff.inDays}d ago';
-      }
-      return '${date.month}/${date.day}/${date.year}';
-    } catch (_) {
-      return '';
-    }
   }
 
   // ── Series helpers (shared shape with PikPak/playlist player) ────────────────
@@ -878,7 +287,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             IconButton(
               focusNode: _focus.addLinkButtonFocusNode,
               icon: const Icon(Icons.add_link),
-              onPressed: _catalog.isLoading ? null : _showAddLinkDialog,
+              onPressed: _catalog.isLoading
+                  ? null
+                  : _sections.linkActions.showAddLinkDialog,
               tooltip: 'Add to Premiumize',
               iconSize: iconSize,
               padding: iconPadding,
@@ -1221,7 +632,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     bool autofocusFirst = true,
   }) {
     final isVideo = item.isVideo;
-    final date = _formatUnixDate(item.createdAt);
+    final date = _sections.dateFormat.formatUnixDate(item.createdAt);
     final metaParts = <String>[
       if (!item.isFolder && item.size > 0) Formatters.formatFileSize(item.size),
       if (date.isNotEmpty) date,
@@ -1268,9 +679,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           showInStrip: true,
           onSelected: () {
             if (item.isFolder) {
-              _playFolder(item);
+              _sections.folderPlayback.playFolder(item);
             } else {
-              _playFile(item);
+              _sections.filePlayback.playFile(item);
             }
           },
         ),
@@ -1280,9 +691,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         showInStrip: true,
         onSelected: () {
           if (item.isFolder) {
-            _downloadFolder(item);
+            _sections.folderDownload.downloadFolder(item);
           } else {
-            _downloadFile(item);
+            _sections.fileDownload.downloadFile(item);
           }
         },
       ),
@@ -1290,7 +701,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         CloudRowAction(
           icon: Icons.playlist_add,
           label: 'Add to Playlist',
-          onSelected: () => _addToPlaylist(item),
+          onSelected: () => _sections.playlistActions.addToPlaylist(item),
         ),
       CloudRowAction(
         icon: Icons.delete_outline,
@@ -1311,7 +722,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       onTap: item.isFolder
           ? () => _sections.folderNavigation.navigateIntoFolder(item)
           : isVideo
-          ? () => _playFile(item)
+          ? () => _sections.filePlayback.playFile(item)
           : null,
       actions: actions,
       selectionMode: _selection.isSelectionMode,
@@ -1644,24 +1055,24 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'performSearch': s._sections.searchActions.performSearch,
     'runCloudSearch': s._sections.searchActions.runCloudSearch,
     'selectBoundSource': s._sections.sourceBinding.selectBoundSource,
-    'playFile': s._playFile,
-    'playFolder': s._playFolder,
-    'playPremiumizeVideos': s._playPremiumizeVideos,
-    'downloadFile': s._downloadFile,
-    'downloadFolder': s._downloadFolder,
-    'downloadSelectedFiles': s._downloadSelectedFiles,
-    'addToPlaylist': s._addToPlaylist,
-    'addFileToPlaylist': s._addFileToPlaylist,
-    'addFolderToPlaylist': s._addFolderToPlaylist,
+    'playFile': s._sections.filePlayback.playFile,
+    'playFolder': s._sections.folderPlayback.playFolder,
+    'playPremiumizeVideos': s._sections.folderPlayback.playPremiumizeVideos,
+    'downloadFile': s._sections.fileDownload.downloadFile,
+    'downloadFolder': s._sections.folderDownload.downloadFolder,
+    'downloadSelectedFiles': s._sections.folderDownload.downloadSelectedFiles,
+    'addToPlaylist': s._sections.playlistActions.addToPlaylist,
+    'addFileToPlaylist': s._sections.playlistActions.addFileToPlaylist,
+    'addFolderToPlaylist': s._sections.playlistActions.addFolderToPlaylist,
     'showDeleteDialog': s._sections.deleteActions.showDeleteDialog,
     'handleDeleteSelected': s._sections.deleteActions.handleDeleteSelected,
     'executeDelete': s._sections.deleteActions.executeDelete,
     'deleteTransfer': s._sections.transferActions.deleteTransfer,
     'clearFinishedTransfers':
         s._sections.transferActions.clearFinishedTransfers,
-    'showAddLinkDialog': s._showAddLinkDialog,
-    'autoPasteLink': s._autoPasteLink,
-    'addLink': s._addLink,
+    'showAddLinkDialog': s._sections.linkActions.showAddLinkDialog,
+    'autoPasteLink': s._sections.linkActions.autoPasteLink,
+    'addLink': s._sections.linkActions.addLink,
     'toggleSelectionMode': s._sections.selectionActions.toggleSelectionMode,
     'exitSelectionMode': s._sections.selectionActions.exitSelectionMode,
     'toggleSelection': s._sections.selectionActions.toggleSelection,
@@ -1671,7 +1082,7 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'focusFirstItemOrFallback':
         s._sections.focusActions.focusFirstItemOrFallback,
     'showSnackBar': s._sections.feedback.showSnackBar,
-    'formatUnixDate': s._formatUnixDate,
+    'formatUnixDate': s._sections.dateFormat.formatUnixDate,
     'formatPlaylistTitle': formatPlaylistTitle,
     'composeEntryTitle': composeEntryTitle,
     'findFirstEpisodeIndex': findFirstEpisodeIndex,

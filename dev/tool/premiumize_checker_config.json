@@ -126,7 +126,14 @@
     "PremiumizeFolderNavigation",
     "PremiumizeViewModes",
     "PremiumizeSearchActions",
-    "PremiumizeSourceBinding"
+    "PremiumizeSourceBinding",
+    "PremiumizeFilePlayback",
+    "PremiumizeFolderPlayback",
+    "PremiumizeFileDownload",
+    "PremiumizeFolderDownload",
+    "PremiumizePlaylistActions",
+    "PremiumizeLinkActions",
+    "PremiumizeDateFormat"
   ],
   "receiver_paths": {
     "_catalog": "PremiumizeCatalogState",
@@ -153,7 +160,14 @@
     "_sections.folderNavigation": "PremiumizeFolderNavigation",
     "_sections.viewModes": "PremiumizeViewModes",
     "_sections.searchActions": "PremiumizeSearchActions",
-    "_sections.sourceBinding": "PremiumizeSourceBinding"
+    "_sections.sourceBinding": "PremiumizeSourceBinding",
+    "_sections.filePlayback": "PremiumizeFilePlayback",
+    "_sections.folderPlayback": "PremiumizeFolderPlayback",
+    "_sections.fileDownload": "PremiumizeFileDownload",
+    "_sections.folderDownload": "PremiumizeFolderDownload",
+    "_sections.playlistActions": "PremiumizePlaylistActions",
+    "_sections.linkActions": "PremiumizeLinkActions",
+    "_sections.dateFormat": "PremiumizeDateFormat"
   },
   "receiver_owners": {
     "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState",
@@ -181,7 +195,14 @@
     "_sections.folderNavigation": "PremiumizeFolderNavigation",
     "_sections.viewModes": "PremiumizeViewModes",
     "_sections.searchActions": "PremiumizeSearchActions",
-    "_sections.sourceBinding": "PremiumizeSourceBinding"
+    "_sections.sourceBinding": "PremiumizeSourceBinding",
+    "_sections.filePlayback": "PremiumizeFilePlayback",
+    "_sections.folderPlayback": "PremiumizeFolderPlayback",
+    "_sections.fileDownload": "PremiumizeFileDownload",
+    "_sections.folderDownload": "PremiumizeFolderDownload",
+    "_sections.playlistActions": "PremiumizePlaylistActions",
+    "_sections.linkActions": "PremiumizeLinkActions",
+    "_sections.dateFormat": "PremiumizeDateFormat"
   },
   "plain_sections": [
     {
@@ -213,6 +234,26 @@
       "owner": "PremiumizeSourceBinding"
     },
     {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_playback.dart",
+      "owner": "PremiumizeFilePlayback"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_playback.dart",
+      "owner": "PremiumizeFolderPlayback"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_download.dart",
+      "owner": "PremiumizeFileDownload"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_download.dart",
+      "owner": "PremiumizeFolderDownload"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_playlist_actions.dart",
+      "owner": "PremiumizePlaylistActions"
+    },
+    {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart",
       "owner": "PremiumizeDeleteActions"
     },
@@ -221,12 +262,20 @@
       "owner": "PremiumizeTransferActions"
     },
     {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_actions.dart",
+      "owner": "PremiumizeLinkActions"
+    },
+    {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart",
       "owner": "PremiumizeFeedback"
     },
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart",
       "owner": "PremiumizeFocusActions"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_date_format.dart",
+      "owner": "PremiumizeDateFormat"
     }
   ],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
@@ -317,7 +366,14 @@
     "PremiumizeFolderNavigation": "$State._sections.folderNavigation",
     "PremiumizeViewModes": "$State._sections.viewModes",
     "PremiumizeSearchActions": "$State._sections.searchActions",
-    "PremiumizeSourceBinding": "$State._sections.sourceBinding"
+    "PremiumizeSourceBinding": "$State._sections.sourceBinding",
+    "PremiumizeFilePlayback": "$State._sections.filePlayback",
+    "PremiumizeFolderPlayback": "$State._sections.folderPlayback",
+    "PremiumizeFileDownload": "$State._sections.fileDownload",
+    "PremiumizeFolderDownload": "$State._sections.folderDownload",
+    "PremiumizePlaylistActions": "$State._sections.playlistActions",
+    "PremiumizeLinkActions": "$State._sections.linkActions",
+    "PremiumizeDateFormat": "$State._sections.dateFormat"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",
