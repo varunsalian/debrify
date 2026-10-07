@@ -445,9 +445,11 @@ activity's class-level `@OptIn(UnstableApi::class)`; each such moved
 declaration gains exactly `@OptIn(UnstableApi::class)` using
 `androidx.annotation.OptIn` (declared substitution, listed per declaration in
 the manifest). The required set is fixed now, not lint-driven:
-`classifyIptvError`, `languageOfOverride`, `buildAudioTrackLabel`
-(`Format.bitrate` is `@UnstableApi` in Media3 1.8.0) and
-`IptvLiveLoadErrorPolicy`; step 0 re-derives the set from the Media3 1.8.0
+`languageOfOverride`, `buildAudioTrackLabel` (`Format.bitrate` is
+`@UnstableApi` in Media3 1.8.0) and `IptvLiveLoadErrorPolicy`
+(`DefaultLoadErrorHandlingPolicy`). `classifyIptvError` uses only stable
+Media3 APIs and gets **no** annotation (corrected at step 0 from the
+Media3 1.8.0 bytecode, confirmed with `javap`; see Progress); step 0 re-derives the set from the Media3 1.8.0
 class annotations and stops if it differs. No file-level opt-in.
 Android lint's `UnsafeOptInUsageError` result for the module must be
 unchanged (run `./gradlew :app:lintDebug` at base and gate and compare the
@@ -779,3 +781,7 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   Characterization and its proofs remain pending. Detached original
   worktree removed; no production source, lockfile, ProGuard or phase-1
   manifest changes, branch switch, push or device interaction.
+- 2026-10-07 — step-0 opt-in preflight stopped as designed: Media3 1.8.0
+  bytecode shows `classifyIptvError` uses only stable APIs; the required
+  opt-in set is the three declarations above (Claude approved the
+  correction). Step 0 resumes.
