@@ -850,3 +850,22 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   additions only, stable input fingerprint/JBR 21.0.10. Mutation worktree
   removed; no production, lockfile or ProGuard edits. Later phase-2 JVM
   gates compare against `p2-step0b`.
+
+- 2026-10-07 — **Phase 2 step 1 moves complete**, following step 0b
+  `6a441d0f4`. Moved exactly 54 subtrees to the 12 manifest destinations;
+  policy supplier/setupPlayer patch, constants and three opt-ins are the
+  only declared semantic-token edits. PSI checker: all 2,839 declarations
+  classified, zero differences; 32 self-tests pass (phase-1 fixture retained).
+  Test-helper-only retargets preserve typed/default dispatch and candidate
+  class assertions; the policy helper additionally verifies construction
+  laziness and both callbacks on their invoking thread. Dependency report
+  records every retarget; Dart/native source anchors remain valid unchanged.
+  Activity 19,961 → 19,017 lines, new files 7–233; size ratchet updated
+  with `--update`, preserving unrelated entries. Compile/tests, size and
+  diff checks pass with no new Kotlin warnings. Clean **`p2-gate` matches
+  all 382 `p2-step0b` identity/status pairs exactly**; 381 pass, unchanged
+  focus failure, no skips. Four Dart guard suites: 44 pass/one existing
+  failure, all 45 statuses match phase-1 gate. Evidence `p2/step1/`,
+  `junit/p2-gate/`. Release/R8, lint, decoder and full Flutter gates follow.
+  The activity retains phase 3–7 responsibilities under its existing
+  temporary exception; no new oversized component or localization text.

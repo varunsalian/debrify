@@ -3214,3 +3214,62 @@ match exactly and only four passing identities are added. The input
 fingerprint is stable (HEAD `b840bf878` plus the one new test file); JBR
 21.0.10. Evidence: `junit/p2-step0b/`, `p2/step0b/baseline-additions.json`.
 The detached mutation worktree was removed.
+
+## Phase 2 step 1 — production moves and retargets
+
+The manifest moves 54 complete subtrees to 12 files, retaining the same
+package and unqualified production call sites. Exactly three declaration
+opt-ins, four relocated constants, the policy constructor supplier and the
+single `setupPlayer` patch match the approved manifest. Kotlin PSI compares
+all 2,839 original declarations: zero differences beyond declared edits.
+Multiline comment/string tokens and newlines are byte-preserved; only
+leading code indentation changes. All 32 checker self-tests pass, including
+the complete phase-1 fixture and every required negative.
+
+Only `TvPlayerOriginalAccess.kt` is retargeted in tests. `callTyped` selects
+the facade's exact static signature for moved functions (including both
+channel overloads); `callDefault` uses the real static `$default` dispatcher
+without the former activity receiver. Existing assertions remain intact.
+Its original-name selectors map as follows:
+
+| Original activity members | New owner |
+|---|---|
+| `fun classifyIptvError(PlaybackException)`, `class IptvLiveLoadErrorPolicy` | `IptvLoadErrorPolicyKt` (functions/constants); top-level classes in `IptvLoadErrorPolicy.kt` |
+| `fun parseIptvSources(JSONArray?)`, `fun parseIptvLists(JSONArray?)`, `fun parseStringList(JSONArray?)`, `fun parseIptvChannels(JSONArray)`, `fun parseIptvChannels(List<*>)`, `fun iptvChannelEntry(Int,Int?,String,String,String?,String?,String,Int,String?,String?,Boolean,String?,String?,Int?,Int?,Boolean?,String?,Int?,Long,Map<String, String>)` | `IptvPayloadParsingKt` (functions/constants); top-level classes in `IptvPayloadParsing.kt` |
+| `fun isSegmentedStreamUrl(String)`, `fun xtreamTsTwin(String)`, `fun sanitizeRecordingName(String)`, `fun recordingTimestamp()` | `IptvRecordingUrlRulesKt` (functions/constants); top-level classes in `IptvRecordingUrlRules.kt` |
+| `fun isIptvSeriesSentinel(IptvChannelEntry)`, `fun currentIptvStartOverProgramme(IptvChannelEntry)`, `fun formatIptvRemaining(Long)`, `fun adoptIptvEpg(IptvChannelEntry,IptvChannelEntry)`, `fun isStremioIptvUrl(String)`, `fun iptvQualityFromLabel(String)` | `IptvEntryRulesKt` (functions/constants); top-level classes in `IptvEntryRules.kt` |
+| `fun buildNowPlayingText(StremioTvGuideChannel)`, `fun updateStremioTvGuideChannelData(StremioTvGuideChannel,Map<*, *>)` | `StremioTvGuideDataKt` (functions/constants); top-level classes in `StremioTvGuideData.kt` |
+| `fun languageOfOverride(TrackSelectionOverride?)`, `fun buildAudioTrackLabel(Format)`, `fun buildSubtitleTrackLabel(Format)`, `fun isSearchSubtitleOption(String)`, `fun isLoadingSubtitleOption(String)`, `fun isExternalSubtitleOption(String)`, `fun isSideRenderableSubtitle(String)`, `property SEARCH_SUBTITLE_LABEL`, `property EXTERNAL_SUBTITLE_PREFIX` | `TvTrackLabelsKt` (functions/constants); top-level classes in `TvTrackLabels.kt` |
+| `fun parseSubtitleCatalogResults(Any?)`, `fun resolveSeasonEpisodeForSubtitle(PlaybackItem)`, `fun parseSeasonEpisodeFromTitle(String)`, `fun buildSubtitleSearchInitialQuery(PlaybackItem)`, `fun buildManualSubtitleDisplayLabel(SubtitleCatalogResult,String,Int?,Int?)` | `SubtitleSearchQueryKt` (functions/constants); top-level classes in `SubtitleSearchQuery.kt` |
+| `fun spellNumber(Int?)`, `fun getAcceleratedSeekStep(Int)`, `fun formatTime(Long)` | `TvPlayerFormattingKt` (functions/constants); top-level classes in `TvPlayerFormatting.kt` |
+| `fun mrow(String,String?,Boolean,Boolean,Boolean,Int?,Boolean,String?,(() -> Unit)?,((Int) -> Unit)?)` | `UnifiedMenuRowsKt` (functions/constants); top-level classes in `UnifiedMenuRows.kt` |
+| `fun androidDecoderStatus(String)`, `fun buildProtectedMediaOrigins(List<PlaybackItem>)`, `fun originKey(Uri)`, `fun isPikPakPlaybackItem(PlaybackItem?)`, `fun diagnosticProvider(String?)`, `fun startupLog(String,Boolean)`, `property STARTUP_FAILOVER_LOG_TAG`, `property PROVIDER_PIKPAK` | `TvStartupDiagnosticsKt` (functions/constants); top-level classes in `TvStartupDiagnostics.kt` |
+| `fun rebuildNavigationMaps(PlaybackPayload,String)` | `PlaylistNavigationMapsKt` (functions/constants); top-level classes in `PlaylistNavigationMaps.kt` |
+| `fun requestStreamFromFlutter(PlaybackItem,Int,(String?, String?) -> Unit)`, `fun requestMovieMetadataFromFlutter(PlaybackItem,Int,(String?) -> Unit)`, `fun requestIptvEpg(IptvChannelEntry,Boolean,Boolean,(Map<*, *>?) -> Unit)`, `class IptvStremioCandidate`, `fun requestIptvStreamUrls(String,String?,(List<IptvStremioCandidate>, String?) -> Unit)`, `fun reportIptvStreamResult(String,String?,Boolean)`, `fun requestQuickPlayNextEpisode(String,Int,Int)` | `TvPlayerFlutterRequestsKt` (functions/constants); top-level classes in `TvPlayerFlutterRequests.kt` |
+
+The old binary selector `AndroidTvTorrentPlayerActivity$IptvStremioCandidate`
+now selects `IptvStremioCandidate`, preserving the exact-class assertion and
+field/getter checks. The old typed inner-policy constructor selector now
+constructs `IptvLiveLoadErrorPolicy(Function0)` with fresh activity field
+reads. Additional helper assertions check zero supplier invocations during
+construction, then both methods on a separate invoking thread. Existing
+per-invocation live/non-live/invalid-index assertions still exercise that
+same policy instance. The production supplier remains exactly the manifest
+expression; the reflection and thread probe exist only in tests.
+
+Dart anchors stay at their existing activity path. No moved signature is an
+anchor; `sendProgress` → `commitStartupCandidate` retains its manual-source
+guards after removing unrelated helpers. All four source-text suites retain
+45 identities, 44 pass and the same existing profile-source failure, with
+no changed statuses vs the observed phase-1 gate. `NativeAudioRoutingTest`
+retains its unchanged Media3 builder assertion and passes in the full JVM
+run. No Dart edits or weakened assertions.
+
+The activity decreases 19,961 → 19,017 lines (944 removed); extracted files
+are 7–233 lines. `check_file_sizes.py --update` lowers only this activity's
+ratchet; pre-existing unrelated shrinkage entries remain unchanged. Size
+and diff checks pass. `compileDebugKotlin` and unit-test compilation pass
+with no new warning identities. Clean `junit/p2-gate` has exactly the same
+382 identity/status pairs as `p2-step0b` (381 pass, known focus failure, no
+skips), with a stable input fingerprint. Evidence under `p2/step1/`.
+Release, mapping, lint and full Flutter gate evidence follow separately.

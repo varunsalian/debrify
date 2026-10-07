@@ -14,8 +14,61 @@ import com.bumptech.glide.request.target.DrawableImageViewTarget
  * Move commits retarget this helper; the behavioural assertions stay unchanged.
  */
 internal object TvPlayerOriginalAccess {
+    private val movedFunctions = mapOf(
+        "adoptIptvEpg" to "IptvEntryRulesKt",
+        "androidDecoderStatus" to "TvStartupDiagnosticsKt",
+        "buildAudioTrackLabel" to "TvTrackLabelsKt",
+        "buildManualSubtitleDisplayLabel" to "SubtitleSearchQueryKt",
+        "buildNowPlayingText" to "StremioTvGuideDataKt",
+        "buildProtectedMediaOrigins" to "TvStartupDiagnosticsKt",
+        "buildSubtitleSearchInitialQuery" to "SubtitleSearchQueryKt",
+        "buildSubtitleTrackLabel" to "TvTrackLabelsKt",
+        "classifyIptvError" to "IptvLoadErrorPolicyKt",
+        "currentIptvStartOverProgramme" to "IptvEntryRulesKt",
+        "diagnosticProvider" to "TvStartupDiagnosticsKt",
+        "formatIptvRemaining" to "IptvEntryRulesKt",
+        "formatTime" to "TvPlayerFormattingKt",
+        "getAcceleratedSeekStep" to "TvPlayerFormattingKt",
+        "iptvChannelEntry" to "IptvPayloadParsingKt",
+        "iptvQualityFromLabel" to "IptvEntryRulesKt",
+        "isExternalSubtitleOption" to "TvTrackLabelsKt",
+        "isIptvSeriesSentinel" to "IptvEntryRulesKt",
+        "isLoadingSubtitleOption" to "TvTrackLabelsKt",
+        "isPikPakPlaybackItem" to "TvStartupDiagnosticsKt",
+        "isSearchSubtitleOption" to "TvTrackLabelsKt",
+        "isSegmentedStreamUrl" to "IptvRecordingUrlRulesKt",
+        "isSideRenderableSubtitle" to "TvTrackLabelsKt",
+        "isStremioIptvUrl" to "IptvEntryRulesKt",
+        "languageOfOverride" to "TvTrackLabelsKt",
+        "mrow" to "UnifiedMenuRowsKt",
+        "originKey" to "TvStartupDiagnosticsKt",
+        "parseIptvChannels" to "IptvPayloadParsingKt",
+        "parseIptvLists" to "IptvPayloadParsingKt",
+        "parseIptvSources" to "IptvPayloadParsingKt",
+        "parseSeasonEpisodeFromTitle" to "SubtitleSearchQueryKt",
+        "parseStringList" to "IptvPayloadParsingKt",
+        "parseSubtitleCatalogResults" to "SubtitleSearchQueryKt",
+        "rebuildNavigationMaps" to "PlaylistNavigationMapsKt",
+        "recordingTimestamp" to "IptvRecordingUrlRulesKt",
+        "reportIptvStreamResult" to "TvPlayerFlutterRequestsKt",
+        "requestIptvEpg" to "TvPlayerFlutterRequestsKt",
+        "requestIptvStreamUrls" to "TvPlayerFlutterRequestsKt",
+        "requestMovieMetadataFromFlutter" to "TvPlayerFlutterRequestsKt",
+        "requestQuickPlayNextEpisode" to "TvPlayerFlutterRequestsKt",
+        "requestStreamFromFlutter" to "TvPlayerFlutterRequestsKt",
+        "resolveSeasonEpisodeForSubtitle" to "SubtitleSearchQueryKt",
+        "sanitizeRecordingName" to "IptvRecordingUrlRulesKt",
+        "spellNumber" to "TvPlayerFormattingKt",
+        "startupLog" to "TvStartupDiagnosticsKt",
+        "updateStremioTvGuideChannelData" to "StremioTvGuideDataKt",
+        "xtreamTsTwin" to "IptvRecordingUrlRulesKt",
+    )
+
     fun type(name: String): Class<*> = Class.forName(
-        "com.debrify.app.tv." + name,
+        "com.debrify.app.tv." + when (name) {
+            "AndroidTvTorrentPlayerActivity\$IptvStremioCandidate" -> "IptvStremioCandidate"
+            else -> name
+        },
     )
 
     fun construct(name: String, vararg arguments: Any?): Any {
@@ -36,21 +89,59 @@ internal object TvPlayerOriginalAccess {
 
     /** Exact JVM signatures keep same-arity overloads distinct. */
     fun callTyped(owner: Any, name: String, types: Array<Class<*>>, vararg arguments: Any?): Any? {
-        val method = owner.javaClass.getDeclaredMethod(name, *types).apply { isAccessible = true }
-        return unwrap { method.invoke(owner, *arguments) }
+        val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
+        val method = (facade ?: owner.javaClass).getDeclaredMethod(name, *types).apply { isAccessible = true }
+        return unwrap { method.invoke(if (facade == null) owner else null, *arguments) }
     }
 
     fun constructTyped(name: String, types: Array<Class<*>>, vararg arguments: Any?): Any {
+        if (name == "AndroidTvTorrentPlayerActivity\$IptvLiveLoadErrorPolicy") {
+            check(types.contentEquals(arrayOf(AndroidTvTorrentPlayerActivity::class.java)))
+            return movedPolicy(arguments.single() as AndroidTvTorrentPlayerActivity)
+        }
         val constructor = type(name).getDeclaredConstructor(*types).apply { isAccessible = true }
         return unwrap { constructor.newInstance(*arguments) }
     }
 
     /** Invoke Kotlin's real omitted-argument dispatcher, including its mask. */
     fun callDefault(owner: Any, name: String, types: Array<Class<*>>, mask: Int, vararg arguments: Any?): Any? {
-        val method = owner.javaClass.getDeclaredMethod(
-            name + "\$default", owner.javaClass, *types, Int::class.javaPrimitiveType, Any::class.java,
+        val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
+        val receiverTypes = if (facade == null) arrayOf(owner.javaClass) else emptyArray()
+        val receiver = if (facade == null) arrayOf(owner) else emptyArray()
+        val method = (facade ?: owner.javaClass).getDeclaredMethod(
+            name + "\$default", *receiverTypes, *types, Int::class.javaPrimitiveType, Any::class.java,
         ).apply { isAccessible = true }
-        return unwrap { method.invoke(null, owner, *arguments, mask, null) }
+        return unwrap { method.invoke(null, *receiver, *arguments, mask, null) }
+    }
+
+    /** Retarget the former inner constructor without snapshotting its activity. */
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun movedPolicy(activity: AndroidTvTorrentPlayerActivity): Any {
+        val invokingThreads = mutableListOf<Thread>()
+        val liveNow = {
+            invokingThreads.add(Thread.currentThread())
+            val entries = field(activity, "iptvChannels") as List<*>
+            val index = field(activity, "currentIptvIndex") as Int
+            (entries.getOrNull(index) as IptvChannelEntry?)?.isLive == true
+        }
+        val policy = type("IptvLiveLoadErrorPolicy").getDeclaredConstructor(kotlin.jvm.functions.Function0::class.java)
+            .apply { isAccessible = true }.newInstance(liveNow) as androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+        org.junit.Assert.assertTrue("supplier must not run at construction", invokingThreads.isEmpty())
+        val probe = java.util.concurrent.FutureTask<Unit> {
+            policy.getMinimumLoadableRetryCount(androidx.media3.common.C.DATA_TYPE_MEDIA)
+            val spec = androidx.media3.datasource.DataSpec(android.net.Uri.parse("https://example.test/probe"))
+            policy.getRetryDelayMsFor(androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo(
+                androidx.media3.exoplayer.source.LoadEventInfo(1, spec, 0L),
+                androidx.media3.exoplayer.source.MediaLoadData(androidx.media3.common.C.DATA_TYPE_MEDIA),
+                java.io.IOException("probe"), 1,
+            ))
+        }
+        val invokingThread = Thread(probe, "policy-supplier-test")
+        invokingThread.start()
+        probe.get(5, java.util.concurrent.TimeUnit.SECONDS)
+        org.junit.Assert.assertEquals("both methods invoke the supplier", 2, invokingThreads.size)
+        invokingThreads.forEach { org.junit.Assert.assertSame("supplier runs on the invoking thread", invokingThread, it) }
+        return policy
     }
 
     private fun <T> unwrap(action: () -> T): T = try {
