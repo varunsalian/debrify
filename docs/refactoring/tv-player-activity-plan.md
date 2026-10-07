@@ -836,3 +836,17 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   Detached original worktree removed. **Stopped before production moves**
   as requested; no source, lockfile or ProGuard changes, push, branch switch,
   device or emulator interaction. Later phase-2 JVM gates use `p2-step0`.
+
+- 2026-10-07 — **Phase 2 step 0b complete** on original production
+  `dcbd9aafe`. Added four URL-guard tests: 59/59 phase-2 tests pass on the
+  original. Six named assertion-failing proof runs cover five distinct
+  mutations; exact Claude d01 also fails both new twin assertions in the
+  full 120-identity characterization run. No compile/crash proofs. First
+  delimiter and query/fragment guard order, ampersands and encoded delimiters
+  are pinned; the equivalent segmented-strip order is documented. Mutation
+  table appended to the dependency report; evidence `p2/step0b/`.
+  JVM baseline **`p2-step0b`: 382 identities, 381 pass, the unchanged focus
+  failure, no skips**. All 378 prior statuses match `p2-step0`; four passing
+  additions only, stable input fingerprint/JBR 21.0.10. Mutation worktree
+  removed; no production, lockfile or ProGuard edits. Later phase-2 JVM
+  gates compare against `p2-step0b`.

@@ -3172,3 +3172,45 @@ and all 32 checker tests pass; file-size and diff checks pass.
 The detached original worktree is removed after these archives. No
 production moves, ProGuard/lockfile edits, push, branch switch, device or
 emulator work. Later phase-2 JVM gates compare against **`p2-step0`**.
+
+## Phase 2 step 0b — URL guard order
+
+Claude's original-code sample killed 15/16 mutations. The surviving d01
+changed the whole-string question-mark guard to an ampersand guard. Four
+new tests pin question marks in fragments, authority, credentials and ID;
+ampersands and encoded delimiters; first query/fragment delimiters; suffixes
+that occur only after those delimiters; and both query/fragment orders.
+All 59 phase-2 characterization tests pass on original `dcbd9aafe`.
+
+The two `substringBefore` operations in `isSegmentedStreamUrl` commute:
+either order selects the prefix before the earliest delimiter. Swapping
+them is equivalent and has no assertion-failing proof. Checking `?` on the
+cleaned twin URL is observably different and is killed below. No behavior
+fix was made.
+
+Six named proof runs (five distinct source mutations) are assertion-killed
+on the original, with fresh XML and source restoration between runs.
+Evidence: `p2/step0b/mutation-catalog.json`, `run_mutations.py`,
+`mutations/<ID>/`; d01 also runs against all 120 characterization identities
+(including phase 1), failing only the two new twin tests, with no compile
+errors/crashes (`d01-all-characterizations-result.json` and raw log/XML).
+
+| ID | Named test (`TvIptvUrlGuardCharacterizationTest`) | Original mutation | Failing assertion |
+|---|---|---|---|
+| d01 | `twinRejectsQuestionMarksAnywhereBeforeRemovingTheFragment` | `if (url.contains('?')) return null` → `if (url.contains('&')) return null` | http://h/live/u/p/1.m3u8#x?y expected null, but was:<http://h/live/u/p/1.ts> |
+| g02 | `twinRejectsQuestionMarksAnywhereBeforeRemovingTheFragment` | `if (url.contains('?')) return null` → `val clean = url.substringBefore('#')` | http://h/live/u/p/1.m3u8#x?y expected null, but was:<http://h/live/u/p/1.ts> |
+| g03 | `twinPreservesAmpersandsAndEscapesAndUsesOnlyTheFirstFragment` | `val clean = url.substringBefore('#')` → `val clean = url.substringBeforeLast('#')` | expected:<http://h/live/u/p/1.ts> but was:<null> |
+| g04 | `twinPreservesAmpersandsAndEscapesAndUsesOnlyTheFirstFragment` | `if (url.contains('?')) return null` → `if (url.contains('&')) return null` | h/live/u&x/p/1 expected:<http://h/live/u&x/p/1.ts> but was:<null> |
+| g05 | `segmentedPathsStopAtTheFirstQuestionMarkEvenWithLaterSuffixes` | `val path = url.substringBefore('?').substringBefore('#').lowercase()` → `val path = url.substringBeforeLast('?').substringBefore('#').lowercase()` | http://h/a.M3U8?first.ts?last expected:<true> but was:<false> |
+| g06 | `segmentedPathsStopAtTheFirstFragmentEvenWhenItContainsAQuestion` | `val path = url.substringBefore('?').substringBefore('#').lowercase()` → `val path = url.substringBefore('?').substringBeforeLast('#').lowercase()` | http://h/a.M3U8#first.ts#last expected:<true> but was:<false> |
+
+For g02 the complete replacement moves the guard after fragment removal
+and checks `clean`; the catalog retains its exact two-line before/after.
+g04 repeats d01 against the independent ampersand-preservation assertion.
+
+Full JVM baseline `p2-step0b`: **382 identities, 381 pass, the unchanged
+known focus failure, zero skips**. Versus `p2-step0`, all 378 prior statuses
+match exactly and only four passing identities are added. The input
+fingerprint is stable (HEAD `b840bf878` plus the one new test file); JBR
+21.0.10. Evidence: `junit/p2-step0b/`, `p2/step0b/baseline-additions.json`.
+The detached mutation worktree was removed.
