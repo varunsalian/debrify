@@ -551,7 +551,7 @@ lists and categories, a recording start (file name), subtitle search
 (query/identity row), track menus (labels), Stremio TV guide data,
 quick-play next episode, EPG load on a slow provider (45 s timeout path).
 
-## Phase 3 — first stateful collaborators: sleep timer, skip segments, Up Next card, status pill, IPTV recording actions
+## Phase 3 — first stateful collaborators: sleep timer, skip segments, Up Next card, IPTV recording actions
 
 Branch `refactor/tvplayer-p3` off the phase-2 merge `ec365eb80` (activity 19,017 lines). Evidence under
 `refactor-evidence/tvplayer/p3/`. The feasibility inventory (owned state,
@@ -562,8 +562,8 @@ line numbers there are at `dcbd9aafe` and are re-measured on the phase-2
 merge before the manifest is written.
 
 **Re-estimate (honest scope).** The phase map's sizes were optimistic: most
-of the activity is stateful and cross-coupled. Phase 3 moves ≈ 870 lines
-for ≈ 55 declared activity edits. The remaining phases are re-planned after
+of the activity is stateful and cross-coupled. Phase 3 moves ≈ 810 lines
+(≈ 580 if skip segments are deferred) for ≈ 54 declared activity edits. The remaining phases are re-planned after
 phase 3 with the same per-feature feasibility method; expect more, smaller
 phases than the original seven.
 
@@ -592,6 +592,20 @@ patch per line; reflected by a test → phase 6/7).
   never substituted; the checker gets each substitution with an exact token
   context and occurrence count, so a wrong `this` cannot be rewritten
   silently.
+- **Injected activity type.** Each controller receives the activity as
+  `activity: AppCompatActivity` (the activity's direct superclass), never
+  `Activity`/`Context`, so every `this` → `activity` substitution keeps the
+  original static type's overload resolution (e.g. Glide 4.16.0
+  `with(FragmentActivity)` → activity-lifecycle request manager, whereas
+  `with(Activity)` → application context). Step T lists every substituted
+  `this` site whose callee is overloaded on Context/Activity/
+  FragmentActivity/LifecycleOwner and records the resolved overload before
+  and after (from the compiled bytecode) — any difference fails.
+- **Cross-feature state** has one owner: when a moved feature reads another
+  moved feature's state (Skip reads Up Next visibility to suppress credits
+  skipping and focus offers), its Host getter reads the **owning
+  controller** through the activity (`this@AndroidTvTorrentPlayerActivity.
+  upNextController.x`), never a mirrored copy.
 - **Host interfaces** are narrow (only the members the moved bodies use) and
   are implemented by an `object : Tv<Feature>Controller.Host { … }` inside the
   controller's property initializer in the activity. Host members are
@@ -682,11 +696,17 @@ Flutter channel where needed), mutation-proved:
   (request identity), button visibility vs `hasEverBeenReady`, skip action
   seek target, reset on `playItem` (order: `hasEverBeenReady` reset → Up
   Next hide → skip reset), scope cancellation in `onDestroy`.
-- **Up Next card:** threshold/min-duration/tick constants, show/dismiss/
+- **Up Next card:** the poster request's Glide lifecycle ownership (request
+  manager bound to the activity's lifecycle; cleared on destroy) —
+  mutation-proved by changing the original to
+  `Glide.with(this.applicationContext)`; threshold/min-duration/tick constants, show/dismiss/
   trigger, ticker start/stop, interaction with `isCleanPlaybackState`, key
   handling while visible, `onDestroy` cleanup.
-- **Status pill:** lazy creation (view tree position, dp sizes), show/
-  transient (1,400 ms) /hide, hide runnable on the borrowed handler.
+- **Skip ↔ Up Next wiring** through the production activity: showing Up
+  Next suppresses credits skipping on the next skip-state update, dismissing
+  it reveals skipping again, and focus offering keeps its original conditions
+  (also exercised in the skip-deferred variant).
+- (Status pill characterization moves with the feature to a later phase.)
 - **IPTV recording actions:** gating (engine on, recordable URL, permissions
   path incl. SDK 28/29/33 branches), start/stop toggles for tee and engine
   recording (service-intent payloads), file naming (phase-2 helpers),
@@ -1077,3 +1097,8 @@ and engine), scheduled recording confirmation.
   explicitly-qualified Host forwarders; braced host templates; skip network
   fixture prerequisite or deferral; recording evaluation-time cases;
   current-tree check of earlier destinations); P3 `Context.MODE_PRIVATE`.
+- 2026-10-07 — phase 3 design round 2 (Codex): P1 (Up Next `Glide.with`
+  overload would change with an `Activity`-typed injection) → controllers
+  take `AppCompatActivity`, overload-resolution audit of every substituted
+  `this`, Glide lifecycle test; P2 cross-feature reads go through the owning
+  controller + Skip↔Up Next characterization; P3 scope/title/estimate.
