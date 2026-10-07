@@ -189,6 +189,8 @@ def self_test(package):
    print('callback alone '+spec['name']+' '+label+': rejected',flush=True)
  live={SOURCE:(ROOT/SOURCE).read_text(),**{p.relative_to(ROOT).as_posix():p.read_text() for p in (ROOT/config['feature']).rglob('*.dart')}}
  accept('live sources',live,config)
+ from iptv_spotlight_timeline_clock_seam_test import self_test as clock_seam_self_test
+ clock_seam_self_test(package)
  print('All timeline real-config fixtures PASS',flush=True)
 
 def main():

@@ -976,6 +976,8 @@ def check_seams(original_source, sources, config, baseline, package=None):
     The main declaration comparison then checks every patched leaf, so a
     registered seam never excuses a second edit to a method. Auxiliary files
     are checked in full against their patched baseline, including directives.
+    An opt-in source reader may validate registered moves and supply their
+    ORIGINAL source; its entire fingerprint must still match that baseline.
     """
     from check_verbatim_moves import parse
     errors = []
@@ -991,7 +993,15 @@ def check_seams(original_source, sources, config, baseline, package=None):
         if path == config['source']:
             original_source = expected
             continue
-        actual = (ROOT / path).read_text()
+        if spec.get('source_reader_module'):
+            import importlib
+            try:
+                actual = importlib.import_module(spec['source_reader_module']).read_validated_source(path, package)
+            except ValueError as error:
+                errors.append('Auxiliary clock seam changed outside its exact edits: ' + path + '\n' + str(error))
+                continue
+        else:
+            actual = (ROOT / path).read_text()
         units = parse({'expected': expected, 'actual': actual}, package)
         def fingerprint(unit):
             return (unit['directives'], [(d['name'], tokens(d)) for d in unit['declarations']])

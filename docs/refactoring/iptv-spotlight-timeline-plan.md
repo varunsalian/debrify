@@ -1200,3 +1200,35 @@ The full gate runs on this committed input against latest `base2`; the
 fresh rerun of all 20 other manifests is also finishing with isolated
 packages. Their verdicts are required before step 2. No source mutation or
 dependent move will overlap the gate.
+
+### Step 1 guard continuation — IPTV auxiliary clock seam
+
+The first all-manifest rerun exposed a missed source-text consumer:
+`iptv_checker_config.json` pins the entire timeline as an auxiliary clock
+seam. Its unchanged original-file assertion rejects the declared move
+(`all-manifests-step1-worker0/iptv.txt`); the same manifest passed against
+ORIGINAL in step 0b. This is a checker relocation issue, not an accepted
+failure. The incomplete first gate attempt was stopped and is discarded
+(`gate1-aborted-clock-seam.json`). Gate 1 is restarted on a committed tree
+containing the preserved guard.
+
+Conservative decision: register `source_reader_module` only on that
+auxiliary seam. `check_seams` defaults to its existing direct-file path;
+the opt-in timeline reader first validates every live leaf, retained
+forwarder, scaffold, callback and field binding against R, then returns
+that validated ORIGINAL source. The existing whole-file clock-seam
+fingerprint comparison (including directives and comments) still compares
+it with IPTV's exact patched historical baseline. No seam patch, assertion
+or production body is removed or weakened. A reader validation failure
+retains the named auxiliary-seam error. This additive hook and the one
+IPTV config registration must be unioned by the integrator in addition to
+the previously planned shared edits.
+
+The new timeline-owned clock-seam fixture runs from the CI-listed real
+checker runner. At S=0/1/2/3 it proves the original fingerprint passes and
+a clock mutation in `_dayHeading` fails the auxiliary assertion (the
+method moves at S=2). A different returned baseline and an unregistered
+reader path also fail. The real IPTV CLI passes in the normal scratch
+clone with the opt-in hook. Final fixture, fresh-clone, all-manifest and
+restarted-gate verdicts are recorded below when complete; step 2 remains
+blocked until the required checks pass.
