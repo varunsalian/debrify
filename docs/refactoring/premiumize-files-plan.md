@@ -754,6 +754,8 @@ The resumed step 0b is recorded below; no extraction has begun.
 
 ### Step 0b — independent review closure on ORIGINAL
 
+Checkpoint: `2cf7b76ca267f95cabe55f7fceb9a40181373f86`.
+
 The production screen and all existing characterization assertions remain
 unchanged at `f1cfa6f2`. Three new test files add 19 behavioural identities,
 registered as concrete CI paths. Conservative decisions preserve the observed
@@ -834,3 +836,37 @@ Linux originals are reserved for the separate step-L provenance/PNG commit.
 Steps L and 1–7 remain unstarted. Found-not-fixed and device-only items are
 unchanged. The integration union adds these three CI behaviour-test paths to
 the nine from step 0; no shared checker implementation edit is introduced.
+
+
+Step-0b post-checkpoint audit: all twelve Claude survivor mutations replayed
+against every Premiumize test except `premiumize_source_contract_test.dart`:
+**ten named behavioural kills**, **two permitted native-pending survivors**,
+and **120/120 restored control passes after every mutation**. Both pending
+mutations then fail their named full-body source guards, with passing original
+restored controls (`step0b/postcheckpoint-replay-audit.json`). The mutation map
+labels these two explicitly SOURCE-GUARD-ONLY; native behaviour remains pending.
+One control's first Git metadata attempt did not start tests; its valid mutation
+output is preserved and the control replay passes. The ignored evidence parser
+was corrected to read unit-test assertion text from `error` events as well as
+widget-test `print` events; no shared implementation or assertion changed.
+
+Fresh normal clone: **PASS** (`step0b/fresh-clone-proof.json`) at the exact
+step-0b checkpoint, `.git` is a directory, `flutter pub get`, standalone and
+generic manifest/self-tests on separate explicit parser packages, capture
+script syntax, all 38 source guards and all 19 new review identities. Original
+code/data remain byte-identical to the checkpoint and the base4 tested inputs;
+only this result documentation is added afterward.
+
+### Step L — original Linux golden artifacts
+
+Seven Linux PNGs and their checked-in `provenance.json` are committed separately.
+Claude captured the ORIGINAL checkpoint `f1cfa6f2` twice in local
+`debrify-flutter:3.44.8`, linux/amd64, Flutter 3.44.8 / Dart 3.12.2. Both captures
+and strict replays pass 7/7; every PNG hash matches between independent captures.
+Every recorded source/test/harness input hash still matches this unchanged
+original screen. Capture/strict logs and provenance remain under the Premiumize
+evidence directory; no originals are regenerated or updated. The strict Linux
+CI switch still activates at step 6. Remote CI is pending; this is local Docker
+evidence. With the PNGs and passing `linux-original-strict.txt` verified, stop
+point 2's prerequisite is satisfied and step 1 may proceed. No extraction has
+begun in this artifact commit.
