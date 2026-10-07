@@ -34,6 +34,7 @@ STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT = (
 )
 # settings_widgets: feature checks apply from the first move; facade completes at step 4.
 FEATURES += ("settings_widgets",)
+FEATURES += ("iptv_spotlight_timeline",)
 SETTINGS_WIDGETS_COMPLETE = True
 SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"
 SETTINGS_WIDGETS_FACADE_CAP = 63  # settings_widgets: 63 export lines, 0 comments/blanks.
@@ -78,6 +79,13 @@ STREMIO_TV_TUNER_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart"
 STREMIO_TV_TUNER_BRIDGE = "lib/features/stremio_tv_tuner/presentation/legacy_stremio_tv_tuner/"
 STREMIO_TV_TUNER_FACADE_CAP = 299
 STREMIO_TV_TUNER_SIZE_EXCEPTIONS = {}
+
+# Pure UI timeline extraction; destination scans apply before completion.
+IPTV_SPOTLIGHT_TIMELINE_COMPLETE = True
+IPTV_SPOTLIGHT_TIMELINE_FACADE = "lib/widgets/iptv/spotlight/spotlight_live_timeline.dart"
+IPTV_SPOTLIGHT_TIMELINE_BRIDGE = "lib/features/iptv_spotlight_timeline/presentation/legacy_iptv_spotlight_timeline/"
+IPTV_SPOTLIGHT_TIMELINE_FACADE_CAP = 332
+IPTV_SPOTLIGHT_TIMELINE_SIZE_EXCEPTIONS = {}
 
 DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
@@ -223,6 +231,8 @@ COMPOSITION_ROOTS = {
     STREMIO_TV_CATALOGS_FACADE,
     # settings_widgets: pure compatibility exports; feature files own every declaration.
     SETTINGS_WIDGETS_FACADE,
+    # Timeline facade wires its State-owned live view, record and cached sections.
+    IPTV_SPOTLIGHT_TIMELINE_FACADE,
     # Tuner facade wires its live widget view, owners and legacy sections.
     STREMIO_TV_TUNER_FACADE,
     # Stremio TV facade wires route-owned records, live State and frozen sections.
@@ -489,6 +499,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     # Move-only catalog dialogs; exit: import/refresh contracts + Riverpod controllers.
     STREMIO_TV_CATALOGS_BRIDGE,
     STREMIO_TV_TUNER_BRIDGE,
+    IPTV_SPOTLIGHT_TIMELINE_BRIDGE,
     # Move-only State bridge; exit: Stremio TV data contracts/Riverpod.
     STREMIO_TV_BRIDGE,
 )
@@ -543,6 +554,20 @@ def violations(path: Path) -> list[str]:
         if any(not match.group(1).startswith("package:debrify/features/stremio_tv_catalogs/")
                for match in exports.finditer(without_comments)):
             problems.append("Stremio TV catalogs facade must export its feature destinations")
+    if relative.startswith("lib/features/iptv_spotlight_timeline/"):
+        limit = max(500, IPTV_SPOTLIGHT_TIMELINE_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line IPTV spotlight timeline extraction limit")
+        if "TEMP(iptv_spotlight_timeline)" in source and (IPTV_SPOTLIGHT_TIMELINE_COMPLETE or not relative.startswith(IPTV_SPOTLIGHT_TIMELINE_BRIDGE)):
+            problems.append("IPTV spotlight timeline temporary cross-call outside its exact legacy bridge")
+    if relative.startswith("lib/features/iptv_spotlight_timeline/") or relative == IPTV_SPOTLIGHT_TIMELINE_FACADE:
+        if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin|IndexedStack)\b|package:media_kit|hero_trailer_backdrop|video_player_launcher|features/player_launch", source):
+            problems.append("IPTV spotlight timeline adds keep-alive or playback engine ownership")
+    if IPTV_SPOTLIGHT_TIMELINE_COMPLETE and relative == IPTV_SPOTLIGHT_TIMELINE_FACADE:
+        if lines > IPTV_SPOTLIGHT_TIMELINE_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {IPTV_SPOTLIGHT_TIMELINE_FACADE_CAP}-line IPTV spotlight timeline facade limit")
+        if "TEMP(iptv_spotlight_timeline)" in source:
+            problems.append("IPTV spotlight timeline temporary cross-call remains in the facade")
     if relative.startswith("lib/features/stremio_tv_tuner/"):
         limit = max(500, STREMIO_TV_TUNER_SIZE_EXCEPTIONS.get(relative, 0))
         if lines > limit:
@@ -893,6 +918,17 @@ def violations(path: Path) -> list[str]:
                     problems.append("spotlight board feature imports its facade")
                 if not relative.startswith(SPOTLIGHT_BOARD_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("spotlight board service import outside the exact legacy bridge")
+            if relative.startswith("lib/features/iptv_spotlight_timeline/"):
+                if target == IPTV_SPOTLIGHT_TIMELINE_FACADE:
+                    problems.append("IPTV spotlight timeline feature imports its facade")
+                if not relative.startswith(IPTV_SPOTLIGHT_TIMELINE_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("IPTV spotlight timeline service import outside its exact legacy bridge")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_timeline_feature = relative.split("/")[2]
+                other_timeline_feature = target.split("/")[2]
+                if {own_timeline_feature, other_timeline_feature} == {"iptv_spotlight_timeline", "iptv"}:
+                    if not target.startswith(f"lib/features/{other_timeline_feature}/models/"):
+                        problems.append("IPTV spotlight timeline/IPTV implementation cross-import")
             if relative.startswith("lib/features/stremio_tv_tuner/"):
                 if target == STREMIO_TV_TUNER_FACADE:
                     problems.append("Stremio TV tuner feature imports its facade")
@@ -1095,6 +1131,8 @@ def main() -> int:
         paths.add(ROOT / STREMIO_TV_CATALOGS_FACADE)
     if STREMIO_TV_TUNER_COMPLETE:
         paths.add(ROOT / STREMIO_TV_TUNER_FACADE)
+    if IPTV_SPOTLIGHT_TIMELINE_COMPLETE:
+        paths.add(ROOT / IPTV_SPOTLIGHT_TIMELINE_FACADE)
     if STREMIO_TV_COMPLETE:
         paths.add(ROOT / STREMIO_TV_FACADE)
     if PIKPAK_COMPLETE:

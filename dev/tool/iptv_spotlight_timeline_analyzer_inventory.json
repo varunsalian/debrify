@@ -1,0 +1,91 @@
+{
+  "reference": "49c53e2e8",
+  "description": "ORIGINAL strict/type-rename maxima plus the full step-2 composition measured at step 0b; exact rule/symbol/message maxima, zero warnings/errors.",
+  "entries": [
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@imports",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_ChannelMark",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "symbol": "_RulerMark",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._reconcileProgrammeCursor",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._activateCursor",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState.build",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._accepts",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._focusChannelAt",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._selectIdentity",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_SpotlightLiveTimelineState._selectProgramme",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    },
+    {
+      "severity": "info",
+      "rule": "recursive_getters",
+      "symbol": "_SpotlightLiveTimelineState._sections",
+      "message": "The getter '_sections' recursively returns itself. Try changing the value being returned",
+      "maximum": 1,
+      "origin": "full step-2 composition probe before extraction; live cached-section closure / formatter-expanded original if"
+    }
+  ]
+}

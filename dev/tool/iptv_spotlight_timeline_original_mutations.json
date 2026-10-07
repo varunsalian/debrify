@@ -1,0 +1,579 @@
+[
+  {
+    "label": "clock 30s->1s",
+    "before": "      const Duration(seconds: 30),\n      (_) => _onClockTick(),",
+    "after": "      const Duration(seconds: 1),\n      (_) => _onClockTick(),",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "30 minute refresh waits for tick then clears retry lane and reloads after settling"
+  },
+  {
+    "label": "refresh 30min->0",
+    "before": "_guideRefreshInterval = Duration(minutes: 30);",
+    "after": "_guideRefreshInterval = Duration(minutes: 0);",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "30 minute refresh waits for tick then clears retry lane and reloads after settling"
+  },
+  {
+    "label": "settle cancel removed",
+    "before": "  void _armViewportLoad() {\n    _viewportSettle?.cancel();\n",
+    "after": "  void _armViewportLoad() {\n",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "alternate TV activation keys work and repeats are swallowed"
+  },
+  {
+    "label": "load VOD rows",
+    "before": "      if (!entry.channel.isLive) continue;\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "empty and VOD rows retain messages, header, semantics and playable identity"
+  },
+  {
+    "label": "ready snapshot reloaded",
+    "before": "          (current.status == _GuideStatus.ready ||\n              current.status == _GuideStatus.error)) {",
+    "after": "          (current.status == _GuideStatus.error)) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "eviction keeps the eight-row buffer and cursor row then reloads beyond buffer"
+  },
+  {
+    "label": "evict buffer 8->2",
+    "before": "final buffer = math.max(8, visibleCount * 2);",
+    "after": "final buffer = math.max(2, visibleCount * 2);",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "eviction keeps the eight-row buffer and cursor row then reloads beyond buffer"
+  },
+  {
+    "label": "evict cursor row dropped",
+    "before": "        key.sourceOrdinal == _cursorRow ||\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "eviction keeps the eight-row buffer and cursor row then reloads beyond buffer"
+  },
+  {
+    "label": "sort by stop",
+    "before": "return startOrder != 0 ? startOrder : a.stop.compareTo(b.stop);",
+    "after": "return a.stop.compareTo(b.stop);",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "schedule drops zero and negative durations and sorts start then stop"
+  },
+  {
+    "label": "zero-duration kept",
+    "before": "..removeWhere((programme) => !programme.stop.isAfter(programme.start))",
+    "after": "..removeWhere((programme) => false)",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "schedule drops zero and negative durations and sorts start then stop"
+  },
+  {
+    "label": "accepts mounted removed",
+    "before": "    if (!mounted || token.generation != _requestGeneration) return false;",
+    "after": "    if (token.generation != _requestGeneration) return false;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "disposed failed schedule completion produces no asynchronous error"
+  },
+  {
+    "label": "accepts pending token removed",
+    "before": "    if (_pendingLoads[token.entryKey] != token) return false;\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "equal same-generation retry tokens preserve the first completion behavior"
+  },
+  {
+    "label": "accepts channel identity",
+    "before": "    return identical(widget.channels[token.sourceIndex], token.channel);",
+    "after": "    return true;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "completion rejects in-place recycled channel without widget update"
+  },
+  {
+    "label": "error fallback disabled",
+    "before": "      final selectedProgrammeFailed =\n          token.sourceIndex == _cursorRow &&",
+    "after": "      final selectedProgrammeFailed =\n          false &&\n          token.sourceIndex == _cursorRow &&",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "failed pending programme row announces identity exactly once"
+  },
+  {
+    "label": "retry always bumps generation",
+    "before": "      generation: _requestGeneration == 0\n          ? ++_requestGeneration\n          : _requestGeneration,",
+    "after": "      generation: ++_requestGeneration,",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "equal same-generation retry tokens preserve the first completion behavior"
+  },
+  {
+    "label": "follow-now cursor while selected",
+    "before": "      if (_selectedProgrammeStartMs == null) {\n        _cursorTimeMs",
+    "after": "      if (true) {\n        _cursorTimeMs",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "follow-now retains selected programme time across a clock tick and vertical move"
+  },
+  {
+    "label": "activation repeat not swallowed",
+    "before": "    if (event is KeyRepeatEvent && activationKey) {\n      return KeyEventResult.handled;\n    }\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "alternate TV activation keys work and repeats are swallowed"
+  },
+  {
+    "label": "arrow repeat dropped",
+    "before": "    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {\n      return KeyEventResult.ignored;\n    }\n    _cancelPointerSelection();\n    _holdOk.reset();",
+    "after": "    if (event is! KeyDownEvent) {\n      return KeyEventResult.ignored;\n    }\n    _cancelPointerSelection();\n    _holdOk.reset();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "alternate TV activation keys work and repeats are swallowed"
+  },
+  {
+    "label": "home key -> end",
+    "before": "    if (key == LogicalKeyboardKey.home) {",
+    "after": "    if (key == LogicalKeyboardKey.end) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "arrows repeat and Home jumps to now without activating playback"
+  },
+  {
+    "label": "up at top ignores Now",
+    "before": "      if (!_followNow) {\n        _nowFocusNode.requestFocus();",
+    "after": "      if (false) {\n        _nowFocusNode.requestFocus();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "DPAD reaches Now and returns to the guide with Enter"
+  },
+  {
+    "label": "programme lane keeps cached error",
+    "before": "          if (_hasGuideError(_entryAt(target)!)) {\n            _cursorLane = _CursorLane.identity;",
+    "after": "          if (false) {\n            _cursorLane = _CursorLane.identity;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "vertical move into a cached guide error restores channel focus"
+  },
+  {
+    "label": "reveal lead 12% -> 0",
+    "before": "final lead = (durationMs * 0.12).round();",
+    "after": "final lead = (durationMs * 0.0).round();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "programme reveal keeps a twelve percent lead for a cell before the window"
+  },
+  {
+    "label": "oversized clip rule removed",
+    "before": "    if (programmeStop - programmeStart >= durationMs &&",
+    "after": "    if (false &&\n        programmeStop - programmeStart >= durationMs &&",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "selecting an oversized current programme keeps the now window anchored"
+  },
+  {
+    "label": "now button while following",
+    "before": "                if (!_followNow)\n                  Focus(",
+    "after": "                if (_followNow)\n                  Focus(",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "DPAD reaches Now and returns to the guide with Enter"
+  },
+  {
+    "label": "now Down not restoring",
+    "before": "    if (key == LogicalKeyboardKey.arrowDown ||\n        key == LogicalKeyboardKey.arrowRight) {\n      _restoreFocus();",
+    "after": "    if (key == LogicalKeyboardKey.arrowRight) {\n      _restoreFocus();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "Down from Now restores the selected programme cell"
+  },
+  {
+    "label": "hold without onChannelActions",
+    "before": "        widget.onChannelActions != null &&\n        _cursorLane != _CursorLane.retry) {",
+    "after": "        _cursorLane != _CursorLane.retry) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "without actions OK activates immediately and repeat cannot open another route"
+  },
+  {
+    "label": "hold in retry lane",
+    "before": "        widget.onChannelActions != null &&\n        _cursorLane != _CursorLane.retry) {",
+    "after": "        widget.onChannelActions != null) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "retry lane bypasses hold and activates retry on key down"
+  },
+  {
+    "label": "first tap activates identity",
+    "before": "    final activate = !widget.selectBeforeActivate || _lastTappedCell == target;\n    _lastTappedCell = target;\n    _selectIdentity(",
+    "after": "    final activate = true;\n    _lastTappedCell = target;\n    _selectIdentity(",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "hover disarms a previously tapped channel"
+  },
+  {
+    "label": "dwell 375 -> 0",
+    "before": "    _pointerSettle = Timer(const Duration(milliseconds: 375), () {",
+    "after": "    _pointerSettle = Timer(const Duration(milliseconds: 0), () {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "hover dwell is 375ms and pointer announcements preserve programme and origin"
+  },
+  {
+    "label": "shift swap trackpad",
+    "before": "final swapAxes = shift && signal.kind == PointerDeviceKind.mouse;",
+    "after": "final swapAxes = shift;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "wheel chooses one axis for Offset(1.0, 120.0), shift=true, PointerDeviceKind.trackpad"
+  },
+  {
+    "label": "drag pan sign",
+    "before": "_panTimeline(-details.delta.dx, timelineWidth),",
+    "after": "_panTimeline(details.delta.dx, timelineWidth),",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "horizontal swipe pans programmes, Now restores, vertical swipe scrolls channels"
+  },
+  {
+    "label": "focusChannel scans all",
+    "before": "      for (var index = range.first; index <= range.last; index++) {\n        if (identical(widget.channels[index], channel)) {",
+    "after": "      for (var index = 0; index < widget.channels.length; index++) {\n        if (identical(widget.channels[index], channel)) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "focusChannel does not read outside its lazy visible range"
+  },
+  {
+    "label": "fromPointer dropped (identity)",
+    "before": "    _revealRow(row);\n    _announceSelection(fromPointer: fromPointer);\n    if (activate) _activateIdentity",
+    "after": "    _revealRow(row);\n    _announceSelection();\n    if (activate) _activateIdentity",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "touch selects before playback, even on the focused startup row"
+  },
+  {
+    "label": "programme announced outside lane",
+    "before": "    EpgProgramme? selected;\n    if (_cursorLane == _CursorLane.programme) {",
+    "after": "    EpgProgramme? selected;\n    if (true) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "source_guard_only": "Only _selectProgrammeValue writes a non-null selected start, called solely while entering/remaining in the programme lane. Every transition to identity or retry clears the start; retry-to-identity vertical movement retains its already-null start. Therefore outside that lane no programme start can equal the null selected start. Enumerated assignments are recorded in the dependency report.",
+    "member": "_SpotlightLiveTimelineState._announceSelection",
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._announceSelection"
+  },
+  {
+    "label": "identity width 45->50%",
+    "before": "math.max(0.0, constraints.maxWidth * 0.45),",
+    "after": "math.max(0.0, constraints.maxWidth * 0.5),",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "identity width clamps at 45 percent and row extent includes both text-scaler terms"
+  },
+  {
+    "label": "row height scaler term",
+    "before": "        (widget.dense ? 0 : math.max(0.0, scaler.scale(10) - 10));",
+    "after": "        0;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "identity width clamps at 45 percent and row extent includes both text-scaler terms"
+  },
+  {
+    "label": "NOW badge 25->20",
+    "before": ">= const Duration(minutes: 25);",
+    "after": ">= const Duration(minutes: 20);",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "NOW badge threshold is 25 minutes: duration 24"
+  },
+  {
+    "label": "playhead outside window",
+    "before": "    if (nowMs < startMs || nowMs > endMs || timelineWidth <= 0) {",
+    "after": "    if (timelineWidth <= 0) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "playhead appears only inside the epoch window with positive track width"
+  },
+  {
+    "label": "no re-arm on rowHeight",
+    "before": "        oldWidget.rowHeight != widget.rowHeight ||\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "rowHeight change re-arms pending viewport at the new settle boundary"
+  },
+  {
+    "label": "controller not rebound",
+    "before": "      oldWidget.controller?._detach(this);\n      widget.controller?._attach(this);\n",
+    "after": "      oldWidget.controller?._detach(this);\n",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "controller rebind detaches old owner and disposal releases resources"
+  },
+  {
+    "label": "dispose keeps clock",
+    "before": "    _clockTick?.cancel();\n    _pointerSettle?.cancel();",
+    "after": "    _pointerSettle?.cancel();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "30 minute refresh waits for tick then clears retry lane and reloads after settling"
+  },
+  {
+    "label": "down at end ignored",
+    "before": "    if (target >= widget.channels.length) return KeyEventResult.handled;",
+    "after": "    if (target >= widget.channels.length) return KeyEventResult.ignored;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "Down at last row is handled before ancestor focus"
+  },
+  {
+    "label": "primary focus guard removed",
+    "before": "    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "ignored Home on Now cannot reach the guide cursor handler"
+  },
+  {
+    "label": "source change keeps guides",
+    "before": "      _holdOk.reset();\n      _guides.clear();\n      _pendingLoads.clear();\n      _lastGuideRefreshAt = widget.now();",
+    "after": "      _holdOk.reset();\n      _pendingLoads.clear();\n      _lastGuideRefreshAt = widget.now();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "epgContextVersion retries visible rows"
+  },
+  {
+    "label": "window null keeps follow off",
+    "before": "      _windowStart = _defaultWindowStart();\n      _followNow = true;",
+    "after": "      _windowStart = _defaultWindowStart();\n      _followNow = false;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "initial window switches explicit to follow-now and back without schedule reload"
+  },
+  {
+    "label": "reconcile exact no republish",
+    "before": "      // do not keep pointing at the object from the previous guide snapshot.\n      _announceSelection();\n      return;",
+    "after": "      // do not keep pointing at the object from the previous guide snapshot.\n      return;",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "guide refresh republishes a same-start programme instance"
+  },
+  {
+    "label": "eviction keeps pending",
+    "before": "    _pendingLoads.removeWhere((key, _) => !keep(key));\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "source_guard_only": "Eviction is called only by _loadVisibleRows inside a settled load. Re-arming increments the generation before that load; retained old completions are rejected by _accepts generation even if an evicted pending token remains. No public path evicts without re-arming.",
+    "member": "_SpotlightLiveTimelineState._evictDistantRows",
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._evictDistantRows"
+  },
+  {
+    "label": "Today label",
+    "before": "${sameDay ? 'Today' : _weekday(local.weekday)}",
+    "after": "${sameDay ? 'Now' : _weekday(local.weekday)}",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "empty and VOD rows retain messages, header, semantics and playable identity"
+  },
+  {
+    "label": "replay icon future",
+    "before": "] else if (programme.hasArchive && isPast) ...[",
+    "after": "] else if (programme.hasArchive) ...[",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "future archived programme has no replay icon"
+  },
+  {
+    "label": "focus loss keeps tapped",
+    "before": "      if (!focused) {\n        _lastTappedCell = null;\n        _holdOk.reset();",
+    "after": "      if (!focused) {\n        _holdOk.reset();",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "focus loss clears tap preview before focus is regained"
+  },
+  {
+    "label": "settle generation guard (ledger)",
+    "before": "      if (mounted && generation == _requestGeneration) {",
+    "after": "      if (mounted) {",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "source_guard_only": "Every re-arm cancels the previous timer before incrementing the generation, so an older timer cannot reach this generation check.",
+    "member": "_SpotlightLiveTimelineState._armViewportLoad",
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armViewportLoad"
+  },
+  {
+    "label": "viewport settle default 375 to zero",
+    "before": "this.viewportSettleDelay = const Duration(milliseconds: 375)",
+    "after": "this.viewportSettleDelay = const Duration(milliseconds: 0)",
+    "occurrence": 0,
+    "must_fail": "default viewport delay waits exactly 375ms before loading"
+  },
+  {
+    "label": "accepts generation independently removed",
+    "before": "if (!mounted || token.generation != _requestGeneration) return false;",
+    "after": "if (!mounted) return false;",
+    "occurrence": 0,
+    "must_fail": "old generation for retained offscreen row cannot become ready"
+  },
+  {
+    "label": "accepts context version removed",
+    "before": "if (token.contextVersion != widget.epgContextVersion) return false;",
+    "after": "",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "A context-version widget update clears pending loads and re-arms/increments generation before completion, so generation rejects first.",
+    "member": "_SpotlightLiveTimelineState._accepts"
+  },
+  {
+    "label": "accepts source id removed",
+    "before": "token.entryKey.sourceId != widget.sourceId",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "Changing source id through the host clears pending loads and re-arms/increments generation, so generation rejects first.",
+    "member": "_SpotlightLiveTimelineState._accepts"
+  },
+  {
+    "label": "accepts load generation removed",
+    "before": "token.entryKey.loadGeneration != widget.loadGeneration",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "Changing loadGeneration clears pending loads and re-arms/increments generation, so generation rejects first.",
+    "member": "_SpotlightLiveTimelineState._accepts"
+  },
+  {
+    "label": "accepts negative index removed",
+    "before": "token.sourceIndex < 0",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "Only bounded _loadVisibleRows indices and valid _retry entry ordinals construct tokens; a negative sourceIndex cannot originate.",
+    "member": "_SpotlightLiveTimelineState._accepts"
+  },
+  {
+    "label": "accepts ordinal mismatch removed",
+    "before": "token.entryKey.sourceOrdinal != token.sourceIndex",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "Both token constructors use the same entry ordinal for sourceIndex and entryKey; mismatched ordinals cannot originate.",
+    "member": "_SpotlightLiveTimelineState._accepts"
+  },
+  {
+    "label": "accepts upper bound removed",
+    "before": "token.sourceIndex >= widget.channels.length",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "in-place shrink rejects pending ordinal without asynchronous error"
+  },
+  {
+    "label": "removePendingIfCurrent removes newer token",
+    "before": "if (identical(_pendingLoads[token.entryKey], token)) {",
+    "after": "if (true) {",
+    "occurrence": 0,
+    "must_fail": "new viewport generation rejects old completion while preserving newer pending token"
+  },
+  {
+    "label": "dwell source id removed",
+    "before": "widget.sourceId != sourceId",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "didUpdateWidget cancels the dwell when sourceId changes, before this timer can run.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell load generation removed",
+    "before": "widget.loadGeneration != loadGeneration",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "didUpdateWidget cancels the dwell when loadGeneration changes, before this timer can run.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell context version removed",
+    "before": "widget.epgContextVersion != contextVersion",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "didUpdateWidget cancels the dwell when contextVersion changes, before this timer can run.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell channel list identity removed",
+    "before": "!identical(widget.channels, channels)",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "didUpdateWidget cancels the dwell when the list object changes, before this timer can run.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell negative row removed",
+    "before": "row < 0",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "Dwell entries originate from rendered rows, which always use valid non-negative source ordinals.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell mounted removed",
+    "before": "if (!mounted ||\n          widget.sourceId != sourceId ||",
+    "after": "if (widget.sourceId != sourceId ||",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._armPointerSelection",
+    "source_guard_only": "dispose cancels the pointer timer, so an unmounted dwell never fires.",
+    "member": "_SpotlightLiveTimelineState._armPointerSelection"
+  },
+  {
+    "label": "dwell upper bound removed",
+    "before": "row >= widget.channels.length",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "pointer shrink checks upper bound before indexing live list"
+  },
+  {
+    "label": "dwell channel identity removed",
+    "before": "!identical(widget.channels[row], entry.channel)",
+    "after": "false",
+    "occurrence": 0,
+    "must_fail": "pending pointer dwell rejects an in-place recycled row"
+  },
+  {
+    "label": "dispose listener not removed",
+    "before": "..removeListener(_onViewportMoved)\n      ",
+    "after": "",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState.dispose",
+    "source_guard_only": "The same dispose synchronously disposes the owned ScrollController, clearing its listeners. No public event can arrive between these steps.",
+    "member": "_SpotlightLiveTimelineState.dispose"
+  },
+  {
+    "label": "accepts generation under source-context change",
+    "before": "if (!mounted || token.generation != _requestGeneration) return false;",
+    "after": "if (!mounted) return false;",
+    "occurrence": 0,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "member": "_SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "This ledger row is only the source/context-change scenario: didUpdateWidget clears pending loads and re-arms/increments generation together, so the other clause rejects first. The same mutant also has an independently observable behavioural proof in accepts generation independently removed.",
+    "independent_behaviour_case": "accepts generation independently removed"
+  },
+  {
+    "label": "accepts pending token under source-context change",
+    "before": "    if (_pendingLoads[token.entryKey] != token) return false;\n",
+    "after": "",
+    "occurrence": 0,
+    "claude_exact_text": true,
+    "must_fail": "complete original body and comments _SpotlightLiveTimelineState._accepts",
+    "member": "_SpotlightLiveTimelineState._accepts",
+    "source_guard_only": "This ledger row is only the source/context-change scenario: didUpdateWidget clears pending loads and re-arms/increments generation together, so the other clause rejects first. The same mutant also has an independently observable behavioural proof in accepts pending token removed.",
+    "independent_behaviour_case": "accepts pending token removed"
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "original_checkpoint": "88d98af076f264f0a31373c2d1944a310069f29c",
+  "reference": "49c53e2e8081eb7e951c39bafedf90d678a92f55",
+  "sdk": {
+    "frameworkVersion": "3.44.8",
+    "frameworkRevision": "058e0af2c2b57e369d905a03ac9748b0ebf543c6",
+    "dartSdkVersion": "3.12.2"
+  },
+  "image": "debrify-flutter:3.44.8",
+  "image_id": "sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a",
+  "platform": "linux/amd64",
+  "png_sha256": {
+    "test/goldens/iptv_spotlight_timeline/linux/retry.png": "c68ea57c1665b2f768ecd32628711ce6edb5008de5f1febc067e49608ab82641",
+    "test/goldens/iptv_spotlight_timeline/linux/dense_scaled.png": "083157dfe3839549332eb2d8783b241e66dabca07134e9c37fffbeb781f62c14",
+    "test/goldens/iptv_spotlight_timeline/linux/empty.png": "1f5069ff675b9eccf2a213064c28b4eab9ec7d0540d076dc6124705ddef30abf",
+    "test/goldens/iptv_spotlight_timeline/linux/programme_replay.png": "ba2628cfd6d3437177abbd11e3e6822aa7454b66755be481b0217076787b4740",
+    "test/goldens/iptv_spotlight_timeline/linux/identity.png": "b2b8d591dc262912145a90a9312e8c4156fbcf1b9bfc2a8153038f805faa89f3",
+    "test/goldens/iptv_spotlight_timeline/linux/panned_states.png": "02e1deb03b075ded6b374dff482693708b135e941beda951760d996a3a34c331"
+  },
+  "evidence_sha256": {
+    "linux-original-sha256-first.txt": "c337232cad7586d109d4629721b26734c8bd09d26d8d91a7c4347f1e734474cb",
+    "linux-original-sha256-reverse.txt": "c337232cad7586d109d4629721b26734c8bd09d26d8d91a7c4347f1e734474cb",
+    "linux-original-revision.txt": "d998f189802d4cdf8ccf39ba5552173cb2b3998e4777693eb98947d5716c890f",
+    "linux-original-capture-first.txt": "fa06489fb2cf09819449575e64a47ef3c2fb2cb7cc1cf12ed2c37d966613cb12",
+    "linux-original-capture-reverse.txt": "38c7c60302116a8029d1cb65900bc3d17e48ba0c9ffe4d59cc83e9d083d79702",
+    "linux-original-strict.txt": "c5a6d28bbd1172adeb689c1a82a9b2f76be129b2f81713dcc1b3513cf46d5e6f"
+  }
+}

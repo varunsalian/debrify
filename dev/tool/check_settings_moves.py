@@ -327,6 +327,17 @@ def normalize(values, rows, row=None):
                 break
         if matched_alias:
             continue
+        # Opt-in retained State field reads stay live at exactly this call site.
+        # Do not erase a tear-off, a parenthesized invocation or another receiver.
+        for alias, original_field in CONFIG.get('retained_field_live_getters', {}).items():
+            if (values[i:i + 5] == ['_deps', '.', alias, '(', ')']
+                    and (i == 0 or values[i - 1] not in ('.', '?.'))):
+                out.append(mapping.get(original_field.split('.')[-1], original_field.split('.')[-1]))
+                i += 5
+                matched_alias = True
+                break
+        if matched_alias:
+            continue
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
@@ -995,6 +1006,8 @@ def check_seams(original_source, sources, config, baseline, package=None):
     The main declaration comparison then checks every patched leaf, so a
     registered seam never excuses a second edit to a method. Auxiliary files
     are checked in full against their patched baseline, including directives.
+    An opt-in source reader may validate registered moves and supply their
+    ORIGINAL source; its entire fingerprint must still match that baseline.
     """
     from check_verbatim_moves import parse
     errors = []
@@ -1010,7 +1023,15 @@ def check_seams(original_source, sources, config, baseline, package=None):
         if path == config['source']:
             original_source = expected
             continue
-        actual = (ROOT / path).read_text()
+        if spec.get('source_reader_module'):
+            import importlib
+            try:
+                actual = importlib.import_module(spec['source_reader_module']).read_validated_source(path, package)
+            except ValueError as error:
+                errors.append('Auxiliary clock seam changed outside its exact edits: ' + path + '\n' + str(error))
+                continue
+        else:
+            actual = (ROOT / path).read_text()
         units = parse({'expected': expected, 'actual': actual}, package)
         def fingerprint(unit):
             return (unit['directives'], [(d['name'], tokens(d)) for d in unit['declarations']])
@@ -1129,6 +1150,13 @@ def _check(original_source, sources, rows, source_path, package=None,
                 or declared['bodyOffset'] is None or not is_retained
                 or alias not in CONFIG.get('live_getter_callbacks', [])):
             errors.append('Live getter alias must name one retained facade getter: ' + alias)
+    for alias, member in CONFIG.get('retained_field_live_getters', {}).items():
+        declaration = original.get(member)
+        retained = next((r for r in rows if r['original_name'] == member), None)
+        if (not declaration or not declaration['variables'] or len(declaration['variables']) != 1
+                or not retained or retained['destination_file'] != source_path
+                or retained['new_name'] != member.split('.')[-1]):
+            errors.append('Retained live field getter must name one unchanged facade field: ' + alias)
     for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():
         declaration = original.get(member)
         retained = next((r for r in rows if r['original_name'] == member), None)

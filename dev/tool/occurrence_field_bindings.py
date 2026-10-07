@@ -33,7 +33,36 @@ def aligned(node, config):
     for i in range(len(values) - 2):
         if values[i:i+2] == ['widget', '.'] and values[i+2] in config.get('live_widget_getters', []):
             scaffolding.add(i)
-    return [o for o in node.get('occurrences', []) if o['tokenIndex'] not in scaffolding]
+    result = [o for o in node.get('occurrences', []) if o['tokenIndex'] not in scaffolding]
+    # Only a literal _deps.alias() invocation represents a retained field read.
+    # Keep one occurrence at its original scope and role; chained selectors
+    # still see the ORIGINAL field as their receiver. Absent config is a no-op.
+    retained = config.get('retained_field_live_getters', {})
+    if not retained:
+        return result
+    live_sites = {}
+    for i in range(len(values) - 4):
+        alias = values[i + 2]
+        if (alias in retained and values[i:i + 5] == ['_deps', '.', alias, '(', ')']
+                and (i == 0 or values[i - 1] not in ('.', '?.'))):
+            live_sites[i] = retained[alias].split('.')[-1]
+    rewritten = []
+    for occurrence in result:
+        if occurrence['tokenIndex'] in live_sites:
+            continue
+        o = dict(occurrence)
+        start = o['tokenIndex'] - 2
+        if start in live_sites and o['kind'] == 'selector' and o['role'] == 'invocation':
+            o.update(name=live_sites[start], kind='lexical', qualifier=None,
+                     qualifierTokens=None, binding='unbound', role='read')
+        elif o['kind'] == 'selector':
+            qualifier = list(o['qualifierTokens'])
+            for alias, field in retained.items():
+                if qualifier[:5] == ['_deps', '.', alias, '(', ')']:
+                    qualifier[:5] = [field.split('.')[-1]]
+            o.update(qualifierTokens=qualifier, qualifier=''.join(qualifier))
+        rewritten.append(o)
+    return rewritten
 
 
 def _located(row, lookup, source):
@@ -79,6 +108,28 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
                  and (r['destination_file'], r['destination_class'], r['new_name']) in lookup}
         original = project(original, config, package, moved)
     errors = []
+    retained_live = config.get('retained_field_live_getters', {})
+    if retained_live:
+        # A field read has no occurrence for its late/final modifiers. Pin its
+        # complete retained declaration too, so eager/replacement ownership
+        # cannot hide behind otherwise identical read occurrences.
+        from check_settings_moves import declaration_tokens, sidecar, check_scaffolds
+        for alias, identity in retained_live.items():
+            row = next((r for r in rows if r['original_name'] == identity), None)
+            owner, _, name = identity.rpartition('.')
+            before = original.get(identity)
+            after = lookup.get((source, owner, name))
+            if (row is None or row['destination_file'] != source or before is None or after is None
+                    or declaration_tokens(before, rows, row, original=True) != declaration_tokens(after, rows, row)):
+                errors.append('Retained live field declaration/ownership changed: ' + identity)
+        # Reuse the exact existing scaffold contract at the factory binding;
+        # this also proves that the alias reads the original single field.
+        factories = [s for s in sidecar('scaffolding', 'scaffolds', [])
+                     if s.get('scaffold_activation_step', 0) <= config.get('completed_step', 0)
+                     and s['file'] == source and any(
+                         s['tokens'][i:i + 2] == [alias, ':']
+                         for alias in retained_live for i in range(len(s['tokens']) - 1))]
+        errors.extend(check_scaffolds(lookup, factories))
     for row in rows:
         identity = row['original_name']
         if members is not None and identity not in members:
@@ -87,6 +138,16 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
         after = _located(row, lookup, source)
         if after is None:
             continue
+        # A retained State field must be read through its exact live alias in
+        # moved bodies. Raw bare/this reads would otherwise align with the
+        # original even though that State field is outside the new owner.
+        if retained_live and row['destination_file'] != source and (row['destination_file'], row['destination_class'], row['new_name']) in lookup:
+            retained_names = {identity.split('.')[-1] for identity in retained_live.values()}
+            for occurrence in after.get('occurrences', []):
+                if occurrence['name'] in retained_names and (
+                        occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
+                        or occurrence['kind'] == 'selector' and occurrence['qualifierTokens'] == ['this']):
+                    errors.append('Retained live field qualification lost: ' + identity)
         left, right = aligned(before, config), aligned(after, config)
         annotations = config.get('forwarded_annotation_occurrences', {}).get(identity)
         destination = (row['destination_file'], row['destination_class'], row['new_name'])

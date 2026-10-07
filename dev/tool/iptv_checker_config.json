@@ -171,7 +171,8 @@
           "before": "  static String _dayHeading(DateTime time) {",
           "after": "  String _dayHeading(DateTime time) {"
         }
-      ]
+      ],
+      "source_reader_module": "iptv_spotlight_timeline_source_reader"
     },
     {
       "file": "lib/widgets/iptv/spotlight/spotlight_programme_hero.dart",
