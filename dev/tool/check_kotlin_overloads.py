@@ -56,7 +56,7 @@ def resolve(calls, site, start, end):
     callee = site['callee']
     def matches(call):
         target, descriptor = call.split(':', 1)
-        if callee in ('Intent', 'Builder'):
+        if target.endswith('.<init>'):
             named = target.endswith('/' + callee + '.<init>') or target.endswith('$' + callee + '.<init>')
         else:
             named = target.split('.')[-1] in (callee, callee + '$default')
@@ -68,21 +68,71 @@ def resolve(calls, site, start, end):
     return signatures.pop(), found
 
 
+def receiver_inventory(manifest, original, unit, nodes, moved):
+    """Require every activity receiver, alias use and Runnable self site by PSI."""
+    def row_at(offset):
+        return next((r for name, r in moved.items() if nodes[name]['start'] <= offset < nodes[name]['end']), None)
+    def identity(row, site):
+        line = original.count('\n', 0, site['start']) + 1
+        return row['original'], line, original.splitlines()[line - 1].strip()
+    expected_runnable, expected_alias, calls = [], [], []
+    for site in unit['all_this_sites']:
+        row = row_at(site['start'])
+        if not row:
+            continue
+        if site['receiver'] == 'Runnable':
+            expected_runnable.append(identity(row, site))
+            continue
+        if site['receiver'] != 'activity':
+            raise ValueError('wrong receiver classification: unreviewed object this')
+        alias = next((a for a in unit['context_aliases'] if a['start'] == site['start']), None)
+        if alias:
+            expected_alias.append(dict(original=row['original'], line=identity(row, site)[1],
+                context=identity(row, site)[2], name=alias['name'], uses=[dict(
+                    line=original.count('\n', 0, use['start']) + 1, callee=use.get('callee'),
+                    context=original.splitlines()[original.count('\n', 0, use['start'])].strip()) for use in alias['uses']]))
+            if not alias['uses'] or any('callee' not in use for use in alias['uses']):
+                raise ValueError('unlisted alias escape/non-call use')
+            calls.extend(alias['uses'])
+        elif 'callee' in site:
+            calls.append(site)
+        else:
+            raise ValueError('unlisted alias/non-call activity receiver')
+    actual_runnable = [(x['original'], x['line'], x['context']) for x in manifest['runnable_receivers']]
+    if sorted(expected_runnable) != sorted(actual_runnable) or any(not x.get('reason') for x in manifest['runnable_receivers']):
+        raise ValueError('wrong receiver classification: reviewed Runnable receiver list differs from PSI')
+    if expected_alias != manifest['context_aliases']:
+        raise ValueError('unlisted alias: context alias initialization/uses differ from PSI')
+    expected = sorted((row_at(x['start'])['original'], original.count('\n', 0, x['start']) + 1, x['callee']) for x in calls)
+    actual = sorted((x['original'], x['line'], x['callee']) for x in manifest['overload_audit'])
+    if expected != actual:
+        raise ValueError('substituted this-site audit coverage differs from original PSI')
+    for site in manifest['overload_audit']:
+        is_alias = any(a['original'] == site['original'] and any(
+            use['line'] == site['line'] for use in a['uses']) for a in expected_alias)
+        if is_alias != bool(site.get('alias')):
+            raise ValueError('wrong receiver classification: alias-use marker differs')
+    return calls
+
+
 def audit(manifest, original, current, before, after):
     units = k.parse({'original': original, **current})
     nodes = {path: {n['id']: n for n in k.walk(u['declarations'])} for path, u in units.items()}
     sites = manifest['overload_audit']
     moved = {r['original']: r for r in manifest['declarations'] if r['fate'] == 'moved'}
-    # Exact coverage: all activity-this expressions in moved subtrees except the
-    # Runnable's own this, whose text is preserved by the move checker.
-    expected = []
-    for site in units['original']['this_sites']:
-        row = next((r for name, r in moved.items() if nodes['original'][name]['start'] <= site['start'] < nodes['original'][name]['end']), None)
-        if row and row['original'].split('/')[-1] != 'property upNextTicker':
-            expected.append((row['original'], original.count('\n', 0, site['start']) + 1, site['callee']))
-    actual = [(s['original'], s['line'], s['callee']) for s in sites]
-    if sorted(expected) != sorted(actual):
-        raise ValueError('substituted this-site audit coverage differs from original PSI')
+    if manifest['phase'] >= 4:
+        receiver_sites = receiver_inventory(manifest, original, units['original'], nodes['original'], moved)
+    else:
+        # Historical phase-3 manifest retains its reviewed Up Next receiver.
+        expected = []
+        for site in units['original']['this_sites']:
+            row = next((r for name, r in moved.items() if nodes['original'][name]['start'] <= site['start'] < nodes['original'][name]['end']), None)
+            if row and row['original'].split('/')[-1] != 'property upNextTicker':
+                expected.append((row['original'], original.count('\n', 0, site['start']) + 1, site['callee']))
+        actual = [(s['original'], s['line'], s['callee']) for s in sites]
+        if sorted(expected) != sorted(actual):
+            raise ValueError('substituted this-site audit coverage differs from original PSI')
+        receiver_sites = units['original']['this_sites']
     results = []
     for site in sites:
         row = moved[site['original']]
@@ -90,7 +140,7 @@ def audit(manifest, original, current, before, after):
             raise ValueError('audit destination differs from moved declaration')
         original_node = nodes['original'][site['original']]
         moved_node = nodes[site['destination']][site['target']]
-        psi_site = next(s for s in units['original']['this_sites']
+        psi_site = next(s for s in receiver_sites
                         if original.count('\n', 0, s['start']) + 1 == site['line']
                         and s['callee'] == site['callee'])
         if (site['call_start_line'], site['call_end_line'], site['context']) != (

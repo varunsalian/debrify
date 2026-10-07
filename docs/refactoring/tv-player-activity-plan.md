@@ -734,6 +734,110 @@ near the end of an episode (auto-advance and dismiss), status pill messages
 during source switching and subtitle loads, IPTV recording start/stop (tee
 and engine), scheduled recording confirmation.
 
+## Phase 4 — subtitle rendering/selection and the auto-sync engine
+
+Branch `refactor/tvplayer-p4` off the phase-3 merge `eee52b084` (activity 18,265 lines). The phase-3 initializer-timing rule applies (moved initializers running earlier must be listed and proven inert, else slots preserved). Evidence under
+`refactor-evidence/tvplayer/p4/`. The feasibility inventory (ranked
+candidates, every inbound reference, ownership choices, hazards) is the
+"Phase 4 inventory" section of the deps report; its line numbers are at
+`ec365eb80` and are re-measured on the phase-3 merge before the manifest is
+written.
+
+**Selected:** two controllers following the phase-3 collaborator pattern
+(all its rules apply unchanged: `AppCompatActivity` injection with the
+overload audit, computed explicitly-qualified Host forwarders, slot-anchored
+controller properties, activity-owned readiness getters, braced host
+templates, cross-feature reads via the owning controller, no delegators,
+teardown order unchanged):
+
+- `TvAutoSyncController` — the auto-sync engine (manual run, ladder, verify
+  pass, cue cache, audio-tap use) and its pill/ring UI wiring (≈ 516 lines).
+- `TvSubtitleController` — external (Stremio) subtitle loading/rendering,
+  subtitle track selection, the subtitle settings panel wiring and the five
+  subtitle unified-menu row builders (≈ 571 lines).
+
+≈ 1,087 moved lines for ≈ 28 activity call-site patches in 14 declarations;
+no existing-test retargets expected. Lifecycle edits are in-place token
+patches in `onStart`/`onStop`/`onDestroy`; statement order unchanged.
+
+**Ownership.** `externalSubtitleHandler`, `subtitleScope`, the two sync
+overlays (`syncOverlay`, `linePickerOverlay`) and `speechTap` stay in the
+activity and are **borrowed** by the controllers through the Host (the
+activity remains their owner and keeps clearing/cancelling them exactly
+where it does today; `SubtitleSyncDismissTest` reflects the overlays on the
+activity and stays unchanged). The controllers never clear a borrowed
+handler or cancel a borrowed scope.
+
+**Behaviour to preserve exactly** (from the inventory/survey): manual
+auto-sync catches `Throwable` (the MiBox OOM fix) while the periodic verify
+pass catches only `Exception`; ladder/verify timings; the pill's
+heartbeat/announce/result UI and colours (there is **no** countdown);
+subtitle offset and selection semantics; external subtitle ticker cadence on
+the shared handler; `SubtitleCueCache` semantics as they are (an unbounded
+map — no bound exists to preserve).
+
+**Step T additions (overload audit).** The phase-3 bytecode auditor is
+extended before any move: (a) resolution of **every constructor
+invocation** whose arguments include the substituted receiver
+(`AutoSyncRingView`, `TextView`, `LinearLayout`, both overlay controllers,
+`Intent`, dialog builders, …), (b) **context aliases** (`val ctx = this`
+and any later use of the alias), collected by the PSI adapter even when not
+under a call expression, (c) an explicit, reviewed list of `this`
+occurrences that are anonymous `Runnable`/object receivers (≈ activity lines
+13607, 13628, 14384 at `eee52b084`) excluded from activity substitution, with
+any unlisted `Runnable`-typed `this` failing. A complete phase-4 audit
+fixture with negatives (wrong receiver classification, constructor resolved
+to a different overload, unlisted alias) must pass first. `test_kotlin_moves.py`
+dispatches a complete phase-4 production-config extraction fixture plus the
+inventory's negatives (multi-block, cross-controller, default-argument,
+shadowed-local), keeps all historical suites, and earlier destinations
+(including the four phase-3 controllers) are frozen against `eee52b084`.
+
+**Deferred with reasons:** progress reporter (needs 6 test retargets and an
+edit to the phase-3 sleep `sendProgress` forwarder → its own phase);
+display/audio/speed/night mode (20 patches inside `playbackListener`/
+`setupPlayer`/analytics listener, native audio-effect lifetime → with the
+playback core); unified-menu model (Host would need 61 members → split into
+owning controllers as they move); status pill (34 of 40 callers move in
+phase 6 → with them).
+
+### Step 0 — characterization of the original
+
+Prerequisites, **per feature**, each demonstrated on the original first and
+keeping the production coroutine/handler dispatch:
+- auto-sync: a deterministic seam for the subtitle aligner (alignment can be
+  **blocked** by a latch to test subtitle replacement and destruction while a
+  result is pending) and the audio tap;
+- subtitles: a latch-controlled **uncached** cue fetch (test-only shadow or
+  MockWebServer, as phase 3's skip HTTP shadow) proving IO execution, Main
+  publication, failure fallback, superseded loads (stale token) and destroy
+  during fetch — seeding the cache is not sufficient (hits return
+  synchronously and skip the guarded path).
+Fixtures release and settle their workers during cleanup. **A feature whose
+own prerequisite fails is deferred**; only features whose prerequisites
+pass are moved, and a reduced set (e.g. subtitles only, or subtitles +
+progress reporter) gets revised inbound patches, characterization and a
+design re-review before execution.
+
+- Auto-sync: manual run success/failure/OOM (`Throwable`) paths, ladder
+  steps and timings, verify pass (`Exception` only), restore/decline result
+  states, pill transitions (heartbeat/announce/result, busy/ok/fail colours,
+  label, ring pulsing on/off), auto-sync work **continuing across `onStop`**
+  (pinned as-is; a recorded follow-up), and destroy-only subtitle-scope
+  cancellation plus shared-handler clearing.
+- Subtitles: external subtitle load/render ticker cadence, stale-load
+  rejection, selection (embedded vs external, off), offset changes, settings
+  panel callbacks, the five menu rows' labels and actions, `onStart`/`onStop`
+  resume/suspend behaviour.
+- Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus every phase-3 gate addition. Device checklist (end of
+series): external subtitles (load, timing, offset), subtitle track switching
+incl. off, subtitle settings panel, auto-sync manual run + automatic verify
+(incl. a long file on a low-RAM box), the auto-sync pill states.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
@@ -1158,3 +1262,68 @@ and engine), scheduled recording confirmation.
   (constant / allocation-only, no reads of other state, no side effects);
   otherwise the controller property is split or the slot preserved.
   Decoder verification remains pending-environment. Phase 3 complete; merged.
+- 2026-10-08 — phase 4 design round 1 (Codex): P1s folded (overload auditor
+  extended for constructors, context aliases and reviewed Runnable
+  receivers, with a phase-4 audit fixture; per-feature prerequisite →
+  deferral rule); P2s folded (phase-4 fixture dispatch + earlier destinations
+  frozen at `eee52b084`; uncached latch-controlled cue fetch and blockable
+  alignment; expectations corrected — no countdown, work continues across
+  `onStop`, destroy-only cancellation, unbounded cue cache).
+- 2026-10-08 — phase 4 design round 2 (Codex): **No P1s**, no further findings. Phase 4 design approved.
+
+- 2026-10-08 — phase 4 step T: re-measured `eee52b084` (2,629 PSI
+  declarations); manifest owns 66 moved subtrees / 1,131 partition lines,
+  31 references patched in 14 retained declarations, four added declarations
+  and 28 exact initializer-timing proofs. Earlier destinations (26 files,
+  including all four phase-3 controllers) frozen at `eee52b084`; no whitelist.
+  Original all-retained comparison and complete production-config extraction
+  fixture: zero differences. Fixture compiles; all 23 direct/alias/constructor
+  invocation descriptors unchanged; four reviewed Runnable self receivers.
+  Phase-4 constructor/alias/receiver audit fixture and move-checker negatives
+  added; all historical phase suites/checks retained. Evidence: `p4/`;
+  production unchanged. Checker self-tests: 73/73 pass (historical suites
+  included; each negative fails for its stated reason). Explicit controller property types resolve the Host
+  cycle without construction-time reads.
+
+- 2026-10-08 — phase 4 tooling follow-up: the inherited phase-3 positive
+  fixture writer still hard-coded `p3/fixtures/phase3` when dispatched by
+  phase 4. It now uses the active evidence phase, like the phase-1/2 writers.
+  The focused historical positive check passes and archives under `p4/`;
+  its bytes equal the existing historical fixture. Earlier step-T runs had
+  regenerated those same historical fixture bytes in `p3/`; this evidence
+  path deviation is recorded here. Production and manifests unchanged.
+
+- 2026-10-08 — phase 4 step 0: both per-feature prerequisites passed on
+  `eee52b084` first (seven tests, 20 blocked alignments and 20 uncached loads;
+  Main publication, stale work, failure fallback and destroy covered).
+  No feature deferred. Added 61 original characterizations for auto-sync
+  outcomes/OOM, ladder/verify boundaries and timings, pill UI/animations,
+  continued work across onStop, destroy cancellation/shared-handler cleanup,
+  renderer/ticker/offset/selection, panel callbacks, all five menu builders,
+  external/embedded overlay routing and the legacy track dialog. Every new
+  test has an original-code assertion mutation proof: 61/61 killed, no
+  compile failures or incidental crashes accepted. Table appended to deps;
+  exact mutations, logs/XML/assertions and final test sources under `p4/`.
+  Clean `baseline-eee52b084`: 459 (458 pass, existing focus failure 1).
+  `p4-step0`: 520 (519 pass, same failure); identity comparison passes,
+  additions only (61), all prior statuses identical. Original lint archived:
+  1,352 issues (253 Error / 1,099 Warning), unchanged baseline issue set for
+  the later gate. Production/protected inputs unchanged; temporary original
+  worktree removed. STOP before production moves; Claude's independent
+  mutation sample/review and any 0b follow later.
+
+- 2026-10-08 — **Phase 4 step 0b complete before moves.** Nineteen new original-surface cases close Claude f01/f07/f13/f14/f15 and sweep moved strings/auto-hide deadlines, negative/zero offset guards and visible-only failure refresh. All 47 original sweep proofs fail named assertions; Claude exact five rerun against all 80 phase-4 characterizations are killed, control 80/80. Clean `p4-step0b`: 539 identities (538 pass, same focus failure), all 520 p4-step0 statuses identical with 19 passing additions. Evidence `p4/step0b/`, `junit/p4-step0b/`; original detached tree removed. Production/protected inputs and manifest unchanged; Step 1 and gates follow.
+
+- 2026-10-08 — **Phase 4 step 1 moves complete.** Manifest-materialized 66 subtrees into auto-sync/subtitle controllers (684/776 lines), 31 inbound references in 14 declarations, four slot-anchored additions; activity 18,265 → 17,205 and its size baseline lowered with `--update`. Only the shared reflection helper is retargeted (94 name/getter entries); all other test bytes/assertions unchanged, no Dart retarget necessary. All 80 phase-4 characterizations pass, affected Dart source tests match all 45 prior statuses, forced Kotlin compile preserves five warnings. Checker zero differences over 2,629 declarations; historical manifests and 26 earlier destinations unchanged. Extended compiled overload audit 23/23 identical, four Runnable self sites, full lifecycle order and 28 initializer-timing proofs pass. No status-pill move, borrowed-resource cleanup, dependency/ProGuard edit or bug fix. Full gate follows.
+
+- 2026-10-08 — **Phase 4 gate checks complete on `22990ad8a`; decoder pending-environment.** Clean JVM p4-gate exactly matches all 539 p4-step0b statuses (538 pass, same focus failure); all 80 phase-4 characterizations pass. Checker zero differences over 2,629 declarations, 73 self-tests, all three historical manifests and 26 frozen earlier destinations pass. Extended bytecode overload audit 23/23, four Runnable self sites, 28 initializer proofs and full lifecycle teardown/order pass; compile preserves five warnings. Size passes at activity 17,205/controllers 684/776. Lint exactly matches original 1,352 issues (253 errors, 175 opt-in errors), analyzer all 1,758 prior diagnostics. Release APK succeeds; R8/DEX verifies every new class/Host/anonymous object/facade (18 classes/323 members, three negative controls). Decoder script failure/output and all three native hashes unchanged: pending-environment, no workaround. Full quiet Flutter suite exactly matches all 12,855 phase-3 identity/status pairs on the same SDK and stable tree. Step 0b: 19 passing additions, all 47 sweep proofs and Claude's exact five survivors killed on original eee52b084. Evidence p4/step0b/, p4/step1/, p4/gate/, junit/p4-step0b/ and junit/p4-gate/. Protected inputs/manifest/earlier destinations unchanged; detached original removed. No self independent review, push, branch switch, device/emulator or bug fix. **STOPPED after phase 4**; Claude reviews separately.
+- 2026-10-08 — phase 4 post-implementation reviews of `a665502e8..bee1f5ea2`.
+  Claude: all non-forwarder activity additions read (controllers in slots,
+  subtitle→auto-sync reads via `autoSyncController`, borrowed overlays stay
+  activity-owned, two readiness getters, call-site patches in place incl.
+  `onStop`/`onDestroy`); Claude's 16-mutation sample 11/16, survivors
+  f01/f07/f13/f14/f15 closed in 0b (one earlier invalid 0-test attempt
+  discarded). Independent Codex review (fresh session): **No P1s, no
+  P2/P3**; 81 compiled overload sites across phases 3–4 match; 28 earlier-
+  running initializers covered by inert proofs. Decoder verification remains
+  pending-environment. Phase 4 complete; merged.

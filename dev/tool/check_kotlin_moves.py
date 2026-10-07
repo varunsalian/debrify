@@ -207,6 +207,10 @@ def check(manifest, original, current):
     if errors:
         return errors, len(inventory)
 
+    if manifest['phase'] >= 4:
+        from kotlin_move_partition import check_initializer_timing
+        check_initializer_timing(manifest, inventory, original, errors)
+
     source = manifest['source']
     if set(current) != {source, *manifest['destinations']}:
         errors.append('unexpected/missing destination source set')

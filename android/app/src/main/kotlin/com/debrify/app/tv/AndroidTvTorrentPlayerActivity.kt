@@ -727,7 +727,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Subtitle auto-sync: taps the decoded PCM (created with the player, in
     // setupPlayer) so the aligner has audio history the moment it's asked.
     private var speechTap: SpeechFeatureTap? = null
-    private var autoSyncRunning = false
+    private val autoSyncController: TvAutoSyncController = TvAutoSyncController(
+        this,
+        object : TvAutoSyncController.Host {
+            override val activeExternalSubtitleUrl: String? get() = this@AndroidTvTorrentPlayerActivity.subtitleController.activeExternalSubtitleUrl
+            override fun applySubtitleSettings(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleController.applySubtitleSettings()
+            override fun dp(value: Int): Int = this@AndroidTvTorrentPlayerActivity.dp(value)
+            override val externalSubtitleActive: Boolean get() = this@AndroidTvTorrentPlayerActivity.subtitleController.externalSubtitleActive
+            override val externalSubtitleHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.externalSubtitleHandler
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val speechTap: SpeechFeatureTap? get() = this@AndroidTvTorrentPlayerActivity.speechTap
+            override val subtitleScope: CoroutineScope get() = this@AndroidTvTorrentPlayerActivity.subtitleScope
+        },
+    )
 
     // Seek feedback manager
     private lateinit var seekFeedbackManager: SeekFeedbackManager
@@ -1111,21 +1123,69 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
-    private var subtitleSettingsVisible = false
+    private val subtitleController: TvSubtitleController = TvSubtitleController(
+        this,
+        object : TvSubtitleController.Host {
+            override var autoSyncAppliedOffsetMs: Long?
+                get() = this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncAppliedOffsetMs
+                set(value) { this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncAppliedOffsetMs = value }
+            override var autoSyncResultLabel: String?
+                get() = this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncResultLabel
+                set(value) { this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncResultLabel = value }
+            override var autoSyncResultUrl: String?
+                get() = this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncResultUrl
+                set(value) { this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncResultUrl = value }
+            override val autoSyncRunning: Boolean get() = this@AndroidTvTorrentPlayerActivity.autoSyncController.autoSyncRunning
+            override fun cancelAutoSyncLadder(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.cancelAutoSyncLadder()
+            override fun cancelAutoSyncVerify(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.cancelAutoSyncVerify()
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override var currentStremioSubtitleIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex = value }
+            override fun currentSubtitleIdentityLabel(): String = this@AndroidTvTorrentPlayerActivity.currentSubtitleIdentityLabel()
+            override val externalSubtitleHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.externalSubtitleHandler
+            override val failedSubtitleUrls: MutableSet<String> get() = this@AndroidTvTorrentPlayerActivity.failedSubtitleUrls
+            override fun hideStatusPill(): Unit = this@AndroidTvTorrentPlayerActivity.hideStatusPill()
+            override val isLoadingStremioSubtitles: Boolean get() = this@AndroidTvTorrentPlayerActivity.isLoadingStremioSubtitles
+            override var linePickerOverlay: SubtitleLinePickerController?
+                get() = this@AndroidTvTorrentPlayerActivity.linePickerOverlay
+                set(value) { this@AndroidTvTorrentPlayerActivity.linePickerOverlay = value }
+            override val offsetRenderersFactory: OffsetRenderersFactory? get() = this@AndroidTvTorrentPlayerActivity.offsetRenderersFactory
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
+            override val playerViewReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.playerViewReady
+            override fun runSubtitleAutoSync(auto: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.runSubtitleAutoSync(auto)
+            override fun scheduleAutoSyncVerify(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.scheduleAutoSyncVerify()
+            override fun showSearchSubtitleDialog(): Unit = this@AndroidTvTorrentPlayerActivity.showSearchSubtitleDialog()
+            override fun showStatusPill(message: String): Unit = this@AndroidTvTorrentPlayerActivity.showStatusPill(message)
+            override fun showStatusPillTransient(message: String): Unit = this@AndroidTvTorrentPlayerActivity.showStatusPillTransient(message)
+            override fun showSyncToast(glyph: String, accent: Int, title: String, hint: String?, autoHideMs: Long?, uppercase: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.showSyncToast(glyph, accent, title, hint, autoHideMs, uppercase)
+            override fun startAutoSyncLadder(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.startAutoSyncLadder()
+            override val stremioSubtitles: List<StremioSubtitle> get() = this@AndroidTvTorrentPlayerActivity.stremioSubtitles
+            override val subtitleControlsLift: SubtitleControlsLiftController get() = this@AndroidTvTorrentPlayerActivity.subtitleControlsLift
+            override val subtitleOverlay: SubtitleView get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlay
+            override val subtitleOverlayReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlayReady
+            override val subtitlePanel: SubtitlePanelController? get() = this@AndroidTvTorrentPlayerActivity.subtitlePanel
+            override val subtitleScope: CoroutineScope get() = this@AndroidTvTorrentPlayerActivity.subtitleScope
+            override var syncOverlay: SubtitleSyncOverlayController?
+                get() = this@AndroidTvTorrentPlayerActivity.syncOverlay
+                set(value) { this@AndroidTvTorrentPlayerActivity.syncOverlay = value }
+            override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
+            override fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.tryAutoSelectAddonSubtitle()
+            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
+            override var userManuallySelectedSubtitle: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle
+                set(value) { this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle = value }
+        },
+    )
+    private val playerViewReady: Boolean get() = ::playerView.isInitialized
+    private val subtitleOverlayReady: Boolean get() = ::subtitleOverlay.isInitialized
     private var subtitlePanel: SubtitlePanelController? = null
     private var syncOverlay: SubtitleSyncOverlayController? = null
     private var linePickerOverlay: SubtitleLinePickerController? = null
     private var unifiedMenu: UnifiedMenuController? = null
     private var sourceBrowser: TvSourceBrowserController? = null
-    private val subtitleSeekHandler = Handler(Looper.getMainLooper())
-    private val subtitleSeekRunnable = Runnable {
-        player?.let { p ->
-            val pos = p.currentPosition
-            if (pos >= 0) p.seekTo(pos)
-        }
-    }
-    private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
-    private var currentSubtitleTrackIndex = 0
 
     // Stremio external subtitles
     private var stremioSubtitleService: StremioSubtitleService? = null
@@ -1203,63 +1263,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * do the same. Every automatic start checks this.
      */
     private var sleepStopLatched = false
-
-    // Side-loaded external subtitle rendering. External (Stremio) subtitles are
-    // downloaded + parsed off-thread and fed straight to subtitleOverlay from a
-    // position ticker — the player source is never rebuilt, so switching
-    // subtitles never interrupts playback (and never touches the fragile
-    // resume/seek logic that a re-prepare would).
-    private var externalSubtitleCues: List<SubtitleCue> = emptyList()
-    private var externalSubtitleActive = false
-    private var activeExternalSubtitleUrl: String? = null  // URL of the side-rendered subtitle currently on screen; identifies it for sync-offset scoping
-    private var externalSubtitleLoadToken = 0  // Guard against stale downloads (fast switching / content change)
     private val externalSubtitleHandler = Handler(Looper.getMainLooper())
-    private var externalSubtitleTicker: Runnable? = null
-    private var lastExternalCueText: String? = null
     private var statusPill: TextView? = null
     private val statusPillHideRunnable = Runnable { hideStatusPill() }
-
-    // Auto-sync's toast (bottom-right, quiet): out of the subtitles' way at
-    // bottom-center, and deliberately soft-spoken — sync happens by default
-    // now, so its feedback must never feel like an alert.
-    private var autoSyncPill: LinearLayout? = null
-    private var autoSyncPillRing: AutoSyncRingView? = null
-    private var autoSyncPillLabel: TextView? = null
-    private var autoSyncPillResultShowing = false
-    private var autoSyncPillWindowActive = false
-    private var autoSyncPillAnnounceShowing = false
-    // Dismiss the announce line only if it's still what's on screen — a
-    // status shown meanwhile (manual sync-now) must not be clobbered.
-    private val autoSyncPillAnnounceDismissRunnable = Runnable {
-        if (autoSyncPillAnnounceShowing) {
-            autoSyncPillAnnounceShowing = false
-            hideAutoSyncPillView()
-        }
-    }
-    private val autoSyncCardHideRunnable = Runnable { hideAutoSyncCard() }
-
-    /** Last auto-sync outcome, shown on the menu row while its subtitle is active. */
-    private var autoSyncResultLabel: String? = null
-    private var autoSyncResultUrl: String? = null
-
-    // Hands-free auto-sync (Settings → Playback, Android TV only): a ladder of
-    // attempts as audio accrues — narrow search needs ~20s, wider ones more —
-    // each silent unless it SUCCEEDS. Stops on success, on drift (retrying
-    // won't fix a framerate mismatch), when the user dials any manual offset,
-    // or when the rungs run out.
-    private val autoSyncLadderSec = intArrayOf(20, 45, 90, 180)
-    private var autoSyncLadderIdx = 0
-    private var autoSyncLadderDone = false
-    private var autoSyncLadderTick: Runnable? = null
-
-    // Verify mode: after an offset WE applied (auto, manual button, or a
-    // restored memory), periodically re-check the CURRENT region of the film
-    // against that offset — piecewise alignment delivered where the user is.
-    // The applied value doubles as the tamper flag: the moment the stored
-    // offset differs from it, the user has taken over and verification ends.
-    private var autoSyncAppliedOffsetMs: Long? = null
-    private var autoSyncVerifyTick: Runnable? = null
-    private var autoSyncVerifyMisses = 0
 
     // Focus navigation state - prevents focus recovery from interfering with active navigation
     private var isNavigating = false
@@ -2465,7 +2471,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 previewText = findViewById(R.id.subtitle_preview_text),
                 identityLabel = findViewById(R.id.subtitle_identity_label),
                 searchButton = findViewById(R.id.subtitle_search_button),
-                callbacks = subtitlePanelCallbacks
+                callbacks = subtitleController.subtitlePanelCallbacks
             )
         }
 
@@ -2970,7 +2976,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
                 // While an external subtitle is side-rendered, the overlay is
                 // owned by the ticker — ignore the player's (empty) cue events.
-                if (externalSubtitleActive) return
+                if (subtitleController.externalSubtitleActive) return
                 subtitleOverlay.setCues(cueGroup.cues)
             }
         }
@@ -2984,8 +2990,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // The sync offset is per-subtitle and in-memory: start this session at 0
         // and let SubtitleSettings scope it to whatever subtitle is on screen.
         SubtitleSettings.resetSyncOffset()
-        SubtitleSettings.setActiveSubtitleIdentityProvider(this) { currentSubtitleIdentity() }
-        applySubtitleSettings()
+        SubtitleSettings.setActiveSubtitleIdentityProvider(this) { subtitleController.currentSubtitleIdentity() }
+        subtitleController.applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
         applyResizeMode()
@@ -4361,7 +4367,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (USE_UNIFIED_MENU && unifiedMenu != null) {
                 unifiedMenu?.show("subs")
             } else {
-                showSubtitleSettingsPanel()
+                subtitleController.showSubtitleSettingsPanel()
             }
         }
         subtitleButton?.onFocusChangeListener = extendTimerOnFocus
@@ -4693,9 +4699,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun resetSubtitleState() {
-        stopExternalSubtitleRendering()
+        subtitleController.stopExternalSubtitleRendering()
         stremioSubtitles.clear()
-        subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks
+        subtitleController.subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks
         addonSubtitleResults.clear()
         addonFetchTokens.clear()
         failedSubtitleUrls.clear()
@@ -4871,8 +4877,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Set loading state and refresh panel if visible
         isLoadingStremioSubtitles = true
-        if (subtitleSettingsVisible) {
-            refreshSubtitlePanelForLoading()
+        if (subtitleController.subtitleSettingsVisible) {
+            subtitleController.refreshSubtitlePanelForLoading()
         }
 
         val manualImdbId = manualSubtitleImdbId
@@ -5108,7 +5114,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Repaint whichever subtitle surface is showing (unified menu or legacy panel). */
     private fun refreshSubtitleUiForLoading() {
         if (unifiedMenu?.isVisible == true) unifiedMenu?.render()
-        if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
+        if (subtitleController.subtitleSettingsVisible) subtitleController.refreshSubtitlePanelForLoading()
     }
 
     /**
@@ -5118,8 +5124,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         isLoadingStremioSubtitles = false
         subtitleAddonDiscoveryReady = true
         tryAutoSelectAddonSubtitle()
-        if (subtitleSettingsVisible) {
-            refreshSubtitlePanelForLoading()
+        if (subtitleController.subtitleSettingsVisible) {
+            subtitleController.refreshSubtitlePanelForLoading()
         }
     }
 
@@ -6309,7 +6315,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Tear down any side-rendered subtitle before switching identity —
         // otherwise its cues keep drawing while the panel shows nothing selected.
-        stopExternalSubtitleRendering()
+        subtitleController.stopExternalSubtitleRendering()
 
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
@@ -6323,8 +6329,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .build()
         }
 
-        if (subtitleSettingsVisible) {
-            refreshSubtitlePanelForLoading()
+        if (subtitleController.subtitleSettingsVisible) {
+            subtitleController.refreshSubtitlePanelForLoading()
         }
 
         val subtitleItem = if (type == "series") {
@@ -6688,8 +6694,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             },
         )) {
             SubtitleAutoSelection.Off -> {
-                if (currentStremioSubtitleIndex >= 0 || externalSubtitleActive) {
-                    stopExternalSubtitleRendering() // invalidates in-flight addon downloads
+                if (currentStremioSubtitleIndex >= 0 || subtitleController.externalSubtitleActive) {
+                    subtitleController.stopExternalSubtitleRendering() // invalidates in-flight addon downloads
                     currentStremioSubtitleIndex = -1
                 }
                 trackSelector?.let { selector ->
@@ -6720,7 +6726,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val sub = addonSubtitleResults.firstOrNull { it.addon.priorityId == choice.addonId }
                     ?.subtitles?.getOrNull(choice.index) ?: return
                 currentStremioSubtitleIndex = stremioSubtitles.indexOfFirst { it.url == sub.url }
-                loadStremioSubtitle(sub)
+                subtitleController.loadStremioSubtitle(sub)
             }
             SubtitleAutoSelection.Addon -> return
         }
@@ -13295,9 +13301,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val tag = col2.getOrNull(col2Index)?.tag
         var mode = UnifiedMenuController.Col3Mode.ROWS
         val (col3Title, col3) = when {
-            tag == "emb" -> "Track" to umEmbeddedTrackRows()
-            tag == "appearance" -> "Appearance · live" to umAppearanceRows()
-            tag == "timing" -> "Timing" to umTimingRows()
+            tag == "emb" -> "Track" to subtitleController.umEmbeddedTrackRows()
+            tag == "appearance" -> "Appearance · live" to subtitleController.umAppearanceRows()
+            tag == "timing" -> "Timing" to subtitleController.umTimingRows()
             tag == "search" -> {
                 if (pendingSeriesResult == null) mode = UnifiedMenuController.Col3Mode.SEARCH
                 "Fix movie" to umSearchRows()
@@ -13315,27 +13321,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             col1, currentSubtitleIdentityLabel(), col2, col3Title, col3, mode,
             previewVisible = tag == "appearance"
         )
-    }
-
-    private fun umEmbeddedTrackRows(): List<UnifiedMenuController.Row> {
-        // Build the flat track list only when we don't already have one (menu open /
-        // after a content switch clears it). Rebuilding on every render would re-derive
-        // currentSubtitleTrackIndex from the not-yet-updated player.currentTracks and
-        // clobber a just-made selection, painting the wrong row as selected.
-        if (subtitleTracks.isEmpty()) rebuildSubtitleTrackList()
-        val rows = mutableListOf<UnifiedMenuController.Row>()
-        for ((i, pair) in subtitleTracks.withIndex()) {
-            val isOff = i == 0
-            val isEmbedded = pair.second != null
-            if (isOff || isEmbedded) {
-                rows.add(mrow(
-                    if (isOff) "Off" else pair.first,
-                    selected = currentSubtitleTrackIndex == i,
-                    onOk = { umSelectSubtitleRowIndex(i) }
-                ))
-            }
-        }
-        return rows
     }
 
     private fun umAddonTrackRows(addonId: String): List<UnifiedMenuController.Row> {
@@ -13358,393 +13343,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         // Require addonId match too: a URL shared by two addons dedupes
                         // to one owner, so only that addon's row highlights.
                         selected = cur?.url == sub.url && cur.addonId == addonId,
-                        onOk = { umSelectStremioSubtitleByUrl(sub.url) }
+                        onOk = { subtitleController.umSelectStremioSubtitleByUrl(sub.url) }
                     )
                 }
         }
     }
-
-    private fun umAppearanceRows(): List<UnifiedMenuController.Row> =
-        // Shared with the Torbox player so the subtitle-appearance controls
-        // can't drift between the two (see UnifiedMenuSections).
-        UnifiedMenuSections.appearanceRows(this) { applyAndPersistSubtitleSettings() }
-
-    private fun umTimingRows(): List<UnifiedMenuController.Row> {
-        val ctx = this
-        val ms = SubtitleSettings.getSyncOffsetMs(ctx)
-        // Sync needs the subtitle on screen to judge alignment, which a bottom menu
-        // column covers — so this opens the dedicated over-video sync overlay
-        // (slider for embedded subs, "tap the line" picker for downloaded subs).
-        // Single launcher — the overlay itself owns reset (OK on the slider /
-        // hold-OK on the picker), which also clears the picker's remembered line.
-        return listOf(
-            // Listens to the played audio it has already seen (the PCM tap) and
-            // cross-correlates it against the subtitle's cue schedule — answers
-            // in under a second, applies only on a confident match. Addon subs
-            // only: their cue timelines are in hand, and they're the ones that
-            // arrive mistimed; embedded tracks are authored against this video.
-            mrow(
-                "Auto-sync from audio",
-                value = when {
-                    !externalSubtitleActive -> "needs an addon subtitle"
-                    autoSyncRunning -> "listening…"
-                    // Last outcome, only while the subtitle it was computed
-                    // against is still the one on screen.
-                    autoSyncResultUrl == activeExternalSubtitleUrl -> autoSyncResultLabel
-                    else -> null
-                },
-                accent = true,
-                enabled = externalSubtitleActive && !autoSyncRunning,
-                onOk = { unifiedMenu?.hide(); runSubtitleAutoSync() },
-            ),
-            mrow("Adjust timing  ▸", value = SubtitleSettings.formatSyncOffset(ms),
-                swatch = SubtitleSettings.getSyncOffsetColor(ms), accent = true, onOk = {
-                    unifiedMenu?.hide(); showSyncOverlay()
-                })
-        )
-    }
-
-    /**
-     * Run the audio↔subtitle aligner over whatever anchored PCM history the
-     * tap holds and apply the offset through the exact pathway the manual
-     * slider and line picker use — one offset store, three ways to fill it.
-     *
-     * Every failure mode gets its own honest message; nothing is ever applied
-     * below the aligner's confidence gate. The v1 lesson, kept on purpose: a
-     * wrong auto-sync reads as "broken feature", a declined one as a miss.
-     */
-    private fun runSubtitleAutoSync(auto: Boolean = false) {
-        if (autoSyncRunning) return
-        val tap = speechTap
-        val url = activeExternalSubtitleUrl
-        val rawCues = url?.let { SubtitleCueCache.get(it) }
-        if (tap == null || rawCues.isNullOrEmpty()) {
-            if (!auto) showSyncToast(
-                "✕", AutoSyncColors.FAIL,
-                "Pick an addon subtitle first",
-                autoHideMs = 3_500,
-            )
-            return
-        }
-        val segments = tap.snapshot()
-        val heardSec = (segments.sumOf { it.durationMs } / 1000.0).toInt()
-        val anchoredSec =
-            (segments.filter { it.anchorMs != Long.MIN_VALUE }.sumOf { it.durationMs } / 1000.0).toInt()
-        android.util.Log.d(
-            "AutoSync",
-            "run: heard=${heardSec}s anchored=${anchoredSec}s segments=${segments.size} cues=${rawCues.size}"
-        )
-        if (anchoredSec < 1 && player?.isPlaying == true && !tap.hasRecentAudio(8_000)) {
-            // Playing, yet no PCM ever reached the tap: passthrough/tunneled
-            // audio, or a format the sink won't route through processors.
-            if (auto) return
-            showSyncToast(
-                "✕", AutoSyncColors.FAIL,
-                "Can't analyze this stream's audio",
-                autoHideMs = 4_000,
-            )
-            return
-        }
-        autoSyncRunning = true
-        if (!auto) {
-            showSyncToast(
-                "●", AutoSyncColors.BUSY,
-                "Syncing subtitles…",
-                autoHideMs = null,
-            )
-        } else if (autoSyncPillWindowActive) {
-            // Ladder attempt: the heartbeat flips to its checking face
-            // (white dot + label) while the aligner runs.
-            showSyncToast("●", AutoSyncColors.BUSY, "Checking…", autoHideMs = null)
-            autoSyncPillRing?.arcColor = Color.WHITE
-        }
-        subtitleScope.launch {
-            val result = try {
-                val cues = rawCues.map { CueSpan(it.startMs, it.endMs, it.text) }
-                withContext(Dispatchers.Default) { SubtitleAligner.alignTiered(segments, cues) }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e // activity teardown — let the scope die quietly
-            } catch (e: Throwable) {
-                // Pure math should never throw; if it somehow does, the player
-                // must not die for a subtitle convenience feature. Throwable,
-                // not Exception: the 2026-08-25 MiBox crash was an
-                // OutOfMemoryError (an Error) from a garbage-sized grid, and
-                // it sailed straight past an Exception-only guard.
-                android.util.Log.e("AutoSync", "aligner failed", e)
-                AlignResult.NoMatch(0)
-            } finally {
-                autoSyncRunning = false
-            }
-            android.util.Log.d("AutoSync", "result: $result")
-            // An intermediate rung that stays silent hands the screen back
-            // its quiet; speaking results overwrite this at once.
-            if (auto && autoSyncPillWindowActive) {
-                hideAutoSyncPillView()
-            }
-            // The user may have switched subtitles during the analysis — the
-            // computed offset belongs to the cue timeline it was computed FROM.
-            if (activeExternalSubtitleUrl != url) {
-                if (!auto) showSyncToast(
-                    "●", AutoSyncColors.BUSY,
-                    "Subtitle changed — try again",
-                    autoHideMs = 3_000,
-                )
-                return@launch
-            }
-            fun remember(label: String) {
-                autoSyncResultLabel = label
-                autoSyncResultUrl = url
-            }
-            when (result) {
-                is AlignResult.Synced -> {
-                    autoSyncLadderDone = true
-                    SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, result.offsetMs)
-                    applySubtitleSettings()
-                    autoSyncAppliedOffsetMs = result.offsetMs
-                    scheduleAutoSyncVerify()
-                    val fmt = SubtitleSettings.formatSyncOffset(result.offsetMs)
-                    remember("✓ $fmt")
-                    // Shown in BOTH modes — an offset changing under the user
-                    // must always announce itself, however quietly.
-                    // Number-free by design; the offset lives in the menu row
-                    // (autoSyncResultLabel) and logcat.
-                    showSyncToast(
-                        "✓", AutoSyncColors.OK,
-                        "Subtitles synced",
-                        autoHideMs = 3_000,
-                    )
-                }
-                is AlignResult.Drift -> {
-                    autoSyncLadderDone = true // a longer listen can't fix drift
-                    remember("drifting")
-                    // Worth a word in both modes: drift means THIS subtitle
-                    // file can never be fixed by an offset — switching is the
-                    // only cure, so say so.
-                    showSyncToast(
-                        "✕", AutoSyncColors.FAIL,
-                        "Subs drift on this file",
-                        hint = "Try another subtitle",
-                        autoHideMs = 4_500,
-                    )
-                }
-                is AlignResult.NoMatch -> {
-                    remember("no match")
-                    if (auto) {
-                        // Intermediate rungs stay silent; only the LAST rung's
-                        // failure earns a (gentle) word, so the user knows the
-                        // hand-off is theirs now.
-                        if (autoSyncLadderIdx >= autoSyncLadderSec.size) {
-                            showSyncToast(
-                                "✕", AutoSyncColors.FAIL,
-                                "Couldn't sync automatically",
-                                hint = "Switch subs, or adjust in Subtitles → Timing",
-                                autoHideMs = 5_000,
-                            )
-                        }
-                        return@launch
-                    }
-                    showSyncToast(
-                        "✕", AutoSyncColors.FAIL,
-                        "No confident match",
-                        hint = "Adjust in Subtitles → Timing",
-                        autoHideMs = 4_500,
-                    )
-                }
-                is AlignResult.NotEnoughAudio -> {
-                    remember("${result.analyzedSec}s heard")
-                    if (auto) {
-                        if (autoSyncLadderIdx >= autoSyncLadderSec.size) {
-                            showSyncToast(
-                                "✕", AutoSyncColors.FAIL,
-                                "Couldn't sync automatically",
-                                hint = "Switch subs, or adjust in Subtitles → Timing",
-                                autoHideMs = 5_000,
-                            )
-                        }
-                        return@launch
-                    }
-                    showSyncToast(
-                        "●", AutoSyncColors.BUSY,
-                        "Keep watching a little, then try again",
-                        autoHideMs = 3_500,
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * Arm the hands-free ladder for a freshly loaded addon subtitle. Each tick
-     * asks the tap how much ANCHORED audio exists and fires the next attempt
-     * when a rung's worth is on hand — so the first attempt (narrow search)
-     * lands ~20s in, without the user touching anything. Skips entirely while
-     * a manual offset is dialed in: the user's hand beats the machine's.
-     */
-    private fun startAutoSyncLadder() {
-        cancelAutoSyncLadder()
-        if (!isAutoSyncPrefEnabled()) return
-        // The one up-front sentence, then the heartbeat. Skipped when a
-        // remembered offset just restored — that pill already said everything.
-        if (SubtitleSettings.getSyncOffsetMs(this) == 0L) {
-            openAutoSyncPillWindow()
-        }
-        autoSyncLadderIdx = 0
-        autoSyncLadderDone = false
-        val tick = object : Runnable {
-            override fun run() {
-                if (autoSyncLadderDone || !externalSubtitleActive) return
-                val tap = speechTap
-                if (tap != null && !autoSyncRunning &&
-                    SubtitleSettings.getSyncOffsetMs(this@AndroidTvTorrentPlayerActivity) == 0L &&
-                    autoSyncLadderIdx < autoSyncLadderSec.size &&
-                    tap.anchoredDurationMs() >= autoSyncLadderSec[autoSyncLadderIdx] * 1000.0
-                ) {
-                    autoSyncLadderIdx++
-                    android.util.Log.d("AutoSync", "ladder attempt ${autoSyncLadderIdx}/${autoSyncLadderSec.size}")
-                    runSubtitleAutoSync(auto = true)
-                }
-                if (!autoSyncLadderDone && autoSyncLadderIdx < autoSyncLadderSec.size) {
-                    externalSubtitleHandler.postDelayed(this, 8_000)
-                }
-            }
-        }
-        autoSyncLadderTick = tick
-        externalSubtitleHandler.postDelayed(tick, 8_000)
-    }
-
-    private fun cancelAutoSyncLadder() {
-        autoSyncLadderTick?.let { externalSubtitleHandler.removeCallbacks(it) }
-        autoSyncLadderTick = null
-        autoSyncLadderDone = true
-    }
-
-    private fun scheduleAutoSyncVerify() {
-        cancelAutoSyncVerify()
-        if (!isAutoSyncPrefEnabled()) return
-        val tick = object : Runnable {
-            override fun run() {
-                maybeRunAutoSyncVerify()
-                if (autoSyncVerifyTick === this) {
-                    externalSubtitleHandler.postDelayed(this, 120_000)
-                }
-            }
-        }
-        autoSyncVerifyTick = tick
-        externalSubtitleHandler.postDelayed(tick, 90_000)
-    }
-
-    private fun cancelAutoSyncVerify() {
-        autoSyncVerifyTick?.let { externalSubtitleHandler.removeCallbacks(it) }
-        autoSyncVerifyTick = null
-        autoSyncVerifyMisses = 0
-    }
-
-    /**
-     * Re-check the region the user is CURRENTLY watching against the offset
-     * we applied. Cues ride in pre-shifted by that offset, so a still-correct
-     * sync correlates at lag 0 and any confident peak IS the residual to add.
-     * Two confident-audio misses escalate the residual search from ±10s to
-     * the full width over the same recent window — the ad-break/cut case,
-     * where timing jumps too far for the narrow check to see.
-     */
-    private fun maybeRunAutoSyncVerify() {
-        val applied = autoSyncAppliedOffsetMs ?: return
-        if (!externalSubtitleActive || autoSyncRunning) return
-        if (player?.isPlaying != true) return
-        if (SubtitleSettings.getSyncOffsetMs(this) != applied) {
-            // The user dialed something since — their hand wins, permanently.
-            cancelAutoSyncVerify()
-            return
-        }
-        val tap = speechTap ?: return
-        val url = activeExternalSubtitleUrl ?: return
-        val rawCues = SubtitleCueCache.get(url) ?: return
-        val pos = player?.currentPosition ?: return
-        val windowStart = pos - 360_000
-        val segments = tap.snapshot().filter {
-            it.anchorMs != Long.MIN_VALUE &&
-                it.anchorMs + it.durationMs >= windowStart &&
-                it.anchorMs <= pos + 10_000
-        }
-        if (segments.sumOf { it.durationMs } < 30_000.0) return
-        autoSyncRunning = true
-        subtitleScope.launch {
-            val escalated = autoSyncVerifyMisses >= 2
-            val result = try {
-                val centered = rawCues.map {
-                    CueSpan(it.startMs + applied, it.endMs + applied, it.text)
-                }
-                withContext(Dispatchers.Default) {
-                    if (escalated) {
-                        SubtitleAligner.align(segments, centered)
-                    } else {
-                        SubtitleAligner.align(
-                            segments, centered,
-                            searchMs = 10_000.0,
-                            minAudioMs = 25_000.0,
-                            minCueOverlapFrames = SubtitleAligner.Tuning.NARROW_MIN_CUE_OVERLAP_FRAMES,
-                            minCues = SubtitleAligner.Tuning.NARROW_MIN_CUES,
-                            minZPeak = SubtitleAligner.Tuning.NARROW_MIN_ZPEAK,
-                            minPsr = SubtitleAligner.Tuning.NARROW_MIN_PSR,
-                            scales = doubleArrayOf(1.0),
-                        )
-                    }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("AutoSync", "verify failed", e)
-                AlignResult.NoMatch(0)
-            } finally {
-                autoSyncRunning = false
-            }
-            if (activeExternalSubtitleUrl != url || autoSyncAppliedOffsetMs != applied) return@launch
-            when (result) {
-                is AlignResult.Synced -> {
-                    autoSyncVerifyMisses = 0
-                    if (kotlin.math.abs(result.offsetMs) > 400) {
-                        val newOffset = applied + result.offsetMs
-                        SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, newOffset)
-                        applySubtitleSettings()
-                        autoSyncAppliedOffsetMs = newOffset
-                        autoSyncResultLabel = "✓ ${SubtitleSettings.formatSyncOffset(newOffset)}"
-                        autoSyncResultUrl = url
-                        android.util.Log.d("AutoSync", "verify re-synced $applied -> $newOffset (escalated=$escalated)")
-                        showSyncToast(
-                            "↻", AutoSyncColors.OK,
-                            "Re-synced",
-                            autoHideMs = 3_000,
-                        )
-                    } else {
-                        android.util.Log.d("AutoSync", "verify confirmed $applied (residual ${result.offsetMs}ms)")
-                    }
-                }
-                is AlignResult.NoMatch -> {
-                    autoSyncVerifyMisses++
-                    android.util.Log.d("AutoSync", "verify miss ${autoSyncVerifyMisses}: $result")
-                }
-                else -> {
-                    // NotEnoughAudio / Drift: wait for more playback; a miss
-                    // count here would escalate on silence, not on evidence.
-                    android.util.Log.d("AutoSync", "verify skipped: $result")
-                }
-            }
-        }
-    }
-
-    /**
-     * Settings → Playback → "Auto-sync addon subtitles" (Flutter-side pref).
-     *
-     * OFF by default — experimental opt-in. Must stay in lock-step with the
-     * Dart default in StorageService.getSubtitleAutoSyncEnabled, or an
-     * untouched toggle would mean different things on the two sides.
-     */
-    private fun isAutoSyncPrefEnabled(): Boolean =
-        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
-            this,
-            "subtitle_auto_sync_enabled",
-            false,
-        )
 
     private fun umSearchRows(): List<UnifiedMenuController.Row> {
         if (pendingSeriesResult != null) {
@@ -13786,33 +13389,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             applyManualSubtitleIdentity(r, null, null)
             unifiedMenu?.hide()
         }
-    }
-
-    /** Select an entry from the flat [subtitleTracks] list (Off / embedded) and apply it. */
-    private fun umSelectSubtitleRowIndex(rowIndex: Int) {
-        if (rowIndex !in subtitleTracks.indices) return
-        currentSubtitleTrackIndex = rowIndex
-        userManuallySelectedSubtitle = true
-        applySelectedSubtitleTrack()
-    }
-
-    /** Select an external Stremio subtitle by URL, reusing the battle-tested apply path. */
-    private fun umSelectStremioSubtitleByUrl(url: String) {
-        rebuildSubtitleTrackList()
-        val k = stremioSubtitles.indexOfFirst { it.url == url }
-        if (k < 0) return
-        var ext = 0
-        var rowIdx = -1
-        for ((i, pair) in subtitleTracks.withIndex()) {
-            if (isExternalSubtitleOption(pair.first)) {
-                if (ext == k) { rowIdx = i; break }
-                ext++
-            }
-        }
-        if (rowIdx < 0) return
-        currentSubtitleTrackIndex = rowIdx
-        userManuallySelectedSubtitle = true
-        applySelectedSubtitleTrack()
     }
 
     // ── Sources ─────────────────────────────────────────────────────────────
@@ -14007,428 +13583,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showSubtitleTrackDialog() {
-        val ts = trackSelector ?: return
-        val tracks = player?.currentTracks ?: return
-
-        val subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
-        subtitleTracks.add(Pair("Off", null))
-
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_TEXT) {
-                for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    val label = buildSubtitleTrackLabel(format)
-                    val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
-                    subtitleTracks.add(Pair(label, override))
-                }
-            }
-        }
-
-        if (subtitleTracks.size <= 1) {
-            Toast.makeText(this, "No subtitle tracks available", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val labels = subtitleTracks.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Select Subtitle Track")
-            .setItems(labels) { _, which ->
-                val override = subtitleTracks[which].second
-                val params = ts.parameters.buildUpon()
-                if (override != null) {
-                    params.setOverrideForType(override)
-                    params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                } else {
-                    params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                }
-                ts.parameters = params.build()
-            }
-            .show()
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SUBTITLE SETTINGS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    private fun rebuildSubtitleTrackList() {
-        subtitleTracks.clear()
-        subtitleTracks.add(Pair("Off", null))
-        currentSubtitleTrackIndex = 0
-
-        val tracks = player?.currentTracks
-        if (tracks != null) {
-            for (group in tracks.groups) {
-                if (group.type == C.TRACK_TYPE_TEXT) {
-                    for (i in 0 until group.length) {
-                        val format = group.getTrackFormat(i)
-                        val label = buildSubtitleTrackLabel(format)
-                        val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
-                        subtitleTracks.add(Pair(label, override))
-
-                        // Check if this track is currently selected
-                        if (group.isTrackSelected(i)) {
-                            currentSubtitleTrackIndex = subtitleTracks.size - 1
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add Stremio external subtitles to the track list
-        // These are marked with "⬇" prefix to indicate they're external/downloadable
-        for ((index, sub) in stremioSubtitles.withIndex()) {
-            val label = "$EXTERNAL_SUBTITLE_PREFIX ${sub.displayName} (${sub.source})"
-            // Use null override to indicate this is an external subtitle
-            subtitleTracks.add(Pair(label, null))
-
-            // Check if this Stremio subtitle is currently selected
-            if (currentStremioSubtitleIndex == index) {
-                currentSubtitleTrackIndex = subtitleTracks.lastIndex
-            }
-        }
-
-        // Add loading indicator if still fetching Stremio subtitles
-        if (isLoadingStremioSubtitles) {
-            subtitleTracks.add(Pair(SUBTITLE_LOADING_LABEL, null))
-        }
-
-        // Check if no subtitle is currently selected (means "Off")
-        val hasSelectedSubtitle = tracks?.groups?.any { group ->
-            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-        } ?: false
-        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
-            currentSubtitleTrackIndex = 0
-        }
-    }
-
-    private val subtitlePanelCallbacks = object : SubtitlePanelController.Callbacks {
-        override fun getTrackLabels(): List<String> = subtitleTracks.map { it.first }
-        override fun getCurrentTrackIndex(): Int = currentSubtitleTrackIndex
-        override fun selectTrack(index: Int) {
-            val label = subtitleTracks.getOrNull(index)?.first ?: return
-            if (isLoadingSubtitleOption(label)) return
-            if (isSearchSubtitleOption(label)) {
-                showSearchSubtitleDialog()
-                return
-            }
-            currentSubtitleTrackIndex = index
-            userManuallySelectedSubtitle = true
-            applySelectedSubtitleTrack()
-        }
-        override fun onSearchSubtitle() { showSearchSubtitleDialog() }
-        override fun getIdentityLabel(): String = currentSubtitleIdentityLabel()
-        override fun onSettingsChanged() { applyAndPersistSubtitleSettings() }
-        override fun onSyncOverlayRequested() { showSyncOverlay() }
-        override fun onHidden() {
-            subtitleSettingsVisible = false
-            if (::playerView.isInitialized) playerView.requestFocus()
-        }
-    }
-
-    private fun showSubtitleSettingsPanel() {
-        rebuildSubtitleTrackList()
-        subtitlePanel?.show()
-        subtitleSettingsVisible = true
-    }
-
-    private fun hideSubtitleSettingsPanel() {
-        subtitlePanel?.hide() ?: run { subtitleSettingsVisible = false }
-    }
-
-    private fun showSyncOverlay() {
-        val root = findViewById<ViewGroup>(android.R.id.content)?.getChildAt(0) as? ViewGroup ?: return
-
-        // Use line picker for external (Stremio) subtitles. Prefer the actually-
-        // rendering URL: a per-addon retry can transiently drop the current sub's
-        // URL from the flat list (currentStremioSubtitleIndex → -1) while it's still
-        // on screen, and we must not fall through to the embedded slider for it.
-        val externalUrl = activeExternalSubtitleUrl?.takeIf { externalSubtitleActive }
-            ?: stremioSubtitles.getOrNull(currentStremioSubtitleIndex)?.url
-        if (externalUrl != null) {
-            if (linePickerOverlay == null) {
-                linePickerOverlay = SubtitleLinePickerController(
-                    activity = this,
-                    rootContainer = root,
-                    getCurrentPositionMs = { player?.currentPosition ?: 0L },
-                    onOffsetApplied = { applySubtitleSettings() },
-                    onDismissed = Runnable {
-                        linePickerOverlay = null
-                        if (::playerView.isInitialized) playerView.requestFocus()
-                    }
-                )
-            }
-            linePickerOverlay?.show(externalUrl)
-            return
-        }
-
-        // Fall back to slider for embedded subtitles
-        if (syncOverlay == null) {
-            syncOverlay = SubtitleSyncOverlayController(
-                activity = this,
-                rootContainer = root,
-                onSettingsChanged = Runnable { applySubtitleSettings() },
-                onDismissed = Runnable { if (::playerView.isInitialized) playerView.requestFocus() }
-            )
-        }
-        syncOverlay?.show()
-    }
-
-    /**
-     * Refresh subtitle panel to update loading state / loaded subtitles.
-     * Re-collects tracks and updates UI without changing visibility or focus.
-     */
-    private fun refreshSubtitlePanelForLoading() {
-        rebuildSubtitleTrackList()
-        subtitlePanel?.refresh()
-    }
-
-    private fun applySelectedSubtitleTrack() {
-        val ts = trackSelector ?: return
-        val selectedTrack = subtitleTracks.getOrNull(currentSubtitleTrackIndex)
-        val label = selectedTrack?.first ?: ""
-        val override = selectedTrack?.second
-
-        // Check if this is a Stremio external subtitle (marked with ⬇ prefix)
-        if (isSearchSubtitleOption(label)) {
-            showSearchSubtitleDialog()
-            return
-        }
-
-        if (isExternalSubtitleOption(label)) {
-            // Calculate the Stremio subtitle index without assuming where utility rows live.
-            val stremioIndex = subtitleTracks
-                .take(currentSubtitleTrackIndex)
-                .count { isExternalSubtitleOption(it.first) }
-
-            if (stremioIndex >= 0 && stremioIndex < stremioSubtitles.size) {
-                // Disable embedded subtitles first
-                val params = ts.parameters.buildUpon()
-                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                ts.parameters = params.build()
-
-                // Load Stremio subtitle
-                loadStremioSubtitle(stremioSubtitles[stremioIndex])
-                currentStremioSubtitleIndex = stremioIndex
-            }
-            return
-        }
-
-        // Clear Stremio subtitle selection and stop any side-rendered subtitle
-        currentStremioSubtitleIndex = -1
-        stopExternalSubtitleRendering()
-
-        // Handle embedded subtitle selection
-        val params = ts.parameters.buildUpon()
-            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-        if (override != null) {
-            params.setOverrideForType(override)
-            params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-        } else {
-            params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-        }
-        ts.parameters = params.build()
-        // Selecting a different embedded subtitle (or Off) resets the sync offset:
-        // it was calibrated for the previous subtitle. Do it explicitly rather
-        // than via an identity-scoped read — player.currentTracks hasn't updated
-        // to the new selection yet, so a read here would be stale, and embedded
-        // subs carry the offset at the (push-based) renderer level. This also
-        // prevents a same-language embedded track from inheriting a sibling
-        // track's offset through the folded "emb" identity.
-        SubtitleSettings.resetSyncOffset()
-        offsetRenderersFactory?.setOffsetUs(0L)
-    }
-
-    /**
-     * Load an external Stremio subtitle by side-rendering it: the file is
-     * downloaded + parsed off-thread and cues are fed to subtitleOverlay from
-     * a position ticker. The player source is never rebuilt, so playback is
-     * never interrupted — no re-prepare, no rebuffer, no resume/seek juggling.
-     */
-    private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
-        val loadToken = ++externalSubtitleLoadToken
-        // Capture the currently-*rendering* external selection so a failed load
-        // can fall back to it instead of tearing down a working subtitle. At
-        // this point currentStremioSubtitleIndex still holds the previous value
-        // (callers overwrite it only after this returns), but only trust it when
-        // a subtitle is actually active — otherwise the previous pick was still
-        // downloading (and will be discarded by the token check), so there's
-        // nothing real to fall back to.
-        val previousStremioIndex = if (externalSubtitleActive) currentStremioSubtitleIndex else -1
-        showStatusPill("Loading ${subtitle.displayName}…")
-
-        val cached = SubtitleCueCache.get(subtitle.url)
-        if (cached != null) {
-            onExternalSubtitleLoaded(subtitle, cached, previousStremioIndex)
-            return
-        }
-
-        subtitleScope.launch {
-            val parsed = withContext(Dispatchers.IO) { SubtitleCueCache.fetch(subtitle.url) }
-            // Stale if the user picked another subtitle or content changed meanwhile
-            if (loadToken != externalSubtitleLoadToken) return@launch
-            onExternalSubtitleLoaded(subtitle, parsed, previousStremioIndex)
-        }
-    }
-
-    private fun onExternalSubtitleLoaded(
-        subtitle: StremioSubtitle,
-        cues: List<SubtitleCue>,
-        previousStremioIndex: Int
-    ) {
-        if (cues.isEmpty()) {
-            android.util.Log.w("StremioSubs", "Failed to load/parse external subtitle: ${subtitle.url}")
-            failedSubtitleUrls.add(subtitle.url)   // don't auto-select this broken sub again
-            showStatusPillTransient("Couldn't load ${subtitle.displayName}")
-            // Keep whatever was rendering before — do NOT stopExternalSubtitleRendering()
-            // here (it would wipe a working subtitle and cancel the error pill).
-            // Just restore the selection state to the previously-good subtitle.
-            currentStremioSubtitleIndex = previousStremioIndex
-            if (previousStremioIndex < 0) {
-                // Nothing external was active before; the selecting caller already
-                // disabled embedded text tracks in anticipation. Re-enable so
-                // ExoPlayer can restore an embedded subtitle.
-                trackSelector?.let { ts ->
-                    ts.parameters = ts.parameters.buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                        .build()
-                }
-            }
-            if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
-            tryAutoSelectAddonSubtitle()
-            return
-        }
-
-        // Disable embedded text tracks so they don't double-render under the
-        // side-loaded cues (covers the auto-select path, which doesn't go
-        // through applySelectedSubtitleTrack).
-        trackSelector?.let { ts ->
-            ts.parameters = ts.parameters.buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                .build()
-        }
-
-        externalSubtitleCues = cues
-        externalSubtitleActive = true
-        activeExternalSubtitleUrl = subtitle.url
-        lastExternalCueText = null
-        // Clear immediately: disabling the embedded track fires onCues(empty),
-        // but that's now suppressed, and the first ticker render early-returns
-        // when no cue is active — without this a stale embedded line would
-        // freeze on screen until the next external cue.
-        if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
-        startExternalSubtitleTicker()
-        // Remembered sync for this exact content+subtitle (keyed by the same
-        // identity that scopes the live offset): restore BEFORE the ladder
-        // arms — a non-zero recall parks the ladder via its own offset==0
-        // gate. Announced: an offset appearing out of nowhere must say why.
-        val recalledIdentity = currentSubtitleIdentity()
-        val recalled = recalledIdentity?.let { SubtitleSettings.recallSyncOffset(this, it) }
-        if (recalled != null) {
-            SubtitleSettings.setSyncOffsetMs(this, recalled)
-            // Same initialized-guard the overlay clear above uses: the side
-            // ticker reads the offset at lookup time anyway, so on a very
-            // early load the apply can be safely skipped rather than touch a
-            // lateinit view.
-            if (::subtitleOverlay.isInitialized) applySubtitleSettings()
-            autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(recalled)}"
-            autoSyncResultUrl = subtitle.url
-            autoSyncAppliedOffsetMs = recalled
-            scheduleAutoSyncVerify()
-            showSyncToast(
-                "↻", AutoSyncColors.OK,
-                "Sync restored",
-                autoHideMs = 3_000,
-            )
-        }
-        startAutoSyncLadder()
-        showStatusPillTransient("✓ ${subtitle.displayName}")
-        android.util.Log.d("StremioSubs", "Side-rendering ${cues.size} cues from ${subtitle.displayName}")
-    }
-
-    /** Stop side-rendering and give the overlay back to the player's onCues. */
-    private fun stopExternalSubtitleRendering() {
-        cancelAutoSyncLadder()
-        cancelAutoSyncVerify()
-        autoSyncAppliedOffsetMs = null
-        externalSubtitleLoadToken++
-        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
-        externalSubtitleTicker = null
-        if (externalSubtitleActive || externalSubtitleCues.isNotEmpty()) {
-            externalSubtitleActive = false
-            activeExternalSubtitleUrl = null
-            externalSubtitleCues = emptyList()
-            lastExternalCueText = null
-            if (::subtitleOverlay.isInitialized) subtitleOverlay.setCues(emptyList())
-            // Re-enable the embedded text track type that onExternalSubtitleLoaded
-            // disabled — otherwise embedded-subtitle auto-selection stays dead for
-            // every subsequent item. Callers that want text off (Off selection)
-            // re-apply their own params right after this returns.
-            trackSelector?.let { ts ->
-                ts.parameters = ts.parameters.buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    .build()
-            }
-        }
-        hideStatusPill()
-    }
-
-    private fun startExternalSubtitleTicker() {
-        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
-        val ticker = object : Runnable {
-            override fun run() {
-                if (!externalSubtitleActive) return
-                renderExternalSubtitleCue()
-                externalSubtitleHandler.postDelayed(this, EXTERNAL_SUBTITLE_TICK_MS)
-            }
-        }
-        externalSubtitleTicker = ticker
-        ticker.run()
-    }
-
-    private fun renderExternalSubtitleCue() {
-        val cues = externalSubtitleCues
-        if (cues.isEmpty()) return
-        // Same convention as the sync line picker: a positive offset means the
-        // subtitle text lags the audio, so we look up cues at (position - offset).
-        val effectiveMs = (player?.currentPosition ?: return) - SubtitleSettings.getSyncOffsetMs(this)
-
-        // Binary search for the last cue starting at or before effectiveMs,
-        // then collect all still-active overlapping cues. Cues are sorted only
-        // by start time, so a long-running cue (e.g. an anime sign/song event)
-        // can begin many entries before the current dialogue line — scan the
-        // whole prefix (cheap: a few thousand comparisons a few times a second).
-        var lo = 0
-        var hi = cues.size - 1
-        var last = -1
-        while (lo <= hi) {
-            val mid = (lo + hi) / 2
-            if (cues[mid].startMs <= effectiveMs) { last = mid; lo = mid + 1 } else hi = mid - 1
-        }
-
-        var text: String? = null
-        if (last >= 0) {
-            val active = StringBuilder()
-            for (i in 0..last) {
-                val cue = cues[i]
-                if (cue.startMs <= effectiveMs && effectiveMs < cue.endMs) {
-                    if (active.isNotEmpty()) active.append('\n')
-                    active.append(cue.text)
-                }
-            }
-            if (active.isNotEmpty()) text = active.toString()
-        }
-
-        if (text == lastExternalCueText) return
-        lastExternalCueText = text
-        subtitleOverlay.setCues(
-            if (text == null) emptyList()
-            else listOf(Cue.Builder().setText(text).build())
-        )
-    }
-
     // ── Status pill ──────────────────────────────────────────────────────────
     // Small bottom-center chip for transient progress feedback that must not
     // touch playback: external subtitle downloads and source switches.
@@ -14484,218 +13638,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pill.animate().alpha(0f).setDuration(220).withEndAction {
             pill.visibility = View.GONE
         }.start()
-    }
-
-    private fun ensureAutoSyncPill(): LinearLayout {
-        autoSyncPill?.let { return it }
-        val ring = AutoSyncRingView(this)
-        val label = TextView(this).apply {
-            textSize = 11f
-            setTextColor(0xEBFFFFFF.toInt())
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            letterSpacing = 0.08f
-            isSingleLine = true
-        }
-        val pill = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                setColor(0xA80C0E12.toInt())
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), 0x21FFFFFF)
-            }
-            minimumHeight = dp(36)
-            setPadding(dp(12), 0, dp(14), 0)
-            elevation = dp(240).toFloat()
-            visibility = View.GONE
-            isFocusable = false
-            addView(ring, LinearLayout.LayoutParams(dp(17), dp(17)))
-            addView(
-                label,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).also { it.marginStart = dp(8) },
-            )
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM or Gravity.END
-            ).also {
-                it.bottomMargin = dp(42)
-                it.rightMargin = dp(48)
-            }
-        }
-        findViewById<ViewGroup>(android.R.id.content).addView(pill)
-        autoSyncPill = pill
-        autoSyncPillRing = ring
-        autoSyncPillLabel = label
-        return pill
-    }
-
-    /**
-     * Open the auto-sync window: one plain sentence for ~5 seconds, then the
-     * screen stays quiet until a real event — a checking pass or a verdict —
-     * has something to say. No countdown, no persistent indicator.
-     */
-    private fun openAutoSyncPillWindow() {
-        stopAutoSyncPillWindow()
-        autoSyncPillWindowActive = true
-        showSyncToast(
-            "●", AutoSyncColors.BUSY,
-            "Trying to auto-sync subtitles — this may take a minute, keep watching",
-            autoHideMs = null,
-            uppercase = false,
-        )
-        autoSyncPillAnnounceShowing = true
-        externalSubtitleHandler.postDelayed(autoSyncPillAnnounceDismissRunnable, 5_000)
-    }
-
-    private fun stopAutoSyncPillWindow() {
-        externalSubtitleHandler.removeCallbacks(autoSyncPillAnnounceDismissRunnable)
-        autoSyncPillAnnounceShowing = false
-        autoSyncPillWindowActive = false
-    }
-
-    /**
-     * Auto-sync status, rendered on the pill. The [glyph] keys the face:
-     * "●" = active (pulsing dot + one line), anything else = result (colored
-     * glyph + label; the window closes). [hint] is no longer drawn — the pill
-     * stays one quiet line — so it goes to logcat instead. [autoHideMs] null
-     * keeps the pill up until replaced. [uppercase] false keeps a sentence
-     * (the announce line) in its natural case.
-     */
-    private fun showSyncToast(
-        glyph: String,
-        accent: Int,
-        title: String,
-        hint: String? = null,
-        autoHideMs: Long?,
-        uppercase: Boolean = true,
-    ) {
-        externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
-        if (hint != null) Log.d("AutoSync", "pill: $title — $hint")
-        autoSyncPillAnnounceShowing = false
-        val pill = ensureAutoSyncPill()
-        val active = glyph == "●"
-        autoSyncPillResultShowing = !active
-        if (!active) stopAutoSyncPillWindow()
-        autoSyncPillRing?.visibility = if (active) View.VISIBLE else View.GONE
-        autoSyncPillRing?.setPulsing(active)
-        autoSyncPillRing?.arcColor = accent
-        pill.setPadding(dp(12), 0, dp(14), 0)
-        autoSyncPillLabel?.let { labelView ->
-            labelView.visibility = View.VISIBLE
-            val text = if (uppercase) title.uppercase() else title
-            if (active) {
-                labelView.setTextColor(0xEBFFFFFF.toInt())
-                labelView.letterSpacing = if (uppercase) 0.08f else 0.01f
-                labelView.text = text
-            } else {
-                labelView.setTextColor(accent)
-                labelView.letterSpacing = 0.08f
-                labelView.text = "$glyph  $text"
-            }
-        }
-        (pill.background as? GradientDrawable)?.setStroke(
-            dp(1),
-            if (active) 0x21FFFFFF else (accent and 0x00FFFFFF) or 0x4D000000,
-        )
-        revealAutoSyncPill()
-        if (autoHideMs != null) {
-            externalSubtitleHandler.postDelayed(autoSyncCardHideRunnable, autoHideMs)
-        }
-    }
-
-    private fun revealAutoSyncPill() {
-        val pill = autoSyncPill ?: return
-        pill.animate().cancel()
-        if (pill.visibility != View.VISIBLE) {
-            pill.alpha = 0f
-            pill.translationY = dp(8).toFloat()
-            pill.visibility = View.VISIBLE
-        }
-        pill.animate().alpha(1f).translationY(0f).setDuration(220).start()
-    }
-
-    /** View-only fade; window state is untouched (idle-hide relies on this). */
-    private fun hideAutoSyncPillView() {
-        autoSyncPillRing?.setPulsing(false)
-        val pill = autoSyncPill ?: return
-        if (pill.visibility != View.VISIBLE) return
-        pill.animate().cancel()
-        pill.animate().alpha(0f).translationY(dp(6).toFloat()).setDuration(240).withEndAction {
-            pill.visibility = View.GONE
-        }.start()
-    }
-
-    private fun hideAutoSyncCard() {
-        externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
-        stopAutoSyncPillWindow()
-        hideAutoSyncPillView()
-    }
-
-    /**
-     * A stable key for "the subtitle currently on screen", used to scope the
-     * sync offset (see SubtitleSettings). It changes whenever the subtitle
-     * changes OR the content/episode changes, so the offset — which is only
-     * valid for the exact subtitle it was dialed in against — resets by
-     * construction. Returns null when no subtitle is showing.
-     *
-     * The content key is folded in so the same embedded language (or a reused
-     * subtitle URL) across two different episodes never shares an offset.
-     */
-    private fun currentSubtitleIdentity(): String? {
-        val contentKey = payload?.items?.getOrNull(currentIndex)?.resumeId ?: "idx:$currentIndex"
-        if (externalSubtitleActive) {
-            val url = activeExternalSubtitleUrl ?: return null
-            return "$contentKey|ext:$url"
-        }
-        // Fold all embedded text tracks into a single "emb" identity: switching
-        // between embedded tracks of the SAME episode keeping the offset is an
-        // acceptable edge; the offset only needs to reset across episodes (the
-        // content key handles that) and across the external⇄embedded boundary.
-        val embeddedSelected = player?.currentTracks?.groups?.any { group ->
-            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-        } ?: false
-        return if (embeddedSelected) "$contentKey|emb" else null
-    }
-
-    private fun applySubtitleSettings() {
-        subtitleOverlay.setFixedTextSize(
-            TypedValue.COMPLEX_UNIT_SP,
-            SubtitleSettings.getFontSizeSp(this)
-        )
-        subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
-        subtitleControlsLift.setBasePaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
-        // Only carry an offset onto the renderer when a subtitle is actually on
-        // screen. Dialing the slider with subtitles off stores an offset under a
-        // null owner (so the slider stays live), but it must NOT be pushed to the
-        // renderer — otherwise a later auto-selected subtitle, which doesn't pass
-        // through the selection reset, would render shifted while the read is 0.
-        val hasSubtitle = currentSubtitleIdentity() != null
-        val newOffsetUs = if (hasSubtitle) SubtitleSettings.getSyncOffsetMs(this) * 1000L else 0L
-        val oldOffsetUs = offsetRenderersFactory?.currentOffsetUs ?: 0L
-        offsetRenderersFactory?.setOffsetUs(newOffsetUs)
-        if (externalSubtitleActive) {
-            // Side-rendered subtitles pick the offset up at lookup time — just
-            // force an immediate re-render, no seek needed.
-            lastExternalCueText = null
-            renderExternalSubtitleCue()
-        } else if (newOffsetUs != oldOffsetUs) {
-            // Debounce: rapid offset changes (line picker tap, arrow key hold)
-            // would otherwise pile up seeks and confuse the text renderer.
-            subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
-            subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150)
-        }
-    }
-
-    private fun applyAndPersistSubtitleSettings() {
-        applySubtitleSettings()
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-            "saveSubtitleAppearance",
-            SubtitleSettings.profileAppearanceSnapshot(this),
-        )
     }
 
     // Aspect ratio
@@ -17252,7 +16194,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         // Resume the side-rendered subtitle ticker paused in onStop.
-        if (externalSubtitleActive) startExternalSubtitleTicker()
+        if (subtitleController.externalSubtitleActive) subtitleController.startExternalSubtitleTicker()
     }
 
     override fun onStop() {
@@ -17291,7 +16233,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player?.pause()
         // Stop waking the main thread 4x/second while the activity isn't visible;
         // state is preserved and onStart restarts the ticker.
-        externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
+        subtitleController.externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
     }
 
     private fun setupBackPressHandler() {
@@ -17541,7 +16483,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         syncOverlay = null
         linePickerOverlay?.hide()
         linePickerOverlay = null
-        subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
+        subtitleController.subtitleSeekHandler.removeCallbacks(subtitleController.subtitleSeekRunnable)
         externalSubtitleHandler.removeCallbacksAndMessages(null)
         // Drop the identity provider so the SubtitleSettings singleton doesn't
         // retain this Activity via the captured lambda (no-op if a newer player
@@ -18255,8 +17197,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
-        private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
-        private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
         private const val PIKPAK_MAX_RETRIES = 5
         private const val PIKPAK_METADATA_TIMEOUT_MS = 10000  // 10 seconds to wait for metadata
         private const val PIKPAK_BASE_DELAY_MS = 2000  // 2 seconds base delay
