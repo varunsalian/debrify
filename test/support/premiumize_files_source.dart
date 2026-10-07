@@ -21,27 +21,31 @@ String premiumizeOriginalMember(String originalName) {
   final owner = moved
       ? row['destination_class']!
       : originalName.split('.').first;
-  final ownerMarker = RegExp(
-    r'^class ' + RegExp.escape(owner) + r'\b',
-    multiLine: true,
-  ).firstMatch(fileSource);
-  if (ownerMarker == null) throw StateError('Missing owner: $path::$owner');
-  final ownerEnd = RegExp(
-    r'^}',
-    multiLine: true,
-  ).firstMatch(fileSource.substring(ownerMarker.end));
-  if (ownerEnd == null) throw StateError('Missing owner end: $path::$owner');
-  final source = fileSource.substring(
-    ownerMarker.start,
-    ownerMarker.end + ownerEnd.end,
-  );
+  var source = fileSource;
+  if (owner.isNotEmpty) {
+    final ownerMarker = RegExp(
+      r'^class ' + RegExp.escape(owner) + r'\b',
+      multiLine: true,
+    ).firstMatch(fileSource);
+    if (ownerMarker == null) throw StateError('Missing owner: $path::$owner');
+    final ownerEnd = RegExp(
+      r'^}',
+      multiLine: true,
+    ).firstMatch(fileSource.substring(ownerMarker.end));
+    if (ownerEnd == null) throw StateError('Missing owner end: $path::$owner');
+    source = fileSource.substring(
+      ownerMarker.start,
+      ownerMarker.end + ownerEnd.end,
+    );
+  }
+  final indent = owner.isEmpty ? '' : '  ';
   final start = RegExp(
-    r'^  \S[^\n]*\b' + RegExp.escape(name) + r'\s*\(',
+    '^$indent\\S[^\\n]*\\b${RegExp.escape(name)}\\s*\\(',
     multiLine: true,
   ).firstMatch(source);
   if (start == null) throw StateError('Missing method marker: $path::$name');
   final end = RegExp(
-    r'^  }\s*$',
+    '^$indent}\\s*\$',
     multiLine: true,
   ).firstMatch(source.substring(start.end));
   if (end == null) throw StateError('Missing method end: $path::$name');

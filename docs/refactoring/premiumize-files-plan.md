@@ -870,3 +870,42 @@ CI switch still activates at step 6. Remote CI is pending; this is local Docker
 evidence. With the PNGs and passing `linux-original-strict.txt` verified, stop
 point 2's prerequisite is satisfied and step 1 may proceed. No extraction has
 begun in this artifact commit.
+
+
+### Step 1 — enums, pure helpers and feature guards
+
+The two enums and six pure methods now live in the four manifest-owned model
+and application files. Their declarations, expressions and comments pass the
+113-leaf verbatim checker; the accessor uses the six registered unbound
+tear-offs. The public widget and lifecycle are unchanged. The facade shrinks
+from 2,376 to 2,276 formatted lines; its size baseline only decreases.
+
+Premiumize is registered from its first destination, with an unconditional
+500-line feature cap, exact legacy bridge, facade composition root and
+application restrictions. The facade cap remains staged for step 7. Real-main
+negative probes reject the facade import, services/HTTP/BuildContext in
+application, late fields, oversized destinations, and all four cloud peers in
+both directions. AllDebrid's peer-only import scan works before registration
+and after registration; an absent sibling's unrelated code is outside that
+scan. The probes modify owned copies inside `.dart_tool`, never the real
+AllDebrid screen or feature. CI invokes the new architecture self-test.
+
+Evidence: `premiumize/step1/`. All 158 frozen Premiumize identities and three
+shape checks pass; the changed source-reader resolver additionally passes all
+38 body contracts. The shape manifest registers all four destinations and
+retains the facade's six bare radii/six token calls, floor 488, zero slack.
+Architecture/self-test, sizes, storage keys/references, exact CI format/scoped
+analyzer/allowlist and whole-analyzer comparison pass, with zero added
+diagnostics. Two source-reader string-style infos in a draft were corrected;
+the draft logs remain evidence. Every other manifest/self-test passes: all 20
+output hashes and adapter hashes match the original proof byte-for-byte, with
+source inputs unchanged from `49c53e2e`. Every parser invocation uses an
+explicit package inside this worktree's `.dart_tool`.
+
+Conservative decisions: retain all original behavior and text; no service,
+storage, model, cloud-widget, player/launcher or bridge implementation changes.
+Premiumize does not opt into occurrence-field bindings and relies on no default
+for mandatory qualification. A disposable normal clone under `.dart_tool`
+validated the upcoming owner/section wiring with all 158 tests plus shape
+checks. It identified only existing opt-in formatter accommodations for owner
+qualification; production remains at step 1 until this checkpoint.

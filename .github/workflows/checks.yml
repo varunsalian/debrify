@@ -47,6 +47,7 @@ jobs:
       - run: python3 dev/tool/stremio_tv_catalogs_architecture_test.py
       # settings_widgets: prove completion/import/size guards through the real main.
       - run: python3 dev/tool/settings_widgets_architecture_test.py
+      - run: python3 dev/tool/premiumize_architecture_test.py
       # Migrated destinations and their facades are both covered. Warnings that
       # predate a move-only extraction are recorded in analyzer_allowlist.txt;
       # any other warning, any error, or a stale entry fails.

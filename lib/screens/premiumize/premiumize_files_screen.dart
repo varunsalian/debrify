@@ -1,3 +1,7 @@
+import 'package:debrify/features/premiumize_files/models/folder_view_mode.dart';
+import 'package:debrify/features/premiumize_files/models/premiumize_view.dart';
+import 'package:debrify/features/premiumize_files/application/premiumize_sort_policy.dart';
+import 'package:debrify/features/premiumize_files/application/premiumize_playlist_titles.dart';
 import 'dart:async';
 import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
@@ -55,10 +59,6 @@ class PremiumizeFilesScreen extends StatefulWidget {
   State<PremiumizeFilesScreen> createState() => _PremiumizeFilesScreenState();
 }
 
-enum _FolderViewMode { raw, sortedAZ }
-
-enum _PremiumizeView { files, transfers }
-
 class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   final ScrollController _scrollController = ScrollController();
 
@@ -73,7 +73,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   String _errorMessage = '';
 
   // Active view (cloud files vs transfers).
-  _PremiumizeView _selectedView = _PremiumizeView.files;
+  PremiumizeView _selectedView = PremiumizeView.files;
 
   // Cloud files state.
   final List<PremiumizeFolderItem> _items = [];
@@ -88,7 +88,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   final List<({String? id, String name})> _navigationStack = [];
 
   // Per-folder view-mode persistence during this session.
-  final Map<String, _FolderViewMode> _folderViewModes = {};
+  final Map<String, PremiumizeFolderViewMode> _folderViewModes = {};
 
   // TV content focus handler (stored for proper unregistration).
   VoidCallback? _tvContentFocusHandler;
@@ -292,14 +292,14 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Future<void> _refresh() async {
     _exitSelectionMode();
-    if (_selectedView == _PremiumizeView.transfers) {
+    if (_selectedView == PremiumizeView.transfers) {
       await _loadTransfers();
     } else {
       await _loadFolder();
     }
   }
 
-  void _switchView(_PremiumizeView view) {
+  void _switchView(PremiumizeView view) {
     if (_selectedView == view) return;
     _exitSelectionMode();
     // Reset the Files list offset so a Files→Transfers→Files round-trip
@@ -309,7 +309,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       _selectedView = view;
       _errorMessage = '';
     });
-    if (view == _PremiumizeView.transfers) {
+    if (view == PremiumizeView.transfers) {
       _loadTransfers();
     } else {
       _loadFolder();
@@ -383,12 +383,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   // ── View modes ─────────────────────────────────────────────────────────────
 
-  _FolderViewMode _getCurrentViewMode() {
-    if (_isAtRoot) return _FolderViewMode.raw;
-    return _folderViewModes[_currentFolderId!] ?? _FolderViewMode.raw;
+  PremiumizeFolderViewMode _getCurrentViewMode() {
+    if (_isAtRoot) return PremiumizeFolderViewMode.raw;
+    return _folderViewModes[_currentFolderId!] ?? PremiumizeFolderViewMode.raw;
   }
 
-  void _setViewMode(_FolderViewMode mode) {
+  void _setViewMode(PremiumizeFolderViewMode mode) {
     if (_isAtRoot) return;
     setState(() {
       _folderViewModes[_currentFolderId!] = mode;
@@ -400,58 +400,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   List<PremiumizeFolderItem> _applyViewMode(
-    _FolderViewMode mode,
+    PremiumizeFolderViewMode mode,
     List<PremiumizeFolderItem> items,
   ) {
-    if (mode == _FolderViewMode.raw) return List.of(items);
-    return _applySortedView(items);
-  }
-
-  List<PremiumizeFolderItem> _applySortedView(
-    List<PremiumizeFolderItem> items,
-  ) {
-    final folders = items.where((i) => i.isFolder).toList();
-    final files = items.where((i) => !i.isFolder).toList();
-
-    int cmp(String a, String b, {bool seasonAware = false}) {
-      final aNum = seasonAware
-          ? _extractSeasonNumber(a)
-          : _extractLeadingNumber(a);
-      final bNum = seasonAware
-          ? _extractSeasonNumber(b)
-          : _extractLeadingNumber(b);
-      if (aNum != null && bNum != null) return aNum.compareTo(bNum);
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-      return a.toLowerCase().compareTo(b.toLowerCase());
-    }
-
-    folders.sort((a, b) => cmp(a.name, b.name, seasonAware: true));
-    files.sort((a, b) => cmp(a.name, b.name));
-    return [...folders, ...files];
-  }
-
-  int? _extractSeasonNumber(String name) {
-    final patterns = [
-      RegExp(r'^(\d+)[\s._-]'),
-      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
-    ];
-    final lower = name.toLowerCase();
-    for (final p in patterns) {
-      final m = p.firstMatch(lower);
-      if (m != null && m.groupCount >= 1) return int.tryParse(m.group(1)!);
-    }
-    return null;
-  }
-
-  int? _extractLeadingNumber(String name) {
-    final m = RegExp(r'^(\d+)[\s._-]').firstMatch(name);
-    if (m != null && m.groupCount >= 1) return int.tryParse(m.group(1)!);
-    return null;
+    if (mode == PremiumizeFolderViewMode.raw) return List.of(items);
+    return applySortedView(items);
   }
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -750,19 +703,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final sortedVideos = [for (final i in indexed) videos[i]];
     final sortedInfos = [for (final i in indexed) infos[i]];
 
-    int startIndex = isSeries ? _findFirstEpisodeIndex(sortedInfos) : 0;
+    int startIndex = isSeries ? findFirstEpisodeIndex(sortedInfos) : 0;
     if (startIndex < 0 || startIndex >= sortedVideos.length) startIndex = 0;
 
     final entries = <PlaylistEntry>[];
     for (int i = 0; i < sortedVideos.length; i++) {
       final v = sortedVideos[i];
       final info = sortedInfos[i];
-      final episodeLabel = _formatPlaylistTitle(
+      final episodeLabel = formatPlaylistTitle(
         info: info,
         fallback: v.name,
         isSeriesCollection: isSeries,
       );
-      final title = _composeEntryTitle(
+      final title = composeEntryTitle(
         seriesTitle: info.title,
         episodeLabel: episodeLabel,
         isSeriesCollection: isSeries,
@@ -1427,62 +1380,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   // ── Series helpers (shared shape with PikPak/playlist player) ────────────────
 
-  String _formatPlaylistTitle({
-    required SeriesInfo info,
-    required String fallback,
-    required bool isSeriesCollection,
-  }) {
-    if (!isSeriesCollection) return fallback;
-    final season = info.season;
-    final episode = info.episode;
-    if (info.isSeries && season != null && episode != null) {
-      final s = season.toString().padLeft(2, '0');
-      final e = episode.toString().padLeft(2, '0');
-      final desc = info.episodeTitle?.trim().isNotEmpty == true
-          ? info.episodeTitle!.trim()
-          : info.title?.trim().isNotEmpty == true
-          ? info.title!.trim()
-          : fallback;
-      return 'S${s}E$e · $desc';
-    }
-    return fallback;
-  }
-
-  String _composeEntryTitle({
-    required String? seriesTitle,
-    required String episodeLabel,
-    required bool isSeriesCollection,
-    required String fallback,
-  }) {
-    if (!isSeriesCollection) return fallback;
-    final clean = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
-    if (clean != null && clean.isNotEmpty) return '$clean $episodeLabel';
-    return fallback;
-  }
-
-  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
-    int startIndex = 0;
-    int? bestSeason;
-    int? bestEpisode;
-    for (int i = 0; i < infos.length; i++) {
-      final info = infos[i];
-      final season = info.season;
-      final episode = info.episode;
-      if (!info.isSeries || season == null || episode == null) continue;
-      final betterSeason = bestSeason == null || season < bestSeason;
-      final betterEpisode =
-          bestSeason != null &&
-          season == bestSeason &&
-          (bestEpisode == null || episode < bestEpisode);
-      if (betterSeason || betterEpisode) {
-        bestSeason = season;
-        bestEpisode = episode;
-        startIndex = i;
-      }
-    }
-    return startIndex;
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   /// Pushed from the Cloud hub to browse (no folder target) — the root has no
@@ -1516,10 +1413,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
 
     final showViewModeDropdown =
-        _selectedView == _PremiumizeView.files && _navigationStack.isNotEmpty;
+        _selectedView == PremiumizeView.files && _navigationStack.isNotEmpty;
     // Search is available in the files view everywhere: at root it runs a
     // server-side cloud search; inside a folder it filters locally.
-    final showSearch = _selectedView == _PremiumizeView.files;
+    final showSearch = _selectedView == PremiumizeView.files;
 
     final bool isCompact = MediaQuery.sizeOf(context).width < 500;
     final double iconSize = isCompact ? 20 : 24;
@@ -1568,7 +1465,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           // Keep the button mounted while a navigation fetch runs (_items is
           // cleared then) so the AppBar doesn't flicker and TV focus parked
           // on it isn't dropped.
-          if (_selectedView == _PremiumizeView.files &&
+          if (_selectedView == PremiumizeView.files &&
               (_items.isNotEmpty || _isLoading) &&
               !_isSearchActive &&
               !widget.selectSourceMode)
@@ -1640,7 +1537,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildBody() {
     if (_isSearchActive) return _buildSearchResults();
-    if (_selectedView == _PremiumizeView.transfers) {
+    if (_selectedView == PremiumizeView.transfers) {
       return _buildTransfersList();
     }
     // Folder navigation clears _items, so a fetch with nothing to show gets
@@ -1654,11 +1551,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   Widget _buildViewSelector() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: CloudSegmentedTabs<_PremiumizeView>(
+      child: CloudSegmentedTabs<PremiumizeView>(
         segments: const [
-          CloudSegment(_PremiumizeView.files, 'My Files', Icons.folder_rounded),
+          CloudSegment(PremiumizeView.files, 'My Files', Icons.folder_rounded),
           CloudSegment(
-            _PremiumizeView.transfers,
+            PremiumizeView.transfers,
             'Transfers',
             Icons.swap_vert_rounded,
           ),
@@ -1690,14 +1587,14 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           }
           return KeyEventResult.ignored;
         },
-        child: DropdownButtonFormField<_FolderViewMode>(
+        child: DropdownButtonFormField<PremiumizeFolderViewMode>(
           focusNode: _viewModeDropdownFocusNode,
           isExpanded: true,
           value: mode,
           decoration: InputDecoration(
             labelText: 'View Mode',
             prefixIcon: Icon(
-              mode == _FolderViewMode.raw
+              mode == PremiumizeFolderViewMode.raw
                   ? Icons.view_list
                   : Icons.sort_by_alpha,
               color: theme.colorScheme.primary,
@@ -1713,9 +1610,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             ),
           ),
           items: const [
-            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
-              value: _FolderViewMode.sortedAZ,
+              value: PremiumizeFolderViewMode.raw,
+              child: Text('Raw'),
+            ),
+            DropdownMenuItem(
+              value: PremiumizeFolderViewMode.sortedAZ,
               child: Text('Sort (A-Z)'),
             ),
           ],
@@ -2331,9 +2231,9 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'getCurrentViewMode': s._getCurrentViewMode,
     'setViewMode': s._setViewMode,
     'applyViewMode': s._applyViewMode,
-    'applySortedView': s._applySortedView,
-    'extractSeasonNumber': s._extractSeasonNumber,
-    'extractLeadingNumber': s._extractLeadingNumber,
+    'applySortedView': applySortedView,
+    'extractSeasonNumber': extractSeasonNumber,
+    'extractLeadingNumber': extractLeadingNumber,
     'toggleSearch': s._toggleSearch,
     'performSearch': s._performSearch,
     'runCloudSearch': s._runCloudSearch,
@@ -2364,13 +2264,13 @@ Map<String, Object?> premiumizeFilesTestAccess(
     'focusFirstItemOrFallback': s._focusFirstItemOrFallback,
     'showSnackBar': s._showSnackBar,
     'formatUnixDate': s._formatUnixDate,
-    'formatPlaylistTitle': s._formatPlaylistTitle,
-    'composeEntryTitle': s._composeEntryTitle,
-    'findFirstEpisodeIndex': s._findFirstEpisodeIndex,
+    'formatPlaylistTitle': formatPlaylistTitle,
+    'composeEntryTitle': composeEntryTitle,
+    'findFirstEpisodeIndex': findFirstEpisodeIndex,
     'isBrowsePush': s._isBrowsePush,
-    'rawMode': _FolderViewMode.raw,
-    'sortedMode': _FolderViewMode.sortedAZ,
-    'filesView': _PremiumizeView.files,
-    'transfersView': _PremiumizeView.transfers,
+    'rawMode': PremiumizeFolderViewMode.raw,
+    'sortedMode': PremiumizeFolderViewMode.sortedAZ,
+    'filesView': PremiumizeView.files,
+    'transfersView': PremiumizeView.transfers,
   };
 }
