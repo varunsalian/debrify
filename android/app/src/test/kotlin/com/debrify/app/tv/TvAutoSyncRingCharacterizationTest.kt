@@ -42,7 +42,12 @@ internal class TvAutoSyncRingCharacterizationTest : TvPlayerAdapterHarness() {
             // Seek the real animator to a deterministic frame. Robolectric's
             // global vsync clock can lag after other classes advance time.
             animator.currentPlayTime = 900
-            assertTrue((Original.field(ring, "pulse") as Float) > 0f)
+            assertEquals(0.5f, Original.field(ring, "pulse") as Float, 0.001f)
+            animator.currentPlayTime = 0
+            assertEquals(0f, Original.field(ring, "pulse") as Float, 0f)
+            animator.currentPlayTime = 1800
+            assertEquals(1f, Original.field(ring, "pulse") as Float, 0.001f)
+            animator.currentPlayTime = 900
             val elapsed = animator.currentPlayTime
             Original.call(ring, "setPulsing", true)
             assertEquals(elapsed, animator.currentPlayTime)
@@ -109,5 +114,34 @@ internal class TvAutoSyncRingCharacterizationTest : TvPlayerAdapterHarness() {
         Original.call(ring, "onDraw", stopped)
         assertEquals(1, stopped.circles.size)
         assertEquals(Paint.Style.FILL, stopped.circles[0].paint.style)
+    }
+
+    @Test fun haloAppearsAboveZeroAndExpandsToFullRadiusWithZeroAlphaAtOne() {
+        val ring = ring()
+        for ((pulse, radius, alpha) in listOf(Triple(0.001f, 17.5325f, 81), Triple(1f, 50f, 0))) {
+            Original.set(ring, "pulse", pulse)
+            val canvas = RecordingCanvas()
+            Original.call(ring, "onDraw", canvas)
+            assertEquals(2, canvas.circles.size)
+            assertEquals(radius, canvas.circles[0].radius, 0.001f)
+            assertEquals(alpha, canvas.circles[0].paint.alpha)
+            assertEquals(16f, canvas.circles[1].radius, 0f)
+            assertEquals(255, canvas.circles[1].paint.alpha)
+        }
+    }
+
+    @Test fun statusPaletteColorsKeepTheirOpaqueArgbValues() {
+        val colors = Original.construct("AutoSyncColors")
+        val ring = ring()
+        for ((name, expected) in listOf("OK" to 0xFF82E0AD, "FAIL" to 0xFFE8C07B, "BUSY" to 0xFF7BDCFF)) {
+            val color = Original.field(colors, name) as Int
+            assertEquals(expected.toInt(), color)
+            assertEquals(255, android.graphics.Color.alpha(color))
+            Original.call(ring, "setArcColor", color)
+            val canvas = RecordingCanvas()
+            Original.call(ring, "onDraw", canvas)
+            assertEquals(1, canvas.circles.size)
+            assertEquals(expected.toInt(), canvas.circles[0].paint.color)
+        }
     }
 }

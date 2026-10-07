@@ -2373,3 +2373,121 @@ Claude’s independent sampling of at least 10 additional mutations and any
 resulting step 0b gaps remain for the independent reviewer. No device interaction
 or production moves were performed. Release/R8/Dart suite phase gates remain
 at their planned later milestone.
+
+
+## Phase 1 step 0b
+
+Closed all seven independent Claude survivors on **original `39c630303`**.
+Added **26 tests**, strengthened the existing ring pulse test, and expanded
+`TvPlayerOriginalAccess` only for the original Kotlin default constructor and
+Glide's installed request listeners and a valid wrapped episode-holder
+hierarchy separating row and descendant-container alpha. Production source, dependencies, lockfile,
+and ProGuard rules were unchanged while establishing this baseline.
+
+The final original characterization run is **72/72 passing** (all phase-1
+characterizations plus `PlaybackItemHeadersTest`, `PlaybackProgressPolicyTest`,
+and `LateEpisodeMetadataMergeTest`). Each new/strengthened named test below has
+an original-code mutation ending in `AssertionError`/`ComparisonFailure`.
+The zero-duration EPG case catches division errors and fails an assertion: its
+observable contract is a successful bind for malformed/zero-length programmes.
+
+Evidence resolves through `<git-common-dir>/refactor-evidence/tvplayer/`:
+`p1/step0b/cases.json`, `results.json`, `mutations/<id>/mutation.patch`,
+`gradle.log`, raw `xml/`; both initial/final test inputs and clean original
+logs/XML are archived there. The proof runner verifies the original revision,
+restores the original after each case, and checks the unchanged lockfile.
+
+### New and strengthened test → mutation → failing assertion
+
+| Named test | Original mutation | Failing assertion | Evidence ID |
+|---|---|---|---|
+| `TvAdapterFocusCharacterizationTest.classicEpisodeFocusUsesBothScaleAxesElevationAndDurations` | `?.scaleX(1.08f) \n                         ?.scaleY(1.08f)` → `?.scaleX(1.06f) \n                         ?.scaleY(1.08f)` | expected:<1.08> but was:<1.06> | `complete-c04` |
+| `TvAdapterFocusCharacterizationTest.guideAndPickerFocusTargetsDurationsAndRowDimensionsStayExact` | `120` → `121` | expected:<120> but was:<121> | `n000` |
+| `TvAdapterFocusCharacterizationTest.movieFocusUsesBothScaleAxesAndBothDurations` | `1.08f` → `1.13f` | expected:<1.08> but was:<1.13> | `n051` |
+| `TvAdapterFocusCharacterizationTest.playingDotKeepsItsPulseValuesDurationRepeatAndStopReset` | `ObjectAnimator.ofFloat(dot, "alpha", 1f, 0.3f, 1f)` → `ObjectAnimator.ofFloat(dot, "alpha", 0.9f, 0.3f, 1f)` | expected:<1.0> but was:<0.9> | `x007` |
+| `TvAdapterFocusCharacterizationTest.seasonHeaderZeroOneAndManyUseTheOriginalPluralRule` | `subtitleView.text = "$episodeCount Episode${if (episodeCount != 1) "s" else ""}"` → `subtitleView.text = "$episodeCount Episode${if (episodeCount > 1) "s" else ""}"` | expected:<0 Episode[s]> but was:<0 Episode[]> | `complete-c01` |
+| `TvArtworkVisibilityCharacterizationTest.channelLogoStartFailureAndSuccessKeepTheOriginalListenerConsumption` | `View.GONE` → `View.INVISIBLE` | expected:<8> but was:<4> | `v054` |
+| `TvArtworkVisibilityCharacterizationTest.episodeArtworkLoadingFailureAndSuccessPinEveryVisibilityAssignment` | `View.GONE` → `View.INVISIBLE` | view=2131362147 expected:<8> but was:<4> | `v025` |
+| `TvArtworkVisibilityCharacterizationTest.movieArtworkFailureAndSuccessUseGoneForTheReplacedView` | `View.GONE` → `View.INVISIBLE` | view=2131361893 expected:<8> but was:<4> | `v047` |
+| `TvArtworkVisibilityCharacterizationTest.stremioPosterStartFailureAndSuccessKeepTheOriginalListenerConsumption` | `View.GONE` → `View.INVISIBLE` | expected:<8> but was:<4> | `v063` |
+| `TvAutoSyncRingCharacterizationTest.haloAppearsAboveZeroAndExpandsToFullRadiusWithZeroAlphaAtOne` | `0f` → `0.05f` | expected:<2> but was:<1> | `n007` |
+| `TvAutoSyncRingCharacterizationTest.pulseDurationRepeatRequestAndRepeatedStartKeepTheSameClock` | `ValueAnimator.ofFloat(0f, 1f)` → `ValueAnimator.ofFloat(0.1f, 1f)` | expected:<0.5> but was:<0.55> | `x005` |
+| `TvAutoSyncRingCharacterizationTest.statusPaletteColorsKeepTheirOpaqueArgbValues` | `0xFF82E0AD` → `0xFE82E0AD` | expected:<-8200019> but was:<-24977235> | `x012` |
+| `TvGuideVisibilityCharacterizationTest.epgAiringReplayFutureAndExpiredRowsPinVisibilityAlphaAndProgressScale` | `coerceAtLeast(1L)` → `coerceAtLeast(0L)` | EPG bind must handle a zero-duration programme: java.lang.ArithmeticException: / by zero | `x011` |
+| `TvGuideVisibilityCharacterizationTest.iptvCurrentLiveFavoriteGroupAndEpgUseExactVisibleOrGoneStates` | `holder.favorite.visibility = if (entry.isFavorite) View.VISIBLE else View.GONE` → `holder.favorite.visibility = if (entry.isFavorite) View.VISIBLE else View.INVISIBLE` | favorite expected:<8> but was:<4> | `complete-c07` |
+| `TvGuideVisibilityCharacterizationTest.stremioEndTimeUsesTwelveAtMidnightAndNoonAndGoneAtTheStopBoundary` | `val h12 = if (h == 0) 12 else h` → `val h12 = if (h == 0) 0 else h` | expected:<[12]:05 AM> but was:<[0]:05 AM> | `complete-c12` |
+| `TvGuideVisibilityCharacterizationTest.stremioSwitchCurrentLoadingEmptyAndNextRowsPinEveryVisibilityAndTextAlpha` | `1.0f` → `1.05f` | expected:<1.0> but was:<1.05> | `final-n077` |
+| `TvModelDefaultsCharacterizationTest.everyAbsentPlaybackKeyKeepsItsJsonAndMapDefault` | `val mimeType: String? = null` → `val mimeType: String? = "changed"` | PlaybackItem equality; absent mimeType must keep its explicit expected default | `mime-default` |
+| `TvModelDefaultsCharacterizationTest.everyAbsentSourceKeyKeepsItsJsonAndMapDefault` | `seeders = obj.optInt("seeders", 0)` → `seeders = obj.optInt("seeders", 1)` | JSON.seeders expected:<0> but was:<1> | `complete-c14` |
+| `TvModelDefaultsCharacterizationTest.lateMetadataPositiveDurationAndNegativeLivePositionBoundsStayExact` | `liveDurationMs > 0L` → `liveDurationMs > 1L` | expected:<1> but was:<30000> | `x002` |
+| `TvModelDefaultsCharacterizationTest.payloadConstructorDefaultsKeepCompletionThresholdsAndIndependentGuideLists` | `movieCompletionThreshold: Int = 80` → `movieCompletionThreshold: Int = 81` | expected:<80> but was:<81> | `x000` |
+| `TvModelDefaultsCharacterizationTest.rewatchBoundariesDistinguishNinetyNinetyFourAndNinetyFive` | `if (allowLocalProgressDisplay && trakt >= 95 && resumePositionMs > 0 && local < 95) return local` → `if (allowLocalProgressDisplay && trakt >= 95 && resumePositionMs > 0 && local < 90) return local` | local=90 tracker=95 expected:<90> but was:<95> | `complete-c19` |
+| `TvModelDefaultsCharacterizationTest.sourceDisplayTitleAndSizeBoundaryLiteralsRemainObservable` | `newlineIdx <= 0` → `newlineIdx <= 1` | expected:<[]Movie> but was:<[A \n ]Movie> | `x010` |
+| `TvPlaylistThresholdCharacterizationTest.episodeFullAndPartialBindsPinProgressThresholdsAlphaAndExactVisibility` | `95` → `94` | view=2131361898 expected:<0> but was:<8> | `r-n043` |
+| `TvPlaylistThresholdCharacterizationTest.episodeMetadataZeroBoundariesBadgePaddingAndFallbackStatesStayExact` | `View.GONE` → `View.INVISIBLE` | view=2131361891 expected:<8> but was:<4> | `v000` |
+| `TvPlaylistThresholdCharacterizationTest.missingToActualBindResetsRootAndContainerAlphaIndependently` | `1.0f` → `1.05f` | expected:<1.0> but was:<1.05> | `final-n024` |
+| `TvPlaylistThresholdCharacterizationTest.movieFullAndPartialBindsPinProgressThresholdsAlphaAndExactVisibility` | `94` → `93` | view=2131361897 expected:<0> but was:<8> | `r-n063` |
+| `TvPlaylistThresholdCharacterizationTest.movieSizeBoundariesGroupColorsAndAttachedFallbackNumberStayExact` | `View.GONE` → `View.INVISIBLE` | view=2131361891 expected:<8> but was:<4> | `v035` |
+
+### Claude's seven exact survivors re-run on the final tests
+
+Every final re-run executes **all 72 relevant tests**; no compilation error or
+crash supplies the proof. Raw patches preserve Claude's exact before/after
+strings, including the original 90% rewatch mutation.
+
+| Named test | Exact original mutation | Failing assertion | Evidence ID |
+|---|---|---|---|
+| `TvAdapterFocusCharacterizationTest.seasonHeaderZeroOneAndManyUseTheOriginalPluralRule` | `subtitleView.text = "$episodeCount Episode${if (episodeCount != 1) "s" else ""}"` → `subtitleView.text = "$episodeCount Episode${if (episodeCount > 1) "s" else ""}"` | expected:<0 Episode[s]> but was:<0 Episode[]> | `complete-c01` |
+| `TvAdapterFocusCharacterizationTest.classicEpisodeFocusUsesBothScaleAxesElevationAndDurations` | `?.scaleX(1.08f) \n                         ?.scaleY(1.08f)` → `?.scaleX(1.06f) \n                         ?.scaleY(1.08f)` | expected:<1.08> but was:<1.06> | `complete-c04` |
+| `TvGuideVisibilityCharacterizationTest.iptvCurrentLiveFavoriteGroupAndEpgUseExactVisibleOrGoneStates` | `holder.favorite.visibility = if (entry.isFavorite) View.VISIBLE else View.GONE` → `holder.favorite.visibility = if (entry.isFavorite) View.VISIBLE else View.INVISIBLE` | favorite expected:<8> but was:<4> | `complete-c07` |
+| `TvGuideVisibilityCharacterizationTest.iptvCurrentLiveFavoriteGroupAndEpgUseExactVisibleOrGoneStates` | `holder.liveBadge.visibility = if (entry.isLive) View.VISIBLE else View.GONE` → `holder.liveBadge.visibility = View.GONE` | liveBadge expected:<0> but was:<8> | `complete-c08` |
+| `TvGuideVisibilityCharacterizationTest.stremioEndTimeUsesTwelveAtMidnightAndNoonAndGoneAtTheStopBoundary` | `val h12 = if (h == 0) 12 else h` → `val h12 = if (h == 0) 0 else h` | expected:<[12]:05 AM> but was:<[0]:05 AM> | `complete-c12` |
+| `TvModelDefaultsCharacterizationTest.everyAbsentSourceKeyKeepsItsJsonAndMapDefault` | `seeders = obj.optInt("seeders", 0)` → `seeders = obj.optInt("seeders", 1)` | JSON.seeders expected:<0> but was:<1> | `complete-c14` |
+| `TvModelDefaultsCharacterizationTest.rewatchBoundariesDistinguishNinetyNinetyFourAndNinetyFive` | `if (allowLocalProgressDisplay && trakt >= 95 && resumePositionMs > 0 && local < 95) return local` → `if (allowLocalProgressDisplay && trakt >= 95 && resumePositionMs > 0 && local < 90) return local` | local=90 tracker=95 expected:<90> but was:<95> | `complete-c19` |
+
+### Gap-class sweep and equivalent mutations
+
+The sweep has **278 distinct mutation archives**, **262 assertion-killed
+runs**, 14 equivalent variants, and two early survivors killed after
+strengthening: Stremio Y-reset (`final-n077`) and independent row/container
+alpha reset (`final-n024`). It covers all
+**74 `View.GONE` sites** in moved adapters, all **35 explicit/implicit
+`optX` default sites**, six explicit map fallbacks, guarded absent defaults,
+optional map/JSON fields, constructor defaults, focus scales on both axes,
+elevations and durations, watched/progress bounds in full and partial binds,
+text alpha values, size/title boundaries, ring/dot endpoints and geometry.
+`numeric-inventory.json` records all 302 PSI numeric tokens, including literals
+that are parameters, ordinal indexes, colours, or unreachable code. Absent
+`PlaybackItem` expected values are all explicit, avoiding dependence on the
+constructor defaults being characterized. Source defaults pin all 19 fields;
+playback defaults pin all 23 fields on JSON and map paths.
+
+The following variants are not behaviour changes and cannot supply a behaviour
+proof; the exact move checker preserves their original tokens anyway:
+
+- `v026`, `v027`, `v030`, `v031`: poster/shimmer hiding immediately repeated by
+  `showFallback`. Terminal poster/shimmer states are asserted and their setters
+  are individually killed elsewhere in the sweep.
+- `d017`, `d018`, `d022`, `d023`, `d027`, `d030`: guarded string `optString`
+  fallbacks never supply an absent value; `obj.has` selects `null` first.
+  Android SDK-28 `JSONObject.optString`/`JSON.toString` bytecode is archived:
+  present JSON NULL becomes the string "null", not the fallback. The actual
+  absent-result branches are killed separately (`g000`–`g010`).
+- `n043`, `n046`, `n063`, `n064`: raising the upper progress bound admits only
+  rows already excluded by the watched guard. Lowering each bound is observable
+  at 94%, and is assertion-killed in `r-n043`, `r-n046`, `r-n063`, `r-n064`.
+
+Private `getSeasonGradient` has no production caller; its literals are retained
+verbatim rather than tested through an invented caller. Constructor thresholds,
+actual focus/pulse endpoints, mutable-list ownership, positive one-millisecond
+bounds, rating zero boundaries, and midnight/noon labels are covered. No bugs
+were fixed. Calibration attempts are retained separately under `calibration-1/`
+and are excluded from accepted evidence. Robolectric's fresh Paint alpha is a
+legacy-shadow artifact: palette opacity is checked from packed ARGB; halo/dot
+alpha snapshots after pulsing draws remain independently asserted.
+
+Clean JVM baseline: **`junit/p1-step0b`**, 323 identities (322 pass, the same
+known focus failure, zero skips). Comparison with `p1-step0`: **26 passing
+additions only**, all 297 prior identities and statuses retained. Tested HEAD
+`739f9992d`, 8 dirty files, JBR 21.0.10; input fingerprints match before/after.
+The original detached worktree was removed after archiving the proofs.

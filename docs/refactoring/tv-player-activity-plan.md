@@ -454,3 +454,17 @@ guide; auto-sync ring animates during subtitle auto-sync.
   Moves, anchor/helper retargets, release/R8 and full Flutter phase gates
   remain at their planned milestones. Later JVM runs compare against
   **`p1-step0`**, not the pre-characterization baseline.
+
+- 2026-10-07 — **Phase 1 step 0b complete**. Added 26 characterization tests
+  and strengthened the existing ring pulse test. All seven exact Claude
+  survivors are assertion-killed against all 72 relevant original-code tests.
+  The gap sweep archives 278 runs: 262 assertion kills, 14 equivalent variants
+  explained in the dependency report, and two early survivors closed by final
+  assertions. Every one of the 27 new/strengthened named tests has a mutation
+  proof. Exact visibility, absent defaults, focus axes/durations/elevations,
+  progress thresholds, alpha and ring/pulse boundaries are covered. Evidence:
+  `p1/step0b/`; original clean run 72/72. Detached original worktree removed.
+  Clean JVM baseline **`p1-step0b`**: 323 identities, 322 pass, unchanged known
+  focus failure, no skips; **26 passing additions only** versus `p1-step0`,
+  stable fingerprints, JBR 21.0.10. Production source, lockfile and ProGuard
+  remain unchanged. Later phase-1 JVM gates compare against `p1-step0b`.

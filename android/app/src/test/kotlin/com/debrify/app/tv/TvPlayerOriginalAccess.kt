@@ -5,6 +5,10 @@ import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
 import java.lang.reflect.InvocationTargetException
+import android.graphics.drawable.Drawable
+import android.widget.ImageView
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.DrawableImageViewTarget
 
 /** Only this helper knows the original private JVM names/constructor order.
  * Move commits retarget this helper; the behavioural assertions stay unchanged.
@@ -129,4 +133,29 @@ internal object TvPlayerOriginalAccess {
 
     fun ring(outer: AndroidTvTorrentPlayerActivity, context: Context): View =
         construct("AutoSyncRingView", outer, context) as View
+
+    fun defaultPayload(): Any {
+        val constructor = type("PlaybackPayload").declaredConstructors.single { it.isSynthetic }
+        constructor.isAccessible = true
+        return unwrap { constructor.newInstance(
+            "Title", null, "single", mutableListOf<PlaybackItem>(), 0, null,
+            null, null, null, null, null, null, 0.0, 0.0, false, 0, 0, null,
+            ((1 shl 18) - 1) xor ((1 shl 6) - 1), null,
+        ) }
+    }
+
+    fun episodeHolder(view: View): RecyclerView.ViewHolder =
+        construct("PlaylistAdapter\$EpisodeViewHolder", view, { _: Int -> }, null, null) as RecyclerView.ViewHolder
+
+    /** Exercise the original listener installed by a real bind without network
+     * or decoder timing. This is a test-only seam into Glide's request object.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun artworkListener(image: ImageView): RequestListener<Drawable> {
+        val request = DrawableImageViewTarget(image).request!!
+        val listeners = request.javaClass.getDeclaredField("requestListeners").apply {
+            isAccessible = true
+        }.get(request) as List<RequestListener<Drawable>>
+        return listeners.single()
+    }
 }
