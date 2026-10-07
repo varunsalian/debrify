@@ -107,7 +107,7 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
      children (attached to the following child, or to the container's
      closing brace). Declarations are identified by overload-safe selectors
      (kind + name + parameter type list as written + container path, e.g.
-     `fun parseIptvChannels(JSONArray)` vs `fun parseIptvChannels(String)`;
+     `fun parseIptvChannels(JSONArray)` vs `fun parseIptvChannels(List<*>)`;
      `init#n` for the n-th `init` block; property by name; companion and
      anonymous objects by container path). Expression bodies, delegated
      properties, constructor properties, anonymous objects and nested `init`
@@ -362,12 +362,15 @@ verifies with a diff limited to the helper.
 
 ### Phase 1 steps
 
-- **T** — `check_kotlin_moves.py` + self-tests (fixtures under
+- **T** — `dev/tool/android_junit_evidence.py` (`run <label>` = the clean
+  run + identity archive of rule 6; `compare <label> --against <label>` =
+  the rule-6 failure conditions), `check_kotlin_moves.py` + self-tests (fixtures under
   `dev/tool/fixtures/kotlin_moves/`), and the phase-1 manifest
   `dev/tool/kotlin_moves/tvplayer_p1.json` naming base SHA `39c630303`.
 - **0 / 0b** — dependency report copy, characterization + mutation tables.
-- **1** — the moves (one commit per destination group is fine), keep rules,
-  retargeted source-text tests, baseline update.
+- **1** — the moves (one commit per destination group is fine), the
+  reflection helper retargeted, retargeted source-text tests, size-baseline
+  update; verify (do not edit) existing R8 coverage.
 - **gate** — compile, JVM tests vs baseline, checker, size, Dart
   source-text tests, release build + decoder verification + mapping check,
   full Flutter suite (`suite_evidence.py`), commit message contains `gate`.
@@ -410,3 +413,5 @@ guide; auto-sync ring animates during subtitle auto-sync.
   original self-comparison, frozen activity imports + exact destination
   import lists, Paint-copying recording canvas, all four payload-bind
   overloads.
+- 2026-10-07 — design round 3 (Codex): **No P1s**; two P3 wording fixes
+  applied. Design approved for phase 1 execution.
