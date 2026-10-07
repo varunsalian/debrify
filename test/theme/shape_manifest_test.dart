@@ -35,6 +35,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_layout.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_list.dart':
+      0,
+
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
       1,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart':
@@ -201,7 +208,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/playlist_screen.dart': 0,
-  'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
   'lib/ui/core/trailer_indicators.dart': 1,
   'lib/features/home/presentation/home_hero_live_layer.dart': 0,
@@ -301,6 +307,81 @@ const Map<String, int> kExtractedShapeResidue = {
       5,
   'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_row.dart': 1,
   'lib/screens/settings/iptv_settings_two_pane.dart': 0,
+  'lib/screens/premiumize/premiumize_files_screen.dart': 0,
+  'lib/features/premiumize_files/application/premiumize_playlist_titles.dart':
+      0,
+  'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
+  'lib/features/premiumize_files/models/folder_view_mode.dart': 0,
+  'lib/features/premiumize_files/models/premiumize_view.dart': 0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_actions_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_back_navigation.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_loading.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_data_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_date_format.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_download.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_list.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_playback.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_download.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_navigation.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_playback.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_layout_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_actions.dart':
+      4,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_composition.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_playlist_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_root_layout.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_sections.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_source_binding.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_status_layout.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_toolbar_layout.dart':
+      2,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_modes.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart':
+      0,
+
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 0,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog.dart':
       1,

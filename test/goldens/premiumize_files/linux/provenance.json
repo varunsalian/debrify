@@ -1,0 +1,56 @@
+{
+  "checkpoint": "f1cfa6f2f63df09cedb3fa75e9e8e9b3e0a97a7c",
+  "sdk": {
+    "frameworkVersion": "3.44.8",
+    "channel": "stable",
+    "repositoryUrl": "https://github.com/flutter/flutter.git",
+    "frameworkRevision": "058e0af2c2b57e369d905a03ac9748b0ebf543c6",
+    "frameworkCommitDate": "2026-07-23 10:56:21 -0700",
+    "engineRevision": "0cd610717bde95fd88343c64f81c11ba4e5c0010",
+    "engineCommitDate": "2026-07-23 16:11:34.000Z",
+    "engineContentHash": "13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939",
+    "engineBuildDate": "2026-07-23 09:36:29.809",
+    "dartSdkVersion": "3.12.2",
+    "devToolsVersion": "2.57.0",
+    "flutterVersion": "3.44.8",
+    "flutterRoot": "/opt/flutter"
+  },
+  "capture_flag": "PREMIUMIZE_CAPTURE_ORIGINAL_LINUX=true",
+  "strict_flag": "PREMIUMIZE_REQUIRE_ORIGINAL_LINUX=true",
+  "input_sha256": {
+    "lib/screens/premiumize/premiumize_files_screen.dart": "93be5f5e4bfe1b5c9dd411adcad616e030b9fe4e478c484ffd2e7b6e96a64476",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_views_test.dart": "6646591be00ec559fd49436d7d1b5ceb56aecb9e46eab722bc5631384f1c78ed",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_actions_test.dart": "0cecb35b9ad685cd5ee1013819d174710053dc2a4f1f5f66bd781fb0b77c8752",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_test.dart": "bed39d43c1f64b148f0230e693e97db8cf854d08b08f4c268e1376ecd3366318",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_action_bodies.json": "18f3007622c8d8dc580bbf1c4c6e8e3b78164e67e902aed162ea03a06b11e541",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_source_contract_test.dart": "ebb10634cf5120194399b7d8d2cdfe1352e7662aae1d789c27692207c06aa1ac",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_titles_test.dart": "e2150c2f1aacedb0945903e9ae34e4669588d63b19dc18b33139b062d8331722",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_test.dart": "282b49574d6fea9032e30b2f4ffd0fb54ec4f487b2e6281424c38ce6c96bf1be",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_delete_test.dart": "3eb0701a749682d9e2531684bf4e72885915c1f7cfb0a6ca536318a9ea083fb4",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_binding_test.dart": "c96a386349ba3f7810b373ce824fb928cbef994c2be6ecf919e76a6c0408c000",
+    "test/features/premiumize_files/presentation/legacy_premiumize/premiumize_profile_test.dart": "5139bc69f4e62e3d5f023b1cdfae12fa34f7cbc1524f684676417fb173f322ea",
+    "test/support/premiumize_files_source.dart": "4181d3b08c0f2a7aeae8407f8a9af307546bb0958eab0e5dc3b3976620d6d517",
+    "test/support/premiumize_files_fixture.dart": "1d129cdc60f976dae83b7338bf1d431aa1b5903dfe24ff46b6ee8785608e6593"
+  },
+  "golden_sha256": {
+    "test/goldens/premiumize_files/linux/select-source.png": "88a880f84e4d6dbc2baa844642ad8f198556ccf4c967c502807c0fe29a9d5baf",
+    "test/goldens/premiumize_files/linux/not-configured.png": "f24c80ecfef22eb34589448575ac4476b5c5f4308edeff7451b928321d365b5c",
+    "test/goldens/premiumize_files/linux/folder.png": "98e7fc1801e5ff1f412a47b54261cb9dbe505dc55bb1493931c752bb0f838957",
+    "test/goldens/premiumize_files/linux/transfers.png": "ca6d908cfe09cb2301683d03a10b3c387ef72fdf80cfd97f64b178ae7e4694dc",
+    "test/goldens/premiumize_files/linux/selection.png": "6de26649c8bbd7ee7f5cb77707afc577dbdde78c00537c7884f3936b91813201",
+    "test/goldens/premiumize_files/linux/search-results.png": "c415fcd69437703e9ecb28ff91ed9650087ab8bc60a290927f2703c129011783",
+    "test/goldens/premiumize_files/linux/root.png": "ed32045066b383e9fc70a2d7bfdbf4599476fb159eb62251487451b405800b2d"
+  },
+  "provenance_note": "Captured by Claude on macOS host via local Docker (colima), image debrify-flutter:3.44.8 (linux/amd64, Flutter 3.44.8),\nsame image calibrated in earlier refactors against GitHub-runner Linux originals. Script: dev/tool/capture_premiumize_linux_goldens.sh\nat checkpoint f1cfa6f2f (exact-subject resolution). Two independent captures from fresh clones ($HOME/.cache/pm-linux, pm-linux2):\nboth capture runs and both strict runs passed 7/7; all seven PNG SHA-256 values identical between captures\n(linux-original-sha256.txt vs linux-original-sha256-second-capture.txt). This is local evidence, not a remote CI URL.",
+  "local_evidence": "refactor-evidence/premiumize/ in the git common directory",
+  "evidence_sha256": {
+    "linux-original-capture.txt": "bea2815c8fcac78c7282256709c4c5f14ebb8b96963bb618e0b969212038eaae",
+    "linux-original-strict.txt": "ff5195f3935b629cf61d4af922afc8290ad05ed213dfea5a1693c5b83ce38736",
+    "linux-original-sha256.txt": "9f73809d1789bff4fe1363fa25b50a1798444a9f647ec56710ba2b995a6302be",
+    "linux-original-sha256-second-capture.txt": "9f73809d1789bff4fe1363fa25b50a1798444a9f647ec56710ba2b995a6302be",
+    "linux-original-capture-note.txt": "d3969bab42b5b5cebeabbd346fcd58c8c08b6788c270fea7af3d37f5074dcb92"
+  },
+  "strict_original_tests_passed": 7,
+  "independent_captures_byte_identical": true,
+  "remote_ci": "pending"
+}

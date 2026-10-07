@@ -11,6 +11,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail", "stremio_tv_tuner")
+FEATURES += ("premiumize_files",)
+PREMIUMIZE_COMPLETE = True
+PREMIUMIZE_FACADE = "lib/screens/premiumize/premiumize_files_screen.dart"
+PREMIUMIZE_BRIDGE = "lib/features/premiumize_files/presentation/legacy_premiumize/"
+PREMIUMIZE_FACADE_CAP = 251  # Measured final facade, including the frozen accessor.
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
 FEATURES += ("recordings",)
@@ -278,6 +283,7 @@ COMPOSITION_ROOTS = {
     # Pure compatibility export surface; feature files own the widgets.
     DETAIL_SHOWCASE_FACADE,
     PIKPAK_FACADE,
+    PREMIUMIZE_FACADE,
     PLAYBACK_SETTINGS_FACADE,
     DEBRID_FACADE,
     IPTV_FACADE,
@@ -538,6 +544,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     TORBOX_BRIDGE,
     DEBRID_BRIDGE,
     PIKPAK_BRIDGE,
+    PREMIUMIZE_BRIDGE,
     PLAYBACK_SETTINGS_BRIDGE,
     # Pure UI two-pane bridge; exit: stats/options contracts and route state.
     IPTV_SETTINGS_TWO_PANE_BRIDGE,
@@ -857,6 +864,20 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 450-line merged-detail facade limit")
         if "TEMP(merged_detail)" in source:
             problems.append("temporary merged-detail cross-call remains in the facade")
+    if relative.startswith("lib/features/premiumize_files/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line Premiumize extraction limit")
+        if "TEMP(premiumize)" in source and (PREMIUMIZE_COMPLETE or not relative.startswith(PREMIUMIZE_BRIDGE)):
+            problems.append("temporary Premiumize cross-call outside the staged legacy bridge")
+        if relative.startswith("lib/features/premiumize_files/application/") and re.search(r"\bBuildContext\b", source):
+            problems.append("pure Premiumize application helper references BuildContext")
+        if re.search(r"\blate\b", source):
+            problems.append("Premiumize extraction introduces late initialization")
+    if PREMIUMIZE_COMPLETE and relative == PREMIUMIZE_FACADE:
+        if lines > PREMIUMIZE_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {PREMIUMIZE_FACADE_CAP}-line Premiumize facade limit")
+        if "TEMP(premiumize)" in source:
+            problems.append("temporary Premiumize cross-call remains in the facade")
     if relative.startswith("lib/features/pikpak_files/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line PikPak extraction limit")
@@ -1114,6 +1135,10 @@ def violations(path: Path) -> list[str]:
                 problems.append("pure IPTV application helper imports a legacy service")
             if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
                 problems.append("pure TorBox application helper imports a legacy service")
+            if relative.startswith("lib/features/premiumize_files/application/") and target.startswith(("package:http/", "package:shared_preferences/", "package:sqflite")):
+                problems.append("pure Premiumize application helper imports a data implementation")
+            if relative.startswith("lib/features/premiumize_files/application/") and target.startswith("lib/services/"):
+                problems.append("pure Premiumize application helper imports a legacy service")
             if relative.startswith("lib/features/pikpak_files/application/") and target.startswith("lib/services/"):
                 problems.append("pure PikPak application helper imports a legacy service")
             if relative.startswith("lib/features/debrid_downloads/application/") and target.startswith("lib/services/"):
@@ -1202,6 +1227,12 @@ def violations(path: Path) -> list[str]:
                     problems.append("merged-detail feature imports the detail facade")
                 if own == "merged_detail" and not relative.startswith(MERGED_DETAIL_BRIDGE) and target.startswith(("lib/services/", "lib/services/storage/")):
                     problems.append("merged-detail service/storage/launcher import outside the legacy bridge")
+                if own == "premiumize_files" and target == PREMIUMIZE_FACADE:
+                    problems.append("Premiumize feature imports the files facade")
+                if target.startswith("lib/features/") and "premiumize_files" in {own, target.split("/")[2]}:
+                    other = target.split("/")[2] if own == "premiumize_files" else own
+                    if other in {"pikpak_files", "torbox_downloads", "debrid_downloads", "alldebrid_files"}:
+                        problems.append("Premiumize/cloud feature cross-import")
                 if own == "pikpak_files" and target == PIKPAK_FACADE:
                     problems.append("PikPak feature imports the files facade")
                 if own == "debrid_downloads" and target == DEBRID_FACADE:
@@ -1215,6 +1246,23 @@ def violations(path: Path) -> list[str]:
                 if target.startswith(COMPOSITION + "/") or target == FACADE:
                     problems.append(f"feature imports the composition layer: {uri}")
     return [f"{relative}: {problem}" for problem in problems]
+
+
+def premiumize_peer_import_violations(path):
+    relative = path.relative_to(ROOT).as_posix()
+    problems = []
+    for declaration in re.findall(r"^\s*import\s+([^;]+);", path.read_text(), re.MULTILINE):
+        for uri in URIS.findall(declaration):
+            target = uri
+            if uri.startswith("package:debrify/"):
+                target = "lib/" + uri.removeprefix("package:debrify/")
+            elif not uri.startswith(("dart:", "package:")):
+                resolved = (path.parent / uri).resolve()
+                if resolved.is_relative_to(ROOT):
+                    target = resolved.relative_to(ROOT).as_posix()
+            if target.startswith("lib/features/premiumize_files/"):
+                problems.append(f"{relative}: Premiumize/cloud feature cross-import")
+    return problems
 
 
 def main() -> int:
@@ -1262,6 +1310,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SPOTLIGHT_TIMELINE_FACADE)
     if STREMIO_TV_COMPLETE:
         paths.add(ROOT / STREMIO_TV_FACADE)
+    if PREMIUMIZE_COMPLETE:
+        paths.add(ROOT / PREMIUMIZE_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
@@ -1292,6 +1342,9 @@ def main() -> int:
         problems.append(f'Registered storage directory is missing: {STORAGE_SOURCE_DIR}')
     if not paths:
         problems.append("No migrated sources found; check the measured source set.")
+    if "alldebrid_files" not in FEATURES:
+        for path in sorted((ROOT / "lib/features/alldebrid_files").rglob("*.dart")):
+            problems.extend(premiumize_peer_import_violations(path))
     for path in sorted(paths):
         if not path.is_file():
             problems.append(f"Registered extracted source is missing: {path}")
