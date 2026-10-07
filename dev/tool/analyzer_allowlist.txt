@@ -61,3 +61,14 @@ warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_t
 warning | unused_local_variable | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The value of the local variable 'hideBackButton' isn't used. Try removing the variable or using it
 # _DebrifyTVScreenState._buildSettingsCard
 warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_card.dart | The declaration 'setHideBackButton' isn't referenced. Try removing the declaration of 'setHideBackButton'
+
+# Recordings: ORIGINAL private constructors through the frozen widget aliases.
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_buttons.dart | A value for optional parameter 'filled' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_buttons.dart | A value for optional parameter 'danger' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_buttons.dart | A value for optional parameter 'autofocus' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_buttons.dart | A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_buttons.dart | A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_chrome.dart | A value for optional parameter 'onScheduleDown' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_chrome.dart | A value for optional parameter 'chip' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_chrome.dart | A value for optional parameter 'action' isn't ever given. Try removing the unused parameter
+warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_library_row.dart | A value for optional parameter 'focusNode' isn't ever given. Try removing the unused parameter

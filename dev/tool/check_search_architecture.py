@@ -13,6 +13,14 @@ ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail", "stremio_tv_tuner")
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
+FEATURES += ("recordings",)
+RECORDINGS_COMPLETE = False
+RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
+RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"
+# Measured by the compiling Step 0b probe; enforced at completion.
+RECORDINGS_FACADE_CAP = 101
+RECORDINGS_SIZE_EXCEPTIONS = {}
+RECORDINGS_HANDOFF_FILES = {RECORDINGS_BRIDGE + "recordings_hub_actions.dart"}
 STREMIO_TV_CATALOGS_COMPLETE = True
 STREMIO_TV_CATALOGS_FACADE = "lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart"
 STREMIO_TV_CATALOGS_BRIDGE = "lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/"
@@ -479,6 +487,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     DEBRIFY_TV_BRIDGE,
     # Move-only catalog dialogs; exit: import/refresh contracts + Riverpod controllers.
     STREMIO_TV_CATALOGS_BRIDGE,
+    # Move-only DVR bridge; exit: recordings repository + Riverpod controller.
+    RECORDINGS_BRIDGE,
     STREMIO_TV_TUNER_BRIDGE,
     # Move-only State bridge; exit: Stremio TV data contracts/Riverpod.
     STREMIO_TV_BRIDGE,
@@ -512,6 +522,19 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/recordings/"):
+        limit = RECORDINGS_SIZE_EXCEPTIONS.get(relative, 500)
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line recordings extraction limit")
+        if "TEMP(recordings)" in source and (RECORDINGS_COMPLETE or not relative.startswith(RECORDINGS_BRIDGE)):
+            problems.append("Recordings temporary cross-call outside its exact legacy bridge")
+        if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin)\b", source):
+            problems.append("Recordings adds keep-alive ownership")
+    if RECORDINGS_COMPLETE and relative == RECORDINGS_FACADE:
+        if lines > RECORDINGS_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {RECORDINGS_FACADE_CAP}-line recordings facade limit")
+        if "TEMP(recordings)" in source:
+            problems.append("Recordings temporary cross-call remains in the facade")
     if relative.startswith("lib/features/stremio_tv_catalogs/"):
         limit = STREMIO_TV_CATALOGS_SIZE_EXCEPTIONS.get(relative, 500)
         if lines > limit:
@@ -808,6 +831,15 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/recordings/"):
+                if target == RECORDINGS_FACADE:
+                    problems.append("Recordings feature imports its facade")
+                if target.startswith("lib/screens/"):
+                    problems.append("Recordings feature imports a screen")
+                if not relative.startswith(RECORDINGS_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("Recordings service import outside its exact legacy bridge")
+                if any(name in target for name in ("video_player_launcher", "player_launch", "media_kit", "lib/screens/video_player/")) and relative not in RECORDINGS_HANDOFF_FILES:
+                    problems.append("Recordings playback import outside its registered handoff file")
             if relative.startswith("lib/features/stremio_tv_catalogs/"):
                 if target == STREMIO_TV_CATALOGS_FACADE:
                     problems.append("Stremio TV catalogs feature imports its facade")
@@ -1058,6 +1090,8 @@ def main() -> int:
         paths.add(ROOT / DEBRIFY_TV_FACADE)
     if STREMIO_TV_CATALOGS_COMPLETE:
         paths.add(ROOT / STREMIO_TV_CATALOGS_FACADE)
+    if RECORDINGS_COMPLETE:
+        paths.add(ROOT / RECORDINGS_FACADE)
     if STREMIO_TV_TUNER_COMPLETE:
         paths.add(ROOT / STREMIO_TV_TUNER_FACADE)
     if STREMIO_TV_COMPLETE:
@@ -1082,6 +1116,8 @@ def main() -> int:
         for root in sorted(COMPOSITION_ROOTS)
         if not (ROOT / root).is_file()
     ]
+    if not (ROOT / RECORDINGS_FACADE).is_file():
+        problems.append("Recordings facade is missing")
     if not (ROOT / "lib/features/spotlight_board").is_dir():
         problems.append("Registered spotlight board directory is missing")
     if STREMIO_TV_COMPLETE and not (ROOT / STREMIO_TV_FACADE).is_file():
