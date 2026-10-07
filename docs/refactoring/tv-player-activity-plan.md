@@ -71,21 +71,43 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
    proven not to use outer members. Each allowed edit is declared, not
    inferred.
 2. **Kotlin move checker** (`dev/tool/check_kotlin_moves.py`, built in phase 1
-   step T). Manifest-driven like `check_verbatim_moves.py`: for each moved
-   declaration it extracts the declaration from the original file at the
-   recorded base SHA and from the destination at HEAD, lexes both with a real
-   Kotlin lexer (nested block comments, KDoc, string templates `${…}` with
-   nesting, raw strings, char literals, backtick identifiers, annotations,
-   numeric literals with `_`/suffixes), applies only the manifest's declared
-   substitutions at declared token positions, and requires identical token
-   streams **including comments**. It also requires that every declaration
-   removed from the original is either listed as moved or listed as
-   intentionally retained/rewritten with a reason, and that no declaration is
-   moved twice. It has self-tests with real-config positive fixtures and
-   negative fixtures (changed literal, dropped comment, reordered statement,
-   undeclared receiver change, undeclared visibility change, missing
-   declaration, duplicate move, template-content change) — each negative must
-   fail for the stated reason.
+   step T). Manifest-driven like `check_verbatim_moves.py`, and **exhaustive
+   over the original file**, not only over moved code:
+   - **Ownership.** Every declaration of the original file at the recorded
+     base SHA (top-level, class members incl. property initializers and
+     `init` blocks, nested types, companion members) is assigned exactly one
+     fate in the manifest: `retained` (stays in the original file),
+     `moved` (destination file + declared substitutions) or `rewritten`
+     (only with a reason and a named test). Unassigned, doubly assigned,
+     surviving-after-move (original and destination both present) and
+     unexpected new declarations in the original file or any destination are
+     errors.
+   - **Retained code is compared too.** Every retained declaration must be
+     token-identical to the original (only declared substitutions — e.g. a
+     call that now targets a collaborator), and retained members keep their
+     relative order, so property-initializer and `init` order cannot change
+     silently. File-level items are validated: `package`, file annotations
+     (`@file:`), the class-level `@OptIn`, and the import list (only removals
+     of imports proven unused, and additions in destinations).
+   - **Lexing.** A real Kotlin lexer for Kotlin 2.2.20 syntax: nested block
+     comments, KDoc, string templates `$x`/`${…}` with nesting, raw strings,
+     char literals, backtick identifiers, annotations with use-site targets,
+     numeric literals with `_`/suffixes, labels (`return@x`, `this@X`).
+     Comments are tokens. **Newlines are significant** (Kotlin's grammar
+     treats `NL` as a statement separator): the comparison keeps one `NL`
+     token per line break between tokens and only normalises indentation and
+     trailing spaces. Same-tokens/different-newline layouts are a failure.
+   - **Substitutions** are declared per declaration with the exact original
+     token sequence, its replacement and an expected occurrence count; any
+     other difference fails.
+   - **Self-tests**: positive real-config fixtures, and negatives that must
+     each fail for the stated reason — changed literal, dropped/edited
+     comment, reordered statement, newline-only change, undeclared receiver
+     change, undeclared visibility change, missing declaration, duplicate
+     move, original+destination both present, unexpected new declaration,
+     retained-body edit, property-initializer reorder, template-content
+     change, import change in the original that is not an unused-import
+     removal.
 3. **Characterize the original first (step 0).** Before any move in a phase,
    add Robolectric/JVM tests that pin the phase's observable behaviour on the
    **original** code, prove each with an assertion-failing mutation of the
@@ -108,31 +130,44 @@ unreachable menu "sources" section) are recorded in **Follow-ups**, not fixed.
    owner/path in the same commit with an equal-or-stronger assertion; the
    phase's dependency report lists each retarget (old anchor → new anchor) and
    the reviewer checks it. Never delete an assertion to make a move pass.
-5. **R8 parity.** `proguard-rules.pro` keeps
-   `AndroidTvTorrentPlayerActivity { *; }` and `AndroidTvTorrentPlayerActivity$** { *; }`.
-   Code moved **out of the activity or its nested types** into a new class
-   would silently lose that keep. Every new class that receives such code gets
-   a matching `-keep class com.debrify.app.tv.<Name> { *; }` (and `$**` when it
-   has nested types) in the same commit, so release shrinking/obfuscation
-   treatment of moved code is unchanged. Code moved from **top-level**
-   declarations (not kept today) gets no new rule. The rules added are listed
-   in the phase's report; a later cleanup may relax them (Follow-up).
-6. **Gates per phase** (local; CI does not run Android JVM tests):
-   - `./gradlew :app:compileDebugKotlin` and `:app:testDebugUnitTest` with the
-     Android Studio JBR (JDK 21). Compare per-test identities against the
-     recorded baseline (`.git/refactor-evidence/tvplayer/baseline-results`,
-     259 tests, 1 known pre-existing failure:
-     `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`).
-     No new failures, no missing tests.
+5. **R8 parity.** `proguard-rules.pro:52` already has
+   `-keep class com.debrify.app.** { *; }`, which covers every class in the
+   app package — the activity, its nested types, top-level classes and JVM
+   file facades (`…Kt`) alike — in addition to the activity-specific rules
+   at 157/166. Extracted classes stay in `com.debrify.app.tv`, so their
+   shrink/obfuscation treatment is unchanged and **no rules are added**. The
+   broad rule must be preserved (a phase that would need to change any
+   proguard rule stops and asks). The phase-gate release build's
+   `mapping.txt` is checked for the complete moved set: every moved class,
+   its nested holders and new file facades (e.g. `TvPlaybackItemKt`) appear
+   with identity mappings for the class and all moved members.
+6. **Gates per phase** (local; CI does not run Android JVM tests).
+   Evidence paths resolve through `git rev-parse --path-format=absolute
+   --git-common-dir` (worktrees have a `.git` file) under
+   `refactor-evidence/tvplayer/`.
+   - JVM baseline: a clean `:app:cleanTestDebugUnitTest :app:testDebugUnitTest`
+     run (Android Studio JBR, JDK 21) at the phase base, archived with every
+     test identity and status, the tested revision, dirty-file count, Gradle
+     exit code and JDK version (`junit/<label>/identities.json` + raw XML).
+     A **new complete baseline is recorded after step 0** adds
+     characterization tests; later runs are compared against it. A
+     comparison fails on: any new failure/error, any missing identity, any new
+     skip, a run with no/partial XML (identity count lower than the baseline
+     or Gradle aborting before tests), or a tree that changed during the run.
+     Known pre-existing failure:
+     `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+   - `./gradlew :app:compileDebugKotlin` with no new Kotlin warnings
+     (compiler warning set compared by message identity, line shifts
+     tolerated).
    - Kotlin move checker + its self-tests; `check_file_sizes.py` (the
      activity's baseline entry is lowered with `--update`; every new file
      ≤ 800 lines unless a documented exception); format/analyze of any Dart
      touched; the Dart source-text tests above.
    - At the phase gate: a **release build** (`flutter build apk --release`,
      no install) succeeds, `dev/scripts/verify_android_subtitle_decoders.sh`
-     passes on it, and the R8 `mapping.txt` shows every new keep-ruled class
-     unobfuscated; plus the full Flutter suite via `suite_evidence.py` on the
-     merged tree (gate commits contain `gate`).
+     passes on it, and the R8 mapping check of rule 5 passes; plus the full
+     Flutter suite via `suite_evidence.py` on the merged tree (gate commits
+     contain `gate`).
    - Never `flutter run`/install anything on a device; no emulators.
 7. **Device checks** are not gates. Each phase lists what a human should check
    on a real Android TV at the end of the whole series; Claude aggregates them
@@ -147,7 +182,7 @@ Line numbers are at `39c630303`; each phase section re-measures.
 
 | Phase | Content | ≈ lines out | Risk |
 |---|---|---|---|
-| 1 | Top-level models + adapters; self-contained nested types; Kotlin move checker | 2,900 | low |
+| 1 | Top-level models + adapters; self-contained nested types; Kotlin move checker | 2,250 | low |
 | 2 | Pure helpers and stateless policies (IPTV error classification, recording URL rules, payload parsing helpers, playlist next/prev targeting, formatting); Flutter bridge seam (`TvPlayerFlutterBridge` wrapping the 32 method calls, same names/args/order) | 2,000 | low–med |
 | 3 | Self-owned features with timers: sleep timer, skip segments, Up Next card, status pill, PikPak cold-storage retry, recording actions, auto-sync ring/pill | 2,500 | med |
 | 4 | Tracks / subtitles / display / speed / night mode; progress reporter | 2,500 | med |
@@ -205,9 +240,10 @@ name + constructor order — moves with shuffle in phase 7);
   Glide, Media3 `UnstableApi`, views); imports are not part of the token
   comparison but unused imports must not be added. The activity's import list
   only loses imports that become unused (checked by compile warnings diff).
-- R8: the moved nested types (`IptvCategoryAdapter`, `IptvListPickerAdapter`,
-  `AutoSyncColors`, `AutoSyncRingView`) were kept via `$**`; add keep rules
-  for these four (rule 5). Top-level moves get none.
+- R8: covered by the existing broad `-keep class com.debrify.app.** { *; }`
+  (rule 5); no rule changes. The gate's mapping check covers all ten
+  destination files' classes, nested holders (`ViewHolder`s, companions,
+  `PlaylistListItem` subclasses) and the new `TvPlaybackItemKt` facade.
 - `mergeLateMetadata*` move from the `AndroidTvTorrentPlayerActivityKt` JVM
   facade to `TvPlaybackItemKt`; nothing references the facade by name
   (verified at step 0 by grep over Kotlin, Java, proguard rules and tests).
@@ -215,7 +251,8 @@ name + constructor order — moves with shuffle in phase 7);
   and the `PlaybackItem.displayProgressPercent` `if (watched) return 100`
   pin are retargeted to the new files with equal assertions.
 - Size: every destination ≤ 800 lines (largest expected: `TvPlaylistAdapter.kt`
-  ≈ 560). Activity shrinks by ≈ 2,900 to ≈ 19,300; baseline lowered.
+  ≈ 560). Activity shrinks by ≈ 2,250 to ≈ 19,970 (before import cleanup);
+  baseline lowered to the measured count.
 
 ### Step 0 — characterization of the original
 
@@ -234,15 +271,46 @@ the original file and then unchanged after the moves:
   `IptvCategoryAdapter`, `IptvListPickerAdapter`): `itemCount`, view types,
   bound text/visibility/selected state for representative rows (now playing,
   watched, progress, missing episode, season header, favourite, EPG now/next,
-  Glide-free fallbacks), click and focus-change lambdas invoked with the right
-  arguments, and any DPAD key handling the adapter installs.
-- `AutoSyncRingView`: colour/pulse state transitions observable via its public
-  API (draw is not pixel-tested).
+  Glide-free fallbacks), click, long-click (incl. whether it is consumed) and
+  focus-change lambdas invoked with the right arguments, and any DPAD key
+  handling the adapter installs. In addition, explicitly:
+  - season/group ordering and filtering, and a recycled holder going from a
+    missing-episode row to an actual row (and back) leaves no stale state;
+  - payload (partial) binds: the progress payload path and active-position
+    notifications of `PlaylistAdapter` (≈20698), Stremio TV guide partial
+    binds (≈21982);
+  - IPTV channel identity-based notifications, DiffUtil updates, list
+    readiness / mutable membership and stale-EPG request eligibility
+    (≈21637, ≈21722);
+  - posted callbacks (e.g. the Stremio guide progress-width post ≈22156) with
+    their recycled-holder / `NO_POSITION` guards — exercised through an
+    **attached, measured RecyclerView** (directly invoking
+    `onBindViewHolder` leaves `bindingAdapterPosition == NO_POSITION` and
+    would make the guard trivially exit);
+  - classic vs styled binding where an adapter has both (guide styles).
+- `AutoSyncRingView`, under a PAUSED looper with bounded advances: the pulse
+  animator's 1,800 ms duration, its infinite-repeat request (assert the
+  requested repeat count via `ShadowValueAnimator.getActualRepeatCount()` —
+  Robolectric 4.15.1 runs `INFINITE` as one repeat, which is not production
+  behaviour and must not be asserted as such), the repeated-start guard,
+  stop/reset, cancellation on detach, `arcColor` changes, and non-pixel draw
+  assertions (circle/arc calls and paint colour/stroke/alpha) via legacy
+  canvas recording.
 - Mutation proofs on the original for every test; Claude samples ≥ 10 more.
 
-Because the nested adapters are `private` today, tests that need them before
-the move use the same reflection approach as existing tests and switch to
-direct references in the move commit (listed in the report).
+**Access to private originals.** Every phase-1 target is file-private or a
+private nested type today (`StremioSource`, `PlaybackPayload`, all five
+top-level adapters and their entry/model classes, the two nested picker
+adapters, `AutoSyncColors`, the `inner` `AutoSyncRingView`, whose
+constructor takes the outer activity instance). Step 0 adds one test helper
+(`TvPlayerOriginalAccess.kt`) with reflection-based locators/constructors
+for each (by JVM binary name, e.g. `com.debrify.app.tv.PlaylistAdapter`,
+`com.debrify.app.tv.AndroidTvTorrentPlayerActivity$IptvCategoryAdapter`,
+the ring's `(outer, Context)` constructor). Production visibility is not
+widened to establish the baseline. In the move commit only that helper is
+retargeted to direct references (or to the new binary names); the
+behavioural assertions in the tests do not change, which the reviewer
+verifies with a diff limited to the helper.
 
 ### Phase 1 steps
 
@@ -282,3 +350,8 @@ guide; auto-sync ring animates during subtitle auto-sync.
 ## Progress
 
 (appended per step)
+- 2026-10-07 — design round 1 (Codex): 2 P1 (checker must be exhaustive incl.
+  retained code; baseline archive incomplete), 5 P2, 1 P3 — all folded into
+  rules 2, 5, 6 and phase-1 step 0. Clean JVM baseline recorded:
+  `junit/baseline-39c630303/identities.json` at `8bb284e3c` (docs-only over
+  `39c630303`): 259 identities, 258 pass, 1 known failure.
