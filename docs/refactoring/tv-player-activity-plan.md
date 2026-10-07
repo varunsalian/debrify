@@ -1311,3 +1311,5 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   the later gate. Production/protected inputs unchanged; temporary original
   worktree removed. STOP before production moves; Claude's independent
   mutation sample/review and any 0b follow later.
+
+- 2026-10-08 — **Phase 4 step 0b complete before moves.** Nineteen new original-surface cases close Claude f01/f07/f13/f14/f15 and sweep moved strings/auto-hide deadlines, negative/zero offset guards and visible-only failure refresh. All 47 original sweep proofs fail named assertions; Claude exact five rerun against all 80 phase-4 characterizations are killed, control 80/80. Clean `p4-step0b`: 539 identities (538 pass, same focus failure), all 520 p4-step0 statuses identical with 19 passing additions. Evidence `p4/step0b/`, `junit/p4-step0b/`; original detached tree removed. Production/protected inputs and manifest unchanged; Step 1 and gates follow.
