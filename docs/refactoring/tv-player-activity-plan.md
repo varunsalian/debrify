@@ -1284,3 +1284,11 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   production unchanged. Checker self-tests: 73/73 pass (historical suites
   included; each negative fails for its stated reason). Explicit controller property types resolve the Host
   cycle without construction-time reads.
+
+- 2026-10-08 — phase 4 tooling follow-up: the inherited phase-3 positive
+  fixture writer still hard-coded `p3/fixtures/phase3` when dispatched by
+  phase 4. It now uses the active evidence phase, like the phase-1/2 writers.
+  The focused historical positive check passes and archives under `p4/`;
+  its bytes equal the existing historical fixture. Earlier step-T runs had
+  regenerated those same historical fixture bytes in `p3/`; this evidence
+  path deviation is recorded here. Production and manifests unchanged.

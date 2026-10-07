@@ -43,7 +43,7 @@ class Phase3MovesTest(unittest.TestCase):
         self.verify(self.current)
         self.assertEqual(4, len(self.manifest['destinations']))
         self.assertEqual(6, len(self.manifest['added']))
-        folder = k.evidence_root(k.ROOT) / 'p3/fixtures/phase3'
+        folder = k.evidence_root(k.ROOT) / k.EVIDENCE_PHASE / 'fixtures/phase3'
         for path, text in self.current.items():
             folder.mkdir(parents=True, exist_ok=True)
             (folder / Path(path).name).write_text(text)
