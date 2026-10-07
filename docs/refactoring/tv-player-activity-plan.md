@@ -551,6 +551,132 @@ lists and categories, a recording start (file name), subtitle search
 (query/identity row), track menus (labels), Stremio TV guide data,
 quick-play next episode, EPG load on a slow provider (45 s timeout path).
 
+## Phase 3 — first stateful collaborators: sleep timer, skip segments, Up Next card, status pill, IPTV recording actions
+
+Branch `refactor/tvplayer-p3` off the phase-2 merge `ec365eb80` (activity 19,017 lines). Evidence under
+`refactor-evidence/tvplayer/p3/`. The feasibility inventory (owned state,
+every inbound reference, outbound host needs, timers and teardown position,
+`this`-ambiguity and `::x.isInitialized` hazards, per-feature substitution
+and patch counts) is the "Phase 3 inventory" section of the deps report;
+line numbers there are at `dcbd9aafe` and are re-measured on the phase-2
+merge before the manifest is written.
+
+**Re-estimate (honest scope).** The phase map's sizes were optimistic: most
+of the activity is stateful and cross-coupled. Phase 3 moves ≈ 870 lines
+for ≈ 55 declared activity edits. The remaining phases are re-planned after
+phase 3 with the same per-feature feasibility method; expect more, smaller
+phases than the original seven.
+
+**Selected features** (ranked by patch count and risk in the inventory):
+sleep timer (≈ 68 lines, 13 call-site patches), skip segments (≈ 230, 8),
+Up Next card (≈ 118, 12), status pill (≈ 58, delegating members),
+IPTV recording actions (≈ 395, 21). **Deferred, with reasons:** PikPak
+retry (shares `pikPakRetryId` with the startup gate → phase 6), auto-sync
+pill (belongs with the auto-sync engine → phase 4), "Next" overlay (one
+patch per line; reflected by a test → phase 6/7).
+
+### Collaborator pattern (applies from phase 3 on)
+
+- Each feature becomes `internal class Tv<Feature>Controller(...)` (house
+  pattern) in its own file. Its owned fields and functions move **verbatim**
+  into the class body, in original order, with only declared substitutions:
+  `this` (when it means the activity/Context) → `activity`; inherited
+  Activity members (`isFinishing`, `isDestroyed`, `runOnUiThread`,
+  `findViewById`, `getSharedPreferences`, `MODE_PRIVATE`, `resources`,
+  `window`, `currentFocus`, `startService`) → `activity.` qualified; host
+  state and calls → `host.x`. A `this` that refers to an anonymous
+  `Runnable`/`object` (inventory lists them, e.g. the Up Next ticker) is
+  never substituted; the checker gets each substitution with an exact token
+  context and occurrence count, so a wrong `this` cannot be rewritten
+  silently.
+- **Host interfaces** are narrow (only the members the moved bodies use) and
+  are implemented by an `object : Tv<Feature>Controller.Host { … }` inside the
+  controller's property initializer in the activity. Host members are
+  one-line forwarders to existing activity members (no logic). The activity's
+  class header does not change.
+- **Construction order.** The controller property is declared exactly where
+  the feature's field block was, so property-initializer order and creation
+  time of Handlers/scopes are unchanged (Handlers and the skip coroutine
+  scope are created in the controller's own initializers, in the same
+  relative order).
+- **`::x.isInitialized`** cannot be qualified across objects. Each such check
+  in moved code becomes a host getter with the identical expression
+  (`val skipSegmentButtonReady: Boolean get() = ::skipSegmentButton.isInitialized`)
+  evaluated at the same moment; each is a declared substitution.
+- **State not cleanly ownable stays** in the activity behind the host (e.g.
+  `sleepStopLatched`, written in 5 places, read on 7 playback paths).
+- **Teardown order is unchanged**: `onDestroy`/`onStop`/`onPause` keep their
+  statement order; a moved cancel call becomes `controller.cancelX()` in the
+  same position (a declared call-site patch). Borrowed handlers (e.g.
+  `externalSubtitleHandler` for the status pill) stay owned and cleared by
+  the activity; the controller never clears a borrowed handler.
+- **Status pill delegators.** The 40 status-pill call sites stay verbatim:
+  `showStatusPill`, `showStatusPillTransient`, `hideStatusPill` remain as
+  one-line `private` activity members that delegate to `TvStatusPill`
+  (declared `patched` rows whose whole body is the delegation). This is the
+  only delegator use in phase 3; it is recorded as a temporary structure with
+  an exit (the call sites move with their features in phases 4–6, after which
+  the delegators are removed).
+- **Companion constants** used by one feature only move with it as
+  file-private constants (Up Next ×3, skip ×2 incl. `IMDB_ID_REGEX`).
+- **Reflection.** Kotlin mangles JVM names of `internal` members; tests that
+  reflect moved members target `private` members or public members of the
+  `internal` class, never an `internal fun`. Dart source-text anchors on
+  `triggerUpNext`/`dismissUpNext` are retargeted to the new file with equal
+  assertions.
+- **Checker extensions (step T).** New fates: `moved` into a class body
+  (destination selector = class + order), `added` for the declared new
+  activity declarations (each controller property incl. its host object,
+  and host getters) pinned by exact token text in the manifest, and
+  delegator `patched` rows. New negatives: an extra `this`→`activity`
+  rewrite at an undeclared position, a host forwarder containing logic
+  beyond its pinned text, a moved field reordered inside the controller, an
+  `added` declaration differing from its pinned text, teardown statement
+  reordering in `onDestroy`. Also: manifests are phase-scoped (each
+  describes the activity at its own phase's completion), so the checker
+  gains `--at <sha>` to verify a historical manifest against its phase's
+  merge commit (phase 1 at `dcbd9aafe`, phase 2 at `ec365eb80`), and the
+  integration checks run every manifest that way.
+
+### Step 0 — characterization of the original
+
+Behaviour through the activity's existing surface on the original
+(Robolectric, PAUSED looper, reflection via `TvPlayerOriginalAccess`, fake
+Flutter channel where needed), mutation-proved:
+
+- **Sleep timer:** countdown arm/re-arm/cancel, minutes-left/value labels,
+  end-of-item arming, fire order (cancel → latch → `sendProgress(completed =
+  false)` → pause → release screen → toast), playbackListener interactions
+  (end-of-item consumes and cancels), `onDestroy` cancellation, unified-menu
+  rows wiring.
+- **Skip segments:** request construction (IMDb extraction, season/episode),
+  cache bound (`MAX_SKIP_SEGMENT_CACHE_ENTRIES`), stale-result rejection
+  (request identity), button visibility vs `hasEverBeenReady`, skip action
+  seek target, reset on `playItem` (order: `hasEverBeenReady` reset → Up
+  Next hide → skip reset), scope cancellation in `onDestroy`.
+- **Up Next card:** threshold/min-duration/tick constants, show/dismiss/
+  trigger, ticker start/stop, interaction with `isCleanPlaybackState`, key
+  handling while visible, `onDestroy` cleanup.
+- **Status pill:** lazy creation (view tree position, dp sizes), show/
+  transient (1,400 ms) /hide, hide runnable on the borrowed handler.
+- **IPTV recording actions:** gating (engine on, recordable URL, permissions
+  path), start/stop toggles for tee and engine recording, file naming
+  (phase-2 helpers), `RecordingRegistry` listener add/remove order, finalize
+  in `onStop`/`onDestroy`, scheduled-recording confirmation path.
+- **Carried from phase 1:** `AutoSyncRingView` repaint requests
+  (invalidate on colour change, animator update, stop/reset).
+- Claude's independent mutation sample; 0b closes survivors.
+
+### Gate, review, device checks
+
+As rule 6, plus: the teardown-order assertion of the checker; JVM
+characterization re-run after moves unchanged except the access helper;
+lint issue-set comparison. Device checklist (end of series): sleep timer
+countdown + end-of-episode, intro/credits skip button and skip, Up Next card
+near the end of an episode (auto-advance and dismiss), status pill messages
+during source switching and subtitle loads, IPTV recording start/stop (tee
+and engine), scheduled recording confirmation.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in

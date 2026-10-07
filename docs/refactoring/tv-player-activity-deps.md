@@ -3322,3 +3322,753 @@ archive. The original mutation worktree is removed. No push, branch switch,
 device/emulator interaction or bug fix. Gate summary:
 `p2/gate/execution-summary.json`. **Stopped after phase-2 moves and gate
 checks; Claude's separate review and patched-bundle verification remain.**
+
+---
+
+## Phase 3 inventory (stateful feature feasibility, at `dcbd9aafe`; re-measure on `ec365eb80`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`dcbd9aafe` (19,961 lines; class header 136, companion 19914–19960). Read-only survey. Line numbers
+are current (lines < 10602 are unchanged from the pre-phase-1 survey; later ones shifted).
+References were found with a word-boundary scan that resolves each hit's enclosing class member,
+then checked by hand. "Patch" means one token-level edit in a retained activity declaration
+(`foo` → `ctl.foo`), the edit the checker would record as `patched`.
+
+Phase-2 assumptions (from the `Phase 2 inventory` on `refactor/tvplayer-p2`, b840bf878; the
+section is **not** in the deps doc at `dcbd9aafe`): top-level by phase 3 are
+`isSegmentedStreamUrl`, `xtreamTsTwin`, `sanitizeRecordingName`, `recordingTimestamp` (group C),
+`isPikPakPlaybackItem` plus `internal const val PROVIDER_PIKPAK` (group J), `startupLog`, and
+`mrow`. Phase 2 explicitly leaves these in the activity because they are almost pure:
+`dp`, `releaseScreenForSleep`, `holdScreenForPlayback`, `fadeInNextOverlay`, `hideNextOverlay`,
+`isCurrentIptvSegmented`, `engineRecordableUrl`, `isSchedulableStreamUrl`,
+`engineTaskIdForCurrentChannel` and `recordingResourceFor`. `SkipSegmentRequest` and
+`SleepTimerMode` are pure but are deferred to phase 3, to move with their features.
+
+### Cross-cutting constraints (apply to every feature)
+
+- **`::prop.isInitialized` cannot be qualified.** It only compiles for properties in the same
+  lexical scope, so `host::x.isInitialized` is illegal. Every such check either keeps its lateinit
+  in the same class or becomes a host getter, which is a non-trivial substitution. Moved-code
+  sites: 6879 `::startupGateStatus`, 6893 `::pikPakReactivationIndicator`, 8165/8415
+  `::skipSegmentButton`, 8326 `::seekFeedbackManager`. 8397/8403 `::playerView` stay, because
+  their functions stay.
+- **Ambiguous `this`.** In 6819, 6839, 6851 and 6864, `this` is the polling `object : Runnable`,
+  and so is 8740 (`upNextTicker`). It must **not** be substituted. Every other `this` in the moved
+  code is the Activity/Context. Scope functions in the moved code have no receiver ambiguity
+  (checked: recording's only `apply` is `Intent(this, …).apply {}`, where `this` precedes the
+  receiver).
+- **Inherited statics and members.** `MODE_PRIVATE` (9427), `isFinishing`, `isDestroyed`,
+  `runOnUiThread`, `startService`, `getSharedPreferences`, `findViewById`, `currentFocus`,
+  `resources` and `window` need `activity.` substitutions. Labels such as `return@runOnUiThread`
+  survive `activity.runOnUiThread {`.
+- **Companion constants used by only one feature** move with it as file-private top-level
+  constants. A declared companion-member move:
+  - Up Next: `UP_NEXT_THRESHOLD_MS` 19940, `UP_NEXT_MIN_DURATION_MS` 19941, `UP_NEXT_TICK_MS` 19942.
+  - Skip: `MAX_SKIP_SEGMENT_CACHE_ENTRIES` 19951, `IMDB_ID_REGEX` 19952. `IMDB_ID_REGEX` is used
+    only at 8147.
+  - PikPak: `PIKPAK_MAX_RETRIES` 19956, `PIKPAK_METADATA_TIMEOUT_MS` 19957,
+    `PIKPAK_BASE_DELAY_MS` 19958, `PIKPAK_MAX_DELAY_MS` 19959, plus the comment at 19954.
+    `PROVIDER_PIKPAK` already goes top-level in phase 2.
+- **Reflection and name mangling.** Kotlin mangles the JVM names of `internal` *members*. A test
+  that reflects a moved member by simple name must target a `private` member or a public member of
+  an `internal class`; it must not target an `internal fun`. This matters for the PikPak retargets.
+- **Construction order.** The Handlers and the skip scope are property initializers created at
+  activity construction. Declare each controller as a property where its field block was, so
+  initializer order and creation time stay as they are. The checker treats the removed fields as
+  moved and the new property as a declared new declaration. Implement host interfaces as an
+  `object :` inside that property initializer. Making the activity implement them would patch the
+  class header.
+
+---
+
+### 1. Sleep timer (rank 2)
+
+**Owned state** (moves):
+
+| line | name | type / initializer |
+|---|---|---|
+| 1268 | `SleepTimerMode` | `private enum class { OFF, COUNTDOWN, END_OF_ITEM }` → top-level `internal enum` (unqualified uses then resolve unchanged) |
+| 1269 | `sleepTimerMode` | `= SleepTimerMode.OFF` |
+| 1270 | `sleepTimerDeadlineElapsedMs` | `= 0L` |
+| 1271 | `sleepTimerHandler` | `val = Handler(Looper.getMainLooper())` |
+| 1272 | `sleepTimerRunnable` | `Runnable? = null` |
+| 1273 | `sleepTimerMinuteOptions` | `val = listOf(15, 30, 45, 60, 90)` |
+
+The banner comment 1261–1267 moves with the block.
+
+**Not cleanly ownable:** `sleepStopLatched` (1275–1282, `= false`).
+- Written at: 1682 and 1717 (playbackListener), 4591 (playItem), 7417 (togglePlayPause), 8382
+  (fireSleepTimer).
+- Read at: 414 (iptvLiveRecoveryEligible), 582 (onIptvTwinTrialTimeout), 4584 (playItem), 4748
+  (discoverProtectedMime), 4778 (startPlayback), 5413 (shuffleAttemptOwned), 18874 (onStart).
+- It stays in the activity. Moving it would cost 11 patches in playback-core code.
+
+**Owned functions:**
+- Moved: `sleepTimerMinutesLeft@8336–8340`, `sleepTimerValueLabel@8342–8346`,
+  `startSleepCountdown@8348–8359`, `armSleepAtEndOfItem@8361–8365`, `cancelSleepTimer@8367–8373`,
+  and `fireSleepTimer@8380–8387` with its KDoc from 8375. The banner is at 8333.
+- **Stay:** `releaseScreenForSleep@8395–8398` and `holdScreenForPlayback@8401–8404`. They use
+  `window` and `::playerView.isInitialized`, and playbackListener calls them at 1683, 1718 and 1805.
+- Total ≈ 13 field lines + 55 function lines ≈ **68 lines**.
+
+**Inbound coupling** (13 patches in 4 declarations):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 414 | iptvLiveRecoveryEligible | `sleepTimerMode` | read |
+| 1680 | playbackListener (val@1499) | `sleepTimerMode` | read |
+| 1681 | playbackListener | `cancelSleepTimer()` | call |
+| 1715 | playbackListener | `sleepTimerMode` | read |
+| 1716 | playbackListener | `cancelSleepTimer()` | call |
+| 15422 | umPlaybackModel@15419 | `sleepTimerValueLabel()` | call |
+| 15429 | umPlaybackModel | `sleepTimerMode` | read |
+| 15430 | umPlaybackModel | `cancelSleepTimer(announce = true)` | call |
+| 15433 | umPlaybackModel | `sleepTimerMinuteOptions` | read |
+| 15434 | umPlaybackModel | `startSleepCountdown(minutes)` | call |
+| 15442 | umPlaybackModel | `sleepTimerMode` | read |
+| 15443 | umPlaybackModel | `armSleepAtEndOfItem()` | call |
+| 19103 | onDestroy | `cancelSleepTimer()` | call |
+
+`SleepTimerMode.X` at 414, 1680, 1715, 15429 and 15442 needs no patch once the enum is top-level.
+umPlaybackModel moves in phase 4; whichever phase runs second re-patches it.
+
+**Outbound:**
+- State/actions, all in `fireSleepTimer`: `sleepStopLatched` (write, 8382),
+  `sendProgress(completed = false)` (8383; named argument, so the host method must name its
+  parameter `completed`), `player?.pause()` (8384), `releaseScreenForSleep()` (8385).
+- Android: Toast context `this` at 8358, 8364, 8372 and 8386; the handler is owned.
+
+**Timers:**
+- `sleepTimerHandler` is the only timer. `cancelSleepTimer` removes its callbacks.
+- Teardown: only `onDestroy@19103`, after `RecordingRegistry.removeListener` 19100 and before
+  `finalizeIptvRecordingIfActive` 19107. Nothing in onPause/onStop.
+- The fire order is cancel → latch → sendProgress → pause → release screen → toast. It must stay.
+
+**Tests:** none reflective. No Dart anchors (the Dart `SleepTimerMode` is unrelated).
+
+**Proposed shape:**
+```kotlin
+internal class TvSleepTimerController(private val activity: Activity, private val host: Host) {
+    interface Host {
+        var sleepStopLatched: Boolean
+        val player: Player?
+        fun sendProgress(completed: Boolean)
+        fun releaseScreenForSleep()
+    }
+}
+```
+
+**Substitutions (8):**
+- `this` → `activity` ×4.
+- In `fireSleepTimer` only: `sleepStopLatched` → `host.sleepStopLatched`, `sendProgress` →
+  `host.sendProgress`, `player` → `host.player`, `releaseScreenForSleep` →
+  `host.releaseScreenForSleep`.
+
+**Activity patches: 13. Risk: low.**
+
+Note: the deps doc's earlier idea, that the controller owns `sleepStopLatched`, is not
+recommended, because it is read on 7 playback paths.
+
+---
+
+### 2. Skip segments (intro/credits) (rank 1)
+
+**Owned state** (moves; the comment block 1240–1242 travels with it):
+
+| line | name | type / initializer |
+|---|---|---|
+| 1243–1250 | `SkipSegmentRequest` | `private data class(providerId, imdbId, season, episode, durationSeconds, key)`; file-private in the destination |
+| 1251 | `skipSegmentScope` | `val = CoroutineScope(Dispatchers.Main + SupervisorJob())` |
+| 1252 | `skipSegmentFetchJob` | `kotlinx.coroutines.Job? = null` |
+| 1253 | `skipSegmentFetchGeneration` | `= 0` |
+| 1254 | `loadedSkipSegmentKey` | `String? = null` |
+| 1255 | `loadingSkipSegmentKey` | `String? = null` |
+| 1256 | `skipSegments` | `= TvSkipSegments.EMPTY` |
+| 1257 | `activeSkipSegment` | `TvSkipSegment? = null` |
+| 1258 | `skipFocusOfferedKey` | `String? = null` |
+| 1259 | `skipSegmentCache` | `val = mutableMapOf<String, TvSkipSegments>()` (bounded at 64, evicts the first key) |
+
+**Stay in the activity:**
+- `skipSegmentButton` (168, lateinit `AppCompatButton`). It is bound at 2523, and
+  dispatchKeyEvent@7217 does `::skipSegmentButton.isInitialized && currentFocus == skipSegmentButton`,
+  which cannot be qualified.
+- `skipSegmentsEnabled` (848) and `skipSegmentProviderId` (849). loadPlayerDefaults writes them
+  (16373, 16379) and logs them (16385). They are player defaults (phase 4).
+
+**Owned functions:**
+- `currentSkipSegmentRequest@8135–8162`, `updateSkipSegmentState@8164–8197`,
+  `ensureSkipSegments@8199–8255`, `presentSkipSegment@8257–8305`, `skipActiveSegment@8307–8331`,
+  `resetSkipSegmentState@8406–8416`. The last is separated from the others by the sleep block.
+- ≈ 20 + 197 + 11 + 2 constant lines ≈ **230 lines**.
+
+**Inbound** (8 patches in 4 declarations):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2524 | bindViews | `skipActiveSegment()` (click lambda) | call |
+| 4612 | playItem | `resetSkipSegmentState()` | call; must stay right after hideUpNextCard 4611 |
+| 7677 | updateSeekbarProgress | `updateSkipSegmentState(currentPosition, duration)` | call |
+| 19154 | onDestroy | `skipSegmentFetchGeneration++` | write |
+| 19155–19156 | onDestroy | `skipSegmentFetchJob?.cancel()`, `= null` | call / write |
+| 19157 | onDestroy | `skipSegmentScope.cancel()` | call |
+| 19158 | onDestroy | `skipSegmentCache.clear()` | call |
+
+A single `destroy()` member would cut the 5 onDestroy patches to 1, but it is a new declaration and
+not verbatim. Prefer the 5 qualified patches.
+
+**Outbound:**
+- State (host):
+  - Read-only: `skipSegmentsEnabled` 8136; `skipSegmentProviderId` 8137, 8155, 8160; `isIptvMode`
+    8138; `payload` 8145; `currentIndex` 8148; `hasEverBeenReady` 8175.
+  - `upNextVisible` 8195 and 8295. This is Up Next state: host getter.
+  - `player` 8241, 8252, 8308.
+  - `controlsMenuVisible` 8282, 8292; `playlistVisible` 8293; `seekbarVisible` 8294.
+  - `subtitlePanel` 8296, `unifiedMenu` 8297, `sourceBrowser` 8298, `syncOverlay` 8299,
+    `linePickerOverlay` 8300.
+  - `releaseResumeHold()` 8324.
+  - `seekFeedbackManager` 8326 (`::isInitialized`) and 8328.
+- Views/Android: `skipSegmentButton` 8165 (`::isInitialized`), 8258, 8415 (`::isInitialized`);
+  `currentFocus` and `playerView.requestFocus()` 8262; `resources.displayMetrics.density` 8283.
+- Pure: `TvSkipSegmentClients`, `TvSkipSegments`, `C.TIME_UNSET`, `Locale`.
+
+**Timers:**
+- `skipSegmentScope` (Main + SupervisorJob) and `skipSegmentFetchJob`.
+- `button.post {}` at 8303 and the ViewPropertyAnimators at 8263, 8276, 8279 and 8288 are
+  **not** cancelled on destroy. Keep that as is.
+- Teardown: only onDestroy 19154–19158, after `subtitleScope.cancel()` 19148 and before
+  `progressHandler.removeCallbacksAndMessages` 19161.
+- The staleness guard is the generation check at 8240 plus the recomputed key check at 8242.
+
+**Tests:** none (the Dart `skip_segment_*` tests target the Flutter service).
+
+**Proposed shape:**
+```kotlin
+internal class TvSkipSegmentController(private val activity: Activity, private val host: Host) {
+    interface Host {
+        val skipSegmentButtonBound: Boolean            // activity: ::skipSegmentButton.isInitialized
+        val skipSegmentButton: AppCompatButton
+        val skipSegmentsEnabled: Boolean; val skipSegmentProviderId: String
+        val isIptvMode: Boolean; val payload: PlaybackPayload?; val currentIndex: Int
+        val hasEverBeenReady: Boolean; val player: ExoPlayer?; val playerView: PlayerView
+        val controlsMenuVisible: Boolean; val playlistVisible: Boolean; val seekbarVisible: Boolean
+        val upNextVisible: Boolean
+        val subtitlePanel: SubtitleSettingsPanelController?; val unifiedMenu: UnifiedMenuController?
+        val sourceBrowser: TvSourceBrowserController?; val syncOverlay: SubtitleSyncOverlay?
+        val linePickerOverlay: SubtitleLinePickerController?
+        val seekFeedbackManagerBound: Boolean; val seekFeedbackManager: SeekFeedbackManager
+        fun releaseResumeHold()
+    }
+}
+```
+Verify the exact view and controller types against the field declarations at 1197–1201.
+
+**Substitutions:** ≈ 34 `host.`/`activity.` token edits.
+- The two `::skipSegmentButton.isInitialized` checks become `host.skipSegmentButtonBound`.
+- `::seekFeedbackManager.isInitialized` becomes `host.seekFeedbackManagerBound`.
+- `currentFocus` and `resources` become `activity.…`.
+
+The host surface is wide, but it is all read-only except `releaseResumeHold()`.
+
+**Activity patches: 8. Risk: medium-low.** The async generation guard and per-item reset ordering
+are already well delimited.
+
+---
+
+### 3. Up Next card (rank 3)
+
+**Owned state** (moves; the banner at 163 moves too):
+
+| line | name | type / initializer |
+|---|---|---|
+| 164 | `upNextCard` | lateinit `View` |
+| 165 | `upNextPoster` | lateinit `android.widget.ImageView` |
+| 166 | `upNextTitle` | lateinit `TextView` |
+| 167 | `upNextCountdown` | lateinit `TextView` |
+| 169 | `upNextVisible` | `= false` |
+| 170 | `upNextTargetIndex` | `Int? = null` |
+| 171 | `upNextDismissedForIndex` | `= -1` |
+| 172 | `upNextHandler` | `val = Handler(Looper.getMainLooper())` |
+
+The field run is interleaved with `skipSegmentButton@168`, which stays. There are no
+`::isInitialized` checks on the Up Next views.
+
+**Owned functions:**
+- `maybeShowUpNext@8691–8711`, `upNextTicker` (val object Runnable) `@8713–8742`,
+  `showUpNextCard@8744–8769`, `triggerUpNext@8771–8777`, `dismissUpNext@8779–8782`,
+  `hideUpNextCard@8784–8796`. The banner is at 8672–8674.
+- **Keep `isCleanPlaybackState@8677–8687` in the activity.** It is a cross-cluster predicate (11
+  flags, including `nextOverlay` and `pikPakReactivationIndicator`) and becomes a host method.
+- ≈ 9 + 106 + 3 constant lines ≈ **118 lines**.
+
+**Inbound** (12 patches; 14 if skip is still in the activity):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 2519–2522 | bindViews | `upNextCard/Poster/Title/Countdown =` | write ×4 |
+| 1454 | progressRunnable (val@1451) | `maybeShowUpNext()` | call, every 5 s |
+| 4611 | playItem | `hideUpNextCard()` | call (per-item reset; triggerUpNext depends on it) |
+| 5509 | playShowShuffle | `hideUpNextCard()` | call |
+| 7191 | dispatchKeyEvent | `upNextVisible` | read |
+| 7194 / 7198 / 7202 | dispatchKeyEvent | `triggerUpNext()`, `dismissUpNext()`, `hideUpNextCard()` | call ×3 |
+| 19135 | onDestroy | `upNextHandler.removeCallbacksAndMessages(null)` | call |
+| (8195, 8295) | updateSkipSegmentState, presentSkipSegment | `upNextVisible` | read; 0 if skip moved first (host getter) |
+
+**Outbound:**
+- State/actions (host):
+  - `continuousShuffleEnabled` 8693, 8705; `canShuffleWholeShow()` 8693.
+  - `isIptvMode`, `isStremioTvMode` 8694.
+  - `currentIndex` 8695, 8708, 8780; `isCleanPlaybackState()` 8696, 8722.
+  - `player` 8697, 8715; `pickShuffleIndex()` 8706; `getNextPlayableIndex()` 8708.
+  - `payload` 8745.
+  - `isAutoAdvancing` (**write**, 8775); `playItem(target)` 8776.
+- Android: Glide `with(this)` 8756 (activity). `this` at 8740 is the Runnable and is not
+  substituted.
+
+**Timers:**
+- `upNextHandler` with `upNextTicker`, removed in showUpNextCard 8767 and hideUpNextCard 8785.
+- Teardown: only onDestroy 19135, after `bufferingHandler.removeCallbacksAndMessages` 19132 and
+  before the metadata-receiver unregister. The card animators are not cancelled; keep that.
+
+**Tests:** `test/android_tv_auto_advance_resume_test.dart:39–51` uses
+`_between('private fun triggerUpNext()', 'private fun dismissUpNext()')` on the activity file. It
+asserts that `isAutoAdvancing = true` comes before `playItem(target)`.
+- **Retarget** it to the new file. Both anchors change if the functions become non-private:
+  activity calls triggerUpNext and dismissUpNext, so they lose `private`.
+- With `host.` prefixes the asserted substrings still match.
+- No reflection tests.
+
+**Proposed shape:**
+```kotlin
+internal class TvUpNextController(private val activity: Activity, private val host: Host) {
+    interface Host {
+        val player: ExoPlayer?; val payload: PlaybackPayload?; val currentIndex: Int
+        val continuousShuffleEnabled: Boolean; val isIptvMode: Boolean; val isStremioTvMode: Boolean
+        var isAutoAdvancing: Boolean
+        fun isCleanPlaybackState(): Boolean
+        fun canShuffleWholeShow(): Boolean
+        fun pickShuffleIndex(): Int?
+        fun getNextPlayableIndex(i: Int): Int?
+        fun playItem(index: Int)   // playItem has defaulted params; the host wrapper must call playItem(index) exactly
+    }
+}
+```
+
+**Substitutions:** ≈ 17 `host.` edits, plus `this` → `activity` ×1 (8756).
+
+**Activity patches: 12 (+2 without skip). Risk: medium.** The ticker races playItem, and there is
+1 Dart retarget.
+
+---
+
+### 4. Status pill + auto-sync pill (rank 4 for the status pill; auto-sync pill: defer to phase 4)
+
+### 4a. Status pill
+
+**Owned state:**
+- `statusPill` 1296, `TextView? = null`.
+- `statusPillHideRunnable` 1297, `val = Runnable { hideStatusPill() }`.
+
+**Functions:**
+- `ensureStatusPill@15992–16015`, `showStatusPill@16017–16027`,
+  `showStatusPillTransient@16030–16033` (1400 ms), `hideStatusPill@16035–16043`.
+- With the banner 15988–15990: ≈ **58 lines**.
+
+**Inbound** (40 call sites in 18 declarations):
+- `showStatusPill`: 15815 (loadStremioSubtitle), 17762 (onStremioSourceSelected).
+- `showStatusPillTransient` (31 calls):
+  - 1821 (playbackListener) and 5506 (playShowShuffle).
+  - onExternalSubtitleLoaded: 15839, 15903.
+  - requestEpisodeFetch: 16791, 16796, 16811, 16833, 16840.
+  - requestAdjacentEpisodeFetch: 16859, 16865, 16885, 16891, 16921, 16928.
+  - commitManualSourceCandidate: 17145. failManualSourceCandidate: 17203.
+  - watchSourceSwitchOutcome: 17649, 17659.
+  - resolveStremioSourceViaFlutter: 17827, 17840, 17852, 17863.
+  - resolveSourceToPlaylistViaFlutter: 17917, 17930, 17942, 17953.
+  - failMoreTorrentSources: 18179.
+  - switchToSourcePlaylist: 18248, 18266, 18293.
+- `hideStatusPill` (7 calls): 15931 (stopExternalSubtitleRendering), 17205
+  (failManualSourceCandidate), 17342 (commitStartupCandidate), 17420 (failStartupCandidate), 17640
+  and 17656 (watchSourceSwitchOutcome), 17684 (dropStaleSourceSwitchFeedback).
+
+**Outbound:**
+- Android only: `this` 15994; `dp(` ×8 at 16000, 16001, 16003, 16004 and 16010; `findViewById`
+  16012.
+- Borrowed `externalSubtitleHandler` at 16018, 16032 and 16036. It is shared with the subtitle
+  ticker and the auto-sync ladder/verify.
+
+**Timers:**
+- The hide runnable is posted on the borrowed `externalSubtitleHandler`. It is cleared only by
+  onDestroy's `externalSubtitleHandler.removeCallbacksAndMessages(null)` @19195, which comes after
+  player release. The controller must not own or clear that handler.
+- The pill view is never removed, and its animators are not cancelled.
+
+**Tests:** none.
+
+**Shape:** `TvStatusPill(activity: Activity, handler: Handler /*borrowed*/, dp: (Int) -> Int)`.
+- Substitutions: `this` → `activity` ×1, `findViewById` → `activity.findViewById` ×1,
+  `externalSubtitleHandler` → `handler` ×3, `dp(` → `dp(` (lambda name kept) or `host.dp(` ×8.
+
+**Activity patches: 40.** Alternatively keep three one-line delegating members in the activity:
+**3 patched declarations, 0 call-site patches**.
+**Recommendation:** use the delegating members. The feature is tiny, so if delegating members are
+rejected as non-verbatim, defer it. **Risk: low** (UI only).
+
+### 4b. Auto-sync pill (UI for the auto-sync engine, cluster C5)
+
+**Owned state:**
+- `autoSyncPill` 1302 (`LinearLayout? = null`), `autoSyncPillRing` 1303
+  (`AutoSyncRingView? = null`), `autoSyncPillLabel` 1304 (`TextView? = null`).
+- `autoSyncPillResultShowing` 1305 (`= false`; **write-only**, never read),
+  `autoSyncPillWindowActive` 1306 (`= false`), `autoSyncPillAnnounceShowing` 1307 (`= false`).
+- `autoSyncPillAnnounceDismissRunnable` 1310–1315 (val Runnable),
+  `autoSyncCardHideRunnable` 1316 (val Runnable).
+- The comment block 1299–1301 moves too.
+- `autoSyncResultLabel/Url` (1319–1320) are menu-row state. They are **not** pill state and stay
+  with C5.
+
+**Functions:**
+- `ensureAutoSyncPill@16045–16090`, `openAutoSyncPillWindow@16097–16108` (KDoc from 16092),
+  `stopAutoSyncPillWindow@16110–16114`, `showSyncToast@16124–16164` (KDoc 16116),
+  `revealAutoSyncPill@16166–16175`, `hideAutoSyncPillView@16178–16186`,
+  `hideAutoSyncCard@16188–16192`.
+- ≈ **166 lines**.
+
+**Inbound** (18 sites in 4 declarations):
+
+| function | sites |
+|---|---|
+| runSubtitleAutoSync@14923 | `showSyncToast` 14929, 14948, 14957, 14965, 14994, 15018, 15030, 15044, 15053, 15064, 15073; `autoSyncPillWindowActive` reads 14962, 14988; `autoSyncPillRing?.arcColor =` write 14966; `hideAutoSyncPillView()` 14989 |
+| startAutoSyncLadder@15090 | `openAutoSyncPillWindow()` 15096 |
+| maybeRunAutoSyncVerify@15157 | `showSyncToast` 15220 |
+| onExternalSubtitleLoaded@15831 | `showSyncToast` 15896 |
+
+**Outbound:**
+- `this` ×3 (16047, 16048, 16055); `dp(` ×16; `findViewById` 16085.
+- `externalSubtitleHandler` at 16107, 16111, 16132, 16162 and 16189 (borrowed).
+- `AutoSyncRingView` and `AutoSyncColors` are already top-level (phase 1).
+- `Log.d` (16133).
+
+**Timers:**
+- The announce-dismiss (5 s) and card-hide runnables run on the borrowed handler. They are cleared
+  only at onDestroy@19195.
+- The ring's pulse animator self-cancels in `AutoSyncRingView.onDetachedFromWindow`.
+
+**Tests:** `TvAutoSyncRingCharacterizationTest` covers only the ring and the colours, not the pill.
+The open follow-up (plan "P3 → phase 3") adds ring-invalidation assertions; that is independent
+of the pill move.
+
+**Shape:** the same as 4a (`activity`, borrowed `handler`, `dp`). Expose `windowActive` and `ring`
+for the 3 field reads/writes.
+
+**Activity patches: 18, all inside the C5 engine.** **Recommendation:** move the pill **with C5 in
+phase 4**. Its only callers are the engine, so moving the two together makes all 18 edits
+intra-controller. Moving it now means patching the engine twice. **Risk: low-medium**, because it
+interacts with the ladder/verify runnables on the same handler.
+
+---
+
+### 5. PikPak cold-storage retry (rank 6)
+
+**Owned state:**
+
+| line | name | type / initializer |
+|---|---|---|
+| 1368 | `isPikPakRetrying` | `Boolean = false` |
+| 1369 | `pikPakRetryCount` | `Int = 0` (**write-only** everywhere; never read) |
+| 1370 | `pikPakRetryId` | `Int = 0` (**not cleanly ownable**: see below) |
+| 1371 | `pikPakRetryHandler` | `val = Handler(Looper.getMainLooper())` |
+
+**Stay** (they would need `::isInitialized` or have outside readers):
+- `pikPakReactivationIndicator` (1375, lateinit `View`).
+  - Bound at 2670; read at 8685 (isCleanPlaybackState) and 19036 (showBufferingIndicatorDebounced).
+  - onDestroy touches it at 19127–19129.
+  - The test sets it reflectively (StremioTvStartupWatchdogTest:55).
+- `pikPakReactivationText` (1376, lateinit `TextView`), bound at 2671.
+
+**Functions:**
+- `playPikPakVideoWithRetry@6652–6705`. This is really media start: subtitle reset,
+  `setMediaItem/prepare/play`, `updateTitle`, `restartProgressUpdates`, `fetchStremioSubtitles`.
+- `attemptPikPakPlaybackLoop@6707–6801`, `waitForPikPakMetadata@6803–6870` (its local `checkHandler`
+  is **never cancelled**; it relies on the retryId guard), `showPikPakRetryOverlay@6873–6889`,
+  `hidePikPakRetryOverlay@6891–6898`, `cancelPikPakRetry@6900–6912`.
+- Total with the banner 6648–6650 ≈ **265 lines + 5 field + 6 constant lines**.
+- The engine-only variant (6707–6912, leaving `playPikPakVideoWithRetry` in the activity) is
+  ≈ 206 lines.
+
+**Inbound** (19 patches in 10 declarations; the engine-only variant adds 4 more in
+`playPikPakVideoWithRetry`):
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 4615 | playItem | `cancelPikPakRetry()` | call |
+| 4790 | startPlayback | `playPikPakVideoWithRetry(item)` | call |
+| 5440 | watchShufflePlayback (15 s posted lambda) | `isPikPakRetrying` | read |
+| 17503, 17509, 17511 | schedulePikPakGateReprepare (phase-6 gate) | `pikPakRetryId` | read ×3; 17503 captures, 17509 and 17511 compare at fire time |
+| 17755 | onStremioSourceSelected | `cancelPikPakRetry()` | call |
+| 18424 | switchToSourcePlaylist | `cancelPikPakRetry()` | call |
+| 18578 | switchToStremioSource | `cancelPikPakRetry()` | call |
+| 18624, 18625 | switchToStremioSource | `pikPakRetryId++`, `val myRetryId = pikPakRetryId` | write / read |
+| 18626, 18627 | switchToStremioSource | `pikPakRetryCount = 0`, `isPikPakRetrying = false` | write ×2 |
+| 18628 | switchToStremioSource | `hidePikPakRetryOverlay()` | call |
+| 18647 | switchToStremioSource | `attemptPikPakPlaybackLoop(tempItem, 0, myRetryId)` | call |
+| 19029 | onPause | `cancelPikPakRetry()` | call |
+| 19123 | onDestroy | `cancelPikPakRetry()` | call |
+| 19124 | onDestroy | `pikPakRetryHandler.removeCallbacksAndMessages(null)` | call |
+| 19667 | playStremioTvPlaybackMap | `cancelPikPakRetry()` | call |
+
+18624–18628 duplicate the reset at 6660–6665. A `beginRetry(): Int` member would replace them but
+is not verbatim.
+
+**Outbound** (engine 6707–6912):
+- Actions:
+  - `cancelPikPakGateReprepare()` 6754, 6830, 6905 and `schedulePikPakGateReprepare(retryId)` 6860
+    (phase-6 gate).
+  - `failShufflePlayback()` 6766, `failManualSourceCandidate("pikpak-exhausted")` 6767,
+    `failStartupCandidate(…)` 6771, `playNext()` 6781, `tryAutoSelectAddonSubtitle()` 6842.
+- State: `startupFailoverCursor` 6770, 6880; `isStremioTvMode` 6859; `player` 6718, 6827.
+- Views: `startupGateStatus` 6879 (`::isInitialized`), 6882; `pikPakReactivationText` 6884;
+  `pikPakReactivationIndicator` 6885–6887, 6893 (`::isInitialized`), 6894–6896.
+- Android: `runOnUiThread` 6776, 6874, 6892; `isFinishing` 6775, 6792, 6875, 6893; `isDestroyed`
+  6875, 6893; Toast `this` 6777.
+- **Do not substitute** `this` at 6819, 6839, 6851 and 6864: there it is the Runnable.
+- `playPikPakVideoWithRetry` adds:
+  - `resetSubtitleState` 6656, `player` 6668, 6688, `subtitleOverlay` 6674, `payload` 6680.
+  - `pendingShufflePlayback` 6689, `subtitleTrackReadiness` 6690, `updateTitle` 6696.
+  - `playlistAdapter` and `currentIndex` 6697, `restartProgressUpdates` 6698,
+    `fetchStremioSubtitles` 6701.
+
+**Timers:**
+- `pikPakRetryHandler`: the exhausted → `playNext` 1500 ms post at 6780.
+- The per-call `checkHandler` polls every 500 ms (6864, 6869) and is not tracked.
+- Cancel paths:
+  - `cancelPikPakRetry` at onPause 19029. This is the **only feature cancelled in onPause**;
+    onPause runs it after `super.onPause()` and the ActivityTracker reset.
+  - onDestroy 19123–19124, after the iptvBrowseHandler clear and zap token bumps 19114–19120 and before indicator cleanup
+    19127 and `bufferingHandler` 19132.
+  - Plus 6 navigation sites.
+
+**Tests:** `StremioTvStartupWatchdogTest` (`call` = `declaredMethods.first { name && parameterCount }`):
+- `waitForPikPakMetadata`/5 at :176.
+- `cancelPikPakRetry`/0 at :192, :221 and :237.
+- Field sets `pikPakReactivationIndicator` and `nextOverlay` at :54–55.
+- Reads `pikPakGateReprepare` (which stays) at :220 and :224.
+- Moving the engine **breaks 4 reflective calls**. Retarget them to the controller instance
+  through `read(activity, "<controllerField>")`. Keep the target methods `private` or public on an
+  internal class: an `internal` member is name-mangled.
+- No Dart anchors. The PikPak assertions in `manual_source_validation_contract_test.dart` target
+  the Flutter player, plus the whole-file `startupResolverProvider…`/`startupPikPakTorrent…` strings
+  in phase-6 code.
+
+**Proposed shape** (engine-only):
+```kotlin
+internal class TvPikPakRetryController(private val activity: Activity, private val host: Host) {
+    interface Host {
+        val player: ExoPlayer?; val isStremioTvMode: Boolean; val startupFailoverCursor: StartupFailoverCursor?
+        val startupGateStatusBound: Boolean; val startupGateStatus: TextView
+        val indicatorBound: Boolean; val pikPakReactivationIndicator: View; val pikPakReactivationText: TextView
+        fun cancelPikPakGateReprepare(); fun schedulePikPakGateReprepare(retryId: Int?)
+        fun failShufflePlayback(): Boolean; fun failManualSourceCandidate(reason: String): Boolean
+        fun failStartupCandidate(reason: String); fun playNext(); fun tryAutoSelectAddonSubtitle()
+    }
+}
+```
+Check the exact signatures and defaulted parameters of `failManualSourceCandidate` (17152),
+`failStartupCandidate` (17351) and `playNext` (5228) before fixing the interface.
+
+**Substitutions:** ≈ 35.
+
+**Activity patches: 19 (+4 test retargets). Risk: medium-high.**
+- `pikPakRetryId` is a shared token: the phase-6 gate reads it 3× and `switchToStremioSource`
+  writes it.
+- The engine calls back into the startup/manual/shuffle gates.
+- `playPikPakVideoWithRetry` is phase-7 playback start.
+- **Recommendation:** extract with the phase-6 source-switch/startup-gate unit, or at least after
+  it, so that `pikPakRetryId` and `schedulePikPakGateReprepare` share one owner.
+
+---
+
+### 6. IPTV recording actions (rank 5)
+
+**Owned state** (moves):
+- `recordingEngineEnabled` 9244–9250, `val Boolean by lazy { ProfilePreferenceProjection.getBoolean(this, "recording_engine_enabled", true) }`.
+  It is read lazily and fixed per launch; the first read happens on whichever path calls first.
+- `recordingRegistryListener` 9254–9256, `val () -> Unit`, guarded by `!isDestroyed && !isFinishing`.
+- `notificationPermissionRequestCode` 18991, `val = 7403`. It is used only at 9433.
+
+**Stay:**
+- `iptvRecordingController` (197, `by lazy { IptvRecordingController(this) }`, the tee). It has 9
+  references in IPTV-live code: 477 (performIptvLiveRetune), 2910/2918 (setupPlayer), 12674,
+  14142, 14306/14307, 19011/19012 (onResume). Moving it would add 9 patches.
+- `iptvRecordButton` (195), which dock/skin code assigns and styles: 4295, 4546, 9114, 9150, 9712,
+  9750, 9794.
+- `legacyStoragePermissionRequestCode` (18990, `= 7402`), unless it moves with a patch at 18999.
+
+**Functions:**
+- Phase-2 movers are excluded: `isSegmentedStreamUrl` 9258–9272, `xtreamTsTwin` 9279–9295,
+  `sanitizeRecordingName` 9667–9672, `recordingTimestamp` 9674–9676.
+- Moving:
+  - `isCurrentIptvSegmented@9274–9277`, `engineRecordableUrl@9297–9310`,
+    `isSchedulableStreamUrl@9312–9325`, `engineTaskIdForCurrentChannel@9327–9333`,
+    `recordingResourceFor@9335–9338`.
+  - `canRecordCurrentIptv@9340–9354`, `updateRecordButtonState@9356–9374`,
+    `toggleIptvRecording@9376–9413`, `maybeAskNotificationPermission@9415–9435`.
+  - `toggleEngineRecording@9437–9534`, `promptScheduleRecording@9536–9649` (its body has
+    tab-indented lines 9622–9645; the checker normalises indentation only),
+    `finalizeIptvRecordingIfActive@9651–9665`.
+- With the KDoc/banner (9233–9243) ≈ **395 lines**. The largest yield in phase 3.
+
+**Inbound** (21 patches in 13 declarations):
+
+| line | enclosing | ref |
+|---|---|---|
+| 451, 462 | performIptvLiveRetune | `isCurrentIptvSegmented()` |
+| 478, 479 | performIptvLiveRetune | `finalizeIptvRecordingIfActive()`, `updateRecordButtonState()` |
+| 2038 | onCreate | `RecordingRegistry.addListener(recordingRegistryListener)`; before the `mode=="iptv"` early return |
+| 2911 | setupPlayer (`iptvRecordingController.onAborted` lambda) | `updateRecordButtonState()` |
+| 9116 | setupIptvControls (click) | `toggleIptvRecording()` |
+| 9706, 9714 | updateIptvControlPresentation | `recordingEngineEnabled`, `updateRecordButtonState()` |
+| 9900 | setupIptvOverlay (`onRecordFuture` lambda) | `promptScheduleRecording(entry, program)` |
+| 12673 ×2 | isRecordingCurrentIptvChannel | `recordingEngineEnabled`, `engineTaskIdForCurrentChannel()` |
+| 14143, 14240 | setIptvMediaItem | `finalizeIptvRecordingIfActive()`, `updateRecordButtonState()` |
+| 14316 | retryIptvAsHlsIfUnrecognized | `updateRecordButtonState()` |
+| 14338 | beginIptvPlayback | `finalizeIptvRecordingIfActive()` |
+| 18926 | onStop | `finalizeIptvRecordingIfActive()`; after `super.onStop()`, before the twin park and `iptvLiveRecovery.cancel` |
+| 19001 | onRequestPermissionsResult | `updateRecordButtonState()` |
+| 19100 | onDestroy | `RecordingRegistry.removeListener(recordingRegistryListener)` |
+| 19107 | onDestroy | `finalizeIptvRecordingIfActive()` |
+
+Keeping `isCurrentIptvSegmented` in the activity (IPTV-live also uses it) saves 2 patches and adds
+1 host member.
+
+**Outbound:**
+- IPTV state:
+  - `currentIptvStreamUrl` at 9275, 9330, 9350, 9403 and 9474.
+  - `iptvHlsForcedUrls` at 9276 and 9308.
+  - `iptvChannels` and `currentIptvIndex` at 9405 and 9492.
+  - `iptvSources` 9337, `iptvSourceId` 9336, `currentIptvHttpHeaders` 9518.
+- Recording state: `iptvRecordingController` at 9360, 9381, 9382, 9407, 9655 and 9656;
+  `iptvRecordButton` at 9358.
+- Request codes: `legacyStoragePermissionRequestCode` at 9461 and 9547;
+  `notificationPermissionRequestCode` at 9433.
+- Android: **53 × `this`**, all Activity/Context: Toasts, `ActivityCompat.requestPermissions`
+  (needs an Activity), `AlertDialog.Builder` (themed Activity), `startService`,
+  `ContextCompat.startForegroundService`, ProfilePreferenceProjection, RecordingScheduleStore,
+  RecordingAlarmReceiver, DateFormat.
+- Also: `getSharedPreferences(…, MODE_PRIVATE)` 9427, `startService` 9442, `isFinishing` 9255 and
+  9658, `isDestroyed` 9255.
+
+**Timers/resources:**
+- There is no handler. The registry listener's add (onCreate 2038) and remove (onDestroy 19100)
+  must keep their positions.
+- The tee finalize runs in onStop 18926 and onDestroy 19107. The order in onDestroy is
+  removeListener 19100 → cancelSleepTimer 19103 → finalize 19107.
+- `AlertDialog` (9602) and the permission dialogs are not dismissed on destroy. That is the
+  existing behaviour.
+- onResume 19011 runs the tee's `retryPendingPublish`; it stays.
+
+**Tests:** none reflective. No Dart anchors. The profile/source guard tests scan the `recording/`
+package, not this file.
+
+**Proposed shape:**
+```kotlin
+internal class TvIptvRecordingActions(private val activity: AppCompatActivity, private val host: Host) {
+    interface Host {
+        val currentIptvStreamUrl: String?; val iptvHlsForcedUrls: Set<String>
+        val iptvChannels: List<IptvChannelEntry>; val currentIptvIndex: Int
+        val iptvSources: List<IptvSourceEntry>; val iptvSourceId: String?
+        val currentIptvHttpHeaders: Map<String, String>
+        val iptvRecordingController: IptvRecordingController; val iptvRecordButton: AppCompatButton?
+        val legacyStoragePermissionRequestCode: Int
+    }
+}
+```
+Verify the exact collection types at 863, 864, 883, 888, 992, 1010 and 1016.
+
+**Substitutions:** `this` → `activity` ×53, ≈ 22 `host.` edits, and `activity.` for
+`isFinishing`, `isDestroyed`, `startService`, `getSharedPreferences` and `MODE_PRIVATE`
+(→ `Context.MODE_PRIVATE`).
+
+**Activity patches: 21. Risk: medium.** Permission flows, the foreground-service start, profile
+authorisation (`jobAuthorizationValid`) and lazy-init timing must be preserved. This feature has
+the best lines-per-patch ratio after skip.
+
+---
+
+### 7. "Next" overlay (auto-advance toast) (rank 7: do not extract standalone)
+
+**Owned state:**
+- `nextOverlay` 156 (lateinit `View`), `nextText` 157 (lateinit `TextView`), `nextSubtext` 158
+  (lateinit `TextView`).
+- Related: `nextBackdrop` 161, plus `setNextOverlayBackdrop@5911–5925`. Its only caller passes
+  `null` (5906), so the image-load branch is dead.
+
+**Functions:**
+- `showNextOverlay@8650–8654`, `fadeInNextOverlay@8656–8661`, `hideNextOverlay@8663–8670`.
+- With the banner 8649: ≈ **22 lines**.
+
+**Inbound with the views moved: 23 patches.**
+- bindViews 2515–2517 (×3).
+- playbackListener: 1742 and 1754 (`showNextOverlay`), 1744 and 1756 (`hideNextOverlay`).
+- setResolvingState: 5901 (`nextText`), 5902 (`nextSubtext`), 5903 (`fadeIn`), 5905 (`hide`).
+- requestStremioTvNext@19732: 19753 and 19777 (`nextText`), 19754 and 19778 (`nextSubtext`),
+  19755 (`fadeIn`), 19770, 19787, 19795, 19809 and 19818 (`hide`).
+- Reads: isCleanPlaybackState 8684, showBufferingIndicatorDebounced 19036.
+
+**Inbound with the views kept** (host getters): 12 call patches.
+
+**Outbound:** views only.
+
+**Timers:**
+- None owned. The 1500 ms auto-advance-then-hide runs on **progressHandler** (1743, 1755, 19787),
+  which belongs to the playback core.
+- The fade animators are not cancelled.
+
+**Tests:** StremioTvStartupWatchdogTest:54 sets the field `nextOverlay` reflectively, so moving
+the field breaks the test.
+
+**Verdict:** the patch/line ratio is about 1:1, and the real owner is the loading/resolving overlay
+(`setResolvingState`, `setNextOverlayBackdrop`, the Stremio TV next-channel flow). Fold it into
+phase 7 (title/dock identity/loading overlay) or phase 6 (Stremio TV). **Risk: low; value: low.**
+
+---
+
+### Ranking (activity call-site patches, risk)
+
+| rank | feature | lines out | activity patches (decls) | test retargets | risk | notes |
+|---|---|---|---|---|---|---|
+| 1 | Skip segments | ≈230 | **8** (4) | 0 | med-low | wide read-only host (≈20 members); 3 `::isInitialized` → host getters |
+| 2 | Sleep timer | ≈68 | **13** (4) | 0 | low | `sleepStopLatched` stays (not ownable); enum → top-level |
+| 3 | Up Next card | ≈118 | **12** (6) (+2 if before skip) | 1 Dart `_between` anchor | med | keep `isCleanPlaybackState` on the host; do it after skip so `upNextVisible` is a host getter |
+| 4 | Status pill | ≈58 | **40** (18), or 3 delegating members | 0 | low | needs a ruling: delegators vs. call-site patches |
+| 5 | IPTV recording actions | ≈395 | **21** (13) | 0 | med | 53 `this`→`activity`; the tee controller stays |
+| 6 | PikPak retry | ≈206–276 | **19** (10) | 4 reflective calls | med-high | `pikPakRetryId` is shared with the phase-6 gate: best done with phase 6 |
+| — | Auto-sync pill | ≈166 | 18 (4, all in C5) | 0 | low-med | move with C5 in phase 4 |
+| — | Next overlay | ≈22 | 12–23 | 1 reflective field | low | fold into phase 6/7 |
+
+Suggested phase-3 batch order: skip → sleep → Up Next → recording (→ status pill, if delegators
+are allowed). The total is ≈ 810–870 lines out for ≈ 54 patches (+40 or +3 for the status pill).
+That is well below the plan's ≈2,500 estimate unless PikPak and the auto-sync pill are pulled
+forward. The plan's phase-3 line estimate should be re-measured.
+
+**onDestroy ordering to preserve** (current lines):
+
+| line | step |
+|---|---|
+| 19100 | `RecordingRegistry.removeListener` |
+| 19103 | `cancelSleepTimer` |
+| 19107 | `finalizeIptvRecordingIfActive` |
+| 19123–19124 | `cancelPikPakRetry` + `pikPakRetryHandler` |
+| 19127–19130 | `pikPakReactivationIndicator` |
+| 19135 | `upNextHandler` |
+| 19148 | `subtitleScope.cancel` |
+| 19154–19158 | skip generation/job/scope/cache |
+| 19161–19163 | progress/controls/seekbar handlers |
+| 19173+ | player release |
+| 19195 | `externalSubtitleHandler.removeCallbacksAndMessages` (pill runnables) |
+
+Elsewhere:
+- onStop: 18926 finalize (tee).
+- onPause: 19029 `cancelPikPakRetry`.
+- Per-item reset in playItem: 4611 `hideUpNextCard` → 4612 `resetSkipSegmentState` →
+  4615 `cancelPikPakRetry`.
