@@ -2641,5 +2641,105 @@
         "after": "Couldn't start recording"
       }
     ]
+  },
+  {
+    "label": "preset-five-minutes",
+    "kind": "B",
+    "tests": [
+      "recordings_preset_durations"
+    ],
+    "must_fail": [
+      "length preset 5 minutes (test) schedules its exact duration"
+    ],
+    "assertion_reasons": [
+      "preset schedules exact desktop duration:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('5 minutes (test)', Duration(minutes: 5))",
+        "after": "('5 minutes (test)', Duration(minutes: 10))"
+      }
+    ]
+  },
+  {
+    "label": "preset-thirty-minutes",
+    "kind": "B",
+    "tests": [
+      "recordings_preset_durations"
+    ],
+    "must_fail": [
+      "length preset 30 minutes schedules its exact duration"
+    ],
+    "assertion_reasons": [
+      "preset schedules exact desktop duration:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('30 minutes', Duration(minutes: 30))",
+        "after": "('30 minutes', Duration(minutes: 60))"
+      }
+    ]
+  },
+  {
+    "label": "preset-one-hour",
+    "kind": "B",
+    "tests": [
+      "recordings_preset_durations"
+    ],
+    "must_fail": [
+      "length preset 1 hour schedules its exact duration"
+    ],
+    "assertion_reasons": [
+      "preset schedules exact desktop duration:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('1 hour', Duration(hours: 1))",
+        "after": "('1 hour', Duration(hours: 2))"
+      }
+    ]
+  },
+  {
+    "label": "preset-label",
+    "kind": "B",
+    "tests": [
+      "recordings_preset_durations"
+    ],
+    "must_fail": [
+      "length preset 2 hours schedules its exact duration"
+    ],
+    "assertion_reasons": [
+      "preset schedules exact desktop duration:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('2 hours', Duration(hours: 2))",
+        "after": "('2 hours', Duration(hours: 3))"
+      }
+    ]
+  },
+  {
+    "label": "preset-three-hours",
+    "kind": "B",
+    "tests": [
+      "recordings_preset_durations"
+    ],
+    "must_fail": [
+      "length preset 3 hours schedules its exact duration"
+    ],
+    "assertion_reasons": [
+      "preset schedules exact desktop duration:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "('3 hours', Duration(hours: 3))",
+        "after": "('3 hours', Duration(hours: 2))"
+      }
+    ]
   }
 ]

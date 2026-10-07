@@ -371,3 +371,4 @@ test/features/recordings/recordings_shape_inventory_test.dart
 test/features/recordings/presentation/recordings_review_closure_test.dart
 test/features/recordings/presentation/recordings_text_inventory_test.dart
 test/features/recordings/presentation/recordings_visual_properties_test.dart
+test/features/recordings/presentation/recordings_preset_durations_test.dart
