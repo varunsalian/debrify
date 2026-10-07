@@ -4,7 +4,8 @@ import org.robolectric.Robolectric
 
 /** The activity is instantiated, never created: no player, channel or lifecycle side effects. */
 open class TvPhase2OriginalTest {
-    protected val activity = Robolectric.buildActivity(AndroidTvTorrentPlayerActivity::class.java).get()
+    protected val lifecycle = Robolectric.buildActivity(AndroidTvTorrentPlayerActivity::class.java)
+    protected val activity = lifecycle.get()
     protected val stringType = String::class.java
     protected val intType = Int::class.javaPrimitiveType!!
     protected val longType = Long::class.javaPrimitiveType!!

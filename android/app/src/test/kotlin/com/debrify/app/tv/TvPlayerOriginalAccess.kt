@@ -159,6 +159,12 @@ internal object TvPlayerOriginalAccess {
         isAccessible = true
     }.get(owner)
 
+    fun glideTracks(manager: com.bumptech.glide.RequestManager, request: com.bumptech.glide.request.Request): Boolean {
+        val tracker = com.bumptech.glide.RequestManager::class.java.getDeclaredField("requestTracker")
+            .apply { isAccessible = true }.get(manager)!!
+        return (field(tracker, "requests") as Set<*>).contains(request)
+    }
+
     fun set(owner: Any, name: String, value: Any?) {
         owner.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(owner, value)
     }

@@ -1114,3 +1114,20 @@ and engine), scheduled recording confirmation.
   compiled Activity-injection negative is rejected for the Glide overload
   change. Raw evidence is under `p3/`; the dependency report records the
   re-measured inventory and commands/results. No production moves performed.
+
+- 2026-10-08 — phase 3 step 0 complete on original `ec365eb80`, with 44
+  new passing characterization identities and 44/44 assertion-based mutation
+  proofs (one named proof for every addition). Deterministic skip HTTP shadow
+  prerequisite passed 20 consecutive latch-controlled IO/Main fetches; skip
+  remains in scope. Timer/menu/end behavior, Glide activity lifecycle,
+  Up Next ticking/keys/teardown, Skip↔Up Next and playItem order, recording
+  engine/tee/permissions/lazy reads, registry delivery-time membership,
+  click-time profile/resource authority and persisted schedules, host liveness,
+  and ring repaint paths are covered. Clean JVM baseline `baseline-ec365eb80`
+  (382/381 pass) → `p3-step0` (426/425 pass): all prior statuses identical,
+  44 passing additions only; the same existing focus failure remains.
+  Original lint issue set archived (1,353 issues; 253 errors/1,100 warnings;
+  175 UnsafeOptInUsageError). Deps report contains the complete mutation table
+  and baseline provenance. Lockfile, ProGuard, activity and earlier destinations
+  unchanged. Temporary original worktree removed after evidence archival.
+  **Stopped after step T/0; no production moves, push or device interaction.**
