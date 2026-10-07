@@ -219,7 +219,7 @@ Line numbers are at `39c630303`; each phase section re-measures.
 | Phase | Content | ≈ lines out | Risk |
 |---|---|---|---|
 | 1 | Top-level models + adapters; self-contained nested types; Kotlin move checker | 2,250 | low |
-| 2 | Pure helpers and stateless policies (IPTV error classification, recording URL rules, payload parsing helpers, playlist next/prev targeting, formatting); Flutter bridge seam (`TvPlayerFlutterBridge` wrapping the 32 method calls, same names/args/order) | 2,000 | low–med |
+| 2 | Activity-pure helpers (46 names), Flutter request functions, `IptvLiveLoadErrorPolicy` (see phase 2) | 900 | low |
 | 3 | Self-owned features with timers: sleep timer, skip segments, Up Next card, status pill, PikPak cold-storage retry, recording actions, auto-sync ring/pill | 2,500 | med |
 | 4 | Tracks / subtitles / display / speed / night mode; progress reporter | 2,500 | med |
 | 5 | IPTV live: guide, browse, zap paging, channel switch + startup-channel memory, EPG, Start Over, zap banner, Stremio candidate ladder (one unit: shared token protocol) | 4,000 | high |
@@ -382,6 +382,131 @@ Android TV, release build: open a series → playlist overlay (season tabs,
 now-playing, watched/progress, missing episodes); a movie collection playlist;
 IPTV guide (channel list, categories picker, list picker, EPG pane); Stremio TV
 guide; auto-sync ring animates during subtitle auto-sync.
+
+## Phase 2 — activity-pure helpers, Flutter request functions, IPTV load-error policy
+
+Branch `refactor/tvplayer-p2` off `dcbd9aafe` (phase 1 merged). Evidence
+under `refactor-evidence/tvplayer/p2/`. Line numbers below are at
+`dcbd9aafe` (activity 19,961 lines). The full verified inventory (purity
+proof per identifier, callers, collisions, reflection/anchor checks, the
+88 "almost-pure" exclusions) is the "Phase 2 inventory" section of the deps
+report.
+
+**Why this phase is smaller than the phase map estimated.** A complete
+fixpoint scan of all 487 member functions found only 46 names (47
+declarations, 784 lines with KDoc) whose bodies touch no activity member.
+Phase 2 moves exactly those (plus one policy class); everything else needs a
+signature change and belongs to a later, feature-owned phase. Expected
+removal ≈ 900 lines.
+
+### Moves (verbatim, top-level `internal fun` in package `com.debrify.app.tv`)
+
+Call sites do not change: a top-level function of the same name resolves
+identically once the member is gone, and the inventory proves no same-name
+member/overload remains in the class, no star/same-name import or
+extension exists in the package, and the only same-name member elsewhere
+(`SubtitleLinePickerController.formatTime`) is a class member that keeps
+winning inside its own class.
+
+| Destination | Contents (inventory group) |
+|---|---|
+| `IptvLoadErrorPolicy.kt` | A: `classifyIptvError`; plus `IptvLiveLoadErrorPolicy` (below) |
+| `IptvPayloadParsing.kt` | B: `parseIptvSources`, `parseIptvLists`, `parseStringList`, both `parseIptvChannels` overloads (must move together), `iptvChannelEntry` |
+| `IptvRecordingUrlRules.kt` | C: `isSegmentedStreamUrl`, `xtreamTsTwin`, `sanitizeRecordingName`, `recordingTimestamp` |
+| `IptvEntryRules.kt` | D |
+| `StremioTvGuideData.kt` | E |
+| `TvTrackLabels.kt` | F |
+| `SubtitleSearchQuery.kt` | G |
+| `TvPlayerFormatting.kt` | H |
+| `UnifiedMenuRows.kt` | I (`mrow`) |
+| `TvStartupDiagnostics.kt` | J |
+| `PlaylistNavigationMaps.kt` | K (`rebuildNavigationMaps`) |
+| `TvPlayerFlutterRequests.kt` | L: `requestStreamFromFlutter`, `requestMovieMetadataFromFlutter`, `requestIptvEpg`, `reportIptvStreamResult`, `requestQuickPlayNextEpisode`, plus `requestIptvStreamUrls` with its nested `IptvStremioCandidate` (becomes top-level `internal`) |
+
+These request functions only use `MainActivity.getAndroidTvPlayerChannel()`
+and their parameters; method names, argument maps, callbacks, the
+`requestIptvEpg` private 45 s watchdog Handler and threading stay
+byte-identical (verbatim move). The bridge *seam* (an injectable interface)
+is not introduced here; it arrives with the first phase that needs to fake
+these calls for a stateful collaborator.
+
+**Companion constants.** `SEARCH_SUBTITLE_LABEL` and
+`STARTUP_FAILOVER_LOG_TAG` (single users that move) become `private const
+val` in their destination file; `EXTERNAL_SUBTITLE_PREFIX` and
+`PROVIDER_PIKPAK` (also used by retained code) become top-level `internal
+const val` in the destination and leave the companion. Retained unqualified
+references resolve to the top-level constant; `const` inlining is unchanged.
+Step 0 greps that nothing references them qualified
+(`AndroidTvTorrentPlayerActivity.X` / `Companion.X`) in Kotlin, Java, Dart
+or tests (none at planning time).
+
+**Opt-in annotations.** Moved code using Media3 `@UnstableApi` APIs loses the
+activity's class-level `@OptIn(UnstableApi::class)`; each such moved
+declaration gains exactly `@OptIn(UnstableApi::class)` (declared
+substitution, listed per declaration in the manifest). No file-level opt-in.
+Android lint's `UnsafeOptInUsageError` result for the module must be
+unchanged (run `./gradlew :app:lintDebug` at base and gate and compare the
+issue set).
+
+**`IptvLiveLoadErrorPolicy`** (`private inner class`, 700–749) becomes
+`internal class IptvLiveLoadErrorPolicy(private val liveNow: () -> Boolean)
+: DefaultLoadErrorHandlingPolicy()` in `IptvLoadErrorPolicy.kt`; the 2-line
+`liveNow()` member is deleted and its expression moves verbatim into the
+single call site (≈2960):
+`IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }`.
+The body (713–748) is verbatim: `liveNow()` invokes the function-typed
+property with the same syntax. This is the first **`patched`** use (rule 2):
+the manifest carries the three exact token patches (class header, member
+deletion, call site) and the checker compares the entire resulting
+declarations. Threading, evaluation time (each `getRetryDelayMsFor` /
+`getMinimumLoadableRetryCount` call reads the fields on the loader thread
+exactly as before), instance count (one per factory build) and captured
+lifetime (the lambda captures the activity as the inner class did) are
+unchanged. The non-volatile read stays a recorded follow-up.
+
+**Not in phase 2** (move with their features): `TvSourceAddon` (phase 6),
+`SkipSegmentRequest`/`SleepTimerMode` (phase 3), `DockSkinSpec` (phase 7),
+`ShufflePlaybackAttempt` (reflected by name — phase 7), the 88 almost-pure
+functions.
+
+### Step 0 — characterization of the original
+
+- Each moved pure helper is exercised directly through
+  `TvPlayerOriginalAccess` (reflection on an un-created
+  `Robolectric.buildActivity(...).get()` instance for private members;
+  binary names for nested types), covering every branch the body has
+  (inputs → outputs, including null/empty/malformed JSON, overload
+  dispatch between the two `parseIptvChannels`, regex edge cases in
+  `xtreamTsTwin`/`isSegmentedStreamUrl`, formatting boundaries, label rules,
+  diagnostics strings, navigation-map construction).
+- Flutter request functions: a test installs
+  `MainActivity.setAndroidTvPlayerChannel(MethodChannel(recordingMessenger,
+  "com.debrify.app/android_tv_player"))` and asserts method names, exact
+  argument maps, the callback mapping of success/error/notImplemented
+  replies, the null-channel path, and the `requestIptvEpg` 45 s watchdog
+  (PAUSED looper: fires `callback(null)` once at 45 s; a reply before it
+  wins and the late timeout does not call back twice) — restoring the static
+  channel in `@After`.
+- `IptvLiveLoadErrorPolicy`: retry delay / minimum loadable retry count for
+  live vs non-live, per HTTP status/exception class, via an activity with
+  `iptvChannels`/`currentIptvIndex` set by reflection (original) — the test
+  helper alone retargets to the constructor supplier after the move.
+- Mutation proofs on the original for every test; Claude samples further
+  mutations; 0b closes survivors. New JVM baseline `p2-step0`.
+
+### Gate, review, device checks
+
+As rule 6 (JVM identities vs `p2-step0`, checker incl. the `patched`
+policy, lint opt-in comparison, size baseline, release build + mapping
+check, decoder check recorded as pending-environment if the patched bundle
+is unavailable, full Flutter suite). Reviews as rule 8. Also carried from
+phase 1 → phase 3: `AutoSyncRingView` repaint-request coverage.
+
+Device checklist (end of series): IPTV live channel with a flaky source
+(retries/live-edge behaviour), IPTV start-up from a payload with sources,
+lists and categories, a recording start (file name), subtitle search
+(query/identity row), track menus (labels), Stremio TV guide data,
+quick-play next episode, EPG load on a slow provider (45 s timeout path).
 
 ## Follow-ups (found while mapping; not fixed here)
 

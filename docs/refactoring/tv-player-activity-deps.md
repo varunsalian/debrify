@@ -2587,3 +2587,357 @@ mutation patches/XML, named proof coverage and gate comparisons. Required
 decoder verification remains a P2 environment prerequisite; explicit repaint
 coverage is a P3 follow-up before phase 3. Neither is represented as a passing
 gate. Review and independent audit evidence: `p1/post-review/`.
+
+---
+
+## Phase 2 inventory (pure members, at `dcbd9aafe`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` @ dcbd9aafe (19,961 lines; class 136–19961, companion 19914). Read-only survey.
+
+### Method
+
+1. Enumerated all 487 class-level `fun` declarations (4-space indent, class body before the companion) and brace-matched their spans on a string/comment-stripped copy of the file (no overlaps).
+2. Collected every *bare* identifier in each span: not preceded by `.`, `?.`, `::` or `@`. Named-argument occurrences were dropped. Locals, params, lambda params, destructured vals, for-vars and local funs were excluded.
+3. Flagged an identifier when it matches a class-level `val`/`var`/`fun`/nested type of the activity, `this`/`super`, or an Activity/Context API name (getString, resources, window, runOnUiThread, findViewById, currentFocus, cacheDir, filesDir, assets, …). A member is pure iff its flags are empty, or contain only names already in the pure set (fixpoint; every overload of a name must qualify).
+4. **Manually re-read every candidate body in full** (all listed below), resolving each unqualified identifier.
+   - Inherited Activity members are not hidden behind implicit receivers. `title` occurs only as a param, local or named argument.
+   - All types used are top-level `internal` or public: PlaybackItem, PlaybackPayload, SeasonEpisode, SubtitleCatalogResult, IptvChannelEntry, IptvSourceEntry, IptvListEntry, IptvEpgProgram, StremioTvGuideChannel, UnifiedMenuController.Row, DiagnosticFileLog, MainActivity.
+5. Checks:
+   - **Collisions:** grepped every name across `android/app/src/main/kotlin/com/debrify/app/tv/*` and `android/app/src/main/java/com/debrify/app/tv/*`. Also checked activity imports with the same name, and star imports in the tv package (none). Same-named Java methods in TorboxTvPlayerActivity do not affect Kotlin resolution.
+   - **Call forms:** looked for `this.name`, `this@X.name` and `::name` references (none).
+   - **Declarations:** checked non-`private` modifiers and annotations on the declarations (all are plain `private fun` with no annotations; none is `@Volatile`, `@Synchronized` or an extension).
+   - **Overloads:** no pure name has a non-pure overload left behind. The only multi-declaration name is `parseIptvChannels` ×2, and both overloads are pure.
+6. **Tests:**
+   - Kotlin JVM tests: `grep -rw NAME android/app/src/test` matched none of the names. Reflection goes through `TvPlayerOriginalAccess` with literal names, `ShufflePlaybackFlowTest` (`declaredClasses` → ShufflePlaybackAttempt) and `StremioTvStartupWatchdogTest` / `SubtitleSyncDismissTest` (fields plus `setupBackPressHandler`), and none of those target a candidate.
+   - `NativeAudioRoutingTest` reads the activity source, but only for `setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)`.
+   - Dart source-text tests: `test/manual_source_validation_contract_test.dart`, `test/android_tv_mdblist_progress_source_test.dart` and `test/android_tv_auto_advance_resume_test.dart`. Every string literal in them was matched against the candidate bodies (0 hits), and every `_between` anchor pair was resolved.
+     - The only region containing candidates is `sendProgress(` → `commitStartupCandidate(` (16586–17282), which contains `requestQuickPlayNextEpisode` and `formatTime`. The region still exists after the move and its asserted strings (`manualSourceSwitchSnapshot != null`, `manualSourceRestoreInProgress`) are not in those bodies, so it is safe.
+     - No anchor string is a candidate signature.
+
+**Common to every move:** the functions become `internal fun` in package `com.debrify.app.tv` with an identical body; call sites stay unchanged.
+- The activity's class-level `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn, line 135) will no longer cover moved code. Add `@OptIn(UnstableApi::class)` to the moved media3-touching declarations: classifyIptvError, languageOfOverride, IptvLiveLoadErrorPolicy, and buildAudio/SubtitleTrackLabel if lint flags them. This annotation is the only non-body edit.
+- Each new file needs its own imports (Locale, JSONArray/JSONObject, Uri, MediaCodecList, Format, TrackSelectionOverride, PlaybackException, HttpDataSource, DiagnosticFileLog, MainActivity, MethodChannel are referenced unqualified or partly qualified in the bodies).
+- `dev/tool/check_kotlin_moves.py` with a new manifest (`kotlin_moves/tvplayer_p2.json`) can prove the verbatim moves, as it did for phase 1.
+
+
+### A. IPTV error classification + live-load policy → `IptvLoadErrorPolicy.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun classifyIptvError(error: PlaybackException): IptvLiveRecovery.ErrorClass` | 683–699 (fun@685) | 664(restoreAcceptedIptvTwinAfterAuth), 1937(class-body) | Pure. Media3 `HttpDataSource.InvalidResponseCodeException` → needs `@OptIn(UnstableApi::class)` (androidx.annotation) on the moved fun/file; currently covered by the activity's class-level @OptIn. Caller 1937 is inside the anonymous Player.Listener. Tests/anchors: none. |
+
+**Group lines:** 17
+
+### B. IPTV payload parsing → `IptvPayloadParsing.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun parseIptvSources(array: JSONArray?): MutableList<IptvSourceEntry>` | 8919–8937 | 8817(initIptvMode) | Pure (JSONArray/JSONObject + internal IptvSourceEntry). Tests/anchors: none. |
+| `fun parseIptvLists(array: JSONArray?): MutableList<IptvListEntry>` | 8939–8949 | 8818(initIptvMode) | Pure. Tests/anchors: none. |
+| `fun parseStringList(array: JSONArray?): MutableList<String>` | 8951–8955 | 8819(initIptvMode) | Pure. Generic name — no other `parseStringList` in package. Tests/anchors: none. |
+| `fun parseIptvChannels(array: JSONArray): MutableList<IptvChannelEntry> + overload fun parseIptvChannels(list: List<*>)…` | 8957–9002; 9004–9045 | 8830(initIptvMode), 10802(requestIptvBrowse), 11755(requestIptvChannelJump), 11897(requestIptvZapPage) | TWO overloads (8957, 9004) — both pure (only call iptvChannelEntry); MUST move together (a member overload left behind would win over the top-level one at every in-class call site). Tests/anchors: none. |
+| `fun iptvChannelEntry(index: Int, …20 params…): IptvChannelEntry` | 9047–9096 | 8960(parseIptvChannels), 9018(parseIptvChannels) | Pure factory; only called by the two parseIptvChannels overloads — move as a unit. Tests/anchors: none. |
+
+**Group lines:** 173
+
+### C. Recording URL rules → `IptvRecordingUrlRules.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun isSegmentedStreamUrl(url: String): Boolean` | 9258–9272 (fun@9264) | 9276(isCurrentIptvSegmented), 9308(engineRecordableUrl) | Pure. Callers are almost-pure (isCurrentIptvSegmented / engineRecordableUrl read `iptvHlsForcedUrls`/`currentIptvStreamUrl`) and stay. Tests/anchors: none. |
+| `fun xtreamTsTwin(url: String): String?` | 9279–9295 (fun@9286) | 465(performIptvLiveRetune), 9309(engineRecordableUrl) | Pure (regex). Tests/anchors: none. |
+| `fun sanitizeRecordingName(raw: String): String` | 9667–9672 | 9406(toggleIptvRecording), 9508(toggleEngineRecording) | Pure. Tests/anchors: none. |
+| `fun recordingTimestamp(): String` | 9674–9676 | 9406(toggleIptvRecording), 9508(toggleEngineRecording) | Pure wrt activity (reads wall clock via Date()). Expression body. Tests/anchors: none. |
+
+**Group lines:** 41
+
+### D. IPTV entry / EPG rules → `IptvEntryRules.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun isIptvSeriesSentinel(entry: IptvChannelEntry): Boolean` | 10185–10186 | 9829(setupIptvOverlay), 9848(setupIptvOverlay) | Pure, expression body. Tests/anchors: none. |
+| `fun isStremioIptvUrl(url: String): Boolean` | 14132–14132 | 14356(beginIptvPlayback) | Pure, 1 line. Tests/anchors: none. |
+| `fun iptvQualityFromLabel(label: String): String` | 14417–14426 | 14409(populateIptvStremioSources) | Pure. Tests/anchors: none. |
+| `fun currentIptvStartOverProgramme(entry: IptvChannelEntry): IptvEpgProgram?` | 11162–11181 | 11188(updateIptvStartOverButton), 11244(toggleIptvStartOver) | Pure wrt activity (System.currentTimeMillis()). Name says `current` but takes the entry as a param; scanner flagged `title` only as a named argument. Tests/anchors: none. |
+| `fun formatIptvRemaining(ms: Long): String` | 13954–13961 (fun@13955) | 13867(paintStyledZapBannerEpg), 13928(paintIptvZapBannerEpg) | Pure. Tests/anchors: none. |
+| `fun adoptIptvEpg(from: IptvChannelEntry, to: IptvChannelEntry)` | 13980–14002 (fun@13990) | 13974(refreshIptvZapBannerPosition) | Pure wrt activity; mutates its `to` parameter (fields are vars on internal IptvChannelEntry). Tests/anchors: none. |
+
+**Group lines:** 64
+
+### E. Stremio TV guide data → `StremioTvGuideData.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun buildNowPlayingText(channel: StremioTvGuideChannel): String` | 19423–19431 | 19385(updateStremioTvGuideHeader) | Pure. Local `val title` shadows Activity.getTitle() today; at top level it is just a local — same semantics. Tests/anchors: none. |
+| `fun updateStremioTvGuideChannelData(channel: StremioTvGuideChannel, data: Map<*, *>)` | 19548–19571 | 19651(playStremioTvPlaybackMap) | Pure wrt activity; mutates parameter. Tests/anchors: none. |
+
+**Group lines:** 33
+
+### F. Track / subtitle labels → `TvTrackLabels.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun buildAudioTrackLabel(format: Format): String` | 15557–15570 | 14628(umAudioTracks), 15486(showAudioTrackDialog) | Pure (Locale.getDefault()). Format fields — verify lint; add @OptIn if flagged. Tests/anchors: none. |
+| `fun buildSubtitleTrackLabel(format: Format): String` | 15572–15581 | 15528(showSubtitleTrackDialog), 15598(rebuildSubtitleTrackList) | Pure. Tests/anchors: none. |
+| `fun languageOfOverride(override: TrackSelectionOverride?): String?` | 14119–14128 (fun@14120) | 14774(umAudioModel), 15512(showAudioTrackDialog) | Pure. `TrackGroup.getFormat` is media3 — add @OptIn(UnstableApi::class). Tests/anchors: none. |
+| `fun isSearchSubtitleOption(label: String): Boolean` | 15719–15721 | 15644(class-body), 15738(applySelectedSubtitleTrack) | Uses companion `private const SEARCH_SUBTITLE_LABEL` (only use is here, line 15720) → move const too as top-level `private const val` in the new file and delete from companion. Tests/anchors: none. |
+| `fun isLoadingSubtitleOption(label: String): Boolean` | 15723–15725 | 15643(class-body) | Pure; hard-codes "⏳" (companion SUBTITLE_LOADING_LABEL not referenced). Tests/anchors: none. |
+| `fun isExternalSubtitleOption(label: String): Boolean` | 15727–15729 | 15314(umSelectStremioSubtitleByUrl), 15743(applySelectedSubtitleTrack), 15747(applySelectedSubtitleTrack) | Uses companion `private const EXTERNAL_SUBTITLE_PREFIX`, ALSO used by activity at 15614 → must become top-level `internal const val` (delete companion copy; 15614 then resolves to the top-level const). Declared substitution, not verbatim. Tests/anchors: none. |
+| `fun isSideRenderableSubtitle(url: String): Boolean` | 15788–15797 (fun@15794) | 5087(seedInjectedSubtitles), 5138(launchAddonSubtitleFetch) | Pure. (Torbox Java has a same-named private method — irrelevant to Kotlin resolution.) Tests/anchors: none. |
+
+**Group lines:** 53
+
+### G. Subtitle search query / identity → `SubtitleSearchQuery.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun parseSubtitleCatalogResults(result: Any?): List<SubtitleCatalogResult>` | 6334–6356 | 6311(requestSubtitleCatalogSearchFromFlutter) | Pure (raw-map validation boundary). Tests/anchors: none. |
+| `fun resolveSeasonEpisodeForSubtitle(item: PlaybackItem): SeasonEpisode?` | 6565–6573 | 6200(showSearchSubtitleDialog), 15281(umPickSearchResult) | Pure transitively (calls parseSeasonEpisodeFromTitle) — move together. Tests/anchors: none. |
+| `fun parseSeasonEpisodeFromTitle(title: String): SeasonEpisode?` | 6575–6592 | 6572(resolveSeasonEpisodeForSubtitle) | Pure; param `title` shadows Activity.title today — no change at top level. Tests/anchors: none. |
+| `fun buildSubtitleSearchInitialQuery(item: PlaybackItem): String` | 6594–6611 | 6045(showSearchSubtitleDialog), 6634(currentSubtitleIdentityLabel), 14727(class-body) | Pure. Tests/anchors: none. |
+| `fun buildManualSubtitleDisplayLabel(result: SubtitleCatalogResult, type: String, season: Int?, episode: Int?): String` | 6613–6625 | 6528(applyManualSubtitleIdentity) | Pure (SubtitleCatalogResult.titleLine() is a member of the internal data class in TvPlaybackPayload.kt). Tests/anchors: none. |
+
+**Group lines:** 81
+
+### H. Formatting / seek math → `TvPlayerFormatting.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun formatTime(ms: Long): String` | 16947–16959 (fun@16948) | 7680(updateSeekbarProgress), 7682(updateSeekbarProgress), 7684(updateSeekbarProgress), 7688(updateSeekbarProgress), 7688(updateSeekbarProgress), 7920(updateCinemaProgressUI), 7923(updateCinemaProgressUI), 7925(updateCinemaProgressUI) … (+4) | Pure (String.format default locale, unchanged). COLLISION CHECK: SubtitleLinePickerController.kt:564 has `private fun formatTime(ms: Long)` MEMBER — member wins inside that class, so no behaviour change and no ambiguity; dart test/calendar_display_preferences_test.dart match is an unrelated Dart symbol. Tests/anchors: none. |
+| `fun spellNumber(n: Int?): String` | 5880–5897 (fun@5882) | 5681(updateOttIdentity), 5681(updateOttIdentity) | Pure. Tests/anchors: none. |
+| `fun getAcceleratedSeekStep(repeatCount: Int): Long` | 8036–8043 | 7157(dispatchKeyEvent), 7162(dispatchKeyEvent), 7750(setupCinemaProgressBar), 7757(setupCinemaProgressBar) | Pure (local constants, not companion SEEK_STEP_MS). Tests/anchors: none. |
+
+**Group lines:** 39
+
+### I. Unified-menu row factory → `UnifiedMenuRows.kt` (or top of existing UnifiedMenuSections.kt)
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun mrow(title: String, value: String? = null, …, onAdjust: ((Int) -> Unit)? = null): UnifiedMenuController.Row` | 14662–14666 | 14675(umSectionRows), 14676(umSectionRows), 14677(umSectionRows), 14678(umSectionRows), 14751(umAudioModel), 14752(umAudioModel), 14757(umAudioModel), 14760(umAudioModel) … (+39) | Pure; default params are literals only. Return type is the public nested `UnifiedMenuController.Row` (fine for internal fun). 47 call sites, all in um* builders. Param `title` shadows Activity.title already. Tests/anchors: none. |
+
+**Group lines:** 5
+
+### J. Startup / source diagnostics & protected origins → `TvStartupDiagnostics.kt` (+ origins could go to ProtectedStreamHttp.kt)
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun originKey(uri: Uri): String?` | 2690–2701 | 2684(buildProtectedMediaOrigins), 2868(setupPlayer), 18567(switchToStremioSource) | Pure. Tests/anchors: none. |
+| `fun buildProtectedMediaOrigins(...)` | 2678–2688 | 4568(playItem), 4620(playItem), 4773(startPlayback) | Pure transitively (only calls originKey) — move with originKey. Tests/anchors: none. |
+| `fun diagnosticProvider(value: String?): String` | 17560–17567 | 2121(onCreate) | Pure. Tests/anchors: none. |
+| `fun startupLog(message: String, warning: Boolean = false)` | 17569–17578 | 1830(class-body), 1850(class-body), 2138(onCreate), 2140(onCreate), 4666(resolveAndPlay), 4682(resolveAndPlay), 4694(resolveAndPlay), 4709(resolveAndPlay) … (+28) | Side effect = DiagnosticFileLog (object) + android.util.Log; no activity state. Uses companion `private const STARTUP_FAILOVER_LOG_TAG` (only used here, 17576/17577) → move const as file-private. 36 callers. Tests/anchors: none. |
+| `fun isPikPakPlaybackItem(item: PlaybackItem?): Boolean` | 17483–17485 | 17488(currentPlaybackItemIsPikPak) | Uses companion `private const PROVIDER_PIKPAK`, ALSO used at 4784 and 18645 → make top-level `internal const val PROVIDER_PIKPAK` and delete companion copy (Torbox Java has its own; no clash). Declared substitution. Tests/anchors: none. |
+| `fun androidDecoderStatus(decoderName: String): String` | 318–339 | 301(class-body) | Pure (MediaCodecList query, SDK_INT). Only caller is inside the anonymous AnalyticsListener (301). Tests/anchors: none. |
+
+**Group lines:** 66
+
+### K. Playlist navigation targeting → `PlaylistNavigationMaps.kt`
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String)` | 18494–18535 | 18211(switchToSourcePlaylist), 18432(switchToSourcePlaylist) | Pure wrt activity; mutates the passed `model` (contentType/next/prev maps/collectionGroups/perItemImdbIds — all var/mutable on internal PlaybackPayload). Callers pass `payload` explicitly. Tests/anchors: none. |
+
+**Group lines:** 42
+
+### L. Flutter channel requests — activity-pure but belong to the phase-2 `TvPlayerFlutterBridge` seam, NOT the pure-helper files
+
+| Function (becomes `internal fun`) | Lines (incl. KDoc) | Callers (line(enclosing fun)) | Verification / collisions / reflection / anchors |
+|---|---|---|---|
+| `fun requestStreamFromFlutter(item: PlaybackItem, index: Int, callback: (String?, String?) -> Unit)` | 5927–5964 | 4673(resolveAndPlay), 4675(resolveAndPlay), 4687(resolveAndPlay), 4704(resolveAndPlay), 4715(resolveAndPlay), 4721(resolveAndPlay), 5541(playShowShuffle), 5542(playShowShuffle) | Pure wrt activity (MainActivity.getAndroidTvPlayerChannel() static). Callback thread = MethodChannel (main). Tests/anchors: none. |
+| `fun requestMovieMetadataFromFlutter(item: PlaybackItem, index: Int, callback: (String?) -> Unit)` | 5984–6023 (fun@5988) | 5043(fetchStremioSubtitles), 5046(fetchStremioSubtitles), 5057(fetchStremioSubtitles) | Same. Tests/anchors: none. |
+| `fun requestIptvEpg(entry: IptvChannelEntry, includeSchedule: Boolean, includeCatchupMetadata: Boolean = entry.isCurrent, callback: (Map<*, *>?) -> Unit)` | 11404–11471 (fun@11411) | 10913(ensureIptvChannelEpg), 11029(showIptvSchedulePane), 11033(showIptvSchedulePane) | Default value references only the param. Creates its OWN Handler(Looper.getMainLooper()) + 45s watchdog — not an activity handler, so the watchdog is not cancelled on destroy today (unchanged by a move). Tests/anchors: none. |
+| `fun reportIptvStreamResult(channelUrl: String, url: String?, success: Boolean)` | 14599–14611 (fun@14600) | 14483(tryNextIptvStremioCandidate), 14544(reportIptvStremioWinnerIfNeeded) | Fire-and-forget. Tests/anchors: none. |
+| `fun requestQuickPlayNextEpisode(imdbId: String, season: Int, episode: Int)` | 16935–16945 | 1790(class-body), 5269(playNext) | Fire-and-forget. Tests/anchors: none. |
+
+**Group lines:** 170
+### IptvLiveLoadErrorPolicy (lines 700–749 incl. KDoc; class 709–749): is it a near-verbatim move?
+
+Yes. It is a verbatim move plus three declared substitutions. Nothing else in the body touches the activity. The body only uses `C`, `HttpDataSource`, `LoadErrorHandlingPolicy` and `super`, and `liveNow()` is its only capture.
+
+```kotlin
+// IptvLoadErrorPolicy.kt (with classifyIptvError)
+@OptIn(UnstableApi::class)                       // DefaultLoadErrorHandlingPolicy is @UnstableApi
+internal class IptvLiveLoadErrorPolicy(
+    private val liveNow: () -> Boolean,           // replaces `private fun liveNow()` (710–711)
+) : DefaultLoadErrorHandlingPolicy() {
+    // 713–748 verbatim: `liveNow()` now invokes the function-typed property (same syntax)
+}
+// call site 2960:
+.setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true })
+```
+
+Declared substitutions:
+1. `private inner class` becomes `internal class` with a constructor supplier, and the activity's `@OptIn` is replaced by its own.
+2. The 2-line `liveNow()` member is deleted, and its expression moves verbatim into the call-site lambda.
+3. The call site changes from `IptvLiveLoadErrorPolicy()` to `IptvLiveLoadErrorPolicy { … }`.
+
+Notes on the move:
+- **Threading is unchanged.** The lambda still reads non-volatile `iptvChannels` and `currentIptvIndex` on the loader thread, which is the known follow-up recorded in plan line 397. The move does not fix it.
+- **JVM name changes** from `AndroidTvTorrentPlayerActivity$IptvLiveLoadErrorPolicy` to `IptvLiveLoadErrorPolicy`. No test reflects it (grep of android/app/src/test and test/), and there is no name clash in the package.
+- **One instance per media-source-factory build**, as today. The lambda captures the activity just as the inner class captured `this@Activity`, so lifetime is unchanged.
+- **Unit testing:** it becomes testable with a fake `liveNow` and `LoadErrorInfo`. The deps survey (row 1970 and §471) already lists the retry-delay contract to characterize.
+
+### Pairs that move together only with a nested type (still activity-free)
+
+| Item | Lines | Notes |
+|---|---|---|
+| `requestIptvStreamUrls(channelUrl, channelName, callback: (List<IptvStremioCandidate>, String?) -> Unit)` | 14548–14597 (fun@14552) | Its only "member" reference is the **private nested** `data class IptvStremioCandidate` (14133–14135). An `internal` top-level fun cannot expose a private nested type, so the type must move to top-level `internal data class IptvStremioCandidate` in the same batch. The activity's `private var iptvStremioCandidates: List<IptvStremioCandidate>` (1080) and `tryNextIptvStremioCandidate` then resolve to the top-level type unchanged. Not reflected in tests. This is a Flutter-bridge member, so it belongs with group L. Callers: grep `requestIptvStreamUrls(` (beginIptvPlayback/populate path). |
+
+### Nested value types / consts
+
+| Type | Lines | Movable? |
+|---|---|---|
+| `data class TvSourceAddon(id, name, sourceKey)` (public nested) | 1171 | Yes, self-contained. Uses: 1172 property, 18832 construction. No qualified `AndroidTvTorrentPlayerActivity.TvSourceAddon` uses anywhere, and not in tests. The JVM name changes. Low value alone. |
+| `private data class SkipSegmentRequest` | 1243–1250 | Yes, self-contained. Uses 8135/8154/8199, all in stateful skip-segment code. Low value alone. |
+| `private enum class SleepTimerMode` | 1268 | Yes, self-contained. Uses 414, 1269, 1680, 1715, 8337–8370, 15429/15442. The Dart `SleepTimerMode` (lib/screens/video_player/widgets/sleep_timer_sheet.dart) is unrelated, with no clash. |
+| `private data class DockSkinSpec` | 12576–12592 incl. KDoc | Yes, the type itself is pure. Its `by lazy` instance (12596+) reads `controlsSkin`/`R.layout` and stays. |
+| `private data class IptvStremioCandidate` | 14133–14135 | Yes, together with requestIptvStreamUrls (above). |
+| `private class ShufflePlaybackAttempt` | 5394–5402 | **NO.** `ShufflePlaybackFlowTest.kt:27` finds it via `activity.javaClass.declaredClasses.first { it.simpleName == "ShufflePlaybackAttempt" }`, so moving it needs the test retargeted through TvPlayerOriginalAccess first. |
+| Companion consts affected by group moves | 19914+ | `SEARCH_SUBTITLE_LABEL` and `STARTUP_FAILOVER_LOG_TAG` are single-use, so they move as file-private. `EXTERNAL_SUBTITLE_PREFIX` (also used at 15614) and `PROVIDER_PIKPAK` (also used at 4784 and 18645) must become top-level `internal const val`, and their companion copies must be deleted. If a companion copy were left in place, it would shadow the top-level const inside the class. That is harmless but duplicates the value. `PAYLOAD_KEY` (public) is untouched. |
+
+### Excluded: almost-pure (1–2 activity members) — NOT phase-2 verbatim moves
+
+The middle column lists the remaining non-pure references, after removing named arguments and references to pure-set functions. `this` means it needs a Context (Glide.with, DateFormat, DefaultDataSource.Factory, prefs, TextView(this)).
+
+Notable ones:
+- **Context-only.** These could become top-level with a `context: Context` param, but that is a signature change:
+  - formatEpgTime (11003)
+  - buildMergedSourceOrNull (4887) and buildMergedSource (4919)
+  - loadGuideArt (3485)
+  - zapText (12676)
+  - isAutoSyncPrefEnabled (15249)
+  - dp/dpToPx (resources)
+- **One state read.** These could become pure policies with that value as a param:
+  - guideAdjacent (16756, `hasAdjacentEpisodeResolver`)
+  - computeMovieGroups (8555, `payload`)
+  - startupWatchdogShouldExtend (17532, `player` + `currentPlaybackItemIsPikPak`; also uses companion STARTUP_*_MAX_WAIT_MS)
+  - startupSourceFields (17546, `stremioSources`)
+  - engineRecordableUrl (9302) and isCurrentIptvSegmented (9274) (`iptvHlsForcedUrls`/`currentIptvStreamUrl` around the pure recording rules)
+  - recordingResourceFor (9335)
+  - currentSubtitleIdentityLabel (6627)
+  - requestSubtitleCatalogSearchFromFlutter (6294, only `runOnUiThread`; bridge seam)
+  - umAudioTracks/umAudioSelectedIndex (`player`)
+  - umSectionRows (`stremioSubtitles`)
+  - umAddLoadMoreRow
+  - iptvMediaCodecSelector (2715)
+  - readStagedExtra (2229, `cacheDir`)
+  - requestMetadataFromFlutter (2454, `payload`)
+  - guideTitleFor (5590, `payload`)
+  - currentPlaybackItemIsPikPak (17487)
+
+Full list:
+
+| Function | Lines | Remaining activity refs |
+|---|---|---|
+| `clearParkedIptvTwinRestore` | 641–644 | `iptvTwinTrialRestoreOriginal`, `iptvTwinTrialRestoreTwin` |
+| `hideIptvReconnectPill` | 777–779 | `iptvReconnectPill` |
+| `dpToPx` | 781–782 | `resources` |
+| `releaseResumeHold` | 1408–1410 | `resumeHoldTargetMs` |
+| `readStagedExtra` | 2229–2248 | `cacheDir` |
+| `requestMetadataFromFlutter` | 2454–2484 | `payload` |
+| `iptvMediaCodecSelector` | 2715–2734 | `iptvDecoderMode`, `isIptvMode` |
+| `setupSeekbar` | 3135–3144 | `hideSeekbar`, `seekbarOverlay` |
+| `guideSkinBind` | 3379–3437 | `controlsSkin` |
+| `loadGuideArt` | 3485–3494 | `this` |
+| `selectSeasonTab` | 3747–3761 | `playlistView`, `seasonTabs` |
+| `findNextFocusablePosition` | 3860–3889 | `moviePlaylistAdapter`, `seriesPlaylistAdapter` |
+| `selectMovieTab` | 4120–4133 | `movieTabs`, `playlistView` |
+| `updateOttCaption` | 4230–4239 | `ottCaptionLabel`, `ottCaptionOwner` |
+| `clearOttCaption` | 4241–4246 | `ottCaptionLabel`, `ottCaptionOwner` |
+| `refreshOttCaptionFor` | 4250–4253 | `ottSkinInstalled`, `updateOttCaption` |
+| `buildMergedSourceOrNull` | 4888–4914 | `this` |
+| `buildMergedSource` | 4919–4933 | `this` |
+| `setAddonSubtitleSlot` | 5162–5173 | `addonSubtitleResults` |
+| `shuffleAttemptCurrent` | 5407–5408 | `ShufflePlaybackAttempt`, `shuffleAttemptOwned` |
+| `restoreShufflePreparation` | 5415–5419 | `ShufflePlaybackAttempt`, `mediaPreparationGeneration` |
+| `clearQueuedShuffle` | 5447–5452 | `queuedShuffleGeneration`, `queuedShuffleNavigation` |
+| `guideTitleFor` | 5590–5595 | `payload` |
+| `dockTagsFor` | 5857–5878 | `dockTagsCache`, `dockTagsCacheKey` |
+| `reportValidatedSourceCommit` | 5966–5982 | `sourcePersistenceSessionId`, `stremioSources` |
+| `requestSubtitleCatalogSearchFromFlutter` | 6294–6332 | `runOnUiThread` |
+| `createSubtitleCatalogResultAdapter` | 6358–6404 | `dp`, `this` |
+| `currentSubtitleIdentityLabel` | 6627–6642 | `getCurrentSubtitleSearchItem`, `manualSubtitleDisplayLabel` |
+| `dp` | 6644–6646 | `resources` |
+| `isFocusInControlsOverlay` | 7381–7390 | `controlsOverlay`, `currentFocus` |
+| `isFocusInIptvChannelList` | 7392–7401 | `currentFocus`, `iptvGuideList` |
+| `cancelScheduledHideControlsMenu` | 7622–7624 | `controlsHandler`, `hideControlsRunnable` |
+| `startSeekbarProgressUpdates` | 7653–7656 | `seekbarHandler`, `seekbarProgressRunnable` |
+| `stopSeekbarProgressUpdates` | 7658–7660 | `seekbarHandler`, `seekbarProgressRunnable` |
+| `updateCinemaSeekSpeed` | 7913–7916 | `currentSeekSpeed` |
+| `updateSeekSpeed` | 8063–8072 | `currentSeekSpeed`, `seekbarSpeedIndicator` |
+| `releaseScreenForSleep` | 8395–8398 | `playerView`, `window` |
+| `holdScreenForPlayback` | 8401–8404 | `playerView`, `window` |
+| `computeMovieGroups` | 8555–8641 | `payload` |
+| `fadeInNextOverlay` | 8656–8661 | `nextOverlay` |
+| `hideNextOverlay` | 8663–8670 | `nextOverlay` |
+| `isCurrentIptvSegmented` | 9274–9277 | `currentIptvStreamUrl`, `iptvHlsForcedUrls` |
+| `engineRecordableUrl` | 9302–9310 | `iptvHlsForcedUrls` |
+| `isSchedulableStreamUrl` | 9319–9325 | `engineRecordableUrl` |
+| `engineTaskIdForCurrentChannel` | 9329–9333 | `currentIptvStreamUrl`, `engineRecordableUrl` |
+| `recordingResourceFor` | 9335–9338 | `iptvSourceId`, `iptvSources` |
+| `replaceControlDockOrder` | 9765–9776 | `originalControlDockOrder` |
+| `commitIptvAllCategorySearch` | 10294–10297 | `clearIptvAllCategorySearchState`, `iptvAllCategorySearchActive` |
+| `focusCurrentIptvGuideRow` | 10308–10317 | `iptvChannelAdapter`, `iptvGuideList` |
+| `focusedIptvGuideEntry` | 10994–11001 | `iptvChannelAdapter`, `iptvGuideList` |
+| `formatEpgTime` | 11003–11004 | `this` |
+| `isFocusInIptvEpgPanel` | 11393–11402 | `currentFocus`, `iptvEpgPanel` |
+| `boundedHiddenIptvZapWindow` | 12024–12032 | `iptvGuideVisible`, `iptvZapMaxHiddenWindow` |
+| `queuePendingIptvZapInput` | 12069–12073 | `iptvZapPendingInputs` |
+| `adjacentIptvCategory` | 12109–12119 | `iptvZapCategories`, `iptvZapCategory` |
+| `guideTypeface` | 12656–12667 | `assets`, `guideTypefaces` |
+| `zapText` | 12676–12692 | `this` |
+| `styledZapText` | 12951–12973 | `guideTypeface`, `this` |
+| `setIptvPreferredAudioLang` | 14094–14104 | `trackSelector` |
+| `cancelIptvStremioStallWatchdog` | 14532–14535 | `iptvStremioStallRunnable`, `progressHandler` |
+| `requestIptvStreamUrls` | 14552–14597 | `IptvStremioCandidate` |
+| `umAudioTracks` | 14620–14635 | `player` |
+| `umAudioSelectedIndex` | 14638–14650 | `player` |
+| `umSectionRows` | 14668–14680 | `stremioSubtitles` |
+| `umAppearanceRows` | 14874–14877 | `applyAndPersistSubtitleSettings`, `this` |
+| `isAutoSyncPrefEnabled` | 15249–15254 | `this` |
+| `umAddLoadMoreRow` | 15344–15356 | `moreSourcesLoadingMode`, `requestMoreTorrentSources` |
+| `hideSubtitleSettingsPanel` | 15668–15670 | `subtitlePanel`, `subtitleSettingsVisible` |
+| `refreshSubtitlePanelForLoading` | 15714–15717 | `rebuildSubtitleTrackList`, `subtitlePanel` |
+| `revealAutoSyncPill` | 16166–16175 | `autoSyncPill`, `dp` |
+| `applyAndPersistSubtitleSettings` | 16249–16255 | `applySubtitleSettings`, `this` |
+| `releaseLoudnessEnhancer` | 16332–16339 | `loudnessEnhancer` |
+| `restartProgressUpdates` | 16436–16439 | `progressHandler`, `progressRunnable` |
+| `acknowledgeRecoveryCheckpoint` | 16582–16584 | `filesDir`, `sourcePersistenceSessionId` |
+| `sendPlaybackMaintenanceState` | 16712–16720 | `player`, `sourcePersistenceSessionId` |
+| `sendPlaybackActivityState` | 16722–16734 | `sendPlaybackMaintenanceState`, `sourcePersistenceSessionId` |
+| `guideAdjacent` | 16756–16771 | `hasAdjacentEpisodeResolver` |
+| `startupCandidateElapsedMs` | 17479–17481 | `startupCandidateStartedElapsedMs` |
+| `currentPlaybackItemIsPikPak` | 17487–17488 | `currentIndex`, `payload` |
+| `cancelPikPakGateReprepare` | 17490–17493 | `pikPakGateReprepare`, `progressHandler` |
+| `startupWatchdogShouldExtend` | 17532–17544 | `currentPlaybackItemIsPikPak`, `player` |
+| `startupSourceFields` | 17546–17558 | `stremioSources` |
+| `mediaServerPlaybackLog` | 17580–17587 | `currentStremioSourceIndex`, `stremioSources` |
+| `updateStremioQualityBadge` | 17617–17620 | `stremioSourceBadgeText`, `stremioSources` |
+| `failAddonFetch` | 18148–18151 | `addonFetchState`, `sourceBrowser` |
+| `hideStremioSourceBadge` | 18673–18685 | `stremioSourceBadge` |
+| `hideStremioSourceBadgeImmediately` | 18690–18695 | `stremioSourceBadge` |
+| `isFocusInStremioTvGuideList` | 19433–19442 | `currentFocus`, `stremioTvGuideList` |
+All other members (≈350) touch 3+ activity members, views, handlers or the player, and are out of scope.
+
+### Totals
+
+| Group | Lines (incl. KDoc) |
+|---|---|
+| A classifyIptvError | 17 |
+| B IPTV payload parsing | 173 |
+| C Recording URL rules | 41 |
+| D IPTV entry/EPG rules | 64 |
+| E Stremio TV guide data | 33 |
+| F Track/subtitle labels | 53 (+2 consts) |
+| G Subtitle search query | 81 |
+| H Formatting/seek | 39 |
+| I mrow | 5 |
+| J Startup diagnostics/origins | 66 (+2 consts) |
+| K Playlist navigation maps | 42 |
+| **Pure helpers A–K** | **614 lines, 41 functions (42 decls incl. 2 parseIptvChannels overloads)** |
+| L Flutter bridge requests (activity-pure; bridge seam) | 170 lines, 5 functions |
+| **All activity-pure members** | **784 lines, 46 names / 47 decls** (736 lines without KDoc) |
+| IptvLiveLoadErrorPolicy (declared substitution) | 50 |
+| requestIptvStreamUrls + IptvStremioCandidate (pair) | 50 + 3 |
+| Self-contained nested value types (TvSourceAddon, SkipSegmentRequest, SleepTimerMode, DockSkinSpec) | ≈1 + 8 + 1 + 17 |
+| **Upper bound removable in phase 2 without touching stateful code** | **≈914 lines** (≈4.6% of 19,961). That is well short of the plan's 2,000-line phase-2 estimate, so the remainder must come from the Flutter bridge seam (which wraps state-touching callers) and the "almost-pure" policies after a parameterization step. |
