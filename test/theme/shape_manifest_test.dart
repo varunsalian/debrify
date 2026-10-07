@@ -42,6 +42,10 @@ const Map<String, int> kShapeResidue = {
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_list.dart':
       0,
 
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_toolbar.dart':
+      1,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_bars.dart':
+      0,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
       1,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart':
@@ -199,7 +203,7 @@ const Map<String, int> kShapeResidue = {
   'lib/features/home/presentation/category_tag.dart': 0,
   'lib/features/search/presentation/search_mode_toggle.dart': 0,
   'lib/ui/core/see_all_link.dart': 0,
-  'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,
+
   'lib/screens/cloud_screen.dart': 0,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
   'lib/screens/debrify_tv/dialogs/external_player_notice_dialog.dart': 0,
@@ -382,6 +386,48 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart':
       0,
 
+  'lib/screens/alldebrid/alldebrid_files_screen.dart': 0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_root_layout.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_list_views.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playlist_actions.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_actions.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_actions.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_sections.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_loading.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection_state.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_state.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_scope.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_state.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_state.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_state.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback_state.dart':
+      0,
+  'lib/features/alldebrid_files/models/alldebrid_view.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 0,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog.dart':
       1,

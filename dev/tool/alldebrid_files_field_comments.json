@@ -1,0 +1,11 @@
+{
+  "leading_field_comments": [
+    "_AllDebridFilesScreenState._selectedView",
+    "_AllDebridFilesScreenState._links",
+    "_AllDebridFilesScreenState._currentMagnet",
+    "_AllDebridFilesScreenState._searchActive",
+    "_AllDebridFilesScreenState._fileSearchActive",
+    "_AllDebridFilesScreenState._selectionMode",
+    "_AllDebridFilesScreenState._shouldFocusOnLoad"
+  ]
+}

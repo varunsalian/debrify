@@ -1,0 +1,1403 @@
+[
+  {
+    "name": "ready-filter",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "magnets.where((m) => m.isReady).toList()",
+        "after": "magnets"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_fixture_test.dart::HTTP fixture original ready-only load uses success envelope and exact authorization"
+    ]
+  },
+  {
+    "name": "back-root-sentinel",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_handleBackNavigation",
+        "before": "return false;",
+        "after": "return true;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::back registration and sentinel teardown pushed=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::back registration and sentinel teardown pushed=true"
+    ]
+  },
+  {
+    "name": "focus-first-row",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusFirstItem",
+        "before": "_firstItemFocusNode.requestFocus();",
+        "after": "_toolbarSearchFocusNode.requestFocus();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::TV tab 12 stored closure focuses first row and identity removal preserves replacement",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_test.dart::TV focus request before a held initial load focuses first row only after load"
+    ]
+  },
+  {
+    "name": "back-priority",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_handleBackNavigation",
+        "before": "_exitSelectionMode();",
+        "after": "_toggleSearch();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::back priority selection then file search then root search then magnet then false"
+    ]
+  },
+  {
+    "name": "navigate-reset",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_navigateUp",
+        "before": "_fileSearchQuery = '';",
+        "after": "_fileSearchQuery = 'mutant';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::navigate up requests focus resets files search and root scroll"
+    ]
+  },
+  {
+    "name": "initial-query-trim",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "initState",
+        "before": "widget.initialSearchQuery?.trim()",
+        "after": "widget.initialSearchQuery"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::initial query is trimmed and a same-key widget update does not reapply it"
+    ]
+  },
+  {
+    "name": "pending-consumption",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "initState",
+        "before": "MainPageBridge.getAndClearAllDebridFocusWebDownloads()",
+        "after": "true"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::pending deep link consumes once and starts both loads concurrently pushed=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::pending deep link consumes once and starts both loads concurrently pushed=true"
+    ]
+  },
+  {
+    "name": "own-handler-clear",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "dispose",
+        "before": "MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads",
+        "after": "false"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::own disposal clears live handler then a notification becomes pending for next mount"
+    ]
+  },
+  {
+    "name": "replacement-handler-survives",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "dispose",
+        "before": "MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads",
+        "after": "true"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::second mounted deep-link registration survives first disposal and last disposal clears it"
+    ]
+  },
+  {
+    "name": "live-search-reset",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusWebDownloads",
+        "before": "_searchQuery = '';",
+        "after": "_searchQuery = 'mutant';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::repeated live notifications reset root and magnet state preserve file search and always reload"
+    ]
+  },
+  {
+    "name": "reload-skeleton-detach",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_loadLinks",
+        "before": "_loadingLinks = true;",
+        "after": "_loadingLinks = false;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::held live links reload detaches scrolled list skeleton then restarts at zero"
+    ]
+  },
+  {
+    "name": "unmount-publication",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "if (!mounted) return;\n      setState(() {\n        _magnets",
+        "after": "setState(() {\n        _magnets"
+      },
+      {
+        "member": "_load",
+        "before": "} catch (e) {\n      if (!mounted) return;",
+        "after": "} catch (e) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_test.dart::unmount during pending original load rejects publication without throwing"
+    ]
+  },
+  {
+    "name": "picker-map-fields",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildMagnetCard",
+        "before": "debridService: 'alldebrid'",
+        "after": "debridService: 'mutant'"
+      },
+      {
+        "member": "_buildLinkCard",
+        "before": "debridService: 'alldebrid'",
+        "after": "debridService: 'mutant'"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::pushed picker binding awaits once before pop and preserves every source field web=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::pushed picker binding awaits once before pop and preserves every source field web=true"
+    ]
+  },
+  {
+    "name": "picker-empty-hash",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildMagnetCard",
+        "before": "This AllDebrid magnet has no infohash to bind.",
+        "after": "mutant hash rejection"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::picker rejects whitespace infohash and a non-video saved link has no tap"
+    ]
+  },
+  {
+    "name": "picker-toolbar-title",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildToolbar",
+        "before": "Select AllDebrid Source",
+        "after": "Mutant picker"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::picker hides mutation actions and retains one search focus attachment even with zero matches"
+    ]
+  },
+  {
+    "name": "picker-empty-search",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildToolbar",
+        "before": "if (widget.selectSourceMode && hasItems)",
+        "after": "if (widget.selectSourceMode)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::picker with empty backing lists renders no toolbar search button in either view"
+    ]
+  },
+  {
+    "name": "picker-live-dispatch",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildMagnetCard",
+        "before": "await widget.onSourceSelected?.call(",
+        "after": "if (false) await widget.onSourceSelected?.call("
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_binding_test.dart::same-key picker widget update reads the new onSourceSelected callback live"
+    ]
+  },
+  {
+    "name": "search-up-target",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildSearchBar",
+        "before": "_moveFocusTo(_toolbarSearchFocusNode, _searchFocusNode)",
+        "after": "_moveFocusTo(_firstItemFocusNode, _searchFocusNode)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_test.dart::root search hardware Up Down Right clear Left and Enter restore real focus"
+    ]
+  },
+  {
+    "name": "file-search-up-target",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildFileSearchBar",
+        "before": "_moveFocusTo(_backButtonFocusNode, _fileSearchFocusNode)",
+        "after": "_moveFocusTo(_firstItemFocusNode, _fileSearchFocusNode)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_test.dart::file search hardware Up Down exits to Back and the first file"
+    ]
+  },
+  {
+    "name": "add-dialog-down",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddMagnetDialog",
+        "before": "node.nextFocus();",
+        "after": "node.requestFocus();"
+      },
+      {
+        "member": "_showAddLinkDialog",
+        "before": "node.nextFocus();",
+        "after": "node.requestFocus();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_test.dart::add dialog hardware Down leaves the field for actions web=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_test.dart::add dialog hardware Down leaves the field for actions web=true"
+    ]
+  },
+  {
+    "name": "multi-unlock-start-order",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "sortedVideos[startIndex].link",
+        "after": "sortedVideos.last.link"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::multi-file play unlocks start first then sequential fallback with all failures series=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::multi-file play unlocks start first then sequential fallback with all failures series=true"
+    ]
+  },
+  {
+    "name": "no-videos-snack",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "No playable video files found.",
+        "after": "Mutant no videos"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::magnet Play with no videos shows original snack without unlocking"
+    ]
+  },
+  {
+    "name": "single-shortcut-snack",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "Failed to unlock this file.",
+        "after": "Mutant single failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::single-video magnet shortcuts to file unlock failure snack"
+    ]
+  },
+  {
+    "name": "unlock-failure-file_play",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "Failed to unlock this file.",
+        "after": "Mutant unlock failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::real row action unlock failure retains exact request and message kind=file_play"
+    ]
+  },
+  {
+    "name": "unlock-failure-file_download",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadFile",
+        "before": "Failed to unlock this file.",
+        "after": "Mutant unlock failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::real row action unlock failure retains exact request and message kind=file_download"
+    ]
+  },
+  {
+    "name": "unlock-failure-link_play",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playLink",
+        "before": "Failed to unlock this link.",
+        "after": "Mutant unlock failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::real row action unlock failure retains exact request and message kind=link_play"
+    ]
+  },
+  {
+    "name": "unlock-failure-link_download",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadLink",
+        "before": "Failed to unlock this link.",
+        "after": "Mutant unlock failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::real row action unlock failure retains exact request and message kind=link_download"
+    ]
+  },
+  {
+    "name": "dialog-maps",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadMagnet",
+        "before": "'_adIndex': i",
+        "after": "'_adIndex': i + 1"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::magnet Download opens actual selection dialog with exact maps and failure loop callback order"
+    ]
+  },
+  {
+    "name": "invalid-selection-result",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadSelectedFiles",
+        "before": "Failed to queue any files",
+        "after": "Mutant invalid-index result"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::missing negative and out-of-range selection indices fail without any unlock request"
+    ]
+  },
+  {
+    "name": "clipboard-value",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_copyLink",
+        "before": "ClipboardData(text: url)",
+        "after": "ClipboardData(text: 'mutant URL')"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::copy saved link writes unlocked URL to clipboard after exact unlock"
+    ]
+  },
+  {
+    "name": "duplicate-modal",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showLoading",
+        "before": "if (_loadingDialogOpen || !mounted) return;",
+        "after": "if (!mounted) return;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::duplicate loading requests share one non-dismissible modal and one flag"
+    ]
+  },
+  {
+    "name": "system-back-dismiss",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_dismissLoading",
+        "before": "if (mounted) Navigator.of(context, rootNavigator: true).pop();",
+        "after": "if (false) Navigator.of(context, rootNavigator: true).pop();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback_download_test.dart::system Back pops loading dialog while flag stays true then dismiss pops pushed screen"
+    ]
+  },
+  {
+    "name": "missing-key-text",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "Add your AllDebrid API key in Settings first.",
+        "after": "Mutant missing key"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::missing key keeps exact error Retry and marks lazy links loaded on failure"
+    ]
+  },
+  {
+    "name": "load-error-text",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "Failed to load your AllDebrid library:",
+        "after": "Mutant library:"
+      },
+      {
+        "member": "_loadLinks",
+        "before": "Failed to load your saved links:",
+        "after": "Mutant links:"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::load failure Retry uses original entry and exact request list web=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::load failure Retry uses original entry and exact request list web=true"
+    ]
+  },
+  {
+    "name": "view-selection-reset",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildViewSelectorBar",
+        "before": "_exitSelectionMode();",
+        "after": "_toggleSelectionMode();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::links load lazily once and view switching clears selection search and shared scroll"
+    ]
+  },
+  {
+    "name": "root-refresh-header-false",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "AllDebridService.listMagnets(apiKey)",
+        "after": "AllDebridService.listMagnets('mutant-key')"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable root toolbar refresh selects its own loader web=false"
+    ]
+  },
+  {
+    "name": "root-refresh-header-true",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_loadLinks",
+        "before": "AllDebridService.listSavedLinks(apiKey)",
+        "after": "AllDebridService.listSavedLinks('mutant-key')"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable root toolbar refresh selects its own loader web=true"
+    ]
+  },
+  {
+    "name": "row-key",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildMagnetsView",
+        "before": "ValueKey(magnets[index].id)",
+        "after": "ValueKey('mutant-row')"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::magnet links and file rows retain exact keys and first focus binding"
+    ]
+  },
+  {
+    "name": "dormant-force-retention",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_openMagnet",
+        "before": "if (!force) _currentFiles = [];",
+        "after": "_currentFiles = [];"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::dormant forced-files refresh retains files during held load and cached credential"
+    ]
+  },
+  {
+    "name": "search-case",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_visibleMagnets",
+        "before": "m.name.toLowerCase().contains(q)",
+        "after": "m.name.contains(q)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::three searches trim and ignore case with link host and file filename boundaries"
+    ]
+  },
+  {
+    "name": "empty-state-text",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildMagnetsView",
+        "before": "Your AllDebrid library is empty.",
+        "after": "Mutant empty magnets"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::empty root links and files keep original messages"
+    ]
+  },
+  {
+    "name": "open-file-error",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_openMagnet",
+        "before": "Failed to load files:",
+        "after": "Mutant load files:"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::open magnet failure clears loading and shows exact failure snack without reload"
+    ]
+  },
+  {
+    "name": "golden-padding",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "build",
+        "before": "const SizedBox(height: 8)",
+        "after": "const SizedBox(height: 12)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden magnet_root",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden web_downloads",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden magnet_files",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden selection",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden select_source",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_views_test.dart::reachable pixel golden error"
+    ]
+  },
+  {
+    "name": "magnet-cancel",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_deleteMagnets",
+        "before": "Remove \"${magnets.first.name}\" from your AllDebrid account?",
+        "after": "Mutant confirmation"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::single magnet confirmation Cancel makes no deletion request"
+    ]
+  },
+  {
+    "name": "magnet-delete-order",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_deleteMagnets",
+        "before": "'Magnet deleted'",
+        "after": "'Mutant magnet deleted'"
+      },
+      {
+        "member": "_deleteMagnets",
+        "before": "'${magnets.length} magnets deleted'",
+        "after": "'${magnets.length} mutant magnets deleted'"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::magnet deletion reload and success snack use list order mode=single",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::magnet deletion reload and success snack use list order mode=selected",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::magnet deletion reload and success snack use list order mode=all",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::magnet deletion reload and success snack use list order mode=swallowed_failure"
+    ]
+  },
+  {
+    "name": "link-delete-results",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_deleteLinks",
+        "before": "'Delete link?'",
+        "after": "'Mutant link confirmation?'"
+      },
+      {
+        "member": "_deleteLinks",
+        "before": "links.length == 1 ? 'Link deleted' : '${links.length} links deleted'",
+        "after": "links.length == 1 ? 'Mutant link deleted' : '${links.length} mutant links deleted'"
+      },
+      {
+        "member": "_deleteLinks",
+        "before": "Failed to delete $fail link",
+        "after": "Mutant deletion $fail link"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::saved link deletion counts failures then reloads in list order mode=cancel",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::saved link deletion counts failures then reloads in list order mode=single",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::saved link deletion counts failures then reloads in list order mode=all",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::saved link deletion counts failures then reloads in list order mode=partial"
+    ]
+  },
+  {
+    "name": "visible-only-selection",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_toggleSelectAll",
+        "before": "for (final m in _visibleMagnets)",
+        "after": "for (final m in _magnets)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::filtered Select All and Deselect All preserve hidden selections and visible all flag"
+    ]
+  },
+  {
+    "name": "prune-stale-selection",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "_selectedIds.removeWhere((id) => !_magnets.any((m) => m.id == id));",
+        "after": "_selectedIds.removeWhere((id) => false);"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_selection_test.dart::reload prunes stale selected ids but retains surviving selection and mode"
+    ]
+  },
+  {
+    "name": "add-magnet-cancel-empty",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddMagnetDialog",
+        "before": "Navigator.of(ctx).pop(),",
+        "after": "Navigator.of(ctx).pop(controller.text),"
+      },
+      {
+        "member": "_showAddMagnetDialog",
+        "before": "Navigator.of(ctx).pop(controller.text.trim())",
+        "after": "Navigator.of(ctx).pop(controller.text)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add magnet real dialog exact trimmed upload snack before reload mode=cancel",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add magnet real dialog exact trimmed upload snack before reload mode=empty"
+    ]
+  },
+  {
+    "name": "add-magnet-header",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddMagnetDialog",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add magnet real dialog exact trimmed upload snack before reload mode=success",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add magnet real dialog exact trimmed upload snack before reload mode=failure"
+    ]
+  },
+  {
+    "name": "clipboard-prefix",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "clipText.startsWith('http://') || clipText.startsWith('https://')",
+        "after": "true"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link clipboard auto-pastes trimmed http and https only"
+    ]
+  },
+  {
+    "name": "add-link-cancel-empty",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "Navigator.of(ctx).pop(),",
+        "after": "Navigator.of(ctx).pop(controller.text),"
+      },
+      {
+        "member": "_showAddLinkDialog",
+        "before": "Navigator.of(ctx).pop(controller.text.trim())",
+        "after": "Navigator.of(ctx).pop(controller.text)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=cancel",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=empty"
+    ]
+  },
+  {
+    "name": "add-link-validation",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "Enter a valid URL (must start with http:// or https://)",
+        "after": "Mutant invalid URL"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=invalid"
+    ]
+  },
+  {
+    "name": "add-link-header",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=success",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=unlock_failure",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::add link validates input and saves original URL with exact request order mode=save_failure"
+    ]
+  },
+  {
+    "name": "playlist-map",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_addMagnetToPlaylist",
+        "before": "'provider': 'alldebrid'",
+        "after": "'provider': 'mutant'"
+      },
+      {
+        "member": "_addMagnetToPlaylist",
+        "before": "'provider': 'alldebrid'",
+        "after": "'provider': 'mutant'"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::playlist real menu persists exact map and reports duplicate single=false",
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::playlist real menu persists exact map and reports duplicate single=true"
+    ]
+  },
+  {
+    "name": "playlist-hash-reject",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_addMagnetToPlaylist",
+        "before": "This magnet has no infohash to save.",
+        "after": "Mutant missing hash"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_playlist_test.dart::playlist empty-hash rejection makes no file request or persisted entry"
+    ]
+  },
+  {
+    "name": "root-key-reread",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "await AllDebridStorage.getAllDebridApiKey()",
+        "after": "_apiKey ?? await AllDebridStorage.getAllDebridApiKey()"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::root load re-reads credential while lazy links and link refresh retain cached key"
+    ]
+  },
+  {
+    "name": "remount-new-key",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_load",
+        "before": "AllDebridService.listMagnets(apiKey)",
+        "after": "AllDebridService.listMagnets('mutant-key')"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::remount reads replaced credential and constructs independent resources"
+    ]
+  },
+  {
+    "name": "cached-action-play_file",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=play_file"
+    ]
+  },
+  {
+    "name": "cached-action-play_magnet",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playMagnet",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=play_magnet"
+    ]
+  },
+  {
+    "name": "cached-action-download_file",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadFile",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=download_file"
+    ]
+  },
+  {
+    "name": "cached-action-download_magnet",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadMagnet",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=download_magnet"
+    ]
+  },
+  {
+    "name": "cached-action-play_link",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_playLink",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=play_link"
+    ]
+  },
+  {
+    "name": "cached-action-download_link",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_downloadLink",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=download_link"
+    ]
+  },
+  {
+    "name": "cached-action-copy_link",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_copyLink",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=copy_link"
+    ]
+  },
+  {
+    "name": "cached-action-add_magnet",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddMagnetDialog",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=add_magnet"
+    ]
+  },
+  {
+    "name": "cached-action-add_link",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=add_link"
+    ]
+  },
+  {
+    "name": "cached-action-delete_magnet",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_deleteMagnets",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=delete_magnet"
+    ]
+  },
+  {
+    "name": "cached-action-delete_link",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_deleteLinks",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=delete_link"
+    ]
+  },
+  {
+    "name": "cached-action-playlist",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_addMagnetToPlaylist",
+        "before": "final apiKey = _apiKey;",
+        "after": "final apiKey = 'mutant-key';"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_profile_test.dart::cached credential remains on every action request after storage change action=playlist"
+    ]
+  },
+  {
+    "name": "source-only-01",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "dispose",
+        "before": "_searchController.dispose();\n    _searchFocusNode.dispose();",
+        "after": "_searchFocusNode.dispose();\n    _searchController.dispose();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::verbatim State startup and ten ordered disposals"
+    ]
+  },
+  {
+    "name": "source-only-02",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "title: file.fileName",
+        "after": "title: file.path"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact file launcher arguments and mounted handoff"
+    ]
+  },
+  {
+    "name": "source-only-03",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "PlaylistViewMode.series : PlaylistViewMode.sorted",
+        "after": "PlaylistViewMode.sorted : PlaylistViewMode.series"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ]
+  },
+  {
+    "name": "source-only-04",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playLink",
+        "before": "title: l.fileName",
+        "after": "title: l.link"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact saved-link launcher arguments and notify order"
+    ]
+  },
+  {
+    "name": "source-only-05",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_downloadFile",
+        "before": "credentialKey: 'alldebrid_api_key'",
+        "after": "credentialKey: 'mutant_credential'"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::file enqueue credentials context size and failure contracts"
+    ]
+  },
+  {
+    "name": "source-only-06",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_downloadLink",
+        "before": "credentialKey: 'alldebrid_api_key'",
+        "after": "credentialKey: 'mutant_credential'"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::saved-link enqueue credentials context and failure contracts"
+    ]
+  },
+  {
+    "name": "source-only-07",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_downloadSelectedFiles",
+        "before": "Queued $success, $fail failed",
+        "after": "Mutant mixed result"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::selected-files sequential enqueue and three result branches"
+    ]
+  },
+  {
+    "name": "source-only-08",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_downloadMagnet",
+        "before": "'_fullPath': files[i].path",
+        "after": "'_fullPath': files[i].fileName"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::download dialog maps retain full paths sizes indices and unawaited callback"
+    ]
+  },
+  {
+    "name": "source-only-09",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_addMagnetToPlaylist",
+        "before": "'sizeBytes': videos.first.size",
+        "after": "'sizeBytes': 123"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::playlist persistence single and collection maps retain all arguments"
+    ]
+  },
+  {
+    "name": "source-only-10",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_showLoading",
+        "before": "barrierDismissible: false",
+        "after": "barrierDismissible: true"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::shared loading flag guard clear-before-pop and non-dismissible barrier"
+    ]
+  },
+  {
+    "name": "source-only-11",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_openMagnet",
+        "before": "This magnet failed on AllDebrid.",
+        "after": "Mutant dormant failure"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::dormant non-ready snacks and badges remain unreachable and verbatim"
+    ]
+  },
+  {
+    "name": "source-only-12",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_navigateUp",
+        "before": "_scrollController.jumpTo(0)",
+        "after": "_scrollController.jumpTo(1)"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::navigate-up attached-scroll reset and focus protocol remain verbatim"
+    ]
+  },
+  {
+    "name": "source-only-13",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_showAddLinkDialog",
+        "before": "AllDebridService.saveLink(apiKey, link)",
+        "after": "AllDebridService.saveLink(apiKey, link.trim())"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::clipboard auto-paste and original input link-save contract remain verbatim"
+    ]
+  },
+  {
+    "name": "step0b-fwd-searchctl",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusWebDownloads",
+        "before": "      _searchQuery = '';\n      _searchController.clear();\n    });\n    await _loadLinks();",
+        "after": "      _searchQuery = '';\n    });\n    await _loadLinks();"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review live web notification clears the retained root search controller"
+    ],
+    "independent_review_mutant_sha256": "f4e76f97864fb38136c3fb980ee709d351b343f750869d5fd886a07e9681ae5a"
+  },
+  {
+    "name": "step0b-focus-atroot",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_focusFirstItem",
+        "before": "      if (_isAtRoot && hasItems) {",
+        "after": "      if (hasItems) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review TV content focus inside a magnet keeps Back focused and defers row focus"
+    ],
+    "independent_review_mutant_sha256": "827b25f3ea4730e3da8a49b4ce24494e300189d6a2beef789fded859bd7d759c"
+  },
+  {
+    "name": "step0b-snack-dur",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_snack",
+        "before": "        duration: const Duration(seconds: 3),",
+        "after": "        duration: const Duration(seconds: 4),"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review snackbar stays visible before three seconds and expires after its exit animation"
+    ],
+    "independent_review_mutant_sha256": "fd6dc295c8eea97cb040929fbf051611bc04639d5a3a9cb56ce5d07df2c41ce3"
+  },
+  {
+    "name": "step0b-filesearch-focus",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "build",
+        "before": "                            if (mounted) _fileSearchFocusNode.requestFocus();",
+        "after": "                            if (mounted) {}"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review AppBar search-files tap focuses the new field without entering text"
+    ],
+    "independent_review_mutant_sha256": "50fceeea47cf6f75379427bf805aa52d13a7ccb8181aa4b12b093264ba2dc70a"
+  },
+  {
+    "name": "step0b-clear-left",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_buildSearchBar",
+        "before": "                  if (key == LogicalKeyboardKey.arrowLeft) {\n                    _searchFocusNode.requestFocus();\n                    return KeyEventResult.handled;",
+        "after": "                  if (key == LogicalKeyboardKey.arrowLeft) {\n                    return KeyEventResult.ignored;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review clear Left returns focus through the screen handler before directional traversal"
+    ],
+    "independent_review_mutant_sha256": "3ae7930d3b9746e756d20e13724d60c99c703aed29f19d35719a93722988ef3b"
+  },
+  {
+    "name": "step0b-movefocus-ctx",
+    "kind": "behavioural",
+    "edits": [
+      {
+        "member": "_moveFocusTo",
+        "before": "    if (target != null && target.context != null) {",
+        "after": "    if (target != null) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_review_closure_test.dart::review search Down releases the field when no first-row target is attached"
+    ],
+    "independent_review_mutant_sha256": "8aa38bb250e0bfb62e150044b1b02186b22fdde05a56ae48e876e663b22763b0"
+  },
+  {
+    "name": "step0b-source-navup-jump",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_navigateUp",
+        "before": "    _shouldFocusOnLoad = true;\n    if (_scrollController.hasClients) _scrollController.jumpTo(0);",
+        "after": "    _shouldFocusOnLoad = true;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::navigate-up attached-scroll reset and focus protocol remain verbatim"
+    ],
+    "independent_review_mutant_sha256": "30ab73b1f8187dfb28d13d0f816317c77c67963648837bfce034f0d38e1d9692"
+  },
+  {
+    "name": "step0b-source-fallback-idx",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "          startUrl = u;\n          startIndex = i;",
+        "after": "          startUrl = u;"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "60dbea6532f554cbb781aedec606ea04245e30f208040f5502ec12bf0754b9f0"
+  },
+  {
+    "name": "step0b-source-relpath",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "      if (firstSlash > 0) {",
+        "after": "      if (firstSlash > 999999) {"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "09e631bf69f37fd1f2f49752df044a54d5ef617f41eb3521bbe3ebc5de6de316"
+  },
+  {
+    "name": "step0b-source-multi-size",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playVideos",
+        "before": "          sizeBytes: v.size > 0 ? v.size : null,",
+        "after": "          sizeBytes: v.size,"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact series playlist sorting fallback clamp and launcher arguments"
+    ],
+    "independent_review_mutant_sha256": "6b6642eebaa2331d4546297d3b88db001a8f7fa562b191e473e5aa1d3370fa67"
+  },
+  {
+    "name": "step0b-source-playfile-mode",
+    "kind": "source-guard",
+    "edits": [
+      {
+        "member": "_playFile",
+        "before": "viewMode: PlaylistViewMode.sorted,",
+        "after": "viewMode: PlaylistViewMode.series,"
+      }
+    ],
+    "tests": [
+      "test/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_source_contract_test.dart::token-exact file launcher arguments and mounted handoff"
+    ],
+    "independent_review_mutant_sha256": "8532199e8f8017e7bee0498358a2c7d362a93c866e7ac9dead16e3bdf11eca52"
+  }
+]

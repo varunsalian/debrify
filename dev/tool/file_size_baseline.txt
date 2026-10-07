@@ -30,7 +30,7 @@
 2187 lib/theme/app_theme.dart
 2153 lib/services/android_tv_player_bridge.dart
 2038 lib/services/debrify_tv_database.dart
-1996 lib/screens/alldebrid/alldebrid_files_screen.dart
+202 lib/screens/alldebrid/alldebrid_files_screen.dart
 1991 lib/screens/trakt_calendar_screen.dart
 1967 lib/services/pikpak_api_service.dart
 1939 lib/services/profiles/profile_restore_coordinator.dart

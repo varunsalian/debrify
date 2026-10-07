@@ -108,6 +108,12 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
                  and (r['destination_file'], r['destination_class'], r['new_name']) in lookup}
         original = project(original, config, package, moved)
     errors = []
+    if config.get('alldebrid_formatter_brace_occurrences'):
+        from alldebrid_files_formatter_braces import canonical_lookup
+        try:
+            lookup = canonical_lookup(lookup, rows, source, config, package)
+        except ValueError as error:
+            return ['AllDebrid formatter occurrence evidence: ' + str(error)]
     retained_live = config.get('retained_field_live_getters', {})
     if retained_live:
         # A field read has no occurrence for its late/final modifiers. Pin its
