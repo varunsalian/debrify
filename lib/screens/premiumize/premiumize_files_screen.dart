@@ -1,3 +1,10 @@
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_state.dart';
+import 'package:debrify/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart';
 import 'package:debrify/features/premiumize_files/models/folder_view_mode.dart';
 import 'package:debrify/features/premiumize_files/models/premiumize_view.dart';
 import 'package:debrify/features/premiumize_files/application/premiumize_sort_policy.dart';
@@ -60,84 +67,22 @@ class PremiumizeFilesScreen extends StatefulWidget {
 }
 
 class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
-  final ScrollController _scrollController = ScrollController();
+  final _catalog = PremiumizeCatalogState();
+  final _nav = PremiumizeNavigationState();
+  final _view = PremiumizeViewState();
+  final _focus = PremiumizeFocusState();
+  final _selection = PremiumizeSelectionState();
+  final _search = PremiumizeSearchState();
+  final _link = PremiumizeLinkState();
 
   // Premiumize tab index in main.dart's page list (for TV focus + back handler).
   static const int _tabIndex = 11;
 
-  String? _apiKey;
-  bool _premiumizeEnabled = false;
-
-  bool _isLoading = false;
-  bool _initialLoad = true;
-  String _errorMessage = '';
-
-  // Active view (cloud files vs transfers).
-  PremiumizeView _selectedView = PremiumizeView.files;
-
-  // Cloud files state.
-  final List<PremiumizeFolderItem> _items = [];
-
-  // Transfers state.
-  final List<PremiumizeTransfer> _transfers = [];
-  bool _isLoadingTransfers = false;
-
-  // Folder navigation state (server-side, by id).
-  String? _currentFolderId; // null = root
-  String _currentFolderName = 'My Files';
-  final List<({String? id, String name})> _navigationStack = [];
-
-  // Per-folder view-mode persistence during this session.
-  final Map<String, PremiumizeFolderViewMode> _folderViewModes = {};
-
-  // TV content focus handler (stored for proper unregistration).
-  VoidCallback? _tvContentFocusHandler;
-  bool _shouldFocusOnLoad = false;
-
-  // Add-link state.
-  final TextEditingController _linkController = TextEditingController();
-  bool _isAddingLink = false;
-
-  // Multi-select state.
-  bool _isSelectionMode = false;
-  final Set<String> _selectedIds = {};
   bool get _isAllSelected =>
-      _selectedIds.length == _items.length && _items.isNotEmpty;
+      _selection.selectedIds.length == _catalog.items.length &&
+      _catalog.items.isNotEmpty;
 
-  // Search state. At root this runs a server-side cloud search (debounced);
-  // inside a folder it filters the currently-loaded items locally.
-  bool _isSearchActive = false;
-  bool _isSearching = false; // a cloud search request is in flight
-  Timer? _searchDebounce;
-  final TextEditingController _searchController = TextEditingController();
-  List<PremiumizeFolderItem> _searchResults = [];
-
-  // Focus nodes for TV/D-pad navigation.
-  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'pm-refresh');
-  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'pm-back');
-  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'pm-retry');
-  final FocusNode _settingsButtonFocusNode = FocusNode(
-    debugLabel: 'pm-settings',
-  );
-  final FocusNode _viewModeDropdownFocusNode = FocusNode(
-    debugLabel: 'pm-view-mode',
-  );
-  final FocusNode _addLinkButtonFocusNode = FocusNode(
-    debugLabel: 'pm-add-link',
-  );
-  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'pm-first-item');
-  final FocusNode _deleteButtonFocusNode = FocusNode(
-    debugLabel: 'pm-delete-btn',
-  );
-  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'pm-search');
-  final FocusNode _searchButtonFocusNode = FocusNode(
-    debugLabel: 'pm-search-button',
-  );
-  final FocusNode _searchClearFocusNode = FocusNode(
-    debugLabel: 'pm-search-clear',
-  );
-
-  bool get _isAtRoot => _currentFolderId == null;
+  bool get _isAtRoot => _nav.currentFolderId == null;
 
   @override
   void initState() {
@@ -152,13 +97,13 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         'premiumize',
         _handleBackNavigation,
       );
-      _tvContentFocusHandler = () {
-        _shouldFocusOnLoad = true;
+      _focus.tvContentFocusHandler = () {
+        _focus.shouldFocusOnLoad = true;
         _focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(
         _tabIndex,
-        _tvContentFocusHandler!,
+        _focus.tvContentFocusHandler!,
       );
     }
   }
@@ -169,28 +114,28 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('premiumize');
-      if (_tvContentFocusHandler != null) {
+      if (_focus.tvContentFocusHandler != null) {
         MainPageBridge.unregisterTvContentFocusHandler(
           _tabIndex,
-          _tvContentFocusHandler!,
+          _focus.tvContentFocusHandler!,
         );
       }
     }
-    _searchDebounce?.cancel();
-    _scrollController.dispose();
-    _linkController.dispose();
-    _searchController.dispose();
-    _refreshButtonFocusNode.dispose();
-    _backButtonFocusNode.dispose();
-    _retryButtonFocusNode.dispose();
-    _settingsButtonFocusNode.dispose();
-    _viewModeDropdownFocusNode.dispose();
-    _addLinkButtonFocusNode.dispose();
-    _firstItemFocusNode.dispose();
-    _deleteButtonFocusNode.dispose();
-    _searchFocusNode.dispose();
-    _searchButtonFocusNode.dispose();
-    _searchClearFocusNode.dispose();
+    _search.searchDebounce?.cancel();
+    _focus.scrollController.dispose();
+    _link.linkController.dispose();
+    _search.searchController.dispose();
+    _focus.refreshButtonFocusNode.dispose();
+    _focus.backButtonFocusNode.dispose();
+    _focus.retryButtonFocusNode.dispose();
+    _focus.settingsButtonFocusNode.dispose();
+    _focus.viewModeDropdownFocusNode.dispose();
+    _focus.addLinkButtonFocusNode.dispose();
+    _focus.firstItemFocusNode.dispose();
+    _focus.deleteButtonFocusNode.dispose();
+    _focus.searchFocusNode.dispose();
+    _focus.searchButtonFocusNode.dispose();
+    _focus.searchClearFocusNode.dispose();
     super.dispose();
   }
 
@@ -200,43 +145,44 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     if (!mounted) return;
     setState(() {
-      _premiumizeEnabled = enabled && apiKey != null && apiKey.isNotEmpty;
-      _apiKey = apiKey;
+      _catalog.premiumizeEnabled =
+          enabled && apiKey != null && apiKey.isNotEmpty;
+      _catalog.apiKey = apiKey;
       if (widget.initialFolderId != null && widget.initialFolderName != null) {
-        _currentFolderId = widget.initialFolderId;
-        _currentFolderName = widget.initialFolderName!;
+        _nav.currentFolderId = widget.initialFolderId;
+        _nav.currentFolderName = widget.initialFolderName!;
       }
       final initialQuery = widget.initialSearchQuery?.trim() ?? '';
       if (initialQuery.isNotEmpty) {
-        _isSearchActive = true;
-        _searchController.text = initialQuery;
+        _search.isSearchActive = true;
+        _search.searchController.text = initialQuery;
       }
     });
 
-    if (_premiumizeEnabled) {
+    if (_catalog.premiumizeEnabled) {
       _loadFolder();
       final initialQuery = widget.initialSearchQuery?.trim() ?? '';
       if (initialQuery.isNotEmpty) _performSearch(initialQuery);
     } else {
-      setState(() => _initialLoad = false);
+      setState(() => _catalog.initialLoad = false);
     }
   }
 
   // ── Loading ──────────────────────────────────────────────────────────────
 
   Future<void> _loadFolder() async {
-    final apiKey = _apiKey;
-    if (apiKey == null || apiKey.isEmpty || _isLoading) return;
+    final apiKey = _catalog.apiKey;
+    if (apiKey == null || apiKey.isEmpty || _catalog.isLoading) return;
 
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
+      _catalog.isLoading = true;
+      _catalog.errorMessage = '';
     });
 
     try {
       final listing = await PremiumizeService.listFolder(
         apiKey,
-        folderId: _currentFolderId,
+        folderId: _nav.currentFolderId,
       );
       if (!mounted) return;
 
@@ -244,55 +190,55 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       final ordered = _applyViewMode(mode, listing.items);
 
       setState(() {
-        _items
+        _catalog.items
           ..clear()
           ..addAll(ordered);
-        _isLoading = false;
-        _initialLoad = false;
+        _catalog.isLoading = false;
+        _catalog.initialLoad = false;
       });
       _focusFirstItemOrFallback();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-        _initialLoad = false;
+        _catalog.errorMessage = e.toString();
+        _catalog.isLoading = false;
+        _catalog.initialLoad = false;
       });
     }
   }
 
   Future<void> _loadTransfers() async {
-    final apiKey = _apiKey;
-    if (apiKey == null || apiKey.isEmpty || _isLoadingTransfers) return;
+    final apiKey = _catalog.apiKey;
+    if (apiKey == null || apiKey.isEmpty || _catalog.isLoadingTransfers) return;
 
     setState(() {
-      _isLoadingTransfers = true;
-      _errorMessage = '';
+      _catalog.isLoadingTransfers = true;
+      _catalog.errorMessage = '';
     });
 
     try {
       final transfers = await PremiumizeService.listTransfers(apiKey);
       if (!mounted) return;
       setState(() {
-        _transfers
+        _catalog.transfers
           ..clear()
           ..addAll(transfers);
-        _isLoadingTransfers = false;
-        _initialLoad = false;
+        _catalog.isLoadingTransfers = false;
+        _catalog.initialLoad = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
-        _isLoadingTransfers = false;
-        _initialLoad = false;
+        _catalog.errorMessage = e.toString();
+        _catalog.isLoadingTransfers = false;
+        _catalog.initialLoad = false;
       });
     }
   }
 
   Future<void> _refresh() async {
     _exitSelectionMode();
-    if (_selectedView == PremiumizeView.transfers) {
+    if (_view.selectedView == PremiumizeView.transfers) {
       await _loadTransfers();
     } else {
       await _loadFolder();
@@ -300,14 +246,14 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   void _switchView(PremiumizeView view) {
-    if (_selectedView == view) return;
+    if (_view.selectedView == view) return;
     _exitSelectionMode();
     // Reset the Files list offset so a Files→Transfers→Files round-trip
     // doesn't land back on a stale scroll position.
-    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
     setState(() {
-      _selectedView = view;
-      _errorMessage = '';
+      _view.selectedView = view;
+      _catalog.errorMessage = '';
     });
     if (view == PremiumizeView.transfers) {
       _loadTransfers();
@@ -320,50 +266,53 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   void _navigateIntoFolder(PremiumizeFolderItem folder) {
     _exitSelectionMode();
-    _shouldFocusOnLoad = true;
+    _focus.shouldFocusOnLoad = true;
     // Reset scroll while the outgoing list is still attached, so the new
     // folder never inherits the old offset.
-    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
     setState(() {
-      _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
-      _currentFolderId = folder.id;
-      _currentFolderName = folder.name;
+      _nav.navigationStack.add((
+        id: _nav.currentFolderId,
+        name: _nav.currentFolderName,
+      ));
+      _nav.currentFolderId = folder.id;
+      _nav.currentFolderName = folder.name;
       // Clear stale rows so the loading skeleton shows instead of the
       // outgoing folder's contents sitting frozen while the fetch runs.
-      _items.clear();
-      _isSearchActive = false;
-      _searchController.clear();
-      _searchResults = [];
+      _catalog.items.clear();
+      _search.isSearchActive = false;
+      _search.searchController.clear();
+      _search.searchResults = [];
     });
     _loadFolder();
   }
 
   void _navigateUp() {
     _exitSelectionMode();
-    if (_navigationStack.isEmpty) return;
+    if (_nav.navigationStack.isEmpty) return;
     // Refocus the first row once the parent listing loads — clearing _items
     // disposes the focused row and nothing else reclaims DPAD focus.
-    _shouldFocusOnLoad = true;
-    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    _focus.shouldFocusOnLoad = true;
+    if (_focus.scrollController.hasClients) _focus.scrollController.jumpTo(0);
     setState(() {
-      final previous = _navigationStack.removeLast();
-      _currentFolderId = previous.id;
-      _currentFolderName = previous.name;
-      _items.clear();
+      final previous = _nav.navigationStack.removeLast();
+      _nav.currentFolderId = previous.id;
+      _nav.currentFolderName = previous.name;
+      _catalog.items.clear();
     });
     _loadFolder();
   }
 
   bool _handleBackNavigation() {
-    if (_isSelectionMode) {
+    if (_selection.isSelectionMode) {
       _exitSelectionMode();
       return true;
     }
-    if (_isSearchActive) {
+    if (_search.isSearchActive) {
       _toggleSearch();
       return true;
     }
-    if (_navigationStack.isNotEmpty) {
+    if (_nav.navigationStack.isNotEmpty) {
       _navigateUp();
       return true;
     }
@@ -385,15 +334,16 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   PremiumizeFolderViewMode _getCurrentViewMode() {
     if (_isAtRoot) return PremiumizeFolderViewMode.raw;
-    return _folderViewModes[_currentFolderId!] ?? PremiumizeFolderViewMode.raw;
+    return _view.folderViewModes[_nav.currentFolderId!] ??
+        PremiumizeFolderViewMode.raw;
   }
 
   void _setViewMode(PremiumizeFolderViewMode mode) {
     if (_isAtRoot) return;
     setState(() {
-      _folderViewModes[_currentFolderId!] = mode;
-      final reordered = _applyViewMode(mode, _items);
-      _items
+      _view.folderViewModes[_nav.currentFolderId!] = mode;
+      final reordered = _applyViewMode(mode, _catalog.items);
+      _catalog.items
         ..clear()
         ..addAll(reordered);
     });
@@ -411,19 +361,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   void _toggleSearch() {
     setState(() {
-      _isSearchActive = !_isSearchActive;
-      if (!_isSearchActive) {
-        _searchDebounce?.cancel();
-        _searchController.clear();
-        _searchResults = [];
-        _isSearching = false;
+      _search.isSearchActive = !_search.isSearchActive;
+      if (!_search.isSearchActive) {
+        _search.searchDebounce?.cancel();
+        _search.searchController.clear();
+        _search.searchResults = [];
+        _search.isSearching = false;
       } else {
         // Search and multi-select are mutually exclusive: selection bar actions
         // operate on _items, not search results.
-        _isSelectionMode = false;
-        _selectedIds.clear();
+        _selection.isSelectionMode = false;
+        _selection.selectedIds.clear();
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _searchFocusNode.requestFocus();
+          if (mounted) _focus.searchFocusNode.requestFocus();
         });
       }
     });
@@ -432,19 +382,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   void _performSearch(String query) {
     final q = query.trim();
     if (q.isEmpty) {
-      _searchDebounce?.cancel();
+      _search.searchDebounce?.cancel();
       setState(() {
-        _searchResults = [];
-        _isSearching = false;
+        _search.searchResults = [];
+        _search.isSearching = false;
       });
       return;
     }
 
     // Root: server-side cloud search (recursive), debounced to limit calls.
     if (_isAtRoot) {
-      _searchDebounce?.cancel();
-      setState(() => _isSearching = true);
-      _searchDebounce = Timer(
+      _search.searchDebounce?.cancel();
+      setState(() => _search.isSearching = true);
+      _search.searchDebounce = Timer(
         const Duration(milliseconds: 350),
         () => _runCloudSearch(q),
       );
@@ -454,28 +404,28 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     // Inside a folder: filter the currently-loaded items locally.
     final lower = q.toLowerCase();
     setState(() {
-      _isSearching = false;
-      _searchResults = _items
+      _search.isSearching = false;
+      _search.searchResults = _catalog.items
           .where((i) => !i.isFolder && i.name.toLowerCase().contains(lower))
           .toList();
     });
   }
 
   Future<void> _runCloudSearch(String query) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     try {
       final results = await PremiumizeService.searchCloud(apiKey, query);
       if (!mounted) return;
       // Drop stale results if the query changed while the request was in flight.
-      if (_searchController.text.trim() != query) return;
+      if (_search.searchController.text.trim() != query) return;
       setState(() {
-        _searchResults = results;
-        _isSearching = false;
+        _search.searchResults = results;
+        _search.isSearching = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSearching = false);
+      setState(() => _search.isSearching = false);
       _showSnackBar('Search failed: $e', isError: true);
     }
   }
@@ -483,7 +433,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   // ── Playback ───────────────────────────────────────────────────────────────
 
   Future<void> _selectBoundSource(PremiumizeFolderItem item) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     _showLoadingDialog(
@@ -569,10 +519,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     String? url = file.playableUrl;
     // Search hits (folder/search) may omit the direct link — resolve by id.
     if ((url == null || url.isEmpty) &&
-        _apiKey != null &&
-        _apiKey!.isNotEmpty) {
+        _catalog.apiKey != null &&
+        _catalog.apiKey!.isNotEmpty) {
       final resolved = await PremiumizeService.resolveItemById(
-        _apiKey!,
+        _catalog.apiKey!,
         file.id,
       );
       url = resolved?.link;
@@ -608,7 +558,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _playFolder(PremiumizeFolderItem folder) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     _showLoadingDialog('Scanning folder for videos...');
@@ -774,7 +724,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _downloadFolder(PremiumizeFolderItem folder) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     _showLoadingDialog('Scanning folder for files...');
@@ -892,7 +842,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _addFolderToPlaylist(PremiumizeFolderItem folder) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     _showLoadingDialog('Scanning folder for videos...');
@@ -982,8 +932,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _handleDeleteSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final selected = _items.where((i) => _selectedIds.contains(i.id)).toList();
+    if (_selection.selectedIds.isEmpty) return;
+    final selected = _catalog.items
+        .where((i) => _selection.selectedIds.contains(i.id))
+        .toList();
     final count = selected.length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1013,7 +965,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _executeDelete(List<PremiumizeFolderItem> items) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     _showSnackBar(
@@ -1036,10 +988,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _items.removeWhere((i) => deletedIds.contains(i.id));
-      _searchResults.removeWhere((i) => deletedIds.contains(i.id));
-      _selectedIds.clear();
-      _isSelectionMode = false;
+      _catalog.items.removeWhere((i) => deletedIds.contains(i.id));
+      _search.searchResults.removeWhere((i) => deletedIds.contains(i.id));
+      _selection.selectedIds.clear();
+      _selection.isSelectionMode = false;
     });
     if (fail == 0) {
       _showSnackBar(
@@ -1057,7 +1009,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   // ── Transfers ────────────────────────────────────────────────────────────────
 
   Future<void> _deleteTransfer(PremiumizeTransfer transfer) async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1082,7 +1034,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     try {
       await PremiumizeService.deleteTransfer(apiKey, transfer.id);
       if (!mounted) return;
-      setState(() => _transfers.removeWhere((t) => t.id == transfer.id));
+      setState(
+        () => _catalog.transfers.removeWhere((t) => t.id == transfer.id),
+      );
       _showSnackBar('Transfer removed', isError: false);
     } catch (e) {
       _showSnackBar('Failed to remove transfer: $e', isError: true);
@@ -1090,7 +1044,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _clearFinishedTransfers() async {
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
     try {
       await PremiumizeService.clearFinishedTransfers(apiKey);
@@ -1135,7 +1089,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 return KeyEventResult.ignored;
               },
               child: TextField(
-                controller: _linkController,
+                controller: _link.linkController,
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'magnet:?xt=... or https://...',
@@ -1171,7 +1125,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              _linkController.clear();
+              _link.linkController.clear();
               Navigator.of(context).pop();
             },
             child: const Text('Cancel'),
@@ -1180,7 +1134,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFFB923C),
             ),
-            onPressed: _isAddingLink ? null : _addLink,
+            onPressed: _link.isAddingLink ? null : _addLink,
             child: const Text('Add', style: TextStyle(color: Colors.black)),
           ),
         ],
@@ -1196,13 +1150,13 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           (text.startsWith('http://') ||
               text.startsWith('https://') ||
               text.startsWith('magnet:'))) {
-        _linkController.text = text;
+        _link.linkController.text = text;
       }
     } catch (_) {}
   }
 
   Future<void> _addLink() async {
-    final link = _linkController.text.trim();
+    final link = _link.linkController.text.trim();
     if (link.isEmpty) {
       _showSnackBar('Please enter a link', isError: true);
       return;
@@ -1213,29 +1167,29 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       _showSnackBar('Please enter a valid URL or magnet link', isError: true);
       return;
     }
-    final apiKey = _apiKey;
+    final apiKey = _catalog.apiKey;
     if (apiKey == null || apiKey.isEmpty) return;
 
     Navigator.of(context).pop();
-    setState(() => _isAddingLink = true);
+    setState(() => _link.isAddingLink = true);
     _showLoadingDialog('Adding to Premiumize...');
 
     try {
       await PremiumizeService.createTransfer(
         apiKey,
         link,
-        folderId: _currentFolderId,
+        folderId: _nav.currentFolderId,
       );
       _dismissDialog();
       if (!mounted) return;
-      _linkController.clear();
+      _link.linkController.clear();
       _showSnackBar('Added to Premiumize', isError: false);
       await _refresh();
     } catch (e) {
       _dismissDialog();
       _showSnackBar('Failed to add: $e', isError: true);
     } finally {
-      if (mounted) setState(() => _isAddingLink = false);
+      if (mounted) setState(() => _link.isAddingLink = false);
     }
   }
 
@@ -1243,25 +1197,25 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   void _toggleSelectionMode() {
     setState(() {
-      if (_isSelectionMode) _selectedIds.clear();
-      _isSelectionMode = !_isSelectionMode;
+      if (_selection.isSelectionMode) _selection.selectedIds.clear();
+      _selection.isSelectionMode = !_selection.isSelectionMode;
     });
   }
 
   void _exitSelectionMode() {
-    if (!_isSelectionMode) return;
+    if (!_selection.isSelectionMode) return;
     setState(() {
-      _isSelectionMode = false;
-      _selectedIds.clear();
+      _selection.isSelectionMode = false;
+      _selection.selectedIds.clear();
     });
   }
 
   void _toggleSelection(String id) {
     setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
+      if (_selection.selectedIds.contains(id)) {
+        _selection.selectedIds.remove(id);
       } else {
-        _selectedIds.add(id);
+        _selection.selectedIds.add(id);
       }
     });
   }
@@ -1269,11 +1223,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   void _toggleSelectAll() {
     setState(() {
       if (_isAllSelected) {
-        _selectedIds.clear();
+        _selection.selectedIds.clear();
       } else {
-        _selectedIds
+        _selection.selectedIds
           ..clear()
-          ..addAll(_items.map((i) => i.id));
+          ..addAll(_catalog.items.map((i) => i.id));
       }
     });
   }
@@ -1305,15 +1259,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   void _focusFirstItemOrFallback() {
-    if (!_shouldFocusOnLoad) return;
+    if (!_focus.shouldFocusOnLoad) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_shouldFocusOnLoad) return;
-      if (_items.isNotEmpty) {
-        _shouldFocusOnLoad = false;
-        _firstItemFocusNode.requestFocus();
-      } else if (!_isLoading) {
-        _shouldFocusOnLoad = false;
-        _addLinkButtonFocusNode.requestFocus();
+      if (!mounted || !_focus.shouldFocusOnLoad) return;
+      if (_catalog.items.isNotEmpty) {
+        _focus.shouldFocusOnLoad = false;
+        _focus.firstItemFocusNode.requestFocus();
+      } else if (!_catalog.isLoading) {
+        _focus.shouldFocusOnLoad = false;
+        _focus.addLinkButtonFocusNode.requestFocus();
       }
     });
   }
@@ -1389,7 +1343,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isPushedRoute && _isAtRoot && _initialLoad) {
+    if (widget.isPushedRoute && _isAtRoot && _catalog.initialLoad) {
       return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -1402,21 +1356,25 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       );
     }
 
-    if (!_premiumizeEnabled) return _buildNotEnabled();
-    if (_initialLoad && (_isLoading || _isLoadingTransfers)) {
+    if (!_catalog.premiumizeEnabled) return _buildNotEnabled();
+    if (_catalog.initialLoad &&
+        (_catalog.isLoading || _catalog.isLoadingTransfers)) {
       return const CloudScaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_errorMessage.isNotEmpty && _items.isEmpty && _transfers.isEmpty) {
+    if (_catalog.errorMessage.isNotEmpty &&
+        _catalog.items.isEmpty &&
+        _catalog.transfers.isEmpty) {
       return _buildError();
     }
 
     final showViewModeDropdown =
-        _selectedView == PremiumizeView.files && _navigationStack.isNotEmpty;
+        _view.selectedView == PremiumizeView.files &&
+        _nav.navigationStack.isNotEmpty;
     // Search is available in the files view everywhere: at root it runs a
     // server-side cloud search; inside a folder it filters locally.
-    final showSearch = _selectedView == PremiumizeView.files;
+    final showSearch = _view.selectedView == PremiumizeView.files;
 
     final bool isCompact = MediaQuery.sizeOf(context).width < 500;
     final double iconSize = isCompact ? 20 : 24;
@@ -1441,7 +1399,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   return KeyEventResult.ignored;
                 },
                 child: IconButton(
-                  focusNode: _backButtonFocusNode,
+                  focusNode: _focus.backButtonFocusNode,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: _handleBackNavigation,
                   tooltip: 'Back',
@@ -1459,23 +1417,27 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         title: Text(
           widget.selectSourceMode
               ? 'Select Premiumize Source'
-              : (_isAtRoot ? 'Premiumize' : _currentFolderName),
+              : (_isAtRoot ? 'Premiumize' : _nav.currentFolderName),
         ),
         actions: [
           // Keep the button mounted while a navigation fetch runs (_items is
           // cleared then) so the AppBar doesn't flicker and TV focus parked
           // on it isn't dropped.
-          if (_selectedView == PremiumizeView.files &&
-              (_items.isNotEmpty || _isLoading) &&
-              !_isSearchActive &&
+          if (_view.selectedView == PremiumizeView.files &&
+              (_catalog.items.isNotEmpty || _catalog.isLoading) &&
+              !_search.isSearchActive &&
               !widget.selectSourceMode)
             IconButton(
               icon: Icon(
-                _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                _selection.isSelectionMode
+                    ? Icons.close
+                    : Icons.checklist_outlined,
               ),
               onPressed: _toggleSelectionMode,
-              tooltip: _isSelectionMode ? 'Exit selection' : 'Select items',
-              color: _isSelectionMode
+              tooltip: _selection.isSelectionMode
+                  ? 'Exit selection'
+                  : 'Select items',
+              color: _selection.isSelectionMode
                   ? Theme.of(context).colorScheme.error
                   : null,
               iconSize: iconSize,
@@ -1485,10 +1447,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             ),
           if (showSearch)
             IconButton(
-              focusNode: _searchButtonFocusNode,
-              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              focusNode: _focus.searchButtonFocusNode,
+              icon: Icon(_search.isSearchActive ? Icons.close : Icons.search),
               onPressed: _toggleSearch,
-              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              tooltip: _search.isSearchActive ? 'Close search' : 'Search files',
               iconSize: iconSize,
               padding: iconPadding,
               constraints: iconConstraints,
@@ -1496,9 +1458,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             ),
           if (!widget.selectSourceMode)
             IconButton(
-              focusNode: _addLinkButtonFocusNode,
+              focusNode: _focus.addLinkButtonFocusNode,
               icon: const Icon(Icons.add_link),
-              onPressed: _isLoading ? null : _showAddLinkDialog,
+              onPressed: _catalog.isLoading ? null : _showAddLinkDialog,
               tooltip: 'Add to Premiumize',
               iconSize: iconSize,
               padding: iconPadding,
@@ -1506,9 +1468,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
               visualDensity: VisualDensity.compact,
             ),
           IconButton(
-            focusNode: _refreshButtonFocusNode,
+            focusNode: _focus.refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
-            onPressed: (_isLoading || _isLoadingTransfers) ? null : _refresh,
+            onPressed: (_catalog.isLoading || _catalog.isLoadingTransfers)
+                ? null
+                : _refresh,
             tooltip: 'Refresh',
             iconSize: iconSize,
             padding: iconPadding,
@@ -1519,11 +1483,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       ),
       body: Column(
         children: [
-          if (_isAtRoot && !_isSearchActive && !widget.selectSourceMode)
+          if (_isAtRoot && !_search.isSearchActive && !widget.selectSourceMode)
             _buildViewSelector(),
-          if (_isSelectionMode) _buildSelectionBar(),
+          if (_selection.isSelectionMode) _buildSelectionBar(),
           if (showViewModeDropdown) _buildViewModeDropdown(),
-          if (_isSearchActive && showSearch) _buildSearchBar(),
+          if (_search.isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
@@ -1536,15 +1500,17 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildBody() {
-    if (_isSearchActive) return _buildSearchResults();
-    if (_selectedView == PremiumizeView.transfers) {
+    if (_search.isSearchActive) return _buildSearchResults();
+    if (_view.selectedView == PremiumizeView.transfers) {
       return _buildTransfersList();
     }
     // Folder navigation clears _items, so a fetch with nothing to show gets
     // the shimmer skeleton. Pull-to-refresh keeps its items and never hits
     // this branch — the RefreshIndicator spinner covers it.
-    if (_isLoading && _items.isEmpty) return const CloudRowSkeletonList();
-    if (_items.isEmpty) return _buildEmpty();
+    if (_catalog.isLoading && _catalog.items.isEmpty) {
+      return const CloudRowSkeletonList();
+    }
+    if (_catalog.items.isEmpty) return _buildEmpty();
     return _buildFileList();
   }
 
@@ -1560,7 +1526,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             Icons.swap_vert_rounded,
           ),
         ],
-        selected: _selectedView,
+        selected: _view.selectedView,
         onSelected: _switchView,
       ),
     );
@@ -1582,13 +1548,13 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            _backButtonFocusNode.requestFocus();
+            _focus.backButtonFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         },
         child: DropdownButtonFormField<PremiumizeFolderViewMode>(
-          focusNode: _viewModeDropdownFocusNode,
+          focusNode: _focus.viewModeDropdownFocusNode,
           isExpanded: true,
           value: mode,
           decoration: InputDecoration(
@@ -1629,7 +1595,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildSelectionBar() {
     final theme = Theme.of(context);
-    final count = _selectedIds.length;
+    final count = _selection.selectedIds.length;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1656,7 +1622,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            focusNode: _deleteButtonFocusNode,
+            focusNode: _focus.deleteButtonFocusNode,
             onPressed: count > 0 ? _handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
@@ -1674,25 +1640,27 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildSearchBar() {
     final app = AppThemeScope.of(context);
-    final hasText = _searchController.text.isNotEmpty;
+    final hasText = _search.searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
           Expanded(
             child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
+              controller: _search.searchController,
+              focusNode: _focus.searchFocusNode,
               textInputAction: TextInputAction.search,
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent
               // wrapper): up to the app-bar actions, down into the results,
               // right to the clear button when visible.
-              onUpArrow: () =>
-                  _searchFocusNode.focusInDirection(TraversalDirection.up),
-              onDownArrow: () =>
-                  _searchFocusNode.focusInDirection(TraversalDirection.down),
+              onUpArrow: () => _focus.searchFocusNode.focusInDirection(
+                TraversalDirection.up,
+              ),
+              onDownArrow: () => _focus.searchFocusNode.focusInDirection(
+                TraversalDirection.down,
+              ),
               onRightArrow: hasText
-                  ? () => _searchClearFocusNode.requestFocus()
+                  ? () => _focus.searchClearFocusNode.requestFocus()
                   : null,
               decoration: InputDecoration(
                 hintText: _isAtRoot
@@ -1711,27 +1679,27 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 ),
               ),
               onChanged: _performSearch,
-              onSubmitted: (_) => _searchFocusNode.unfocus(),
+              onSubmitted: (_) => _focus.searchFocusNode.unfocus(),
             ),
           ),
           if (hasText)
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Focus(
-                focusNode: _searchClearFocusNode,
+                focusNode: _focus.searchClearFocusNode,
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
                   if (isActivateKey(key)) {
                     setState(() {
-                      _searchController.clear();
-                      _searchResults = [];
+                      _search.searchController.clear();
+                      _search.searchResults = [];
                     });
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   if (key == LogicalKeyboardKey.arrowLeft) {
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -1751,10 +1719,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                         icon: const Icon(Icons.clear, color: Colors.grey),
                         onPressed: () {
                           setState(() {
-                            _searchController.clear();
-                            _searchResults = [];
+                            _search.searchController.clear();
+                            _search.searchResults = [];
                           });
-                          _searchFocusNode.requestFocus();
+                          _focus.searchFocusNode.requestFocus();
                         },
                       ),
                     );
@@ -1768,7 +1736,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildSearchResults() {
-    if (_searchController.text.trim().isEmpty) {
+    if (_search.searchController.text.trim().isEmpty) {
       return Center(
         child: Text(
           _isAtRoot ? 'Type to search your cloud' : 'Type to search files',
@@ -1776,10 +1744,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         ),
       );
     }
-    if (_isSearching && _searchResults.isEmpty) {
+    if (_search.isSearching && _search.searchResults.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_searchResults.isEmpty) {
+    if (_search.searchResults.isEmpty) {
       return const Center(
         child: Text('No results found', style: TextStyle(color: Colors.grey)),
       );
@@ -1790,9 +1758,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     // box while the user is typing.
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _searchResults.length,
+      itemCount: _search.searchResults.length,
       itemBuilder: (context, index) {
-        final item = _searchResults[index];
+        final item = _search.searchResults[index];
         return KeyedSubtree(
           key: ValueKey('search-${item.id}'),
           child: _buildFileCard(item, index, autofocusFirst: false),
@@ -1803,11 +1771,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildFileList() {
     return ListView.builder(
-      controller: _scrollController,
+      controller: _focus.scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: _items.length,
+      itemCount: _catalog.items.length,
       itemBuilder: (context, index) {
-        final item = _items[index];
+        final item = _catalog.items[index];
         return KeyedSubtree(
           key: ValueKey(item.id),
           child: _buildFileCard(item, index),
@@ -1849,7 +1817,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 ),
               ]
             : const [],
-        focusNode: (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
+        focusNode: (autofocusFirst && index == 0)
+            ? _focus.firstItemFocusNode
+            : null,
       );
     }
 
@@ -1912,18 +1882,20 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           ? () => _playFile(item)
           : null,
       actions: actions,
-      selectionMode: _isSelectionMode,
-      selected: _selectedIds.contains(item.id),
+      selectionMode: _selection.isSelectionMode,
+      selected: _selection.selectedIds.contains(item.id),
       onToggleSelected: () => _toggleSelection(item.id),
-      focusNode: (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
+      focusNode: (autofocusFirst && index == 0)
+          ? _focus.firstItemFocusNode
+          : null,
     );
   }
 
   Widget _buildTransfersList() {
-    if (_isLoadingTransfers && _transfers.isEmpty) {
+    if (_catalog.isLoadingTransfers && _catalog.transfers.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_transfers.isEmpty) {
+    if (_catalog.transfers.isEmpty) {
       return ListView(
         children: [
           const SizedBox(height: 120),
@@ -1954,7 +1926,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
 
     final app = AppThemeScope.of(context);
-    final hasFinished = _transfers.any((t) => t.isFinished);
+    final hasFinished = _catalog.transfers.any((t) => t.isFinished);
     return Column(
       children: [
         if (hasFinished)
@@ -1972,9 +1944,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: _transfers.length,
+            itemCount: _catalog.transfers.length,
             itemBuilder: (context, index) =>
-                _buildTransferCard(_transfers[index], app),
+                _buildTransferCard(_catalog.transfers[index], app),
           ),
         ),
       ],
@@ -2118,7 +2090,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 ),
                 const SizedBox(height: 32),
                 FilledButton.icon(
-                  focusNode: _settingsButtonFocusNode,
+                  focusNode: _focus.settingsButtonFocusNode,
                   autofocus: true,
                   onPressed: () => _showSnackBar(
                     'Open Settings > Premiumize to configure',
@@ -2154,13 +2126,13 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _errorMessage,
+                  _catalog.errorMessage,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 32),
                 FilledButton.icon(
-                  focusNode: _retryButtonFocusNode,
+                  focusNode: _focus.retryButtonFocusNode,
                   autofocus: true,
                   onPressed: _refresh,
                   icon: const Icon(Icons.refresh),
@@ -2182,43 +2154,43 @@ Map<String, Object?> premiumizeFilesTestAccess(
 ) {
   final s = state as _PremiumizeFilesScreenState;
   return {
-    'scrollController': s._scrollController,
-    'apiKey': s._apiKey,
-    'premiumizeEnabled': s._premiumizeEnabled,
-    'isLoading': s._isLoading,
-    'initialLoad': s._initialLoad,
-    'errorMessage': s._errorMessage,
-    'selectedView': s._selectedView,
-    'items': s._items,
-    'transfers': s._transfers,
-    'isLoadingTransfers': s._isLoadingTransfers,
-    'currentFolderId': s._currentFolderId,
-    'currentFolderName': s._currentFolderName,
-    'navigationStack': s._navigationStack,
-    'folderViewModes': s._folderViewModes,
-    'tvContentFocusHandler': s._tvContentFocusHandler,
-    'shouldFocusOnLoad': s._shouldFocusOnLoad,
-    'linkController': s._linkController,
-    'isAddingLink': s._isAddingLink,
-    'isSelectionMode': s._isSelectionMode,
-    'selectedIds': s._selectedIds,
+    'scrollController': s._focus.scrollController,
+    'apiKey': s._catalog.apiKey,
+    'premiumizeEnabled': s._catalog.premiumizeEnabled,
+    'isLoading': s._catalog.isLoading,
+    'initialLoad': s._catalog.initialLoad,
+    'errorMessage': s._catalog.errorMessage,
+    'selectedView': s._view.selectedView,
+    'items': s._catalog.items,
+    'transfers': s._catalog.transfers,
+    'isLoadingTransfers': s._catalog.isLoadingTransfers,
+    'currentFolderId': s._nav.currentFolderId,
+    'currentFolderName': s._nav.currentFolderName,
+    'navigationStack': s._nav.navigationStack,
+    'folderViewModes': s._view.folderViewModes,
+    'tvContentFocusHandler': s._focus.tvContentFocusHandler,
+    'shouldFocusOnLoad': s._focus.shouldFocusOnLoad,
+    'linkController': s._link.linkController,
+    'isAddingLink': s._link.isAddingLink,
+    'isSelectionMode': s._selection.isSelectionMode,
+    'selectedIds': s._selection.selectedIds,
     'isAllSelected': s._isAllSelected,
-    'isSearchActive': s._isSearchActive,
-    'isSearching': s._isSearching,
-    'searchDebounce': s._searchDebounce,
-    'searchController': s._searchController,
-    'searchResults': s._searchResults,
-    'refreshButtonFocusNode': s._refreshButtonFocusNode,
-    'backButtonFocusNode': s._backButtonFocusNode,
-    'retryButtonFocusNode': s._retryButtonFocusNode,
-    'settingsButtonFocusNode': s._settingsButtonFocusNode,
-    'viewModeDropdownFocusNode': s._viewModeDropdownFocusNode,
-    'addLinkButtonFocusNode': s._addLinkButtonFocusNode,
-    'firstItemFocusNode': s._firstItemFocusNode,
-    'deleteButtonFocusNode': s._deleteButtonFocusNode,
-    'searchFocusNode': s._searchFocusNode,
-    'searchButtonFocusNode': s._searchButtonFocusNode,
-    'searchClearFocusNode': s._searchClearFocusNode,
+    'isSearchActive': s._search.isSearchActive,
+    'isSearching': s._search.isSearching,
+    'searchDebounce': s._search.searchDebounce,
+    'searchController': s._search.searchController,
+    'searchResults': s._search.searchResults,
+    'refreshButtonFocusNode': s._focus.refreshButtonFocusNode,
+    'backButtonFocusNode': s._focus.backButtonFocusNode,
+    'retryButtonFocusNode': s._focus.retryButtonFocusNode,
+    'settingsButtonFocusNode': s._focus.settingsButtonFocusNode,
+    'viewModeDropdownFocusNode': s._focus.viewModeDropdownFocusNode,
+    'addLinkButtonFocusNode': s._focus.addLinkButtonFocusNode,
+    'firstItemFocusNode': s._focus.firstItemFocusNode,
+    'deleteButtonFocusNode': s._focus.deleteButtonFocusNode,
+    'searchFocusNode': s._focus.searchFocusNode,
+    'searchButtonFocusNode': s._focus.searchButtonFocusNode,
+    'searchClearFocusNode': s._focus.searchClearFocusNode,
     'isAtRoot': s._isAtRoot,
     'loadSettings': s._loadSettings,
     'loadFolder': s._loadFolder,

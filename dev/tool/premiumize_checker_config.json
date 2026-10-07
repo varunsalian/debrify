@@ -9,7 +9,8 @@
     "root_build_forwarder",
     "retained_forwarder",
     "formatter_if_braces",
-    "context_confirmation"
+    "context_confirmation",
+    "formatter_navigation_record_comma"
   ],
   "baseline": "49c53e2e",
   "source": "lib/screens/premiumize/premiumize_files_screen.dart",
@@ -36,7 +37,48 @@
     "selectSourceMode",
     "onSourceSelected"
   ],
-  "token_rules": [],
+  "token_rules": [
+    {
+      "original_name": "_PremiumizeFilesScreenState._navigateIntoFolder",
+      "allowed_edit": "formatter_navigation_record_comma",
+      "difference_prefix": "formatter_navigation_record_comma:",
+      "before": [
+        "navigationStack",
+        ".",
+        "add",
+        "(",
+        "(",
+        "id",
+        ":",
+        "currentFolderId",
+        ",",
+        "name",
+        ":",
+        "currentFolderName",
+        ")",
+        ")",
+        ";"
+      ],
+      "after": [
+        "navigationStack",
+        ".",
+        "add",
+        "(",
+        "(",
+        "id",
+        ":",
+        "currentFolderId",
+        ",",
+        "name",
+        ":",
+        "currentFolderName",
+        ",",
+        ")",
+        ")",
+        ";"
+      ]
+    }
+  ],
   "additional_owners": [],
   "required_nodes": [],
   "forwarders": {},
@@ -64,10 +106,33 @@
   ],
   "seams": [],
   "self_test_module": "premiumize_checker_test",
-  "receivers": [],
-  "receiver_paths": {},
+  "receivers": [
+    "PremiumizeCatalogState",
+    "PremiumizeNavigationState",
+    "PremiumizeViewState",
+    "PremiumizeFocusState",
+    "PremiumizeSelectionState",
+    "PremiumizeSearchState",
+    "PremiumizeLinkState"
+  ],
+  "receiver_paths": {
+    "_catalog": "PremiumizeCatalogState",
+    "_nav": "PremiumizeNavigationState",
+    "_view": "PremiumizeViewState",
+    "_focus": "PremiumizeFocusState",
+    "_selection": "PremiumizeSelectionState",
+    "_search": "PremiumizeSearchState",
+    "_link": "PremiumizeLinkState"
+  },
   "receiver_owners": {
-    "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState"
+    "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState",
+    "_catalog": "PremiumizeCatalogState",
+    "_nav": "PremiumizeNavigationState",
+    "_view": "PremiumizeViewState",
+    "_focus": "PremiumizeFocusState",
+    "_selection": "PremiumizeSelectionState",
+    "_search": "PremiumizeSearchState",
+    "_link": "PremiumizeLinkState"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
@@ -140,8 +205,25 @@
   ],
   "callback_closure_binding": true,
   "callback_instances": {
-    "_PremiumizeFilesScreenState": "$State"
+    "_PremiumizeFilesScreenState": "$State",
+    "PremiumizeCatalogState": "$State._catalog",
+    "PremiumizeNavigationState": "$State._nav",
+    "PremiumizeViewState": "$State._view",
+    "PremiumizeFocusState": "$State._focus",
+    "PremiumizeSelectionState": "$State._selection",
+    "PremiumizeSearchState": "$State._search",
+    "PremiumizeLinkState": "$State._link"
   },
-  "callback_receiver_aliases": {},
-  "original_activation": {}
+  "callback_receiver_aliases": {
+    "_catalog": "$State._catalog",
+    "_nav": "$State._nav",
+    "_view": "$State._view",
+    "_focus": "$State._focus",
+    "_selection": "$State._selection",
+    "_search": "$State._search",
+    "_link": "$State._link"
+  },
+  "original_activation": {
+    "_PremiumizeFilesScreenState._navigateIntoFolder": "lib/screens/premiumize/premiumize_files_screen.dart"
+  }
 }

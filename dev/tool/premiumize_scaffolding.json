@@ -1,3 +1,102 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_catalog",
+      "tokens": [
+        "final",
+        "_catalog",
+        "=",
+        "PremiumizeCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "PremiumizeFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_link",
+      "tokens": [
+        "final",
+        "_link",
+        "=",
+        "PremiumizeLinkState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_nav",
+      "tokens": [
+        "final",
+        "_nav",
+        "=",
+        "PremiumizeNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_search",
+      "tokens": [
+        "final",
+        "_search",
+        "=",
+        "PremiumizeSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_selection",
+      "tokens": [
+        "final",
+        "_selection",
+        "=",
+        "PremiumizeSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/premiumize/premiumize_files_screen.dart",
+      "owner": "_PremiumizeFilesScreenState",
+      "name": "_view",
+      "tokens": [
+        "final",
+        "_view",
+        "=",
+        "PremiumizeViewState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

@@ -56,8 +56,9 @@ def self_test(package=None):
             changed[key[0]] = changed[key[0]][:node['start']] + changed[key[0]][node['end']:]
             changed['fixture_moved_lifecycle.dart'] = 'class PremiumizeMovedLifecycle { ' + text + ' }'
         elif case['mutation'] == 'wrong_owner_receiver':
-            assert '_tvContentFocusHandler!' in text
-            text = text.replace('_tvContentFocusHandler!', '_handleBackNavigation', 1)
+            old = '_tvContentFocusHandler!' if '_tvContentFocusHandler!' in text else '_focus.tvContentFocusHandler!'
+            assert old in text
+            text = text.replace(old, '_handleBackNavigation', 1)
         elif case['mutation'] == 'wrong_fetch_pair':
             text = text.replace('_loadFolder(', '_loadTransfers(').replace('loadFolder(', 'loadTransfers(')
             assert text != node['text']

@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/premiumize/premiumize_files_screen.dart': 6,
+
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
       1,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart':
@@ -201,7 +203,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/playlist_screen.dart': 0,
-  'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
   'lib/ui/core/trailer_indicators.dart': 1,
   'lib/features/home/presentation/home_hero_live_layer.dart': 0,
@@ -274,10 +275,24 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/premiumize_files/application/premiumize_playlist_titles.dart':
+      0,
+  'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
   'lib/features/premiumize_files/models/folder_view_mode.dart': 0,
   'lib/features/premiumize_files/models/premiumize_view.dart': 0,
-  'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
-  'lib/features/premiumize_files/application/premiumize_playlist_titles.dart':
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_catalog_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_selection_state.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_state.dart':
       0,
 
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 0,

@@ -909,3 +909,30 @@ for mandatory qualification. A disposable normal clone under `.dart_tool`
 validated the upcoming owner/section wiring with all 158 tests plus shape
 checks. It identified only existing opt-in formatter accommodations for owner
 qualification; production remains at step 1 until this checkpoint.
+
+
+### Step 2 — route-owned state and resources
+
+All 36 mapped fields now live on the seven route-owned state holders. Original
+initializers, final collection identities and the lifecycle disposal order are
+preserved. The State retains tab index 11 and seven final owner handles; its
+facade decreases from 2,276 to 2,248 formatted lines. No work starts from an
+owner constructor. Live reads and writes, including the frozen accessor, use
+the registered receiver paths.
+
+Evidence: `premiumize/step2/`. The 113-leaf manifest and feature self-tests,
+architecture/self-test, sizes, storage keys/references, exact CI format/scoped
+analyzer/allowlist and whole-analyzer comparison pass with zero added
+diagnostics. All 158 original Premiumize identities plus three shape checks
+pass. All seven new destinations are registered, with the facade's six bare
+radii and six token calls retained, floor 488 and zero slack. Every other
+manifest/self-test passes with output and adapter bytes identical to the
+original proof (20 manifests; explicit isolated parser packages).
+
+Conservative formatter decisions: reuse the existing opt-in navigation-record
+trailing-comma rule, activated on the retained original method, and pin the
+single formatter-required skeleton-return brace pair. These change no
+expression, statement, comment or branch condition. The feature does not opt
+into occurrence-field bindings; no qualification default is assumed. Resource
+creation, timer cancellation, callback identity and borrowed implementations
+remain exactly as characterized.
