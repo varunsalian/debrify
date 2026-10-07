@@ -1232,3 +1232,71 @@ reader path also fail. The real IPTV CLI passes in the normal scratch
 clone with the opt-in hook. Final fixture, fresh-clone, all-manifest and
 restarted-gate verdicts are recorded below when complete; step 2 remains
 blocked until the required checks pass.
+
+### Gate 1 accepted
+
+Step-1 input `4c35f749e` and guard continuation
+`e5c6e7d32fd23721408fb92fdf01d9d815fe9851` are accepted. The 13 clock-seam
+fixtures pass here and from the normal clone; its real IPTV CLI positive
+and physical `_dayHeading` mutation prove the preserved auxiliary assertion
+(`step1-fresh-clone-clock-seam-proof.json`). All 20 other complete manifest
+self-tests pass with isolated packages; stdout and occurrence AST digests
+remain byte-identical to ORIGINAL (`step1-reviewed-all-manifests-compatibility.json`).
+
+Serialized full `gate1-serial` on clean committed `e5c6e7d32` passes against
+latest `base2`: exactly 12,197 success, 13 failure, 28 error, 20 skipped,
+1,183 suites, no added/missing identity or changed outcome. Paths `[]`,
+flags `--no-pub --concurrency=2`, identical SDK and stable start/end tree
+are recorded in `gate1-summary.json` / `gate1-serial.env.json`; comparison
+is `gate1-serial-vs-base2.txt`.
+
+NOTE: the second, discarded attempt overlapped three manifest workers and
+hit the unchanged Xtream 50k ingest 30-second timeout, followed by its
+cleanup assertion. Test and service blobs match ORIGINAL, where it passes.
+The exact named test passes alone after those workers finish
+(`gate1-xtream-NOTE.json`), then the entire gate passes serialized. Neither
+incomplete attempt is accepted; no timeout, assertion, baseline or allowlist
+is changed. Step 2 may now begin.
+
+### Step 2 — complete State section move
+
+All 103 entries are reviewed in `step2-wiring-review.json`; actual imports,
+receivers and original callers are wired. Owners retain the 19 fields;
+seven cached sections borrow the live view/context/mounted/setState and
+lazy hold getter. The facade retains original lifecycle order, hold owner,
+controller/widget declarations and the five controller/build forwarders.
+Only registered receiver/name/identifier-link substitutions are used.
+All 16 production files are byte-identical to the accepted step-0b full
+composition probe, including its live-view identity proof.
+
+Facade: 332 physical lines = controller 37 + widget 84 + State 182 +
+imports/exports/gaps/trailing 29. Destinations: entry 88, track 444, guide
+models 64, palette 10, owners 49, window 162, selection 205, guide loading
+241, cursor 297, frame 336, rows 260, parts 134, view 28, dependencies 24,
+sections 27. All are below 500; only this facade's size-baseline entry is
+removed. Bridge/view/hold/localization exceptions keep the exits already
+named above. Every other original production file, pubspec/lockfile and
+existing timeline/results test is byte-identical to R.
+
+Complete timeline CLI self-tests pass all 103 leaves and every S=0–3
+reader, binder, context, callback, comment, scaffold and export fixture
+(`step2-own-manifest.txt`). Mandatory qualification rejects bare owner reads
+at S=2 and S=3 independently and through checker/reader. All 20 other full
+self-tests pass; stdout and occurrence output remain byte-identical to
+pre-opt-in evidence (`step2-all-manifests-compatibility.json`); adapter
+source remains unchanged. Explicit isolated parser packages are used.
+
+CI format, scoped analyzer allowlist/inventory, architecture with real
+negatives, sizes, storage keys/references, shape tests, LF and diff checks
+pass. Ten infos are within the 11 exact probe maxima; outside-slice
+diagnostic identities/locations match latest ORIGINAL after identical-line
+deduplication with raw logs retained (`step2-analyzer-identities.json`).
+No warning/error, suppression, key or braces change. Theme output is
+byte-identical and light-ink remains 774 / 240.
+
+All 228 focused identities/outcomes match `base2`; strict macOS timeline
+and results goldens pass. Linux timeline 6/6 and unchanged results 4/4 pass
+(`step2-linux-strict.txt`), without image updates. All committed golden
+bytes retain their original hashes. No load-sensitive failure occurs.
+Found-not-fixed 1–6 remain unchanged. Step 2 is complete; completion guards,
+fresh final clone, gate 2, device checks, remote CI and integration remain.
