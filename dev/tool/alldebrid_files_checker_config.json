@@ -494,7 +494,7 @@
       ]
     }
   ],
-  "completed_step": 5,
+  "completed_step": 6,
   "playback_files": [
     "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
   ],
@@ -1564,5 +1564,6 @@
     }
   ],
   "alldebrid_formatter_brace_occurrences": true,
-  "context_exception_difference": "context/formatter exceptions: only exact predicate/body/raw prefix sites in alldebrid_files_context_exceptions.json; original guards and statement order unchanged; plain build retains its exact annotated facade forwarder"
+  "context_exception_difference": "context/formatter exceptions: only exact predicate/body/raw prefix sites in alldebrid_files_context_exceptions.json; original guards and statement order unchanged; plain build retains its exact annotated facade forwarder",
+  "required_facade_source_step": 6
 }

@@ -66,11 +66,11 @@ STREMIO_TV_HANDOFF_FILES = {
     STREMIO_TV_BRIDGE + "stremio_tv_player_guide.dart",
 }
 FEATURES += ("alldebrid_files",)
-ALLDEBRID_COMPLETE = False
+ALLDEBRID_COMPLETE = True
 ALLDEBRID_FACADE = "lib/screens/alldebrid/alldebrid_files_screen.dart"
 ALLDEBRID_BRIDGE = "lib/features/alldebrid_files/presentation/legacy_alldebrid/"
-# Set to the measured facade when Step 6 completes.
-ALLDEBRID_FACADE_CAP = 300
+# Final normally formatted facade: measured at Step 6; no size exception.
+ALLDEBRID_FACADE_CAP = 202
 ALLDEBRID_PEERS = frozenset(("debrid_downloads", "torbox_downloads", "pikpak_files", "premiumize_files"))
 ALLDEBRID_PLAYBACK_FILES = frozenset((ALLDEBRID_BRIDGE + "alldebrid_playback.dart",))
 ALLDEBRID_DOWNLOAD_FILES = frozenset((ALLDEBRID_BRIDGE + "alldebrid_downloads.dart",))
@@ -228,6 +228,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # AllDebrid facade owns live State wiring and the verbatim lifecycle.
+    ALLDEBRID_FACADE,
     # Pure catalog compatibility export surface; feature files own declarations.
     STREMIO_TV_CATALOGS_FACADE,
     # settings_widgets: pure compatibility exports; feature files own every declaration.

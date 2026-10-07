@@ -229,8 +229,8 @@ All three immediately call `MainPageBridge.notifyPlayerLaunching()` before `awai
 | Reader / registration | Observed original | Step owning the change |
 | --- | --- | --- |
 | `theme_surface_manifest.txt` cloud registry | cloud wildcard already covers facade; add feature globs when destinations exist | 1 |
-| `test/theme/shape_manifest_test.dart` | facade 1 bare radius (`_buildSelectionBar`), 5 `app.shape.br` calls (toolbar 1, search decoration 3, search bar 1) | 5 destinations, 6 final facade transition |
-| Shape destinations | toolbar + search-bars in kShapeResidue; every other owner/helper/model/deps/composition in kExtractedShapeResidue at zero; root/list-view also zero | each creation step; final facade leaves kShapeResidue and enters extracted at 0 in 6 |
+| `test/theme/shape_manifest_test.dart` | facade 1 bare radius (`_buildSelectionBar`), 5 `app.shape.br` calls (toolbar 1, search decoration 3, search bar 1) | 5 destinations and zero-token facade transition; 6 measured cap |
+| Shape destinations | toolbar + search-bars in kShapeResidue; every other owner/helper/model/deps/composition in kExtractedShapeResidue at zero; root/list-view also zero | each creation step; facade leaves kShapeResidue and enters extracted at 0 with the last builders in 5; cap measured in 6 |
 | `file_size_baseline.txt:38` | 1,996 facade lines; manual seam-only raise now, shrink-only thereafter | 0 seam, then every extraction |
 | `check_search_architecture.py` | feature unregistered; exact bridge, bidirectional models-inclusive peers, launcher/enqueue placement, 500 caps and negatives | 1; final facade cap/TEMP in 6 |
 | `.github/workflows/checks.yml` | format/analyze facade + every new support helper path inside commands | 0 |
@@ -239,8 +239,43 @@ All three immediately call `MainPageBridge.notifyPlayerLaunching()` before `awai
 | Generic profile/theme/storage readers | repo scans; no hard-coded AllDebrid source rewrite found; run affected source guards and storage tools | 0 and subsequent checks |
 | Production callers | main tab/deep-link/hub, home source editor; existing web picker/home editor tests | every step |
 
-No Step 1 guard/theme registration or Step 5 shape redistribution is performed here. No Premiumize source/config is edited. Every existing manifest is run with an isolated parser package and existing adapter/checker output is compared before/after the opt-in callback selector. Fresh normal clone verification covers every new checker/self-test after flutter pub get.
+The original report preceded extraction; the registrations in the schedule above are now implemented and verified at their owning checkpoints. No Premiumize source/config is edited. Every existing manifest is run with an isolated parser package and existing adapter/checker output is compared before/after the opt-in callback selector. Fresh normal clone verification covers every new checker/self-test after flutter pub get.
 
 ## Verification records
 
-Run evidence and mutation results are recorded in the plan Progress section and in the common git directory under `refactor-evidence/alldebrid_files/`. macOS original pixels are committed now; Linux capture remains Claude-owned Step L. Successful native enqueue, physical focus and all launcher handoffs remain pending unless an original-code fixture/device proof is explicitly recorded.
+Run evidence and mutation results are recorded in the plan Progress section and in the common git directory under `refactor-evidence/alldebrid_files/`. The macOS originals and Claude-supplied Linux originals are committed; strict replay verifies the original pixels at every extraction checkpoint, without recapture. Successful native enqueue, physical focus and all launcher handoffs remain pending unless an original-code fixture/device proof is explicitly recorded.
+
+## Completed extraction source set
+
+The frozen 98-leaf map is fully wired and checked. All field initializers and original method bodies are preserved; the episode helper is a playback method per Decision 7. The facade contains the public widget, lifecycle, one exact build forwarder, six plain owners, live callback/widget getter wiring, one stable lazy section cache, and the frozen accessor. No application folder, duplicate implementation, part file, mixin, new listener, saved context/widget snapshot, or cross-feature import is introduced. Field comments and section headings move with their owners. No size exception.
+
+## Final physical file sizes
+
+Normal formatter output, including imports, comments and blank lines. No size exception.
+
+| Source | Lines |
+| --- | ---: |
+| `lib/screens/alldebrid/alldebrid_files_screen.dart` | 202 |
+| `lib/features/alldebrid_files/models/alldebrid_view.dart` | 4 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_add_actions.dart` | 149 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_delete_actions.dart` | 160 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_downloads.dart` | 188 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart` | 61 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback_state.dart` | 5 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_focus_state.dart` | 24 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_loading.dart` | 93 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_library_state.dart` | 21 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_list_views.dart` | 385 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation.dart` | 165 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation_state.dart` | 15 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart` | 282 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playlist_actions.dart` | 80 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_root_layout.dart` | 134 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_scope.dart` | 11 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search.dart` | 82 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_bars.dart` | 163 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_state.dart` | 17 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_sections.dart` | 300 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection.dart` | 64 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_selection_state.dart` | 6 |
+| `lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_toolbar.dart` | 303 |
