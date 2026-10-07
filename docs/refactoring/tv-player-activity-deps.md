@@ -2529,3 +2529,54 @@ All destinations are below 800 lines. Remaining activity responsibilities
 retain the documented phases 2–7 exit milestones. Existing native English
 labels are preserved as a legacy localization exception: native controls need
 a scoped localization prerequisite in a separate migration.
+
+
+## Phase 1 gate evidence
+
+Checked source revision `b783e5b02`. Clean JVM `p1-gate` equals `p1-step0b`:
+323 identities, 322 passing, one unchanged focus failure, no skips/additions/
+missing identities; stable inputs. Kotlin compile succeeds with exactly the
+same five warning messages. Exhaustive checker: 3,477 declarations, zero
+differences; 24 self-tests pass; size and changed-Dart formatting pass. Analyzer
+adds zero diagnostics. Focused source-anchor run: 44 pass and the unchanged
+profile-source guard failure; the verified rerun has stable fingerprints.
+
+`flutter build apk --release` succeeds (102.2 MB). Complete rule-5 coverage
+uses release Kotlin SourceFile attributes to enumerate all ten destinations:
+**53 classes, 1,080 fields/methods**, including holders, companions, anonymous
+classes and `TvPlaybackItemKt`. Every class has an explicit identity mapping.
+R8 emits **519 explicit member mappings**, and omits **561 unchanged member
+identities** from its text output. All 1,080 original names and mapped type
+descriptors are independently present as definitions in the APK DEX files;
+no missing/renamed member is accepted. Mapping inline frames are grouped to
+the residual declaration, avoiding false renames from caller frames. Three
+negative controls reject a changed class mapping, changed member mapping and
+a missing DEX member. Evidence: `p1/check_mapping.py`, `mapping-result.json`,
+`moved-bytecode-inventory.json`, archived mapping/configuration/seeds/usage
+and `release-provenance.json` (APK/input hashes). Rules are unchanged.
+
+**Decoder gate failed; phase gate remains pending.** The verifier finds nine
+missing required decoders and three missing auto-sync filters in each of the
+three APK ABIs. APK `libmpv.so` bytes exactly equal the local pinned upstream
+v1.1.5 fallback jars (MD5/SHA-256 recorded); the patched build marker is absent.
+The existing CI patched-library recipe requires Linux. Vendored recipe, patch,
+verification script, app Gradle settings, lockfile and ProGuard are byte-identical
+to `39c630303` (`release-build-inputs-parity.json`). No binary substitution,
+dependency/build-setting edit or bug fix was made. Evidence:
+`decoder-verification.log`, `decoder-provenance.json`,
+`decoder-missing-all-abis.json`; tracked Follow-up in the plan.
+
+Full Flutter comparison against the observed original-source run passes with
+**12,855 identical identities/statuses**: 12,794 pass, 13 failures, 28 errors,
+20 skips. No added/missing/fixed/failed/skipped identity. Same Flutter 3.44.8 /
+Dart 3.12.2; the tested tree stayed stable. Reporter emits one duplicate
+success event, which the identity comparison correctly deduplicates. Evidence:
+`flutter-gate.jsonl`, `.env.json`, `flutter-gate-comparison.log`,
+`flutter-gate-identity-delta.json`, `flutter-gate-known-failures.json`.
+
+The first concurrent source-anchor run changed its untracked-path fingerprint
+when release compilation created an ignored-build Kotlin session artifact;
+it was rejected. The session file was archived/removed, and the source tests
+were rerun after release build (`flutter-source-anchors-verified*`). Original
+raw calibration and first mapping-parser attempt are retained, not counted
+as passing evidence. No device, emulator, install or push occurred.

@@ -397,6 +397,14 @@ guide; auto-sync ring animates during subtitle auto-sync.
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
 - Revisit the per-class R8 keep rules after the series.
+- Phase-1 local decoder gate: the unchanged upstream fallback MediaKit jars
+  omit `pgssub`, `xsub`, `ccaption`, `jacosub`, `microdvd`, `mpl2`, `pjs`,
+  `realtext`, `sami` and the `astats`/`aspectralstats`/`ametadata` filters.
+  Complete verification needs the existing pinned CI patched native bundle;
+  its build recipe requires Linux. No libraries/recipes were changed here.
+- Observed full Flutter baseline has 41 failing/error identities and 20 skips
+  (`p1/flutter-gate-known-failures.json`); all statuses are unchanged at the
+  phase-1 gate. Follow up separately; no obsolete allowlist was used.
 
 ## Progress
 
@@ -480,3 +488,45 @@ guide; auto-sync ring animates during subtitle auto-sync.
   unchanged. Retarget inventory and legacy native localization prerequisite
   recorded in the dependency report. Remaining activity duties exit in phases
   2–7; no new size exception. Phase gate follows on this tree.
+
+- 2026-10-07 — **Phase 1 gate checks run on `b783e5b02`; release decoder
+  gate remains FAILED/pending**. JVM `p1-gate` matches `p1-step0b` exactly:
+  323 identities, 322 pass, unchanged known focus failure, zero additions,
+  removals or skips, clean/stable input fingerprints. Debug Kotlin compile
+  succeeds with the same five warning messages. Move checker: 3,477
+  declarations, zero differences; all 24 self-tests pass. File-size check
+  passes; Dart formatting changes zero lines. Analyzer comparison adds zero
+  diagnostic identities (1,852 before, 1,767 after; duplicate/build-output
+  diagnostics removed). Four focused Dart source-test files: 45 identities,
+  44 pass and the unchanged profile-source guard failure. First concurrent
+  focused run was rejected for a generated Kotlin session path; verified
+  rerun after release build has a stable fingerprint.
+  Release APK build succeeds. Rule-5 complete check passes: all ten source
+  files, 53 emitted classes and 1,080 fields/methods, including nested holders,
+  companions, anonymous classes and `TvPlaybackItemKt`. R8 represents 519
+  member mappings explicitly and omits 561 unchanged identities; every one
+  of the latter is independently verified by name and mapped descriptor in
+  the actual APK DEX definitions. Inline-frame groups are distinguished from
+  residual-member mappings. Three negative controls reject renamed class,
+  renamed member and missing DEX member. This representation refinement
+  strengthens verification without adding/removing ProGuard rules.
+  Decoder verification fails: each of the three APK ABIs lacks nine required
+  decoders and three auto-sync filters. Packaged binaries exactly match the
+  vendored Gradle recipe's pinned upstream v1.1.5 fallback (hashes archived),
+  with no `.debrify-subtitle-build` marker; the CI patched bundle recipe
+  requires Linux. No dependency, binary, build-setting or bug fix was made.
+  The phase gate is not declared passed; patched-library verification remains
+  pending in a suitable environment.
+  Full Flutter suite on the clean moved tree matches the observed original
+  baseline exactly: **12,855 identities**, **12,794 pass**, **13 failures**,
+  **28 errors**, **20 skips**; no additions, missing identities, status changes
+  or newly skipped tests. Flutter 3.44.8 / Dart 3.12.2, stable before/after
+  tested-tree fingerprints; comparison PASS. Raw reporter emits one repeated
+  success event; identity-based totals are used, as required by the plan.
+  Evidence: `p1/gate-checker*`, `compile-after-moves.log`,
+  `kotlin-warnings-comparison.json`, `analyze-comparison.log`,
+  `flutter-source-anchors-verified*`, `release-build.log`,
+  `mapping-result.json`, `moved-bytecode-inventory.json`, `check_mapping.py`,
+  `release-provenance.json`, `release-{mapping,configuration,seeds,usage}.txt`,
+  `decoder-verification.log`, `decoder-provenance.json`,
+  `decoder-missing-all-abis.json`, `flutter-gate*`, `junit/p1-gate/`.
