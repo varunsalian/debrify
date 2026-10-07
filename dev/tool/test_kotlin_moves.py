@@ -15,20 +15,25 @@ def extraction(manifest, original):
     unit = k.parse({'base': original})['base']
     spans, _ = k.spans(unit, set(manifest['split_containers']))
     destinations = {p: spec['prefix'] for p, spec in manifest['destinations'].items()}
-    removals = []
+    replacements = []
     for row in manifest['declarations']:
-        if row['fate'] != 'moved':
+        if row['fate'] == 'retained':
             continue
         start, end = spans[row['original']]
         text = original[start:end]
-        for edit in row.get('substitutions', []):
+        for edit in row.get('substitutions', []) + row.get('patches', []):
             if text.count(edit['before']) != edit['count']:
                 raise ValueError('fixture text substitution occurrence count')
             text = text.replace(edit['before'], edit['after'])
-        destinations[row['destination']] += text
-        removals.append((start, end))
-    for start, end in sorted(removals, reverse=True):
-        original = original[:start] + original[end:]
+        if row['fate'] == 'moved':
+            destinations[row['destination']] += text
+            replacements.append((start, end, ''))
+        elif row['fate'] == 'patched':
+            replacements.append((start, end, text))
+        else:
+            raise ValueError('fixture unknown fate: ' + row['fate'])
+    for start, end, text in sorted(replacements, reverse=True):
+        original = original[:start] + text + original[end:]
     return {manifest['source']: original, **{p: s + manifest['destinations'][p].get('tail', '\n') for p, s in destinations.items()}}
 
 
@@ -79,7 +84,7 @@ class KotlinMovesTest(unittest.TestCase):
         errors, count = k.check(manifest, original, current)
         self.assertEqual(3477, count)
         self.assertEqual([], errors)
-        folder = k.evidence_root(k.ROOT) / 'p1/complete-extraction-fixture'
+        folder = k.evidence_root(k.ROOT) / k.EVIDENCE_PHASE / 'fixtures/phase1'
         for path, text in current.items():
             destination = folder / Path(path).name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -167,8 +172,14 @@ class KotlinMovesTest(unittest.TestCase):
             self.verify(manifest, self.current)
 
 
-def run():
-    result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(KotlinMovesTest))
+def run(manifest_path=k.MANIFEST):
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(KotlinMovesTest)
+    manifest = json.loads(Path(manifest_path).read_text())
+    if manifest['phase'] == 2:
+        import test_kotlin_moves_phase2
+        test_kotlin_moves_phase2.MANIFEST = manifest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase2.Phase2MovesTest))
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 
 

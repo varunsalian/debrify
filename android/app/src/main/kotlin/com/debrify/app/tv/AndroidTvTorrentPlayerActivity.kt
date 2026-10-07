@@ -314,29 +314,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
         }
     }
-
-    private fun androidDecoderStatus(decoderName: String): String {
-        val normalized = decoderName.lowercase(Locale.US)
-        if (
-            normalized.contains(".google.") ||
-            normalized.contains(".android.") ||
-            normalized.startsWith("c2.android") ||
-            normalized.startsWith("c2.google") ||
-            normalized.contains("ffmpeg")
-        ) {
-            return "software"
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val codecInfo = runCatching {
-                MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.firstOrNull {
-                    it.name.equals(decoderName, ignoreCase = true)
-                }
-            }.getOrNull()
-            if (codecInfo?.isSoftwareOnly == true) return "software"
-            if (codecInfo?.isHardwareAccelerated == true) return "hardware"
-        }
-        return "unknown"
-    }
     private var offsetRenderersFactory: OffsetRenderersFactory? = null
 
     // Phase 0 of the IPTV resilience plan: per-tune logcat diagnostics.
@@ -678,74 +655,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvLiveRetuneInFlight = false
         }
         return true
-    }
-
-    /** 401/403/404 repeat deterministically; decoder failures repeat unless
-     *  the hiccup was transient; everything else gets the full ladder. */
-    private fun classifyIptvError(error: PlaybackException): IptvLiveRecovery.ErrorClass {
-        val http = generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
-            .firstOrNull()?.responseCode
-        if (http == 401 || http == 403 || http == 404) {
-            return IptvLiveRecovery.ErrorClass.AUTH
-        }
-        return when (error.errorCode) {
-            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ->
-                IptvLiveRecovery.ErrorClass.DECODER
-            else -> IptvLiveRecovery.ErrorClass.TRANSIENT
-        }
-    }
-
-    /** Phase 1, Layer 1: loader-level retry policy for live IPTV. Retries
-     *  happen UNDER an intact buffer — the player never leaves READY, so a
-     *  drop the origin repairs within the buffered lead is invisible.
-     *  Classified per the plan: 401/403/404 are deterministic (no retry —
-     *  escalate to the fatal-error path, where the machine surrenders or
-     *  re-resolves), 429/503 honor Retry-After, other transport errors get
-     *  a short flat delay and a generous (bounded) retry count. Non-live
-     *  entries keep media3 defaults untouched. */
-    private inner class IptvLiveLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
-        private fun liveNow(): Boolean =
-            iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
-
-        override fun getRetryDelayMsFor(
-            loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo,
-        ): Long {
-            if (!liveNow()) return super.getRetryDelayMsFor(loadErrorInfo)
-            val http = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
-                .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
-                .firstOrNull()
-            when (http?.responseCode) {
-                401, 403, 404 -> return C.TIME_UNSET // fatal: same answer every time
-                429, 503 -> {
-                    // Bound the TIME this class can hide a failure, not just
-                    // the count: minimumLoadableRetryCount is a floor, and a
-                    // 5s-per-retry rate limit would otherwise sit invisible
-                    // (no pill — the player never errors) for minutes before
-                    // the machine's ladder even starts (codex r2, finding 9).
-                    if (loadErrorInfo.errorCount > 4) return C.TIME_UNSET
-                    val retryAfterSec = http.headerFields.entries
-                        .firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }
-                        ?.value?.firstOrNull()?.trim()?.toLongOrNull()
-                    return (retryAfterSec?.times(1000))?.coerceIn(1_000L, 15_000L)
-                        ?: 5_000L
-                }
-            }
-            return if (loadErrorInfo.exception is HttpDataSource.HttpDataSourceException) {
-                // ~15s of 1s in-buffer retries, then escalate to the machine.
-                if (loadErrorInfo.errorCount > 15) C.TIME_UNSET else 1_000L
-            } else {
-                super.getRetryDelayMsFor(loadErrorInfo)
-            }
-        }
-
-        // A floor, not a cap — the real bound is the TIME_UNSET escalation
-        // by errorCount in getRetryDelayMsFor above. Kept above the default
-        // so transport errors actually reach the 15×1s schedule.
-        override fun getMinimumLoadableRetryCount(dataType: Int): Int =
-            if (liveNow()) 20 else super.getMinimumLoadableRetryCount(dataType)
     }
 
     private fun showIptvReconnectPill(text: String) {
@@ -2675,31 +2584,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioSourceBadgeText = findViewById(R.id.stremio_source_badge_text)
     }
 
-    private fun buildProtectedMediaOrigins(items: List<PlaybackItem>): Set<String> {
-        return items
-            .mapNotNull { item ->
-                if (item.url.isBlank()) {
-                    null
-                } else {
-                    originKey(Uri.parse(item.url))
-                }
-            }
-            .toSet()
-    }
-
-    private fun originKey(uri: Uri): String? {
-        val scheme = uri.scheme?.lowercase() ?: return null
-        if (scheme != "http" && scheme != "https") return null
-        val host = uri.host?.lowercase() ?: return null
-        val port = when {
-            uri.port != -1 -> uri.port
-            scheme == "http" -> 80
-            scheme == "https" -> 443
-            else -> -1
-        }
-        return "$scheme://$host:$port"
-    }
-
     /**
      * Video decoder order for IPTV, honouring the user's Playback setting.
      *
@@ -2957,7 +2841,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             DefaultMediaSourceFactory(this, iptvExtractors)
                 .setDataSourceFactory(recordingDataSourceFactory)
-                .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy())
+                .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true })
         } else {
             DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(recordingDataSourceFactory)
@@ -5877,25 +5761,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return DockFormatTags.detect(decoded)
     }
 
-    /** "Seven" for 7 — MARQUEE's spelled-out season/episode line. Numbers a
-     *  playbill wouldn't spell (50+) fall back to digits. */
-    private fun spellNumber(n: Int?): String {
-        if (n == null) return ""
-        val ones = arrayOf(
-            "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven",
-            "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen",
-            "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
-        )
-        return when {
-            n < 0 || n >= 50 -> n.toString()
-            n < 20 -> ones[n]
-            else -> {
-                val tens = if (n < 30) "Twenty" else if (n < 40) "Thirty" else "Forty"
-                if (n % 10 == 0) tens else "$tens-${ones[n % 10]}"
-            }
-        }
-    }
-
     private fun setResolvingState(resolving: Boolean) {
         if (resolving) {
             nextText.text = "" // Title is filled in once the stream resolves
@@ -5924,45 +5789,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestStreamFromFlutter(item: PlaybackItem, index: Int, callback: (String?, String?) -> Unit) {
-        try {
-            val args = hashMapOf<String, Any?>(
-                "resumeId" to item.resumeId,
-                "itemId" to item.id,
-                "index" to index
-            )
-            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - sending to Flutter: resumeId=${item.resumeId}, itemId=${item.id}, index=$index")
-
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "requestTorrentStream",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - Flutter returned: $result")
-                        val map = result as? Map<*, *>
-                        val url = map?.get("url") as? String
-                        val provider = map?.get("provider") as? String
-                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url, provider: $provider")
-                        callback(url, provider)
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - error: $errorCode - $errorMessage")
-                        callback(null, null)
-                    }
-
-                    override fun notImplemented() {
-                        android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - not implemented")
-                        callback(null, null)
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - exception: ${e.message}", e)
-            callback(null, null)
-        }
-    }
-
     private fun reportValidatedSourceCommit(sourceIndex: Int) {
         if (sourceIndex !in stremioSources.indices) return
         try {
@@ -5978,47 +5804,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "AndroidTvPlayer",
                 "Failed to report committed source $sourceIndex: ${e.message}",
             )
-        }
-    }
-
-    /**
-     * Request movie metadata (IMDB ID) from Flutter for the given item.
-     * Used for movie collections to fetch per-item IMDB IDs from Cinemeta.
-     */
-    private fun requestMovieMetadataFromFlutter(item: PlaybackItem, index: Int, callback: (String?) -> Unit) {
-        try {
-            val args = hashMapOf<String, Any?>(
-                "index" to index,
-                "filename" to item.title
-            )
-            android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - index=$index, filename=${item.title}")
-
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "requestMovieMetadata",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - Flutter returned: $result")
-                        val map = result as? Map<*, *>
-                        val imdbId = map?.get("imdbId") as? String
-                        android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - extracted imdbId: $imdbId")
-                        callback(imdbId)
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - error: $errorCode - $errorMessage")
-                        callback(null)
-                    }
-
-                    override fun notImplemented() {
-                        android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - not implemented")
-                        callback(null)
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - exception: ${e.message}", e)
-            callback(null)
         }
     }
 
@@ -6331,30 +6116,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun parseSubtitleCatalogResults(result: Any?): List<SubtitleCatalogResult> {
-        val items = result as? List<*> ?: return emptyList()
-        return items.mapNotNull { rawItem ->
-            val map = rawItem as? Map<*, *> ?: return@mapNotNull null
-            val imdbId = map["imdbId"]?.toString()?.takeIf { it.startsWith("tt") }
-                ?: return@mapNotNull null
-            val type = map["type"]?.toString()?.lowercase(Locale.US)
-                ?.takeIf { it == "movie" || it == "series" }
-                ?: return@mapNotNull null
-            val name = map["name"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-                ?: imdbId
-            val year = map["year"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-            val source = map["source"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
-
-            SubtitleCatalogResult(
-                imdbId = imdbId,
-                type = type,
-                name = name,
-                year = year,
-                source = source
-            )
-        }
-    }
-
     private fun createSubtitleCatalogResultAdapter(
         results: MutableList<SubtitleCatalogResult>
     ): ArrayAdapter<SubtitleCatalogResult> {
@@ -6560,68 +6321,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         Toast.makeText(this, "Searching subtitles for ${result.name}", Toast.LENGTH_SHORT).show()
         fetchStremioSubtitlesWithImdb(result.imdbId, type, subtitleItem)
-    }
-
-    private fun resolveSeasonEpisodeForSubtitle(item: PlaybackItem): SeasonEpisode? {
-        val existingSeason = item.season
-        val existingEpisode = item.episode
-        if (existingSeason != null && existingEpisode != null && existingSeason > 0 && existingEpisode > 0) {
-            return SeasonEpisode(existingSeason, existingEpisode)
-        }
-
-        return parseSeasonEpisodeFromTitle(item.title)
-    }
-
-    private fun parseSeasonEpisodeFromTitle(title: String): SeasonEpisode? {
-        val patterns = listOf(
-            Regex("""(?i)\bS(\d{1,2})\s*E(\d{1,3})\b"""),
-            Regex("""(?i)\b(\d{1,2})x(\d{1,3})\b"""),
-            Regex("""(?i)\bSeason\s*(\d{1,2})\s*(?:Episode|Ep|E)\s*(\d{1,3})\b""")
-        )
-
-        for (pattern in patterns) {
-            val match = pattern.find(title) ?: continue
-            val season = match.groupValues.getOrNull(1)?.toIntOrNull()
-            val episode = match.groupValues.getOrNull(2)?.toIntOrNull()
-            if (season != null && episode != null && season > 0 && episode > 0) {
-                return SeasonEpisode(season, episode)
-            }
-        }
-
-        return null
-    }
-
-    private fun buildSubtitleSearchInitialQuery(item: PlaybackItem): String {
-        val filename = item.title.substringAfterLast('/').substringBefore('?')
-        val withoutExtension = filename.replace(Regex("""\.[A-Za-z0-9]{2,5}$"""), "")
-        val cleaned = withoutExtension
-            .replace(Regex("""[._]+"""), " ")
-            .replace(Regex("""(?i)\bS\d{1,2}\s*E\d{1,3}\b"""), " ")
-            .replace(Regex("""(?i)\b\d{1,2}x\d{1,3}\b"""), " ")
-            .replace(
-                Regex(
-                    """(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|web[- ]?dl|webrip|bluray|brrip|hdtv|dvdrip|x264|x265|h264|h265|hevc|aac|dts|yify)\b"""
-                ),
-                " "
-            )
-            .replace(Regex("""\s+"""), " ")
-            .trim()
-
-        return cleaned.ifEmpty { item.title }
-    }
-
-    private fun buildManualSubtitleDisplayLabel(
-        result: SubtitleCatalogResult,
-        type: String,
-        season: Int?,
-        episode: Int?
-    ): String {
-        val base = result.titleLine()
-        return if (type == "series" && season != null && episode != null) {
-            "$base S${season}E$episode"
-        } else {
-            base
-        }
     }
 
     private fun currentSubtitleIdentityLabel(): String {
@@ -8033,15 +7732,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         hideSeekbar()
     }
 
-    private fun getAcceleratedSeekStep(repeatCount: Int): Long {
-        val baseStep = 10_000L          // 10 seconds
-        val acceleration = 2_000L       // 2 seconds per repeat
-        val maxStep = 120_000L          // 2 minutes cap
-
-        val calculatedStep = baseStep + (repeatCount * acceleration)
-        return calculatedStep.coerceAtMost(maxStep)
-    }
-
     private fun seekBackward(stepMs: Long = 10_000L, isContinuous: Boolean = false) {
         seekbarPosition = (seekbarPosition - stepMs).coerceAtLeast(0)
         updateSeekSpeed(stepMs)
@@ -8916,185 +8606,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun parseIptvSources(array: JSONArray?): MutableList<IptvSourceEntry> {
-        if (array == null) return mutableListOf()
-        return MutableList(array.length()) { index ->
-            val source = array.optJSONObject(index) ?: JSONObject()
-            IptvSourceEntry(
-                id = source.optString("id"),
-                name = source.optString("name").ifEmpty { "IPTV" },
-                isFavorites = source.optBoolean("isFavorites"),
-                isContinue = source.optBoolean("isContinue"),
-                isXtream = source.optBoolean("isXtream"),
-                isList = source.optBoolean("isList"),
-                listId = source.optString("listId").takeIf { it.isNotEmpty() },
-                connectionResourceId = source.optString("connectionResourceId")
-                    .takeIf { it.isNotEmpty() },
-                connectionResourceRevision = if (source.has("connectionResourceRevision"))
-                    source.optLong("connectionResourceRevision") else null,
-            )
-        }.filterTo(mutableListOf()) { it.id.isNotEmpty() && !it.isContinue }
-    }
-
-    private fun parseIptvLists(array: JSONArray?): MutableList<IptvListEntry> {
-        if (array == null) return mutableListOf()
-        return MutableList(array.length()) { index ->
-            val entry = array.optJSONObject(index) ?: JSONObject()
-            IptvListEntry(
-                id = entry.optString("id"),
-                name = entry.optString("name").ifEmpty { "List" },
-                isBuiltin = entry.optBoolean("isBuiltin"),
-            )
-        }.filterTo(mutableListOf()) { it.id.isNotEmpty() }
-    }
-
-    private fun parseStringList(array: JSONArray?): MutableList<String> {
-        if (array == null) return mutableListOf()
-        return MutableList(array.length()) { index -> array.optString(index) }
-            .filterTo(mutableListOf()) { it.isNotEmpty() }
-    }
-
-    private fun parseIptvChannels(array: JSONArray): MutableList<IptvChannelEntry> =
-        MutableList(array.length()) { index ->
-            val channel = array.optJSONObject(index) ?: JSONObject()
-            iptvChannelEntry(
-                index = index,
-                channelNumber = channel.optInt("channelNumber", 0).takeIf { it > 0 },
-                name = channel.optString("name"),
-                url = channel.optString("url"),
-                logoUrl = channel.optString("logoUrl").takeIf { it.isNotEmpty() },
-                group = channel.optString("group").takeIf { it.isNotEmpty() },
-                contentType = channel.optString("contentType"),
-                duration = channel.optInt("duration", -1),
-                sourceId = channel.optString("sourceId").takeIf { it.isNotEmpty() },
-                sourceName = channel.optString("sourceName").takeIf { it.isNotEmpty() },
-                isFavorite = channel.optBoolean("isFavorite"),
-                seriesId = channel.optString("seriesId").takeIf { it.isNotEmpty() },
-                seriesName = channel.optString("seriesName").takeIf { it.isNotEmpty() },
-                season = channel.optInt("season", -1).takeIf { it >= 0 },
-                episode = channel.optInt("episode", -1).takeIf { it >= 0 },
-                hasNextEpisode =
-                    channel.optBoolean("hasNextEpisode").takeIf {
-                        channel.has("hasNextEpisode")
-                    },
-                tvArchive = channel.optString("tvArchive")
-                    .takeIf { it.isNotEmpty() },
-                tvArchiveDuration = channel.optInt("tvArchiveDuration", 0)
-                    .takeIf { it > 0 },
-                resumePositionMs = channel.optLong("resumePositionMs", 0L),
-                headers = channel.optJSONObject("httpHeaders")?.let { obj ->
-                    buildMap {
-                        for (key in obj.keys()) {
-                            obj.optString(key).takeIf { it.isNotEmpty() }?.let { value ->
-                                put(
-                                    if (key.equals("User-Agent", ignoreCase = true)) {
-                                        "User-Agent"
-                                    } else {
-                                        key
-                                    },
-                                    value,
-                                )
-                            }
-                        }
-                    }
-                } ?: emptyMap(),
-            )
-        }
-
-    private fun parseIptvChannels(raw: List<*>): MutableList<IptvChannelEntry> =
-        raw.mapIndexedNotNullTo(mutableListOf()) { index, item ->
-            val channel = item as? Map<*, *> ?: return@mapIndexedNotNullTo null
-            val headers = (channel["httpHeaders"] as? Map<*, *>)?.entries
-                ?.mapNotNull { (key, value) ->
-                    val name = key as? String ?: return@mapNotNull null
-                    val text = value?.toString()?.takeIf { it.isNotEmpty() }
-                        ?: return@mapNotNull null
-                    (if (name.equals("User-Agent", ignoreCase = true)) {
-                        "User-Agent"
-                    } else {
-                        name
-                    }) to text
-                }?.toMap() ?: emptyMap()
-            iptvChannelEntry(
-                index = index,
-                channelNumber = (channel["channelNumber"] as? Number)
-                    ?.toInt()
-                    ?.takeIf { it > 0 },
-                name = channel["name"] as? String ?: return@mapIndexedNotNullTo null,
-                url = channel["url"] as? String ?: return@mapIndexedNotNullTo null,
-                logoUrl = (channel["logoUrl"] as? String)?.takeIf { it.isNotEmpty() },
-                group = (channel["group"] as? String)?.takeIf { it.isNotEmpty() },
-                contentType = channel["contentType"] as? String ?: "",
-                duration = (channel["duration"] as? Number)?.toInt() ?: -1,
-                sourceId = (channel["sourceId"] as? String)?.takeIf { it.isNotEmpty() },
-                sourceName = (channel["sourceName"] as? String)?.takeIf { it.isNotEmpty() },
-                isFavorite = channel["isFavorite"] == true,
-                seriesId = (channel["seriesId"] as? String)?.takeIf { it.isNotEmpty() },
-                seriesName = (channel["seriesName"] as? String)?.takeIf { it.isNotEmpty() },
-                season = (channel["season"] as? Number)?.toInt(),
-                episode = (channel["episode"] as? Number)?.toInt(),
-                hasNextEpisode = channel["hasNextEpisode"] as? Boolean,
-                tvArchive = (channel["tvArchive"] as? String)
-                    ?.takeIf { it.isNotEmpty() },
-                tvArchiveDuration = (channel["tvArchiveDuration"] as? Number)
-                    ?.toInt(),
-                resumePositionMs =
-                    (channel["resumePositionMs"] as? Number)?.toLong() ?: 0L,
-                headers = headers,
-            )
-        }
-
-    private fun iptvChannelEntry(
-        index: Int,
-        channelNumber: Int?,
-        name: String,
-        url: String,
-        logoUrl: String?,
-        group: String?,
-        contentType: String,
-        duration: Int,
-        sourceId: String?,
-        sourceName: String?,
-        isFavorite: Boolean,
-        seriesId: String?,
-        seriesName: String?,
-        season: Int?,
-        episode: Int?,
-        hasNextEpisode: Boolean?,
-        tvArchive: String?,
-        tvArchiveDuration: Int?,
-        resumePositionMs: Long,
-        headers: Map<String, String>,
-    ): IptvChannelEntry {
-        val normalizedType = contentType.ifEmpty {
-            if (duration == -1) "live" else "vod"
-        }
-        return IptvChannelEntry(
-            index = index,
-            channelNumber = channelNumber,
-            name = name,
-            url = url,
-            logoUrl = logoUrl,
-            group = group,
-            isLive = normalizedType == "live",
-            isCurrent = false,
-            resumePositionMs = resumePositionMs,
-            httpHeaders = headers,
-            contentType = normalizedType,
-            duration = duration,
-            sourceId = sourceId,
-            sourceName = sourceName,
-            isFavorite = isFavorite,
-            seriesId = seriesId,
-            seriesName = seriesName,
-            season = season,
-            episode = episode,
-            hasNextEpisode = hasNextEpisode,
-            tvArchive = tvArchive,
-            tvArchiveDuration = tvArchiveDuration,
-        )
-    }
-
     private fun setupIptvControls() {
         playerView.findViewById<View>(R.id.debrify_random_button)?.visibility = View.GONE
         val entry = iptvChannels.getOrNull(currentIptvIndex)
@@ -9255,43 +8766,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!isDestroyed && !isFinishing) updateRecordButtonState()
     }
 
-    /**
-     * True when [url] is a SEGMENTED (adaptive) stream: HLS, DASH,
-     * SmoothStreaming. Neither recorder can capture those byte-for-byte — the
-     * manifest and the media segments live at different URIs, so a raw capture
-     * would be the manifest alone, an XML/text file wearing a .ts name.
-     */
-    private fun isSegmentedStreamUrl(url: String): Boolean {
-        val path = url.substringBefore('?').substringBefore('#').lowercase()
-        return path.endsWith(".m3u8") ||
-            path.endsWith(".m3u") ||
-            path.endsWith(".mpd") ||
-            path.endsWith(".ism") ||
-            path.endsWith(".isml") ||
-            path.endsWith("/manifest")
-    }
-
     private fun isCurrentIptvSegmented(): Boolean {
         val url = currentIptvStreamUrl ?: return true
         return iptvHlsForcedUrls.contains(url) || isSegmentedStreamUrl(url)
-    }
-
-    /**
-     * Xtream panels serve every live channel in both containers — the `.ts`
-     * twin of a `/live/user/pass/id.m3u8` URL is the same channel as one
-     * progressive MPEG-TS stream, which IS engine-recordable. Strict path
-     * match only, and never for URLs carrying a query string (a twin stripped
-     * of its token would just 401); anything else returns null.
-     */
-    private fun xtreamTsTwin(url: String): String? {
-        if (url.contains('?')) return null
-        val clean = url.substringBefore('#')
-        val m = Regex(
-            "^(https?://[^/]+)/live/([^/]+)/([^/]+)/([^/.]+)\\.m3u8$",
-            RegexOption.IGNORE_CASE,
-        ).find(clean) ?: return null
-        val (host, user, pass, id) = m.destructured
-        return "$host/live/$user/$pass/$id.ts"
     }
 
     /** The URL the ENGINE would capture for [url], or null when it can't:
@@ -9663,17 +9140,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ).show()
         }
     }
-
-    private fun sanitizeRecordingName(raw: String): String {
-        val cleaned = raw.replace(Regex("[^A-Za-z0-9 _-]"), "")
-            .trim()
-            .replace(Regex("\\s+"), "_")
-        return cleaned.take(60).ifEmpty { "recording" }
-    }
-
-    private fun recordingTimestamp(): String =
-        java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-            .format(java.util.Date())
 
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
@@ -10181,9 +9647,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.iptv_guide_current_name)?.setTextColor(t.fg)
         findViewById<TextView>(R.id.iptv_guide_current_group)?.setTextColor(t.fgFaint)
     }
-
-    private fun isIptvSeriesSentinel(entry: IptvChannelEntry): Boolean =
-        entry.contentType == "series" || entry.url.startsWith("xtream-series://")
 
     private fun showIptvGuide() {
         if (iptvChannels.getOrNull(currentIptvIndex)?.isLive != true) return
@@ -11159,27 +10622,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvEpgAdapter?.updatePrograms(emptyList())
     }
 
-    private fun currentIptvStartOverProgramme(entry: IptvChannelEntry): IptvEpgProgram? {
-        val now = System.currentTimeMillis()
-        if (!entry.isLive ||
-            entry.tvArchive == "0" ||
-            (!entry.epgNowHasArchive && entry.tvArchive != "1") ||
-            entry.epgNowStartMs <= 0L ||
-            now !in entry.epgNowStartMs until entry.epgNowStopMs
-        ) return null
-        val archiveDays = entry.tvArchiveDuration ?: 0
-        if (archiveDays > 0 &&
-            entry.epgNowStartMs < now - archiveDays.toLong() * 86_400_000L
-        ) return null
-        return IptvEpgProgram(
-            title = entry.epgNowTitle ?: entry.name,
-            description = null,
-            startMs = entry.epgNowStartMs,
-            stopMs = entry.epgNowStopMs,
-            hasArchive = true,
-        )
-    }
-
     private fun updateIptvStartOverButton(entry: IptvChannelEntry? =
         iptvChannels.getOrNull(currentIptvIndex)
     ) {
@@ -11399,75 +10841,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             node = node.parent as? View
         }
         return false
-    }
-
-    /**
-     * Ask Flutter for a channel's guide data. Always answers asynchronously
-     * on the main thread — the failure paths are posted on purpose, because
-     * the callback runs notifyItemChanged and a synchronous invocation from
-     * onBindViewHolder would fire it while RecyclerView is computing layout
-     * (IllegalStateException). MethodChannel results are async already.
-     */
-    private fun requestIptvEpg(
-        entry: IptvChannelEntry,
-        includeSchedule: Boolean,
-        includeCatchupMetadata: Boolean = entry.isCurrent,
-        callback: (Map<*, *>?) -> Unit,
-    ) {
-        // Deliver exactly once, and ALWAYS: a MethodChannel whose engine died
-        // in the background never invokes its Result (the messenger is gone),
-        // which used to leave entry.epgLoading stuck true for the whole
-        // session — i.e. "EPG missing everywhere on TV" with playback fine.
-        // The watchdog turns that silence into a null answer so rows recover
-        // (and retry once the engine is back).
-        //
-        // 45s, NOT a snappy timeout: the Dart side's legitimate worst case is
-        // a queue wait behind its 3-slot fetch gate plus two 10s HTTP tries
-        // (data-table + typo fallback) — a shorter deadline would discard
-        // real answers from slow panels and report "no guide data" wrongly.
-        // The watchdog only exists for the dead-engine hang, where nothing
-        // ever arrives; slow-but-alive answers must win.
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
-        fun deliver(result: Map<*, *>?) {
-            if (delivered.compareAndSet(false, true)) callback(result)
-        }
-        handler.postDelayed({ deliver(null) }, 45_000)
-        try {
-            val args = hashMapOf<String, Any?>(
-                "channelUrl" to entry.url,
-                "includeSchedule" to includeSchedule,
-                "includeCatchupMetadata" to includeCatchupMetadata,
-                "archiveDisabled" to (entry.tvArchive == "0"),
-                "archiveDurationDays" to entry.tvArchiveDuration,
-            )
-            val channel = MainActivity.getAndroidTvPlayerChannel()
-            if (channel == null) {
-                handler.post { deliver(null) }
-                return
-            }
-            channel.invokeMethod(
-                "requestIptvEpg",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        deliver(result as? Map<*, *>)
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        android.util.Log.e("AndroidTvPlayer", "requestIptvEpg error: $errorCode - $errorMessage")
-                        deliver(null)
-                    }
-
-                    override fun notImplemented() {
-                        deliver(null)
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "requestIptvEpg exception: ${e.message}", e)
-            handler.post { deliver(null) }
-        }
     }
 
     private fun updateIptvGuideCurrentName() {
@@ -13951,15 +13324,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** "36 min" / "1 hr 12 min" — what is left of a programme's runtime. */
-    private fun formatIptvRemaining(ms: Long): String {
-        val minutes = (ms / 60_000L).coerceAtLeast(0L)
-        if (minutes < 60) return "$minutes min"
-        val hours = minutes / 60
-        val rest = minutes % 60
-        return if (rest == 0L) "$hours hr" else "$hours hr $rest min"
-    }
-
     /** A window install or merge renumbers this channel and can change the
      *  category total. Repaint a banner that is still on screen instead of
      *  leaving it showing whatever the launcher's list implied. */
@@ -13975,30 +13339,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvZapBannerEntry = entry
         paintIptvZapBannerPosition(entry)
         paintIptvZapBannerEpg(entry)
-    }
-
-    /**
-     * Hand known now/next data to a replacement entry for the same channel.
-     *
-     * A window install swaps in fresh [IptvChannelEntry] objects, and the new
-     * one carries no EPG. Without this, repainting from it flips a banner that
-     * is already showing the programme back to "No guide data" until the
-     * refetch lands — a visible regression on the very first tune, where the
-     * bootstrap window always arrives a moment after the banner. Only real data
-     * moves across: adopting a blank answer would suppress [to]'s own fetch.
-     */
-    private fun adoptIptvEpg(from: IptvChannelEntry, to: IptvChannelEntry) {
-        if (from.epgNowTitle == null || to.epgLoaded) return
-        to.epgNowTitle = from.epgNowTitle
-        to.epgNowStartMs = from.epgNowStartMs
-        to.epgNowStopMs = from.epgNowStopMs
-        to.epgNowHasArchive = from.epgNowHasArchive
-        to.epgCatchupMetadataLoaded = from.epgCatchupMetadataLoaded
-        to.epgNextTitle = from.epgNextTitle
-        to.epgNextStartMs = from.epgNextStartMs
-        // Claim "loaded" only when nothing is already on its way; an in-flight
-        // fetch will overwrite these with its own, fresher answer.
-        if (!to.epgLoading) to.epgLoaded = true
     }
 
     /**
@@ -14115,24 +13455,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             mapOf("seriesKey" to key, "lang" to lang)
         )
     }
-
-    /** The audio language of a track-selection override, for capturing a pick. */
-    private fun languageOfOverride(override: TrackSelectionOverride?): String? {
-        if (override == null) return null
-        val idx = override.trackIndices.firstOrNull() ?: return null
-        return try {
-            override.mediaTrackGroup.getFormat(idx).language
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    // ── Stremio-addon IPTV channels (resolve-on-demand + serial ladder) ──────
-
-    private fun isStremioIptvUrl(url: String): Boolean = url.startsWith("stremio-tv://")
-
-    /** One playable link for a Stremio channel: stream URL + the addon's label. */
-    private data class IptvStremioCandidate(val url: String, val label: String)
 
     /** The shared ExoPlayer media-item swap both IPTV entry points use. */
     private fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String) {
@@ -14414,17 +13736,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupStremioSources()
     }
 
-    private fun iptvQualityFromLabel(label: String): String {
-        val m = Regex("(2160p|4k|1080p|720p|480p)", RegexOption.IGNORE_CASE).find(label)
-        return when (m?.value?.lowercase()) {
-            "2160p", "4k" -> "4K"
-            "1080p" -> "1080p"
-            "720p" -> "720p"
-            "480p" -> "480p"
-            else -> "LIVE"
-        }
-    }
-
     /** Leaving a Stremio channel (or re-resolving one) — retire its source rows. */
     private fun clearIptvStremioSources() {
         if (!isIptvMode || stremioSources.isEmpty()) return
@@ -14544,72 +13855,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         reportIptvStreamResult(key, url, true)
     }
 
-    /**
-     * Ask Flutter to resolve a stremio-tv:// channel key into labeled stream
-     * links. On an empty result the callback's second argument carries a
-     * user-facing reason ("Couldn't reach <addon>…") when Flutter knows one.
-     */
-    private fun requestIptvStreamUrls(
-        channelUrl: String,
-        channelName: String?,
-        callback: (List<IptvStremioCandidate>, String?) -> Unit,
-    ) {
-        try {
-            val args = hashMapOf<String, Any?>(
-                "channelUrl" to channelUrl,
-                "channelName" to channelName,
-            )
-            val channel = MainActivity.getAndroidTvPlayerChannel()
-            if (channel == null) {
-                callback(emptyList(), null)
-                return
-            }
-            channel.invokeMethod(
-                "requestIptvStreamUrls",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        val map = result as? Map<*, *>
-                        val candidates = (map?.get("candidates") as? List<*>)?.mapNotNull { item ->
-                            val m = item as? Map<*, *> ?: return@mapNotNull null
-                            val u = (m["url"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                            val label = (m["label"] as? String)?.takeIf { it.isNotBlank() } ?: "Source"
-                            IptvStremioCandidate(u, label)
-                        } ?: emptyList()
-                        val message = (map?.get("message") as? String)?.takeIf { it.isNotBlank() }
-                        callback(candidates, message)
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls error: $errorCode - $errorMessage")
-                        callback(emptyList(), null)
-                    }
-
-                    override fun notImplemented() {
-                        callback(emptyList(), null)
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "requestIptvStreamUrls exception: ${e.message}", e)
-            callback(emptyList(), null)
-        }
-    }
-
-    /** Fire-and-forget outcome report (winner caching / invalidation). */
-    private fun reportIptvStreamResult(channelUrl: String, url: String?, success: Boolean) {
-        try {
-            val args = hashMapOf<String, Any?>(
-                "channelUrl" to channelUrl,
-                "url" to url,
-                "success" to success,
-            )
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("reportIptvStreamResult", args)
-        } catch (e: Exception) {
-            android.util.Log.w("AndroidTvPlayer", "reportIptvStreamResult failed: ${e.message}")
-        }
-    }
-
     // Track selection
     // ═══════════════════════════════════════════════════════════════════════════
     // UNIFIED MENU · backing (reuses existing apply logic; nothing is duplicated
@@ -14658,12 +13903,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Passed to the controller so named shortcuts match the visible rows.
     private val unifiedSectionIds = listOf("audio", "subs", "display", "playback")
-
-    private fun mrow(
-        title: String, value: String? = null, selected: Boolean = false, accent: Boolean = false,
-        enabled: Boolean = true, swatch: Int? = null, adjustable: Boolean = false, tag: String? = null,
-        onOk: (() -> Unit)? = null, onAdjust: ((Int) -> Unit)? = null
-    ) = UnifiedMenuController.Row(title, value, selected, accent, enabled, swatch, adjustable, tag, onOk, onAdjust)
 
     private fun umSectionRows(): List<UnifiedMenuController.Row> {
         val subBadge = when {
@@ -15554,32 +14793,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun buildAudioTrackLabel(format: Format): String {
-        val lang = format.language ?: "und"
-        val label = format.label
-        val channels = if (format.channelCount != Format.NO_VALUE) "${format.channelCount}ch" else ""
-        val bitrate = if (format.bitrate != Format.NO_VALUE) "${format.bitrate / 1000}kbps" else ""
-
-        val parts = mutableListOf<String>()
-        if (!label.isNullOrEmpty()) parts.add(label)
-        else parts.add(lang.uppercase(Locale.getDefault()))
-        if (channels.isNotEmpty()) parts.add(channels)
-        if (bitrate.isNotEmpty()) parts.add(bitrate)
-
-        return parts.joinToString(" · ")
-    }
-
-    private fun buildSubtitleTrackLabel(format: Format): String {
-        val lang = format.language ?: "und"
-        val label = format.label
-
-        return if (!label.isNullOrEmpty()) {
-            "$label ($lang)"
-        } else {
-            lang.uppercase(Locale.getDefault())
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // SUBTITLE SETTINGS PANEL
     // ═══════════════════════════════════════════════════════════════════════════
@@ -15716,18 +14929,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitlePanel?.refresh()
     }
 
-    private fun isSearchSubtitleOption(label: String): Boolean {
-        return label == SEARCH_SUBTITLE_LABEL
-    }
-
-    private fun isLoadingSubtitleOption(label: String): Boolean {
-        return label.startsWith("⏳")
-    }
-
-    private fun isExternalSubtitleOption(label: String): Boolean {
-        return label.startsWith(EXTERNAL_SUBTITLE_PREFIX)
-    }
-
     private fun applySelectedSubtitleTrack() {
         val ts = trackSelector ?: return
         val selectedTrack = subtitleTracks.getOrNull(currentSubtitleTrackIndex)
@@ -15783,17 +14984,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // track's offset through the folded "emb" identity.
         SubtitleSettings.resetSyncOffset()
         offsetRenderersFactory?.setOffsetUs(0L)
-    }
-
-    /**
-     * True if this subtitle URL is a format the on-device parser can render.
-     * TTML/DFXP were handled by ExoPlayer's decoder in the old re-prepare path
-     * but our SubtitleCueParser can't parse them (they'd yield zero cues and
-     * fail the load), so they're filtered out of the offered list entirely.
-     */
-    private fun isSideRenderableSubtitle(url: String): Boolean {
-        val path = url.substringBefore("?").lowercase()
-        return !path.endsWith(".ttml") && !path.endsWith(".dfxp")
     }
 
     /**
@@ -16932,32 +16122,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
     }
 
-    private fun requestQuickPlayNextEpisode(imdbId: String, season: Int, episode: Int) {
-        android.util.Log.d("AndroidTvPlayer", "Requesting Quick Play next episode after S${season}E${episode} for $imdbId")
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-            "requestQuickPlayNextEpisode",
-            hashMapOf<String, Any>(
-                "imdbId" to imdbId,
-                "season" to season,
-                "episode" to episode,
-            )
-        )
-    }
-
-    // Utilities
-    private fun formatTime(ms: Long): String {
-        if (ms <= 0) return "00:00"
-        val totalSeconds = ms / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val hours = minutes / 60
-        return if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, minutes % 60, seconds)
-        } else {
-            String.format("%02d:%02d", minutes, seconds)
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════
     // Stremio Source Switcher
     // ═══════════════════════════════════════════════════════════════════════
@@ -17480,10 +16644,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (startupCandidateStartedElapsedMs <= 0L) 0L
         else (SystemClock.elapsedRealtime() - startupCandidateStartedElapsedMs).coerceAtLeast(0L)
 
-    private fun isPikPakPlaybackItem(item: PlaybackItem?): Boolean =
-        item != null && (PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
-            item.url.contains("mypikpak.com"))
-
     private fun currentPlaybackItemIsPikPak(): Boolean =
         isPikPakPlaybackItem(payload?.items?.getOrNull(currentIndex))
 
@@ -17555,26 +16715,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "addonPresent=${!source?.addonId.isNullOrBlank()} " +
             "sourcePresent=${!source?.source.isNullOrBlank()} " +
             "mediaServer=${source?.source?.startsWith("mediaserver:") == true}"
-    }
-
-    private fun diagnosticProvider(value: String?): String {
-        if (value.isNullOrBlank()) return "-"
-        return value
-            .lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9_.-]"), "_")
-            .take(32)
-            .ifBlank { "-" }
-    }
-
-    private fun startupLog(message: String, warning: Boolean = false) {
-        DiagnosticFileLog.record(
-            source = "android_tv_player",
-            event = "startup_gate",
-            message = message,
-            level = if (warning) "warning" else "info",
-        )
-        if (warning) android.util.Log.w(STARTUP_FAILOVER_LOG_TAG, message)
-        else android.util.Log.d(STARTUP_FAILOVER_LOG_TAG, message)
     }
 
     private fun mediaServerPlaybackLog(event: String, errorCode: Int? = null, httpStatus: Int? = null) {
@@ -18491,49 +17631,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String) {
-        model.contentType = contentType
-
-        val nextMap = mutableMapOf<Int, Int>()
-        val prevMap = mutableMapOf<Int, Int>()
-
-        // Determine the CHRONOLOGICAL order to chain next/prev through. Torrent
-        // file order is NOT necessarily episode order (a pack may list S01E05
-        // before S01E02), and the playlist adapter itself displays episodes
-        // sorted by season then episode. If we linked next/prev in raw file
-        // order, "next episode" / autoplay-next would jump to whatever file
-        // happens to sit next in the torrent — the wrong episode. So for series
-        // content, chain in (season, episode) order to match what the user sees.
-        // Collections (no season/episode) keep raw list order.
-        val isSeries = contentType == "series" &&
-            model.items.any { it.season != null && it.episode != null }
-        val order: List<Int> = if (isSeries) {
-            model.items.indices.sortedWith(
-                compareBy(
-                    { model.items[it].season ?: Int.MAX_VALUE },
-                    { model.items[it].episode ?: Int.MAX_VALUE },
-                    { it }, // stable tie-break on raw index
-                )
-            )
-        } else {
-            model.items.indices.toList()
-        }
-
-        for (pos in 0 until order.lastIndex) {
-            nextMap[order[pos]] = order[pos + 1]
-        }
-        for (pos in 1..order.lastIndex) {
-            prevMap[order[pos]] = order[pos - 1]
-        }
-
-        model.nextEpisodeMap = nextMap
-        model.prevEpisodeMap = prevMap
-        model.collectionGroups = null
-        model.perItemImdbIds.clear()
-
-        android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, isSeries=$isSeries, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
-    }
-
     private fun switchToStremioSource(url: String, sourceIndex: Int, mimeType: String? = null, mimeDiscovered: Boolean = false) {
         // Live Stremio IPTV channel: the movie path below seeks to the
         // previous position and runs PikPak/YouTube bookkeeping — all wrong
@@ -19420,16 +18517,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildNowPlayingText(channel: StremioTvGuideChannel): String {
-        val title = channel.nowPlayingTitle ?: return "Loading..."
-        val parts = mutableListOf(title)
-        if (!channel.nowPlayingYear.isNullOrEmpty()) parts.add("(${channel.nowPlayingYear})")
-        if (channel.nowPlayingRating != null && channel.nowPlayingRating!! > 0) {
-            parts.add("★ ${String.format(Locale.US, "%.1f", channel.nowPlayingRating)}")
-        }
-        return parts.joinToString(" ")
-    }
-
     private fun isFocusInStremioTvGuideList(): Boolean {
         val list = stremioTvGuideList ?: return false
         var current = currentFocus
@@ -19543,31 +18630,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    private fun updateStremioTvGuideChannelData(
-        channel: StremioTvGuideChannel,
-        data: Map<*, *>
-    ) {
-        val np = data["nowPlaying"] as? Map<*, *>
-        if (np != null) {
-            channel.nowPlayingTitle = np["title"] as? String
-            channel.nowPlayingPoster = (np["poster"] as? String)?.takeIf { it.isNotEmpty() }
-            channel.nowPlayingYear = (np["year"] as? String)?.takeIf { it.isNotEmpty() }
-            channel.nowPlayingRating = (np["rating"] as? Number)?.toDouble()
-            channel.nowPlayingSlotEndMs = (np["slotEndMs"] as? Number)?.toLong() ?: 0
-            channel.nowPlayingProgress = (np["progress"] as? Number)?.toFloat() ?: 0f
-            channel.hasGuideData = true
-        }
-
-        val next = data["nextUp"] as? Map<*, *>
-        if (next != null) {
-            channel.nextUpTitle = next["title"] as? String
-            channel.nextUpPoster = (next["poster"] as? String)?.takeIf { it.isNotEmpty() }
-            channel.nextUpYear = (next["year"] as? String)?.takeIf { it.isNotEmpty() }
-            channel.nextUpRating = (next["rating"] as? Number)?.toDouble()
-        }
-        channel.isLoadingGuideData = false
     }
 
     private fun updateStremioSourcesFromPlaybackMap(map: Map<*, *>) {
@@ -19919,7 +18981,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // substituting before real playback wins.
         private const val RESUME_HOLD_TOLERANCE_MS = 10_000L
         private const val RESUME_HOLD_SETTLE_MS = 30_000L
-        private const val STARTUP_FAILOVER_LOG_TAG = "DebrifyStartupGate"
         /**
          * When true, the dock buttons (Audio, Subs, Fill, Speed, Night, Shuffle) open the
          * unified Miller-columns menu instead of the individual dialogs/panels. Additive —
@@ -19944,15 +19005,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
-        private const val SEARCH_SUBTITLE_LABEL = "Search Movie/Show Subtitles"
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
         private const val EXTERNAL_SUBTITLE_TICK_MS = 250L
-        private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
         private const val MAX_SKIP_SEGMENT_CACHE_ENTRIES = 64
         private val IMDB_ID_REGEX = Regex("^tt\\d+$")
-
-        // PikPak cold storage retry constants
-        private const val PROVIDER_PIKPAK = "pikpak"
         private const val PIKPAK_MAX_RETRIES = 5
         private const val PIKPAK_METADATA_TIMEOUT_MS = 10000  // 10 seconds to wait for metadata
         private const val PIKPAK_BASE_DELAY_MS = 2000  // 2 seconds base delay
