@@ -748,6 +748,7 @@ and engine), scheduled recording confirmation.
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
 - Revisit the per-class R8 keep rules after the series.
+- Recording actions contain three redundant unreachable toast branches (unsupported after the complementary permission gate, in engine/schedule; null record URL after identical URL scheduling eligibility). Preserve here; reconsider only in separate behavior-approved work.
 - Independent post-review P3 coverage follow-up before phase 3: characterize
   ring repaint requests after color changes, animator updates and stop/reset,
   with original-code assertion-killed `invalidate()` removal mutations. Current
@@ -1131,3 +1132,5 @@ and engine), scheduled recording confirmation.
   and baseline provenance. Lockfile, ProGuard, activity and earlier destinations
   unchanged. Temporary original worktree removed after evidence archival.
   **Stopped after step T/0; no production moves, push or device interaction.**
+
+- 2026-10-08 — **Phase 3 step 0b complete before moves.** Added 30 original-surface characterization tests; all 70 sweep mutations fail named assertions on ec365eb80. All nine skip focus exclusions, key/post conditions, animation durations/targets/deadband, reachable recording Toast occurrences, dialog text and sleep/skip/Up Next strings are pinned. Claude exact e12–e15 rerun against 194 phase-2/3 tests: all killed, clean control passes. Clean `p3-step0b` has 456 identities (455 pass, unchanged source-browser focus failure), retaining all 426 p3-step0 statuses with 30 passing additions. Rejected fixture-leak attempt is archived; accepted combined run passes after cleanup. Three unreachable original recording-message guards are preserved and documented, no bug fix. Evidence `p3/step0b/` and `junit/p3-step0b/`; original detached tree removed. Production, lockfile, ProGuard and earlier manifests unchanged. Step 1 and gates follow.

@@ -30,15 +30,20 @@ class TvRecordingMediaStoreProvider : ContentProvider() {
     val inserts = mutableListOf<ContentValues>()
     val publications = mutableListOf<ContentValues>()
     var beforePublish: (() -> Unit)? = null
+    var failInsert = false
+    var failPublish = false
     lateinit var file: File
     override fun onCreate() = true
     override fun insert(uri: Uri, values: ContentValues?): Uri {
+        if (failInsert) throw java.io.IOException("fixture insert failure")
         inserts.add(ContentValues(values)); return Uri.parse("content://media/external/downloads/123")
     }
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor =
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_CREATE)
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int {
-        beforePublish?.invoke(); publications.add(ContentValues(values)); return 1
+        beforePublish?.invoke()
+        if (failPublish) throw java.io.IOException("fixture publish failure")
+        publications.add(ContentValues(values)); return 1
     }
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 1
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null

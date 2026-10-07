@@ -21,9 +21,12 @@ import org.robolectric.shadows.ShadowToast
 @Implements(value = DeviceSecretCipherPlugin::class, isInAndroidSdk = false)
 class TvScheduleCipherShadow {
     companion object {
+        var failSeal = false
+        @org.robolectric.annotation.Resetter @JvmStatic fun reset() { failSeal = false }
         private val payloads = mutableMapOf<String, Pair<ByteArray, ByteArray>>()
         @Implementation @JvmStatic fun sealForNative(plaintext: ByteArray, aad: ByteArray): String =
-            ("test-envelope-${payloads.size}").also { payloads[it] = plaintext.copyOf() to aad.copyOf() }
+            if (failSeal) throw java.io.IOException("fixture seal failure") else
+                ("test-envelope-${payloads.size}").also { payloads[it] = plaintext.copyOf() to aad.copyOf() }
         @Implementation @JvmStatic fun openForNative(envelope: String, aad: ByteArray): ByteArray {
             val stored = payloads[envelope] ?: error("unknown test envelope")
             check(stored.second.contentEquals(aad)) { "schedule AAD differs" }
