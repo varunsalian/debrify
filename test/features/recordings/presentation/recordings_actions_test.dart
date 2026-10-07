@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/recordings_fixture.dart';
+import '../../../support/recordings_visual_assertions.dart';
 
 Future<void> waitForEmptyDvr(
   WidgetTester tester,
@@ -101,6 +102,16 @@ void main() {
           findsOneWidget,
           reason: 'Stop snackbar matches captured byte outcome $bytes',
         );
+        recordingTextProperties(
+          t,
+          find
+              .descendant(
+                of: find.byType(SnackBar),
+                matching: find.byType(Text),
+              )
+              .first,
+          reason: 'desktop Stop snackbar Text properties',
+        );
         expect(
           recordingsType('_LibraryRow'),
           bytes > 0 ? findsOneWidget : findsNothing,
@@ -127,6 +138,11 @@ void main() {
         find.text("Couldn't delete the recording"),
         findsOneWidget,
         reason: 'active-capture deletion reports refusal',
+      );
+      recordingTextProperties(
+        t,
+        find.text("Couldn't delete the recording"),
+        reason: 'delete failure snackbar Text properties',
       );
       expect(
         f.paths.reads - reads,

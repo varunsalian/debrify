@@ -1,0 +1,102 @@
+// Feature-owned AST inventory. Uses the existing isolated analyzer package;
+// shared parser output and every other manifest remain unchanged.
+import 'dart:convert';
+import 'dart:io';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+
+class Inventory extends RecursiveAstVisitor<void> {
+  Inventory(this.source);
+  final String source;
+  final strings = <Map<String, Object?>>[];
+  final texts = <Map<String, Object?>>[];
+  final buttons = <Map<String, Object?>>[];
+  final counts = <String, int>{};
+  String member(AstNode node) {
+    final method = node.thisOrAncestorOfType<MethodDeclaration>();
+    final field = node.thisOrAncestorOfType<FieldDeclaration>();
+    final owner = node.thisOrAncestorOfType<ClassDeclaration>();
+    return '${owner?.namePart.typeName.lexeme ?? '<top>'}.${method?.name.lexeme ?? field?.fields.variables.first.name.lexeme ?? '<declaration>'}';
+  }
+
+  String id(AstNode node, String kind) {
+    final key = '$kind:${member(node)}';
+    final index = counts.update(key, (n) => n + 1, ifAbsent: () => 0);
+    return '$key:$index';
+  }
+
+  void literal(StringLiteral node) {
+    if (node.parent is AdjacentStrings) return;
+    strings.add({
+      'id': id(node, 'string'),
+      'member': member(node),
+      'line': '\n'.allMatches(source.substring(0, node.offset)).length + 1,
+      'source': source.substring(node.offset, node.end),
+      'value': node.stringValue,
+    });
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    literal(node);
+    super.visitSimpleStringLiteral(node);
+  }
+
+  @override
+  void visitStringInterpolation(StringInterpolation node) {
+    literal(node);
+    super.visitStringInterpolation(node);
+  }
+
+  @override
+  void visitAdjacentStrings(AdjacentStrings node) {
+    literal(node);
+    super.visitAdjacentStrings(node);
+  }
+
+  void call(AstNode node, String name, ArgumentList arguments) {
+    if (name == 'Text' || name == '_HubButton') {
+      (name == 'Text' ? texts : buttons).add({
+        'id': id(node, name),
+        'member': member(node),
+        'line': '\n'.allMatches(source.substring(0, node.offset)).length + 1,
+        if (name == 'Text') 'data': arguments.arguments.first.toSource(),
+        'properties': {
+          for (final argument in arguments.arguments.whereType<NamedArgument>())
+            argument.name.lexeme: argument.argumentExpression.toSource(),
+        },
+      });
+    }
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    call(node, node.constructorName.type.toSource(), node.argumentList);
+    super.visitInstanceCreationExpression(node);
+  }
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target == null)
+      call(node, node.methodName.name, node.argumentList);
+    super.visitMethodInvocation(node);
+  }
+}
+
+void main() {
+  final source =
+      (jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>)['source']
+          as String;
+  final parsed = parseString(content: source, throwIfDiagnostics: false);
+  if (parsed.errors.isNotEmpty) throw StateError('${parsed.errors}');
+  final inventory = Inventory(source);
+  parsed.unit.accept(inventory);
+  stdout.write(
+    jsonEncode({
+      'strings': inventory.strings,
+      'texts': inventory.texts,
+      'buttons': inventory.buttons,
+    }),
+  );
+}

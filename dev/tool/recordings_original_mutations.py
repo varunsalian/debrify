@@ -117,6 +117,16 @@ def main():
                                 and 'Expected:' in event.get('error',event.get('message',''))]
             text = json.dumps(assertion_events)
             killed = expected <= rejected and all(reason in text for reason in reasons)
+            if a.kind == 'B':
+                tests = {event['test']['id']: event['test']['name']
+                         for line in path.read_text().splitlines()
+                         if isinstance(event := json.loads(line), dict)
+                         and event.get('type') == 'testStart'}
+                # A reason emitted by a different test cannot prove this case.
+                killed = killed and all(any(
+                    reason in json.dumps([event for event in assertion_events
+                        if tests.get(event.get('testID')) == identity.split('::', 1)[1]])
+                    for reason in reasons) for identity in expected)
             env = json.loads(path.with_suffix('.env.json').read_text())
             assert not env['tree_changed_during_run']
             assert frozen(root) == snapshot, 'test/fixture bytes changed'

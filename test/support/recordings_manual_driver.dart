@@ -10,23 +10,27 @@ class RecordingsManualDriver {
   final RecordingsFixture fixture;
   final String url = 'http://recordings.test/manual.ts';
 
-  Future<void> open({String? channelUrl}) async {
+  Future<void> open({
+    String? channelUrl,
+    String? resourceId,
+    int? resourceRevision,
+  }) async {
     await fixture.tap(tester, find.text('Schedule').first);
     await fixture.until(
       tester,
-      () => find.text('Record which channel?').evaluate().isNotEmpty,
+      () => find.byType(AlertDialog).evaluate().isNotEmpty,
     );
     fixture.navigator.currentState!.pop(
-      const IptvStartupChannelChoice(
-        url: 'http://recordings.test/manual.ts',
+      IptvStartupChannelChoice(
+        url: channelUrl ?? url,
         name: 'Manual channel',
         playlistId: null,
         channelNumber: 7,
         group: 'Group',
         logoUrl: null,
         httpHeaders: {'X-Fixture': 'manual'},
-        connectionResourceId: null,
-        connectionResourceRevision: null,
+        connectionResourceId: resourceId,
+        connectionResourceRevision: resourceRevision,
         listName: 'Favorites',
       ),
     );

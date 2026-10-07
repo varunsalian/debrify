@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/recordings_fixture.dart';
 import '../../../support/recordings_manual_driver.dart';
+import '../../../support/recordings_visual_assertions.dart';
 
 class RecordingWrites extends InMemorySharedPreferencesStore {
   RecordingWrites(super.values) : super.withData();
@@ -121,6 +122,16 @@ void main() {
         await f.until(
           t,
           () => find.text('Recording scheduled').evaluate().isNotEmpty,
+        );
+        expect(
+          find.text('Recording scheduled'),
+          findsOneWidget,
+          reason: 'scheduled result snackbar verbatim',
+        );
+        recordingTextProperties(
+          t,
+          find.text('Recording scheduled'),
+          reason: 'scheduled result snackbar Text properties',
         );
         final rows = await DesktopScheduleService.instance.list();
         expect(rows, hasLength(1));

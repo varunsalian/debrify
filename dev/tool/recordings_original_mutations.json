@@ -1981,5 +1981,665 @@
         "after": "i == 0"
       }
     ]
+  },
+  {
+    "label": "daylabel-weekday-order",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "each nonrelative weekday"
+    ],
+    "assertion_reasons": [
+      "nonrelative schedule weekday d/m verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._dayLabel",
+        "before": "const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];",
+        "after": "const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];"
+      }
+    ]
+  },
+  {
+    "label": "library-row-maxlines",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "populated widgets every Text"
+    ],
+    "assertion_reasons": [
+      "LibraryRow title Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_LibraryRowState.build",
+        "before": "maxLines: 2,",
+        "after": "maxLines: 1,"
+      }
+    ]
+  },
+  {
+    "label": "live-chip-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "populated DVR verbatim"
+    ],
+    "assertion_reasons": [
+      "populated DVR verbatim text:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "chip: '$liveCount LIVE',",
+        "after": "chip: '$liveCount ON AIR',"
+      }
+    ]
+  },
+  {
+    "label": "rowicon-focus-color",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "row icon both focus states"
+    ],
+    "assertion_reasons": [
+      "RowIconButton focused and unfocused icon colour"
+    ],
+    "edits": [
+      {
+        "member": "_RowIconButtonState.build",
+        "before": "? const Color(0xFFFF8CA3)",
+        "after": "? const Color(0xFFFFFFFF)"
+      }
+    ]
+  },
+  {
+    "label": "title-underscores-kept",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "populated DVR verbatim"
+    ],
+    "assertion_reasons": [
+      "populated DVR verbatim text:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._displayFor",
+        "before": "final title = base.replaceAll('_', ' ').trim();",
+        "after": "final title = base.trim();"
+      }
+    ]
+  },
+  {
+    "label": "hubbar-title",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "empty DVR verbatim"
+    ],
+    "assertion_reasons": [
+      "empty DVR verbatim text:"
+    ],
+    "edits": [
+      {
+        "member": "_HubBar.build",
+        "before": "'Recordings',",
+        "after": "'DVR',"
+      }
+    ]
+  },
+  {
+    "label": "library-hint-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "empty zones retain"
+    ],
+    "assertion_reasons": [
+      "library hint verbatim inventory"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "'No recordings yet. Focus a live channel '",
+        "after": "'No recordings yet! Focus a live channel '"
+      }
+    ]
+  },
+  {
+    "label": "desktop-footer-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "empty zones retain"
+    ],
+    "assertion_reasons": [
+      "desktop footer verbatim inventory"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState.build",
+        "before": "'Recordings run while Debrify is open and '",
+        "after": "'Recordings run while Debrify is active and '"
+      }
+    ]
+  },
+  {
+    "label": "schedule-subtitle-separator",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "relative day and channel prefix"
+    ],
+    "assertion_reasons": [
+      "relative titled schedule subtitle verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_ScheduleRowState.build",
+        "before": "'${s.channelName} \u00b7 ${widget.timeText}'",
+        "after": "'${s.channelName} \u2014 ${widget.timeText}'"
+      }
+    ]
+  },
+  {
+    "label": "duplicate-result-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "manual picker title invalid"
+    ],
+    "assertion_reasons": [
+      "duplicate result snackbar verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "'Already scheduled at that time'",
+        "after": "'Already scheduled for that time'"
+      }
+    ]
+  },
+  {
+    "label": "unschedulable-result-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "manual picker title invalid"
+    ],
+    "assertion_reasons": [
+      "unschedulable channel snackbar verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "'TS or Xtream stream'",
+        "after": "'TS or direct stream'"
+      }
+    ]
+  },
+  {
+    "label": "back-tooltip-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "empty DVR verbatim"
+    ],
+    "assertion_reasons": [
+      "Back tooltip verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_HubBar.build",
+        "before": "tooltip: 'Back',",
+        "after": "tooltip: 'Return',"
+      }
+    ]
+  },
+  {
+    "label": "channel-picker-title-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "manual picker title invalid"
+    ],
+    "assertion_reasons": [
+      "channel picker title verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "title: 'Record which channel?',",
+        "after": "title: 'Record what channel?',"
+      }
+    ]
+  },
+  {
+    "label": "elapsed-seconds-padding",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "populated DVR verbatim"
+    ],
+    "assertion_reasons": [
+      "populated DVR verbatim text:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtElapsed",
+        "before": "final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');",
+        "after": "final s = d.inSeconds.remainder(60).toString();"
+      }
+    ]
+  },
+  {
+    "label": "kilobyte-suffix",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "byte and duration templates"
+    ],
+    "assertion_reasons": [
+      "formatted library subtitle verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtBytes",
+        "before": "'${(bytes / 1024).toStringAsFixed(0)} KB'",
+        "after": "'${(bytes / 1024).toStringAsFixed(0)} KiB'"
+      }
+    ]
+  },
+  {
+    "label": "duration-whole-hour-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "byte and duration templates"
+    ],
+    "assertion_reasons": [
+      "formatted library subtitle verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtDuration",
+        "before": "'${d.inHours}h'",
+        "after": "'${d.inHours} hr'"
+      }
+    ]
+  },
+  {
+    "label": "long-content-minutes-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "long recording full content"
+    ],
+    "assertion_reasons": [
+      "long recording content verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "' ${minutes}m'",
+        "after": "' ${minutes} min'"
+      }
+    ]
+  },
+  {
+    "label": "long-content-nextday-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "long recording full content"
+    ],
+    "assertion_reasons": [
+      "long recording content verbatim:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._askRecordingLength",
+        "before": "' the next day'",
+        "after": "' tomorrow'"
+      }
+    ]
+  },
+  {
+    "label": "countdown-starting-text",
+    "kind": "B",
+    "tests": [
+      "recordings_load_and_timers"
+    ],
+    "must_fail": [
+      "countdown renders second"
+    ],
+    "assertion_reasons": [
+      "countdown boundary"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._fmtCountdown",
+        "before": "return 'starting\u2026';",
+        "after": "return 'starting';"
+      }
+    ]
+  },
+  {
+    "label": "hub-title-fontsize",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "empty DVR and hub"
+    ],
+    "assertion_reasons": [
+      "HubBar title Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_HubBar.build",
+        "before": "fontSize: 19,",
+        "after": "fontSize: 20,"
+      }
+    ]
+  },
+  {
+    "label": "section-chip-figures",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "populated widgets every Text"
+    ],
+    "assertion_reasons": [
+      "SectionHeader chip Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_SectionHeader.build",
+        "before": "fontFeatures: const [FontFeature.tabularFigures()],",
+        "after": "fontFeatures: const [],"
+      }
+    ]
+  },
+  {
+    "label": "empty-hint-alpha",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "empty hint Text"
+    ],
+    "assertion_reasons": [
+      "EmptyHint Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_EmptyHint.build",
+        "before": "alpha: 0.45",
+        "after": "alpha: 0.5"
+      }
+    ]
+  },
+  {
+    "label": "live-title-lines",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "populated widgets every Text"
+    ],
+    "assertion_reasons": [
+      "LiveCard title Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_LiveCard.build",
+        "before": "maxLines: 1,",
+        "after": "maxLines: 2,"
+      }
+    ]
+  },
+  {
+    "label": "schedule-title-overflow",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "populated widgets every Text"
+    ],
+    "assertion_reasons": [
+      "ScheduleRow title Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_ScheduleRowState.build",
+        "before": "maxLines: 1,\n                      overflow: TextOverflow.ellipsis,\n                      style: const TextStyle(",
+        "after": "maxLines: 1,\n                      overflow: TextOverflow.clip,\n                      style: const TextStyle("
+      }
+    ]
+  },
+  {
+    "label": "empty-explanation-align",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "empty DVR and hub"
+    ],
+    "assertion_reasons": [
+      "EmptyDvr explanation Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_EmptyDvr.build",
+        "before": "textAlign: TextAlign.center,",
+        "after": "textAlign: TextAlign.left,"
+      }
+    ]
+  },
+  {
+    "label": "hubbutton-text-weight",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "filled both focus states"
+    ],
+    "assertion_reasons": [
+      "focus Text properties"
+    ],
+    "edits": [
+      {
+        "member": "_HubButtonState.build",
+        "before": "fontWeight: FontWeight.w800,",
+        "after": "fontWeight: FontWeight.w700,"
+      }
+    ]
+  },
+  {
+    "label": "hubicon-focus-fill",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "hub icon both focus states"
+    ],
+    "assertion_reasons": [
+      "HubIconButton focus decoration"
+    ],
+    "edits": [
+      {
+        "member": "_HubIconButtonState.build",
+        "before": "_focused ? 0.12 : 0.05",
+        "after": "_focused ? 0.15 : 0.05"
+      }
+    ]
+  },
+  {
+    "label": "schedule-focus-border-width",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "schedule both focus states"
+    ],
+    "assertion_reasons": [
+      "focus decoration"
+    ],
+    "edits": [
+      {
+        "member": "_ScheduleRowState.build",
+        "before": "width: _focused ? 1.8 : 1,",
+        "after": "width: _focused ? 2 : 1,"
+      }
+    ]
+  },
+  {
+    "label": "library-focus-fill",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "library and thumb both focus states"
+    ],
+    "assertion_reasons": [
+      "focus decoration"
+    ],
+    "edits": [
+      {
+        "member": "_LibraryRowState.build",
+        "before": "alpha: 0.07",
+        "after": "alpha: 0.08"
+      }
+    ]
+  },
+  {
+    "label": "thumb-highlight-fill",
+    "kind": "B",
+    "tests": [
+      "recordings_visual_properties"
+    ],
+    "must_fail": [
+      "library and thumb both focus states"
+    ],
+    "assertion_reasons": [
+      "Thumb highlighted and unhighlighted play fill"
+    ],
+    "edits": [
+      {
+        "member": "_Thumb.build",
+        "before": "? _kGold",
+        "after": "? _kRec"
+      }
+    ]
+  },
+  {
+    "label": "delete-dialog-text-colour",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "cancel and delete dialog complete"
+    ],
+    "assertion_reasons": [
+      "delete dialog Text properties:"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._delete",
+        "before": "const Text('Delete', style: TextStyle(color: _kRec))",
+        "after": "const Text('Delete', style: TextStyle(color: _kGold))"
+      }
+    ]
+  },
+  {
+    "label": "bad-time-result-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "manual next-minute end and removed source result text"
+    ],
+    "assertion_reasons": [
+      "bad-time result snackbar verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "That time has already passed",
+        "after": "That time is in the past"
+      }
+    ]
+  },
+  {
+    "label": "generic-schedule-result-text",
+    "kind": "B",
+    "tests": [
+      "recordings_text_inventory"
+    ],
+    "must_fail": [
+      "manual next-minute end and removed source result text"
+    ],
+    "assertion_reasons": [
+      "removed-source result snackbar verbatim"
+    ],
+    "edits": [
+      {
+        "member": "_RecordingsPageState._createManualSchedule",
+        "before": "Couldn't schedule recording",
+        "after": "Couldn't start recording"
+      }
+    ]
   }
 ]
