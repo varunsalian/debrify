@@ -39,6 +39,22 @@ SETTINGS_WIDGETS_COMPLETE = True
 SETTINGS_WIDGETS_FACADE = "lib/screens/settings/widgets/settings_widgets.dart"
 SETTINGS_WIDGETS_FACADE_CAP = 63  # settings_widgets: 63 export lines, 0 comments/blanks.
 SETTINGS_WIDGETS_PUBLIC_NAMES = frozenset(['ConnectionCard', 'ConnectionInfo', 'ConnectionsSummary', 'SettingsBackground', 'SettingsBannerTone', 'SettingsHeader', 'SettingsInfoBanner', 'SettingsInfoTile', 'SettingsLookHero', 'SettingsPageHeader', 'SettingsPageScaffold', 'SettingsRowContent', 'SettingsRows', 'SettingsSection', 'SettingsSectionLabel', 'SettingsSelectDropdown', 'SettingsSelectOption', 'SettingsSkeleton', 'SettingsTile', 'SettingsToggleTile', 'TvRenderQualityChoice', 'TvUiScaleChoice', 'WebDavSyncPendingBadge', 'kSettingsAccent', 'kSettingsAccent2', 'kSettingsAmber', 'kSettingsBg', 'kSettingsDim', 'kSettingsDim2', 'kSettingsGreen', 'kSettingsLine', 'kSettingsMaxWidth', 'kSettingsPanel', 'kSettingsPanel2', 'kSettingsRed', 'kTvRenderQualityChoices', 'kTvUiScaleChoices', 'launchSettingsUrl', 'pushSettingsPage', 'settingsConnectionIsReady', 'settingsConnectionNeedsAttention', 'settingsInitialsFor', 'settingsPageTheme', 'showLegacyModeInfoDialog', 'showSettingsDialog', 'tvRenderQualityLabel', 'tvUiScaleLabel'])
+# Pure UI two-pane move: feature checks are unconditional from step 1.
+FEATURES += ("iptv_settings_two_pane",)
+IPTV_SETTINGS_TWO_PANE_COMPLETE = True
+IPTV_SETTINGS_TWO_PANE_FACADE = "lib/screens/settings/iptv_settings_two_pane.dart"
+IPTV_SETTINGS_TWO_PANE_BRIDGE = "lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/"
+IPTV_SETTINGS_TWO_PANE_FACADE_CAP = 7  # Measured and activated at completion.
+IPTV_SETTINGS_TWO_PANE_PUBLIC_NAMES = frozenset([
+    "IptvAutoRefreshDialog", "IptvSettingsTwoPane", "IptvSettingsTwoPaneState",
+    "iptvAutoRefreshExplanation", "iptvAutoRefreshLabel",
+])
+IPTV_SETTINGS_TWO_PANE_EXPORTS = {
+    "package:debrify/features/iptv_settings_two_pane/presentation/iptv_auto_refresh_dialog.dart":
+        {"IptvAutoRefreshDialog", "iptvAutoRefreshExplanation", "iptvAutoRefreshLabel"},
+    "package:debrify/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart":
+        {"IptvSettingsTwoPane", "IptvSettingsTwoPaneState"},
+}
 STREMIO_TV_COMPLETE = True
 STREMIO_TV_FACADE = "lib/screens/stremio_tv/stremio_tv_screen.dart"
 STREMIO_TV_BRIDGE = "lib/features/stremio_tv/presentation/legacy_stremio_tv/"
@@ -230,6 +246,7 @@ COMPOSITION_ROOTS = {
     # Pure catalog compatibility export surface; feature files own declarations.
     STREMIO_TV_CATALOGS_FACADE,
     # settings_widgets: pure compatibility exports; feature files own every declaration.
+    IPTV_SETTINGS_TWO_PANE_FACADE,
     SETTINGS_WIDGETS_FACADE,
     # Timeline facade wires its State-owned live view, record and cached sections.
     IPTV_SPOTLIGHT_TIMELINE_FACADE,
@@ -338,6 +355,31 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Exact per-file legacy constants/types; exits are in the two-pane plan.
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_widget.dart": {
+        "lib/services/iptv_media_store.dart": {"IptvListMeta"},
+        "lib/services/storage/iptv_appearance_storage.dart": {"IptvAppearanceStorage"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_owners.dart": {
+        "lib/services/iptv_source_stats.dart": {"IptvSourceStats"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_navigation.dart": {
+        "lib/services/iptv_source_stats.dart": {"IptvSourceStatsLoader"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_rail.dart": {
+        "lib/services/iptv_source_stats.dart": {"IptvSourceStatsLoader"},
+        "lib/services/storage/startup_iptv_storage.dart": {"StartupIptvStorage"},
+        "lib/screens/settings/iptv_style_page.dart": {"iptvStyleLabel"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_panes.dart": {
+        "lib/services/iptv_source_stats.dart": {"IptvGuideSource", "IptvSourceStats", "IptvSourceStatsLoader"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_list_panes.dart": {
+        "lib/services/storage/startup_iptv_storage.dart": {"StartupIptvStorage"},
+    },
+    IPTV_SETTINGS_TWO_PANE_BRIDGE + "iptv_settings_two_pane_preference_panes.dart": {
+        "lib/screens/settings/iptv_style_page.dart": {"kIptvStyleChoices"},
+    },
     # settings_widgets: exact legacy type/static imports; exits recorded in its plan.
     'lib/features/settings_widgets/presentation/settings_connection_card.dart': {
         'lib/services/main_page_bridge.dart': {'MainPageBridge'},
@@ -487,6 +529,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     DEBRID_BRIDGE,
     PIKPAK_BRIDGE,
     PLAYBACK_SETTINGS_BRIDGE,
+    # Pure UI two-pane bridge; exit: stats/options contracts and route state.
+    IPTV_SETTINGS_TWO_PANE_BRIDGE,
     # Bounded move-only settings bridge; exit: IPTV settings data contracts.
     IPTV_SETTINGS_BRIDGE,
     PLAYLIST_CONTENT_BRIDGE,
@@ -686,6 +730,29 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    # These feature checks do not depend on completion or bridge membership.
+    if relative.startswith("lib/features/iptv_settings_two_pane/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line IPTV settings two-pane limit")
+        if re.search(r"\b(?:Builder|KeepAlive|AutomaticKeepAlive|IndexedStack)\s*\(", source):
+            problems.append("IPTV settings two-pane adds a wrapper or keep-alive widget")
+    if relative.startswith("lib/features/iptv_settings_two_pane/") or relative == IPTV_SETTINGS_TWO_PANE_FACADE:
+        if "TEMP(iptv_settings_two_pane)" in source:
+            problems.append("temporary IPTV settings two-pane cross-call remains")
+    if IPTV_SETTINGS_TWO_PANE_COMPLETE and relative == IPTV_SETTINGS_TWO_PANE_FACADE:
+        if lines > IPTV_SETTINGS_TWO_PANE_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {IPTV_SETTINGS_TWO_PANE_FACADE_CAP}-line IPTV settings two-pane facade limit")
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+        exports = re.compile(r"export\s+['\"]([^'\"]+)['\"]\s+show\s+([\w,\s]+);", re.MULTILINE)
+        matches = list(exports.finditer(without_comments))
+        names = [name.strip() for match in matches for name in match.group(2).split(",")]
+        if exports.sub("", without_comments).strip():
+            problems.append("IPTV settings two-pane facade must contain only export directives and comments")
+        if len(names) != 5 or set(names) != IPTV_SETTINGS_TWO_PANE_PUBLIC_NAMES:
+            problems.append("IPTV settings two-pane facade must export exactly the original five names")
+        if (len(matches) != len(IPTV_SETTINGS_TWO_PANE_EXPORTS)
+                or any(set(n.strip() for n in match.group(2).split(",")) != IPTV_SETTINGS_TWO_PANE_EXPORTS.get(match.group(1)) for match in matches)):
+            problems.append("IPTV settings two-pane facade must export each name from its exact destination")
     # settings_widgets: no feature size exceptions; completion adds the pure facade.
     if relative.startswith("lib/features/settings_widgets/"):
         if lines > 500:
@@ -869,6 +936,24 @@ def violations(path: Path) -> list[str]:
                 if ({own_catalog_feature, other_catalog_feature} == {"stremio_tv", "stremio_tv_catalogs"}
                         and not target.startswith(f"lib/features/{other_catalog_feature}/models/")):
                     problems.append("Stremio TV/catalogs implementation cross-import outside models")
+            if relative.startswith("lib/features/iptv_settings_two_pane/"):
+                if target == IPTV_SETTINGS_TWO_PANE_FACADE:
+                    problems.append("IPTV settings two-pane feature imports its facade")
+                if target.startswith(("lib/services/", "lib/screens/")):
+                    if not relative.startswith(IPTV_SETTINGS_TWO_PANE_BRIDGE):
+                        problems.append("IPTV settings two-pane service/screen import outside its legacy bridge")
+                    elif target not in PRESENTATION_BRIDGE_IMPORTS.get(relative, {}):
+                        problems.append("IPTV settings two-pane import outside its exact per-file registration")
+                if (target.startswith(("package:http/", "package:shared_preferences/", "package:sqflite"))
+                        or any(name in target for name in ("media_kit", "video_player", "player_launch", "native_bridge", "profiles/", "profile_service"))):
+                    problems.append("IPTV settings two-pane imports a playback/storage/http/native/profile implementation")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own_two_pane_feature, other_two_pane_feature = relative.split("/")[2], target.split("/")[2]
+                two_pane_peers = {"settings", "iptv", "iptv_settings", "settings_widgets"}
+                if ((own_two_pane_feature == "iptv_settings_two_pane" and other_two_pane_feature in two_pane_peers)
+                        or (other_two_pane_feature == "iptv_settings_two_pane" and own_two_pane_feature in two_pane_peers)):
+                    if not target.startswith(f"lib/features/{other_two_pane_feature}/models/"):
+                        problems.append("IPTV settings two-pane/settings-family implementation cross-import")
             # settings_widgets: physical directive targets, never facade resolution.
             if relative.startswith("lib/features/settings_widgets/"):
                 if target == SETTINGS_WIDGETS_FACADE:
@@ -1018,6 +1103,10 @@ def violations(path: Path) -> list[str]:
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
                 if relative.startswith("lib/features/detail_showcase/") and names != bridge[target]:
                     problems.append(f"detail showcase service import must show the exact registered declarations: {uri}")
+                if relative.startswith("lib/features/iptv_settings_two_pane/"):
+                    shown_names = re.findall(r"\w+", shown.group(1)) if shown else []
+                    if names != bridge[target] or len(shown_names) != len(names):
+                        problems.append(f"IPTV settings two-pane import must show the exact per-file registered declarations: {uri}")
                 if relative.startswith("lib/features/settings_widgets/") and names != bridge[target]:
                     problems.append(f"settings widgets service import must show the exact registered declarations: {uri}")
                 if not names or not names <= bridge[target]:
@@ -1111,6 +1200,8 @@ def main() -> int:
         paths.add(ROOT / SPOTLIGHT_BOARD_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if IPTV_SETTINGS_TWO_PANE_COMPLETE:
+        paths.add(ROOT / IPTV_SETTINGS_TWO_PANE_FACADE)
     if SETTINGS_WIDGETS_COMPLETE:
         paths.add(ROOT / SETTINGS_WIDGETS_FACADE)
     if DETAIL_SHOWCASE_COMPLETE:
