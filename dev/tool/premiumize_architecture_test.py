@@ -11,7 +11,10 @@ FEATURE = 'lib/features/premiumize_files/'
 
 
 def main():
-    from check_search_architecture import FEATURES
+    from check_search_architecture import (
+        FEATURES, PREMIUMIZE_COMPLETE, PREMIUMIZE_FACADE,
+        PREMIUMIZE_FACADE_CAP, PREMIUMIZE_BRIDGE,
+    )
     peer_registered = "alldebrid_files" in FEATURES
     with tempfile.TemporaryDirectory(prefix='premiumize_architecture_', dir=ROOT / '.dart_tool') as directory:
         tree = Path(directory)
@@ -64,6 +67,29 @@ def main():
                     assert result.returncode == 0, 'Unregistered peer scan must stay restricted to Premiumize cross-imports'
                     results['unregistered peer unrelated violations ignored'] = 'PASS'
             peer_probe.unlink()
+        if PREMIUMIZE_COMPLETE:
+            facade = tree / PREMIUMIZE_FACADE
+            original_facade = facade.read_text()
+            lines = len(original_facade.splitlines())
+            assert lines <= PREMIUMIZE_FACADE_CAP
+            facade.write_text(original_facade + '\n' * (PREMIUMIZE_FACADE_CAP - lines + 1))
+            result = run()
+            assert result.returncode != 0 and 'Premiumize facade limit' in result.stderr, result.stderr
+            results['measured facade cap'] = 'rejected by real main'
+            facade.write_text(original_facade)
+            changed = original_facade.replace('\n\n', '\n// TEMP(premiumize) probe\n', 1)
+            assert changed != original_facade and len(changed.splitlines()) == lines
+            facade.write_text(changed)
+            result = run()
+            assert result.returncode != 0 and 'temporary Premiumize cross-call remains in the facade' in result.stderr, result.stderr
+            results['completed facade temporary marker'] = 'rejected by real main'
+            facade.write_text(original_facade)
+            bridge_probe = tree / (PREMIUMIZE_BRIDGE + 'premiumize_completion_probe.dart')
+            bridge_probe.write_text('// TEMP(premiumize) probe\n')
+            result = run()
+            assert result.returncode != 0 and 'temporary Premiumize cross-call' in result.stderr, result.stderr
+            results['completed legacy bridge temporary marker'] = 'rejected by real main'
+            bridge_probe.unlink()
         assert run().returncode == 0
         print(json.dumps(results, indent=2))
     return 0

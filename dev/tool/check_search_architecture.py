@@ -12,10 +12,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail", "stremio_tv_tuner")
 FEATURES += ("premiumize_files",)
-PREMIUMIZE_COMPLETE = False
+PREMIUMIZE_COMPLETE = True
 PREMIUMIZE_FACADE = "lib/screens/premiumize/premiumize_files_screen.dart"
 PREMIUMIZE_BRIDGE = "lib/features/premiumize_files/presentation/legacy_premiumize/"
-PREMIUMIZE_FACADE_CAP = 400  # Measured downward at step 7.
+PREMIUMIZE_FACADE_CAP = 251  # Measured final facade, including the frozen accessor.
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
 STREMIO_TV_CATALOGS_COMPLETE = True
@@ -1110,6 +1110,8 @@ def main() -> int:
         paths.add(ROOT / STREMIO_TV_TUNER_FACADE)
     if STREMIO_TV_COMPLETE:
         paths.add(ROOT / STREMIO_TV_FACADE)
+    if PREMIUMIZE_COMPLETE:
+        paths.add(ROOT / PREMIUMIZE_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
