@@ -1,0 +1,609 @@
+{
+  "baseline": "49c53e2e",
+  "source": "lib/screens/settings/recordings_page.dart",
+  "feature": "lib/features/recordings",
+  "engine": "sections",
+  "context_guard": true,
+  "completed_step": 4,
+  "completion_step": 4,
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "live_getter_callback",
+    "retained_forwarder",
+    "layout_body"
+  ],
+  "receivers": [
+    "_deps",
+    "_owners",
+    "_sections",
+    "RecordingsHubData"
+  ],
+  "live_getter_callbacks": [
+    "context",
+    "mounted"
+  ],
+  "receiver_paths": {
+    "_owners": "RecordingsHubOwners",
+    "_sections.data": "RecordingsHubData",
+    "_sections.format": "RecordingsHubFormat",
+    "_sections.actions": "RecordingsHubActions",
+    "_sections.scheduling": "RecordingsHubScheduling",
+    "_sections.layout": "RecordingsHubLayout",
+    "RecordingsHubData": "RecordingsHubData"
+  },
+  "receiver_owners": {
+    "_owners": "RecordingsHubOwners",
+    "_sections.data": "RecordingsHubData",
+    "_sections.format": "RecordingsHubFormat",
+    "_sections.actions": "RecordingsHubActions",
+    "_sections.scheduling": "RecordingsHubScheduling",
+    "_sections.layout": "RecordingsHubLayout",
+    "RecordingsHubData": "RecordingsHubData"
+  },
+  "receiver_members": {
+    "RecordingsHubData": [
+      "isAndroid",
+      "desktop",
+      "desktopCaptures",
+      "_anythingLive",
+      "showBatteryNudge",
+      "batteryNudgeDismissedPref",
+      "dismissBatteryNudge",
+      "loadAll",
+      "_syncTimers",
+      "_pollLive"
+    ],
+    "RecordingsHubFormat": [
+      "fmtBytes",
+      "fmtElapsed",
+      "fmtCountdown",
+      "fmtDuration",
+      "clock",
+      "dayLabel",
+      "_stampSuffix",
+      "displayFor"
+    ],
+    "RecordingsHubActions": [
+      "stopAndroid",
+      "stopDesktop",
+      "cancelSchedule",
+      "play",
+      "delete",
+      "openFolder"
+    ],
+    "RecordingsHubScheduling": [
+      "createManualSchedule",
+      "_pickTime",
+      "_askRecordingLength"
+    ],
+    "RecordingsHubLayout": [
+      "build"
+    ],
+    "RecordingsHubOwners": [
+      "live",
+      "schedules",
+      "library",
+      "loading",
+      "exactAlarms",
+      "now",
+      "ticker",
+      "poll",
+      "appVisible",
+      "batteryExempt",
+      "batteryNudgeDismissedAtMs",
+      "firstLibraryFocus"
+    ]
+  },
+  "type_renames": {},
+  "occurrence_type_renames": true,
+  "occurrence_field_bindings": {
+    "owners": [
+      "_RecordingsPageState"
+    ],
+    "record_paths": {
+      "_owners": "RecordingsHubOwners",
+      "RecordingsHubData": "RecordingsHubData"
+    },
+    "mandatory_qualification": true,
+    "mandatory_qualification_classes": [
+      "RecordingsHubOwners",
+      "RecordingsHubData",
+      "RecordingsHubActions",
+      "RecordingsHubScheduling",
+      "RecordingsHubFormat",
+      "RecordingsHubLayout"
+    ]
+  },
+  "record_owners": [
+    "_RecordingsPageState"
+  ],
+  "record_fields": {
+    "_RecordingsPageState": [
+      "_live",
+      "_schedules",
+      "_library",
+      "_loading",
+      "_exactAlarms",
+      "_now",
+      "_ticker",
+      "_poll",
+      "_appVisible",
+      "_batteryExempt",
+      "_batteryNudgeDismissedAtMs",
+      "_firstLibraryFocus"
+    ]
+  },
+  "lexical_state_setters": {},
+  "lifecycle": [
+    "_RecordingsPageState.initState",
+    "_RecordingsPageState.dispose",
+    "_RecordingsPageState.didChangeAppLifecycleState"
+  ],
+  "verbatim_comment_bytes": true,
+  "forwarders": {
+    "_RecordingsPageState.build": {
+      "receiver": "_sections.layout",
+      "text": "@override Widget build(BuildContext context) => _sections.layout.build(context);"
+    }
+  },
+  "forwarded_annotation_occurrences": {
+    "_RecordingsPageState.build": [
+      "override"
+    ]
+  },
+  "source_validator_module": "recordings_contracts",
+  "self_test_module": "recordings_checker_test",
+  "sidecars": {
+    "scaffolding": "dev/tool/recordings_scaffolding.json",
+    "callbacks": "dev/tool/recordings_callback_sites.json"
+  },
+  "scaffolds": [
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart",
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart"
+  ],
+  "conditional_scaffolds": true,
+  "type_aliases": [
+    {
+      "original_name": "_HubBar",
+      "alias": "RecordingsHubHubBar",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_SectionHeader",
+      "alias": "RecordingsHubSectionHeader",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyHint",
+      "alias": "RecordingsHubEmptyHint",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LiveCard",
+      "alias": "RecordingsHubLiveCard",
+      "file": "lib/features/recordings/presentation/recordings_hub_live_card.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_ScheduleRow",
+      "alias": "RecordingsHubScheduleRow",
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LibraryRow",
+      "alias": "RecordingsHubLibraryRow",
+      "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyDvr",
+      "alias": "RecordingsHubEmptyDvr",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_BatteryBanner",
+      "alias": "RecordingsHubBatteryBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_AlarmBanner",
+      "alias": "RecordingsHubAlarmBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubButton",
+      "alias": "RecordingsHubHubButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubIconButton",
+      "alias": "RecordingsHubHubIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_RowIconButton",
+      "alias": "RecordingsHubRowIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    }
+  ],
+  "file_aliases": [
+    {
+      "original_name": "_HubBar",
+      "alias": "RecordingsHubHubBar",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_SectionHeader",
+      "alias": "RecordingsHubSectionHeader",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyHint",
+      "alias": "RecordingsHubEmptyHint",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LiveCard",
+      "alias": "RecordingsHubLiveCard",
+      "file": "lib/features/recordings/presentation/recordings_hub_live_card.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_ScheduleRow",
+      "alias": "RecordingsHubScheduleRow",
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LibraryRow",
+      "alias": "RecordingsHubLibraryRow",
+      "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyDvr",
+      "alias": "RecordingsHubEmptyDvr",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_BatteryBanner",
+      "alias": "RecordingsHubBatteryBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_AlarmBanner",
+      "alias": "RecordingsHubAlarmBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubButton",
+      "alias": "RecordingsHubHubButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubIconButton",
+      "alias": "RecordingsHubHubIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_RowIconButton",
+      "alias": "RecordingsHubRowIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    }
+  ],
+  "plain_sections": [
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
+      "owner": "RecordingsHubFormat"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout"
+    }
+  ],
+  "planned_type_aliases": [
+    {
+      "original_name": "_HubBar",
+      "alias": "RecordingsHubHubBar",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_SectionHeader",
+      "alias": "RecordingsHubSectionHeader",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyHint",
+      "alias": "RecordingsHubEmptyHint",
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LiveCard",
+      "alias": "RecordingsHubLiveCard",
+      "file": "lib/features/recordings/presentation/recordings_hub_live_card.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_ScheduleRow",
+      "alias": "RecordingsHubScheduleRow",
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_LibraryRow",
+      "alias": "RecordingsHubLibraryRow",
+      "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_EmptyDvr",
+      "alias": "RecordingsHubEmptyDvr",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_BatteryBanner",
+      "alias": "RecordingsHubBatteryBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_AlarmBanner",
+      "alias": "RecordingsHubAlarmBanner",
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubButton",
+      "alias": "RecordingsHubHubButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_HubIconButton",
+      "alias": "RecordingsHubHubIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    },
+    {
+      "original_name": "_RowIconButton",
+      "alias": "RecordingsHubRowIconButton",
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "kind": "widget"
+    }
+  ],
+  "planned_plain_sections": [
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
+      "owner": "RecordingsHubFormat"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling"
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout"
+    }
+  ],
+  "plain_owner_files": {
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart": "RecordingsHubData",
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart": "RecordingsHubFormat",
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart": "RecordingsHubActions",
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart": "RecordingsHubScheduling",
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart": "RecordingsHubLayout"
+  },
+  "comment_leaves": [
+    {
+      "anchor": "_RecordingsPageState._stopAndroid",
+      "offset": 10032,
+      "end_offset": 10109,
+      "text": "// \u2500\u2500 Actions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_RecordingsPageState._fmtBytes",
+      "offset": 23631,
+      "end_offset": 23708,
+      "text": "// \u2500\u2500 Formatting \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_RecordingsPageState.build",
+      "offset": 27282,
+      "end_offset": 27359,
+      "text": "// \u2500\u2500 Build \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_HubBar",
+      "offset": 37703,
+      "end_offset": 37782,
+      "text": "// \u2500\u2500 Top bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_SectionHeader",
+      "offset": 39152,
+      "end_offset": 39231,
+      "text": "// \u2500\u2500 Sections \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_LiveCard",
+      "offset": 41509,
+      "end_offset": 41588,
+      "text": "// \u2500\u2500 Recording-now card \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_ScheduleRow",
+      "offset": 45626,
+      "end_offset": 45705,
+      "text": "// \u2500\u2500 Scheduled row \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_LibraryRow",
+      "offset": 51462,
+      "end_offset": 51541,
+      "text": "// \u2500\u2500 Library row \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_EmptyDvr",
+      "offset": 57318,
+      "end_offset": 57397,
+      "text": "// \u2500\u2500 Empty state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    },
+    {
+      "anchor": "_HubButton",
+      "offset": 65203,
+      "end_offset": 65282,
+      "text": "// \u2500\u2500 Buttons \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    }
+  ],
+  "original_sha256": "3bb7832dc08306747b19cf88992713f0733dc894594c2fdd96a9d297261fda49",
+  "byte_identical_declarations": {
+    "RecordingsPage": "dev/tool/recordings_page_original.txt"
+  },
+  "scaffold_file_steps": {
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart": 2,
+    "lib/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart": 2
+  },
+  "additional_owners": [
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart",
+      "owner": "RecordingsHubSections",
+      "names": [
+        "RecordingsHubSections",
+        "data",
+        "actions",
+        "scheduling",
+        "format",
+        "layout"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubHubBar"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubSectionHeader"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubEmptyHint"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_live_card.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubLiveCard"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubScheduleRow"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubLibraryRow"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubEmptyDvr"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubBatteryBanner"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubAlarmBanner"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubHubButton"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubHubIconButton"
+      ]
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "names": [
+        "RecordingsHubRowIconButton"
+      ]
+    }
+  ]
+}

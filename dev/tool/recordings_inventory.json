@@ -1,0 +1,420 @@
+{
+  "reference": "49c53e2e",
+  "original_sha256": "3bb7832dc08306747b19cf88992713f0733dc894594c2fdd96a9d297261fda49",
+  "original_lines": 2129,
+  "shape": {
+    "bare_radii": 12,
+    "shape_calls": 0,
+    "existing_floor": 488
+  },
+  "theme": {
+    "light_ink_sites": [
+      [
+        962,
+        "color: Colors.white.withValues(alpha: 0.3),"
+      ],
+      [
+        1008,
+        "color: Colors.white,"
+      ],
+      [
+        1051,
+        "color: Colors.white.withValues(alpha: 0.38),"
+      ],
+      [
+        1068,
+        "color: chipColor == Colors.white38"
+      ],
+      [
+        1096,
+        "color: Colors.white.withValues(alpha: 0.03),"
+      ],
+      [
+        1098,
+        "border: Border.all(color: Colors.white.withValues(alpha: 0.05)),"
+      ],
+      [
+        1103,
+        "color: Colors.white.withValues(alpha: 0.45),"
+      ],
+      [
+        1165,
+        "color: Colors.white,"
+      ],
+      [
+        1322,
+        "color: _focused ? _kGold : Colors.white.withValues(alpha: 0.06),"
+      ],
+      [
+        1356,
+        "color: Colors.white,"
+      ],
+      [
+        1369,
+        "color: Colors.white.withValues(alpha: 0.5),"
+      ],
+      [
+        1411,
+        "color: Colors.white.withValues(alpha: _focused ? 0.8 : 0.35),"
+      ],
+      [
+        1474,
+        "color: _focused ? _kGold : Colors.white.withValues(alpha: 0.06),"
+      ],
+      [
+        1514,
+        "color: Colors.white,"
+      ],
+      [
+        1526,
+        "color: Colors.white.withValues(alpha: 0.5),"
+      ],
+      [
+        1648,
+        "color: Colors.white,"
+      ],
+      [
+        1664,
+        "color: Colors.white.withValues(alpha: 0.5),"
+      ],
+      [
+        1707,
+        "color: Color(0xFFF59E0B),"
+      ],
+      [
+        1721,
+        "color: Colors.white,"
+      ],
+      [
+        1732,
+        "color: Colors.white.withValues(alpha: 0.55),"
+      ],
+      [
+        1747,
+        "color: Colors.white.withValues(alpha: 0.45),"
+      ],
+      [
+        1800,
+        "color: const Color(0xFFF59E0B).withValues(alpha: 0.1),"
+      ],
+      [
+        1813,
+        "color: Color(0xFFF59E0B),"
+      ],
+      [
+        1824,
+        "color: Colors.white,"
+      ],
+      [
+        1834,
+        "color: Colors.white.withValues(alpha: 0.55),"
+      ],
+      [
+        2037,
+        "color: Colors.white.withValues(alpha: _focused ? 0.12 : 0.05),"
+      ],
+      [
+        2047,
+        "color: Colors.white.withValues(alpha: 0.8),"
+      ]
+    ],
+    "surface_counts": {
+      "files": 1,
+      "lines": 2129,
+      "colour_sites": 95,
+      "white_lines": 34,
+      "theme_of": 0
+    }
+  },
+  "strict": {
+    "protocol": "R under lib/features/analysis_options.yaml; compiling rename/alias/receiver/import probe; max per rule, enclosing ORIGINAL member, message",
+    "original": [
+      {
+        "severity": "info",
+        "rule": "directives_ordering",
+        "member": "<imports>",
+        "message": "Sort directive sections alphabetically. Try sorting the directives"
+      },
+      {
+        "severity": "info",
+        "rule": "directives_ordering",
+        "member": "<imports>",
+        "message": "Sort directive sections alphabetically. Try sorting the directives"
+      }
+    ],
+    "probe": [
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'filled' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'danger' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'autofocus' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubIconButton._HubIconButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_HubBar._HubBar",
+        "message": "A value for optional parameter 'onScheduleDown' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'chip' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'action' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart"
+      },
+      {
+        "severity": "warning",
+        "rule": "unused_element_parameter",
+        "member": "_LibraryRow._LibraryRow",
+        "message": "A value for optional parameter 'focusNode' isn't ever given. Try removing the unused parameter",
+        "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart"
+      },
+      {
+        "severity": "info",
+        "rule": "recursive_getters",
+        "member": "_RecordingsPageState._sections",
+        "message": "The getter '_sections' recursively returns itself. Try changing the value being returned",
+        "file": "lib/screens/settings/recordings_page.dart"
+      }
+    ],
+    "maximum": [
+      {
+        "rule": "directives_ordering",
+        "member": "<imports>",
+        "message": "Sort directive sections alphabetically. Try sorting the directives",
+        "count": 2
+      },
+      {
+        "rule": "recursive_getters",
+        "member": "_RecordingsPageState._sections",
+        "message": "The getter '_sections' recursively returns itself. Try changing the value being returned",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubBar._HubBar",
+        "message": "A value for optional parameter 'onScheduleDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'autofocus' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'danger' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'filled' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubIconButton._HubIconButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_LibraryRow._LibraryRow",
+        "message": "A value for optional parameter 'focusNode' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'action' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'chip' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      }
+    ],
+    "added": [
+      {
+        "rule": "recursive_getters",
+        "member": "_RecordingsPageState._sections",
+        "message": "The getter '_sections' recursively returns itself. Try changing the value being returned",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubBar._HubBar",
+        "message": "A value for optional parameter 'onScheduleDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'autofocus' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'danger' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'filled' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubButton._HubButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_HubIconButton._HubIconButton",
+        "message": "A value for optional parameter 'onDown' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_LibraryRow._LibraryRow",
+        "message": "A value for optional parameter 'focusNode' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'action' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      },
+      {
+        "rule": "unused_element_parameter",
+        "member": "_SectionHeader._SectionHeader",
+        "message": "A value for optional parameter 'chip' isn't ever given. Try removing the unused parameter",
+        "count": 1
+      }
+    ],
+    "removed": [
+      {
+        "rule": "directives_ordering",
+        "member": "<imports>",
+        "message": "Sort directive sections alphabetically. Try sorting the directives",
+        "count": 2
+      }
+    ],
+    "rule_counts": {
+      "use_build_context_synchronously": {
+        "original": 0,
+        "probe": 0
+      },
+      "library_private_types_in_public_api": {
+        "original": 0,
+        "probe": 0
+      },
+      "unused_element": {
+        "original": 0,
+        "probe": 0
+      },
+      "unused_element_parameter": {
+        "original": 0,
+        "probe": 9
+      },
+      "unused_import": {
+        "original": 0,
+        "probe": 0
+      },
+      "unnecessary_import": {
+        "original": 0,
+        "probe": 0
+      },
+      "directives_ordering": {
+        "original": 2,
+        "probe": 0
+      },
+      "use_key_in_widget_constructors": {
+        "original": 0,
+        "probe": 0
+      },
+      "prefer_const_constructors": {
+        "original": 0,
+        "probe": 0
+      },
+      "recursive_getters": {
+        "original": 0,
+        "probe": 1
+      }
+    },
+    "probe_sources_sha256": {
+      "lib/screens/settings/recordings_page.dart": "578afcf934c8535d3030a7030ccbff879f09d05833b080571b18e017e37ce668",
+      "lib/features/recordings/presentation/recordings_hub_library_row.dart": "05322e87d06a2d57c5412e3e9056bc54848c0d699e6fcd1aede46d759a874296",
+      "lib/features/recordings/presentation/recordings_hub_tokens.dart": "9c6f260d1a3431cc756b115bac1f8b85ba32d6946ebb6759d64edb3c268d1d5a",
+      "lib/features/recordings/presentation/recordings_hub_live_card.dart": "906f4ce94b2ddfe96c5751040b6adbe5323a24b573a8ed781f6936bae4597ba1",
+      "lib/features/recordings/presentation/recordings_hub_chrome.dart": "d07b8c3c379fe150468a6633ab9f5d79e1a089e190fafd5e59be626cd70d5ee1",
+      "lib/features/recordings/presentation/recordings_hub_buttons.dart": "469768508b716e3662e4a46ef5d372c5131d828a39c1fa88cfd254759b3334c1",
+      "lib/features/recordings/presentation/recordings_hub_empty_states.dart": "3e8e14ae2ea22a38b312a42ef2b2181ca3d61a900a8497c3e3e21f46dc14687f",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart": "8412c5569d89fbc888206cb229cf30a70e3808459344caece52948d9571cf800",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart": "250785284530dc9e21eda40d4af93ba7d904bc548d66224a5baa951657652d73",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart": "9503da1f4d6bc6ba06b3a0c65394cd1e8f1dd00260c31b67f6e3dfc23eaab2f0",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart": "ec6cf7e77d86c85184458d34202aa1581a07d3b8ff3c1653b03d95ebdd2a9baf",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart": "3f84715176e87e6a7f7fc78872f1c686a56ba011db511e0d0ba3878ee09531bc",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart": "ad6693baacc192a46ce3be65c0b056cfb74ee7a253c9cb063fcd29bbdf72ac80",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart": "aa48fc29eba87280229e075b50200c0cb7150f4514ed5a8c547b1cc2b6eb8ced",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart": "5c958e1dc85709f193cc8d7ed16ad80eb9ef07c43118a7b80ce3fe01e5e479c2",
+      "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart": "8342fdc59d9a0fc4365057bf23c8626f0c36b6fe587813d4660a9bf83168e709"
+    },
+    "probe_errors": 0,
+    "original_count": 2,
+    "probe_count": 10,
+    "maximum_count": 12
+  }
+}

@@ -1,0 +1,696 @@
+{
+  "scaffolds": [
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart",
+      "owner": "",
+      "name": "RecordingsHubDependencies",
+      "tokens": [
+        "class",
+        "RecordingsHubDependencies",
+        "{",
+        "RecordingsHubDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "owners",
+        ",",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        ",",
+        "required",
+        "this",
+        ".",
+        "sections",
+        "}",
+        ")",
+        ";",
+        "final",
+        "RecordingsHubOwners",
+        "owners",
+        ";",
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";",
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";",
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";",
+        "final",
+        "RecordingsHubSections",
+        "Function",
+        "(",
+        ")",
+        "sections",
+        ";",
+        "}"
+      ],
+      "when_file_present": true
+    },
+    {
+      "file": "lib/screens/settings/recordings_page.dart",
+      "owner": "_RecordingsPageState",
+      "name": "_owners",
+      "tokens": [
+        "final",
+        "_owners",
+        "=",
+        "RecordingsHubOwners",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/screens/settings/recordings_page.dart",
+      "owner": "_RecordingsPageState",
+      "name": "_composition",
+      "tokens": [
+        "RecordingsHubSections",
+        "?",
+        "_composition",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/screens/settings/recordings_page.dart",
+      "owner": "_RecordingsPageState",
+      "name": "_sections",
+      "tokens": [
+        "RecordingsHubSections",
+        "get",
+        "_sections",
+        "=>",
+        "_composition",
+        "??=",
+        "RecordingsHubSections",
+        "(",
+        "RecordingsHubDependencies",
+        "(",
+        "owners",
+        ":",
+        "_owners",
+        ",",
+        "context",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "context",
+        ",",
+        "mounted",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "mounted",
+        ",",
+        "setState",
+        ":",
+        "setState",
+        ",",
+        "sections",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_sections",
+        ")",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData",
+      "name": "RecordingsHubData",
+      "tokens": [
+        "RecordingsHubData",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "RecordingsHubDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData",
+      "name": "_owners",
+      "tokens": [
+        "RecordingsHubOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_data.dart",
+      "owner": "RecordingsHubData",
+      "name": "_sections",
+      "tokens": [
+        "RecordingsHubSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions",
+      "name": "RecordingsHubActions",
+      "tokens": [
+        "RecordingsHubActions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "RecordingsHubDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_actions.dart",
+      "owner": "RecordingsHubActions",
+      "name": "_sections",
+      "tokens": [
+        "RecordingsHubSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling",
+      "name": "RecordingsHubScheduling",
+      "tokens": [
+        "RecordingsHubScheduling",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "RecordingsHubDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_scheduling.dart",
+      "owner": "RecordingsHubScheduling",
+      "name": "_sections",
+      "tokens": [
+        "RecordingsHubSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
+      "owner": "RecordingsHubFormat",
+      "name": "RecordingsHubFormat",
+      "tokens": [
+        "RecordingsHubFormat",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_format.dart",
+      "owner": "RecordingsHubFormat",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "RecordingsHubDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 2,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout",
+      "name": "RecordingsHubLayout",
+      "tokens": [
+        "RecordingsHubLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "RecordingsHubDependencies",
+        "_deps",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout",
+      "name": "_owners",
+      "tokens": [
+        "RecordingsHubOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_layout.dart",
+      "owner": "RecordingsHubLayout",
+      "name": "_sections",
+      "tokens": [
+        "RecordingsHubSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        "(",
+        ")",
+        ";"
+      ],
+      "scaffold_activation_step": 3,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "name": "RecordingsHubHubBar",
+      "tokens": [
+        "typedef",
+        "RecordingsHubHubBar",
+        "=",
+        "_HubBar",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "name": "RecordingsHubSectionHeader",
+      "tokens": [
+        "typedef",
+        "RecordingsHubSectionHeader",
+        "=",
+        "_SectionHeader",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_chrome.dart",
+      "owner": "",
+      "name": "RecordingsHubEmptyHint",
+      "tokens": [
+        "typedef",
+        "RecordingsHubEmptyHint",
+        "=",
+        "_EmptyHint",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_live_card.dart",
+      "owner": "",
+      "name": "RecordingsHubLiveCard",
+      "tokens": [
+        "typedef",
+        "RecordingsHubLiveCard",
+        "=",
+        "_LiveCard",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart",
+      "owner": "",
+      "name": "RecordingsHubScheduleRow",
+      "tokens": [
+        "typedef",
+        "RecordingsHubScheduleRow",
+        "=",
+        "_ScheduleRow",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_library_row.dart",
+      "owner": "",
+      "name": "RecordingsHubLibraryRow",
+      "tokens": [
+        "typedef",
+        "RecordingsHubLibraryRow",
+        "=",
+        "_LibraryRow",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "name": "RecordingsHubEmptyDvr",
+      "tokens": [
+        "typedef",
+        "RecordingsHubEmptyDvr",
+        "=",
+        "_EmptyDvr",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "name": "RecordingsHubBatteryBanner",
+      "tokens": [
+        "typedef",
+        "RecordingsHubBatteryBanner",
+        "=",
+        "_BatteryBanner",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_empty_states.dart",
+      "owner": "",
+      "name": "RecordingsHubAlarmBanner",
+      "tokens": [
+        "typedef",
+        "RecordingsHubAlarmBanner",
+        "=",
+        "_AlarmBanner",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "name": "RecordingsHubHubButton",
+      "tokens": [
+        "typedef",
+        "RecordingsHubHubButton",
+        "=",
+        "_HubButton",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "name": "RecordingsHubHubIconButton",
+      "tokens": [
+        "typedef",
+        "RecordingsHubHubIconButton",
+        "=",
+        "_HubIconButton",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    },
+    {
+      "file": "lib/features/recordings/presentation/recordings_hub_buttons.dart",
+      "owner": "",
+      "name": "RecordingsHubRowIconButton",
+      "tokens": [
+        "typedef",
+        "RecordingsHubRowIconButton",
+        "=",
+        "_RowIconButton",
+        ";"
+      ],
+      "scaffold_activation_step": 1,
+      "when_file_present": true
+    }
+  ],
+  "facade_text": "final _owners = RecordingsHubOwners();\nRecordingsHubSections? _composition;\nRecordingsHubSections get _sections => _composition ??= RecordingsHubSections(RecordingsHubDependencies(owners: _owners, context: () => context, mounted: () => mounted, setState: setState, sections: () => _sections));",
+  "section_text": {
+    "RecordingsHubData": "RecordingsHubData(this._deps); final RecordingsHubDependencies _deps; RecordingsHubOwners get _owners => _deps.owners; RecordingsHubSections get _sections => _deps.sections();",
+    "RecordingsHubActions": "RecordingsHubActions(this._deps); final RecordingsHubDependencies _deps; RecordingsHubSections get _sections => _deps.sections();",
+    "RecordingsHubScheduling": "RecordingsHubScheduling(this._deps); final RecordingsHubDependencies _deps; RecordingsHubSections get _sections => _deps.sections();",
+    "RecordingsHubFormat": "RecordingsHubFormat(this._deps); final RecordingsHubDependencies _deps;",
+    "RecordingsHubLayout": "RecordingsHubLayout(this._deps); final RecordingsHubDependencies _deps; RecordingsHubOwners get _owners => _deps.owners; RecordingsHubSections get _sections => _deps.sections();"
+  },
+  "dependencies_file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart",
+  "dependencies_text": "class RecordingsHubDependencies {\nRecordingsHubDependencies({required this.owners, required this.context, required this.mounted, required this.setState, required this.sections});\nfinal RecordingsHubOwners owners;\nfinal BuildContext Function() context;\nfinal bool Function() mounted;\nfinal void Function(VoidCallback) setState;\nfinal RecordingsHubSections Function() sections;\n}",
+  "sections_file": "lib/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart",
+  "composition_text": {
+    "2": "class RecordingsHubSections { RecordingsHubSections(RecordingsHubDependencies deps) : data = RecordingsHubData(deps), format = RecordingsHubFormat(deps); final RecordingsHubData data; final RecordingsHubFormat format; }",
+    "3": "class RecordingsHubSections { RecordingsHubSections(RecordingsHubDependencies deps) : data = RecordingsHubData(deps), actions = RecordingsHubActions(deps), scheduling = RecordingsHubScheduling(deps), format = RecordingsHubFormat(deps), layout = RecordingsHubLayout(deps); final RecordingsHubData data; final RecordingsHubActions actions; final RecordingsHubScheduling scheduling; final RecordingsHubFormat format; final RecordingsHubLayout layout; }"
+  },
+  "composition_tokens": {
+    "2": [
+      "class",
+      "RecordingsHubSections",
+      "{",
+      "RecordingsHubSections",
+      "(",
+      "RecordingsHubDependencies",
+      "deps",
+      ")",
+      ":",
+      "data",
+      "=",
+      "RecordingsHubData",
+      "(",
+      "deps",
+      ")",
+      ",",
+      "format",
+      "=",
+      "RecordingsHubFormat",
+      "(",
+      "deps",
+      ")",
+      ";",
+      "final",
+      "RecordingsHubData",
+      "data",
+      ";",
+      "final",
+      "RecordingsHubFormat",
+      "format",
+      ";",
+      "}"
+    ],
+    "3": [
+      "class",
+      "RecordingsHubSections",
+      "{",
+      "RecordingsHubSections",
+      "(",
+      "RecordingsHubDependencies",
+      "deps",
+      ")",
+      ":",
+      "data",
+      "=",
+      "RecordingsHubData",
+      "(",
+      "deps",
+      ")",
+      ",",
+      "actions",
+      "=",
+      "RecordingsHubActions",
+      "(",
+      "deps",
+      ")",
+      ",",
+      "scheduling",
+      "=",
+      "RecordingsHubScheduling",
+      "(",
+      "deps",
+      ")",
+      ",",
+      "format",
+      "=",
+      "RecordingsHubFormat",
+      "(",
+      "deps",
+      ")",
+      ",",
+      "layout",
+      "=",
+      "RecordingsHubLayout",
+      "(",
+      "deps",
+      ")",
+      ";",
+      "final",
+      "RecordingsHubData",
+      "data",
+      ";",
+      "final",
+      "RecordingsHubActions",
+      "actions",
+      ";",
+      "final",
+      "RecordingsHubScheduling",
+      "scheduling",
+      ";",
+      "final",
+      "RecordingsHubFormat",
+      "format",
+      ";",
+      "final",
+      "RecordingsHubLayout",
+      "layout",
+      ";",
+      "}"
+    ]
+  }
+}

@@ -231,8 +231,12 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
             continue
         for occurrence in node.get('occurrences', []):
             # Unconditional by default (the pre-flag behaviour every feature
-            # relied on); a config may only opt out explicitly.
+            # relied on); a config may only opt out explicitly. A preserved
+            # widget may own a same-named field (recordings: now): opt-in class
+            # scope keeps that separate from relocated State fields.
             if (binding_config.get('mandatory_qualification', True)
+                    and (binding_config.get('mandatory_qualification_classes') is None
+                         or owner in binding_config['mandatory_qualification_classes'])
                     and occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
                     and occurrence['name'] in record_fields):
                 errors.append('Bare owner field reference: '+f'{file}:{owner}.{name} {occurrence["name"]}')

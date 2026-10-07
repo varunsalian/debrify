@@ -1,0 +1,84 @@
+{
+  "guards": [
+    {
+      "id": "android_platform",
+      "original_fragment": "Platform.isAndroid",
+      "reason": "dart:io host stays macOS/Linux; Flutter target override does not make the native branch reachable"
+    },
+    {
+      "id": "poll_cadences",
+      "original_fragment": "seconds: _live.isNotEmpty ? 3 : 15",
+      "reason": "Android native poll never arms on either test host"
+    },
+    {
+      "id": "membership",
+      "original_fragment": "if (!sameSets) {",
+      "reason": "Android native task membership path is unreachable on test hosts"
+    },
+    {
+      "id": "folder_process",
+      "original_fragment": "Process.run('open', [dir.path])",
+      "reason": "Process.run cannot be intercepted without a production seam and the fixture must not open Finder"
+    },
+    {
+      "id": "folder_fallback",
+      "original_fragment": "Recordings folder: ${dir.path}",
+      "reason": "Process.run platform exception transport cannot be induced safely without opening a real desktop application"
+    },
+    {
+      "id": "exact_alarm_result",
+      "original_fragment": "result.errorCode == 'exact_alarms_required'",
+      "reason": "desktop service cannot return Android exact-alarm rejection"
+    },
+    {
+      "id": "battery_private",
+      "original_fragment": "_batteryNudgeDismissedAtMs = now",
+      "reason": "page dismissal and banner are Android-only; device preference round-trip is covered separately"
+    },
+    {
+      "id": "channel_metadata",
+      "original_fragment": "channel: entry.channelName",
+      "reason": "desktop listLibrary always supplies null channelName"
+    },
+    {
+      "id": "stored_duration",
+      "original_fragment": "var durationMs = entry.durationMs;",
+      "reason": "desktop listLibrary always supplies null durationMs"
+    },
+    {
+      "id": "dormant_record_url",
+      "original_fragment": "if (recordUrl == null) return;",
+      "reason": "isSchedulableUrl already requires a non-null engineRecordableUrl"
+    },
+    {
+      "id": "dispose_order",
+      "original_fragment": "_firstLibraryFocus.dispose();",
+      "reason": "resource and listener teardown order cannot be observed at all public boundaries; verbatim AST leaf pins ordering"
+    },
+    {
+      "id": "rec_dot_parameters",
+      "original_fragment": "duration: const Duration(milliseconds: 900)",
+      "reason": "controller numeric parameters are pinned structurally; TV static-vs-animation is separately behavioural"
+    },
+    {
+      "id": "focus_debug",
+      "original_fragment": "debugLabel: 'recordings_first_library_row'",
+      "reason": "debug label is diagnostic metadata, not user-observable rendering"
+    },
+    {
+      "id": "handoff_android",
+      "original_fragment": "disableExternalPlayer: _isAndroid",
+      "reason": "Android true is unreachable on desktop; desktop false is proven through external transport"
+    },
+    {
+      "id": "calendar_dst",
+      "original_fragment": "start.day + 1",
+      "reason": "fixed test process timezone has no DST transition; calendar-vs-24-hour distinction needs a host zone different from the pinned protocol"
+    },
+    {
+      "id": "android_live_autofocus",
+      "original_fragment": "desktopCaptures.isEmpty",
+      "reason": "Android live entries are not loaded on dart:io desktop hosts; first desktop Stop precedence is B, Android fallback remains S"
+    }
+  ]
+}

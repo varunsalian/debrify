@@ -1,0 +1,554 @@
+{
+  "baseline": "49c53e2e",
+  "site": "_RecordingsPageState._play",
+  "argument_order": [
+    "videoUrl",
+    "title",
+    "showVideoTitle",
+    "disableExternalPlayer"
+  ],
+  "parameters": [
+    {
+      "name": "videoUrl",
+      "default": null,
+      "required": true,
+      "classification": "observable",
+      "supplied": true
+    },
+    {
+      "name": "audioUrl",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "fallbackUrl",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "title",
+      "default": null,
+      "required": true,
+      "classification": "observable",
+      "supplied": true
+    },
+    {
+      "name": "subtitle",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "playlist",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startIndex",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "rdTorrentId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "torboxTorrentId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "pikpakCollectionId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "webDavServerId",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "webDavBaseUrl",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "webDavPath",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "requestMagicNext",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "requestNextChannel",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "initialContinuousShuffle",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startFromRandom",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "randomStartMaxPercent",
+      "default": "40",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startAtPercent",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "hideSeekbar",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "showChannelName",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "channelName",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "channelNumber",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "showVideoTitle",
+      "default": "true",
+      "required": false,
+      "classification": "observable",
+      "supplied": true
+    },
+    {
+      "name": "hideOptions",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "hideBackButton",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "httpHeaders",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "disableExternalPlayer",
+      "default": "false",
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": true
+    },
+    {
+      "name": "isAndroidTvOverride",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "disableAutoResume",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "viewMode",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "contentImdbId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "contentType",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "contentSeason",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "contentEpisode",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "resumePolicy",
+      "default": "PlaybackResumePolicy.sourceSpecific",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvChannels",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvStartIndex",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvCategories",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvSourceId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvSourceName",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvSelectedCategory",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvContentType",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvSources",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "iptvLists",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "iptvBrowseProvider",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioSources",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioCurrentSourceIndex",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "resolveStremioSource",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "resolveSourceToPlaylist",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startupFailoverEnabled",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startupResolverProvider",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "onStremioSourceCommitted",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "onStartupSourcesExhausted",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "startupHasRemainingSavedSources",
+      "default": "false",
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "seriesSourceFetcher",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvChannels",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvCurrentChannelId",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvRotationMinutes",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvSeriesRotationMinutes",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvMixSalt",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvGuideDataProvider",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvChannelSwitchProvider",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "stremioTvNextProvider",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "traktScrobble",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "traktProgressPercent",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "simklScrobble",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "simklProgressPercent",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "mdblistScrobble",
+      "default": "false",
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "mdblistProgressPercent",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "contentTitle",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "posterUrl",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "contentYear",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "addonId",
+      "default": null,
+      "required": false,
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "initialSubtitles",
+      "default": null,
+      "required": false,
+      "classification": "observable",
+      "supplied": false
+    },
+    {
+      "name": "suppressTrackerAutoSync",
+      "default": "false",
+      "classification": "launcher-only",
+      "supplied": false
+    },
+    {
+      "name": "suppressTraktAutoSync",
+      "default": "false",
+      "classification": "launcher-only",
+      "supplied": false
+    }
+  ],
+  "observable_transport": "VideoPlayerLaunchArgsWidget.toWidget; engine-free typed VideoPlayerScreen observer",
+  "launcher_only_proofs": {
+    "disableExternalPlayer": "desktop B: mocked Infuse transport; Android true S: Platform.isAndroid unreachable on macOS/Linux",
+    "other_defaults": "S: exact push envelope and frozen launch-argument declaration"
+  }
+}

@@ -29,6 +29,7 @@ EXCLUDE_PATH_PARTS = (
     'player',                  # playlist_player_service etc. keep out
     'initial_setup_flow',      # onboarding: deferred
     'home_theme', 'see_all_theme', 'cloud_theme',  # authored kits
+    'features/recordings/',    # preserves the settings DVR exclusion
     'screens/settings/',       # done in step 1 (except stremio_addons below)
     'settings_screen',         # done in step 1 pass
 )

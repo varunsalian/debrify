@@ -62,6 +62,8 @@ PRIMARY = (
     'lib/screens/settings',
     'lib/features/iptv_settings_two_pane/presentation/',  # two-pane moved vocabulary
     'lib/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/',
+    'lib/features/recordings/presentation/',
+    'lib/features/recordings/presentation/legacy_recordings/',
     'lib/features/settings_widgets/presentation/',  # settings_widgets moved vocabulary
     'lib/screens/cloud_screen.dart',
     'lib/screens/debrid_downloads_screen.dart',
@@ -102,6 +104,14 @@ def scan(path):
         stripped = line.strip()
         if stripped.startswith('//') or stripped.startswith('///'):
             continue
+        # Recordings' frozen colour rename wraps two original border ternaries.
+        # Keep their ink classification without changing other surfaces' scan.
+        if (path.startswith('lib/features/recordings/') and i >= 3
+                and re.match(r':\s*Colors\.white\b', stripped)):
+            previous = [part.strip() for part in lines[i - 3:i - 1]]
+            if (INK_ROLE.search(previous[0]) and previous[1].startswith('?')
+                    and not LIGHT.search(' '.join(previous))):
+                line = stripped = ' '.join([*previous, stripped])
         if not INK_ROLE.search(line) or not LIGHT.search(line):
             continue
         # Three lines of context, because the reason a white is correct is
