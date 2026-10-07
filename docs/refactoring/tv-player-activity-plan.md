@@ -1140,3 +1140,21 @@ and engine), scheduled recording confirmation.
 - 2026-10-08 — **Phase 3 final step-0b message boundary supplement.** Gate verification corrected the earlier stable-dependency reachability assumption. Three extra cases pass on original ec365eb80 and three named assertion mutations kill engine/schedule permission revocation messages and a forced-HLS change between eligibility reads. All recording Toast branches/texts are now covered; step-0b totals 33 new tests and 73/73 sweep proofs. Original proofs precede bringing these cases into the moved tree. Sequencing deviation: these test-only additions finish during the gate after Step 1; production is unchanged. Original canonical p3-step0b is extended, preserving earlier 456-identity archives with before-boundary labels. The quiet full Flutter rerun already exactly matches all 12,855 phase-2 identity/status pairs; these later changes affect only Android JVM tests/docs, with no Dart or production input changes.
 
 - 2026-10-08 — **Phase 3 gate complete; decoder pending-environment.** Final original p3-step0b and clean moved p3-gate exactly match **459 JVM statuses** (458 pass, unchanged focus failure); 33 passing additions vs p3-step0. **73/73 sweep proofs**, final Claude e12–e15 rerun against 197 characterizations all killed. Checker zero differences for 2,671 declarations, 53 self-tests, both historical manifests, all 22 earlier destinations, 58 bytecode overload sites and full teardown order pass. Forced compile preserves five warnings; size passes at activity 18,265/controllers 92–436. Final lint no additions: 1,352 issues, same 253 errors/175 opt-ins, only fixture-referenced splash_logo unused warning removed. Release APK succeeds; R8/DEX verifies 21 classes/276 members including all Host/anonymous objects and both Kt facades (159 explicit + 117 DEX identities, three negatives). Decoder output and three libmpv hashes unchanged from earlier phases: pending-environment, no workaround. Full quiet Flutter run exactly matches **all 12,855 phase-2 statuses**; initial one keyword-cache startup timing miss rejected, focused and complete quiet retry pass unchanged. Analyzer exactly matches all 1,758 phase-2 diagnostics. Extra three original-proved message cases finished during gate, baseline/Native JVM/lint extended; complete Flutter/release evidence remains valid for test-only/docs additions. Protected inputs unchanged, original detached tree removed. Evidence p3/gate/, p3/step0b-boundary/, junit/p3-step0b/ and junit/p3-gate/. No self independent review, push, branch switch, device interaction or bug fix. **STOPPED after phase 3**; Claude's separate review follows.
+- 2026-10-08 — phase 3 post-implementation reviews of `399e115a2..2b0a38442`.
+  Claude: every added activity line read — controllers in their original
+  field slots, computed explicitly-qualified Host forwarders, activity-owned
+  readiness getters, Skip→Up Next read via `upNextController`, call-site
+  patches only, `onDestroy` cleanup order unchanged; Claude's 18-mutation
+  sample 14/18, survivors e12–e15 closed in 0b. Independent Codex review
+  (fresh session): **No P1s**; 58 overload descriptors, Host/ownership/
+  Runnable `this`/teardown verified; 117 mutation patches re-verified.
+  **P3 accepted as a documented exception:** a few moved field initializers
+  now run when the controller is constructed (activity line ≈162) instead of
+  at their original slot — the Up Next ticker `Runnable` allocation and the
+  notification request-code constant; both are allocation/constant-only
+  (no reads, no side effects), so no observable change. **Rule tightened for
+  phase 4+:** a moved field whose initializer would run earlier than its
+  original slot must be listed in the manifest and proven inert
+  (constant / allocation-only, no reads of other state, no side effects);
+  otherwise the controller property is split or the slot preserved.
+  Decoder verification remains pending-environment. Phase 3 complete; merged.
