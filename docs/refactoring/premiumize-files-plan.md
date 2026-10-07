@@ -945,3 +945,10 @@ Seven plain sections now own the step-3 methods. The five deferred callbacks (pe
 Evidence: `premiumize/step3/`. All 113 verbatim leaves and feature self-tests, architecture/self-test, sizes, storage keys/references, exact CI format/scoped analyzer/allowlist and whole-analyzer comparison pass with zero added diagnostics. All 158 frozen Premiumize identities and three shape checks pass. Every other manifest/self-test passes (20), with output and adapter bytes identical to the original proof and explicit isolated parser packages. The facade is 1917 formatted lines. Every destination and the facade are registered in the shape manifest (floor 488, zero slack).
 
 Conservative decisions: typed narrow dependency records contain only the original field reads and calls; composition callbacks preserve parameter defaults. Only registered receiver/rename substitutions, live callbacks, imports and exactly pinned formatter brace pairs/trailing commas are admitted. Comments in moved leaves remain verbatim. No occurrence-field-binding opt-in or checker default is assumed. Found-not-fixed remains unchanged.
+
+
+### Full-suite gate 1
+
+Full-suite evidence `premiumize/gate1.jsonl` and `.env.json` records committed source `38d3e87bdfe65befdcb63732198bd84443e0025f`, tested tree `37e949cac4856d847ebf2bf95b071cbeb9429295`, paths `[]`, and runner flags separately. Same SDK as the latest original Premiumize base4. Identity comparison against base4 passes after documented same-tree isolated replays, if any. Raw counts: {'success': 12190, 'failure': 13, 'error': 28, 'skipped': 20}. Reconciled counts: {'success': 12190, 'failure': 13, 'error': 28, 'skipped': 20}. No missing identities, new failures, new skips or previously passing regressions. Original passing observations, including the isolated base3 Xtream and base4 MDB controls, remain mandatory.
+
+Canonical `premiumize/gate1/identity-audit.json` retains both raw comparisons and any NOTE/replay records; raw logs, assertions and failure allowlists are unchanged. The gate commit changes only this Progress record. Device-only checks, remote CI and integration remain pending.
