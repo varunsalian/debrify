@@ -500,9 +500,11 @@ functions.
 - Flutter request functions: a test installs
   `MainActivity.setAndroidTvPlayerChannel(MethodChannel(recordingMessenger,
   "com.debrify.app/android_tv_player"))` (saving and restoring the previous
-  static channel in `@After`). The fake `BinaryMessenger` decodes the
-  `StandardMethodCodec` envelope (flipping the buffer first) to assert method
-  names and exact argument maps, and **posts replies through a main-looper
+  static channel in `@After`). The fake `BinaryMessenger` flips each
+  outgoing request buffer and decodes it with
+  `StandardMethodCodec.decodeMethodCall` to assert method names and exact
+  argument maps; replies are built with `encodeSuccessEnvelope` /
+  `encodeErrorEnvelope` (buffers flipped before the channel decodes them), and **posts replies through a main-looper
   Handler** (production `MethodChannel` invokes results on the replying
   thread; a synchronous fake would misrepresent timing). It distinguishes a
   raw-`null` reply (`notImplemented`) from an encoded-null success envelope,
@@ -535,8 +537,8 @@ functions.
 
 ### Gate, review, device checks
 
-As rule 6 (JVM identities vs `p2-step0`, checker incl. the `patched`
-policy, lint opt-in comparison, size baseline, release build + mapping
+As rule 6 (JVM identities vs `p2-step0`, checker incl. the moved policy
+with its substitutions and the patched `setupPlayer`, lint opt-in comparison, size baseline, release build + mapping
 check, decoder check recorded as pending-environment if the patched bundle
 is unavailable, full Flutter suite). Reviews as rule 8. Also carried from
 phase 1 → phase 3: `AutoSyncRingView` repaint-request coverage.
@@ -740,3 +742,5 @@ quick-play next episode, EPG load on a slow provider (45 s timeout path).
   fixture first); P2s folded (per-invocation policy reads, async fake
   messenger + per-function null-channel/exception/default-argument cases,
   typed reflection selectors); P3s: fixed opt-in set, inventory scope notes.
+- 2026-10-07 — phase 2 design round 2 (Codex): **No P1s**; two P3 wording
+  fixes applied. Phase 2 design approved for execution.

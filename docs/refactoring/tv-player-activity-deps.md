@@ -2618,7 +2618,7 @@ Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerAc
      - No anchor string is a candidate signature.
 
 **Common to every move:** the functions become `internal fun` in package `com.debrify.app.tv` with an identical body; call sites stay unchanged.
-- The activity's class-level `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn, line 135) will no longer cover moved code. Add `@OptIn(UnstableApi::class)` to the moved media3-touching declarations: classifyIptvError, languageOfOverride, IptvLiveLoadErrorPolicy, and buildAudio/SubtitleTrackLabel if lint flags them. This annotation is the only non-body edit.
+- The activity's class-level `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn, line 135) will no longer cover moved code. Superseded by the plan's fixed set: exactly `classifyIptvError`, `languageOfOverride`, `buildAudioTrackLabel` and `IptvLiveLoadErrorPolicy` gain `@OptIn(UnstableApi::class)` (androidx.annotation.OptIn); step 0 re-derives the set from Media3 1.8.0 annotations; lint issue sets are compared, not used to decide.
 - Each new file needs its own imports (Locale, JSONArray/JSONObject, Uri, MediaCodecList, Format, TrackSelectionOverride, PlaybackException, HttpDataSource, DiagnosticFileLog, MainActivity, MethodChannel are referenced unqualified or partly qualified in the bodies).
 - `dev/tool/check_kotlin_moves.py` with a new manifest (`kotlin_moves/tvplayer_p2.json`) can prove the verbatim moves, as it did for phase 1.
 
