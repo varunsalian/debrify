@@ -304,7 +304,11 @@
   ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_AllDebridFilesScreenState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "plain_sections": [
     {
       "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_navigation.dart",
@@ -345,10 +349,32 @@
     {
       "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_feedback.dart",
       "owner": "AllDebridFeedback"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_root_layout.dart",
+      "owner": "AllDebridRootLayout"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_toolbar.dart",
+      "owner": "AllDebridToolbar"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_bars.dart",
+      "owner": "AllDebridSearchBars"
+    },
+    {
+      "file": "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_list_views.dart",
+      "owner": "AllDebridListViews"
     }
   ],
   "annotation_exceptions": {},
-  "named_exceptions": {},
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_AllDebridFilesScreenState.build",
+      "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_root_layout.dart",
+      "context/formatter exceptions: only exact predicate/body/raw prefix sites in alldebrid_files_context_exceptions.json; original guards and statement order unchanged; plain build retains its exact annotated facade forwarder"
+    ]
+  },
   "test_accessors": [
     {
       "name": "allDebridFilesTestAccess",
@@ -468,7 +494,7 @@
       ]
     }
   ],
-  "completed_step": 4,
+  "completed_step": 5,
   "playback_files": [
     "lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart"
   ],
@@ -1520,6 +1546,21 @@
         "selector",
         "invocation"
       ]
+    }
+  ],
+  "occurrence_layout_bodies": [
+    "_AllDebridFilesScreenState.build"
+  ],
+  "token_rules": [
+    {
+      "original_name": "_AllDebridFilesScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "context/formatter exceptions:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
     }
   ],
   "alldebrid_formatter_brace_occurrences": true,

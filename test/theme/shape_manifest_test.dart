@@ -35,6 +35,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_toolbar.dart':
+      1,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_search_bars.dart':
+      0,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
       1,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_url_import_dialog.dart':
@@ -192,7 +196,7 @@ const Map<String, int> kShapeResidue = {
   'lib/features/home/presentation/category_tag.dart': 0,
   'lib/features/search/presentation/search_mode_toggle.dart': 0,
   'lib/ui/core/see_all_link.dart': 0,
-  'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,
+
   'lib/screens/cloud_screen.dart': 0,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
   'lib/screens/debrify_tv/dialogs/external_player_notice_dialog.dart': 0,
@@ -274,6 +278,11 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/alldebrid/alldebrid_files_screen.dart': 0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_root_layout.dart':
+      0,
+  'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_list_views.dart':
+      0,
   'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playlist_actions.dart':
       0,
   'lib/features/alldebrid_files/presentation/legacy_alldebrid/alldebrid_playback.dart':
