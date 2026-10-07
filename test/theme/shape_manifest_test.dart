@@ -35,8 +35,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/premiumize/premiumize_files_screen.dart': 2,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_feedback.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_layout.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_list.dart':
       0,
 
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalog_editor_dialog.dart':
@@ -277,6 +280,7 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/premiumize/premiumize_files_screen.dart': 0,
   'lib/features/premiumize_files/application/premiumize_playlist_titles.dart':
       0,
   'lib/features/premiumize_files/application/premiumize_sort_policy.dart': 0,
@@ -300,6 +304,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_download.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_list.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_playback.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_focus_actions.dart':
@@ -312,6 +318,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_folder_playback.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_layout_composition.dart':
+      0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_actions.dart':
       4,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_link_state.dart':
@@ -321,6 +329,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_navigation_state.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_playlist_actions.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_root_layout.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_actions.dart':
       0,
@@ -334,6 +344,10 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_source_binding.dart':
       0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_status_layout.dart':
+      0,
+  'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_toolbar_layout.dart':
+      2,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_actions.dart':
       0,
   'lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_view_modes.dart':

@@ -1,5 +1,6 @@
 import 'premiumize_actions_composition.dart';
 import 'premiumize_data_composition.dart';
+import 'premiumize_layout_composition.dart';
 import 'premiumize_navigation_composition.dart';
 import 'premiumize_sections.dart';
 
@@ -13,5 +14,6 @@ PremiumizeSections createPremiumizeSections(
   wirePremiumizeDataSections(sections, scope, owners);
   wirePremiumizeNavigationSections(sections, scope, owners);
   wirePremiumizeActionsSections(sections, scope, owners);
+  wirePremiumizeLayoutSections(sections, scope, owners);
   return sections;
 }

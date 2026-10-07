@@ -77,11 +77,25 @@
         ")",
         ";"
       ]
+    },
+    {
+      "original_name": "_PremiumizeFilesScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
     }
   ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_PremiumizeFilesScreenState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "lifecycle": [
     "_PremiumizeFilesScreenState.initState",
     "_PremiumizeFilesScreenState.dispose"
@@ -133,7 +147,13 @@
     "PremiumizeFolderDownload",
     "PremiumizePlaylistActions",
     "PremiumizeLinkActions",
-    "PremiumizeDateFormat"
+    "PremiumizeDateFormat",
+    "PremiumizeRootLayout",
+    "PremiumizeToolbarLayout",
+    "PremiumizeSearchLayout",
+    "PremiumizeFileList",
+    "PremiumizeTransferList",
+    "PremiumizeStatusLayout"
   ],
   "receiver_paths": {
     "_catalog": "PremiumizeCatalogState",
@@ -167,7 +187,13 @@
     "_sections.folderDownload": "PremiumizeFolderDownload",
     "_sections.playlistActions": "PremiumizePlaylistActions",
     "_sections.linkActions": "PremiumizeLinkActions",
-    "_sections.dateFormat": "PremiumizeDateFormat"
+    "_sections.dateFormat": "PremiumizeDateFormat",
+    "_sections.rootLayout": "PremiumizeRootLayout",
+    "_sections.toolbarLayout": "PremiumizeToolbarLayout",
+    "_sections.searchLayout": "PremiumizeSearchLayout",
+    "_sections.fileList": "PremiumizeFileList",
+    "_sections.transferList": "PremiumizeTransferList",
+    "_sections.statusLayout": "PremiumizeStatusLayout"
   },
   "receiver_owners": {
     "_PremiumizeFilesScreenState": "_PremiumizeFilesScreenState",
@@ -202,7 +228,13 @@
     "_sections.folderDownload": "PremiumizeFolderDownload",
     "_sections.playlistActions": "PremiumizePlaylistActions",
     "_sections.linkActions": "PremiumizeLinkActions",
-    "_sections.dateFormat": "PremiumizeDateFormat"
+    "_sections.dateFormat": "PremiumizeDateFormat",
+    "_sections.rootLayout": "PremiumizeRootLayout",
+    "_sections.toolbarLayout": "PremiumizeToolbarLayout",
+    "_sections.searchLayout": "PremiumizeSearchLayout",
+    "_sections.fileList": "PremiumizeFileList",
+    "_sections.transferList": "PremiumizeTransferList",
+    "_sections.statusLayout": "PremiumizeStatusLayout"
   },
   "plain_sections": [
     {
@@ -276,6 +308,30 @@
     {
       "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_date_format.dart",
       "owner": "PremiumizeDateFormat"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_root_layout.dart",
+      "owner": "PremiumizeRootLayout"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_toolbar_layout.dart",
+      "owner": "PremiumizeToolbarLayout"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_search_layout.dart",
+      "owner": "PremiumizeSearchLayout"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_file_list.dart",
+      "owner": "PremiumizeFileList"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_transfer_list.dart",
+      "owner": "PremiumizeTransferList"
+    },
+    {
+      "file": "lib/features/premiumize_files/presentation/legacy_premiumize/premiumize_status_layout.dart",
+      "owner": "PremiumizeStatusLayout"
     }
   ],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in premiumize_context_exceptions.json; original guards and statement order unchanged",
@@ -373,7 +429,13 @@
     "PremiumizeFolderDownload": "$State._sections.folderDownload",
     "PremiumizePlaylistActions": "$State._sections.playlistActions",
     "PremiumizeLinkActions": "$State._sections.linkActions",
-    "PremiumizeDateFormat": "$State._sections.dateFormat"
+    "PremiumizeDateFormat": "$State._sections.dateFormat",
+    "PremiumizeRootLayout": "$State._sections.rootLayout",
+    "PremiumizeToolbarLayout": "$State._sections.toolbarLayout",
+    "PremiumizeSearchLayout": "$State._sections.searchLayout",
+    "PremiumizeFileList": "$State._sections.fileList",
+    "PremiumizeTransferList": "$State._sections.transferList",
+    "PremiumizeStatusLayout": "$State._sections.statusLayout"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",
