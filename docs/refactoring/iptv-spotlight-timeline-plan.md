@@ -1350,3 +1350,74 @@ Gate 2 runs next on the clean committed input, with paths `[]`, flags
 `--no-pub --concurrency=2`, against latest `base2` and accepted
 `gate1-serial`. All heavy checker/clone runs finish before the full suite;
 no mutation or dependent edit overlaps its tested tree.
+
+### Gate 2 accepted and completion handoff
+
+Step 3 input: `a551d80b040c982170e105b2cdcfc98b4d255b12`, tested tree
+`c2a4069efce9a6f877221342dc9b187fd77ecf9a`. Accepted full `gate2-serial`
+passes against both latest `base2` (tree
+`ba2335e6064bb0c3c09870909824d18ba049e48e`) and accepted `gate1-serial`
+(input `e5c6e7d32fd23721408fb92fdf01d9d815fe9851`). Exactly 12,258
+identities/outcomes match each: 12,197 success, 13 failure, 28 error and
+20 skipped across 1,183 suites. No added/missing identity, changed outcome,
+new skip or new failure. Comparison logs are `gate2-serial-vs-base2.txt`
+and `gate2-serial-vs-gate1-serial.txt`; `gate2-summary.json` records the
+stable clean start/end HEAD/tree, paths `[]`, flags separately, and the
+same Flutter 3.44.8 / Dart 3.12.2 SDK as both baselines. The ordinary
+Flutter exit 1 is the same 41 baseline failures/errors; both comparison
+verdicts PASS.
+
+NOTE / conservative scheduling decision: the first gate-2 attempt used
+`--concurrency=2` and hit the named Xtream 50k ingest 30-second timeout,
+then its cleanup assertion. It is incomplete and discarded
+(`gate2-aborted-contention.json`). The test and all six imported project
+libraries are byte-identical to ORIGINAL. The exact named test passes
+alone on this same committed input (`gate2-xtream-NOTE.json`). The complete
+retry uses `--no-pub --concurrency=1`, serializing test suites to reduce
+contention; it passes that test and every other baseline identity. This
+changes runner scheduling only: no timeout, assertion, baseline or allowlist
+is modified. Accepted gate 1 uses concurrency 2; both full gates have
+paths `[]`. All incomplete attempts remain explicitly unaccepted.
+
+Final facade/destination measurements and production hashes are unchanged
+from step 2. Every step commit ends with the required Codex co-author
+footer. `final-audit.json` records the series, clean branch, protected
+files, unchanged allowlists, golden hashes and acceptance input. This
+closing commit changes Progress only; no executable input changes after
+the accepted gate. Steps 0, 0b, L and 1–3 and both full-suite gates are
+complete. No branch switch, push, rebase, sibling edit or main-checkout edit.
+
+Integrator union list:
+- `check_settings_moves.py` and `occurrence_field_bindings.py`: named opt-in
+  `retained_field_live_getters` normalization, alignment, retained-declaration
+  ownership and exact live-factory checks; keep all absent-key defaults.
+- `check_settings_moves.py.check_seams`: additive `source_reader_module`
+  hook, retaining full ORIGINAL fingerprint comparison;
+  `iptv_checker_config.json` registers it on this one auxiliary timeline
+  seam. Include the owned reader and clock-seam fixtures.
+- `check_search_architecture.py`: this feature's own FEATURES += line, exact
+  bridge, 500-line destinations/empty exceptions, COMPLETE flag, measured
+  332-line facade cap, COMPOSITION_ROOTS/main/TEMP, import/service/data/
+  playback/keep-alive and bidirectional IPTV boundary checks.
+- `ci_behavior_tests.txt`: union all eight timeline test paths, including
+  source-contract/checker driver and review tests; `checks.yml`: preserve
+  format/analyze paths inside commands before tee, architecture runner and
+  isolated analyzer inventory calls.
+- `file_size_baseline.txt`: remove only this completed facade's old entry.
+  Neither analyzer_allowlist nor ci_behavior_known_failures changes here.
+
+The binder qualification note above remains mandatory: this feature
+explicitly sets `mandatory_qualification: true`. Do not replace upstream's
+new default or discard edit_profile's other named opt-in blocks when
+unioning the retained getter key. On the integrated committed tree rerun
+every manifest, architecture/size/storage/shape/theme, CI format/analyze
+and full-suite comparison, as described in Integration.
+
+Found-not-fixed 1–6 remain: periodic offstage setState, the public
+`itemCanFitBadge` name, up-to-30-second refresh delay, cache-constructor
+directory requests, equal same-generation retry-token first-completion
+behavior, and malformed bundled Roboto assets. Existing bridge/view/hold/
+localization exceptions retain their documented future exits. Pending:
+the end-of-series Android TV/tvOS/provider/desktop/touch/accessibility
+device checks above, remote CI when available, and cross-worktree
+semantic integration. No device gate is claimed. Nothing is pushed.
