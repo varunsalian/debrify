@@ -215,7 +215,8 @@ const Map<String, int> kShapeResidue = {
   // "Found, not fixed"). The guard stays armed against further growth.
   'lib/screens/settings/filter_settings_page.dart': 2,
   'lib/screens/settings/iptv_hidden_categories_page.dart': 1,
-  'lib/screens/settings/iptv_settings_two_pane.dart': 7,
+  'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_rail_entry.dart':
+      0,
   'lib/screens/settings/provider_settings_page.dart': 0,
   'lib/screens/settings/quick_play_settings_page.dart': 0,
   'lib/screens/settings/settings_tv_layout.dart': 0,
@@ -274,6 +275,16 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv_settings_two_pane/presentation/iptv_auto_refresh_dialog.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_destination.dart':
+      0,
+  'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_method_card.dart':
+      1,
+  'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_pane_parts.dart':
+      5,
+  'lib/features/iptv_settings_two_pane/presentation/iptv_two_pane_row.dart': 1,
+  'lib/screens/settings/iptv_settings_two_pane.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 0,
   'lib/features/stremio_tv_catalogs/presentation/legacy_stremio_tv_catalogs/local_catalogs_manage_dialog.dart':
       1,

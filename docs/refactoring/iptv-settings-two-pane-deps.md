@@ -53,21 +53,21 @@ lexical context and both VLB parameter declarations stay unchanged.
 | Original leaf | Destination / owner / new member | Widget properties | Owner/static reads | Context / lifecycle / cross-class references | Step / wiring |
 | --- | --- | --- | --- | --- | --- |
 
-| `iptvAutoRefreshLabel` | `iptv_auto_refresh_dialog.dart` / `iptvAutoRefreshLabel` | — | — | — | 1 / pending move; original verified |
-| `iptvAutoRefreshExplanation` | `iptv_auto_refresh_dialog.dart` / `iptvAutoRefreshExplanation` | — | — | — | 1 / pending move; original verified |
-| `IptvAutoRefreshDialog` | `iptv_auto_refresh_dialog.dart` / `IptvAutoRefreshDialog` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
+| `iptvAutoRefreshLabel` | `iptv_auto_refresh_dialog.dart` / `iptvAutoRefreshLabel` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `iptvAutoRefreshExplanation` | `iptv_auto_refresh_dialog.dart` / `iptvAutoRefreshExplanation` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `IptvAutoRefreshDialog` | `iptv_auto_refresh_dialog.dart` / `IptvAutoRefreshDialog` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
 | `IptvSettingsTwoPane` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart` / `IptvSettingsTwoPane` | — | — | — | 2 / pending move; original verified |
-| `_Dest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneDest` | — | — | — | 1 / pending move; original verified |
-| `_SourceDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneSourceDest` | — | — | — | 1 / pending move; original verified |
-| `_AddDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAddDest` | — | — | — | 1 / pending move; original verified |
-| `_ListsDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneListsDest` | — | — | — | 1 / pending move; original verified |
-| `_StartupDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneStartupDest` | — | — | — | 1 / pending move; original verified |
-| `_AutoRefreshDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAutoRefreshDest` | — | — | — | 1 / pending move; original verified |
-| `_ContinueWatchingDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneContinueWatchingDest` | — | — | — | 1 / pending move; original verified |
-| `_ChannelPreviewDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneChannelPreviewDest` | — | — | — | 1 / pending move; original verified |
-| `_AppearanceDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAppearanceDest` | — | — | — | 1 / pending move; original verified |
-| `_PlayerGuideDest` | `iptv_two_pane_destination.dart` / `IptvTwoPanePlayerGuideDest` | — | — | — | 1 / pending move; original verified |
-| `_RecordingDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneRecordingDest` | — | — | — | 1 / pending move; original verified |
+| `_Dest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_SourceDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneSourceDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_AddDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAddDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_ListsDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneListsDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_StartupDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneStartupDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_AutoRefreshDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAutoRefreshDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_ContinueWatchingDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneContinueWatchingDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_ChannelPreviewDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneChannelPreviewDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_AppearanceDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneAppearanceDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_PlayerGuideDest` | `iptv_two_pane_destination.dart` / `IptvTwoPanePlayerGuideDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_RecordingDest` | `iptv_two_pane_destination.dart` / `IptvTwoPaneRecordingDest` | — | — | — | 1 / wired; production, verbatim and behavior verified |
 | `IptvSettingsTwoPaneState._panePoolSize` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `_panePoolSize` | — | — | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._app` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `app` | — | — | — | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._dest` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_owners.dart` / `IptvSettingsTwoPaneOwners` / `dest` | — | — | — | 2 / pending move; original verified |
@@ -114,18 +114,18 @@ lexical context and both VLB parameter declarations stay unchanged.
 | `IptvSettingsTwoPaneState._buildRecordingPane` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_preference_panes.dart` / `IptvSettingsTwoPanePreferencePanes` / `buildRecordingPane` | `batteryExempt`, `maxConcurrentRecordings`, `onOpenScheduledRecordings`, `onPickMaxConcurrent`, `onRequestBatteryExemption`, `onToggleRecordingEngine`, `recordingEngineEnabled`, `scheduledCount`, `showEngineToggle` | — | row:decl:member/block0#row#0; calls/tear-offs: _chevron, _paneNode, _returnToRail | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._returnToRail` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_navigation.dart` / `IptvSettingsTwoPaneNavigation` / `returnToRail` | — | — | calls/tear-offs: _focusRail, _selectedRailIndex | 2 / pending move; original verified |
 | `IptvSettingsTwoPaneState._chevron` | `legacy_iptv_settings_two_pane/iptv_settings_two_pane_panes.dart` / `IptvSettingsTwoPanePanes` / `chevron` | — | `_app` | — | 2 / pending move; original verified |
-| `_RailHeading` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailHeading` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_RailEntry` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailEntry` | — | — | — | 1 / pending move; original verified |
-| `_RailEntryState` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailEntryState` | `busy`, `chevron`, `focusNode`, `icon`, `onDown`, `onFocused`, `onRight`, `onSelect`, `onUp`, `selected`, `subtitle`, `title`, `trailing` | — | context:decl:member/method1#context#0; mounted:unbound | 1 / pending move; original verified |
-| `_PaneHeader` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPanePaneHeader` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_Badge` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneBadge` | — | — | — | 1 / pending move; original verified |
-| `_StatStrip` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneStatStrip` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_QuietBanner` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneQuietBanner` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_RowGroup` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneRowGroup` | — | — | context:decl:member/method1#context#0 | 1 / pending move; original verified |
-| `_PaneRow` | `iptv_two_pane_row.dart` / `IptvTwoPaneRow` | — | — | — | 1 / pending move; original verified |
-| `_PaneRowState` | `iptv_two_pane_row.dart` / `IptvTwoPaneRowState` | `danger`, `focusNode`, `icon`, `onLeft`, `onTap`, `subtitle`, `title`, `trailing` | — | context:decl:member/method3#context#0; mounted:unbound | 1 / pending move; original verified |
-| `_MethodCard` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCard` | — | — | — | 1 / pending move; original verified |
-| `_MethodCardState` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCardState` | `focusNode`, `hint`, `icon`, `label`, `onDown`, `onLeft`, `onRight`, `onTap`, `selected` | — | context:decl:member/method1#context#0; mounted:unbound | 1 / pending move; original verified |
+| `_RailHeading` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailHeading` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
+| `_RailEntry` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailEntry` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_RailEntryState` | `iptv_two_pane_rail_entry.dart` / `IptvTwoPaneRailEntryState` | `busy`, `chevron`, `focusNode`, `icon`, `onDown`, `onFocused`, `onRight`, `onSelect`, `onUp`, `selected`, `subtitle`, `title`, `trailing` | — | context:decl:member/method1#context#0; mounted:unbound | 1 / wired; production, verbatim and behavior verified |
+| `_PaneHeader` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPanePaneHeader` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
+| `_Badge` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneBadge` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_StatStrip` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneStatStrip` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
+| `_QuietBanner` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneQuietBanner` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
+| `_RowGroup` | `iptv_two_pane_pane_parts.dart` / `IptvTwoPaneRowGroup` | — | — | context:decl:member/method1#context#0 | 1 / wired; production, verbatim and behavior verified |
+| `_PaneRow` | `iptv_two_pane_row.dart` / `IptvTwoPaneRow` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_PaneRowState` | `iptv_two_pane_row.dart` / `IptvTwoPaneRowState` | `danger`, `focusNode`, `icon`, `onLeft`, `onTap`, `subtitle`, `title`, `trailing` | — | context:decl:member/method3#context#0; mounted:unbound | 1 / wired; production, verbatim and behavior verified |
+| `_MethodCard` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCard` | — | — | — | 1 / wired; production, verbatim and behavior verified |
+| `_MethodCardState` | `iptv_two_pane_method_card.dart` / `IptvTwoPaneMethodCardState` | `focusNode`, `hint`, `icon`, `label`, `onDown`, `onLeft`, `onRight`, `onTap`, `selected` | — | context:decl:member/method1#context#0; mounted:unbound | 1 / wired; production, verbatim and behavior verified |
 
 ## Frozen callback map
 

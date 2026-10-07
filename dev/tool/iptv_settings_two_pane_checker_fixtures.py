@@ -105,8 +105,11 @@ def imports_for(path,step):
    elif group=='preference_panes':base+=[STYLE,pieces['parts'],pieces['row']];show={STYLE:'kIptvStyleChoices'}
  return ''.join("import '"+p+"'"+(' show '+show[p] if p in show else '')+';\n' for p in sorted(set(base)))
 
+def auto_refresh_export():
+ return "export 'package:debrify/"+PREFIX[4:]+"iptv_auto_refresh_dialog.dart'\n    show IptvAutoRefreshDialog, iptvAutoRefreshExplanation, iptvAutoRefreshLabel;\n"
+
 def exports():
- return "export 'package:debrify/"+PREFIX[4:]+"iptv_auto_refresh_dialog.dart'\n    show IptvAutoRefreshDialog, iptvAutoRefreshExplanation, iptvAutoRefreshLabel;\nexport 'package:debrify/"+BRIDGE[4:]+"iptv_settings_two_pane_widget.dart'\n    show IptvSettingsTwoPane, IptvSettingsTwoPaneState;\n"
+ return auto_refresh_export()+"export 'package:debrify/"+BRIDGE[4:]+"iptv_settings_two_pane_widget.dart'\n    show IptvSettingsTwoPane, IptvSettingsTwoPaneState;\n"
 
 def layout(original,rows,config,parsed,leaves,step):
  if step==0:return {SOURCE:original}
@@ -132,5 +135,7 @@ def layout(original,rows,config,parsed,leaves,step):
  if step>=2:
   for path,text in scaffold_data.items():destinations[path].append(text)
  sources={SOURCE:imports_for(SOURCE,step)+'\n'.join(facade)+'\n' if step<2 else exports()}
+ if step==1:
+  imports=imports_for(SOURCE,step);sources[SOURCE]=sources[SOURCE].replace(imports,imports+'\n'+auto_refresh_export(),1)
  sources.update({p:imports_for(p,step)+'\n'.join(b) for p,b in destinations.items()})
  return sources

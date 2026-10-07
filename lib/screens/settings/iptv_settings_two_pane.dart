@@ -1,61 +1,24 @@
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_auto_refresh_dialog.dart';
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_two_pane_destination.dart';
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_two_pane_method_card.dart';
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_two_pane_pane_parts.dart';
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_two_pane_rail_entry.dart';
+import 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_two_pane_row.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/screens/settings/iptv_style_page.dart';
+import 'package:debrify/services/iptv_media_store.dart';
+import 'package:debrify/services/iptv_source_stats.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/startup_iptv_storage.dart';
+import 'package:debrify/theme/app_theme.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import '../../models/iptv_playlist.dart';
-import '../../services/iptv_media_store.dart';
-import '../../services/iptv_source_stats.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/app_theme_scope.dart';
-import 'iptv_style_page.dart';
-
-String iptvAutoRefreshLabel(int hours) =>
-    hours == 0 ? 'Off' : 'Every $hours hours';
-
-const iptvAutoRefreshExplanation =
-    'Updates occur when the app or operating system permits; exact timing '
-    'is not guaranteed. Local files are not refreshed.';
-
-/// Shared picker for phone and TV settings, including keyboard/DPAD input.
-class IptvAutoRefreshDialog extends StatelessWidget {
-  const IptvAutoRefreshDialog({super.key, required this.intervalHours});
-
-  final int intervalHours;
-
-  @override
-  Widget build(BuildContext context) => SimpleDialog(
-    title: const Text('Auto-refresh'),
-    children: [
-      const Padding(
-        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Text(
-          'Applies to all sources in this profile. '
-          '$iptvAutoRefreshExplanation',
-        ),
-      ),
-      for (final hours in const [0, 6, 12, 24, 48])
-        TextButton(
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          ),
-          autofocus: hours == intervalHours,
-          onPressed: () => Navigator.of(context).pop(hours),
-          child: Row(
-            children: [
-              Icon(
-                hours == intervalHours
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              const SizedBox(width: 12),
-              Text(iptvAutoRefreshLabel(hours)),
-            ],
-          ),
-        ),
-    ],
-  );
-}
+export 'package:debrify/features/iptv_settings_two_pane/presentation/iptv_auto_refresh_dialog.dart'
+    show
+        IptvAutoRefreshDialog,
+        iptvAutoRefreshExplanation,
+        iptvAutoRefreshLabel;
 
 /// Two-pane IPTV settings for TV and desktop ("Concept A"): a rail of the
 /// user's actual sources on the left, the selected source's detail on the
@@ -253,53 +216,6 @@ class IptvSettingsTwoPane extends StatefulWidget {
   State<IptvSettingsTwoPane> createState() => IptvSettingsTwoPaneState();
 }
 
-/// What the pane is showing. Sources are identified by playlist id so a
-/// refresh that rebuilds the list can't shift the selection onto a neighbour.
-sealed class _Dest {
-  const _Dest();
-}
-
-class _SourceDest extends _Dest {
-  const _SourceDest(this.playlistId);
-  final String playlistId;
-}
-
-class _AddDest extends _Dest {
-  const _AddDest();
-}
-
-class _ListsDest extends _Dest {
-  const _ListsDest();
-}
-
-class _StartupDest extends _Dest {
-  const _StartupDest();
-}
-
-class _AutoRefreshDest extends _Dest {
-  const _AutoRefreshDest();
-}
-
-class _ContinueWatchingDest extends _Dest {
-  const _ContinueWatchingDest();
-}
-
-class _ChannelPreviewDest extends _Dest {
-  const _ChannelPreviewDest();
-}
-
-class _AppearanceDest extends _Dest {
-  const _AppearanceDest();
-}
-
-class _PlayerGuideDest extends _Dest {
-  const _PlayerGuideDest();
-}
-
-class _RecordingDest extends _Dest {
-  const _RecordingDest();
-}
-
 class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// Rows in the busiest pane (a source: refresh, default, edit, guide,
   /// delete) plus headroom for the lists pane, which grows with the user's
@@ -310,7 +226,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// before first use because `build` always runs before them.
   late AppTheme _app;
 
-  final ValueNotifier<_Dest> _dest = ValueNotifier(const _AddDest());
+  final ValueNotifier<IptvTwoPaneDest> _dest = ValueNotifier(
+    const IptvTwoPaneAddDest(),
+  );
 
   /// One node per rail entry, rebuilt when the entry count changes.
   final List<FocusNode> _railNodes = [];
@@ -337,7 +255,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     // came here to add: then "Add" is the whole point of the trip. Deliberately
     // only the OPENING landing — the later re-homing below (a deleted source
     // leaving the pane pointing at a ghost) still goes through _initialDest.
-    _dest.value = widget.openAddSource ? const _AddDest() : _initialDest();
+    _dest.value = widget.openAddSource
+        ? const IptvTwoPaneAddDest()
+        : _initialDest();
   }
 
   @override
@@ -347,7 +267,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     _syncStats();
     // A deleted source must not leave the pane pointing at a ghost.
     final dest = _dest.value;
-    if (dest is _SourceDest &&
+    if (dest is IptvTwoPaneSourceDest &&
         !widget.playlists.any((p) => p.id == dest.playlistId)) {
       _dest.value = _initialDest();
     }
@@ -366,13 +286,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     super.dispose();
   }
 
-  _Dest _initialDest() {
-    if (widget.playlists.isEmpty) return const _AddDest();
+  IptvTwoPaneDest _initialDest() {
+    if (widget.playlists.isEmpty) return const IptvTwoPaneAddDest();
     final id = widget.defaultPlaylistId;
     if (id != null && widget.playlists.any((p) => p.id == id)) {
-      return _SourceDest(id);
+      return IptvTwoPaneSourceDest(id);
     }
-    return _SourceDest(widget.playlists.first.id);
+    return IptvTwoPaneSourceDest(widget.playlists.first.id);
   }
 
   /// Rail entries: every source, then Add, Lists, Startup, Channel preview,
@@ -466,8 +386,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// "Add a source" entry would. LEFT out of the pane still returns to that
   /// entry, so the rail is one keypress away.
   void focusAddPane() {
-    final alreadyThere = _dest.value is _AddDest;
-    _dest.value = const _AddDest();
+    final alreadyThere = _dest.value is IptvTwoPaneAddDest;
+    _dest.value = const IptvTwoPaneAddDest();
     if (alreadyThere) {
       _enterPane();
       return;
@@ -485,53 +405,53 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   int get _selectedRailIndex {
     final dest = _dest.value;
     return switch (dest) {
-      _SourceDest(:final playlistId) => () {
+      IptvTwoPaneSourceDest(:final playlistId) => () {
         final i = widget.playlists.indexWhere((p) => p.id == playlistId);
         return i < 0 ? 0 : i;
       }(),
-      _AddDest() => widget.playlists.length,
-      _ListsDest() => widget.playlists.length + 1,
-      _StartupDest() => widget.playlists.length + 2,
-      _ChannelPreviewDest() => _channelPreviewIndex,
-      _ContinueWatchingDest() => _continueWatchingIndex,
-      _AppearanceDest() => _appearanceIndex,
-      _PlayerGuideDest() => _playerGuideIndex,
-      _RecordingDest() => _recordingIndex,
-      _AutoRefreshDest() => _autoRefreshIndex,
+      IptvTwoPaneAddDest() => widget.playlists.length,
+      IptvTwoPaneListsDest() => widget.playlists.length + 1,
+      IptvTwoPaneStartupDest() => widget.playlists.length + 2,
+      IptvTwoPaneChannelPreviewDest() => _channelPreviewIndex,
+      IptvTwoPaneContinueWatchingDest() => _continueWatchingIndex,
+      IptvTwoPaneAppearanceDest() => _appearanceIndex,
+      IptvTwoPanePlayerGuideDest() => _playerGuideIndex,
+      IptvTwoPaneRecordingDest() => _recordingIndex,
+      IptvTwoPaneAutoRefreshDest() => _autoRefreshIndex,
     };
   }
 
-  _Dest _destForRail(int index) {
-    if (index == _autoRefreshIndex) return const _AutoRefreshDest();
+  IptvTwoPaneDest _destForRail(int index) {
+    if (index == _autoRefreshIndex) return const IptvTwoPaneAutoRefreshDest();
     if (index < widget.playlists.length) {
-      return _SourceDest(widget.playlists[index].id);
+      return IptvTwoPaneSourceDest(widget.playlists[index].id);
     }
     return switch (index - widget.playlists.length) {
-      0 => const _AddDest(),
-      1 => const _ListsDest(),
-      2 => const _StartupDest(),
-      3 => const _ChannelPreviewDest(),
-      4 => const _ContinueWatchingDest(),
+      0 => const IptvTwoPaneAddDest(),
+      1 => const IptvTwoPaneListsDest(),
+      2 => const IptvTwoPaneStartupDest(),
+      3 => const IptvTwoPaneChannelPreviewDest(),
+      4 => const IptvTwoPaneContinueWatchingDest(),
       5 =>
         widget.showAppearanceSection
-            ? const _AppearanceDest()
-            : const _PlayerGuideDest(),
+            ? const IptvTwoPaneAppearanceDest()
+            : const IptvTwoPanePlayerGuideDest(),
       6 =>
         widget.showAppearanceSection
-            ? const _PlayerGuideDest()
+            ? const IptvTwoPanePlayerGuideDest()
             : widget.showRecordingSection
-            ? const _RecordingDest()
-            : const _PlayerGuideDest(),
+            ? const IptvTwoPaneRecordingDest()
+            : const IptvTwoPanePlayerGuideDest(),
       _ =>
         widget.showRecordingSection
-            ? const _RecordingDest()
-            : const _PlayerGuideDest(),
+            ? const IptvTwoPaneRecordingDest()
+            : const IptvTwoPanePlayerGuideDest(),
     };
   }
 
   void _enterPane() {
     // The add pane's first stop is the method chooser, which the parent owns.
-    if (_dest.value is _AddDest) {
+    if (_dest.value is IptvTwoPaneAddDest) {
       switch (widget.addMethod) {
         case 1:
           widget.fileMethodFocusNode.requestFocus();
@@ -569,7 +489,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           _buildRail(),
           Container(width: 1, color: t.line),
           Expanded(
-            child: ValueListenableBuilder<_Dest>(
+            child: ValueListenableBuilder<IptvTwoPaneDest>(
               valueListenable: _dest,
               builder: (context, dest, _) => _buildPane(dest),
             ),
@@ -586,7 +506,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     final width = MediaQuery.sizeOf(context).width;
     return SizedBox(
       width: width >= 1400 ? 400 : 330,
-      child: ValueListenableBuilder<_Dest>(
+      child: ValueListenableBuilder<IptvTwoPaneDest>(
         valueListenable: _dest,
         builder: (context, dest, _) {
           final selected = _selectedRailIndex;
@@ -594,9 +514,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
             controller: _railScroll,
             padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
             children: [
-              const _RailHeading('Sources'),
+              const IptvTwoPaneRailHeading('Sources'),
               for (var i = 0; i < widget.playlists.length; i++)
-                _RailEntry(
+                IptvTwoPaneRailEntry(
                   focusNode: _railNodes[i],
                   icon: _iconFor(widget.playlists[i]),
                   title: widget.playlists[i].name,
@@ -620,13 +540,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     style: TextStyle(fontSize: 13, color: t.dim),
                   ),
                 ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[widget.playlists.length],
                 icon: Icons.add_rounded,
                 title: 'Add a source',
                 subtitle: 'URL, file, or Xtream login',
                 selected: selected == widget.playlists.length,
-                onFocused: () => _dest.value = const _AddDest(),
+                onFocused: () => _dest.value = const IptvTwoPaneAddDest(),
                 onSelect: _enterPane,
                 onUp: widget.playlists.isEmpty
                     ? null
@@ -641,20 +561,20 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 ),
                 child: Container(height: 1, color: t.line),
               ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[widget.playlists.length + 1],
                 icon: Icons.bookmark_rounded,
                 title: 'Channel lists',
                 subtitle: _listsSubtitle,
                 selected: selected == widget.playlists.length + 1,
                 chevron: true,
-                onFocused: () => _dest.value = const _ListsDest(),
+                onFocused: () => _dest.value = const IptvTwoPaneListsDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length),
                 onDown: () => _focusRail(widget.playlists.length + 2),
                 onRight: _enterPane,
               ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[widget.playlists.length + 2],
                 icon: Icons.play_circle_outline_rounded,
                 title: 'Startup channel',
@@ -666,13 +586,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     : 'Off',
                 selected: selected == widget.playlists.length + 2,
                 chevron: true,
-                onFocused: () => _dest.value = const _StartupDest(),
+                onFocused: () => _dest.value = const IptvTwoPaneStartupDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 1),
                 onDown: () => _focusRail(widget.playlists.length + 3),
                 onRight: _enterPane,
               ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[_channelPreviewIndex],
                 icon: Icons.ondemand_video_rounded,
                 title: 'Channel preview',
@@ -681,13 +601,14 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     : 'Off · fullscreen playback only',
                 selected: selected == _channelPreviewIndex,
                 chevron: true,
-                onFocused: () => _dest.value = const _ChannelPreviewDest(),
+                onFocused: () =>
+                    _dest.value = const IptvTwoPaneChannelPreviewDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(widget.playlists.length + 2),
                 onDown: () => _focusRail(_continueWatchingIndex),
                 onRight: _enterPane,
               ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[_continueWatchingIndex],
                 icon: Icons.history_toggle_off_rounded,
                 title: 'Continue watching',
@@ -696,7 +617,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     : 'Off',
                 selected: selected == _continueWatchingIndex,
                 chevron: true,
-                onFocused: () => _dest.value = const _ContinueWatchingDest(),
+                onFocused: () =>
+                    _dest.value = const IptvTwoPaneContinueWatchingDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(_channelPreviewIndex),
                 onDown: () => _focusRail(
@@ -707,20 +629,21 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onRight: _enterPane,
               ),
               if (widget.showAppearanceSection)
-                _RailEntry(
+                IptvTwoPaneRailEntry(
                   focusNode: _railNodes[_appearanceIndex],
                   icon: Icons.style_rounded,
                   title: 'Appearance',
                   subtitle: iptvStyleLabel(widget.iptvStyle),
                   selected: selected == _appearanceIndex,
                   chevron: true,
-                  onFocused: () => _dest.value = const _AppearanceDest(),
+                  onFocused: () =>
+                      _dest.value = const IptvTwoPaneAppearanceDest(),
                   onSelect: _enterPane,
                   onUp: () => _focusRail(_continueWatchingIndex),
                   onDown: () => _focusRail(_playerGuideIndex),
                   onRight: _enterPane,
                 ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[_playerGuideIndex],
                 icon: Icons.smart_display_rounded,
                 title: 'Player guide',
@@ -732,7 +655,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 },
                 selected: selected == _playerGuideIndex,
                 chevron: true,
-                onFocused: () => _dest.value = const _PlayerGuideDest(),
+                onFocused: () =>
+                    _dest.value = const IptvTwoPanePlayerGuideDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(
                   widget.showAppearanceSection
@@ -745,7 +669,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onRight: _enterPane,
               ),
               if (widget.showRecordingSection)
-                _RailEntry(
+                IptvTwoPaneRailEntry(
                   focusNode: _railNodes[_recordingIndex],
                   icon: Icons.fiber_manual_record_rounded,
                   title: 'Recording',
@@ -760,20 +684,22 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                       : 'Player-tied',
                   selected: selected == _recordingIndex,
                   chevron: true,
-                  onFocused: () => _dest.value = const _RecordingDest(),
+                  onFocused: () =>
+                      _dest.value = const IptvTwoPaneRecordingDest(),
                   onSelect: _enterPane,
                   onUp: () => _focusRail(_playerGuideIndex),
                   onDown: () => _focusRail(_autoRefreshIndex),
                   onRight: _enterPane,
                 ),
-              _RailEntry(
+              IptvTwoPaneRailEntry(
                 focusNode: _railNodes[_autoRefreshIndex],
                 icon: Icons.update_rounded,
                 title: 'Auto-refresh',
                 subtitle: iptvAutoRefreshLabel(widget.autoRefreshHours),
                 selected: selected == _autoRefreshIndex,
                 chevron: true,
-                onFocused: () => _dest.value = const _AutoRefreshDest(),
+                onFocused: () =>
+                    _dest.value = const IptvTwoPaneAutoRefreshDest(),
                 onSelect: _enterPane,
                 onUp: () => _focusRail(
                   widget.showRecordingSection
@@ -814,28 +740,28 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   // ---------------------------------------------------------------- pane
 
-  Widget _buildPane(_Dest dest) {
+  Widget _buildPane(IptvTwoPaneDest dest) {
     final child = switch (dest) {
-      _SourceDest(:final playlistId) => _buildSourcePane(playlistId),
-      _AddDest() => _buildAddPane(),
-      _ListsDest() => _buildListsPane(),
-      _StartupDest() => _buildStartupPane(),
-      _ChannelPreviewDest() => _buildChannelPreviewPane(),
-      _ContinueWatchingDest() => _buildContinueWatchingPane(),
-      _AppearanceDest() => _buildAppearancePane(),
-      _PlayerGuideDest() => _buildPlayerGuidePane(),
-      _RecordingDest() => _buildRecordingPane(),
-      _AutoRefreshDest() => Column(
+      IptvTwoPaneSourceDest(:final playlistId) => _buildSourcePane(playlistId),
+      IptvTwoPaneAddDest() => _buildAddPane(),
+      IptvTwoPaneListsDest() => _buildListsPane(),
+      IptvTwoPaneStartupDest() => _buildStartupPane(),
+      IptvTwoPaneChannelPreviewDest() => _buildChannelPreviewPane(),
+      IptvTwoPaneContinueWatchingDest() => _buildContinueWatchingPane(),
+      IptvTwoPaneAppearanceDest() => _buildAppearancePane(),
+      IptvTwoPanePlayerGuideDest() => _buildPlayerGuidePane(),
+      IptvTwoPaneRecordingDest() => _buildRecordingPane(),
+      IptvTwoPaneAutoRefreshDest() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _PaneHeader(
+          const IptvTwoPanePaneHeader(
             icon: Icons.update_rounded,
             title: 'Auto-refresh',
             meta: 'All sources in this profile',
             badges: [],
           ),
           const SizedBox(height: 24),
-          _PaneRow(
+          IptvTwoPaneRow(
             focusNode: _paneNodes[0],
             icon: Icons.schedule_rounded,
             title: iptvAutoRefreshLabel(widget.autoRefreshHours),
@@ -852,16 +778,16 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     // source with its header already off-screen.
     return ListView(
       key: ValueKey(switch (dest) {
-        _SourceDest(:final playlistId) => 'source:$playlistId',
-        _AddDest() => 'add',
-        _ListsDest() => 'lists',
-        _StartupDest() => 'startup',
-        _ChannelPreviewDest() => 'channel-preview',
-        _ContinueWatchingDest() => 'continue-watching',
-        _AppearanceDest() => 'appearance',
-        _PlayerGuideDest() => 'player_guide',
-        _RecordingDest() => 'recording',
-        _AutoRefreshDest() => 'auto-refresh',
+        IptvTwoPaneSourceDest(:final playlistId) => 'source:$playlistId',
+        IptvTwoPaneAddDest() => 'add',
+        IptvTwoPaneListsDest() => 'lists',
+        IptvTwoPaneStartupDest() => 'startup',
+        IptvTwoPaneChannelPreviewDest() => 'channel-preview',
+        IptvTwoPaneContinueWatchingDest() => 'continue-watching',
+        IptvTwoPaneAppearanceDest() => 'appearance',
+        IptvTwoPanePlayerGuideDest() => 'player_guide',
+        IptvTwoPaneRecordingDest() => 'recording',
+        IptvTwoPaneAutoRefreshDest() => 'auto-refresh',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
       children: [child],
@@ -888,33 +814,38 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _PaneHeader(
+        IptvTwoPanePaneHeader(
           icon: _iconFor(playlist),
           title: playlist.name,
           meta: _sourceMeta(playlist),
           badges: [
-            if (isDefault) _Badge('Default', t.warning, Icons.star_rounded),
+            if (isDefault)
+              IptvTwoPaneBadge('Default', t.warning, Icons.star_rounded),
             if (stats.guide == IptvGuideSource.custom)
-              _Badge('Custom guide', t.accent2, Icons.event_note_rounded),
+              IptvTwoPaneBadge(
+                'Custom guide',
+                t.accent2,
+                Icons.event_note_rounded,
+              ),
             if (stats.guide == IptvGuideSource.provider)
-              _Badge(
+              IptvTwoPaneBadge(
                 'Provider guide',
                 t.success,
                 Icons.event_available_rounded,
               ),
             if (stats.cached && stats.refreshedAt != null)
-              _Badge(
+              IptvTwoPaneBadge(
                 'Refreshed ${IptvSourceStatsLoader.ago(stats.refreshedAt)}',
                 t.accent2,
                 Icons.schedule_rounded,
               ),
             if (playlist.connectionReadOnly)
-              _Badge('Shared', t.accent2, Icons.lock_outline_rounded),
+              IptvTwoPaneBadge('Shared', t.accent2, Icons.lock_outline_rounded),
           ],
         ),
         const SizedBox(height: 20),
         if (stats.cached)
-          _StatStrip(
+          IptvTwoPaneStatStrip(
             stats: [
               ('Live channels', IptvSourceStatsLoader.count(stats.live)),
               if (stats.hasVodSplit)
@@ -926,7 +857,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
             ],
           )
         else
-          _QuietBanner(
+          IptvTwoPaneQuietBanner(
             icon: playlist.isLocalFile
                 ? Icons.sd_card_rounded
                 : Icons.cloud_off_rounded,
@@ -937,10 +868,10 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 : 'Not loaded yet. Open this source in IPTV, or refresh it here.',
           ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
             if (canRefresh)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.refresh_rounded,
                 title: busy ? 'Refreshing…' : 'Refresh now',
@@ -958,7 +889,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onTap: busy ? () {} : () => widget.onRefresh(playlist),
                 onLeft: _returnToRail,
               ),
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(row++),
               icon: Icons.star_rounded,
               title: 'Default playlist',
@@ -971,7 +902,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onLeft: _returnToRail,
             ),
             if (!playlist.connectionReadOnly)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.edit_rounded,
                 title: 'Edit source',
@@ -985,7 +916,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
             // Imported files store no catalog, so there is nothing to hide
             // categories against — the row stays off them entirely.
             if (widget.onManageHidden != null && !playlist.isLocalFile)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.visibility_off_rounded,
                 title: 'Hidden categories',
@@ -999,7 +930,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onLeft: _returnToRail,
               ),
             if (widget.onManageCategoryOrder != null)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.swap_vert_rounded,
                 title: 'Category order',
@@ -1009,7 +940,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onLeft: _returnToRail,
               ),
             if (!playlist.connectionReadOnly)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.event_note_rounded,
                 title: 'Guide (EPG) source',
@@ -1026,7 +957,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onLeft: _returnToRail,
               ),
             if (!playlist.connectionReadOnly)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.delete_outline_rounded,
                 title: 'Remove source',
@@ -1059,7 +990,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.add_rounded,
           title: 'Add a source',
           meta: 'Pick how you want to connect, then fill in the details.',
@@ -1069,7 +1000,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         Row(
           children: [
             Expanded(
-              child: _MethodCard(
+              child: IptvTwoPaneMethodCard(
                 focusNode: widget.urlMethodFocusNode,
                 icon: Icons.link_rounded,
                 label: 'From URL',
@@ -1084,7 +1015,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _MethodCard(
+              child: IptvTwoPaneMethodCard(
                 focusNode: widget.fileMethodFocusNode,
                 icon: Icons.folder_open_rounded,
                 label: 'From file',
@@ -1098,7 +1029,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _MethodCard(
+              child: IptvTwoPaneMethodCard(
                 focusNode: widget.xtreamMethodFocusNode,
                 icon: Icons.vpn_key_rounded,
                 label: 'Xtream login',
@@ -1131,7 +1062,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.bookmark_rounded,
           title: 'Channel lists',
           meta:
@@ -1140,12 +1071,12 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
             // Nothing to configure — built in, can't be renamed, reordered or
             // deleted. Deliberately not a focus stop, and deliberately not
             // holding a pool slot.
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: null,
               icon: Icons.star_rounded,
               title: 'Favorites',
@@ -1154,7 +1085,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onTap: null,
               onLeft: _returnToRail,
             ),
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(row++),
               icon: Icons.reorder_rounded,
               title: 'Channel order',
@@ -1164,7 +1095,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onLeft: _returnToRail,
             ),
             for (var i = 0; i < lists.length; i++)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.bookmark_border_rounded,
                 title: lists[i].name,
@@ -1175,7 +1106,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onTap: () => widget.onListActions(lists[i]),
                 onLeft: _returnToRail,
               ),
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(row++),
               icon: Icons.add_rounded,
               title: 'Create list',
@@ -1198,16 +1129,16 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.play_circle_outline_rounded,
           title: 'Startup channel',
           meta: 'Open straight into a live channel when the app starts.',
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(row++),
               icon: Icons.power_settings_new_rounded,
               title: 'Start on a channel',
@@ -1221,7 +1152,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               isLast: !widget.startupEnabled,
             ),
             if (widget.startupEnabled) ...[
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.history_rounded,
                 title: 'Last watched channel',
@@ -1243,7 +1174,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 ),
                 onLeft: _returnToRail,
               ),
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.push_pin_rounded,
                 title: 'A specific channel',
@@ -1261,7 +1192,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 isLast: !pinned,
               ),
               if (pinned)
-                _PaneRow(
+                IptvTwoPaneRow(
                   focusNode: _paneNode(row++),
                   icon: Icons.live_tv_rounded,
                   title: widget.hasStartupChannel
@@ -1284,7 +1215,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.history_toggle_off_rounded,
           title: 'Continue watching',
           meta:
@@ -1293,9 +1224,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(0),
               icon: Icons.playlist_add_check_rounded,
               title: 'Track movies and series',
@@ -1324,7 +1255,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.ondemand_video_rounded,
           title: 'Channel preview',
           meta:
@@ -1333,9 +1264,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
-            _PaneRow(
+            IptvTwoPaneRow(
               focusNode: _paneNode(0),
               icon: Icons.play_circle_outline_rounded,
               title: 'Play channel previews',
@@ -1373,7 +1304,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       required String subtitle,
       bool isLast = false,
     }) {
-      return _PaneRow(
+      return IptvTwoPaneRow(
         focusNode: _paneNode(row++),
         icon: icon,
         title: title,
@@ -1393,7 +1324,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.style_rounded,
           title: 'Appearance',
           meta:
@@ -1402,7 +1333,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
             for (var index = 0; index < kIptvStyleChoices.length; index++)
               styleRow(
@@ -1427,7 +1358,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       required String subtitle,
       bool isLast = false,
     }) {
-      return _PaneRow(
+      return IptvTwoPaneRow(
         focusNode: _paneNode(row++),
         icon: icon,
         title: title,
@@ -1447,7 +1378,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.smart_display_rounded,
           title: 'Player guide',
           meta:
@@ -1456,7 +1387,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
             styleRow(
               icon: Icons.play_circle_outline_rounded,
@@ -1495,7 +1426,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PaneHeader(
+        const IptvTwoPanePaneHeader(
           icon: Icons.fiber_manual_record_rounded,
           title: 'Recording',
           meta:
@@ -1504,10 +1435,10 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           badges: [],
         ),
         const SizedBox(height: 20),
-        _RowGroup(
+        IptvTwoPaneRowGroup(
           children: [
             if (widget.showEngineToggle)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.settings_backup_restore_rounded,
                 title: 'Background recording engine',
@@ -1525,7 +1456,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 isLast: !widget.recordingEngineEnabled,
               ),
             if (!widget.showEngineToggle || widget.recordingEngineEnabled)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.filter_none_rounded,
                 title: 'Simultaneous recordings',
@@ -1539,7 +1470,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               ),
             if ((!widget.showEngineToggle || widget.recordingEngineEnabled) &&
                 widget.batteryExempt != null)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.battery_alert_rounded,
                 title: 'Battery optimization',
@@ -1553,7 +1484,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 isLast: false,
               ),
             if (!widget.showEngineToggle || widget.recordingEngineEnabled)
-              _PaneRow(
+              IptvTwoPaneRow(
                 focusNode: _paneNode(row++),
                 icon: Icons.event_rounded,
                 title: 'Recordings',
@@ -1576,656 +1507,4 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   Widget get _chevron =>
       Icon(Icons.chevron_right_rounded, size: 20, color: _app.settings.dim2);
-}
-
-// ------------------------------------------------------------------ pieces
-
-class _RailHeading extends StatelessWidget {
-  const _RailHeading(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
-          color: t.dim2,
-        ),
-      ),
-    );
-  }
-}
-
-/// One rail entry. Focus selects it (the pane updates live), OK/RIGHT enters
-/// the pane. Snap styling, never a tween — the TV GPU rule.
-class _RailEntry extends StatefulWidget {
-  const _RailEntry({
-    required this.focusNode,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onFocused,
-    required this.onSelect,
-    required this.onUp,
-    required this.onDown,
-    required this.onRight,
-    this.trailing,
-    this.chevron = false,
-    this.busy = false,
-  });
-
-  final FocusNode focusNode;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onFocused;
-  final VoidCallback onSelect;
-  final VoidCallback? onUp;
-  final VoidCallback? onDown;
-  final VoidCallback onRight;
-  final Widget? trailing;
-  final bool chevron;
-  final bool busy;
-
-  @override
-  State<_RailEntry> createState() => _RailEntryState();
-}
-
-class _RailEntryState extends State<_RailEntry> {
-  /// Live, never cached — a remembered flag survives the focus change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `settings/widgets/settings_widgets.dart`.
-  bool get _focused => widget.focusNode.hasFocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final t = app.settings;
-    final active = _focused || widget.selected;
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (has) {
-        if (!mounted) return;
-        setState(() {});
-        if (has) {
-          widget.onFocused();
-          // Keep the entry on screen when DPAD walks past the fold.
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: Duration.zero,
-          );
-        }
-      },
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        switch (event.logicalKey) {
-          case LogicalKeyboardKey.arrowUp:
-            // Deliberately NOT consumed at the top of the rail: UP has to
-            // escape upward to the page's back button, the way every other
-            // settings page behaves.
-            if (widget.onUp == null) return KeyEventResult.ignored;
-            widget.onUp!();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.arrowDown:
-            // Consumed at the bottom, unlike UP: there is nothing below the
-            // rail, and leaving it to geometric traversal would fling focus
-            // sideways into the pane instead of simply stopping.
-            if (widget.onDown == null) return KeyEventResult.handled;
-            widget.onDown!();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.arrowRight:
-            widget.onRight();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.enter:
-          case LogicalKeyboardKey.select:
-          case LogicalKeyboardKey.space:
-            widget.onSelect();
-            return KeyEventResult.handled;
-        }
-        // LEFT is deliberately unhandled: the page's own back/sidebar
-        // handling owns it, exactly as the main settings rail does.
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        // The whole row is the target, not just the glyphs it happens to
-        // paint. Without this the padding is dead space — tolerable while
-        // hover also selected, unacceptable now that clicking is the only
-        // pointer affordance.
-        behavior: HitTestBehavior.opaque,
-        // Pointer: select only. Deliberately NOT onSelect() — that enters the
-        // pane, which is the remote's OK behaviour; with a mouse it would
-        // yank the focus ring into the pane on every click in the rail.
-        onTap: widget.focusNode.requestFocus,
-        child: MouseRegion(
-          // Hover deliberately does nothing. Focus previews the pane, and on
-          // TV focus IS the cursor — but with a mouse, merely crossing the
-          // rail on the way somewhere else would swap the pane out from under
-          // whatever the user was reading.
-          cursor: SystemMouseCursors.click,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: _focused ? t.panel2 : (widget.selected ? t.panel : null),
-              borderRadius: app.shape.br(11),
-              border: Border.all(
-                color: _focused ? t.accent : Colors.transparent,
-                width: 2,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: _focused ? t.accent : t.panel2,
-                    borderRadius: app.shape.br(9),
-                  ),
-                  child: widget.busy
-                      ? const Padding(
-                          padding: EdgeInsets.all(9),
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          widget.icon,
-                          size: 18,
-                          // Focused rides an accent fill; unfocused sits on a
-                          // panel, where the accent tint is the right ink.
-                          color: _focused ? app.inkOn(t.accent) : t.accent2,
-                        ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: active ? app.core.tx : null,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: t.dim),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.trailing != null) widget.trailing!,
-                if (widget.chevron)
-                  Icon(Icons.chevron_right_rounded, size: 18, color: t.dim2),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PaneHeader extends StatelessWidget {
-  const _PaneHeader({
-    required this.icon,
-    required this.title,
-    required this.meta,
-    required this.badges,
-  });
-
-  final IconData icon;
-  final String title;
-  final String meta;
-  final List<Widget> badges;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: t.panel2,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(icon, size: 26, color: t.accent2),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                meta,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: t.dim),
-              ),
-              if (badges.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(spacing: 7, runSpacing: 7, children: badges),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge(this.label, this.color, this.icon);
-  final String label;
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _StatStrip extends StatelessWidget {
-  const _StatStrip({required this.stats});
-  final List<(String, String)> stats;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Row(
-      children: [
-        for (var i = 0; i < stats.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: t.panel,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: t.line),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    stats[i].$2,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    stats[i].$1.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.9,
-                      color: t.dim,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _QuietBanner extends StatelessWidget {
-  const _QuietBanner({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: t.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: t.line),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: t.dim),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(text, style: TextStyle(fontSize: 13, color: t.dim)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RowGroup extends StatelessWidget {
-  const _RowGroup({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Container(
-      decoration: BoxDecoration(
-        color: t.panel,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: t.line),
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-/// One action row in the pane. LEFT hands focus back to the rail; everything
-/// else is ordinary vertical traversal.
-class _PaneRow extends StatefulWidget {
-  const _PaneRow({
-    required this.focusNode,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.trailing,
-    required this.onTap,
-    required this.onLeft,
-    this.danger = false,
-    this.isLast = false,
-  });
-
-  final FocusNode? focusNode;
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final Widget? trailing;
-  final VoidCallback? onTap;
-  final VoidCallback onLeft;
-  final bool danger;
-  final bool isLast;
-
-  @override
-  State<_PaneRow> createState() => _PaneRowState();
-}
-
-class _PaneRowState extends State<_PaneRow> {
-  /// Live, never cached — a remembered flag survives the focus change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `settings/widgets/settings_widgets.dart`.
-  FocusNode? _ownFocusNode;
-  FocusNode get _focusNode =>
-      widget.focusNode ?? (_ownFocusNode ??= FocusNode());
-  bool get _focused => _focusNode.hasFocus;
-
-  @override
-  void dispose() {
-    _ownFocusNode?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    final tint = widget.danger ? t.danger : t.accent2;
-    return Focus(
-      focusNode: _focusNode,
-      canRequestFocus: widget.onTap != null,
-      descendantsAreFocusable: false,
-      onFocusChange: (has) {
-        if (!mounted) return;
-        setState(() {});
-        if (has) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: Duration.zero,
-          );
-        }
-      },
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        switch (event.logicalKey) {
-          case LogicalKeyboardKey.arrowLeft:
-            widget.onLeft();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.enter:
-          case LogicalKeyboardKey.select:
-          case LogicalKeyboardKey.space:
-            widget.onTap?.call();
-            return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        // Same reason as the rail: the row's padding must be clickable.
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap == null
-            ? null
-            : () {
-                widget.focusNode?.requestFocus();
-                widget.onTap!();
-              },
-        child: MouseRegion(
-          cursor: widget.onTap == null
-              ? MouseCursor.defer
-              : SystemMouseCursors.click,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-            decoration: BoxDecoration(
-              color: _focused ? t.panel2 : null,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _focused ? t.accent : Colors.transparent,
-                width: 2,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 20, color: tint),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                          color: widget.danger ? t.danger : null,
-                        ),
-                      ),
-                      if (widget.subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.subtitle!,
-                          style: TextStyle(fontSize: 12, color: t.dim),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (widget.trailing != null) ...[
-                  const SizedBox(width: 12),
-                  // The row is the single target for both DPAD and pointer:
-                  // a Switch/Radio here would otherwise take the tap itself
-                  // and fire the action a second time.
-                  IgnorePointer(child: widget.trailing!),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MethodCard extends StatefulWidget {
-  const _MethodCard({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.hint,
-    required this.selected,
-    required this.onTap,
-    required this.onLeft,
-    required this.onRight,
-    required this.onDown,
-  });
-
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-  final String hint;
-  final bool selected;
-  final VoidCallback onTap;
-  final VoidCallback onLeft;
-  final VoidCallback? onRight;
-  final VoidCallback onDown;
-
-  @override
-  State<_MethodCard> createState() => _MethodCardState();
-}
-
-class _MethodCardState extends State<_MethodCard> {
-  /// Live, never cached — a remembered flag survives the focus change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `settings/widgets/settings_widgets.dart`.
-  bool get _focused => widget.focusNode.hasFocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (has) {
-        if (mounted) setState(() {});
-      },
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        switch (event.logicalKey) {
-          case LogicalKeyboardKey.arrowLeft:
-            widget.onLeft();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.arrowRight:
-            if (widget.onRight == null) return KeyEventResult.handled;
-            widget.onRight!();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.arrowDown:
-            widget.onDown();
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.enter:
-          case LogicalKeyboardKey.select:
-          case LogicalKeyboardKey.space:
-            widget.onTap();
-            return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        // Same reason as the rail: the whole card is the target.
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          widget.focusNode.requestFocus();
-          widget.onTap();
-        },
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-            decoration: BoxDecoration(
-              color: _focused ? t.panel2 : (widget.selected ? t.panel : null),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(
-                color: _focused
-                    ? t.accent
-                    : (widget.selected ? t.accent2 : t.line),
-                width: 2,
-              ),
-            ),
-            child: Column(
-              children: [
-                Icon(widget.icon, size: 24, color: t.accent2),
-                const SizedBox(height: 9),
-                Text(
-                  widget.label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  widget.hint,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: TextStyle(fontSize: 11.5, color: t.dim),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

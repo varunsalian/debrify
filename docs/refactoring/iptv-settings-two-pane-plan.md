@@ -939,3 +939,62 @@ and ran `flutter pub get` with no lockfile changes. Root application and
 pubspec objects remain identical to R/(b). Step L commits only originals,
 the stricter test and this evidence record. Application extraction starts
 after this separate checkpoint.
+
+### Step 1 — pieces and unconditional guards (2026-10-07)
+
+Step L is `55fc98ca0`. All 26 step-1 leaves are wired to their six production
+destinations and checked through the source reader and 73-row manifest. The
+dialog is 48 lines, destination family 46, rail entry 208, pane parts 193, row
+147 and method card 115. The facade temporarily retains the original widget
+and State at 1,510 lines; its measured size ratchet is updated. Remaining
+responsibility: State lifecycle, resources, navigation, rail and panes. Exit:
+step 2's atomic whole-State move and seven-line pure-export facade.
+
+The facade imports the pieces and re-exports the three moved Auto-refresh
+names so existing importers retain the five-name API. The CI analyzer caught
+the missing partial export in the initial fixture layout; it was corrected
+in the facade and fixture generator without editing any importer. That
+preliminary focused run was stopped and discarded; the stable rerun passes
+against `base2`: 357 successes, the same pre-existing profile
+SharedPreferences source-guard failure, no new failures, missing tests or
+skips. All characterization/compatibility suites, the unchanged 124-test
+IPTV-settings set and macOS goldens pass.
+
+Architecture registration is additive: unconditional feature scans, 500-line
+caps, no wrappers/back-imports/forbidden services, named peer bans in both
+directions and exact per-destination/URI show lists. The real-main negative
+fixtures pass, including when completion is false. Facade completion remains
+false and its cap is measured/activated in step 3. CI runs the architecture
+proof after pub get and puts every format/analyze path inside its command
+before `| tee`. The changed-code CI formatter passes; CI analysis has only
+25 existing allowlisted warnings, and the strict slice has 17 inventoried
+infos with zero additions. No allowlist was changed.
+
+Shape registrations move only the rail-entry file into `kShapeResidue` (cap
+0); other destinations and the facade are in `kExtractedShapeResidue` with
+5/1/1 bare-radius caps for parts/row/method and 0 elsewhere. The slice retains
+two tokens and seven bare radii; all three shape tests and the unchanged
+488 floor pass. Theme regex hits remain 0/2/1, with the new presentation and
+bridge globs registered. The earlier original ink artifact measured only
+the facade; the full inventory was recaptured on unchanged (b) and is
+byte-identical: 774 candidates/200 files, 240 PRIMARY candidates/67 files.
+The slice remains at zero candidates. The own manifest is LF; pre-existing
+manifests keep their original bytes, including existing CRLF, rather than
+being reformatted. Storage reference fixtures, source inventories, explicit
+parser packages, document links and staged-diff checks pass. Forbidden files,
+models, loaders, storage, themes, pubspec and all importers are byte-identical
+to R. All five found-not-fixed items remain unchanged.
+
+All 21 manifests/self-tests pass. The configured-manifest driver originally
+omitted the older plain-engine launcher manifest; its isolated original-(b)
+and step-1 CLI runs both pass with byte-identical output, as do two complete
+adapter parses. The updated driver includes it at subsequent steps. The
+20 pre-existing manifests' CLI and actual adapter outputs are byte-identical
+to originals; their full source sets and SHA pairs are recorded. Linux
+strict comparisons pass 13/13 (nine new scenes plus the four unchanged
+IPTV-settings scenes). The architecture proof also passes from the normal
+clone with a `.git` directory after pub get. The existing CI tuner analyzer
+has nine inventoried infos and zero additions. Gate 1 now follows on the
+committed step-1 tree against accepted `base2`, with paths `[]` and the same
+three recorded flags. Gate evidence and its commit will be recorded after
+completion before step 2.
