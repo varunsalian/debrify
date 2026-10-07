@@ -5,6 +5,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PlaybackProgressPolicyTest {
+    @Test fun watchedAndRewatchEdgesKeepTheOriginalDisplayPolicy() {
+        val item = PlaybackItem.fromJson(JSONObject().put("durationMs", 1000L).put("resumePositionMs", 200L))
+        assertEquals(20, item.displayProgressPercent())
+        assertEquals(40, item.copy(traktProgressPercent = 40.9).displayProgressPercent())
+        assertEquals(20, item.copy(traktProgressPercent = 95.0).displayProgressPercent())
+        assertEquals(0, item.copy(resumePositionMs = 1L, durationMs = 100_000L, traktProgressPercent = 100.0).displayProgressPercent())
+        assertEquals(100, item.copy(resumePositionMs = 0L, traktProgressPercent = 100.0).displayProgressPercent())
+        assertEquals(100, item.copy(watched = true).displayProgressPercent())
+        assertEquals(0, item.copy(durationMs = 0L).displayProgressPercent())
+        // Characterization: this function deliberately has no percent clamp.
+        assertEquals(150, item.copy(resumePositionMs = 1500L).displayProgressPercent())
+    }
+
     @Test fun excludedLocalProgressDoesNotOverrideTracker() {
         val item = PlaybackItem.fromJson(JSONObject()
             .put("resumePositionMs", 400L).put("durationMs", 1000L)

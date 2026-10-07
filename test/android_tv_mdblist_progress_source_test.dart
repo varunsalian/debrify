@@ -176,7 +176,7 @@ void main() {
 
   test('native TVMaze placeholders render the serialized watch state', () {
     final native = File(
-      'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
+      'android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistAdapter.kt',
     ).readAsStringSync();
     final placeholder = _between(
       native,
@@ -209,7 +209,10 @@ void main() {
     expect(handler, contains('mergeLateMetadataResumePosition'));
     expect(handler, contains('mergeLateMetadataDuration'));
     expect(handler, contains('traktProgressPercent = newTrackerProgress'));
-    expect(native, contains('if (watched) return 100'));
+    final playbackItem = File(
+      'android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackItem.kt',
+    ).readAsStringSync();
+    expect(playbackItem, contains('if (watched) return 100'));
   });
 
   test('TVMaze-discovered IMDb id feeds later native resolver callbacks', () {
