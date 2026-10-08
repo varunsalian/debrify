@@ -8129,3 +8129,36 @@ All proofs below use original a4ed4f368 and fail the named assertion.
 Exact survivor reruns: i03 (hide cancellation) and i08 (header uppercase) each
 run all 51 cases; recorded failing assertions only, no compile/crash substitutes.
 No bug fix, device/emulator interaction, push, branch switch or self independent review.
+
+### Phase 7 step 1 — Stremio TV guide controller extraction
+
+Manifest-materialized all 30 selected members into
+`TvStremioTvGuideController.kt` (586 physical lines); activity 15,167 → 14,637.
+The controller property is constructed at the original first-state slot;
+all 16 earlier-running initializers have exact inert proofs. The computed,
+explicitly qualified Host preserves live activity reads and the real five-argument
+playback-map forwarder, including `hideGuideOnReady`. Next still passes false;
+switching still passes true. All six finish calls target the activity override.
+The retained media-start trio and every lifecycle body/order remain unchanged.
+No production change outside the exact manifest partition; all 33 prior files
+are byte-identical to a4ed4f368, with no whitelist.
+
+Retargets (helper code only; equal assertions):
+
+- `TvPlayerOriginalAccess`: 30 original guide field/method names →
+  `stremioTvGuideController`, including the guide-wait listener/runnable and
+  default-argument Next dispatch.
+- `StremioTvStartupWatchdogTest.call(initStremioTvGuide)`: activity → the
+  controller's public member; existing `sendProgress` routing preserved.
+  Reversing this exact helper edit reproduces the prior file hash.
+
+All 113 other Kotlin test files remain
+byte-identical, including every Phase-7 assertion; all Dart tests unchanged,
+no source-text anchor retarget needed. **65/65** focused cases pass (51 Phase 7,
+14 watchdog). Forced fresh debug compile succeeds with exactly the five prior
+production warning identities. Checker: 2,417 declarations, zero differences;
+compiled audit **8/8** retains every JVM descriptor, including
+`Glide.with(FragmentActivity)`. The scoped activity size baseline is lowered
+using `--update`; unrelated existing stale entries preserved. Controller ≤800.
+Evidence `p7/step1/`, structure/overload artifacts in `p7/gate/`.
+Full gate follows; no bug fix or borrowed-resource/lifecycle redesign.

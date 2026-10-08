@@ -35,7 +35,11 @@ class StremioTvStartupWatchdogTest {
         TvPlayerOriginalAccess.field(activity, name)
 
     private fun call(activity: Any, name: String, vararg args: Any?): Any? {
-        val owner = if (name == "sendProgress") TvPlayerOriginalAccess.field(activity, "progressReporter")!! else activity
+        val owner = when (name) {
+            "sendProgress" -> TvPlayerOriginalAccess.field(activity, "progressReporter")!!
+            "initStremioTvGuide" -> TvPlayerOriginalAccess.field(activity, "stremioTvGuideController")!!
+            else -> activity
+        }
         val method = owner.javaClass.declaredMethods.first { it.name == name && it.parameterCount == args.size }
         method.isAccessible = true
         return method.invoke(owner, *args)

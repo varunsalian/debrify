@@ -1841,3 +1841,17 @@ ready, back-key behaviour inside the guide list and search box.
   Table/evidence in deps and p7/step0b/, junit/p7-step0b/; detached original
   removed. Production, manifests, protected inputs and previous assertions
   unchanged. Step 1 and gate follow; no self independent review.
+
+- 2026-10-08 — **Phase 7 step 1 moves complete.** Exact manifest extraction:
+  30 members, controller 586 lines, activity 15,167 → 14,637; slot-anchored
+  construction, all 16 inert proofs and the live explicitly qualified Host
+  preserved. Real five-argument forwarder retains hideGuideOnReady; all six
+  finish calls use the activity override. Only shared reflection routing
+  (30 names) and the watchdog's local init helper change; all assertions and
+  Dart tests unchanged. Focused 65/65 pass (51 Phase 7 + 14 watchdog), fresh
+  debug compile retains five warning identities. Checker zero differences
+  across 2,417 declarations; compiled receiver audit 8/8, Glide remains
+  FragmentActivity. All 33 earlier files and five lifecycle bodies/order
+  byte-identical; scoped size baseline lowered with --update. No status-pill
+  move, production deviation, bug fix or self independent review. Full gate
+  follows; evidence p7/step1/ and p7/gate/.
