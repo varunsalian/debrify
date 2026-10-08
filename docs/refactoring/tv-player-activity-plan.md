@@ -1197,7 +1197,8 @@ Runnable; 3 `findViewById` + 1 Toast overload sites; the gate's 7
 `sourceSwitchController.` references become `host.sourceSwitchController.`.
 
 **Retargets.** Reflection: 45 watchdog sites, 7 progress-test sets, 18 gate
-sites in phase-8 tests — routed by 13 owner-map entries in
+sites in phase-8 tests (incl. `TvSourceSwitchBoundaryCharacterizationTest`
+setting `startupTryNextOnFailure`) — routed by **14** owner-map entries in
 `TvPlayerOriginalAccess` plus one `when` branch in the watchdog test's local
 `call` helper; 5 reflected functions become public members of the internal
 controller; assertions byte-identical. Dart: 5 anchor edits in
@@ -1212,13 +1213,25 @@ snapshotting forwarder for `pikPakRetryId`/`player`, a folded `onDestroy`
 block, a missed `host.sourceSwitchController.` qualification), per-phase
 dispatcher keeping all historical suites, compiled audit incl. the
 `invokevirtual` `finish` descriptor, earlier destinations frozen at the
-phase-8 merge.
+phase-8 merge. **Auditor extension:** the PSI collector also records reviewed
+**implicit inherited-receiver** call sites (`finish()`, the 3
+`findViewById`), the bytecode parser retains invocation opcodes, and each site
+pins its expected before/after owner + descriptor + opcode (`finish` must be
+`invokevirtual` on the activity so the override runs); compiled positives and
+negatives prove virtual override dispatch and inherited-method resolution;
+existing argument-based audits are unchanged. Owner-map routes are rescanned
+after step 0 adds accesses.
 
 ### Step 0 — characterization of the original
 
 Commit grace, startup candidate arm/commit/fail, manual begin/commit/fail
 and restore, gate UI (status/indicator views), recovery "fetch more" handoff,
-exhaustion through `finish()` (with the override's progress reads),
+exhaustion through `finish()` characterized **separately for ordinary VOD
+and Stremio TV**: the progress reporter suppresses exhausted playback only in
+Stremio TV mode, so ordinary VOD can still report from the `finish` override
+after the gate clears its cursor — both current behaviours (reporting,
+checkpoint, handoff, one-shot finish flag, `sendFinished` payload) are pinned
+as-is, no suppression added,
 watchdog caps and timings, the 30 s recovery fallback and `missing-source`
 post (cancelled only by the full `progressHandler` clear — pinned as-is),
 `onDestroy` ordering of the 15 statements. Mutation proofs on the original;
@@ -2115,3 +2128,7 @@ finishes and reports), Stremio TV channel startup.
   untouched, live `pikPakRetryId` reads, volatile setter target, 43 compiled
   Toast descriptors, watchdog file byte-identical. Activity 14,637 → 13,937.
   Decoder verification remains pending-environment. Phase 8 complete; merged.
+- 2026-10-08 — phase 9 design round 1 (Codex): **No P1s**; P2s folded
+  (VOD vs Stremio TV exhaustion characterized separately; 14th owner-map
+  route for the phase-8 boundary tests + rescan; auditor extension for
+  implicit inherited receivers with opcode pinning). Phase 9 design approved.
