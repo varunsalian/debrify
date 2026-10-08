@@ -9685,7 +9685,7 @@ constants, with the controller anchored at the `startupFailoverCursor`
 attached-comment slot (1078; declaration 1081). The first block remains
 1081–1099, the second 1143–1156; the intervening recovery timestamp and
 progress reporter remain activity-owned. The sixteen gate functions remain
-12290–12898. `sourceSwitchController` is now 12899–12978;
+12290–12898. `sourceSwitchController` is now 12899–12980;
 `parsePayload` begins 13213; `onDestroy` begins 13570 and its fifteen gate
 statements remain 13589–13603. Constants are at 13918–13927. Exact PSI
 selectors and spans are archived in p9/remeasured-inventory.json and pinned
@@ -9698,3 +9698,128 @@ extraction cases and eight compiled auditor cases (182 total, all passing).
 All 36 earlier destination files, including both phase-8 switcher files, are
 frozen at c4906cd2f with an empty whitelist. The existing phase-8 suite has
 72 cases (the inventory's pre-0b count of 45 is superseded).
+
+## Phase 9 Step 0 — original gate characterization
+
+Original: `c4906cd2f`; Step T: `6b7bd2821`. Production remains byte-identical
+and no reflective or Dart retargets have been made. Forty new tests use the
+original activity, its retained switcher Host, real layout, paused queues,
+binary bridge replies and native diagnostic/recovery writers. The five
+approved reflected functions remain the complete public set; other gate
+functions are exercised through existing public Host methods. The final
+original control run passes all 40 new cases; the earlier affected control
+passes 142 cases (38 new plus 104 existing).
+
+Coverage includes startup/manual duration grace (200 ms checks, exact 1 s),
+late error slates, snapshot/bookmark and metadata restoration before stop and
+replay with tracker resume suppressed, supersession, gate visibility/focus,
+heading animation and copy, commit cancellation/reporting, failed release and
+PikPak acquisition predicates, recovery handoff and the exact 30 s fallback.
+VOD and Stremio TV exhaustion separately execute the real `finish` override:
+VOD reports and stages a checkpoint after the cursor clears; Stremio TV
+suppresses both. Both retain handoff, lifecycle records, the one-shot finish
+flag and the `sendFinished` flags. Watchdogs pin 12 s / 3 s / 45 s / 120 s,
+per-recheck eligibility and four-second reprepare with live guards including
+a destroyed host. Sanitized diagnostics reach the real file writer. Lazy
+resolution, parse clamps/defaults and teardown are also covered.
+
+`TvPhase9BytecodeAccess` pins the compiled fifteen-statement teardown sequence
+(five removals and ten writes); the same test runs actual destruction and
+checks snapshot-before-clear suppression, cancellation, post-clear result
+flags and callback retirement. Separate tests exercise the actual untracked
+recovery fallback and the otherwise unreachable `missing-source` post (a
+fixture list loses the selected row during arming); both remain retired only
+by the existing wholesale handler clear. No production seam or guard added.
+
+Clean JVM baseline `junit/baseline-c4906cd2f`: 759 identities, 758 pass and
+one existing `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`
+failure. Final `junit/p9-step0`: 799 identities, 798 pass and the same failure;
+all 759 baseline identities/statuses retained, 40 passing additions, no
+skips/errors or changed-tree/aborted flags. The intermediate observed 797
+run is also preserved. A discarded initial run hit a Robolectric heap error
+and produced no complete XML. Removing the redundant phase-9 instrumentation
+configuration reuses the existing phase-8 sandbox; both control runs and
+mutation proofs were repeated for that final configuration. No heap,
+dependency, production or test-runner configuration change was introduced.
+
+Original `:app:lintDebug` issue set archived in p9/lint-original/ (XML, HTML,
+text, issues.json and revision metadata): 1352 issues, 253 errors and 1099
+warnings, including 175 UnsafeOptInUsageError issues; exit 1 is recorded for
+the later identity comparison. Raw proof definitions, patches, Gradle logs
+and named-test XML are in p9/mutations/. All **53/53** mutations fail on
+assertions across **40/40** new named tests; the proof dependency hashes match the final fixtures except a documented
+terminal blank-line trim in the timing test. Its fields, constants, method
+descriptors and all executable instructions are identical; only source-debug
+line ranges change (p9/final-formatting/). The five final guard proofs
+add a new test class without changing the already-proven fixtures.
+
+After all tests were added, the reflective owner-map rescan requires **30**
+entries (the reviewed 14 plus **16**): `beginStartupFailoverIfEligible`,
+`commitManualSourceCandidate`, `commitStartupCandidate`,
+`manualSourceCommitCheck`, `manualSourceSwitchIndex`, `startupCommitCheck`,
+`startupFailedReleases`, `startupFailoverGeneration`,
+`startupFirstFrameAtElapsedMs`, `startupHasRemainingSavedSources`,
+`startupMaxAttempts`, `startupPikPakTorrentAcquisitionAttempted`,
+`startupRecoveryAvailable`, `startupRecoveryConsumed`,
+`startupRecoveryFetching`, `startupResolverProvider`. The watchdog's local
+call routing still needs its planned branch. The compiled-order helper must
+retarget private field writes to the controller's accessor representation
+while keeping the exact fifteen-event assertion unchanged. No additional
+public gate function is needed. Details: p9/reflection-owner-rescan.json.
+The manifest's patched rows now name their supplement tests explicitly.
+
+| Proof | Named test | Original mutation | Failing assertion |
+| --- | --- | --- | --- |
+| n01 | TvStartupGateCommitCharacterizationTest::startupUnknownDurationChecksEvery200MsUntilExactlyOneSecond | fun commitStartupCandidate(): postDelayed(check, 200L) → postDelayed(check, 201L) | 200 ms check re-arms expected not same (TvStartupGateCommitCharacterizationTest.kt:27) |
+| n02 | TvStartupGateCommitCharacterizationTest::manualUnknownDurationUsesItsOwnOneSecondGraceAndClearsCandidateState | fun commitManualSourceCandidate(): < 1_000L → < 800L | manual 999 ms is still grace (TvStartupGateCommitCharacterizationTest.kt:40) |
+| n03 | TvStartupGateCommitCharacterizationTest::lateErrorDurationRejectsManualWithoutReportingACommit | fun commitManualSourceCandidate(): durationMs = duration → durationMs = 180_000L | assertion failed (TvStartupGateCommitCharacterizationTest.kt:51) |
+| n04 | TvStartupGateCommitCharacterizationTest::lateErrorDurationRejectsStartupBeforeThreeMinuteBoundary | fun commitStartupCandidate(): durationMs = duration → durationMs = 180_000L | assertion failed (TvStartupGateCommitCharacterizationTest.kt:60) |
+| n05 | TvStartupGateCommitCharacterizationTest::validManualCommitCopiesCandidateUrlAndCancelsEveryOwnedCheck | fun commitManualSourceCandidate(): item.copy(url = url) → item.copy(url = item.url) | expected:<https://[gate.invalid/validated]> but was:<https://[example.test/a]> (TvStartupGateCommitCharacterizationTest.kt:73) |
+| n06 | TvStartupGateCommitCharacterizationTest::manualSnapshotPreservesHeldBookmarkMapsAndTitleBeforeMediaReplacement | fun beginManualSourceCandidate(Int): heldResumePositionMs(livePosition) ?: livePosition → livePosition | expected:<44000> but was:<25000> (TvStartupGateCommitCharacterizationTest.kt:83) |
+| n07 | TvStartupGateCommitCharacterizationTest::replacedManualFailureRestoresAllMetadataBeforeStopAndSuppressesTraktOnReplay | fun failManualSourceCandidate(String,Boolean): playItem(currentIndex, suppressTrakt = true) → playItem(currentIndex, suppressTrakt = false) | rollback must suppress tracker resume expected:<0.0> but was:<80.0> (TvStartupGateCommitCharacterizationTest.kt:109) |
+| n08 | TvStartupGateCommitCharacterizationTest::supersedingUnreplacedManualCandidateHidesFailureAndSnapshotsRestoredSource | fun beginManualSourceCandidate(Int): showFailure = false → showFailure = true | expected:<8> but was:<0> (TvStartupGateCommitCharacterizationTest.kt:120) |
+| n09 | TvStartupGateCommitCharacterizationTest::startupArmPinsDebridFirstOpenAndRetryCopyFocusAndHeadingAnimation | fun armStartupCandidate(Int): setDuration(600L) → setDuration(601L) | expected:<600> but was:<601> (TvStartupGateCommitCharacterizationTest.kt:132) |
+| n10 | TvStartupGateCommitCharacterizationTest::aioChannelArmHasNoDeadlineButKeepsOpeningCopyAndManualDeadline | fun armStartupCandidate(Int): if (isStremioTvMode) null else timeout → timeout | expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$armStartupCandidate$timeout$1@3d9b1fb4> (TvStartupGateCommitCharacterizationTest.kt:143) |
+| n11 | TvStartupGateCommitCharacterizationTest::startupCommitCancelsAllChecksBumpsGenerationAndShowsControlsBadge | fun commitStartupCandidate(): startupFailoverGeneration++ → startupFailoverGeneration += 2 | expected:<2> but was:<3> (TvStartupGateCommitCharacterizationTest.kt:156) |
+| n12 | TvStartupGateRecoveryCharacterizationTest::failureReportsSessionAndSkipsExternalDuplicateAndPreviouslyFailedReleases | fun failStartupCandidate(String): "sourcePersistenceSessionId" to sourcePersistenceSessionId → "sourcePersistenceSessionId" to sourcePersistenceSessionId + 1 | expected:<{sourcePersistenceSessionId=91, sourceIndex=0, reason=decode-test}> but was:<{reason=decode-test, sourcePersistenceSessionId=92, sourceIndex=0}> (TvStartupGateRecoveryCharacterizationTest.kt:24) |
+| n13 | TvStartupGateRecoveryCharacterizationTest::decodingFailureKeyExcludesAlternateTransportOfSameReliableRelease | fun failStartupCandidate(String): it.failureKey("player:ERROR_CODE_DECODING_FAILED") !in startupFailedReleases → true | decoder rejection spans transport twins expected:<2> but was:<1> (TvStartupGateRecoveryCharacterizationTest.kt:36) |
+| n14 | TvStartupGateRecoveryCharacterizationTest::pikpakCountsAcquisitionBeforeResolveAndNeverTriesASecondTorrent | fun failStartupCandidate(String): startupPikPakTorrentAcquisitionAttempted && → false && | second torrent is not acquired (TvStartupGateRecoveryCharacterizationTest.kt:43) |
+| n15 | TvStartupGateRecoveryCharacterizationTest::recoveryFetchKeepsCursorAliveAndIts30SecondFallbackExhausts | fun failStartupCandidate(String): }, 30_000L) → }, 30_001L) | fallback fires at 30000 ms expected:<false> but was:<true> (TvStartupGateRecoveryCharacterizationTest.kt:55) |
+| n16 | TvStartupGateRecoveryCharacterizationTest::recoveryResultsDoNotReportOrBlacklistAnAdditionalFailedSource | fun failStartupCandidate(String): reason != "recovery-results" → true | recovery handoff is not a source failure (TvStartupGateRecoveryCharacterizationTest.kt:62) |
+| n17 | TvStartupGateRecoveryCharacterizationTest::exhaustionWithRecoveryAvailableRetainsItsDistinctToastAndResultFlags | fun failStartupCandidate(String): Saved source failed. Looking for another source… → Saved source failed | expected:<Saved source failed[. Looking for another source…]> but was:<Saved source failed[]> (TvStartupGateRecoveryCharacterizationTest.kt:69) |
+| n18 | TvStartupGateRecoveryCharacterizationTest::ordinaryVodExhaustionRunsFinishOverrideReportsCheckpointAndHandoff | fun failStartupCandidate(String):                 finish() →                 super.finish() | expected:<true> but was:<false> (TvStartupGateRecoveryCharacterizationTest.kt:84) |
+| n19 | TvStartupGateRecoveryCharacterizationTest::stremioTvExhaustionRunsFinishOverrideSuppressesCheckpointButKeepsHandoff | fun failStartupCandidate(String):                 finish() →                 super.finish() | expected:<true> but was:<false> (TvStartupGateRecoveryCharacterizationTest.kt:84) |
+| n20 | TvStartupGateRecoveryCharacterizationTest::staleOrCommittedResolutionFailureHasNoEffectOrBridgeReport | fun failStartupResolution(Int,String): sourceIndex != currentStremioSourceIndex → false | expected:<false> but was:<true> (TvStartupGateRecoveryCharacterizationTest.kt:109) |
+| n21 | TvStartupGateRecoveryCharacterizationTest::sourceFieldsSanitizeTransportBoundLengthAndNeverIncludeIdentityOrUrl | fun startupSourceFields(Int): ?.lowercase(Locale.US) → ?.uppercase(Locale.US) | assertion failed (TvStartupGateRecoveryCharacterizationTest.kt:121) |
+| n22 | TvStartupGateRecoveryCharacterizationTest::sourceSelectionAndMediaServerRecordsReachTheRealDiagnosticWriter | fun mediaServerPlaybackLog(String,Int?,Int?): source = "media_server" → source = "media_server_mutated" | one media-server record reaches writer expected:<1> but was:<0> (TvStartupGateRecoveryCharacterizationTest.kt:135) |
+| n23 | TvStartupGateRecoveryCharacterizationTest::parsePayloadClampsAttemptsResetsEmptyProviderAndDefaultsGatePolicy | fun parsePayload(String): coerceIn(1, 10) → coerceIn(1, 11) | expected:<10> but was:<11> (TvStartupGateRecoveryCharacterizationTest.kt:147) |
+| n24 | TvStartupGateTimingCharacterizationTest::bufferingWatchdogRechecksAtThreeSecondsAndFailsAt45SecondCap | property STARTUP_SLOW_SOURCE_MAX_WAIT_MS: 45_000L → 46_000L | 45 second cap rejects despite data (TvStartupGateTimingCharacterizationTest.kt:25) |
+| n25 | TvStartupGateTimingCharacterizationTest::pikpakWatchdogExtendsUntilExactly120SecondsEvenWithoutBufferData | property STARTUP_PIKPAK_MAX_WAIT_MS: 120_000L → 121_000L | PikPak cap is 120000 ms clock=120132 finishing=false destroyed=false logs=no overlays.list file found \| Ignoring duplicate uses-permissions/uses-permissions-sdk-m: android.permission.POST… (TvStartupGateTimingCharacterizationTest.kt:32) |
+| n26 | TvStartupGateTimingCharacterizationTest::manualWatchdogDoesNotGrantOutgoingPlayerGraceUntilMediaWasReplaced | fun beginManualSourceCandidate(Int): if (manualSourceMediaReplaced && → if (true && | outgoing buffered data cannot extend candidate expected null, but was:<ManualSourceSwitchSnapshot(sourceIndex=0, itemIndex=0, contentType=single, items=[PlaybackItem(id=item, title=Film, … (TvStartupGateTimingCharacterizationTest.kt:37) |
+| n27 | TvStartupGateTimingCharacterizationTest::manualReplacedBufferingCandidateGetsSame45SecondBound | property STARTUP_SLOW_SOURCE_MAX_WAIT_MS: 45_000L → 48_000L | expected null, but was:<ManualSourceSwitchSnapshot(sourceIndex=0, itemIndex=0, contentType=single, items=[PlaybackItem(id=item, title=Film, url=https://example.test/a, httpHeaders={}, mim… (TvStartupGateTimingCharacterizationTest.kt:44) |
+| n28 | TvStartupGateTimingCharacterizationTest::reprepareWaitsFourSecondsIsSinglePendingAndClearsItsIdentityBeforePlayerCalls | property PIKPAK_GATE_REPREPARE_DELAY_MS: 4_000L → 5_000L | expected:<[prepare, play]> but was:<[]> (TvStartupGateTimingCharacterizationTest.kt:57) |
+| n29 | TvStartupGateTimingCharacterizationTest::reprepareReadsReplacementPlayerRetryAndMediaGenerationAtFireTime | fun schedulePikPakGateReprepare(Int?): retryToken != pikPakRetryId → false | live pikPakRetryId invalidates captured request (TvStartupGateTimingCharacterizationTest.kt:70) |
+| n30 | TvStartupGateTimingCharacterizationTest::reprepareRequiresGateOrMatchingLiveChannelRetryAndStillPikpakError | fun schedulePikPakGateReprepare(Int?): (!gateActive && !channelRetryActive) → false | assertion failed (TvStartupGateTimingCharacterizationTest.kt:76) |
+| n31 | TvStartupGateTimingCharacterizationTest::reprepareDropsFinishingActivityAtFireTime | fun schedulePikPakGateReprepare(Int?): isFinishing \|\| isDestroyed → false \|\| isDestroyed | finishing host cannot be re-prepared (TvStartupGateTimingCharacterizationTest.kt:89) |
+| n32 | TvStartupGateTimingCharacterizationTest::supersededStartupResolveIsDiscardedBeforePayloadOrPlayerChanges | fun resolveAndPlay(Int,PlaybackItem): captured = startupGeneration → captured = null | expected same:<PlaybackItem(id=item, title=Film, url=https://example.test/a, httpHeaders={}, mimeType=null, hdVideoUrl=null, audioUrl=null, index=0, season=null, episode=null, artwork=nul… (TvStartupGateTimingCharacterizationTest.kt:95) |
+| n33 | TvStartupGateTimingCharacterizationTest::supersededManualResolveIsDiscardedBeforePayloadOrPlayerChanges | fun resolveAndPlay(Int,PlaybackItem): stremioResolutionToken != manualResolutionToken → false | expected same:<PlaybackItem(id=item, title=Film, url=https://example.test/a, httpHeaders={}, mimeType=null, hdVideoUrl=null, audioUrl=null, index=0, season=null, episode=null, artwork=nul… (TvStartupGateTimingCharacterizationTest.kt:102) |
+| n34 | TvStartupGateTimingCharacterizationTest::emptyInitialResolveRejectsThroughStartupGateAndPreservesExactReason | fun resolveAndPlay(Int,PlaybackItem): "initial-resolve" → "changed-initial-resolve" | expected:<[]initial-resolve> but was:<[changed-]initial-resolve> (TvStartupGateTimingCharacterizationTest.kt:108) |
+| n35 | TvStartupGateTimingCharacterizationTest::destroySnapshotsBeforeGateClearCancelsCallbacksInOrderAndSendsFlagsAfterClear | fun onDestroy(): startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }         startupFailoverTimeout = null → startupFailoverTimeout = null         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) } | fifteen teardown statements retain their compiled sequence expected:<[remove, startupFailoverTimeout, remove, startupCommitCheck, remove, manualSourceSwitchTimeout, remove, manualSourceCo… (TvStartupGateTimingCharacterizationTest.kt:117) |
+| n36 | TvStartupGateTimingCharacterizationTest::destroyWholesalelyRemovesActualUntrackedRecoveryFallback | fun onDestroy(): progressHandler.removeCallbacksAndMessages(null) → progressHandler.removeCallbacks(progressRunnable) | whole-handler clear removes recovery fallback (TvStartupGateTimingCharacterizationTest.kt:153) |
+| n37 | TvStartupGateTimingCharacterizationTest::missingSourcePostIsDeferredPastDispatchGuardAndRemovedByDestroy | fun failStartupCandidate(String): progressHandler.post { failStartupCandidate("missing-source") } → failStartupCandidate("missing-source") | unreachable missing-row post is queued, not recursively swallowed expected:<1> but was:<0> (TvStartupGateTimingCharacterizationTest.kt:170) |
+| n38 | TvStartupGateTimingCharacterizationTest::destroyInvalidatesInFlightInitialResolveBeforeLateCallback | fun onDestroy(): startupFailoverGeneration++ → startupFailoverGeneration += 2 | expected:<2> but was:<3> (TvStartupGateTimingCharacterizationTest.kt:180) |
+| n39 | TvStartupGateTimingCharacterizationTest::reprepareReadsReplacementPlayerRetryAndMediaGenerationAtFireTime | fun schedulePikPakGateReprepare(Int?): player !== retryPlayer → false | live player invalidates captured request (TvStartupGateTimingCharacterizationTest.kt:70) |
+| n40 | TvStartupGateTimingCharacterizationTest::reprepareReadsReplacementPlayerRetryAndMediaGenerationAtFireTime | fun schedulePikPakGateReprepare(Int?): mediaGeneration != mediaPreparationGeneration → false | live mediaPreparationGeneration invalidates captured request (TvStartupGateTimingCharacterizationTest.kt:70) |
+| n41 | TvStartupGateTimingCharacterizationTest::reprepareRequiresGateOrMatchingLiveChannelRetryAndStillPikpakError | fun schedulePikPakGateReprepare(Int?): isStremioTvMode && retryId == pikPakRetryId → retryId == pikPakRetryId | matching id requires channel mode (TvStartupGateTimingCharacterizationTest.kt:77) |
+| n42 | TvStartupGateTimingCharacterizationTest::reprepareRequiresGateOrMatchingLiveChannelRetryAndStillPikpakError | fun schedulePikPakGateReprepare(Int?): retryId == pikPakRetryId → true | assertion failed (TvStartupGateTimingCharacterizationTest.kt:79) |
+| n43 | TvStartupGateTimingCharacterizationTest::reprepareRequiresGateOrMatchingLiveChannelRetryAndStillPikpakError | fun schedulePikPakGateReprepare(Int?): if (player?.playerError == null) return@Runnable → if (false) return@Runnable | error recovered before callback (TvStartupGateTimingCharacterizationTest.kt:82) |
+| n44 | TvStartupGateTimingCharacterizationTest::reprepareRequiresGateOrMatchingLiveChannelRetryAndStillPikpakError | fun schedulePikPakGateReprepare(Int?): \|\| !currentPlaybackItemIsPikPak() → \|\| false | replacement item is not PikPak (TvStartupGateTimingCharacterizationTest.kt:84) |
+| n45 | TvStartupGateTimingCharacterizationTest::bufferingWatchdogRechecksAtThreeSecondsAndFailsAt45SecondCap | property STARTUP_WATCHDOG_RECHECK_MS: 3_000L → 3_100L | 45 second cap rejects despite data (TvStartupGateTimingCharacterizationTest.kt:25) |
+| n46 | TvStartupGateCommitCharacterizationTest::startupUnknownDurationChecksEvery200MsUntilExactlyOneSecond | fun commitStartupCandidate(): < 1_000L → < 800L | 999 ms is still grace (TvStartupGateCommitCharacterizationTest.kt:28) |
+| n47 | TvStartupGateCommitCharacterizationTest::startupArmPinsDebridFirstOpenAndRetryCopyFocusAndHeadingAnimation | fun armStartupCandidate(Int): heading.translationY = 12f → heading.translationY = 11f | expected:<12.0> but was:<11.0> (TvStartupGateCommitCharacterizationTest.kt:132) |
+| n48 | TvStartupGateCommitCharacterizationTest::startupArmPinsDebridFirstOpenAndRetryCopyFocusAndHeadingAnimation | fun armStartupCandidate(Int): View.GONE else View.VISIBLE → View.INVISIBLE else View.VISIBLE | expected:<8> but was:<4> (TvStartupGateCommitCharacterizationTest.kt:127) |
+| n49 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): activePlayer.playerError == null → true | recheck reads live error eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
+| n50 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): activePlayer.playbackState == Player.STATE_BUFFERING → true | recheck reads live state eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
+| n51 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): activePlayer.totalBufferedDuration > 0L → true | recheck reads live buffer eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
+| n52 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): player ?: return false → player ?: return true | recheck reads live player eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
+| n53 | TvStartupGateGuardCharacterizationTest::reprepareRejectsDestroyedActivityEvenWithMatchingChannelRetryAndLivePlayer | fun schedulePikPakGateReprepare(Int?): isFinishing \|\| isDestroyed → isFinishing \|\| false | destroyed host rejects a late reprepare request (TvStartupGateGuardCharacterizationTest.kt:47) |

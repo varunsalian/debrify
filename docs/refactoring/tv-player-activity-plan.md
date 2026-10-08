@@ -2148,3 +2148,28 @@ finishes and reports), Stremio TV channel startup.
   Evidence: p9/checker-self-tests-final.log, original-self-comparison.log,
   earlier-destinations.log, fixture-compile.log, overload-audit.json and
   fixtures/phase9-overloads/. Production unchanged; Step 0 follows.
+
+- 2026-10-08 — phase 9 Step 0 complete on original `c4906cd2f`: 40 new
+  characterization cases, 53/53 named assertion mutation kills (no compile
+  errors/crashes accepted), with definitions, patches, raw Gradle/XML and
+  dependency hashes under p9/mutations/ (a final terminal blank-line trim
+  leaves all executable instructions/fields/descriptors identical; only debug
+  line ranges differ, archived under p9/final-formatting/). Covers commit grace, manual
+  rollback/supersession, UI/focus/animation/copy, failure predicates, recovery
+  handoff/fallback, VOD versus Stremio TV exhaustion through the actual finish
+  override, live watchdog/reprepare guards, diagnostics, parsing, stale resolve
+  callbacks and the compiled fifteen-statement teardown order plus real queue
+  retirement. Original controls pass (40 final new tests; earlier 142 affected
+  tests). Clean baseline-c4906cd2f 759 = 758 pass + the existing focus failure;
+  p9-step0 799 = 798 pass + that same failure. Identity comparison passes with
+  40 additions only; the observed intermediate 797 statuses also remain
+  unchanged. An initial Robolectric heap-error run with no complete XML was
+  discarded; final fixtures reuse the phase-8 sandbox and both controls/proofs
+  were repeated without changing heap/dependencies/runner configuration.
+  Original lint archived: 1352 issues (253 errors, 1099 warnings, 175 unsafe
+  opt-ins) for the later gate. Post-test owner-map rescan requires 30 entries
+  (16 additions to the reviewed 14), retains the five public functions, and
+  records the compiled-order helper retarget. Manifest supplements name actual
+  tests. All 36 earlier destinations and protected inputs remain unchanged;
+  original detached worktree removed. **STOPPED before production moves**;
+  Claude's independent sample/review and Step 0b/Step 1/gate remain next.
