@@ -9000,3 +9000,36 @@ Follow-up (preserved): `PlaybackItem.fromMap`/`fromJson` ignore a supplied
 `mimeType`. Pack parsing therefore retains null MIME, while the direct and
 discovered switch paths explicitly write MIME into the replaced payload item.
 The new whole-item assertions pin both existing behaviors; no parser fix here.
+
+## Phase 8 extraction and gate
+
+Step 0b `6d8c94c98`; extraction/tested gate tree `dfa683648`. Approved
+manifest unchanged. Controller 447 lines, eager fieldless applier 450; activity
+14,637 → 13,937. First-owned-slot construction, one null initializer proof,
+51 computed explicitly-qualified Host members, shared activity-owned tokens
+and volatile header field are preserved. The startup/manual gate, PikPak,
+status pill, fetch-more and episode fetch remain activity-owned.
+
+| Gate | Result |
+| --- | --- |
+| Move checker | All 2,335 declarations; zero differences |
+| Checker self-tests | 152 pass, all historical suites retained |
+| Historical manifests | p1@dcbd9aafe, p2@ec365eb80, p3@eee52b084, p4@1a33c42cb, p5@e71ddac3a, p6@a4ed4f368, p7@53906805d all pass |
+| Earlier destinations | All 34 byte-identical to 53906805d; no whitelist |
+| Compiled receiver/initializer/order | 1/1 JVM descriptor; one initializer proof; five lifecycle bodies preserve all statements/order after exact manifest substitutions |
+| Test routing | 15 shared-helper owner entries; every other Kotlin test byte-identical; exactly three Dart anchors and two source reads; assertions preserved |
+| Affected tests | 99 JVM pass; 19 direct Dart-anchor tests pass; affected suite 45 identities exactly match phase-7 gate |
+| JVM gate | All 759 p8-step0b identities/statuses identical: 758 pass, same focus failure; complete XML, stable clean tree |
+| Kotlin compile | Five production warning identities unchanged from phase-7 gate |
+| Size/format | --update ratchets activity and existing upstream shrinkage; size check passes; Dart formatter zero changes |
+| Lint | Exact original 1,352 issue multiset; 253 errors, 1,099 warnings, 175 opt-ins; no additions/removals |
+| Flutter analyze | Exact prior 1,758 diagnostic multiset |
+| Release/R8/DEX | APK build succeeds, no install; 7 classes/189 members, both new classes/Host/anonymous objects; three mapping negatives pass |
+| Decoder | pending-environment: same exit, byte-identical output, same missing decoders/filters and all three native hashes as phase 7 |
+| Full Flutter | 12855 identity/status pairs exactly match phase-7 quiet gate: {'success': 12794, 'failure': 13, 'error': 28, 'skipped': 20}; same SDK/flags, complete stable clean tree |
+
+Raw evidence under `p8/step0b/`, `p8/step1/`, `p8/gate/`, and
+`junit/p8-step0b/`, `junit/p8-gate/`. Protected lockfile/ProGuard rules and
+all eight manifests are unchanged. Detached original removed. No production
+bug fixes, device/emulator interaction, branch switch, push or self independent
+review. Decoder remains pending the pinned CI native bundle; no workaround.

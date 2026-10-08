@@ -2019,3 +2019,24 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   files pass; compiled overload 1/1, initializer proof and teardown order pass.
   Size baseline updated with --update (also ratchets existing upstream shrinkage).
   Protected inputs/manifests unchanged. Full gate next on the clean move commit.
+- 2026-10-08 — **phase 8 gate complete on `dfa683648`; decoder
+  pending-environment.** Step 0b `6d8c94c98` adds 27 passes, strengthens one
+  MIME assertion, kills 30/30 named original mutations and Claude's exact
+  j05/j08/j11/j12 against all 72 characterizations. Extraction `dfa683648`
+  preserves scope and manifest exactly. Checker zero differences over 2,335
+  declarations; 152 self-tests, seven historical manifests, 34 frozen earlier
+  files, compiled receiver 1/1, initializer proof and teardown order all pass.
+  Clean JVM gate exactly matches all 759 p8-step0b statuses (758 pass/same
+  focus failure). Lint exact original 1,352 issues (253 errors/175 opt-ins);
+  five compiler warnings and all 1,758 analyzer diagnostics unchanged.
+  Size passes at activity 13,937/controller 447/applier 450. Release succeeds,
+  R8/DEX verifies 7 classes/189 members including Host/anonymous objects.
+  Decoder output, missing sets and three native hashes exactly match phase 7:
+  pending-environment. Full quiet Flutter suite exactly matches all
+  12855 phase-7 identities/statuses on the same SDK, stable clean tree;
+  affected source suite also exactly matches 45 identities. All assertions
+  retained at retargeted helper/three Dart anchors. Evidence p8/step0b/,
+  p8/step1/, p8/gate/, junit/p8-step0b/ and junit/p8-gate/. Protected inputs
+  and earlier destinations unchanged, original worktree removed. No self
+  independent review, push, branch switch, device/emulator or bug fix.
+  **STOPPED after phase 8**; Claude reviews separately.
