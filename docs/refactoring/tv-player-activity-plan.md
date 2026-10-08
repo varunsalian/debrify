@@ -2040,3 +2040,10 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   and earlier destinations unchanged, original worktree removed. No self
   independent review, push, branch switch, device/emulator or bug fix.
   **STOPPED after phase 8**; Claude reviews separately.
+- 2026-10-08 — phase 8 post-implementation reviews of `6fdfaf8c6..17a25ec67`.
+  Claude's 15-mutation sample 11/15; survivors j05/j08/j11/j12 (route
+  predicate, reason strings, payload mimeType, badge refresh) closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; gate state
+  untouched, live `pikPakRetryId` reads, volatile setter target, 43 compiled
+  Toast descriptors, watchdog file byte-identical. Activity 14,637 → 13,937.
+  Decoder verification remains pending-environment. Phase 8 complete; merged.
