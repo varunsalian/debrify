@@ -2341,3 +2341,12 @@ episode fetch from the player, status pill messages.
   declarations, zero differences. All 219 checker/auditor self-tests pass,
   including historical phase 1–9 suites and phase-10 negatives. Evidence p10/;
   no production move, branch change, protected-input change or device action.
+
+- 2026-10-08 — **Phase 10 step T constructor controls strengthened.**
+  The compiled phase-10 audit fixture now selects a TextView constructor,
+  rejects a changed constructor overload, and rejects missing/wrong constructor
+  opcode pins. All fourteen current phase-10 audit cases pass. Together with
+  the unchanged 208 historical/extraction cases from the complete run, all
+  222 unique checker/auditor cases are validated; logs and identity union in
+  p10/checker-self-test-summary.json. Production manifest and its 32 compiled
+  receiver sites are unchanged. No production moves.

@@ -10815,3 +10815,11 @@ Thirty-seven earlier destinations remain byte-identical at `8a4d40d1c`, empty
 whitelist. Original all-retained self-comparison classifies 2,309 declarations
 with zero differences. Raw fixture, audit, compilation and negative logs: p10/.
 No production files or old manifests changed.
+
+Step-T constructor supplement: the compiled phase-10 fixture includes a
+TextView constructor site and an assertion-checked different-overload negative,
+plus missing/wrong constructor opcode-pin negatives. Fourteen current audit
+cases pass; the unchanged historical/extraction subset contributes 208 cases,
+for 222 unique validated checker/auditor cases. This supplements the initial
+219-case full run; p10/checker-self-test-summary.json records the exact union.
+The production 32-site audit and manifest are unchanged.

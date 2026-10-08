@@ -20,7 +20,7 @@ class Phase10OverloadsTest(unittest.TestCase):
         body = cls.original[node['start']:node['end']]
         cls.current = {'Controller.kt': 'package com.debrify.app.tv\nimport androidx.appcompat.app.AppCompatActivity\n'
             'import android.view.View\nimport android.widget.TextView\n'
-            'class FixtureController(private val activity: AppCompatActivity) {\n' + body.replace('findViewById', 'activity.findViewById').replace('runOnUiThread {', 'activity.runOnUiThread {').replace('isFinishing', 'activity.isFinishing').replace('isDestroyed', 'activity.isDestroyed').replace(' finish()', ' activity.finish()') + '\n}\n'}
+            'class FixtureController(private val activity: AppCompatActivity) {\n' + body.replace('TextView(this)', 'TextView(activity)').replace('findViewById', 'activity.findViewById').replace('runOnUiThread {', 'activity.runOnUiThread {').replace('isFinishing', 'activity.isFinishing').replace('isDestroyed', 'activity.isDestroyed').replace(' finish()', ' activity.finish()') + '\n}\n'}
         cls.manifest = dict(phase=10, declarations=[dict(original=node['id'], fate='moved',
             destination='Controller.kt', target='class FixtureController/fun exhaust()')],
             overload_audit=[], runnable_receivers=[], context_aliases=[])
@@ -35,6 +35,11 @@ class Phase10OverloadsTest(unittest.TestCase):
                 receiver='implicit-inherited', destination='Controller.kt', target='class FixtureController/fun exhaust()',
                 expected_before=dict(owner='com/debrify/app/tv/AndroidTvTorrentPlayerActivity',descriptor=descriptor,opcode='invokevirtual'),
                 expected_after=dict(owner='androidx/appcompat/app/AppCompatActivity',descriptor=descriptor,opcode='invokevirtual')))
+        cls.manifest['overload_audit'].append(dict(original=node['id'], line=cls.original.count('\n',0,unit['all_this_sites'][0]['start'])+1,
+            context='TextView(this)', callee='TextView', call_start_line=cls.original.count('\n',0,unit['all_this_sites'][0]['call_start'])+1,
+            call_end_line=cls.original.count('\n',0,unit['all_this_sites'][0]['call_end'])+1, destination='Controller.kt', target='class FixtureController/fun exhaust()',
+            expected_before=dict(owner='android/widget/TextView',descriptor='(Landroidx/appcompat/app/AppCompatActivity;)V',opcode='invokespecial'),
+            expected_after=dict(owner='android/widget/TextView',descriptor='(Landroidx/appcompat/app/AppCompatActivity;)V',opcode='invokespecial')))
         cls.before = cls.compile('original', None)
         cls.after = cls.compile('virtual', cls.current['Controller.kt'])
         cls.super_current = {'Controller.kt': cls.current['Controller.kt'].replace('activity: AppCompatActivity) {',
@@ -44,6 +49,8 @@ class Phase10OverloadsTest(unittest.TestCase):
         cls.static_calls = cls.compile('static', cls.static_current['Controller.kt'])
         cls.wide_current = {'Controller.kt': cls.current['Controller.kt'].replace('activity: AppCompatActivity', 'activity: android.app.Activity')}
         cls.wide_calls = cls.compile('wide', cls.wide_current['Controller.kt'])
+        cls.constructor_current = {'Controller.kt': cls.current['Controller.kt'].replace('TextView(activity)', 'TextView(activity as android.content.Context)')}
+        cls.constructor_calls = cls.compile('constructor', cls.constructor_current['Controller.kt'])
         (cls.folder/'manifest.json').write_text(json.dumps(cls.manifest,indent=2)+'\n')
 
     @classmethod
@@ -56,8 +63,9 @@ class Phase10OverloadsTest(unittest.TestCase):
             original = original[:node['start']]+original[node['end']:]
         sources = {'Original.kt':original,
             'View.kt':'package android.view\nopen class View\n',
-            'TextView.kt':'package android.widget\nclass TextView : android.view.View()\n',
-            'Activity.kt':'package android.app\nopen class Activity { open val isFinishing: Boolean get() = false; open val isDestroyed: Boolean get() = false; open fun runOnUiThread(action: Runnable) { action.run() }; var baseFinishes=0; open fun finish() { baseFinishes++ }; open fun <T: android.view.View> findViewById(id: Int): T = android.widget.TextView() as T }\n',
+            'Context.kt':'package android.content\nopen class Context\n',
+            'TextView.kt':'package android.widget\nclass TextView : android.view.View { constructor(): super(); constructor(context: android.content.Context): super(); constructor(activity: androidx.appcompat.app.AppCompatActivity): super() }\n',
+            'Activity.kt':'package android.app\nopen class Activity : android.content.Context() { open val isFinishing: Boolean get() = false; open val isDestroyed: Boolean get() = false; open fun runOnUiThread(action: Runnable) { action.run() }; var baseFinishes=0; open fun finish() { baseFinishes++ }; open fun <T: android.view.View> findViewById(id: Int): T = android.widget.TextView() as T }\n',
             'AppCompatActivity.kt':'package androidx.appcompat.app\nopen class AppCompatActivity : android.app.Activity() { override val isFinishing: Boolean get() = false; override val isDestroyed: Boolean get() = false; override fun runOnUiThread(action: Runnable) { action.run() }; override fun <T: android.view.View> findViewById(id: Int): T = super.findViewById(id) }\n',
             'StaticFinish.kt':'package com.debrify.app.tv\nobject StaticFinish { @JvmStatic fun finish(activity: androidx.appcompat.app.AppCompatActivity) { activity.finish() } }\n',
             'Runner.kt':'package com.debrify.app.tv\nobject Runner { @JvmStatic fun main(args: Array<String>) { val activity=AndroidTvTorrentPlayerActivity(); '+('activity.exhaust()' if controller is None else 'FixtureController(activity).exhaust()')+'; check(activity.overrideFinishes==1 && activity.baseFinishes==1) { "activity override dispatch lost" }; println("override dispatch preserved") } }\n'}
@@ -85,7 +93,7 @@ class Phase10OverloadsTest(unittest.TestCase):
 
     def test_compiled_ui_calls_nested_result_and_lifecycle_getters(self):
         results=audit(self.manifest,self.original,self.current,self.before,self.after)
-        self.assertEqual(9,len(results));self.assertTrue(all(r['resolved_after']['opcode']=='invokevirtual' for r in results))
+        self.assertEqual(10,len(results));self.assertTrue(all(r['resolved_after']['opcode']=='invokevirtual' for r in results if r['site'].get('receiver')=='implicit-inherited'))
         (self.folder/'audit.json').write_text(json.dumps(results,indent=2)+'\n')
 
     def test_compiled_super_finish_rejected(self):
@@ -101,17 +109,17 @@ class Phase10OverloadsTest(unittest.TestCase):
             audit(self.manifest,self.original,self.wide_current,self.before,self.wide_calls)
 
     def test_missing_implicit_receiver_site_rejected(self):
-        m=copy.deepcopy(self.manifest);m['overload_audit'].pop()
+        m=copy.deepcopy(self.manifest);m['overload_audit'].pop(0)
         with self.assertRaisesRegex(ValueError,'implicit inherited-receiver audit coverage differs'):
             audit(m,self.original,self.current,self.before,self.after)
 
     def test_opcode_pin_cannot_be_omitted(self):
-        m=copy.deepcopy(self.manifest);del m['overload_audit'][-1]['expected_after']['opcode']
+        m=copy.deepcopy(self.manifest);del next(s for s in m['overload_audit'] if s.get('receiver')=='implicit-inherited')['expected_after']['opcode']
         with self.assertRaisesRegex(ValueError,'pin requires virtual owner/descriptor/opcode'):
             audit(m,self.original,self.current,self.before,self.after)
 
     def test_nonvirtual_pin_cannot_authorize_super(self):
-        m=copy.deepcopy(self.manifest);m['overload_audit'][-1]['expected_after']['opcode']='invokespecial'
+        m=copy.deepcopy(self.manifest);next(s for s in m['overload_audit'] if s.get('receiver')=='implicit-inherited')['expected_after']['opcode']='invokespecial'
         with self.assertRaisesRegex(ValueError,'pin requires virtual owner/descriptor/opcode'):
             audit(m,self.original,self.super_current,self.before,self.super_calls)
 
@@ -133,4 +141,18 @@ class Phase10OverloadsTest(unittest.TestCase):
     def test_wrong_lifecycle_getter_owner_rejected(self):
         m=copy.deepcopy(self.manifest);site=next(s for s in m['overload_audit'] if s['callee']=='isFinishing');site['expected_after']['owner']='android/app/Activity'
         with self.assertRaisesRegex(ValueError,'implicit inherited dispatch changed'):
+            audit(m,self.original,self.current,self.before,self.after)
+
+    def test_compiled_textview_changed_constructor_rejected(self):
+        with self.assertRaisesRegex(ValueError,'argument receiver dispatch changed'):
+            audit(self.manifest,self.original,self.constructor_current,self.before,self.constructor_calls)
+
+    def test_argument_constructor_opcode_pin_required(self):
+        m=copy.deepcopy(self.manifest);del m['overload_audit'][-1]['expected_after']['opcode']
+        with self.assertRaisesRegex(ValueError,'argument receiver pin requires owner/descriptor/opcode'):
+            audit(m,self.original,self.current,self.before,self.after)
+
+    def test_wrong_argument_constructor_opcode_pin_rejected(self):
+        m=copy.deepcopy(self.manifest);m['overload_audit'][-1]['expected_after']['opcode']='invokestatic'
+        with self.assertRaisesRegex(ValueError,'argument receiver dispatch changed'):
             audit(m,self.original,self.current,self.before,self.after)

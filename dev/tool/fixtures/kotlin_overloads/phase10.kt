@@ -6,6 +6,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     var overrideFinishes = 0
     override fun finish() { overrideFinishes++; super.finish() }
     fun exhaust() {
+        TextView(this)
         findViewById<TextView>(1)
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
