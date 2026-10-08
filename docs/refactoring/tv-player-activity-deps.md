@@ -7928,3 +7928,139 @@ Clean original JVM baseline already archived as `junit/baseline-a4ed4f368`
 zero dirty files, complete XML and stable fingerprints). Original lint
 archived in `p7/lint-original`: 1,352 issues, 253 errors/1,099 warnings,
 175 opt-in errors. Used for Step 0 and the later gate; no production move.
+
+### Phase 7 step 0 — characterization of original `a4ed4f368`
+
+**37/37** new original control cases pass. The attached fixture inflates the
+real guide layout and uses the existing asynchronous binary Flutter messenger,
+typed/default-dispatch reflection and a recording ExoPlayer. Next and switching
+execute the **real retained playback trio**: payload/channel/media updates and
+`setMediaItem → prepare → playWhenReady → play`; adapter updates precede
+switch wait registration. Next passes false and never waits; switching passes
+true and READY hides the guide. Manual Next and the real ENDED listener pin
+false/default versus explicit-true finish dispatch through the activity override.
+Guide key routing and clean-playback eligibility use their production callers.
+
+Coverage: inline JSON and absent-field defaults, current/mode flags, NONE-only
+playlist-button ownership, show/hide/toggle and current-row scrolling/focus at
+150 ms, case-insensitive search/count/reset, header letter/poster fallback,
+activity-owned Glide request and destruction, visible-range ±3 prefetch/edge
+clipping/loaded-loading suppression, all merge fields and targeted payload
+notifications, async replies after token advancement, partial/malformed replies,
+null bridges, every error/notImplemented/send-exception cleanup branch,
+Next/switch guard flags, stale callbacks, rollback, user-visible toast strings,
+1.5 s overlay hide, READY/IDLE/10 s timeout, repeated waits, invocation-time
+player reads in cancellation, and destruction's unchanged fields/token.
+
+All **52/52** original mutations below fail the named test on an assertion
+(`AssertionError`/`ComparisonFailure`), exactly one selected JUnit identity per
+run. Every new test has a proof; extra proofs cover separate callbacks, timing
+literals, partial notifications and production callers. Exact original spans,
+before/after strings, diffs, Gradle logs, one-case XML and final fixture hashes
+are under `p7/mutations/`; runner/list `p7/run_mutations.py`, `mutations.json`.
+No compile error, crash, missing test or interrupted run is accepted as a proof.
+
+Two provisional full JVM runs exposed cross-suite Robolectric synchronization
+interference in the attached guide fixture (636 old statuses preserved, 14 new
+failures); both are retained under `p7/rejected-baselines/`. Pinning frame delay
+alone was insufficient. The final fixture uses explicit activity/controller
+instrumentation as in Phase 6 and saves/restores frame settings. Frame advancement
+is explicit, preserving exact Handler boundaries without automatically draining
+animations. Final original control and **all 52 proofs** were rerun with the
+committed fixture's hashes. An initial search mutation hit a test-side null
+lookup; it was rejected, a preceding row-count assertion was added, and its
+final proof fails that assertion. Earlier attempts are preserved separately.
+
+Clean `baseline-a4ed4f368` has 636 identities (635 pass, the existing
+`TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`
+failure). Final `p7-step0` has **673 identities / 672 pass / the same failure**:
+all 636 identity/status pairs identical, 37 passing additions only; complete XML,
+no abort and stable tree fingerprints. `android_junit_evidence.py compare`
+passes; strict additions-only result `p7/jvm-additions-only.json`. Original lint
+`./gradlew :app:lintDebug` archived from clean a4ed4f368 (exit 1): **1,352**
+issues, 253 errors/1,099 warnings, 175 UnsafeOptInUsageError; no fix.
+
+Checker dispatcher repeated **134/134** with historical suites intact; original
+self-comparison 2,417 declarations/zero differences. Step T retains all 16 inert
+proofs, eight compiled receiver descriptors and 33 frozen earlier destinations.
+Only manifest named-test metadata changes in Step 0; moves, patches, destination
+construction/Host, initializer proofs and earlier-destination configuration are
+unchanged. Production, existing tests, pubspec.lock and ProGuard unchanged.
+Temporary original worktree removed after the final proof run. No production
+moves or test/Dart retargets yet; STOP for Claude's independent sample/review.
+
+#### Follow-ups pinned as-is (no fixes)
+
+- Guide-data replies have no switch-token guard; valid late data still applies.
+  Partial replies leave omitted/malformed entries loading; a null bridge leaves
+  requested rows loading and a channel switch in progress with its new marks.
+- `cancelGuideWait` removes from the **current** player. Swapping players before
+  cancellation leaves the old player's listener registered; capture/ownership
+  changes belong in separate behavioral work.
+- `onDestroy` does not bump the switch token or explicitly cancel guide wait.
+  Both wait field references remain; the existing wholesale progress-handler
+  cleanup removes the pending timeout. No teardown step was added or reordered.
+
+#### Original mutation table
+
+Class abbreviations: UI = `TvStremioTvGuideUiCharacterizationTest`,
+Data = `TvStremioTvGuideDataCharacterizationTest`, Playback =
+`TvStremioTvGuidePlaybackCharacterizationTest`, Wait =
+`TvStremioTvGuideWaitCharacterizationTest`, Wiring =
+`TvStremioTvGuideWiringCharacterizationTest`. Method names below are exact.
+All rows are **killed by assertions on a4ed4f368**, using the final fixture.
+
+| Proof | Named test | Original mutation | Failing assertion |
+| --- | --- | --- | --- |
+| p7-01 | UI.`inlineJsonAndAbsentKeysPreserveGuideDefaultsAndCurrentChannel` | `ch.optInt("number", i + 1) → ch.optInt("number", 99)` | expected:<[, 2, movie, false, false, null, null, null, null, 0, 0.0, null, null, null, null, false, false]> but was:<[, 99, movie, false, false, null, null, null, null, 0, 0.0, null, null, null, null, false, false]> |
+| p7-02 | UI.`missingChannelsStillSetsModeBeforeReturning` | `isStremioTvMode = true → isStremioTvMode = false` | mode is set even without a channels array expected:<true> but was:<false> |
+| p7-03 | UI.`nonePlaylistButtonOpensGuideAndHidesControls` | `playlistButton?.text = "Guide" → playlistButton?.text = "Browse"` | expected:<[Guid]e> but was:<[Brows]e> |
+| p7-04 | UI.`seriesAndCollectionKeepTheirPlaylistButtonAction` | `if (playlistMode == PlaylistMode.NONE) → if (playlistMode != PlaylistMode.NONE)` | playlist label retained for SERIES expected:<[Playlist]> but was:<[Guide]> |
+| p7-05 | UI.`showScrollsThenOffersCurrentRowFocusAt150msAndHideResetsSearch` | `}, 150) → }, 200)` | current row receives focus at 150ms |
+| p7-06 | UI.`searchMatchesNameTypeAndProgrammeCaseInsensitively` | `ch.name.lowercase().contains(query) → false` | search CIN returns one row expected:<1> but was:<0> |
+| p7-07 | UI.`headerLetterFallbackAndMissingCurrentPreserveBoundHeader` | `else "?" → else "!"` | expected:<[?]> but was:<[!]> |
+| p7-08 | UI.`posterUsesActivityGlideLifecycleAndListenerFallback` | `Glide.with(this) → Glide.with(applicationContext)` | header request belongs to activity |
+| p7-09 | Data.`visibleRangePrefetchClipsAndExcludesLoadedOrLoadingWithoutNotifying` | `(first - 3) → (first - 2)` | prefetch extends three on each side expected:<[1, 3, 4, 5, 6, 8]> but was:<[3, 4, 5, 6, 8]> |
+| p7-10 | Data.`successMergesAllFieldsWithTargetedPayloadUpdates` | `ch.nowPlayingTitle = np["title"] as? String → ch.nowPlayingTitle = "Mutated"` | expected:<[Now, null, 2024, 8.0, 999, 0.3, Next, null, null, 7.5]> but was:<[Mutated, null, 2024, 8.0, 999, 0.3, Next, null, null, 7.5]> |
+| p7-11 | Data.`guideReplyStillAppliesAfterSwitchTokenAdvances` | `val data = result as? Map<*, *> → if (stremioTvSwitchToken != 0) return                         val data = result as? Map<*, *>` | guide data has no switch-token guard expected:<late guide> but was:<null> |
+| p7-12 | Data.`partialAndMalformedEntriesLeaveUnreturnedChannelsLoading` | `ch.hasGuideData = true → ch.hasGuideData = false` | valid empty map counts as loaded |
+| p7-13 | Data.`whollyMalformedRepliesClearOnlyRequestedLoading` | `stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false → stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true` | malformed whole reply cleans requested rows expected:<[false, false, true]> but was:<[true, true, true]> |
+| p7-14 | Data.`nullBridgeLeavesGuideRowsLoadingAndSuppressesDuplicates` | `visibleChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true → visibleChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false` | null bridge retains loading state expected:<[true, true, true]> but was:<[false, false, false]> |
+| p7-15 | Data.`errorNotImplementedAndSendExceptionCleanLoading` | `stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false → stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true` | error clears requested rows expected:<[false, false, false]> but was:<[true, true, true]> |
+| p7-16 | Playback.`nextAndSwitchRejectBothInProgressFlags` | `stremioTvNextInProgress \|\| stremioTvChannelSwitchInProgress → stremioTvNextInProgress && stremioTvChannelSwitchInProgress` | stremioTvNextInProgress prevents requests |
+| p7-17 | Playback.`missingCurrentNextDefaultDoesNotFinishButExplicitTrueUsesOverride` | `finishOnFailure: Boolean = false → finishOnFailure: Boolean = true` | default is false |
+| p7-18 | Playback.`nullBridgeNextUsesOptionalFinishAndBridgeToast` | `"Playback bridge unavailable" → "Bridge unavailable"` | expected:<[Playback b]ridge unavailable> but was:<[B]ridge unavailable> |
+| p7-19 | Playback.`nextSuccessUsesRealTrioWithoutGuideWaitAndHidesOverlayAt1500ms` | `hideGuideOnReady = false → hideGuideOnReady = true` | Next must not register a guide wait expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@7d4d4c33> |
+| p7-20 | Playback.`nextTitleFallbackAndInvalidUrlCleanupPreserveFinishChoice` | `val title = map["title"] as? String ?: channel.name → val title = map["title"] as? String ?: "Mutated"` | expected:<[media:https://phase7.invalid/play.mp4:Channel 0, prepare, playWhenReady:true, play]> but was:<[media:https://phase7.invalid/play.mp4:Mutated, prepare, playWhenReady:true, play]> |
+| p7-21 | Playback.`nextErrorAndNotImplementedPreserveMessagesAndFinishChoice` | `"Failed to load next item" → "Next load failed"` | expected:<[Failed to load next item]> but was:<[Next load failed]> |
+| p7-22 | Playback.`nextSendExceptionCleansFlagOverlayAndOptionallyFinishes` | `stremioTvNextInProgress = false → stremioTvNextInProgress = true` | expected:<false> but was:<true> |
+| p7-23 | Playback.`nextStaleSuccessErrorAndNotImplementedLeavePendingStateUntouched` | `if (token != stremioTvSwitchToken) return → if (false) return` | stale success leaves request flag expected:<true> but was:<false> |
+| p7-24 | Playback.`switchSuccessUsesRealTrioAndWaitsForReadyAfterAdapterUpdate` | `hideGuideOnReady = true → hideGuideOnReady = false` | expected:<[listen:add]> but was:<[play]> |
+| p7-25 | Playback.`switchFailuresRollbackCurrentAndSwitchingMarksWithOriginalToasts` | `previousCurrent?.isCurrent = true → previousCurrent?.isCurrent = false` | empty restores previous current expected:<[true, false]> but was:<[false, false]> |
+| p7-26 | Playback.`nullBridgeSwitchRetainsNewMarksAndInProgressFlag` | `stremioTvChannelSwitchInProgress = true → stremioTvChannelSwitchInProgress = false` | null bridge retains in-progress switch expected:<true> but was:<false> |
+| p7-27 | Playback.`switchSendExceptionRollsBackWithoutToast` | `previousCurrent?.isCurrent = true → previousCurrent?.isCurrent = false` | send exception restores previous current expected:<[true, false]> but was:<[false, false]> |
+| p7-28 | Playback.`switchStaleSuccessErrorAndNotImplementedLeaveNewMarksUntouched` | `if (token != stremioTvSwitchToken) → if (false)` | stale success keeps switch pending expected:<true> but was:<false> |
+| p7-29 | Wait.`readyHidesAndCancelsWhileBufferingAndEndedDoNothing` | `state == Player.STATE_READY → state == Player.STATE_ENDED` | java.lang.AssertionError |
+| p7-30 | Wait.`idleClearsAllSwitchingMarksAndNotifiesWhileKeepingGuideOpen` | `it.isSwitchingChannel = false → it.isSwitchingChannel = true` | IDLE clears every switching mark |
+| p7-31 | Wait.`timeoutStartsAt10000msAndCancelsListener` | `postDelayed(timeout, 10_000) → postDelayed(timeout, 9_000)` | guide stays open until timeout |
+| p7-32 | Wait.`repeatedWaitReplacesOldListenerAndCancelReadsCurrentPlayer` | `player?.removeListener(it) → Unit` | expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@131fdc20]> but was:<[]> |
+| p7-33 | Wait.`hiddenGuideDoesNotRegisterWait` | `if (!stremioTvGuideVisible) return → if (false) return` | hidden guide has no listener |
+| p7-34 | Wait.`destroyDoesNotBumpSwitchTokenOrExplicitlyCancelGuideWait` | `super.onDestroy() → stremioTvSwitchToken++         super.onDestroy()` | destroy does not invalidate guide token expected:<17> but was:<18> |
+| p7-35 | UI.`showScrollsThenOffersCurrentRowFocusAt150msAndHideResetsSearch` | `setDuration(200) → setDuration(210)` | expected:<200> but was:<210> |
+| p7-36 | UI.`showScrollsThenOffersCurrentRowFocusAt150msAndHideResetsSearch` | `setDuration(150) → setDuration(170)` | expected:<150> but was:<170> |
+| p7-37 | Playback.`nextSuccessUsesRealTrioWithoutGuideWaitAndHidesOverlayAt1500ms` | `}, 1500) → }, 1400)` | overlay remains before delay expected:<220> but was:<160> |
+| p7-38 | Playback.`nextSuccessUsesRealTrioWithoutGuideWaitAndHidesOverlayAt1500ms` | `nextSubtext.visibility = View.GONE → nextSubtext.visibility = View.INVISIBLE (×2)` | expected:<8> but was:<4> |
+| p7-39 | Playback.`switchFailuresRollbackCurrentAndSwitchingMarksWithOriginalToasts` | `previousCurrent?.isCurrent = true → previousCurrent?.isCurrent = false` | error restores previous current expected:<[true, false]> but was:<[false, false]> |
+| p7-40 | Playback.`switchFailuresRollbackCurrentAndSwitchingMarksWithOriginalToasts` | `previousCurrent?.isCurrent = true → previousCurrent?.isCurrent = false` | notImplemented restores previous current expected:<[true, false]> but was:<[false, false]> |
+| p7-41 | Data.`errorNotImplementedAndSendExceptionCleanLoading` | `stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false → stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true` | notImplemented clears requested rows expected:<[false, false, false]> but was:<[true, true, true]> |
+| p7-42 | Data.`errorNotImplementedAndSendExceptionCleanLoading` | `stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false → stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true` | throw clears requested rows expected:<[false, false, false]> but was:<[true, true, true]> |
+| p7-43 | Data.`successMergesAllFieldsWithTargetedPayloadUpdates` | `adapter.notifyItemChanged(pos, StremioTvGuideAdapter.PAYLOAD_GUIDE_DATA) → adapter.notifyDataSetChanged()` | expected:<[change:0:1:guide_data]> but was:<[all]> |
+| p7-44 | Playback.`nextAndSwitchRejectBothInProgressFlags` | `stremioTvChannelSwitchInProgress \|\| stremioTvNextInProgress → stremioTvChannelSwitchInProgress && stremioTvNextInProgress` | stremioTvNextInProgress prevents requests |
+| p7-45 | Playback.`nextStaleSuccessErrorAndNotImplementedLeavePendingStateUntouched` | `if (token != stremioTvSwitchToken) return → if (false) return` | stale error leaves request flag expected:<true> but was:<false> |
+| p7-46 | Playback.`switchStaleSuccessErrorAndNotImplementedLeaveNewMarksUntouched` | `if (token != stremioTvSwitchToken) → if (false)` | stale error keeps switch pending expected:<true> but was:<false> |
+| p7-47 | Playback.`nextStaleSuccessErrorAndNotImplementedLeavePendingStateUntouched` | `if (token != stremioTvSwitchToken) return → if (false) return` | stale notImplemented leaves request flag expected:<true> but was:<false> |
+| p7-48 | Playback.`switchStaleSuccessErrorAndNotImplementedLeaveNewMarksUntouched` | `if (token != stremioTvSwitchToken) → if (false)` | stale notImplemented keeps switch pending expected:<true> but was:<false> |
+| p7-49 | Wiring.`nextButtonAndEndedDispatchDifferentFinishArguments` | `requestStremioTvNext(finishOnFailure = true) → requestStremioTvNext(finishOnFailure = false)` | automatic Next failure dispatches finish override expected:<true> but was:<false> |
+| p7-50 | Wiring.`guideKeyRoutingConsumesLeftOffersSearchOnHeldUpAndClosesOnBack` | `hideStremioTvGuide() → Unit` | Back closes the guide through its production caller |
+| p7-51 | Wiring.`guideVisibilityBlocksCleanPlaybackStateWithoutOtherOverlays` | `iptvGuideVisible \|\| stremioTvGuideVisible → iptvGuideVisible \|\| false` | guide visibility blocks clean playback state expected:<false> but was:<true> |
+| p7-52 | Wiring.`nextButtonAndEndedDispatchDifferentFinishArguments` | `requestStremioTvNext() → requestStremioTvNext(finishOnFailure = true)` | manual Next retains activity on failure expected:<false> but was:<true> |

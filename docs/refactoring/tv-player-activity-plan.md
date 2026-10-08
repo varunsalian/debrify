@@ -1804,3 +1804,27 @@ ready, back-key behaviour inside the guide list and search box.
   Clean original baseline (636/635 pass) and lint (1,352 issues) archived
   before fixture mutation; full provenance/evidence p7/ and junit/.
   No production moves or lockfile/ProGuard edits. Step 0 follows.
+
+- 2026-10-08 — **Phase 7 step 0 complete; STOP before production moves.**
+  Original a4ed4f368 passes **37/37** new cases: attached guide UI/focus/search,
+  Glide ownership, visible-range lazy loading, async/partial/malformed/null
+  bridge contracts, Next/switch success through the real playback trio,
+  production Next/ENDED/key/clean-state callers, stale replies/rollback,
+  READY/IDLE/10 s waits and unchanged destroy semantics. **52/52** mutations
+  fail named assertions on the original, every new test covered; final
+  fixture hashes recorded. Final `p7-step0`: **673 identities / 672 pass /
+  the existing focus failure**; all 636 clean `baseline-a4ed4f368` statuses
+  identical, 37 passing additions only, complete XML/stable fingerprints.
+  Original lint archived (1,352 issues, 253 errors/1,099 warnings, 175 opt-ins).
+  Checker repeated **134/134**, 2,417 original declarations/zero differences;
+  16 inert proofs, eight compiled receiver descriptors, 33 frozen earlier
+  files retained. Six manifest rows now name their fixture/behavior tests;
+  move/patch/proof configuration unchanged. Two provisional full runs rejected
+  for attached-view Robolectric synchronization interference; explicit
+  activity/controller instrumentation and saved/restored frame settings
+  resolve it. Original control/all proofs rerun with final fixture. Table,
+  follow-ups and rejected-attempt details in deps; raw p7/ and junit/.
+  Production, existing assertions, lockfile and ProGuard untouched; original
+  worktree removed. No production moves, retargets, push, branch switch,
+  device/emulator interaction or self independent review. **STOP**; Claude
+  runs the independent sample/review and any 0b follows separately.

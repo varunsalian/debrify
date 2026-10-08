@@ -2132,7 +2132,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuideWiringCharacterizationTest.nextButtonAndEndedDispatchDifferentFinishArguments"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property metadataUpdateReceiver",
@@ -2156,7 +2156,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuideUiCharacterizationTest.inlineJsonAndAbsentKeysPreserveGuideDefaultsAndCurrentChannel; TvStremioTvGuideUiCharacterizationTest.missingChannelsStillSetsModeBeforeReturning"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun setupMetadataReceiver()",
@@ -2535,7 +2535,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuideWiringCharacterizationTest.nextButtonAndEndedDispatchDifferentFinishArguments"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun playPrevious()",
@@ -2799,7 +2799,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuideWiringCharacterizationTest.guideKeyRoutingConsumesLeftOffersSearchOnHeldUpAndClosesOnBack"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun isFocusInControlsOverlay()",
@@ -3033,7 +3033,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuideWiringCharacterizationTest.guideVisibilityBlocksCleanPlaybackStateWithoutOtherOverlays"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun initIptvMode(JSONObject)",
@@ -4215,7 +4215,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-7 original characterization and exhaustive extraction fixture"
+      "test": "Phase7MovesTest.test_complete_production_extraction_all_16_proofs; TvStremioTvGuidePlaybackCharacterizationTest.switchSuccessUsesRealTrioAndWaitsForReadyAfterAdapterUpdate; TvStremioTvGuidePlaybackCharacterizationTest.nextSuccessUsesRealTrioWithoutGuideWaitAndHidesOverlayAt1500ms"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun requestStremioTvNext(Boolean)",
