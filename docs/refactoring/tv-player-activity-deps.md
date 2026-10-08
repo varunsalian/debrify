@@ -6636,3 +6636,30 @@ fingerprints and complete XML. Baselines live in junit/; original positive logs/
 fixture, test hashes and restored original compiled bytecode in p5/step0b/. An initial copy
 command used the wrong working directory and exited before tests; it is excluded from evidence
 counts. Production/protected inputs/manifest unchanged; original worktree removed before moves.
+
+
+## Phase 5 step 1 — manifest moves
+
+Applied all 42 moved members and 20 exact patched activity declarations, including the
+whole sleepTimerController property row's single sendProgress forwarder. Three controller
+properties occupy their pinned original field slots; AppCompatActivity injection, computed
+explicitly qualified Host getters/setters, 16 inert initializer proofs and cross-controller
+ownership follow the manifest unchanged. The shared guide/zap tokens and three Start Over
+status flags remain activity-owned. No delegators, borrowed-resource cleanup or behavior edits.
+
+| Retarget | Before → after | Assertions |
+|---|---|---|
+| Shared TvPlayerOriginalAccess | 42 moved method/field names → owning progressReporter / iptvChannelStartController / iptvStartOverController | Characterization bodies and expectations unchanged, including omitted-argument dispatch |
+| StremioTvStartupWatchdogTest | Three sendProgress invocations → reporter through helper; two recoveryCompletedItemKeys reads → reporter field through shared helper | Test bodies unchanged; reflection invocation behavior retained |
+| manual_source_validation_contract_test.dart | Activity sendProgress→commitStartupCandidate range → TvProgressReporter sendProgress→sendIptvProgress range | Every expect expression unchanged; both manual-switch guards retained |
+
+Kotlin checker: 2,548 declarations, zero differences; earlier 28 destinations frozen.
+Forced debug compile preserves all five original warning identities. Actual compiled overload
+audit: seven identical descriptors; full onStart/onPause/onStop/onDestroy/finish tokens match
+only declared patches and preserve statement order. Focused 64 JVM tests pass (all 50 phase-5
+characterizations plus 14 watchdog tests); 45 affected Dart statuses exactly match phase 4.
+Activity 17,205 → 16,487 lines; controllers 445/497/375. Ran size --update, retaining only
+the activity ratchet and restoring unrelated already-shrunken entries to their pre-task bytes;
+size check passes. Manifest, earlier destinations, lockfile and all ProGuard files unchanged.
+Raw move/retarget/compile/overload/lifecycle/initializer/size/test evidence under p5/step1/.
+Full gate follows.

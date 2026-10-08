@@ -32,12 +32,13 @@ class StremioTvStartupWatchdogTest {
     }
 
     private fun read(activity: Any, name: String): Any? =
-        activity.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(activity)
+        TvPlayerOriginalAccess.field(activity, name)
 
     private fun call(activity: Any, name: String, vararg args: Any?): Any? {
-        val method = activity.javaClass.declaredMethods.first { it.name == name && it.parameterCount == args.size }
+        val owner = if (name == "sendProgress") TvPlayerOriginalAccess.field(activity, "progressReporter")!! else activity
+        val method = owner.javaClass.declaredMethods.first { it.name == name && it.parameterCount == args.size }
         method.isAccessible = true
-        return method.invoke(activity, *args)
+        return method.invoke(owner, *args)
     }
 
     private fun activity(stremioTv: Boolean = false, iptv: Boolean = false, pikpak: Boolean = false, aiostreams: Boolean = false): AndroidTvTorrentPlayerActivity {

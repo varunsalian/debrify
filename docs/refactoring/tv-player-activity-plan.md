@@ -1482,3 +1482,14 @@ Start Over / catch-up on an archive-enabled channel.
   statuses identical with six passing additions. Table/raw XML/logs/clock source
   and original bytecode under p5/step0b/ and junit/p5-step0b/. Production, manifest
   and protected inputs unchanged; detached original removed before Step 1.
+
+- 2026-10-08 — **Phase 5 step 1 moves complete.** Manifest-materialized 42
+  members into progress/channel-start/Start Over controllers (445/497/375 lines),
+  20 patched activity declarations including the sleep forwarder, three original-slot
+  controller properties and 16 inert initializer proofs. Activity 17,205 → 16,487;
+  size --update scoped to its ratchet. Shared reflection helper gains 42 owner routes;
+  the five watchdog accesses and one Dart progress anchor retarget with equal assertions.
+  Focused JVM 64/64 (all 50 phase-5 cases), all 45 affected Dart statuses unchanged.
+  Checker zero differences across 2,548 declarations; seven compiled overload sites,
+  full lifecycle token/order and five original warning identities pass. All 28 earlier
+  destinations, manifest/protected inputs unchanged. Evidence p5/step1/. Full gate follows.
