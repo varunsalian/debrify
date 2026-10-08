@@ -201,6 +201,28 @@ public final class KotlinPsi {
                            !(callParent instanceof KtProperty) && !(callParent instanceof KtNamedFunction)) callParent = callParent.getParent();
                     Map<String, Object> site = map("start", offset(expression.getTextRange().getStartOffset()),
                         "end", offset(expression.getTextRange().getEndOffset()), "text", expression.getText(), "receiver", receiver);
+                    // Inventory receiver-lambda binding independently, preserving
+                    // historical receiver output. A constructor argument in
+                    // EditText(this).apply is outside the lambda and stays Activity.
+                    if (expression.getLabelName() == null) {
+                        PsiElement scope = expression.getParent();
+                        while (scope != null && !(scope instanceof KtClass) && !(scope instanceof KtObjectDeclaration)) {
+                            if (scope instanceof KtLambdaExpression) {
+                                PsiElement enclosing = scope.getParent();
+                                if (enclosing instanceof KtLambdaArgument) enclosing = enclosing.getParent();
+                                if (enclosing instanceof KtCallExpression) {
+                                    KtCallExpression call = (KtCallExpression)enclosing;
+                                    String callee = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
+                                    if ((callee.equals("apply") || callee.equals("run")) && call.getParent() instanceof KtQualifiedExpression) {
+                                        site.put("lambda_callee", callee);
+                                        site.put("lambda_receiver", ((KtQualifiedExpression)call.getParent()).getReceiverExpression().getText());
+                                        break;
+                                    }
+                                }
+                            }
+                            scope = scope.getParent();
+                        }
+                    }
                     if (callParent instanceof KtCallExpression) {
                         KtCallExpression call = (KtCallExpression)callParent;
                         site.put("call_start", offset(call.getTextRange().getStartOffset()));

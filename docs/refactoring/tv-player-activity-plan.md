@@ -2517,3 +2517,28 @@ episode next/previous, startup channel restore, Start Over after a switch.
   (receiver-lambda exclusion audit; production bootstrap/callback-routed
   step 0 and the corrected key matrix; asymmetric stale-reply cleanup
   contract with independently varied guards). Phase 11 design approved.
+
+- 2026-10-08 — phase 11 step T tooling prepared on `refactor/tvplayer-p11`.
+  Re-measured clean original `00c60870e`: Activity 12,717 lines, 2,295 PSI
+  declarations; all-retained self-comparison zero differences. Draft manifest:
+  92 moved members, one 48-field owner, eager fieldless pager/navigator,
+  47 initializer proofs, 224 cross-file references (four further name hits
+  are unchanged return labels), 132 Host substitutions, 134 Activity token
+  re-points plus the two eight/four Host-property patches. Extraction fixture
+  compiles (425/524/431 lines); all 13 receiver sites retain pinned JVM
+  dispatch. Historical 222 checker cases pass; final phase-11 38 cases pass,
+  including every omitted initializer proof and receiver misclassification
+  negatives. Initial four draft fixture-harness failures were corrected and
+  rerun; raw logs retained. All 40 earlier destination files remain frozen.
+  **Pending design clarification:** the plan names an `EditText.apply`
+  receiver-lambda `this`, but original line 10001 passes Activity `this` to
+  the constructor outside the lambda. Only the two entry-owned `this.index`
+  expressions are receiver-lambda exclusions. Source/bytecode evidence and
+  the proposed correct distinction are in the deps report and
+  `p11/receiver-design-finding.json`; clarification requested before declaring
+  step T complete and continuing the ordered characterization step.
+  Clean original JVM baseline `baseline-00c60870e`: 904 identities, 903 pass,
+  unchanged source-browser focus failure. Original lint archive: 1,352 issues
+  (253 errors, 1,099 warnings, 175 unsafe opt-ins). No new JVM tests, mutations
+  or `p11-step0` run yet. No production edits, lockfile or ProGuard changes;
+  no push or device interaction. Evidence under `p11/` and `junit/`.

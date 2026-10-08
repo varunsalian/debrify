@@ -11747,3 +11747,53 @@ playback-start phase moves `onCreate`'s helpers.
 - (Existing) `requestIptvEpg`'s 45 s watchdog is not cancelled in `onDestroy`.
 - The only writer of `iptvChannelAdapter` (`setupIptvOverlay`) runs inside `initIptvMode`. Any phase that
   moves `initIptvMode` must keep that order.
+
+
+## Phase 11 tooling re-measurement at 00c60870e
+
+Activity: 12,717 physical lines; 2,295 PSI declarations, all classified by the
+original self-comparison with zero differences. The draft phase-11 manifest
+owns 92 members (48 properties, 44 functions), with 47 exact inert initializer
+proofs: 38 constants (including four quoted strings) and nine empty allocations
+(including the fully-qualified typed Java deque). Guide/pager/navigator
+production extraction fixtures are 425/524/431 lines. No production move has
+been applied to the working tree.
+
+The re-measured cross-file substitutions are 224: guide → pager 2, pager →
+guide 126, pager → navigator 10, navigator → guide 70, navigator → pager 16.
+The inventory's remaining four navigator → pager name occurrences are
+`return@requestIptvZapPage` labels, which stay unchanged. Host substitutions
+remain 132 (16/34/82); seven Toast receivers and six inherited `findViewById`
+sites have compiled owner/descriptor/opcode evidence. The 134 activity token
+re-points cover 24 declarations, plus the original two whole-property Host
+rows with eight/four token re-points. The 40 earlier destinations are frozen
+at the phase-10 merge.
+
+**Receiver-design clarification required before completing step T.** The
+approved phase-11 Step T describes three receiver-lambda `this` expressions.
+The original has two: `restoreIptvZapBootstrapFallback` line 9971
+(`entry.apply { this.index = index }`) and `switchToIptvChannel` line 10539
+(`item.apply { this.index = index }`). The third reviewed source context,
+`showIptvChannelJumpDialog` line 10001 (`EditText(this).apply { … }`), passes
+Activity `this` to the constructor before entering the receiver lambda. There
+is no explicit `this` inside that lambda. Original bytecode pins
+`invokespecial android/widget/EditText.<init>:(Landroid/content/Context;)V` at
+line 10001. This dialog stays in the activity. Treating its constructor
+argument as a receiver-lambda exclusion would be a false classification.
+The draft checker rejects that classification, inventories the two actual
+entry receivers, and pins their original contexts. Evidence:
+`p11/receiver-design-finding.json`, `p11/original-psi.json` and the compiled
+production fixture/audit. The inventory's implicit `entry.apply { index = 0 }`
+remains entry-owned and is covered by a separate negative.
+
+The actual `updateIptvControlPresentation` parameter is nullable
+`IptvChannelEntry?`; the fixture Host preserves that original type, and imports
+`LanguageMapper` from its original package. These are scaffold inventory
+corrections, with no production or behavior edits.
+
+Clean original JVM evidence is `junit/baseline-00c60870e`: 904 identities,
+903 passing and the unchanged source-browser focus-test failure. The original
+lint issue archive is `p11/lint-original/`: 1,352 issues, 253 errors, 1,099
+warnings, including 175 unsafe opt-in issues. Step-0 characterization and
+mutation proofs have not started while the receiver-design question is
+pending; no `p11-step0` baseline or mutation table is claimed.

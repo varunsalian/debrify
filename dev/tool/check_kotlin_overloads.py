@@ -83,6 +83,27 @@ def resolve_inherited(calls, site, start, end):
     return dict(signatures.pop()), [invocation for _, invocation in found]
 
 
+def receiver_lambda_inventory(manifest, original, unit, nodes, moved):
+    """Exhaustive lexical exclusions, pinned to the original receiver and context."""
+    expected = []
+    for site in unit['all_this_sites']:
+        if 'lambda_receiver' not in site:
+            continue
+        row = next((r for name, r in moved.items()
+                    if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
+        if row:
+            line = original.count('\n', 0, site['start']) + 1
+            expected.append(dict(original=row['original'], line=line,
+                context=original.splitlines()[line - 1].strip(), text=site['text'],
+                receiver='receiver-lambda', lambda_callee=site['lambda_callee'],
+                lambda_receiver=site['lambda_receiver']))
+    actual = manifest.get('receiver_lambda_exclusions', [])
+    identities = [{key: row.get(key) for key in expected[0]} for row in actual] if expected else actual
+    if expected != identities or any(not row.get('reason') for row in actual):
+        raise ValueError('receiver-lambda exclusion coverage/classification differs from original PSI')
+    return expected
+
+
 def receiver_inventory(manifest, original, unit, nodes, moved):
     """Require every activity receiver, alias use and Runnable self site by PSI."""
     def row_at(offset):
@@ -91,9 +112,13 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
         line = original.count('\n', 0, site['start']) + 1
         return row['original'], line, original.splitlines()[line - 1].strip()
     expected_runnable, expected_alias, calls = [], [], []
+    if manifest['phase'] >= 11:
+        receiver_lambda_inventory(manifest, original, unit, nodes, moved)
     for site in unit['all_this_sites']:
         row = row_at(site['start'])
         if not row:
+            continue
+        if manifest['phase'] >= 11 and 'lambda_receiver' in site:
             continue
         if site['receiver'] == 'Runnable':
             expected_runnable.append(identity(row, site))
