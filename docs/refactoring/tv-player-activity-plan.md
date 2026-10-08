@@ -2228,3 +2228,12 @@ finishes and reports), Stremio TV channel startup.
   removed; no device interaction, install or push. Evidence: p9/gate/ and
   junit/p9-gate/. **STOPPED after phase 9**; no next-phase work or independent
   self-review performed.
+- 2026-10-08 — phase 9 post-implementation reviews of `fbc53a10d..4226d658b`.
+  Claude's 18-mutation sample 14/18; survivors k04/k09/k10/k12 (focus guard,
+  controls-gated badge, progress restart on commit, resolution-token bump on
+  failure) closed in 0b. Independent Codex review (fresh session): **No P1s,
+  no P2/P3**; `finish()` compiled `invokevirtual`, 15 teardown statements in
+  order between the final snapshot and `sendFinished`, VOD/TV exhaustion as
+  characterized, live retry/player reads; the 1 GB heap override was
+  evidence-only (committed build config unchanged). Activity 13,937 → 13320.
+  Decoder verification remains pending-environment. Phase 9 complete; merged.
