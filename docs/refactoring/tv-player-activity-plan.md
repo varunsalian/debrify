@@ -2619,3 +2619,20 @@ episode next/previous, startup channel restore, Start Over after a switch.
   `junit/p11-step0c/`. Final rescan: 89 routes, 45 fields/44 functions,
   913 quoted sites/784 direct selectors. Production/protected inputs unchanged;
   detached original removed after proofs. Approved Step 1 moves and gate follow.
+
+- 2026-10-09 — **Phase 11 Step 1 production moves complete.** Materialized
+  all 92 manifest rows into the guide owner (48 core fields), fieldless pager
+  and fieldless navigator (425/524/431 lines); activity 12,717 → 11,458,
+  size baseline lowered with `--update`. One slot-anchored eager controller,
+  computed qualified Host forwarders, whole-property Start Over/banner patches,
+  retained patched `initIptvMode`, and in-place teardown patches match the
+  manifest. Rescan supplies 89 reflection owner routes; 43 additional public
+  function visibility pins join the originally public install function, without
+  changing any characterization assertion. No watchdog or Dart moved-member
+  selectors need a further retarget. All 233 phase-11 characterizations pass.
+  Checker: 2,295 declarations classified, zero differences; p1–p10 historical
+  checks and 40 frozen earlier files pass. Compiled audit pins all 13 production
+  receivers, two receiver-lambda exclusions remain; five original Kotlin warnings,
+  47 initializer proofs and full lifecycle order are unchanged. Historical and
+  current checker self-tests and the full clean-tree gate follow. Evidence
+  `p11/step1/`, `p11/gate/`. No bug fix, dependency or ProGuard change.

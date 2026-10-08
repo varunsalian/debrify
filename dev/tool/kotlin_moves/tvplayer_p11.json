@@ -3758,7 +3758,7 @@
         },
         {
           "before": "\nprivate fun showIptvGuide() {",
-          "after": "\ninternal fun showIptvGuide() {",
+          "after": "\nfun showIptvGuide() {",
           "count": 1
         },
         {
@@ -3787,7 +3787,7 @@
         },
         {
           "before": "\nprivate fun hideIptvGuide() {",
-          "after": "\ninternal fun hideIptvGuide() {",
+          "after": "\nfun hideIptvGuide() {",
           "count": 1
         },
         {
@@ -3806,7 +3806,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun beginIptvAllCategorySearch() {",
-          "after": "\ninternal fun beginIptvAllCategorySearch() {",
+          "after": "\nfun beginIptvAllCategorySearch() {",
           "count": 1
         }
       ]
@@ -3820,7 +3820,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun restoreIptvCategoryAfterSearch(): Boolean {",
-          "after": "\ninternal fun restoreIptvCategoryAfterSearch(): Boolean {",
+          "after": "\nfun restoreIptvCategoryAfterSearch(): Boolean {",
           "count": 1
         },
         {
@@ -3849,7 +3849,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun commitIptvAllCategorySearch() {",
-          "after": "\ninternal fun commitIptvAllCategorySearch() {",
+          "after": "\nfun commitIptvAllCategorySearch() {",
           "count": 1
         }
       ]
@@ -3860,7 +3860,13 @@
       "fate": "moved",
       "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt",
       "target": "class TvIptvGuideController/fun clearIptvAllCategorySearchState()",
-      "substitutions": []
+      "substitutions": [
+        {
+          "before": "\nprivate fun clearIptvAllCategorySearchState() {",
+          "after": "\nfun clearIptvAllCategorySearchState() {",
+          "count": 1
+        }
+      ]
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun focusCurrentIptvGuideRow()",
@@ -3871,7 +3877,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun focusCurrentIptvGuideRow() {",
-          "after": "\ninternal fun focusCurrentIptvGuideRow() {",
+          "after": "\nfun focusCurrentIptvGuideRow() {",
           "count": 1
         }
       ]
@@ -3885,7 +3891,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun toggleIptvGuide() {",
-          "after": "\ninternal fun toggleIptvGuide() {",
+          "after": "\nfun toggleIptvGuide() {",
           "count": 1
         }
       ]
@@ -3904,7 +3910,7 @@
         },
         {
           "before": "\nprivate fun refreshIptvBrowserChrome(title: String? = null) {",
-          "after": "\ninternal fun refreshIptvBrowserChrome(title: String? = null) {",
+          "after": "\nfun refreshIptvBrowserChrome(title: String? = null) {",
           "count": 1
         }
       ]
@@ -3945,6 +3951,11 @@
           "before": "\nfindViewById<View>(R.id.iptv_nav_browse)?.visibility = liveVisibility",
           "after": "\nactivity.findViewById<View>(R.id.iptv_nav_browse)?.visibility = liveVisibility",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun updateIptvCatalogControlVisibility() {",
+          "after": "\nfun updateIptvCatalogControlVisibility() {",
+          "count": 1
         }
       ]
     },
@@ -3957,7 +3968,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun iptvGuideItemCountLabel(): String {",
-          "after": "\ninternal fun iptvGuideItemCountLabel(): String {",
+          "after": "\nfun iptvGuideItemCountLabel(): String {",
           "count": 1
         }
       ]
@@ -3971,7 +3982,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun selectIptvContentType(contentType: String) {",
-          "after": "\ninternal fun selectIptvContentType(contentType: String) {",
+          "after": "\nfun selectIptvContentType(contentType: String) {",
           "count": 1
         }
       ]
@@ -3985,7 +3996,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun selectIptvSource(source: IptvSourceEntry) {",
-          "after": "\ninternal fun selectIptvSource(source: IptvSourceEntry) {",
+          "after": "\nfun selectIptvSource(source: IptvSourceEntry) {",
           "count": 1
         },
         {
@@ -4130,7 +4141,7 @@
         },
         {
           "before": "\nprivate fun requestIptvBrowse(",
-          "after": "\ninternal fun requestIptvBrowse(",
+          "after": "\nfun requestIptvBrowse(",
           "count": 1
         }
       ]
@@ -4264,7 +4275,7 @@
         },
         {
           "before": "\nprivate fun beginIptvCategoryZapSession(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun beginIptvCategoryZapSession(entry: IptvChannelEntry) {",
+          "after": "\nfun beginIptvCategoryZapSession(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -4403,7 +4414,7 @@
         },
         {
           "before": "\nprivate fun bootstrapInitialIptvZapPaging(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun bootstrapInitialIptvZapPaging(entry: IptvChannelEntry) {",
+          "after": "\nfun bootstrapInitialIptvZapPaging(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -4494,6 +4505,11 @@
           "before": "\niptvChannels = fallback",
           "after": "\nhost.iptvChannels = fallback",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun restoreIptvZapBootstrapFallback(",
+          "after": "\nfun restoreIptvZapBootstrapFallback(",
+          "count": 1
         }
       ]
     },
@@ -4535,7 +4551,7 @@
         },
         {
           "before": "\nprivate fun requestIptvChannelJump(channelNumber: Int) {",
-          "after": "\ninternal fun requestIptvChannelJump(channelNumber: Int) {",
+          "after": "\nfun requestIptvChannelJump(channelNumber: Int) {",
           "count": 1
         },
         {
@@ -4669,7 +4685,7 @@
         },
         {
           "before": "\nprivate fun requestIptvZapPage(",
-          "after": "\ninternal fun requestIptvZapPage(",
+          "after": "\nfun requestIptvZapPage(",
           "count": 1
         },
         {
@@ -4899,6 +4915,11 @@
           "before": "\niptvChannels = window",
           "after": "\nhost.iptvChannels = window",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun mergeIptvZapPage(",
+          "after": "\nfun mergeIptvZapPage(",
+          "count": 1
         }
       ]
     },
@@ -4927,6 +4948,11 @@
         {
           "before": "\nval maxStart = channels.size - iptvZapMaxHiddenWindow",
           "after": "\nval maxStart = channels.size - guide.iptvZapMaxHiddenWindow",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun boundedHiddenIptvZapWindow(",
+          "after": "\nfun boundedHiddenIptvZapWindow(",
           "count": 1
         }
       ]
@@ -4970,7 +4996,7 @@
         },
         {
           "before": "\nprivate fun trimHiddenIptvZapWindow() {",
-          "after": "\ninternal fun trimHiddenIptvZapWindow() {",
+          "after": "\nfun trimHiddenIptvZapWindow() {",
           "count": 1
         },
         {
@@ -4994,7 +5020,7 @@
         },
         {
           "before": "\nprivate fun prefetchIptvZapPage(delta: Int, force: Boolean = false) {",
-          "after": "\ninternal fun prefetchIptvZapPage(delta: Int, force: Boolean = false) {",
+          "after": "\nfun prefetchIptvZapPage(delta: Int, force: Boolean = false) {",
           "count": 1
         },
         {
@@ -5048,7 +5074,7 @@
         },
         {
           "before": "\nprivate fun queuePendingIptvZapInput(delta: Int) {",
-          "after": "\ninternal fun queuePendingIptvZapInput(delta: Int) {",
+          "after": "\nfun queuePendingIptvZapInput(delta: Int) {",
           "count": 1
         },
         {
@@ -5077,7 +5103,7 @@
         },
         {
           "before": "\nprivate fun drainPendingIptvZapInputs() {",
-          "after": "\ninternal fun drainPendingIptvZapInputs() {",
+          "after": "\nfun drainPendingIptvZapInputs() {",
           "count": 1
         },
         {
@@ -5116,7 +5142,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun clearIptvZapBoundaryCache() {",
-          "after": "\ninternal fun clearIptvZapBoundaryCache() {",
+          "after": "\nfun clearIptvZapBoundaryCache() {",
           "count": 1
         },
         {
@@ -5165,7 +5191,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun disableIptvZapPaging() {",
-          "after": "\ninternal fun disableIptvZapPaging() {",
+          "after": "\nfun disableIptvZapPaging() {",
           "count": 1
         },
         {
@@ -5211,6 +5237,11 @@
           "before": "\nval categories = iptvZapCategories.distinct()",
           "after": "\nval categories = guide.iptvZapCategories.distinct()",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun adjacentIptvCategory(delta: Int, attempt: Int): String? {",
+          "after": "\nfun adjacentIptvCategory(delta: Int, attempt: Int): String? {",
+          "count": 1
         }
       ]
     },
@@ -5223,7 +5254,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun prefetchAdjacentIptvCategory(delta: Int, attempt: Int = 1) {",
-          "after": "\ninternal fun prefetchAdjacentIptvCategory(delta: Int, attempt: Int = 1) {",
+          "after": "\nfun prefetchAdjacentIptvCategory(delta: Int, attempt: Int = 1) {",
           "count": 1
         },
         {
@@ -5389,6 +5420,11 @@
           "before": "\ninstallIptvZapWindow(",
           "after": "\nguide.pager.installIptvZapWindow(",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun consumeCachedAdjacentIptvCategory(delta: Int): Boolean {",
+          "after": "\nfun consumeCachedAdjacentIptvCategory(delta: Int): Boolean {",
+          "count": 1
         }
       ]
     },
@@ -5476,7 +5512,7 @@
         },
         {
           "before": "\nprivate fun switchToIptvChannel(",
-          "after": "\ninternal fun switchToIptvChannel(",
+          "after": "\nfun switchToIptvChannel(",
           "count": 1
         },
         {
@@ -5525,7 +5561,7 @@
         },
         {
           "before": "\nprivate fun isLiveIptvZapContext(): Boolean =",
-          "after": "\ninternal fun isLiveIptvZapContext(): Boolean =",
+          "after": "\nfun isLiveIptvZapContext(): Boolean =",
           "count": 1
         },
         {
@@ -5621,6 +5657,11 @@
           "before": "\niptvBrowseToken++",
           "after": "\nguide.iptvBrowseToken++",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun activateIptvZapUiContext() {",
+          "after": "\nfun activateIptvZapUiContext() {",
+          "count": 1
         }
       ]
     },
@@ -5668,7 +5709,7 @@
         },
         {
           "before": "\nprivate fun zapIptvChannel(delta: Int) {",
-          "after": "\ninternal fun zapIptvChannel(delta: Int) {",
+          "after": "\nfun zapIptvChannel(delta: Int) {",
           "count": 1
         },
         {
@@ -5764,6 +5805,11 @@
           "before": "\nrequestIptvZapPage(",
           "after": "\nguide.pager.requestIptvZapPage(",
           "count": 2
+        },
+        {
+          "before": "\nprivate fun requestAdjacentIptvCategory(delta: Int, attempt: Int = 1) {",
+          "after": "\nfun requestAdjacentIptvCategory(delta: Int, attempt: Int = 1) {",
+          "count": 1
         }
       ]
     },
@@ -5845,7 +5891,7 @@
         },
         {
           "before": "\nprivate fun checkpointCurrentIptvPosition() {",
-          "after": "\ninternal fun checkpointCurrentIptvPosition() {",
+          "after": "\nfun checkpointCurrentIptvPosition() {",
           "count": 1
         },
         {
@@ -5884,7 +5930,7 @@
         },
         {
           "before": "\nprivate fun playIptvChannel(index: Int) {",
-          "after": "\ninternal fun playIptvChannel(index: Int) {",
+          "after": "\nfun playIptvChannel(index: Int) {",
           "count": 1
         },
         {
@@ -5920,6 +5966,11 @@
           "before": "\nif (!isIptvMode || iptvSeriesAudioKey == null) return false",
           "after": "\nif (!host.isIptvMode || guide.iptvSeriesAudioKey == null) return false",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun isIptvEpisodeMode(): Boolean {",
+          "after": "\nfun isIptvEpisodeMode(): Boolean {",
+          "count": 1
         }
       ]
     },
@@ -5937,7 +5988,7 @@
         },
         {
           "before": "\nprivate fun nextIptvEpisode(): IptvChannelEntry? {",
-          "after": "\ninternal fun nextIptvEpisode(): IptvChannelEntry? {",
+          "after": "\nfun nextIptvEpisode(): IptvChannelEntry? {",
           "count": 1
         }
       ]
@@ -5956,7 +6007,7 @@
         },
         {
           "before": "\nprivate fun prevIptvEpisode(): IptvChannelEntry? {",
-          "after": "\ninternal fun prevIptvEpisode(): IptvChannelEntry? {",
+          "after": "\nfun prevIptvEpisode(): IptvChannelEntry? {",
           "count": 1
         }
       ]
@@ -5980,7 +6031,7 @@
         },
         {
           "before": "\nprivate fun updateIptvEpisodeControls() {",
-          "after": "\ninternal fun updateIptvEpisodeControls() {",
+          "after": "\nfun updateIptvEpisodeControls() {",
           "count": 1
         },
         {
@@ -6044,7 +6095,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun setIptvPreferredAudioLang(lang: String) {",
-          "after": "\ninternal fun setIptvPreferredAudioLang(lang: String) {",
+          "after": "\nfun setIptvPreferredAudioLang(lang: String) {",
           "count": 1
         },
         {
@@ -6063,7 +6114,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun onIptvSeriesAudioPicked(lang: String?) {",
-          "after": "\ninternal fun onIptvSeriesAudioPicked(lang: String?) {",
+          "after": "\nfun onIptvSeriesAudioPicked(lang: String?) {",
           "count": 1
         },
         {
