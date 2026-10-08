@@ -2562,3 +2562,24 @@ episode next/previous, startup channel restore, Start Over after a switch.
   cases and the prior 38 extraction cases remain passing; six new constructor
   provenance/audit cases pass (266 unique checker cases). The 47 initializer
   proofs and 40 frozen destinations are unchanged. No production moves.
+
+- 2026-10-08 — **Phase 11 Step 0 complete** on original `00c60870e`: 134 new
+  characterization tests pass through real live/VOD bootstrap and installed
+  callbacks. Every new test has an original named assertion proof; all 162
+  mutations are killed, including retained caller wiring and asymmetric
+  success/error/notImplemented stale-reply cleanup for inline/queued timing.
+  Real remote-key matrix, paging boundaries, number entry, outgoing checkpoint,
+  startup memory, Start Over, borrowed-handler trim/archive retry and teardown
+  are pinned. Mutation table appended to the deps report; raw evidence `p11/`.
+  Clean `baseline-00c60870e` has 904 identities (903 pass, unchanged focus
+  failure); `p11-step0` has 1,038 (1,037 pass, same failure), no skips:
+  134 passing additions only, stable run fingerprint, matched 1 GiB/JBR 21.0.10.
+  Original lint remains archived: 1,352 issues (253 errors/1,099 warnings,
+  175 unsafe opt-ins). Reflection rescan finds 67 routes (37 fields/30 funcs);
+  29 additional reflected functions need public unmangled members at Step 1.
+  Step T commit `d83360125`: exactly two receiver-lambda exclusions, Context
+  constructor audit and negatives; 266 unique checker cases, original 2,295
+  declarations classified with zero differences, 47 initializer proofs and
+  40 frozen earlier destinations. Detached original removed. Production,
+  lockfile and ProGuard unchanged; no push, branch switch or device/emulator.
+  **STOPPED before production moves**, awaiting Claude's separate sample/review.
