@@ -1510,3 +1510,13 @@ Start Over / catch-up on an archive-enabled channel.
   unchanged; detached original removed. Evidence p5/step0b/, p5/step1/, p5/gate/
   and junit/. No self independent review, push, branch switch, device/emulator or
   bug fix. **STOPPED after phase 5**; Claude reviews separately.
+- 2026-10-08 — phase 5 post-implementation reviews of `4dd0d97e0..ecc5a3f9d`.
+  Claude: activity-side changes and both retargets read (Dart anchor now in
+  `TvProgressReporter.kt`, asserted manual-switch guards still inside
+  `sendProgress`); Claude's 18-mutation sample 17/18, survivor g14 (exact-now
+  programme boundary) closed in 0b. Independent Codex review (fresh
+  session): **No P1s, no P2/P3**; 4 historical `--at` checks, 28 frozen
+  destinations, progress/recovery/ACK/teardown ordering, `onStop`
+  non-finally vs `finish`/`onDestroy` finally all preserved. Activity
+  17,205 → 16,487. Decoder verification remains pending-environment.
+  Phase 5 complete; merged.
