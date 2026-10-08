@@ -65,6 +65,26 @@ internal object TvPlayerOriginalAccess {
     )
 
     private val controllerOwners = mapOf(
+        "adoptSourceList" to "sourceFetchController",
+        "applyAddonEpisodeSources" to "sourceFetchController",
+        "applyMoreTorrentSources" to "sourceFetchController",
+        "attemptPikPakPlaybackLoop" to "pikPakRetryController",
+        "cancelPikPakRetry" to "pikPakRetryController",
+        "ensureStatusPill" to "statusPillController",
+        "episodeFetchInFlight" to "sourceFetchController",
+        "failAddonFetch" to "sourceFetchController",
+        "failMoreTorrentSources" to "sourceFetchController",
+        "hideStatusPill" to "statusPillController",
+        "isPikPakRetrying" to "pikPakRetryController",
+        "pikPakRetryCount" to "pikPakRetryController",
+        "pikPakRetryHandler" to "pikPakRetryController",
+        "pikPakRetryId" to "pikPakRetryController",
+        "showPikPakRetryOverlay" to "pikPakRetryController",
+        "showStatusPill" to "statusPillController",
+        "showStatusPillTransient" to "statusPillController",
+        "statusPill" to "statusPillController",
+        "statusPillHideRunnable" to "statusPillController",
+        "waitForPikPakMetadata" to "pikPakRetryController",
         "beginManualSourceCandidate" to "startupGateController",
         "beginStartupFailoverIfEligible" to "startupGateController",
         "commitManualSourceCandidate" to "startupGateController",
@@ -445,7 +465,26 @@ internal object TvPlayerOriginalAccess {
     }
 
     /** Exact JVM signatures keep same-arity overloads distinct. */
+    @Suppress("UNCHECKED_CAST")
     fun callTyped(owner: Any, name: String, types: Array<Class<*>>, vararg arguments: Any?): Any? {
+        if (owner is AndroidTvTorrentPlayerActivity) {
+            val fetchNames = setOf("requestEpisodeFetch", "requestAdjacentEpisodeFetch", "requestMoreTorrentSources", "requestAddonTorrentSources")
+            if (name in fetchNames) {
+                val fetch = field(owner, "sourceFetchController") as TvSourceFetchController
+                when (name) {
+                    "requestEpisodeFetch" -> fetch.requestEpisodeFetch(
+                        arguments[0] as Int, arguments[1] as Int, arguments[2] as Boolean, arguments[3] as Boolean,
+                        arguments[4] as AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt?,
+                        arguments[5] as (() -> Unit)?, arguments[6] as (() -> Boolean)?)
+                    "requestAdjacentEpisodeFetch" -> fetch.requestAdjacentEpisodeFetch(
+                        arguments[0] as String?, arguments[1] as Int, arguments[2] as Int,
+                        arguments[3] as Boolean, arguments[4] as Int)
+                    "requestMoreTorrentSources" -> fetch.requestMoreTorrentSources(arguments[0] as String)
+                    "requestAddonTorrentSources" -> fetch.requestAddonTorrentSources(arguments[0] as String)
+                }
+                return Unit
+            }
+        }
         val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
         val actualOwner = memberOwner(owner, name)
         val method = (facade ?: actualOwner.javaClass).getDeclaredMethod(name, *types).apply { isAccessible = true }
@@ -463,6 +502,16 @@ internal object TvPlayerOriginalAccess {
 
     /** Invoke Kotlin's real omitted-argument dispatcher, including its mask. */
     fun callDefault(owner: Any, name: String, types: Array<Class<*>>, mask: Int, vararg arguments: Any?): Any? {
+        if (owner is AndroidTvTorrentPlayerActivity && name == "requestEpisodeFetch") {
+            check(mask == 120)
+            val fetch = field(owner, "sourceFetchController") as TvSourceFetchController
+            return fetch.requestEpisodeFetch(arguments[0] as Int, arguments[1] as Int, autoAdvance = arguments[2] as Boolean)
+        }
+        if (owner is AndroidTvTorrentPlayerActivity && name == "requestAdjacentEpisodeFetch") {
+            check(mask == 24)
+            val fetch = field(owner, "sourceFetchController") as TvSourceFetchController
+            return fetch.requestAdjacentEpisodeFetch(arguments[0] as String?, arguments[1] as Int, arguments[2] as Int)
+        }
         val facade = if (owner is AndroidTvTorrentPlayerActivity) movedFunctions[name]?.let(::type) else null
         val actualOwner = memberOwner(owner, name)
         val receiverTypes = if (facade == null) arrayOf(actualOwner.javaClass) else emptyArray()

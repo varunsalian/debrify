@@ -131,7 +131,8 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
         if is_alias != bool(site.get('alias')):
             raise ValueError('wrong receiver classification: alias-use marker differs')
     if manifest['phase'] >= 9:
-        inherited = [s for s in unit['implicit_inherited_sites'] if row_at(s['start'])]
+        inherited = [s for s in unit['implicit_inherited_sites']
+                     if s.get('introduced_phase', 9) <= manifest['phase'] and row_at(s['start'])]
         expected = sorted((row_at(s['start'])['original'], original.count('\n', 0, s['start']) + 1, s['callee']) for s in inherited)
         actual = sorted((s['original'], s['line'], s['callee']) for s in manifest['overload_audit']
                         if s.get('receiver') == 'implicit-inherited')
@@ -193,6 +194,19 @@ def audit(manifest, original, current, before, after):
         if site.get('receiver') == 'implicit-inherited':
             if old != site['expected_before'] or new != site['expected_after']:
                 raise ValueError(f'implicit inherited dispatch changed at original line {site["line"]}: {old} -> {new}')
+        elif manifest['phase'] >= 10:
+            def signature(call, evidence):
+                target, descriptor = call.split(':', 1)
+                opcodes = {entry['opcode'] for entry in evidence}
+                if len(opcodes) != 1:
+                    raise ValueError('argument receiver opcode must resolve uniquely')
+                return dict(owner=target.rsplit('.', 1)[0], descriptor=descriptor, opcode=opcodes.pop())
+            for key in ('expected_before', 'expected_after'):
+                if set(site.get(key, {})) != {'owner', 'descriptor', 'opcode'}:
+                    raise ValueError('argument receiver pin requires owner/descriptor/opcode')
+            if (old != new or signature(old, old_evidence) != site['expected_before'] or
+                    signature(new, new_evidence) != site['expected_after']):
+                raise ValueError(f'argument receiver dispatch changed at original line {site["line"]}')
         elif old != new:
             raise ValueError(f'overload changed at original line {site["line"]}: {old} -> {new}')
         results.append(dict(site=site, resolved_before=old, resolved_after=new,

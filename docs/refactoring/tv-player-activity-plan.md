@@ -1245,6 +1245,93 @@ commit after first frame), manual source pick before and after first frame
 (incl. a failing pick and restore), exhaustion of all sources (activity
 finishes and reports), Stremio TV channel startup.
 
+## Phase 10 — status pill, PikPak cold-storage retry, source fetch (fetch-more + episode fetch)
+
+Branch `refactor/tvplayer-p10` off the phase-9 merge `8a4d40d1c` (activity 13,320 lines). Evidence under
+`refactor-evidence/tvplayer/p10/`. Inventory: "Phase 10 inventory" in the deps
+report (measured at `c4906cd2f` with phase 9 taken from its committed
+manifest; re-measure on the phase-9 merge). All collaborator rules from
+phases 3–9 apply.
+
+**Selected (≈ 640 lines, three sibling controllers):**
+- `TvStatusPillController` (≈ 75 lines) at the `statusPill` slot; keeps
+  borrowing `externalSubtitleHandler` (never clears it).
+- `TvPikPakRetryController` (≈ 240) at the `isPikPakRetrying` slot; owns its
+  retry `Handler` and `pikPakRetryId` (read live everywhere, incl. the gate's
+  fire-time reads through its Host); 4 PikPak companion constants move with it.
+- `TvSourceFetchController` (≈ 425) at the `episodeFetchInFlight` slot,
+  holding fetch-more and episode fetch together (fetch-more owns no field of
+  its own; merging keeps both `adoptSourceList` calls internal).
+  `stremioResolutionToken` stays activity-owned; episode fetch bumps it via a
+  Host `var` (`++host.stremioResolutionToken`).
+
+27 activity patches in 13 declarations (incl. one-token in-place lifecycle
+patches in `onPause` and `onDestroy` ×2); 17 Host forwarder re-points (20
+token edits) as `patched` activity-property rows in the subtitle Host (3),
+switcher Host (9) and phase-9 gate Host (5); 4 inert initializer proofs (pill
+`Runnable`, PikPak `0`s and `Handler`); 2 new activity-owned readiness getters
+(`startupGateStatusReady`, `pikPakReactivationIndicatorReady`); ≈ 176
+substitutions (incl. 18 `host.startupGateController.`, 4
+`host.sourceSwitchController.`, one already-braced template). Status-pill
+direct callers left in the activity afterwards: 2 (`playbackListener`,
+`playShowShuffle`). `playPikPakVideoWithRetry` stays (media start → playback
+start phase).
+
+**Hazards.** 4 `Runnable` self-references in `waitForPikPakMetadata`,
+`TextView(this)` constructor, `findViewById`, 2 Toasts, 18 `runOnUiThread`,
+named argument `allowResolverFallback`, the Host `var` increment. Follow-up
+pinned as-is: the PikPak metadata `checkHandler` is never cleared; the PikPak
+exhaustion branch checks `isFinishing` but not `isDestroyed`.
+
+**Retargets.** Reflection: 28 direct sites on main + those added by phase 9 —
+7 new owner-map entries, one more `when` branch in the watchdog `call` helper,
+a one-line `ShufflePlaybackFlowTest` field-helper change; `waitForPikPakMetadata`,
+`cancelPikPakRetry`, `showStatusPill` become public members. Dart: the
+`map["recoveryCandidateCount"]` check reads the new `TvSourceFetchController.kt`
+(literal unchanged).
+
+### Step T
+
+Phase-10 extraction fixture + negatives (three sibling controllers at their
+slots, readiness getters, Host `var` increment, missed
+`host.startupGateController.` qualification, snapshotting `pikPakRetryId`);
+per-phase dispatcher keeping all historical suites; compiled audit (incl.
+`TextView(this)` constructor and inherited `findViewById`); earlier
+destinations frozen at the phase-9 merge. **Auditor extension:** the PSI
+collector also records the 18 `runOnUiThread` calls and the 10
+`isFinishing`/`isDestroyed` property reads (mapped to their JVM getters);
+all 32 inventoried inherited-receiver sites carry before/after
+owner–descriptor–opcode pins, with omission and wrong-dispatch negatives;
+historical suites retained.
+
+### Step 0 — characterization of the original
+
+Heavy (episode fetch and fetch-more have no characterization today):
+episode fetch (request, adjacent fetch, token supersession, in-flight guard,
+pill messages, payload merge) and fetch-more with **paired inline and queued
+reply cases** (the phase-8 bounded `workerReply` seam): token, continuation or
+payload are changed before the main queue drains, pinning deferred lock
+clearing, stale rejection inside the UI block, the live payload/index reads of
+the adjacent fallback, the unguarded `notImplemented`, and fetch-more's
+deferred finishing guard — with assertion-failing timing mutations; fetch-more (request, result adoption, empty /
+error / notImplemented, recovery handoff to the gate, candidate counts),
+PikPak retry under a **virtual clock**: `waitForPikPakMetadata` uses
+`System.currentTimeMillis()`, which PAUSED looper mode does not redirect, so
+the clock instrumentation covers both the original activity and the future
+controller (incl. its nested `Runnable`); pinned boundaries: cumulative
+monitoring timeouts at 10/22/36/54/80/108 s and auto-advance at 109.5 s
+(backoff schedule, metadata wait polling, exhaustion routing,
+`onPause` cancel, retry id supersession, reactivation indicator), status
+pill (lazy creation, show/transient/hide timing on the borrowed handler).
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–9 additions. Device checklist (end of series):
+PikPak cold-storage source (retry backoff, reactivation indicator,
+exhaustion), "fetch more sources" after all initial sources fail, next/previous
+episode fetch from the player, status pill messages.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
@@ -2237,3 +2324,97 @@ finishes and reports), Stremio TV channel startup.
   characterized, live retry/player reads; the 1 GB heap override was
   evidence-only (committed build config unchanged). Activity 13,937 → 13320.
   Decoder verification remains pending-environment. Phase 9 complete; merged.
+- 2026-10-08 — phase 10 design round 1 (Codex): **No P1s**; P2s folded
+  (auditor extension for 18 `runOnUiThread` + 10 lifecycle getters; PikPak
+  virtual-clock instrumentation with 10/22/36/54/80/108 s + 109.5 s pins;
+  paired inline/queued reply timing cases). Phase 10 design approved.
+
+- 2026-10-08 — **Phase 10 step T complete** on original `8a4d40d1c`:
+  re-measured 29 subtrees, 176 moved substitutions, 27 caller edits in 13
+  declarations and 17 computed Host re-points (20 edits) in three whole-property
+  patched rows. Complete three-sibling extraction fixture passes and compiles;
+  32 original/fixture bytecode receiver pins pass (TextView constructor, two
+  Toasts, findViewById, eighteen runOnUiThread calls, ten lifecycle getters).
+  Four initializer proofs, four Runnable self receivers, five slot-anchored
+  additions including activity-owned readiness getters; all 37 earlier files
+  frozen at the merge with an empty whitelist. Original self-comparison: 2,309
+  declarations, zero differences. All 219 checker/auditor self-tests pass,
+  including historical phase 1–9 suites and phase-10 negatives. Evidence p10/;
+  no production move, branch change, protected-input change or device action.
+
+- 2026-10-08 — **Phase 10 step T constructor controls strengthened.**
+  The compiled phase-10 audit fixture now selects a TextView constructor,
+  rejects a changed constructor overload, and rejects missing/wrong constructor
+  opcode pins. All fourteen current phase-10 audit cases pass. Together with
+  the unchanged 208 historical/extraction cases from the complete run, all
+  222 unique checker/auditor cases are validated; logs and identity union in
+  p10/checker-self-test-summary.json. Production manifest and its 32 compiled
+  receiver sites are unchanged. No production moves.
+
+- 2026-10-08 — **Phase 10 step 0 complete before production moves.**
+  Seventy-nine original-code cases (pill 7, PikPak 25, episode fetch 27,
+  fetch-more/addon 20), each with a named assertion-killed mutation on
+  `8a4d40d1c`. PikPak virtual clock pins 10/22/36/54/80/108 s and 109.5 s;
+  paired inline/worker replies pin UI-time locks, stale/continuation checks,
+  live adjacent payload/index reads, unguarded notImplemented and deferred
+  fetch-more finishing checks. Three isolated fixture strengthenings remove
+  teardown/unchecked-access noise and isolate the default argument; only
+  accepted assertion proofs count. Mutation table appended to deps; raw logs,
+  XML, definitions, fixture versions and owner rescan under p10/.
+  Clean `baseline-8a4d40d1c`: 810 = 809 pass + known focus failure, clean tree.
+  Final `p10-step0`: 889 = 888 pass + same failure; additions-only comparison,
+  79 passing additions and no missing/new failing/skipped identity. Matching
+  evidence-only 1024 MiB workers, JBR 21.0.10; repository build settings unchanged.
+  Original lint: 1,352 issues (253 errors, 1,099 warnings, 175 unsafe opt-ins),
+  archived for the later gate. Fifteen reflected names / 77 literal sites
+  rescanned; future internal fetch/default helpers will route through typed
+  Kotlin calls, with equal assertions and no visibility expansion.
+  Protected inputs and production bytes unchanged; original worktree removed.
+  **STOPPED before phase-10 production moves.**
+
+- 2026-10-08 — **Phase 10 step 0b complete on original `8a4d40d1c`.**
+  Fifteen real-renderer/overlay cases close the loading refresh gap and sweep
+  every moved fetch UI refresh; all twenty targeted original mutations fail
+  on named assertions. Exact Claude l13 rerun is killed against all 94 phase-10
+  cases; original control passes all 94. Invalid l10 remains excluded.
+  `p10-step0b`: 904 = 903 pass + unchanged known focus failure; comparison
+  against `p10-step0` permits exactly 15 passing additions. Matching 1024 MiB
+  worker, unchanged production/protected inputs. Evidence `p10/step0b/`;
+  mutation table appended to deps. No production move or device action.
+
+- 2026-10-08 — **Phase 10 step 1 production moves complete.**
+  Three sibling controllers at original slots: status pill 81 lines, retry 249,
+  source fetch 431; Activity 13,320 → 12,717, size ratchet lowered. Four inert
+  proofs and activity-owned readiness getters retained; three whole-property
+  patches apply 17 Host re-points, callers and lifecycle statements stay in
+  place. Twenty reflected owner routes plus typed internal/default dispatch,
+  watchdog/shuffle helper retargets and the equal Dart candidate-count anchor;
+  every Kotlin assertion unchanged. Checker classifies all 2,309 declarations
+  with zero differences; all 115 focused JVM cases pass. Gate follows.
+
+- 2026-10-08 — **Phase 10 gate complete; STOPPED.**
+  Tested clean move `de9fadaca`: 2,309 declarations/zero diffs, all 222
+  checker/auditor self-tests, historical phases 1–9 and 37 frozen earlier
+  files pass. All 32 compiled receiver pins, four initializer proofs, four
+  Runnable selves and teardown order preserved. JVM `p10-gate` vs
+  `p10-step0b`: exact 904 statuses (903 pass + known focus failure), matched
+  1024 MiB worker. Five production warnings unchanged; lint exact 1,352
+  issues after refreshing only the stale derived Maven index from a clean
+  original rerun (initial rejected reports retained, no normalization or
+  build configuration changes). Release APK succeeds; R8/DEX 16 classes,
+  223 members and all three Hosts preserve identity. Decoder remains
+  pending-environment with phase-1/9 identical libraries and gaps.
+  Full Flutter vs phase-9 gate: exact 12,855 statuses (12,794 success,
+  13 failure, 28 error, 20 skipped); 45 affected source tests and 1,758
+  analyzer diagnostics unchanged. Sizes 81/249/431, Activity 12,717.
+  Retarget assertions preserved, protected inputs unchanged, detached
+  evidence worktree removed. Evidence `p10/gate/`; no push, device,
+  emulator, bug fix or self independent review. Stopped for Claude review.
+- 2026-10-08 — phase 10 post-implementation reviews of `91882d41b..009808f5d`.
+  Claude's 18-mutation sample: 16 killed, l10 invalid (compile error),
+  survivor l13 (unified-menu re-render on fetch-more start) closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; single
+  retry-ID owner with live gate/switcher reads, borrowed pill handler,
+  callback timing and lifecycle order preserved; Maven index refresh touched
+  derived metadata only. Activity 13,320 → 12,717. Decoder verification
+  remains pending-environment. Phase 10 complete; merged.

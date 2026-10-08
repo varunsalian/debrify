@@ -17,6 +17,9 @@ void main() {
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
+  final nativeSourceFetch = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt',
+  ).readAsStringSync();
   final nativeSourceSwitcher = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt',
   ).readAsStringSync();
@@ -177,7 +180,7 @@ void main() {
         nativeLauncher,
         contains("'recoveryCandidateCount': automatic.length"),
       );
-      expect(nativePlayer, contains('map["recoveryCandidateCount"]'));
+      expect(nativeSourceFetch, contains('map["recoveryCandidateCount"]'));
       expect(nativeStartupGate, contains('startupRecoveryIsConsumed('));
     },
   );
