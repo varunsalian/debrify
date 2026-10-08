@@ -1653,3 +1653,12 @@ favourites-gated jump hint, floating vs docked banner.
   lockfile and ProGuard unchanged. Temporary original worktree removed.
   No production moves, push, branch switch, device interaction or self
   independent review. Claude's independent sample/review and any 0b follow.
+
+- 2026-10-08 — **Phase 6 step 0b complete.** Closed Claude h11 and swept both
+  paging gates across four styles: stale totals with paging inactive, paged
+  positive/nonpositive totals, empty/single/multiple windows and favourite
+  hint gating. Original control 47/47; eight named assertion mutation proofs
+  pass; exact h11 rerun kills all four new cases. `p6-step0b`: 636 identities
+  (635 pass, existing focus failure); all 632 step-0 statuses unchanged, four
+  passing additions only. Evidence `p6/step0b/`, table in deps; production
+  unchanged and original worktree removed. Step 1 follows.

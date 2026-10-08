@@ -7808,3 +7808,31 @@ unchanged. The temporary original worktree is removed after archival.
 Manifest wiring-test metadata is bound to the final recorded test names
 (including the full window-install/merge name); declarations, patches,
 substitutions, structure and initializer proofs are unchanged.
+
+### Phase 6 step 0b — paging gates (original `e71ddac3a`)
+
+Claude’s exact h11 survivor now fails the inactive-paging assertion in all four
+styles (47-test original control passes; mutant runs all 47, four named
+comparison failures). Sweep of all 47 moved members finds exactly two paging
+gates, both in the shared position painter used by classic and styled trees:
+category total selection and channel/jump-hint eligibility. Four new tests
+cover stale positive totals with paging off, positive/nonpositive paged totals,
+empty/single/multiple loaded windows, paging transitions and favourites.
+Production remains unchanged.
+
+| New test | Original mutation | Failing assertion |
+|---|---|---|
+| `TvZapBannerPagingCharacterizationTest::classicPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::classicPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
+| `TvZapBannerPagingCharacterizationTest::consolePagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::consolePagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
+| `TvZapBannerPagingCharacterizationTest::editionPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::editionPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
+| `TvZapBannerPagingCharacterizationTest::glassPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::glassPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
+
+All eight proofs fail on assertions, with one selected test each; no compile,
+crash or zero-test proof. Raw definitions, patches, XML and logs: `p6/step0b/`.
+`junit/p6-step0b` has **636 identities: 635 pass, one unchanged focus failure**.
+All 632 `p6-step0` statuses are identical; only four passing additions.
+Complete XML and stable tree fingerprints; detached original removed.
