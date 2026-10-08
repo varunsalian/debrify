@@ -1789,3 +1789,18 @@ ready, back-key behaviour inside the guide list and search box.
   forwarder with `hideGuideOnReady` and a successful-switch characterization;
   guide-data callback contract corrected and characterized as-is).
 - 2026-10-08 — phase 7 design round 2 (Codex): **No P1s**, no new findings. Phase 7 design approved.
+
+- 2026-10-08 — **Phase 7 step T complete; production untouched.** Re-measured
+  a4ed4f368: 15,167 lines / 2,417 declarations, 30 selected members, 16
+  occurrences in six activity patches, 17 properties / 16 exact inert
+  proofs, first-field slot 1,192. Complete extraction fixture compiles
+  (586-line controller), zero checker differences; 8/8 compiled receiver
+  descriptors including Glide FragmentActivity. All 134 dispatcher tests
+  pass (16 new Phase-7 cases; historical Phase 6 uses its own manifest);
+  33 earlier destinations frozen at a4ed4f368, no whitelist. The measured
+  Host has 11 members; finish is the separate activity dependency, all six
+  calls use activity.finish(). Five-argument trio forwarder pinned with
+  drop/hard-code negatives; omitted contiguous initializer proof rejects.
+  Clean original baseline (636/635 pass) and lint (1,352 issues) archived
+  before fixture mutation; full provenance/evidence p7/ and junit/.
+  No production moves or lockfile/ProGuard edits. Step 0 follows.

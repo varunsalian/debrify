@@ -7892,3 +7892,39 @@ comparisons: `p6/step0b/`, `p6/step1/`, `p6/gate/`, `junit/p6-step0b/`,
 `junit/p6-gate/`. Production manifest, earlier phase manifests, lockfile and
 ProGuard unchanged; detached original removed. No bug fix, push, branch
 switch, emulator/device interaction or self independent review. STOP.
+
+### Phase 7 step T — re-measured at `a4ed4f368`
+
+Activity 15,167 physical lines / 2,417 PSI declarations. Selected 30
+members: 17 properties, 13 methods; 16 call/reference patches in six
+activity declarations. State slot 1,192; guide wait fields 12,985–12,986;
+guide init 14,484; Next 14,951; switching 15,042. Full re-measured selector/
+line table: `p7/remeasured-inventory.json`. Original self-comparison and
+complete production-config extraction fixture: all declarations classified,
+zero differences. Fixture compiles (586-line controller, activity 14,637).
+The activity and retained playback trio remain untouched in this step.
+
+Actual Host is **11** members: seven computed properties (only
+`isStremioTvMode` mutable) and four forwarding methods. The inventory’s
+12-count includes the separate activity `finish` dependency; all six finish
+calls are explicitly `activity.finish()`, preserving the override. No unused
+Host member introduced. Playback forwarder passes all five arguments,
+including `hideGuideOnReady` (false for Next, true for switch).
+
+All **16** later initializers have exact inert proofs, including the
+contiguous field block; construction stays at the first removed field.
+Per-phase dispatch keeps Phase 6 on its own historical manifest and adds
+16 Phase-7 tests. All **134** tests pass; dropped/hard-coded fifth argument,
+missing contiguous-field/wait proofs, snapshot/recursive Host forwarding,
+wrong finish/playerView receivers, Next guide wait/default changes, invented
+guide-data token guard and displaced construction all fail the stated
+checker assertion. Initial fixture-target/newline mistakes were rejected and
+corrected; no checker weakening. Compiled audit **8/8**, including
+`Glide.with(FragmentActivity)`, retains JVM invocation descriptors. All 33
+earlier destinations frozen at `a4ed4f368`; no whitelist. Evidence `p7/`.
+
+Clean original JVM baseline already archived as `junit/baseline-a4ed4f368`
+(636 identities, 635 pass, existing focus failure; revision a4ed4f368,
+zero dirty files, complete XML and stable fingerprints). Original lint
+archived in `p7/lint-original`: 1,352 issues, 253 errors/1,099 warnings,
+175 opt-in errors. Used for Step 0 and the later gate; no production move.
