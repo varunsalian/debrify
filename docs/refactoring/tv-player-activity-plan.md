@@ -1693,3 +1693,12 @@ favourites-gated jump hint, floating vs docked banner.
   inputs/earlier files unchanged; original worktree removed. No production
   deviation, bug fix, push, branch switch, device/emulator or self independent
   review. **STOPPED after phase 6**; Claude reviews separately.
+- 2026-10-08 — phase 6 post-implementation reviews of `239460785..a72dfb14f`.
+  Claude's 20-mutation sample 19/20 (first-occurrence variant for strings
+  duplicated between classic/styled); survivor h11 (paging-gated category
+  total) closed in 0b. Independent Codex review (fresh session): **No P1s,
+  no P2/P3**; 38 `classic.`/4 `styled.` qualifications correct, 28 inert
+  initializer proofs, 42 compiled overload descriptors (4 Glide
+  `FragmentActivity`) + historical 37 Toast sites reproduce. Activity
+  16,487 → 15,167. Decoder verification remains pending-environment.
+  Phase 6 complete; merged.
