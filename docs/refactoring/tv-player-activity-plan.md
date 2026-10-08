@@ -928,6 +928,85 @@ Trakt/Simkl progress after watching; IPTV channel start incl. a Stremio
 IPTV channel with failing first candidates; startup channel remembered;
 Start Over / catch-up on an archive-enabled channel.
 
+## Phase 6 — IPTV zap banner (classic controller + styled renderer)
+
+Branch `refactor/tvplayer-p6` off the phase-5 merge `e71ddac3a` (activity 16,487 lines). Evidence under
+`refactor-evidence/tvplayer/p6/`. The feasibility inventory is the "Phase 6
+inventory" section of the deps report (measured at `1a33c42cb`; re-measure
+on the phase-5 merge — both phase 5 and the banner patch
+`switchToIptvChannel`). All collaborator rules from phases 3–5 apply.
+
+**Re-planned remainder (honest scope).** The phase-6 inventory measured the
+rest of the activity: ≈ 12 more phases after this one (order: 7 Stremio TV
+guide "lite"; 8 startup/manual gate + source switcher + badge; 9 fetch-more
++ episode fetch + PikPak + status pill; 10–11 IPTV core + EPG + VOD; 12
+IPTV tune pipeline + live recovery; then controls I/II (Next overlay in II),
+playlist overlay + guide skin, shuffle + subtitle fetch, playback start +
+media pipeline + metadata receiver, unified menu split by owner; the two
+routers — `playbackListener` and `dispatchKeyEvent` — last, possibly never).
+**Expected end state:** the activity cannot reach 800 lines under these
+rules — Host wiring alone is ≈ 800 lines and grows as code leaves. Realistic
+final size ≈ 2,800–3,600 lines (≈ 2,100–2,700 if the routers move), holding
+lifecycle/teardown order, the composition root and Host objects, shared
+single-owner state, `bindViews`/`parsePayload`. That will be recorded as a
+documented end exception with responsibilities and an exit path when the
+series reaches it.
+
+**Selected:** the zap banner (≈ 1,304 lines, 47 members): 16 activity patches
+in 9 declarations; no test or Dart retargets; no lifecycle edits; no
+coupling with phase-5 controllers. Structure (inventory's recommendation):
+`TvIptvZapBannerController` (classic, ≈ 660 lines) constructs
+`TvIptvZapBannerStyledRenderer` (≈ 700 lines) and passes itself; the styled
+code's 38 references to 19 classic members become explicit `classic.x`
+substitutions and the classic code's 4 dispatch calls become `styled.x`, so
+any missed qualification fails to compile. The activity provides a single
+19-member Host. Extension functions are rejected (size-rule evasion).
+**Initializer timing:** the renderer is constructed inside the classic
+controller, so *all eight* renderer fields run at the classic controller's
+construction slot, and every classic field after its first does too —
+**28 inert proofs** in total under the existing all-later-fields rule (no
+contiguous-block exemption). ≈ 281
+declared substitutions incl. 122 `dp` calls and 42 overload-audit sites
+(4 `Glide.with`).
+
+**Step T.** Checker support for a destination class that constructs a second
+destination class (both pinned structurally; the renderer's constructor
+argument and its initializer position inside the classic controller pinned;
+**effective construction-slot mapping** so the renderer's fields are proved
+against the classic controller's slot), the initializer classifier extended
+narrowly for `Any()` and `Color.parseColor("<string literal>")` (literal
+argument only), a complete production extraction fixture with all 28 proofs,
+negatives for a missing renderer-first-field proof and for reading
+`classic`/Host during construction, the `classic.`/`styled.` cross-qualification substitutions
+with occurrence counts, and negatives (missed qualification compiled against
+a same-name Host member, renderer constructed lazily vs eagerly, swapped
+dispatch target). Per-phase dispatcher; earlier destinations frozen at the
+phase-5 merge.
+
+### Step 0 — characterization of the original
+
+The banner style and guide tokens are cached lazies, and the builder returns
+the existing tree before checking tokens, so style is fixed per activity
+session: characterize **four separate activity instances**, one per style,
+and prove that a preference change mid-session keeps the existing session's
+style and tree. Assert directly: view hierarchy, drawable properties,
+typography, progress, floating vs docked transitions, show/hide timing,
+now/next/EPG text, channel number/name/logo (Glide request lifecycle
+owner), the **LIVE/REC** badges, and favourites-gated jump-hint visibility.
+The two styled `paint…` functions mutate views (they do not draw through
+Canvas) — assert their view effects; a recording canvas is used only where a
+drawable's own drawing is shown to be observable. Pin as-is: an explicit hide
+cancels the tick token but leaves the pending hide callback posted; layout
+listeners are never removed (recorded follow-up). Mutation proofs on the
+original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phase 3–5 gate additions. Device checklist (end of series):
+zap banner in classic and each styled guide style while zapping channels
+(up/down, number entry), logos, EPG now/next, LIVE/REC badges, the
+favourites-gated jump hint, floating vs docked banner.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
@@ -1520,3 +1599,106 @@ Start Over / catch-up on an archive-enabled channel.
   non-finally vs `finish`/`onDestroy` finally all preserved. Activity
   17,205 → 16,487. Decoder verification remains pending-environment.
   Phase 5 complete; merged.
+- 2026-10-08 — phase 6 design round 1 (Codex): P1 folded (renderer fields run
+  at the classic controller's slot → effective slot mapping, 28 inert
+  proofs, classifier support for `Any()`/`Color.parseColor(literal)`, new
+  negatives); P2 step 0 corrected to the real implementation (per-style
+  activity instances, cached style, view-mutating painters, LIVE/REC badges,
+  favourites hint gating, hide leaves the pending callback).
+- 2026-10-08 — phase 6 design round 2 (Codex): **No P1s**; P2 inventory superseded-note and P3 checklist fixed. Phase 6 design approved.
+
+- 2026-10-08 — **Phase 6 step T complete (production untouched).** Re-measured
+  `e71ddac3a`: 16,487 activity lines / 2,567 PSI declarations; 47 moved
+  members / 1,344 partition lines (including attached trivia), 16 activity
+  occurrences patched in nine declarations, one slot-anchored controller
+  property. Nested eager renderer construction/argument/position is pinned;
+  effective slots require all **28** exact inert proofs, including the
+  renderer's first field. Classifier allows only zero-argument `Any()` and
+  valid literal-only `Color.parseColor`, rejecting state/effectful reads.
+  Complete production fixture compiles; checker original self-comparison
+  and extraction have zero differences. **118/118** dispatcher tests pass
+  (all historical suites retained); the compilable same-name Host capture
+  negative fails the exact moved-body comparison. All 38 `classic.` / four
+  `styled.` cross references are counted. Compiled overload audit **42/42**
+  retains descriptors, including four Glide FragmentActivity calls. Five
+  historical `--at` checks and 31 earlier destinations frozen at
+  `e71ddac3a` pass, without whitelist. Evidence: `p6/`; Step 0 follows.
+
+- 2026-10-08 — phase 6 Step-T size follow-up: the initial fixture copied
+  the activity's full imports (801/846 lines). Exact reviewed destination
+  subsets now produce **689/729-line** files; activity imports remain frozen.
+  Final phase-6 suite **21/21** passes; historical suites unchanged. Fixture
+  recompiles; original bytecode was rebuilt from restored `e71ddac3a` before
+  the repeated **42/42** overload audit. The transient prefix/newline failure
+  was rejected, not accepted as parity. Evidence `p6/finalize-imports.log`,
+  `reviewed-destination-imports.json`, `phase6-final-self-tests.log`.
+
+- 2026-10-08 — **Phase 6 step 0 complete; STOP before production moves.**
+  Original `e71ddac3a` passes all **43** new characterizations, spanning
+  four independent style instances, cached style/tree, hierarchy/drawables/
+  typography, dock geometry and layout callbacks, entrance/hide/tick
+  timings, now/next/progress, LIVE/REC/favourites, same-channel repaint,
+  window install/merge, default arguments and both Glide lifecycle paths.
+  **45/45** original mutations fail named assertions (every new test plus
+  two explicit layout-callback proofs); no compile/crash/zero-test proof.
+  Final `p6-step0` has **632 identities / 631 pass / the existing focus
+  failure**: all 589 clean `baseline-e71ddac3a` statuses identical, 43
+  passing additions only, complete XML and stable fingerprints. Original
+  lint archived: 1,352 issues, 253 errors/1,099 warnings (175 opt-in errors);
+  no fix. Mutation table in deps; raw evidence `p6/` and `junit/`.
+  Provisional baseline retained separately after strengthening two layout
+  cases; final baseline rerun and compared, no regressions accepted.
+  Manifest named-test metadata matches recorded cases; move/patch/proof
+  configuration unchanged. Production, previous manifests/destinations,
+  lockfile and ProGuard unchanged. Temporary original worktree removed.
+  No production moves, push, branch switch, device interaction or self
+  independent review. Claude's independent sample/review and any 0b follow.
+
+- 2026-10-08 — **Phase 6 step 0b complete.** Closed Claude h11 and swept both
+  paging gates across four styles: stale totals with paging inactive, paged
+  positive/nonpositive totals, empty/single/multiple windows and favourite
+  hint gating. Original control 47/47; eight named assertion mutation proofs
+  pass; exact h11 rerun kills all four new cases. `p6-step0b`: 636 identities
+  (635 pass, existing focus failure); all 632 step-0 statuses unchanged, four
+  passing additions only. Evidence `p6/step0b/`, table in deps; production
+  unchanged and original worktree removed. Step 1 follows.
+
+- 2026-10-08 — **Phase 6 step 1 complete (`c21519da7`).** Exact manifest
+  extraction: classic controller 689 lines, eager nested styled renderer 729;
+  activity 16,487 → 15,167. All 47 characterizations pass unchanged; only the
+  shared reflection helper retargets 47 names (14 via nested `styled`).
+  No Dart retargets. Scoped size baseline updated with `--update`.
+  Computed 19-member Host, eager renderer first field and all 28 inert
+  proofs preserved; no lifecycle edits. Evidence `p6/step1/`.
+- 2026-10-08 — **Phase 6 gate complete; STOP for Claude’s review.** Tested
+  clean committed `c21519da7` tree. Checker: all 2,567 declarations, zero
+  differences; 118/118 self-tests; five historical `--at` checks (p5 at
+  e71ddac3a); 31 frozen earlier destinations, no whitelist. Compiled audit
+  42/42, all four Glide FragmentActivity calls; 28 initializer proofs and
+  identical teardown/lifecycle tokens. JVM exactly preserves all 636
+  p6-step0b identities (635 pass, existing focus failure). Five production
+  compiler warnings unchanged; lint exactly retains all 1,352 e71ddac3a
+  issues (253 errors, 175 opt-ins); analyzer all 1,758 prior identities.
+  Focused source tests exactly retain 44 passes/one existing failure.
+  Release APK succeeds; R8/DEX all seven new classes/152 members and three
+  negative controls pass. Decoder pending-environment: valid APK check,
+  failure output and all three native hashes identical to Phase 5; rejected
+  missing-argument invocation recorded separately. Full quiet Flutter suite
+  exactly matches all 12855 Phase-5 identity/status pairs
+  (12794 success/13 failure/28
+  error/20 skipped), same SDK/flags and stable clean tree.
+  Step 0b: four passing additions, eight original assertion proofs, exact
+  Claude h11 killed in all four styles (47/47 control). Evidence p6/step0b/,
+  p6/step1/, p6/gate/ and junit/; table/retargets in deps. Manifest/protected
+  inputs/earlier files unchanged; original worktree removed. No production
+  deviation, bug fix, push, branch switch, device/emulator or self independent
+  review. **STOPPED after phase 6**; Claude reviews separately.
+- 2026-10-08 — phase 6 post-implementation reviews of `239460785..a72dfb14f`.
+  Claude's 20-mutation sample 19/20 (first-occurrence variant for strings
+  duplicated between classic/styled); survivor h11 (paging-gated category
+  total) closed in 0b. Independent Codex review (fresh session): **No P1s,
+  no P2/P3**; 38 `classic.`/4 `styled.` qualifications correct, 28 inert
+  initializer proofs, 42 compiled overload descriptors (4 Glide
+  `FragmentActivity`) + historical 37 Toast sites reproduce. Activity
+  16,487 → 15,167. Decoder verification remains pending-environment.
+  Phase 6 complete; merged.
