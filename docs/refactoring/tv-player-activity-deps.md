@@ -9677,3 +9677,24 @@ cross-qualifiers 8 + 3, effective-slot mapping, Host ≈ 42, Handler allocated a
 - PK's exhaustion toast path checks `isFinishing` but not `isDestroyed` (6573); pin as-is.
 - Dart rows 2, 3, 5, 11 are whole-file `contains`; consider `_between` ranges of the owning gate functions
   in a separate test-only change.
+
+## Phase 9 Step T — re-measured at c4906cd2f
+
+The selected gate inventory is unchanged: 46 activity members plus five
+constants, with the controller anchored at the `startupFailoverCursor`
+attached-comment slot (1078; declaration 1081). The first block remains
+1081–1099, the second 1143–1156; the intervening recovery timestamp and
+progress reporter remain activity-owned. The sixteen gate functions remain
+12290–12898. `sourceSwitchController` is now 12899–12978;
+`parsePayload` begins 13213; `onDestroy` begins 13570 and its fifteen gate
+statements remain 13589–13603. Constants are at 13918–13927. Exact PSI
+selectors and spans are archived in p9/remeasured-inventory.json and pinned
+by dev/tool/kotlin_moves/tvplayer_p9.json.
+
+The complete fixture produces a 718-line controller and 13,320-line activity.
+It compiles with production configuration and passes all five receiver pins.
+The 152 historical self-tests retain their own manifests; phase 9 adds 22
+extraction cases and eight compiled auditor cases (182 total, all passing).
+All 36 earlier destination files, including both phase-8 switcher files, are
+frozen at c4906cd2f with an empty whitelist. The existing phase-8 suite has
+72 cases (the inventory's pre-0b count of 45 is superseded).

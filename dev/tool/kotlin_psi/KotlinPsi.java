@@ -238,8 +238,26 @@ public final class KotlinPsi {
                         }
                     }
                 }
+                List<Object> inheritedSites = new ArrayList<>();
+                // These reviewed calls have an implicit Activity receiver, not
+                // an Activity argument. Explicit receivers (including super)
+                // are excluded; bytecode pins the actual inherited dispatch.
+                for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
+                    String callee = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
+                    if (!callee.equals("finish") && !callee.equals("findViewById")) continue;
+                    if (call.getParent() instanceof KtQualifiedExpression &&
+                        ((KtQualifiedExpression)call.getParent()).getSelectorExpression() == call) continue;
+                    PsiElement scope = call.getParent();
+                    while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
+                    if (!(scope instanceof KtClass)) continue;
+                    inheritedSites.add(map("start", offset(call.getTextRange().getStartOffset()),
+                        "call_start", offset(call.getTextRange().getStartOffset()),
+                        "call_end", offset(call.getTextRange().getEndOffset()), "callee", callee,
+                        "receiver", "implicit-inherited", "lexical_class", ((KtClass)scope).getName()));
+                }
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,
+                    "implicit_inherited_sites", inheritedSites,
                     "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));

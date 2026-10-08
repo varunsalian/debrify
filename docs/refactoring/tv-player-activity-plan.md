@@ -2132,3 +2132,19 @@ finishes and reports), Stremio TV channel startup.
   (VOD vs Stremio TV exhaustion characterized separately; 14th owner-map
   route for the phase-8 boundary tests + rescan; auditor extension for
   implicit inherited receivers with opcode pinning). Phase 9 design approved.
+
+- 2026-10-08 — phase 9 Step T complete against `c4906cd2f`. Re-measured
+  manifest: 51 moved subtrees (30 fields, 16 functions, 5 constants),
+  29 initializer proofs, 32 computed Host members, 93 activity-reference
+  edits plus 18 token edits in the two whole-property rows (15 Host re-points).
+  All 182 checker/auditor self-tests pass: 152 historical plus 22 extraction
+  and 8 compiled inherited-receiver tests. Original self-comparison classifies
+  all 2359 declarations with zero differences; all 36 earlier destinations
+  remain frozen. Full production-config extraction fixture compiles (718-line
+  controller) and its five receiver sites pass the bytecode audit, including
+  explicit owner/descriptor/`invokevirtual` pins for three `findViewById`
+  calls and `finish`; both Runnable self receivers are preserved. Static,
+  super and widened-receiver compiled negatives fail for their stated reason.
+  Evidence: p9/checker-self-tests-final.log, original-self-comparison.log,
+  earlier-destinations.log, fixture-compile.log, overload-audit.json and
+  fixtures/phase9-overloads/. Production unchanged; Step 0 follows.
