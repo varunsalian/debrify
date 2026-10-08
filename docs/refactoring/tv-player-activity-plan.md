@@ -1879,3 +1879,11 @@ ready, back-key behaviour inside the guide list and search box.
   manifests/protected inputs/earlier files unchanged, original trees removed.
   No production deviation, bug fix, push, branch switch, device/emulator
   interaction or self independent review. **STOPPED after phase 7**.
+- 2026-10-08 — phase 7 post-implementation reviews of `43a39dea9..cfd2a3f17`.
+  Claude's 18-mutation sample 16/18; survivors i03 (hide cancels the guide
+  wait) and i08 (uppercase header letter) closed in 0b. Independent Codex
+  review (fresh session): **No P1s, no P2/P3**; 16 inert proofs, 8 compiled
+  receiver descriptors, `finish()` virtual dispatch, true/false
+  `hideGuideOnReady`, unguarded guide-data replies, watchdog assertions
+  byte-identical. Activity 15,167 → 14,637. Decoder verification remains
+  pending-environment. Phase 7 complete; merged.
