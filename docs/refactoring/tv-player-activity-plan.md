@@ -838,6 +838,77 @@ series): external subtitles (load, timing, offset), subtitle track switching
 incl. off, subtitle settings panel, auto-sync manual run + automatic verify
 (incl. a long file on a low-RAM box), the auto-sync pill states.
 
+## Phase 5 — progress reporter, IPTV channel start + Stremio candidate ladder, Start Over
+
+Branch `refactor/tvplayer-p5` off the phase-4 merge `1a33c42cb` (activity 17,205 lines). Evidence under
+`refactor-evidence/tvplayer/p5/`. The feasibility inventory (incl. the
+complete writer/reader table of the IPTV shared token fields, Appendix 2) is
+the "Phase 5 inventory" section of the deps report; lines are at
+`eee52b084` and are re-measured on the phase-4 merge. All phase-3/4
+collaborator rules apply unchanged (incl. the extended bytecode overload
+audit and the initializer-timing rule).
+
+**Selected (≈ 792 moved lines, ≈ 36 activity edits in 19 declarations):**
+
+- `TvProgressReporter` — `sendProgress`, the final-progress snapshot and
+  recovery staging/ack handling (≈ 266 lines, 12 edits in 8 declarations +
+  1 edit to the phase-3 sleep controller's Host `sendProgress` forwarder —
+  an explicitly reviewed `patched` change to a phase-3 destination,
+  whitelisted in the earlier-destination comparison). `sendFinished` stays
+  in the activity (a whole-file Dart test pins its payload). The two edits
+  inside `recordPlaybackLifecycle`'s string template use braced host
+  references. Retargets: 5 reflective calls in
+  `StremioTvStartupWatchdogTest` and 1 Dart anchor
+  (`manual_source_validation_contract_test.dart`), each with equal assertions.
+- `TvIptvChannelStartController` — watch registration + startup-channel
+  memory and the Stremio candidate ladder together with
+  `beginIptvPlayback` (14 of the ladder's 23 inbound references are there).
+- `TvIptvStartOverController` — owns `iptvCatchupToken` and the catch-up
+  request flow; the three Start Over status flags stay in the activity
+  (written by live recovery, the player error path and channel switch).
+
+**IPTV split rule (from the inventory).** Only guide + browse + zap paging +
+channel switch (+ `initIptvMode`) must move as one unit, because six shared
+token/context fields (`iptvUiContextToken`, `iptvBrowseToken`,
+`iptvZapRequestToken`, `iptvZapOwnsUiContext`, `iptvZapRequestInFlight`,
+`iptvZapPendingInputs`) are written by both guide and zap code. Phase 5 moves
+none of that core and none of those fields; each phase-5 async guard is owned
+by exactly one controller. Planned order afterwards: zap banner (split
+classic/styled to stay ≤ 800 lines per file), then core + EPG + VOD as one
+multi-file unit; live dock styling with the controls phase; tune pipeline,
+twin trial and live recovery with the playback core.
+
+**Hazards for step T** (all must be fixtures/negatives): shadowed locals
+`window` and `currentIndex` (no host substitution), the `this.index`
+receiver that must not be rewritten, default arguments that read activity
+state (evaluated at call time — must stay so), and controllers constructed
+before the `iptvBrowseHandler`/`progressHandler` they borrow (Host getters
+are computed, never read at construction; the 16 earlier-running moved
+initializers are listed and proven constant/empty-allocation).
+
+### Step 0 — characterization of the original
+
+- Progress: every `sendProgress` path (periodic, completed, paused, sleep,
+  final snapshot in `finish`/`onStop`/`onDestroy` incl. the non-try/finally
+  `onStop` difference), argument maps sent to Flutter, ack handling and
+  recovery staging (`TvPlaybackRecoveryStore`), and the reflective contracts
+  the watchdog test uses.
+- Channel start: watch registration payload, startup-channel memory
+  read/write, `beginIptvPlayback` ordering, Stremio candidate ladder
+  (candidate order, failure advance, winner reporting, token supersession,
+  `isFinishing` guard) with the recording fake channel.
+- Start Over: catch-up request/token supersession, timeline/flag effects as
+  observed through the retained flags, cancellation on stop/destroy.
+- Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus every phase-3/4 gate addition. Device checklist (end of
+series): resume position saved on exit/stop/sleep and restored next launch;
+Trakt/Simkl progress after watching; IPTV channel start incl. a Stremio
+IPTV channel with failing first candidates; startup channel remembered;
+Start Over / catch-up on an archive-enabled channel.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
