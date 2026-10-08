@@ -2391,3 +2391,22 @@ episode fetch from the player, status pill messages.
   watchdog/shuffle helper retargets and the equal Dart candidate-count anchor;
   every Kotlin assertion unchanged. Checker classifies all 2,309 declarations
   with zero differences; all 115 focused JVM cases pass. Gate follows.
+
+- 2026-10-08 — **Phase 10 gate complete; STOPPED.**
+  Tested clean move `de9fadaca`: 2,309 declarations/zero diffs, all 222
+  checker/auditor self-tests, historical phases 1–9 and 37 frozen earlier
+  files pass. All 32 compiled receiver pins, four initializer proofs, four
+  Runnable selves and teardown order preserved. JVM `p10-gate` vs
+  `p10-step0b`: exact 904 statuses (903 pass + known focus failure), matched
+  1024 MiB worker. Five production warnings unchanged; lint exact 1,352
+  issues after refreshing only the stale derived Maven index from a clean
+  original rerun (initial rejected reports retained, no normalization or
+  build configuration changes). Release APK succeeds; R8/DEX 16 classes,
+  223 members and all three Hosts preserve identity. Decoder remains
+  pending-environment with phase-1/9 identical libraries and gaps.
+  Full Flutter vs phase-9 gate: exact 12,855 statuses (12,794 success,
+  13 failure, 28 error, 20 skipped); 45 affected source tests and 1,758
+  analyzer diagnostics unchanged. Sizes 81/249/431, Activity 12,717.
+  Retarget assertions preserved, protected inputs unchanged, detached
+  evidence worktree removed. Evidence `p10/gate/`; no push, device,
+  emulator, bug fix or self independent review. Stopped for Claude review.
