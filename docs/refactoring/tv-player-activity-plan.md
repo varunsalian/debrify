@@ -1437,3 +1437,9 @@ Start Over / catch-up on an archive-enabled channel.
   earlier destinations frozen at `1a33c42cb`, no whitelist. Sleep wiring is
   one patched activity-property row with named existing characterization and
   extra-edit negative. Evidence: `p5/`; production unchanged.
+
+- 2026-10-08 — phase 5 step-T routing follow-up: direct invocation of
+  `test_kotlin_moves.py --manifest …` now selects the active evidence phase,
+  matching the checker wrapper. All historical fixture output stays under
+  `p5/`; the direct dispatcher also passes **97/97** tests. Evidence:
+  `p5/direct-dispatch-self-tests.log`. No production changes.

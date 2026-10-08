@@ -178,6 +178,7 @@ class KotlinMovesTest(unittest.TestCase):
 def run(manifest_path=k.MANIFEST):
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(KotlinMovesTest)
     manifest = json.loads(Path(manifest_path).read_text())
+    k.EVIDENCE_PHASE = 'p' + str(manifest['phase'])
     if manifest['phase'] >= 2:
         import test_kotlin_moves_phase2
         test_kotlin_moves_phase2.MANIFEST = (manifest if manifest['phase'] == 2 else
