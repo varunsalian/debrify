@@ -65,6 +65,36 @@ internal object TvPlayerOriginalAccess {
     )
 
     private val controllerOwners = mapOf(
+        "beginManualSourceCandidate" to "startupGateController",
+        "beginStartupFailoverIfEligible" to "startupGateController",
+        "commitManualSourceCandidate" to "startupGateController",
+        "commitStartupCandidate" to "startupGateController",
+        "manualSourceCandidateUrl" to "startupGateController",
+        "manualSourceCommitCheck" to "startupGateController",
+        "manualSourceMediaReplaced" to "startupGateController",
+        "manualSourceRestoreInProgress" to "startupGateController",
+        "manualSourceSwitchIndex" to "startupGateController",
+        "manualSourceSwitchSnapshot" to "startupGateController",
+        "manualSourceSwitchTimeout" to "startupGateController",
+        "pikPakGateReprepare" to "startupGateController",
+        "schedulePikPakGateReprepare" to "startupGateController",
+        "startupCommitCheck" to "startupGateController",
+        "startupFailedReleases" to "startupGateController",
+        "startupFailoverCursor" to "startupGateController",
+        "startupFailoverDispatching" to "startupGateController",
+        "startupFailoverGeneration" to "startupGateController",
+        "startupFailoverTimeout" to "startupGateController",
+        "startupFirstFrameAtElapsedMs" to "startupGateController",
+        "startupHasRemainingSavedSources" to "startupGateController",
+        "startupMaxAttempts" to "startupGateController",
+        "startupPikPakTorrentAcquisitionAttempted" to "startupGateController",
+        "startupRecoveryAvailable" to "startupGateController",
+        "startupRecoveryCandidateIndices" to "startupGateController",
+        "startupRecoveryConsumed" to "startupGateController",
+        "startupRecoveryFetching" to "startupGateController",
+        "startupResolverProvider" to "startupGateController",
+        "startupSourcesExhausted" to "startupGateController",
+        "startupTryNextOnFailure" to "startupGateController",
         "cancelSourceSwitchWait" to "sourceSwitchController",
         "dropStaleSourceSwitchFeedback" to "sourceSwitchController",
         "hideStremioSourceBadge" to "sourceSwitchController",
@@ -375,6 +405,10 @@ internal object TvPlayerOriginalAccess {
         "updateIptvStartOverButton" to "iptvStartOverController",
         "updateIptvStartOverSeekButton" to "iptvStartOverController",
     )
+
+    fun isStartupArm(frame: StackTraceElement): Boolean =
+        frame.className == TvStartupGateController::class.java.name &&
+            frame.methodName.substringBefore('$') == "armStartupCandidate"
 
     private fun memberOwner(owner: Any, name: String): Any {
         if (owner !is AndroidTvTorrentPlayerActivity) return owner

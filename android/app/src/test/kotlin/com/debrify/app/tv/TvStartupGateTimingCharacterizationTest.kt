@@ -158,7 +158,7 @@ internal class TvStartupGateTimingCharacterizationTest : TvPhase9OriginalTest() 
         val flaky = object : ArrayList<StremioSource>() {
             override fun get(index: Int): StremioSource {
                 val source = super.get(index)
-                if (index == 1 && Thread.currentThread().stackTrace.any { it.methodName == "armStartupCandidate" }) {
+                if (index == 1 && Thread.currentThread().stackTrace.any { TvPlayerOriginalAccess.isStartupArm(it) }) {
                     removeAt(index)
                 }
                 return source

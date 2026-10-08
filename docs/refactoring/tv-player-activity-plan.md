@@ -2186,3 +2186,17 @@ finishes and reports), Stremio TV channel startup.
   identities/statuses retained with 11 passing additions only. Owner rescan
   remains 30. Raw proofs/control/XML and comparisons: p9/step0b/. Production
   unchanged; approved Step 1 moves and the gate follow.
+
+- 2026-10-08 — phase 9 Step 1 moves complete: manifest materialized with
+  slot-anchored 718-line gate controller / 13,320-line activity, 32 computed
+  Host members, 29 inert initializer proofs, 93 activity edits and the two
+  whole-property rows' 15 re-points (18 token edits). The fifteen teardown
+  statements remain in place; all 36 earlier destinations are byte-identical.
+  Checker: 2359 declarations, zero differences; five compiled receiver sites
+  retain descriptor/opcode pins, including virtual finish. All 155 focused
+  JVM cases pass; 45 Dart source-test statuses exactly match phase 8. Thirty
+  owner routes, watchdog public-call routing and the compiled-order helper
+  are retargeted; one stack-frame fixture hook additionally follows the
+  internal JVM suffix through a helper, with assertions unchanged. Five
+  Dart anchor changes and an added session-payload assertion are formatted;
+  size baseline lowered. Evidence: p9/step1/ and p9/gate/. Full gate follows.

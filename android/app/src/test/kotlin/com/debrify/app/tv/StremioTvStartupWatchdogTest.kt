@@ -38,6 +38,9 @@ class StremioTvStartupWatchdogTest {
         val owner = when (name) {
             "sendProgress" -> TvPlayerOriginalAccess.field(activity, "progressReporter")!!
             "initStremioTvGuide" -> TvPlayerOriginalAccess.field(activity, "stremioTvGuideController")!!
+            "beginStartupFailoverIfEligible", "commitStartupCandidate", "beginManualSourceCandidate",
+            "commitManualSourceCandidate", "schedulePikPakGateReprepare" ->
+                TvPlayerOriginalAccess.field(activity, "startupGateController")!!
             else -> activity
         }
         val method = owner.javaClass.declaredMethods.first { it.name == name && it.parameterCount == args.size }

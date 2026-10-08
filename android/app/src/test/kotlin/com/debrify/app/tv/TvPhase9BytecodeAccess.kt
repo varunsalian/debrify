@@ -19,12 +19,16 @@ internal object TvPhase9BytecodeAccess {
                     if (name != "onDestroy") return null
                     return object : MethodVisitor(Opcodes.ASM9) {
                         var inside = false
-                        override fun visitFieldInsn(opcode: Int, owner: String, name: String, descriptor: String) {
-                            if (name == "startupFailoverTimeout") inside = true
-                            if (inside && opcode == Opcodes.PUTFIELD) events.add(name)
-                            if (name == "startupFailoverCursor" && opcode == Opcodes.PUTFIELD) inside = false
-                        }
                         override fun visitMethodInsn(opcode: Int, owner: String, name: String, descriptor: String, isInterface: Boolean) {
+                            if (owner.endsWith("/TvStartupGateController")) {
+                                val member = name.substringBefore('$')
+                                if (member == "getStartupFailoverTimeout") inside = true
+                                if (inside && member.startsWith("set")) {
+                                    val property = member.removePrefix("set").replaceFirstChar { it.lowercase() }
+                                    events.add(property)
+                                    if (property == "startupFailoverCursor") inside = false
+                                }
+                            }
                             if (inside && name == "removeCallbacks") events.add("remove")
                         }
                     }

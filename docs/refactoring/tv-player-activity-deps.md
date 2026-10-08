@@ -9883,3 +9883,37 @@ post-0b owner rescan still requires 30 routes; no new public function needed.
 | b26 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): startupFailoverGeneration++ → Unit | expected:<2> but was:<1> |
 | b27 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): player?.stop() → Unit | failure stops rejected player |
 | b28 | TvStartupGateBoundaryCharacterizationTest::rearmingStartupReplacesTimeoutAndRemovesPendingCommitCheck | fun armStartupCandidate(Int): startupFailoverGeneration++ → Unit | expected:<1> but was:<0> |
+
+## Phase 9 step 1 retargets
+
+Materialized the approved exhaustive manifest: startup/manual gate state and
+functions move to `TvStartupGateController` (718 lines); the activity becomes
+13,320 lines. The controller is slot-anchored at `startupFailoverCursor`, uses
+AppCompatActivity and 32 computed explicitly-qualified Host members, and
+retains all 29 inert initializer proofs. The two whole-property rows repoint
+15 Host members with 18 exact token edits; the other 93 edits and four braced
+activity templates follow the manifest. The fifteen teardown statements stay
+in place and in order. All 36 earlier destinations remain byte-identical.
+
+Reflection helper routes: all 30 entries in p9/step0b/reflection-owner-rescan.json
+now target `startupGateController`. Watchdog `call` routes the five approved
+public reflected functions; no internal function is reflected/invoked. The
+compiled-order helper maps the controller's accessors to the same fifteen
+events. One additional fixture route was discovered by the affected run:
+the unreachable missing-row test's stack-frame hook matched the original
+`armStartupCandidate` name; the moved internal JVM name has a module suffix.
+`TvPlayerOriginalAccess.isStartupArm` now identifies that controller frame
+and strips only the suffix. Its list behavior and every assertion stay the
+same. No production visibility change beyond the manifest.
+
+Dart: the five listed anchors/file sources now read the gate, the manual
+rollback call checks `host.playItem(host.currentIndex, suppressTrakt = true)`,
+and the gate's `sourcePersistenceSessionId` payload reference has the added
+assertion. Dart formatting changes only the two affected expect statements.
+Exact reversible patches and pre-move test hashes: p9/step1/retargets.json.
+All other tests and assertions remain byte-identical. Checker classifies
+2359 declarations with zero differences; five compiled receiver sites pass
+(inherited findViewById and virtual finish included). Focused JVM cases pass;
+45 Dart source-test identities match the phase-8 gate exactly (44 success,
+one existing failure). The focused Dart run intentionally records the dirty
+move tree; the full gate runs after the move commit on a clean tree.
