@@ -1828,3 +1828,16 @@ ready, back-key behaviour inside the guide list and search box.
   worktree removed. No production moves, retargets, push, branch switch,
   device/emulator interaction or self independent review. **STOP**; Claude
   runs the independent sample/review and any 0b follows separately.
+
+- 2026-10-08 — **Phase 7 step 0b complete before moves.** Fourteen original
+  cases close i03/i08 and sweep every guide-wait cleanup call, both overlay
+  cancellations, uppercase header/row fallbacks, type/rating/number/year/Next
+  formatting and recycled-row Glide clearing. Original control 51/51;
+  17/17 named assertion proofs with final fixture hashes, exact Claude i03/i08
+  killed against all 51 cases. Clean-run `p7-step0b`: 687 identities, 686 pass,
+  unchanged focus failure; all 673 p7-step0 statuses identical, 14 passing
+  additions only, complete XML/stable fingerprints. Provisional fixture and
+  mutation attempts rejected/archived; no behavior allowance changed.
+  Table/evidence in deps and p7/step0b/, junit/p7-step0b/; detached original
+  removed. Production, manifests, protected inputs and previous assertions
+  unchanged. Step 1 and gate follow; no self independent review.

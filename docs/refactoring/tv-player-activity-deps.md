@@ -8064,3 +8064,68 @@ All rows are **killed by assertions on a4ed4f368**, using the final fixture.
 | p7-50 | Wiring.`guideKeyRoutingConsumesLeftOffersSearchOnHeldUpAndClosesOnBack` | `hideStremioTvGuide() → Unit` | Back closes the guide through its production caller |
 | p7-51 | Wiring.`guideVisibilityBlocksCleanPlaybackStateWithoutOtherOverlays` | `iptvGuideVisible \|\| stremioTvGuideVisible → iptvGuideVisible \|\| false` | guide visibility blocks clean playback state expected:<false> but was:<true> |
 | p7-52 | Wiring.`nextButtonAndEndedDispatchDifferentFinishArguments` | `requestStremioTvNext() → requestStremioTvNext(finishOnFailure = true)` | manual Next retains activity on failure expected:<false> but was:<true> |
+
+### Phase 7 step 0b — guide cleanup and text transforms (original `a4ed4f368`)
+
+Closed Claude's i03/i08 survivors with active guide waits and lowercase-initial
+channel names. **14** new cases; **51/51** Phase-7 original control cases pass.
+Hide, toggle and the real Back caller unregister the current player's listener,
+clear both wait references and remove the 10 s deadline. The cleanup sweep pins
+replacement waits, READY and timeout cleanup while already hidden, IDLE keeping
+the guide open, null current players and idempotence, and preservation of unrelated
+callbacks on the borrowed progress handler. Both show/hide overlay cancellation
+calls are covered with pending platform animations driven to a controlled frame;
+reopening cancels all prior animation properties, not only alpha.
+
+Text sweep: lowercase fallback initials in the header (absent and failed poster)
+and row, mixed-case row type uppercasing, row rating's one-place US decimal under
+a German locale, channel-number/year/Next formatting, and clearing an old Glide
+request when rebinding without artwork. Existing search cases pin all four
+lowercase transforms (query/name/type/programme); existing Phase-1/2 cases retain
+12 AM/PM and padded minute formatting, all row/header title/year/rating joins,
+poster visibility and lifecycle ownership. Existing Phase-7 data/Next/switch
+cases cover every error/notImplemented/send-exception cleanup and stale-reply
+branch. No production or earlier-destination file changes.
+
+**17/17** named original mutations fail assertions, covering every new test;
+exact Claude i03/i08 reruns against all **51** Phase-7 cases are both killed by
+assertions. Complete logs, patches, XML, exact definitions and final fixture
+hashes: `p7/step0b/`. Claude's independent original results remain untouched.
+Provisional animation fixtures that drained the pending animation, an initial
+stale adapter snapshot and the first non-observable alpha-only cancellation
+mutation were rejected and archived. Final controls/proofs use the committed
+fixture; no crash, compile failure or zero-test run is accepted.
+
+`junit/p7-step0b`: **687 identities / 686 pass / unchanged source-browser focus
+failure**. Every one of the 673 `p7-step0` identity/status pairs is retained;
+14 passing additions only, complete XML, no abort and stable fingerprints.
+`android_junit_evidence.py compare` passes; strict additions-only JSON archived.
+Original worktree removed; lockfile, ProGuard, manifests and production unchanged.
+
+C = `TvStremioTvGuideCleanupAndTextCharacterizationTest`,
+R = `TvStremioTvGuideRowTextCharacterizationTest`.
+All proofs below use original a4ed4f368 and fail the named assertion.
+
+| Proof | Named test | Original mutation | Failing assertion |
+| --- | --- | --- | --- |
+| p7b-01 | C.`hideCancelsCurrentListenerAndPendingTimeout` | `cancelGuideWait() →` | java.lang.AssertionError: hide removes the current player's ready listener expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@111d611c]> but was:<[]> |
+| p7b-02 | C.`toggleAndBackHideCancelPendingGuideWait` | `cancelGuideWait() →` | java.lang.AssertionError: hide removes the current player's ready listener expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@7a158a5]> but was:<[]> |
+| p7b-03 | C.`cancelWithoutCurrentPlayerIsIdempotentAndPreservesOtherCallbacks` | `guidePanelReadyListener = null →` | java.lang.AssertionError: listener cleared even when current player is absent expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@3ce1ee1> |
+| p7b-04 | C.`replacementWaitRemovesOldDeadlineAndKeepsNewDeadline` | `// Clean up any previous listener/timeout cancelGuideWait() → // Clean up any previous listener/timeout` | java.lang.AssertionError: replacement unregisters old listener expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@6577b70a]> but was:<[]> |
+| p7b-05 | C.`readyWhileAlreadyHiddenStillCleansListenerAndTimeout` | `if (state == Player.STATE_READY) { cancelGuideWait() → if (state == Player.STATE_READY) {` | java.lang.AssertionError: hide removes the current player's ready listener expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@4986f8d6]> but was:<[]> |
+| p7b-06 | C.`timeoutWhileAlreadyHiddenStillCleansListenerAndReferences` | `val timeout = Runnable { cancelGuideWait() → val timeout = Runnable {` | java.lang.AssertionError: timeout cleanup runs even without another hide call expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@44238921]> but was:<[]> |
+| p7b-07 | C.`idleRemovesTimeoutWhileKeepingGuideVisible` | `// Playback error — keep guide open cancelGuideWait() → // Playback error — keep guide open` | java.lang.AssertionError: hide removes the current player's ready listener expected:<[com.debrify.app.tv.AndroidTvTorrentPlayerActivity$hideGuideWhenReady$listener$1@757ae459]> but was:<[]> |
+| p7b-08 | C.`showCancelsPendingHideCompletion` | `stremioTvGuideOverlay?.animate()?.cancel() →` | java.lang.AssertionError: show cancels all overlay properties, including translation |
+| p7b-09 | C.`hideCancelsRunningOverlayAnimation` | `stremioTvGuideOverlay?.animate()?.cancel() →` | java.lang.AssertionError: hide cancels the running overlay animation |
+| p7b-10 | C.`absentPosterUppercasesLowercaseHeaderInitial` | `current.name[0].uppercase() → current.name[0].toString()` | org.junit.ComparisonFailure: fallback header initial is uppercased expected:<[C]> but was:<[c]> |
+| p7b-11 | C.`failedPosterUppercasesLowercaseHeaderInitial` | `current.name[0].uppercase() → current.name[0].toString()` | org.junit.ComparisonFailure: failed poster uses uppercased fallback initial expected:<[C]> but was:<[c]> |
+| p7b-12 | C.`rowUppercasesLowercaseInitialAndMixedCaseType` | `channel.name[0].uppercase() → channel.name[0].toString()` | org.junit.ComparisonFailure: row uppercases the fallback initial expected:<[C]> but was:<[c]> |
+| p7b-13 | C.`rowUppercasesLowercaseInitialAndMixedCaseType` | `channel.type.uppercase() → channel.type.lowercase()` | org.junit.ComparisonFailure: row uppercases the full type expected:<[MOVIE]> but was:<[movie]> |
+| p7b-14 | C.`hideCancelsCurrentListenerAndPendingTimeout` | `progressHandler.removeCallbacks(it) → Unit` | java.lang.AssertionError: removed timeout cannot hide a subsequently visible guide |
+| p7b-15 | C.`cancelWithoutCurrentPlayerIsIdempotentAndPreservesOtherCallbacks` | `guidePanelTimeoutRunnable = null →` | java.lang.AssertionError: timeout cleared even when current player is absent expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$$Lambda/0x0000000800b3e320@4241d3a4> |
+| p7b-16 | R.`rowRatingUsesUsDecimalAndOnePlaceWithYearAndNextFormatting` | `String.format(java.util.Locale.US, "%.1f", channel.nowPlayingRating) → String.format("%.1f", channel.nowPlayingRating)` | org.junit.ComparisonFailure: row rating keeps US decimal and rounds to one place expected:<Film (2024) ★ 8[.]5> but was:<Film (2024) ★ 8[,]5> |
+| p7b-17 | R.`rowRebindWithoutPosterClearsPreviousGlideRequest` | `com.bumptech.glide.Glide.with(holder.itemView.context).clear(holder.poster) →` | java.lang.AssertionError: rebinding without artwork clears the previous request |
+
+Exact survivor reruns: i03 (hide cancellation) and i08 (header uppercase) each
+run all 51 cases; recorded failing assertions only, no compile/crash substitutes.
+No bug fix, device/emulator interaction, push, branch switch or self independent review.
