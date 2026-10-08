@@ -960,14 +960,24 @@ coupling with phase-5 controllers. Structure (inventory's recommendation):
 code's 38 references to 19 classic members become explicit `classic.x`
 substitutions and the classic code's 4 dispatch calls become `styled.x`, so
 any missed qualification fails to compile. The activity provides a single
-19-member Host. Extension functions are rejected (size-rule evasion). Eight
-trivial `null`/`0` initializers run earlier and get inert proofs. ≈ 281
+19-member Host. Extension functions are rejected (size-rule evasion).
+**Initializer timing:** the renderer is constructed inside the classic
+controller, so *all eight* renderer fields run at the classic controller's
+construction slot, and every classic field after its first does too —
+**28 inert proofs** in total under the existing all-later-fields rule (no
+contiguous-block exemption). ≈ 281
 declared substitutions incl. 122 `dp` calls and 42 overload-audit sites
 (4 `Glide.with`).
 
 **Step T.** Checker support for a destination class that constructs a second
 destination class (both pinned structurally; the renderer's constructor
-argument pinned), the `classic.`/`styled.` cross-qualification substitutions
+argument and its initializer position inside the classic controller pinned;
+**effective construction-slot mapping** so the renderer's fields are proved
+against the classic controller's slot), the initializer classifier extended
+narrowly for `Any()` and `Color.parseColor("<string literal>")` (literal
+argument only), a complete production extraction fixture with all 28 proofs,
+negatives for a missing renderer-first-field proof and for reading
+`classic`/Host during construction, the `classic.`/`styled.` cross-qualification substitutions
 with occurrence counts, and negatives (missed qualification compiled against
 a same-name Host member, renderer constructed lazily vs eagerly, swapped
 dispatch target). Per-phase dispatcher; earlier destinations frozen at the
@@ -975,13 +985,20 @@ phase-5 merge.
 
 ### Step 0 — characterization of the original
 
-Classic and styled banner: show/hide timing, now/next/EPG text, channel
-number/name/logo (Glide request lifecycle owner), favourite/live/archive
-badges, progress, paging behaviour hooks, focus, layout-listener-driven
-measurements (pinned as-is; listener removal is a recorded follow-up), the
-four styled painters' outputs (non-pixel, Paint-copying canvas as in phase
-1), and switching between classic and styled at runtime. Mutation proofs on
-the original; Claude's independent sample; 0b.
+The banner style and guide tokens are cached lazies, and the builder returns
+the existing tree before checking tokens, so style is fixed per activity
+session: characterize **four separate activity instances**, one per style,
+and prove that a preference change mid-session keeps the existing session's
+style and tree. Assert directly: view hierarchy, drawable properties,
+typography, progress, floating vs docked transitions, show/hide timing,
+now/next/EPG text, channel number/name/logo (Glide request lifecycle
+owner), the **LIVE/REC** badges, and favourites-gated jump-hint visibility.
+The two styled `paint…` functions mutate views (they do not draw through
+Canvas) — assert their view effects; a recording canvas is used only where a
+drawable's own drawing is shown to be observable. Pin as-is: an explicit hide
+cancels the tick token but leaves the pending hide callback posted; layout
+listeners are never removed (recorded follow-up). Mutation proofs on the
+original; Claude's independent sample; 0b.
 
 ### Gate, review, device checks
 
@@ -1581,3 +1598,9 @@ zap banner in classic and each styled guide style while zapping channels
   non-finally vs `finish`/`onDestroy` finally all preserved. Activity
   17,205 → 16,487. Decoder verification remains pending-environment.
   Phase 5 complete; merged.
+- 2026-10-08 — phase 6 design round 1 (Codex): P1 folded (renderer fields run
+  at the classic controller's slot → effective slot mapping, 28 inert
+  proofs, classifier support for `Any()`/`Color.parseColor(literal)`, new
+  negatives); P2 step 0 corrected to the real implementation (per-style
+  activity instances, cached style, view-mutating painters, LIVE/REC badges,
+  favourites hint gating, hide leaves the pending callback).
