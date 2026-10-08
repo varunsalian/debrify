@@ -2636,3 +2636,34 @@ episode next/previous, startup channel restore, Start Over after a switch.
   47 initializer proofs and full lifecycle order are unchanged. Historical and
   current checker self-tests and the full clean-tree gate follow. Evidence
   `p11/step1/`, `p11/gate/`. No bug fix, dependency or ProGuard change.
+
+- 2026-10-09 — **Phase 11 gate complete on `74c99a786`; STOPPED.**
+  Checker: 2,295 original declarations classified, zero differences; all 266
+  self-tests (including complete phase-11 extraction and negatives), p1–p10
+  historical merge checks and 40 frozen earlier destination files pass. All 13
+  production receiver pins, exactly two entry-lambda exclusions, the retained
+  EditText(Context) site and its compiled substituted constructor fixture pass.
+  All 47 initializer proofs, eager fieldless construction, protected inputs,
+  unchanged assertion bytes and full lifecycle teardown order are verified.
+  Clean matched-heap JVM `p11-gate` exactly matches `p11-step0c`: 1,137
+  identities (1,136 pass, same known source-browser focus failure), no skips;
+  all 233 phase-11 characterizations pass. All five Kotlin warning identities
+  remain. Lint exactly matches archived original `00c60870e`: 1,352 issues,
+  253 errors/1,099 warnings, 175 opt-in errors. Analyzer matches all 1,758
+  phase-10 diagnostics. Release APK succeeds without installation; R8/DEX
+  preserves every new controller/Host/anonymous class and member (8 classes,
+  303 members, three negative controls). Decoder check remains
+  **pending-environment**: output, missing decoder/filter manifests and all three
+  native hashes are identical to phase 10 and phase 1, without a workaround.
+  Full clean-tree Flutter suite via `suite_evidence.py` exactly matches all
+  12,855 phase-10 identity/status pairs (12,794 success, 13 failure, 28 error,
+  20 skipped; 1,232 suites); affected Dart checks match all 45 prior outcomes.
+  Step 0c adds three passing JVM cases, nine named original proofs and the exact
+  all-233 n01 kill; n13/n16 are documented equivalent. Evidence `p11/step0c/`,
+  `p11/step1/`, `p11/gate/`, `junit/p11-step0c/`, `junit/p11-gate/`.
+  Public reflection pins were updated from the Step-0b rescan; only the shared
+  helper routes changed, and no Dart/watchdog selector retarget was necessary.
+  Matched 1 GiB test workers remain an evidence-only pre-existing harness
+  exception. Detached original removed; lockfile and ProGuard unchanged.
+  No bug fix, push, branch switch, device/emulator, or self independent review.
+  **STOPPED after phase 11**; Claude reviews separately.

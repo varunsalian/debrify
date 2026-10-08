@@ -12909,3 +12909,32 @@ same JBR and 1 GiB worker. Reflection rescan still needs 89 owner routes,
 | `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load more channels" → message?.takeIf { it.isNotEmpty() } ?: "Unable to load more channels"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[]> but was:<[Unable to load more channels]>` (`requestIptvZapPage-empty`) |
 | `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load more channels" → "Unable to load more channels"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Provider-specific failure]> but was:<[Unable to load more channels]>` (`requestIptvZapPage-server`) |
 | `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | Claude exact n01: `message ?: "Unable to load more channels" → "Unable to load more channels"` | `org.junit.ComparisonFailure: expected Provider-specific failure, got Unable to load more channels`; all 233 tests run |
+
+
+## Phase 11 extraction and gate (`74c99a786`)
+
+The manifest is materialized: guide owns all 48 core fields, with eager
+fieldless pager and navigator collaborators. File sizes are 425/524/431 lines;
+activity is 11,458 lines (from 12,717). Its original `initIptvMode` bootstrap,
+phase-12 chrome/EPG/pickers, and five core cleanup statements stay in place
+with exact owner prefixes. The 89-route shared reflection map covers 45 fields
+and all 44 moved functions; 43 additional public visibility pins are declared
+in the manifest. All existing characterization assertions and other test files
+are byte-identical after reversing the single authorized helper patch.
+
+All 233 phase-11 characterizations pass, and the clean 1,137-identity JVM gate
+exactly matches Step 0c. Checker self-tests (266), original classification
+(2,295; zero differences), all ten historical manifests, 40 frozen destinations,
+13 bytecode receiver pins, two receiver-lambda exclusions, retained and
+substituted EditText(Context) constructor proofs, 47 initializer proofs and
+full lifecycle order pass. Lint's 1,352 original issues and analyzer's 1,758
+phase-10 diagnostics are unchanged. Release succeeds; eight new bytecode
+classes and 303 members retain R8/DEX identities. Full Flutter suite exactly
+retains 12,855 prior identity/status pairs and the same SDK on a stable clean
+tree. Decoder verification retains phase 1's environment failure and identical
+three-ABI hashes/missing manifests; it remains pending-environment.
+
+Raw logs, XML, bytecode/mapping inventories and identity comparisons are in
+`p11/gate/`, `junit/p11-gate/`; the 233-case move control and exact test-retarget
+proofs are in `p11/step1/`. No production redesign, dependency/lockfile or
+ProGuard change, bug fix, device interaction or self independent review.
