@@ -1431,6 +1431,86 @@ guide (open/close, browse categories, search), zapping up/down and by number
 across category pages, channel switch while the guide is open/closed, VOD
 episode next/previous, startup channel restore, Start Over after a switch.
 
+## Phase 12 — IPTV guide chrome (EPG pane + now/next header, overlay builder, pickers)
+
+Branch `refactor/tvplayer-p12` off the phase-11 merge `b870a16b1` (activity 11,458 lines). Evidence under
+`refactor-evidence/tvplayer/p12/`. Inventory: section 3 of the "Phase 11
+inventory" in the deps report (measured at `8a4d40d1c`; re-measure on the
+phase-11 merge). All collaborator rules from phases 3–11 apply, and the
+phase-11 lesson: a first independent mutation sample below ~75 % kills
+triggers a systematic statement-level sweep and a second sample before moves.
+
+**Selected (≈ 1,154 lines, 39 members):**
+- `TvIptvGuideChromeController.kt` (owner, ≈ 400 lines): 21 fields (6
+  now/next header views; EPG pane views, adapter, programmes, day offset,
+  `iptvEpgToken`, visibility, entry) + 10 functions (`ensureIptvChannelEpg`,
+  `updateIptvGuideEpgHeader`, `focusedIptvGuideEntry`, `formatEpgTime`,
+  `showIptvSchedulePane`, `paintIptvEpgLogo`, `selectIptvEpgDay`,
+  `hideIptvEpgPane`, `isFocusInIptvEpgPanel`, `updateIptvGuideCurrentName`);
+  activity property at the `iptvGuideCurrentName` slot; one 13-member Host
+  (incl. a `host.iptvGuideController` cross-feature getter).
+- It eagerly constructs fieldless `TvIptvGuideOverlayBuilder.kt` (≈ 475:
+  `setupIptvOverlay`, `applyGuideStyle`, `showIptvSourcePicker`,
+  `showIptvChannelJumpDialog`) and fieldless `TvIptvGuidePickers.kt` (≈ 415:
+  category/list pickers, `removeIptvGuideRow`, `toggleIptvFavorite`).
+  Cross-file references: overlay → owner as `chrome.x` (14 refs incl. one
+  **write** of `iptvEpgAdapter`), overlay → pickers as `chrome.pickers.x`.
+- 26 activity patches in 4 declarations (`setupControls`, `dispatchKeyEvent`,
+  `initIptvMode` view binds + `setupIptvOverlay` call, in-place `onDestroy`
+  `iptvEpgToken++`); 5 Host re-points (Start Over `iptvEpgToken`; zap banner
+  `ensureIptvChannelEpg`/`formatEpgTime`; the phase-11 `iptvGuideController`
+  property's added Host span → a phase-12 `patched` row, phase-11 files stay
+  byte-identical); the 67 temporary `iptvGuideController.` prefixes from
+  phase 11 become `host.iptvGuideController.` substitutions.
+- 20 inert initializer proofs (supported forms). ≈ 330 substitutions.
+
+**Audit.** 24 `this` → `activity` sites (incl. **2 `Glide.with(this)`** that
+must keep the `FragmentActivity` overload, `AlertDialog.Builder(ctx, theme)`,
+`EditText`/`TextView`/`LinearLayout`/`RecyclerView` constructors,
+`LinearLayoutManager`, Toasts, `ContextCompat.getColorStateList`,
+`DateFormat.getTimeFormat`); 53 implicit inherited sites (`findViewById` ×46,
+`resources` ×2, `isFinishing`/`isDestroyed` ×2 each, `currentFocus`); one
+**excluded receiver**: `TextViewCompat.setCompoundDrawableTintList(this, …)`
+inside `EditText(this).apply {}` — that `this` is the EditText; shadowed
+`title` (lambda parameter, local).
+
+**Timers/teardown.** 60 s archive retry on the borrowed `iptvBrowseHandler`
+(cleared wholesale in `onDestroy`), `iptvEpgToken` guard bumped in place in
+`onDestroy`, uncancelled view posts pinned as-is, `requestIptvEpg` 45 s
+watchdog unchanged (follow-up).
+
+**Retargets.** 4 reflective sites (`iptvEpgToken` in
+`TvIptvStartOverCharacterizationTest`) via 1 owner-map entry; no Dart anchors.
+
+### Step T
+
+Phase-12 extraction fixture (owner + two fieldless collaborators, the
+`iptvEpgAdapter` cross-file write) + negatives; receiver exclusion for the
+`EditText.apply` site; compiled audit of 24 + 53 sites; per-phase dispatcher
+keeping all historical suites; earlier destinations frozen at the phase-11
+merge.
+
+### Step 0 — characterization of the original
+
+Through the real IPTV bootstrap: overlay construction for each of the 4 guide
+styles (separate activity instances — the style is cached per session);
+adapter callbacks (select, long-press series sentinel, favourite, list,
+replay, record); search field focus/IME/Back; source/category/list pickers
+incl. membership load-before-toggle and favourites; channel-jump dialog
+gating (favourites/list source toast); EPG pane show/hide, day buttons, stale
+token, null reply, destroy; now/next header (Glide lifecycle owner, letter
+fallback); the 60 s archive retry. Mutation proofs on the original; Claude's
+independent sample (≥ 75 % kill rate required, else sweep + second sample);
+0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–11 additions. Device checklist (end of series): IPTV
+guide in each guide style (overlay layout, fonts, tokens), category/list
+pickers, favourites toggle, row removal from a custom list, channel-number
+jump dialog, EPG schedule pane (day navigation, replay/record actions),
+now/next header with logo and letter fallback.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
