@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 class ShufflePlaybackFlowTest {
     private fun activity() = Robolectric.buildActivity(AndroidTvTorrentPlayerActivity::class.java).get()
     private fun field(activity: Any, name: String, value: Any?) {
-        activity.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(activity, value)
+        TvPlayerOriginalAccess.set(activity, name, value)
     }
     private fun call(activity: Any, name: String, vararg args: Any): Any? {
         val method = activity.javaClass.declaredMethods.first { it.name == name && it.parameterCount == args.size }

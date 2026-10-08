@@ -2381,3 +2381,13 @@ episode fetch from the player, status pill messages.
   against `p10-step0` permits exactly 15 passing additions. Matching 1024 MiB
   worker, unchanged production/protected inputs. Evidence `p10/step0b/`;
   mutation table appended to deps. No production move or device action.
+
+- 2026-10-08 — **Phase 10 step 1 production moves complete.**
+  Three sibling controllers at original slots: status pill 81 lines, retry 249,
+  source fetch 431; Activity 13,320 → 12,717, size ratchet lowered. Four inert
+  proofs and activity-owned readiness getters retained; three whole-property
+  patches apply 17 Host re-points, callers and lifecycle statements stay in
+  place. Twenty reflected owner routes plus typed internal/default dispatch,
+  watchdog/shuffle helper retargets and the equal Dart candidate-count anchor;
+  every Kotlin assertion unchanged. Checker classifies all 2,309 declarations
+  with zero differences; all 115 focused JVM cases pass. Gate follows.

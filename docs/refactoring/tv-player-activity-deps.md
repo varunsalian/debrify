@@ -11008,3 +11008,36 @@ Fifteen new executable cases use real UnifiedMenuController and TvSourceBrowserC
 All 20 targeted mutations fail on the named JUnit assertion, with no compile/crash proof accepted. Exact Claude l13 is killed by `fetchMoreStartRepaintsLegacyMenuIntoLoadingAndRefreshesBrowser`: expected two live menu-model reads, actual zero; all 94 phase-10 cases ran, original control all pass. The independent sample remains 16 kills + one invalid compile case l10 excluded; l13 is now killed. Raw definitions, patches, full logs, XML and exact rerun are under `p10/step0b/`.
 
 `p10-step0b`: 904 identities (903 pass + the same known source-browser focus failure), versus 889 at `p10-step0`: exactly fifteen passing additions, no missing identity, new failure/error/skip or changed baseline status. Both use the matched evidence-only 1024 MiB worker. Production and protected inputs remain unchanged.
+
+## Phase 10 step 1 — production extraction and retargets
+
+The manifest materializer moves the 29 classified subtrees into sibling `TvStatusPillController` (81 lines), `TvPikPakRetryController` (249), and `TvSourceFetchController` (431). Their activity properties occupy the original first-field slots; readiness checks stay activity-owned. Three whole-property Host patches apply the 17 forward re-points/20 token edits, and all 27 caller edits preserve the in-place lifecycle statement sequence. `playPikPakVideoWithRetry` stays in the activity. No source body rewrite or bug fix. Activity: 13,320 → 12,717 lines; size ratchet lowered.
+
+Reflection owner-map rescan after step 0b routes these twenty moved fields/private/public methods:
+
+| Original activity member | New owner |
+| --- | --- |
+| `adoptSourceList` | `sourceFetchController` |
+| `applyAddonEpisodeSources` | `sourceFetchController` |
+| `applyMoreTorrentSources` | `sourceFetchController` |
+| `attemptPikPakPlaybackLoop` | `pikPakRetryController` |
+| `cancelPikPakRetry` | `pikPakRetryController` |
+| `ensureStatusPill` | `statusPillController` |
+| `episodeFetchInFlight` | `sourceFetchController` |
+| `failAddonFetch` | `sourceFetchController` |
+| `failMoreTorrentSources` | `sourceFetchController` |
+| `hideStatusPill` | `statusPillController` |
+| `isPikPakRetrying` | `pikPakRetryController` |
+| `pikPakRetryCount` | `pikPakRetryController` |
+| `pikPakRetryHandler` | `pikPakRetryController` |
+| `pikPakRetryId` | `pikPakRetryController` |
+| `showPikPakRetryOverlay` | `pikPakRetryController` |
+| `showStatusPill` | `statusPillController` |
+| `showStatusPillTransient` | `statusPillController` |
+| `statusPill` | `statusPillController` |
+| `statusPillHideRunnable` | `statusPillController` |
+| `waitForPikPakMetadata` | `pikPakRetryController` |
+
+Four internal fetch entry points (`requestEpisodeFetch`, `requestAdjacentEpisodeFetch`, `requestMoreTorrentSources`, `requestAddonTorrentSources`) use typed Kotlin dispatch in the shared test access helper. The two default-argument cases call the actual Kotlin methods with the corresponding arguments omitted (original masks 120 and 24); their assertions stay byte-identical. No internal JVM name is reflected and no visibility is widened beyond the manifest. Watchdog `call` routes public `waitForPikPakMetadata`/`cancelPikPakRetry` to the retry controller. ShufflePlaybackFlowTest field writes use the same owner-map helper. New private overlay-show selectors route to the retry owner.
+
+Dart recovery-candidate check: the Activity file read becomes a `TvSourceFetchController.kt` read for exactly `map["recoveryCandidateCount"]`; the literal assertion stays equal. All Kotlin test assertions and other test files remain byte-identical, proven by reversing the recorded helper patches against pre-move hashes. Checker: 2,309 declarations, zero differences. Focused compilation/JVM: all 115 cases pass. Exact patches and validation are under `p10/step1/`; the full gate follows.

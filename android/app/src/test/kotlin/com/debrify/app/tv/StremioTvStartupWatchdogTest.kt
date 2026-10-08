@@ -36,6 +36,8 @@ class StremioTvStartupWatchdogTest {
 
     private fun call(activity: Any, name: String, vararg args: Any?): Any? {
         val owner = when (name) {
+            "waitForPikPakMetadata", "cancelPikPakRetry" ->
+                TvPlayerOriginalAccess.field(activity, "pikPakRetryController")!!
             "sendProgress" -> TvPlayerOriginalAccess.field(activity, "progressReporter")!!
             "initStremioTvGuide" -> TvPlayerOriginalAccess.field(activity, "stremioTvGuideController")!!
             "beginStartupFailoverIfEligible", "commitStartupCandidate", "beginManualSourceCandidate",
