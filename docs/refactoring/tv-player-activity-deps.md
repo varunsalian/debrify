@@ -6709,6 +6709,8 @@ phase 5; Claude reviews separately.
 
 ## Phase 6 inventory (at `1a33c42cb`; re-measure on `e71ddac3a`)
 
+> Superseded where they differ (phase 6 design rounds 1–2): **28** inert initializer proofs (no contiguous-block exemption; renderer fields map to the classic controller's slot), and an explicit hide cancels the tick token but leaves the pending hide callback posted (pinned as-is). Paging/layout characterization checklists below remain valid.
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
 `1a33c42cb` (phase-4 merge, 17,205 lines; class header 136, companion 17171–17205). This is a read-only

@@ -1004,7 +1004,8 @@ original; Claude's independent sample; 0b.
 
 As rule 6 plus phase 3–5 gate additions. Device checklist (end of series):
 zap banner in classic and each styled guide style while zapping channels
-(up/down, number entry), logos, EPG now/next, favourites/live/archive badges.
+(up/down, number entry), logos, EPG now/next, LIVE/REC badges, the
+favourites-gated jump hint, floating vs docked banner.
 
 ## Follow-ups (found while mapping; not fixed here)
 
@@ -1604,3 +1605,4 @@ zap banner in classic and each styled guide style while zapping channels
   negatives); P2 step 0 corrected to the real implementation (per-style
   activity instances, cached style, view-mutating painters, LIVE/REC badges,
   favourites hint gating, hide leaves the pending callback).
+- 2026-10-08 — phase 6 design round 2 (Codex): **No P1s**; P2 inventory superseded-note and P3 checklist fixed. Phase 6 design approved.
