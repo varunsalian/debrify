@@ -2410,3 +2410,11 @@ episode fetch from the player, status pill messages.
   Retarget assertions preserved, protected inputs unchanged, detached
   evidence worktree removed. Evidence `p10/gate/`; no push, device,
   emulator, bug fix or self independent review. Stopped for Claude review.
+- 2026-10-08 — phase 10 post-implementation reviews of `91882d41b..009808f5d`.
+  Claude's 18-mutation sample: 16 killed, l10 invalid (compile error),
+  survivor l13 (unified-menu re-render on fetch-more start) closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; single
+  retry-ID owner with live gate/switcher reads, borrowed pill handler,
+  callback timing and lifecycle order preserved; Maven index refresh touched
+  derived metadata only. Activity 13,320 → 12,717. Decoder verification
+  remains pending-environment. Phase 10 complete; merged.
