@@ -1164,6 +1164,74 @@ switching sources from the Sources panel during movie and series playback
 (resume position kept), automatic recovery to the next source after a dead
 link, badge text, PikPak cold-storage source switch, switching during shuffle.
 
+## Phase 9 — startup / manual source-switch gate
+
+Branch `refactor/tvplayer-p9` off the phase-8 merge `c4906cd2f` (activity 13,937 lines). Evidence under
+`refactor-evidence/tvplayer/p9/`. Inventory: "Phase 9 inventory" in the deps
+report (measured at `53906805d`; lines after the switcher shift ≈ −700 once
+phase 8 merges — re-measure on the phase-8 merge). All collaborator rules
+from phases 3–8 apply. This is the highest-risk unit so far.
+
+**Selected (option A — gate alone):** `TvStartupGateController.kt`
+(≈ 700 lines; 46 members + 5 companion constants), 32-member Host, activity
+property at the gate's first owned slot. 93 activity patches in 15
+declarations (incl. 4 braced-template patches in `resolveAndPlay` and
+`parsePayload`), 15 Host re-points as 2 `patched` activity-property rows
+(`progressReporter` ×4, the phase-8 switcher Host ×11 — phase-8 destination
+files stay byte-identical), 29 inert initializer proofs (all supported forms;
+the second field block now runs before `recoveryStartedAtMs` and
+`progressReporter`), ≈ 191 substitutions. PikPak retry is **not** paired:
+pairing would not settle `pikPakRetryId` (its writers stay split), and adds
+≈ 20 % more edits and new hazard classes; it moves next with fetch-more,
+episode fetch and the status pill.
+
+**Lifecycle.** The 15 gate statements in `onDestroy` stay **in place** as
+single-reference patches (not folded into a controller call), after the final
+progress snapshot and before `sendFinished`, in the same order.
+
+**Hazards.** `finish()` becomes `activity.finish()` compiled as
+`invokevirtual` so the activity's override still runs (its progress reads hit
+the same gate fields); 2 `Runnable` self-references stay unsubstituted;
+`pikPakRetryId` and `player` are read live at fire time inside the reprepare
+Runnable; 3 `findViewById` + 1 Toast overload sites; the gate's 7
+`sourceSwitchController.` references become `host.sourceSwitchController.`.
+
+**Retargets.** Reflection: 45 watchdog sites, 7 progress-test sets, 18 gate
+sites in phase-8 tests — routed by 13 owner-map entries in
+`TvPlayerOriginalAccess` plus one `when` branch in the watchdog test's local
+`call` helper; 5 reflected functions become public members of the internal
+controller; assertions byte-identical. Dart: 5 anchor edits in
+`manual_source_validation_contract_test.dart` (incl. the host-qualified
+`playItem(currentIndex, suppressTrakt = true)` text) plus one added assertion
+so the gate's `sourcePersistenceSessionId` payload site stays pinned.
+
+### Step T
+
+Phase-9 extraction fixture + negatives (static/super `finish` dispatch, a
+snapshotting forwarder for `pikPakRetryId`/`player`, a folded `onDestroy`
+block, a missed `host.sourceSwitchController.` qualification), per-phase
+dispatcher keeping all historical suites, compiled audit incl. the
+`invokevirtual` `finish` descriptor, earlier destinations frozen at the
+phase-8 merge.
+
+### Step 0 — characterization of the original
+
+Commit grace, startup candidate arm/commit/fail, manual begin/commit/fail
+and restore, gate UI (status/indicator views), recovery "fetch more" handoff,
+exhaustion through `finish()` (with the override's progress reads),
+watchdog caps and timings, the 30 s recovery fallback and `missing-source`
+post (cancelled only by the full `progressHandler` clear — pinned as-is),
+`onDestroy` ordering of the 15 statements. Mutation proofs on the original;
+Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–8 additions. Device checklist (end of series):
+Stremio movie/series startup with dead first sources (automatic failover,
+commit after first frame), manual source pick before and after first frame
+(incl. a failing pick and restore), exhaustion of all sources (activity
+finishes and reports), Stremio TV channel startup.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
