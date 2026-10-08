@@ -1164,7 +1164,94 @@ switching sources from the Sources panel during movie and series playback
 (resume position kept), automatic recovery to the next source after a dead
 link, badge text, PikPak cold-storage source switch, switching during shuffle.
 
+## Phase 9 — startup / manual source-switch gate
+
+Branch `refactor/tvplayer-p9` off the phase-8 merge `c4906cd2f` (activity 13,937 lines). Evidence under
+`refactor-evidence/tvplayer/p9/`. Inventory: "Phase 9 inventory" in the deps
+report (measured at `53906805d`; lines after the switcher shift ≈ −700 once
+phase 8 merges — re-measure on the phase-8 merge). All collaborator rules
+from phases 3–8 apply. This is the highest-risk unit so far.
+
+**Selected (option A — gate alone):** `TvStartupGateController.kt`
+(≈ 700 lines; 46 members + 5 companion constants), 32-member Host, activity
+property at the gate's first owned slot. 93 activity patches in 15
+declarations (incl. 4 braced-template patches in `resolveAndPlay` and
+`parsePayload`), 15 Host re-points as 2 `patched` activity-property rows
+(`progressReporter` ×4, the phase-8 switcher Host ×11 — phase-8 destination
+files stay byte-identical), 29 inert initializer proofs (all supported forms;
+the second field block now runs before `recoveryStartedAtMs` and
+`progressReporter`), ≈ 191 substitutions. PikPak retry is **not** paired:
+pairing would not settle `pikPakRetryId` (its writers stay split), and adds
+≈ 20 % more edits and new hazard classes; it moves next with fetch-more,
+episode fetch and the status pill.
+
+**Lifecycle.** The 15 gate statements in `onDestroy` stay **in place** as
+single-reference patches (not folded into a controller call), after the final
+progress snapshot and before `sendFinished`, in the same order.
+
+**Hazards.** `finish()` becomes `activity.finish()` compiled as
+`invokevirtual` so the activity's override still runs (its progress reads hit
+the same gate fields); 2 `Runnable` self-references stay unsubstituted;
+`pikPakRetryId` and `player` are read live at fire time inside the reprepare
+Runnable; 3 `findViewById` + 1 Toast overload sites; the gate's 7
+`sourceSwitchController.` references become `host.sourceSwitchController.`.
+
+**Retargets.** Reflection: 45 watchdog sites, 7 progress-test sets, 18 gate
+sites in phase-8 tests (incl. `TvSourceSwitchBoundaryCharacterizationTest`
+setting `startupTryNextOnFailure`) — routed by **14** owner-map entries in
+`TvPlayerOriginalAccess` plus one `when` branch in the watchdog test's local
+`call` helper; 5 reflected functions become public members of the internal
+controller; assertions byte-identical. Dart: 5 anchor edits in
+`manual_source_validation_contract_test.dart` (incl. the host-qualified
+`playItem(currentIndex, suppressTrakt = true)` text) plus one added assertion
+so the gate's `sourcePersistenceSessionId` payload site stays pinned.
+
+### Step T
+
+Phase-9 extraction fixture + negatives (static/super `finish` dispatch, a
+snapshotting forwarder for `pikPakRetryId`/`player`, a folded `onDestroy`
+block, a missed `host.sourceSwitchController.` qualification), per-phase
+dispatcher keeping all historical suites, compiled audit incl. the
+`invokevirtual` `finish` descriptor, earlier destinations frozen at the
+phase-8 merge. **Auditor extension:** the PSI collector also records reviewed
+**implicit inherited-receiver** call sites (`finish()`, the 3
+`findViewById`), the bytecode parser retains invocation opcodes, and each site
+pins its expected before/after owner + descriptor + opcode (`finish` must be
+`invokevirtual` on the activity so the override runs); compiled positives and
+negatives prove virtual override dispatch and inherited-method resolution;
+existing argument-based audits are unchanged. Owner-map routes are rescanned
+after step 0 adds accesses.
+
+### Step 0 — characterization of the original
+
+Commit grace, startup candidate arm/commit/fail, manual begin/commit/fail
+and restore, gate UI (status/indicator views), recovery "fetch more" handoff,
+exhaustion through `finish()` characterized **separately for ordinary VOD
+and Stremio TV**: the progress reporter suppresses exhausted playback only in
+Stremio TV mode, so ordinary VOD can still report from the `finish` override
+after the gate clears its cursor — both current behaviours (reporting,
+checkpoint, handoff, one-shot finish flag, `sendFinished` payload) are pinned
+as-is, no suppression added,
+watchdog caps and timings, the 30 s recovery fallback and `missing-source`
+post (cancelled only by the full `progressHandler` clear — pinned as-is),
+`onDestroy` ordering of the 15 statements. Mutation proofs on the original;
+Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–8 additions. Device checklist (end of series):
+Stremio movie/series startup with dead first sources (automatic failover,
+commit after first frame), manual source pick before and after first frame
+(incl. a failing pick and restore), exhaustion of all sources (activity
+finishes and reports), Stremio TV channel startup.
+
 ## Follow-ups (found while mapping; not fixed here)
+
+- Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
+  Three attempts were rejected; matched original/extracted 1024 MiB runs pass
+  identity comparison via an evidence-only init script. A durable test-harness
+  memory setting remains a separate infrastructure follow-up; repository build
+  settings stay unchanged in this structural phase.
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
   catch: `onStop` leaves `finalProgressSnapshot` true, while `finish` and
@@ -2047,3 +2134,106 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   untouched, live `pikPakRetryId` reads, volatile setter target, 43 compiled
   Toast descriptors, watchdog file byte-identical. Activity 14,637 → 13,937.
   Decoder verification remains pending-environment. Phase 8 complete; merged.
+- 2026-10-08 — phase 9 design round 1 (Codex): **No P1s**; P2s folded
+  (VOD vs Stremio TV exhaustion characterized separately; 14th owner-map
+  route for the phase-8 boundary tests + rescan; auditor extension for
+  implicit inherited receivers with opcode pinning). Phase 9 design approved.
+
+- 2026-10-08 — phase 9 Step T complete against `c4906cd2f`. Re-measured
+  manifest: 51 moved subtrees (30 fields, 16 functions, 5 constants),
+  29 initializer proofs, 32 computed Host members, 93 activity-reference
+  edits plus 18 token edits in the two whole-property rows (15 Host re-points).
+  All 182 checker/auditor self-tests pass: 152 historical plus 22 extraction
+  and 8 compiled inherited-receiver tests. Original self-comparison classifies
+  all 2359 declarations with zero differences; all 36 earlier destinations
+  remain frozen. Full production-config extraction fixture compiles (718-line
+  controller) and its five receiver sites pass the bytecode audit, including
+  explicit owner/descriptor/`invokevirtual` pins for three `findViewById`
+  calls and `finish`; both Runnable self receivers are preserved. Static,
+  super and widened-receiver compiled negatives fail for their stated reason.
+  Evidence: p9/checker-self-tests-final.log, original-self-comparison.log,
+  earlier-destinations.log, fixture-compile.log, overload-audit.json and
+  fixtures/phase9-overloads/. Production unchanged; Step 0 follows.
+
+- 2026-10-08 — phase 9 Step 0 complete on original `c4906cd2f`: 40 new
+  characterization cases, 53/53 named assertion mutation kills (no compile
+  errors/crashes accepted), with definitions, patches, raw Gradle/XML and
+  dependency hashes under p9/mutations/ (a final terminal blank-line trim
+  leaves all executable instructions/fields/descriptors identical; only debug
+  line ranges differ, archived under p9/final-formatting/). Covers commit grace, manual
+  rollback/supersession, UI/focus/animation/copy, failure predicates, recovery
+  handoff/fallback, VOD versus Stremio TV exhaustion through the actual finish
+  override, live watchdog/reprepare guards, diagnostics, parsing, stale resolve
+  callbacks and the compiled fifteen-statement teardown order plus real queue
+  retirement. Original controls pass (40 final new tests; earlier 142 affected
+  tests). Clean baseline-c4906cd2f 759 = 758 pass + the existing focus failure;
+  p9-step0 799 = 798 pass + that same failure. Identity comparison passes with
+  40 additions only; the observed intermediate 797 statuses also remain
+  unchanged. An initial Robolectric heap-error run with no complete XML was
+  discarded; final fixtures reuse the phase-8 sandbox and both controls/proofs
+  were repeated without changing heap/dependencies/runner configuration.
+  Original lint archived: 1352 issues (253 errors, 1099 warnings, 175 unsafe
+  opt-ins) for the later gate. Post-test owner-map rescan requires 30 entries
+  (16 additions to the reviewed 14), retains the five public functions, and
+  records the compiled-order helper retarget. Manifest supplements name actual
+  tests. All 36 earlier destinations and protected inputs remain unchanged;
+  original detached worktree removed. **STOPPED before production moves**;
+  Claude's independent sample/review and Step 0b/Step 1/gate remain next.
+
+- 2026-10-08 — phase 9 Step 0b: 11 new boundary cases; 28/28 named
+  assertion mutation kills on original `c4906cd2f`, including all four exact
+  Claude survivors k04/k09/k10/k12. Additional sweep covers every moved
+  focus/controls gate, both real progress restart calls, every owned callback
+  removal on commit/failure/rearm, switcher wait removal, failure stop and
+  token/generation changes, and retained PikPak cancellation. The failed-row
+  late resolver reply is ignored while recovery keeps the host alive. The
+  four exact survivors also fail against all 65 phase-9/watchdog tests.
+  `p9-step0b` 810 = 809 pass + the existing focus failure; all 799 `p9-step0`
+  identities/statuses retained with 11 passing additions only. Owner rescan
+  remains 30. Raw proofs/control/XML and comparisons: p9/step0b/. Production
+  unchanged; approved Step 1 moves and the gate follow.
+
+- 2026-10-08 — phase 9 Step 1 moves complete: manifest materialized with
+  slot-anchored 718-line gate controller / 13,320-line activity, 32 computed
+  Host members, 29 inert initializer proofs, 93 activity edits and the two
+  whole-property rows' 15 re-points (18 token edits). The fifteen teardown
+  statements remain in place; all 36 earlier destinations are byte-identical.
+  Checker: 2359 declarations, zero differences; five compiled receiver sites
+  retain descriptor/opcode pins, including virtual finish. All 155 focused
+  JVM cases pass; 45 Dart source-test statuses exactly match phase 8. Thirty
+  owner routes, watchdog public-call routing and the compiled-order helper
+  are retargeted; one stack-frame fixture hook additionally follows the
+  internal JVM suffix through a helper, with assertions unchanged. Five
+  Dart anchor changes and an added session-payload assertion are formatted;
+  size baseline lowered. Evidence: p9/step1/ and p9/gate/. Full gate follows.
+
+- 2026-10-08 — phase 9 gate complete on `4b3ca5d87`: checker 2359
+  declarations / zero differences; all 182 self-tests and historical p1–p8
+  manifests pass; 36 frozen earlier destinations, 29 initializer proofs,
+  five compiled receiver sites (virtual finish / inherited findViewById),
+  two Runnable receivers and fifteen in-place teardown statements verified.
+  JVM 810 = 809 pass + the same original focus failure, exact p9-step0b
+  comparison. Three 512 MiB full-run heap failures were discarded; both
+  original + pre-move tests and extracted trees complete with the same
+  evidence-only 1024 MiB test heap and retain all 810 statuses. No repository
+  build configuration or assertions changed; heap diagnostics, matched
+  baseline/flags and raw failed runs are archived. Lint exactly retains 1352
+  issues (253 errors / 1099 warnings; 175 unsafe opt-ins), Kotlin five warnings
+  and Flutter analyze 1758 diagnostics. Release APK builds; six classes and
+  197 members retain R8/DEX identities. Decoder pending-environment, directly
+  verified unchanged from phase 1 (all three library hashes and nine missing
+  decoders / three filters). Full Flutter suite: 12,855 identities, exact
+  phase-8 status comparison (12,794 success / 13 failures / 28 errors /
+  20 skipped); clean tested tree. Protected inputs / manifests unchanged, original worktree
+  removed; no device interaction, install or push. Evidence: p9/gate/ and
+  junit/p9-gate/. **STOPPED after phase 9**; no next-phase work or independent
+  self-review performed.
+- 2026-10-08 — phase 9 post-implementation reviews of `fbc53a10d..4226d658b`.
+  Claude's 18-mutation sample 14/18; survivors k04/k09/k10/k12 (focus guard,
+  controls-gated badge, progress restart on commit, resolution-token bump on
+  failure) closed in 0b. Independent Codex review (fresh session): **No P1s,
+  no P2/P3**; `finish()` compiled `invokevirtual`, 15 teardown statements in
+  order between the final snapshot and `sendFinished`, VOD/TV exhaustion as
+  characterized, live retry/player reads; the 1 GB heap override was
+  evidence-only (committed build config unchanged). Activity 13,937 → 13320.
+  Decoder verification remains pending-environment. Phase 9 complete; merged.

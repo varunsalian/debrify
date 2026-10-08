@@ -23,6 +23,9 @@ void main() {
   final nativeSourceApplier = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt',
   ).readAsStringSync();
+  final nativeStartupGate = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt',
+  ).readAsStringSync();
   final nativeProgressReporter = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt',
   ).readAsStringSync();
@@ -158,11 +161,11 @@ void main() {
       ),
     );
     expect(
-      nativePlayer,
+      nativeStartupGate,
       contains('startupResolverProvider.equals("pikpak", ignoreCase = true)'),
     );
     expect(
-      nativePlayer,
+      nativeStartupGate,
       contains('startupPikPakTorrentAcquisitionAttempted = true'),
     );
   });
@@ -175,7 +178,7 @@ void main() {
         contains("'recoveryCandidateCount': automatic.length"),
       );
       expect(nativePlayer, contains('map["recoveryCandidateCount"]'));
-      expect(nativePlayer, contains('startupRecoveryIsConsumed('));
+      expect(nativeStartupGate, contains('startupRecoveryIsConsumed('));
     },
   );
 
@@ -319,13 +322,16 @@ void main() {
         'private fun resolveStremioSourceViaFlutter(',
       );
       final reject = _between(
-        nativePlayer,
-        'private fun failManualSourceCandidate(',
-        'private fun armStartupCandidate(',
+        nativeStartupGate,
+        'internal fun failManualSourceCandidate(',
+        'internal fun armStartupCandidate(',
       );
 
       expect(reject, contains('manualSourceRestoreInProgress = true'));
-      expect(reject, contains('playItem(currentIndex, suppressTrakt = true)'));
+      expect(
+        reject,
+        contains('host.playItem(host.currentIndex, suppressTrakt = true)'),
+      );
       expect(reject, contains('putAll(snapshot.perItemImdbIds)'));
       expect(
         reject,
@@ -471,9 +477,9 @@ void main() {
 
   test('Android TV reports exhaustion without deleting failed source pins', () {
     final startupFailure = _between(
-      nativePlayer,
-      'private fun failStartupCandidate(',
-      'private fun failStartupResolution(',
+      nativeStartupGate,
+      'internal fun failStartupCandidate(',
+      'internal fun failStartupResolution(',
     );
 
     expect(startupFailure, isNot(contains('reportRejectedSource')));
@@ -502,6 +508,12 @@ void main() {
       nativePlayer,
       contains(
         'payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)',
+      ),
+    );
+    expect(
+      nativeStartupGate,
+      contains(
+        '"sourcePersistenceSessionId" to host.sourcePersistenceSessionId',
       ),
     );
     expect(playerBridge, contains('ignoring stale playback finish'));

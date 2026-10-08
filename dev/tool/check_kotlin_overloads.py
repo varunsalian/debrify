@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit activity arguments at moved call sites using JVM invocation descriptors."""
+"""Audit reviewed activity receivers using JVM owners, descriptors and opcodes."""
 import argparse
 import bisect
 import json
@@ -21,10 +21,10 @@ def invocations(disassembly):
 
     def flush():
         offsets = [pc for pc, line in lines]
-        for pc, call in code:
+        for pc, opcode, call in code:
             index = bisect.bisect_right(offsets, pc) - 1
             if index >= 0:
-                result.append(dict(owner=owner, method=method, line=lines[index][1], call=call))
+                result.append(dict(owner=owner, method=method, line=lines[index][1], pc=pc, opcode=opcode, call=call))
 
     for line in disassembly.splitlines():
         if re.match(r'^\S.*\b(class|interface)\b', line):
@@ -34,10 +34,10 @@ def invocations(disassembly):
             flush(); code, lines = [], []
             method = line.strip()
         else:
-            instruction = re.match(r'\s+(\d+): invoke\w+\s+.*// (?:InterfaceMethod|Method) (.*)', line)
+            instruction = re.match(r'\s+(\d+): (invoke\w+)\s+.*// (?:InterfaceMethod|Method) (.*)', line)
             location = re.match(r'\s+line (\d+): (\d+)$', line)
             if instruction:
-                code.append((int(instruction[1]), instruction[2].replace('"', '')))
+                code.append((int(instruction[1]), instruction[2], instruction[3].replace('"', '')))
             elif location:
                 lines.append((int(location[2]), int(location[1])))
     flush()
@@ -66,6 +66,21 @@ def resolve(calls, site, start, end):
     if len(signatures) != 1:
         raise ValueError(f'call site must resolve uniquely: {callee} at {start}-{end}: {sorted(signatures)}')
     return signatures.pop(), found
+
+
+def resolve_inherited(calls, site, start, end):
+    """Pin owner, descriptor and opcode for a reviewed implicit receiver."""
+    found = []
+    for invocation in calls:
+        target, descriptor = invocation['call'].split(':', 1)
+        if not start <= invocation['line'] <= end or target.split('.')[-1] != site['callee']:
+            continue
+        owner = target.rsplit('.', 1)[0] if '.' in target else invocation['owner'].replace('.', '/')
+        found.append((dict(owner=owner, descriptor=descriptor, opcode=invocation['opcode']), invocation))
+    signatures = {tuple(sorted(signature.items())) for signature, _ in found}
+    if len(signatures) != 1:
+        raise ValueError(f'implicit inherited call must resolve uniquely: {site["callee"]} at {start}-{end}')
+    return dict(signatures.pop()), [invocation for _, invocation in found]
 
 
 def receiver_inventory(manifest, original, unit, nodes, moved):
@@ -104,14 +119,33 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
     if expected_alias != manifest['context_aliases']:
         raise ValueError('unlisted alias: context alias initialization/uses differ from PSI')
     expected = sorted((row_at(x['start'])['original'], original.count('\n', 0, x['start']) + 1, x['callee']) for x in calls)
-    actual = sorted((x['original'], x['line'], x['callee']) for x in manifest['overload_audit'])
+    actual = sorted((x['original'], x['line'], x['callee']) for x in manifest['overload_audit']
+                    if x.get('receiver') != 'implicit-inherited')
     if expected != actual:
         raise ValueError('substituted this-site audit coverage differs from original PSI')
     for site in manifest['overload_audit']:
+        if site.get('receiver') == 'implicit-inherited':
+            continue
         is_alias = any(a['original'] == site['original'] and any(
             use['line'] == site['line'] for use in a['uses']) for a in expected_alias)
         if is_alias != bool(site.get('alias')):
             raise ValueError('wrong receiver classification: alias-use marker differs')
+    if manifest['phase'] >= 9:
+        inherited = [s for s in unit['implicit_inherited_sites'] if row_at(s['start'])]
+        expected = sorted((row_at(s['start'])['original'], original.count('\n', 0, s['start']) + 1, s['callee']) for s in inherited)
+        actual = sorted((s['original'], s['line'], s['callee']) for s in manifest['overload_audit']
+                        if s.get('receiver') == 'implicit-inherited')
+        if expected != actual:
+            raise ValueError('implicit inherited-receiver audit coverage differs from original PSI')
+        for site in manifest['overload_audit']:
+            if site.get('receiver') == 'implicit-inherited':
+                for key in ('expected_before', 'expected_after'):
+                    pin = site.get(key, {})
+                    if set(pin) != {'owner', 'descriptor', 'opcode'} or pin['opcode'] != 'invokevirtual':
+                        raise ValueError('implicit inherited-receiver pin requires virtual owner/descriptor/opcode')
+        calls.extend(inherited)
+    elif any(s.get('receiver') == 'implicit-inherited' for s in manifest['overload_audit']):
+        raise ValueError('implicit inherited receivers require phase 9 audit')
     return calls
 
 
@@ -151,11 +185,15 @@ def audit(manifest, original, current, before, after):
         delta = current[site['destination']].count('\n', 0, moved_node['start']) - original.count('\n', 0, original_node['start'])
         old_owner = 'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
         new_owner = 'com.debrify.app.tv.' + site['target'].split('/')[0].removeprefix('class ')
-        old, old_evidence = resolve([c for c in before if c['owner'] == old_owner or c['owner'].startswith(old_owner + '$')],
+        resolver = resolve_inherited if site.get('receiver') == 'implicit-inherited' else resolve
+        old, old_evidence = resolver([c for c in before if c['owner'] == old_owner or c['owner'].startswith(old_owner + '$')],
                                    site, site['call_start_line'], site['call_end_line'])
-        new, new_evidence = resolve([c for c in after if c['owner'] == new_owner or c['owner'].startswith(new_owner + '$')],
+        new, new_evidence = resolver([c for c in after if c['owner'] == new_owner or c['owner'].startswith(new_owner + '$')],
                                    site, site['call_start_line'] + delta, site['call_end_line'] + delta)
-        if old != new:
+        if site.get('receiver') == 'implicit-inherited':
+            if old != site['expected_before'] or new != site['expected_after']:
+                raise ValueError(f'implicit inherited dispatch changed at original line {site["line"]}: {old} -> {new}')
+        elif old != new:
             raise ValueError(f'overload changed at original line {site["line"]}: {old} -> {new}')
         results.append(dict(site=site, resolved_before=old, resolved_after=new,
                             before=old_evidence, after=new_evidence))
@@ -177,7 +215,7 @@ def main():
         results = audit(manifest, original, current, bytecode(args.original_classes), bytecode(args.moved_classes))
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(dict(sites=len(results), results=results), indent=2) + '\n')
-        print(f'PASS: {len(results)} activity-this call sites; identical JVM invocation descriptors')
+        print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations')
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, 'FAIL: ' + str(error) + '\n')
 
