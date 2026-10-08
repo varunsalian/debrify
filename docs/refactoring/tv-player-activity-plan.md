@@ -1422,3 +1422,4 @@ Start Over / catch-up on an archive-enabled channel.
   support for typed empty collections/underscored literals with negatives;
   per-phase fixture dispatch + earlier destinations frozen at `1a33c42cb`);
   P2 recovery-writer executor barrier and ACK/exception cases.
+- 2026-10-08 — phase 5 design round 2 (Codex): **No P1s**; P2 inventory wording superseded by the plan (note at the inventory head). Phase 5 design approved.

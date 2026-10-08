@@ -5438,6 +5438,8 @@ Raw evidence: `p4/step0b/`, `p4/step1/`, `p4/gate/`, `junit/p4-step0b/`, `junit/
 
 ## Phase 5 inventory (at `eee52b084`; re-measure on `1a33c42cb`)
 
+> Superseded where they differ (phase 5 design rounds 1–2): the sleep `sendProgress` forwarder edit is a phase-5 `patched` row on the whole activity `sleepTimerController` property (single forwarder replacement, reason, named sleep test, extra-edit negative); **no** earlier-destination/whitelist exception is used anywhere below.
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
 `eee52b084` (18,265 lines; class header 136, companion 18229). Read-only survey of the main
