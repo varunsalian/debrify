@@ -1369,7 +1369,8 @@ every core field.
   EPG archive retry); no `progressHandler`; teardown order unchanged.
 
 **Hazards.** Shadowed locals (`window`, `currentIndex`, `title`), `this.index`
-×2, a receiver `this` inside `EditText.apply` (not substituted), the
+×2 (receiver lambdas, not substituted), the activity `this` passed to
+`EditText(this)` (substituted, constructor-audited), the
 `requestIptvBrowse` default argument reading state (call-time evaluation),
 labels `return@requestIptvZapPage` ×7, 6 inherited-receiver audit sites.
 
@@ -1388,8 +1389,11 @@ fixture (owner + two fieldless collaborators, owner-only shared state,
 cross-qualification) + negatives (a collaborator field, a collaborator
 reading Host directly for shared state, missed qualification, label
 rewrite); **receiver-lambda exclusions:** the PSI collector exhaustively
-inventories reviewed `this` expressions that bind to a receiver lambda (the
-two entry-owned `this.index` sites, the `EditText.apply` receiver), pins each
+inventories reviewed `this` expressions that bind to a receiver lambda
+(exactly the two entry-owned `this.index` sites; the `this` in
+`EditText(this)` is the **activity** passed to the constructor outside the
+lambda — it is substituted to `activity` and covered by the compiled
+constructor-overload audit), pins each
 with its source context, and rejects an omitted or misclassified exclusion or
 any substitution of those expressions; the 7 Toast and 6 inherited-call audit
 sites are retained; per-phase dispatcher keeping all historical suites; compiled audit;
@@ -2542,3 +2546,8 @@ episode next/previous, startup channel restore, Start Over after a switch.
   (253 errors, 1,099 warnings, 175 unsafe opt-ins). No new JVM tests, mutations
   or `p11-step0` run yet. No production edits, lockfile or ProGuard changes;
   no push or device interaction. Evidence under `p11/` and `junit/`.
+- 2026-10-08 — step T stopped on a design mismatch (correctly): only two
+  receiver-lambda `this` exclusions exist; `EditText(this)` passes the activity
+  (source + bytecode evidence in the deps report). Plan corrected (Claude
+  approved): two exclusions; the `EditText(this)` site is substituted and
+  constructor-audited. Step 0 resumes.
