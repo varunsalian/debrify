@@ -1126,8 +1126,10 @@ slot (≈ 12920 at `a4ed4f368`).
 - `activeVodHeaders` is `@Volatile`; the applier writes it through a Host
   setter that writes the same field.
 - Unbraced templates in moved code are braced per occurrence.
-- 4 Host forwarder re-points in phase-5 controllers' Hosts (`iptvChannelStartController`,
-  `progressReporter`) are reviewed `patched` rows on those activity properties.
+- The 4 Host forwarder re-points all belong to the `iptvChannelStartController`
+  activity property: one whole-property `patched` row with exactly four
+  substitutions. `progressReporter` references retained gate state and stays
+  unchanged until the gate phase.
 - 3 Dart anchors are retargeted (`automaticRecovery`, the
   `onStremioSourceSelected` start marker, `requireExactStartupEpisode`) with
   equal-or-stronger assertions.
@@ -1145,7 +1147,12 @@ merge.
 Source selection flows (manual pick, automatic recovery pick, same-source
 reselect, episode-exact requirement), badge text/visibility, apply path
 (media item rebuild, headers incl. the volatile `activeVodHeaders`, seek
-restore, PikPak reprepare runnable reading the live retry id, shuffle
+restore, resolver token checks — both moved resolvers check the switch token
+**only before** `runOnUiThread` dispatch (error/notImplemented likewise):
+characterized by delivering a captured reply on a bounded worker thread,
+superseding the token before draining the paused main looper, and verifying
+the accepted UI action still runs; the playlist resolver's live cursor read
+inside the UI block is preserved and no second guard is introduced; PikPak reprepare runnable reading the live retry id, shuffle
 attempt interplay, `stremioResolutionToken` supersession), the sources panel
 render/selection highlight, `cancelSourceSwitchWait` in `onDestroy`.
 Mutation proofs on the original; Claude's independent sample; 0b.
@@ -1956,3 +1963,7 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   `hideGuideOnReady`, unguarded guide-data replies, watchdog assertions
   byte-identical. Activity 15,167 → 14,637. Decoder verification remains
   pending-environment. Phase 7 complete; merged.
+- 2026-10-08 — phase 8 design round 1 (Codex): **No P1s**; P2s folded
+  (resolver token checks only before dispatch, with a worker-thread
+  characterization; all four re-points are one `iptvChannelStartController`
+  patched row; `progressReporter` unchanged). Phase 8 design approved.
