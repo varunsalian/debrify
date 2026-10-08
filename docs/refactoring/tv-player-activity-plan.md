@@ -852,9 +852,12 @@ audit and the initializer-timing rule).
 
 - `TvProgressReporter` — `sendProgress`, the final-progress snapshot and
   recovery staging/ack handling (≈ 266 lines, 12 edits in 8 declarations +
-  1 edit to the phase-3 sleep controller's Host `sendProgress` forwarder —
-  an explicitly reviewed `patched` change to a phase-3 destination,
-  whitelisted in the earlier-destination comparison). `sendFinished` stays
+  1 edit to the phase-3 sleep controller's Host `sendProgress` forwarder. That
+  forwarder lives in the **activity's** `sleepTimerController` property, so
+  it is a phase-5 `patched` row on that whole activity property (the single
+  forwarder replacement, a reason, the named sleep characterization test and
+  an extra-edit negative); the phase-3 manifest and controller file stay
+  unchanged and no earlier-destination exception is used). `sendFinished` stays
   in the activity (a whole-file Dart test pins its payload). The two edits
   inside `recordPlaybackLifecycle`'s string template use braced host
   references. Retargets: 5 reflective calls in
@@ -886,13 +889,29 @@ before the `iptvBrowseHandler`/`progressHandler` they borrow (Host getters
 are computed, never read at construction; the 16 earlier-running moved
 initializers are listed and proven constant/empty-allocation).
 
+**Step T (checker).** The initializer classifier gains narrowly constrained
+support for the forms phase 5 needs — typed empty collection factories
+(`mutableSetOf<String>()` and siblings with explicit type arguments and no
+arguments) and numeric literals with underscores/suffixes (`1_000L`) —
+preserving the original expressions; negatives reject state-reading or
+effectful initializers. A complete phase-5 production extraction fixture
+exercises all 16 proofs. `test_kotlin_moves.py` dispatches per manifest
+phase: the historical phase-4 suite runs with its own manifest, a new
+phase-5 extraction/negative suite runs with the phase-5 manifest, and all 28
+earlier destination files are frozen against `1a33c42cb`.
+
 ### Step 0 — characterization of the original
 
 - Progress: every `sendProgress` path (periodic, completed, paused, sleep,
   final snapshot in `finish`/`onStop`/`onDestroy` incl. the non-try/finally
-  `onStop` difference), argument maps sent to Flutter, ack handling and
-  recovery staging (`TvPlaybackRecoveryStore`), and the reflective contracts
-  the watchdog test uses.
+  `onStop` difference — exercised by injecting a player-read failure
+  **outside** the delivery catch, since messenger send failures are caught),
+  argument maps sent to Flutter, ack handling (delayed and out-of-order ACKs,
+  ACK after destroy) and recovery staging (`TvPlaybackRecoveryStore`) through
+  a test-only reflected **executor barrier** on the store's separate writer
+  executor (bounded latch waits, cleanup), proving ordinary ticks queue their
+  writes while final/completed/local-completion checkpoints persist before
+  delivery or teardown; and the reflective contracts the watchdog test uses.
 - Channel start: watch registration payload, startup-channel memory
   read/write, `beginIptvPlayback` ordering, Stremio candidate ladder
   (candidate order, failure advance, winner reporting, token supersession,
@@ -1398,3 +1417,8 @@ Start Over / catch-up on an archive-enabled channel.
   P2/P3**; 81 compiled overload sites across phases 3–4 match; 28 earlier-
   running initializers covered by inert proofs. Decoder verification remains
   pending-environment. Phase 4 complete; merged.
+- 2026-10-08 — phase 5 design round 1 (Codex): P1s folded (sleep forwarder
+  as a phase-5 `patched` activity-property row; initializer classifier
+  support for typed empty collections/underscored literals with negatives;
+  per-phase fixture dispatch + earlier destinations frozen at `1a33c42cb`);
+  P2 recovery-writer executor barrier and ACK/exception cases.
