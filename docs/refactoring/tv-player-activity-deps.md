@@ -9823,3 +9823,63 @@ The manifest's patched rows now name their supplement tests explicitly.
 | n51 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): activePlayer.totalBufferedDuration > 0L → true | recheck reads live buffer eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
 | n52 | TvStartupGateGuardCharacterizationTest::watchdogRechecksLiveErrorStateBufferAndPlayerEligibility | fun startupWatchdogShouldExtend(Long): player ?: return false → player ?: return true | recheck reads live player eligibility (TvStartupGateGuardCharacterizationTest.kt:33) |
 | n53 | TvStartupGateGuardCharacterizationTest::reprepareRejectsDestroyedActivityEvenWithMatchingChannelRetryAndLivePlayer | fun schedulePikPakGateReprepare(Int?): isFinishing \|\| isDestroyed → isFinishing \|\| false | destroyed host rejects a late reprepare request (TvStartupGateGuardCharacterizationTest.kt:47) |
+
+## Phase 9 step 0b
+
+On original `c4906cd2f`, added 11 boundary characterizations; all 28
+method-scoped mutations fail their named test on an assertion. Exact Claude
+survivors k04/k09/k10/k12 are included: existing child focus stays on the
+gate, debrid first-open leaves outside focus alone, hidden controls keep the
+badge hidden, and startup/manual commits replace the actual progress pulse
+and report at five seconds. The late failed-row Flutter reply is delivered
+while recovery keeps the activity live: it cannot replace the payload or
+touch the player. A separate manual-failure reply pins that token bump.
+
+The sweep covers every moved focus/controls visibility gate, the restart
+calls in both commits, removals of every timeout/commit-check/reprepare in
+commit and fail, both switcher listener/timeout cancellations, the failure
+stop and generation bump, startup rearming, orphaned manual timeout
+replacement, and cancellation through the retained PikPak retry caller.
+Commit paths retain the resolver token; failure paths invalidate it.
+Callbacks are checked in the real borrowed queue, not only nulled fields.
+Animation frames are drained deterministically while observing ticker
+boundaries. No production code or behavior changed.
+
+Evidence: `p9/step0b/` contains definitions, dependency hashes, full Gradle
+logs and XML. `claude-survivors-rerun/` reruns the four exact patches against
+all 51 phase-9 cases plus the 14 watchdog cases (65 identities), with named
+assertion kills. JVM `p9-step0b`: 810 identities = 809 pass + the same
+pre-existing focus failure; `p9-step0` retains all 799 identities/statuses
+with 11 passing additions only, stable tested tree and complete XML. The
+post-0b owner rescan still requires 30 routes; no new public function needed.
+
+| Proof | Named test | Original mutation | Failing assertion |
+| --- | --- | --- | --- |
+| k04 | TvStartupGateBoundaryCharacterizationTest::armingVisibleGateKeepsExistingChildFocusAndDebridOpenDoesNotStealFocus | fun armStartupCandidate(Int):         if (!debridFirstOpen && !startupGateView.hasFocus()) { →         if (!debridFirstOpen) { | arming must retain the gate's existing focus owner |
+| k09 | TvStartupGateBoundaryCharacterizationTest::hiddenControlsKeepBadgeHiddenAfterStartupCommit | fun commitStartupCandidate():         if (controlsMenuVisible) sourceSwitchController.showStremioSourceBadge()         hideStatusPill() →         sourceSwitchController.showStremioSourceBadge()         hideStatusPill() | commit cannot expose badge over hidden controls expected:<8> but was:<0> |
+| k10 | TvStartupGateBoundaryCharacterizationTest::startupCommitRestartsTheActualProgressTickerAtFiveSeconds | fun commitStartupCandidate():         hideStatusPill()         restartProgressUpdates()         reportValidatedSourceCommit(currentStremioSourceIndex) →         hideStatusPill()         reportValidatedSourceCommit(currentStremioSourceIndex) | no progress pulse before five seconds |
+| k12 | TvStartupGateBoundaryCharacterizationTest::failedStartupRowInvalidatesLateResolveWhileRecoveryKeepsActivityAlive | fun failStartupCandidate(String):             stremioResolutionToken++ // invalidate any resolver callback for the failed row  →   | failed row's late reply must not replace payload expected:<[PlaybackItem(id=item, title=Film, url=https://example.test/a, httpHeaders={}, mimeType=null, hdVideoUrl=nul… |
+| b05 | TvStartupGateBoundaryCharacterizationTest::armingVisibleGateKeepsExistingChildFocusAndDebridOpenDoesNotStealFocus | fun armStartupCandidate(Int): !debridFirstOpen && !startupGateView.hasFocus() → !startupGateView.hasFocus() | debrid first open must leave outside focus alone |
+| b06 | TvStartupGateBoundaryCharacterizationTest::manualCommitRestartsTheActualProgressTickerAtFiveSeconds | fun commitManualSourceCandidate(): restartProgressUpdates() → Unit | no progress pulse before five seconds |
+| b07 | TvStartupGateBoundaryCharacterizationTest::manualFailureInvalidatesLateResolveAndCancelsSwitcherWaitBeforeRestore | fun failManualSourceCandidate(String,Boolean): stremioResolutionToken++ → Unit | manual failure's late reply must not replace restored payload expected:<[PlaybackItem(id=item, title=Film, url=https://example.test/a, httpHeaders={}, mimeType=null, h… |
+| b08 | TvStartupGateBoundaryCharacterizationTest::manualFailureInvalidatesLateResolveAndCancelsSwitcherWaitBeforeRestore | fun failManualSourceCandidate(String,Boolean): manualSourceSwitchTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | manualSourceSwitchTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b09 | TvStartupGateBoundaryCharacterizationTest::manualFailureInvalidatesLateResolveAndCancelsSwitcherWaitBeforeRestore | fun failManualSourceCandidate(String,Boolean): manualSourceCommitCheck?.let { progressHandler.removeCallbacks(it) } → Unit | manualSourceCommitCheck removed from borrowed queue expected:<0> but was:<1> |
+| b10 | TvStartupGateBoundaryCharacterizationTest::manualFailureInvalidatesLateResolveAndCancelsSwitcherWaitBeforeRestore | fun failManualSourceCandidate(String,Boolean): pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) } → Unit | pikPakGateReprepare removed from borrowed queue expected:<0> but was:<1> |
+| b11 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | startupFailoverTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b12 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): startupCommitCheck?.let { progressHandler.removeCallbacks(it) } → Unit | startupCommitCheck removed from borrowed queue expected:<0> but was:<1> |
+| b13 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) } → Unit | pikPakGateReprepare removed from borrowed queue expected:<0> but was:<1> |
+| b14 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitStartupCandidate(): startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | startupFailoverTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b15 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitStartupCandidate(): startupCommitCheck?.let { progressHandler.removeCallbacks(it) } → Unit | startupCommitCheck removed from borrowed queue expected:<0> but was:<1> |
+| b16 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitStartupCandidate(): pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) } → Unit | pikPakGateReprepare removed from borrowed queue expected:<0> but was:<1> |
+| b17 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitManualSourceCandidate(): manualSourceSwitchTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | manualSourceSwitchTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b18 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitManualSourceCandidate(): manualSourceCommitCheck?.let { progressHandler.removeCallbacks(it) } → Unit | manualSourceCommitCheck removed from borrowed queue expected:<0> but was:<1> |
+| b19 | TvStartupGateBoundaryCharacterizationTest::startupAndManualCommitRetireEveryOwnedCallbackWithoutInvalidatingResolver | fun commitManualSourceCandidate(): pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) } → Unit | pikPakGateReprepare removed from borrowed queue expected:<0> but was:<1> |
+| b20 | TvStartupGateBoundaryCharacterizationTest::rearmingStartupReplacesTimeoutAndRemovesPendingCommitCheck | fun armStartupCandidate(Int): startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | startupFailoverTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b21 | TvStartupGateBoundaryCharacterizationTest::rearmingStartupReplacesTimeoutAndRemovesPendingCommitCheck | fun armStartupCandidate(Int): startupCommitCheck?.let { progressHandler.removeCallbacks(it) } → Unit | startupCommitCheck removed from borrowed queue expected:<0> but was:<1> |
+| b22 | TvStartupGateBoundaryCharacterizationTest::newManualCandidateReplacesAnOrphanedOldTimeout | fun beginManualSourceCandidate(Int): manualSourceSwitchTimeout?.let { progressHandler.removeCallbacks(it) } → Unit | manualSourceSwitchTimeout removed from borrowed queue expected:<0> but was:<1> |
+| b23 | TvStartupGateBoundaryCharacterizationTest::cancellingPikpakRetryRetiresItsGateReprepareCallback | fun cancelPikPakGateReprepare(): pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) } → Unit | pikPakGateReprepare removed from borrowed queue expected:<0> but was:<1> |
+| b24 | TvStartupGateBoundaryCharacterizationTest::manualFailureInvalidatesLateResolveAndCancelsSwitcherWaitBeforeRestore | fun failManualSourceCandidate(String,Boolean): sourceSwitchController.cancelSourceSwitchWait() → Unit | manual failure removes current player ready listener |
+| b25 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): sourceSwitchController.cancelSourceSwitchWait() → Unit | startup failure removes current player ready listener |
+| b26 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): startupFailoverGeneration++ → Unit | expected:<2> but was:<1> |
+| b27 | TvStartupGateBoundaryCharacterizationTest::startupFailureRetiresEveryOwnedCheckAndSwitcherWaitBeforeRecovery | fun failStartupCandidate(String): player?.stop() → Unit | failure stops rejected player |
+| b28 | TvStartupGateBoundaryCharacterizationTest::rearmingStartupReplacesTimeoutAndRemovesPendingCommitCheck | fun armStartupCandidate(Int): startupFailoverGeneration++ → Unit | expected:<1> but was:<0> |

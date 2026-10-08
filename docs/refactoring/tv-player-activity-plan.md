@@ -2173,3 +2173,16 @@ finishes and reports), Stremio TV channel startup.
   tests. All 36 earlier destinations and protected inputs remain unchanged;
   original detached worktree removed. **STOPPED before production moves**;
   Claude's independent sample/review and Step 0b/Step 1/gate remain next.
+
+- 2026-10-08 — phase 9 Step 0b: 11 new boundary cases; 28/28 named
+  assertion mutation kills on original `c4906cd2f`, including all four exact
+  Claude survivors k04/k09/k10/k12. Additional sweep covers every moved
+  focus/controls gate, both real progress restart calls, every owned callback
+  removal on commit/failure/rearm, switcher wait removal, failure stop and
+  token/generation changes, and retained PikPak cancellation. The failed-row
+  late resolver reply is ignored while recovery keeps the host alive. The
+  four exact survivors also fail against all 65 phase-9/watchdog tests.
+  `p9-step0b` 810 = 809 pass + the existing focus failure; all 799 `p9-step0`
+  identities/statuses retained with 11 passing additions only. Owner rescan
+  remains 30. Raw proofs/control/XML and comparisons: p9/step0b/. Production
+  unchanged; approved Step 1 moves and the gate follow.
