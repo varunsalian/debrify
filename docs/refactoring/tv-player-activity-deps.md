@@ -9917,3 +9917,50 @@ All other tests and assertions remain byte-identical. Checker classifies
 45 Dart source-test identities match the phase-8 gate exactly (44 success,
 one existing failure). The focused Dart run intentionally records the dirty
 move tree; the full gate runs after the move commit on a clean tree.
+
+## Phase 9 gate
+
+Tested move revision `4b3ca5d87` on a clean worktree. Current checker:
+2359 declarations, zero differences. All 182 checker/auditor self-tests pass;
+historical p1–p8 manifests pass at their eight merge SHAs, including
+p8 at c4906cd2f. The 36 earlier destinations are byte-identical, with no
+whitelist edits. All 29 initializer proofs, computed Host forwarding,
+two preserved Runnable self receivers, five compiled receiver sites
+(inherited findViewById / virtual finish), and the fifteen in-place teardown
+statements pass. Test retargets are exactly reversible; every behavior
+assertion is retained. Kotlin warning set: five identities, unchanged; size
+check passes with the ratcheted 13,320-line activity and 718-line controller.
+
+JVM p9-gate: 810 identities = 809 pass + the same original focus failure,
+all p9-step0b identities/statuses identical. **Harness deviation:** three
+clean 512 MiB attempts exhausted the test worker heap and were rejected;
+no incomplete XML accepted. Heap diagnostics show large Robolectric
+resource/theme structures (e.g. theme-type arrays approximately 112 MB).
+An evidence-only Gradle init script supplies the same 1024 MiB test heap
+to original c4906cd2f + exact pre-move step-0b tests and the clean extracted
+tree. Both complete with identical 810 statuses, also exactly matching the
+original 512 MiB p9-step0b run. JBR/SDK and repository build/test configuration
+are unchanged. The matched original is archived as baseline-p9-step0b-1g;
+all aborted logs, a heap dump/histogram, exact flags and provenance remain
+under p9/gate/. The detached original worktree is removed.
+
+Lint issue-set comparison with archived c4906cd2f passes: 1352 issues
+(253 errors, 1099 warnings), including 175 unsafe opt-ins; no added/removed
+identity. Flutter analyze retains all 1758 diagnostic identities. Release
+`flutter build apk --release --no-pub` succeeds (102,244,526-byte APK);
+mapping and DEX identity verification covers all six new classes, including
+Host/companion/Runnable classes and the activity's anonymous Host, and all
+197 members (121 explicit mappings, 76 implicit identities verified in DEX);
+three checker negative controls also pass. Decoder verification is
+pending-environment: the same nine missing subtitle decoders and three
+filters on all three ABIs; libraries and missing manifests are directly
+identical to phase 1, and the log matches phase 8.
+
+Full Flutter suite, via suite_evidence.py on the clean move revision:
+12,855 identities, exact phase-8 gate comparison: 12,794 success, 13 failures,
+28 errors and 20 skipped; no missing identities, new failures/errors/skips
+or tree changes. No failure baseline recorded/updated to accept regressions.
+pubspec.lock, both protected ProGuard files and historical manifests remain
+unchanged. No device, emulator, install, push or branch change. Evidence:
+`p9/gate/summary.json` and its raw per-check logs/archives, `junit/p9-gate/`.
+Phase 9 complete with the documented decoder environment limitation; stopped.

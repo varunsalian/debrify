@@ -1247,6 +1247,12 @@ finishes and reports), Stremio TV channel startup.
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
+  Three attempts were rejected; matched original/extracted 1024 MiB runs pass
+  identity comparison via an evidence-only init script. A durable test-harness
+  memory setting remains a separate infrastructure follow-up; repository build
+  settings stay unchanged in this structural phase.
+
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
   catch: `onStop` leaves `finalProgressSnapshot` true, while `finish` and
   `onDestroy` clear it in `finally`. Characterization pins the difference;
@@ -2200,3 +2206,25 @@ finishes and reports), Stremio TV channel startup.
   internal JVM suffix through a helper, with assertions unchanged. Five
   Dart anchor changes and an added session-payload assertion are formatted;
   size baseline lowered. Evidence: p9/step1/ and p9/gate/. Full gate follows.
+
+- 2026-10-08 — phase 9 gate complete on `4b3ca5d87`: checker 2359
+  declarations / zero differences; all 182 self-tests and historical p1–p8
+  manifests pass; 36 frozen earlier destinations, 29 initializer proofs,
+  five compiled receiver sites (virtual finish / inherited findViewById),
+  two Runnable receivers and fifteen in-place teardown statements verified.
+  JVM 810 = 809 pass + the same original focus failure, exact p9-step0b
+  comparison. Three 512 MiB full-run heap failures were discarded; both
+  original + pre-move tests and extracted trees complete with the same
+  evidence-only 1024 MiB test heap and retain all 810 statuses. No repository
+  build configuration or assertions changed; heap diagnostics, matched
+  baseline/flags and raw failed runs are archived. Lint exactly retains 1352
+  issues (253 errors / 1099 warnings; 175 unsafe opt-ins), Kotlin five warnings
+  and Flutter analyze 1758 diagnostics. Release APK builds; six classes and
+  197 members retain R8/DEX identities. Decoder pending-environment, directly
+  verified unchanged from phase 1 (all three library hashes and nine missing
+  decoders / three filters). Full Flutter suite: 12,855 identities, exact
+  phase-8 status comparison (12,794 success / 13 failures / 28 errors /
+  20 skipped); clean tested tree. Protected inputs / manifests unchanged, original worktree
+  removed; no device interaction, install or push. Evidence: p9/gate/ and
+  junit/p9-gate/. **STOPPED after phase 9**; no next-phase work or independent
+  self-review performed.
