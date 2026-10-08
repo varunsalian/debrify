@@ -838,8 +838,102 @@ series): external subtitles (load, timing, offset), subtitle track switching
 incl. off, subtitle settings panel, auto-sync manual run + automatic verify
 (incl. a long file on a low-RAM box), the auto-sync pill states.
 
+## Phase 5 — progress reporter, IPTV channel start + Stremio candidate ladder, Start Over
+
+Branch `refactor/tvplayer-p5` off the phase-4 merge `1a33c42cb` (activity 17,205 lines). Evidence under
+`refactor-evidence/tvplayer/p5/`. The feasibility inventory (incl. the
+complete writer/reader table of the IPTV shared token fields, Appendix 2) is
+the "Phase 5 inventory" section of the deps report; lines are at
+`eee52b084` and are re-measured on the phase-4 merge. All phase-3/4
+collaborator rules apply unchanged (incl. the extended bytecode overload
+audit and the initializer-timing rule).
+
+**Selected (≈ 792 moved lines, ≈ 36 activity edits in 19 declarations):**
+
+- `TvProgressReporter` — `sendProgress`, the final-progress snapshot and
+  recovery staging/ack handling (≈ 266 lines, 12 edits in 8 declarations +
+  1 edit to the phase-3 sleep controller's Host `sendProgress` forwarder. That
+  forwarder lives in the **activity's** `sleepTimerController` property, so
+  it is a phase-5 `patched` row on that whole activity property (the single
+  forwarder replacement, a reason, the named sleep characterization test and
+  an extra-edit negative); the phase-3 manifest and controller file stay
+  unchanged and no earlier-destination exception is used). `sendFinished` stays
+  in the activity (a whole-file Dart test pins its payload). The two edits
+  inside `recordPlaybackLifecycle`'s string template use braced host
+  references. Retargets: 5 reflective calls in
+  `StremioTvStartupWatchdogTest` and 1 Dart anchor
+  (`manual_source_validation_contract_test.dart`), each with equal assertions.
+- `TvIptvChannelStartController` — watch registration + startup-channel
+  memory and the Stremio candidate ladder together with
+  `beginIptvPlayback` (14 of the ladder's 23 inbound references are there).
+- `TvIptvStartOverController` — owns `iptvCatchupToken` and the catch-up
+  request flow; the three Start Over status flags stay in the activity
+  (written by live recovery, the player error path and channel switch).
+
+**IPTV split rule (from the inventory).** Only guide + browse + zap paging +
+channel switch (+ `initIptvMode`) must move as one unit, because six shared
+token/context fields (`iptvUiContextToken`, `iptvBrowseToken`,
+`iptvZapRequestToken`, `iptvZapOwnsUiContext`, `iptvZapRequestInFlight`,
+`iptvZapPendingInputs`) are written by both guide and zap code. Phase 5 moves
+none of that core and none of those fields; each phase-5 async guard is owned
+by exactly one controller. Planned order afterwards: zap banner (split
+classic/styled to stay ≤ 800 lines per file), then core + EPG + VOD as one
+multi-file unit; live dock styling with the controls phase; tune pipeline,
+twin trial and live recovery with the playback core.
+
+**Hazards for step T** (all must be fixtures/negatives): shadowed locals
+`window` and `currentIndex` (no host substitution), the `this.index`
+receiver that must not be rewritten, default arguments that read activity
+state (evaluated at call time — must stay so), and controllers constructed
+before the `iptvBrowseHandler`/`progressHandler` they borrow (Host getters
+are computed, never read at construction; the 16 earlier-running moved
+initializers are listed and proven constant/empty-allocation).
+
+**Step T (checker).** The initializer classifier gains narrowly constrained
+support for the forms phase 5 needs — typed empty collection factories
+(`mutableSetOf<String>()` and siblings with explicit type arguments and no
+arguments) and numeric literals with underscores/suffixes (`1_000L`) —
+preserving the original expressions; negatives reject state-reading or
+effectful initializers. A complete phase-5 production extraction fixture
+exercises all 16 proofs. `test_kotlin_moves.py` dispatches per manifest
+phase: the historical phase-4 suite runs with its own manifest, a new
+phase-5 extraction/negative suite runs with the phase-5 manifest, and all 28
+earlier destination files are frozen against `1a33c42cb`.
+
+### Step 0 — characterization of the original
+
+- Progress: every `sendProgress` path (periodic, completed, paused, sleep,
+  final snapshot in `finish`/`onStop`/`onDestroy` incl. the non-try/finally
+  `onStop` difference — exercised by injecting a player-read failure
+  **outside** the delivery catch, since messenger send failures are caught),
+  argument maps sent to Flutter, ack handling (delayed and out-of-order ACKs,
+  ACK after destroy) and recovery staging (`TvPlaybackRecoveryStore`) through
+  a test-only reflected **executor barrier** on the store's separate writer
+  executor (bounded latch waits, cleanup), proving ordinary ticks queue their
+  writes while final/completed/local-completion checkpoints persist before
+  delivery or teardown; and the reflective contracts the watchdog test uses.
+- Channel start: watch registration payload, startup-channel memory
+  read/write, `beginIptvPlayback` ordering, Stremio candidate ladder
+  (candidate order, failure advance, winner reporting, token supersession,
+  `isFinishing` guard) with the recording fake channel.
+- Start Over: catch-up request/token supersession, timeline/flag effects as
+  observed through the retained flags, cancellation on stop/destroy.
+- Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus every phase-3/4 gate addition. Device checklist (end of
+series): resume position saved on exit/stop/sleep and restored next launch;
+Trakt/Simkl progress after watching; IPTV channel start incl. a Stremio
+IPTV channel with failing first candidates; startup channel remembered;
+Start Over / catch-up on an archive-enabled channel.
+
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase-5 original player-read failure occurs outside `deliverProgress`'s
+  catch: `onStop` leaves `finalProgressSnapshot` true, while `finish` and
+  `onDestroy` clear it in `finally`. Characterization pins the difference;
+  any exception-handling change belongs in a separate behavior fix.
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
   `onDestroy`; it can deliver `null` into `ensureIptvChannelEpg` (no
   `isDestroyed` guard). `iptvStremioToken` is not bumped in `onDestroy`.
@@ -1327,3 +1421,102 @@ incl. off, subtitle settings panel, auto-sync manual run + automatic verify
   P2/P3**; 81 compiled overload sites across phases 3–4 match; 28 earlier-
   running initializers covered by inert proofs. Decoder verification remains
   pending-environment. Phase 4 complete; merged.
+- 2026-10-08 — phase 5 design round 1 (Codex): P1s folded (sleep forwarder
+  as a phase-5 `patched` activity-property row; initializer classifier
+  support for typed empty collections/underscored literals with negatives;
+  per-phase fixture dispatch + earlier destinations frozen at `1a33c42cb`);
+  P2 recovery-writer executor barrier and ACK/exception cases.
+- 2026-10-08 — phase 5 design round 2 (Codex): **No P1s**; P2 inventory wording superseded by the plan (note at the inventory head). Phase 5 design approved.
+
+- 2026-10-08 — **Phase 5 step T complete.** Re-measured `1a33c42cb`: 2,548
+  declarations, 42 moved subtrees / 820 partition lines, 20 patched retained
+  declarations, three slot-anchored controller properties and 16 exact inert
+  initializer proofs. Narrow classifier support for typed empty factories and
+  underscored/suffixed literals; state/effectful negatives reject matching
+  forged proofs. Phase-scoped dispatcher preserves the phase-4 manifest/suite;
+  all **97/97** historical and phase-5 checker tests pass. Original all-retained
+  self-comparison and complete production-config extraction fixture: zero
+  differences. Fixture compiles; all seven activity receiver invocation
+  descriptors unchanged; no context aliases/Runnable self sites. All 28
+  earlier destinations frozen at `1a33c42cb`, no whitelist. Sleep wiring is
+  one patched activity-property row with named existing characterization and
+  extra-edit negative. Evidence: `p5/`; production unchanged.
+
+- 2026-10-08 — phase 5 step-T routing follow-up: direct invocation of
+  `test_kotlin_moves.py --manifest …` now selects the active evidence phase,
+  matching the checker wrapper. All historical fixture output stays under
+  `p5/`; the direct dispatcher also passes **97/97** tests. Evidence:
+  `p5/direct-dispatch-self-tests.log`. No production changes.
+
+- 2026-10-08 — **Phase 5 step 0 complete.** Added 44 original-surface
+  characterizations (18 progress, 13 channel-start/ladder, 12 Start Over,
+  one recording handoff) using typed selectors, binary messenger replies,
+  an entered/bounded separate recovery-writer executor barrier, real
+  stop/destroy and tee publication. Queued ordinary versus synchronous
+  final/completed/local-completion recovery, exact progress maps, delayed
+  out-of-order/after-destroy ACKs, the non-finally onStop player-read failure,
+  playlist refresh order, channel/ladder deadlines and token supersession,
+  call-time Start Over defaults and lifecycle/player-error cancellation
+  are pinned. All 44 new tests pass on `1a33c42cb`; **44/44** original-code
+  mutations fail named assertions. Two invalid harness attempts are
+  archived separately and excluded; repaired positives/proofs pass.
+  Clean `baseline-1a33c42cb`: 539 identities (538 pass, existing focus
+  failure 1). Final `p5-step0`: 583 (582 pass, same failure), all 539 prior
+  statuses identical and 44 passing additions; identity comparison passes.
+  Original lint archived: 1,352 issues (253 Error / 1,099 Warning), existing
+  errors retained for later issue-set comparison. Mutation table appended
+  to deps; raw logs/XML, exact patches and final test hashes under `p5/` and
+  `junit/`. All production/protected inputs and 28 earlier destinations
+  unchanged; detached original removed. Step T commits `ae3e8e64f` and
+  `e1859e450` retain 97/97 checker tests, zero-diff original comparison and
+  seven identical compiled overload descriptors. **STOP before production
+  moves**; Claude's separate sample/review and any Step 0b follow later.
+
+- 2026-10-08 — **Phase 5 step 0b complete before moves.** Six controlled-clock
+  cases pin both programme start/stop comparisons at equality and ±1 ms, including
+  request-time airing captured across a delayed reply. All six original-code
+  mutations fail named assertions; Claude exact g14 rerun against all 50 phase-5
+  tests is killed (control 50/50). The moved 60-second elapsed logging comparison
+  retains step-0 coverage/proof; no other moved time comparison exists. Clean
+  p5-step0b: 589 identities (588 pass, same focus failure), all 583 p5-step0
+  statuses identical with six passing additions. Table/raw XML/logs/clock source
+  and original bytecode under p5/step0b/ and junit/p5-step0b/. Production, manifest
+  and protected inputs unchanged; detached original removed before Step 1.
+
+- 2026-10-08 — **Phase 5 step 1 moves complete.** Manifest-materialized 42
+  members into progress/channel-start/Start Over controllers (445/497/375 lines),
+  20 patched activity declarations including the sleep forwarder, three original-slot
+  controller properties and 16 inert initializer proofs. Activity 17,205 → 16,487;
+  size --update scoped to its ratchet. Shared reflection helper gains 42 owner routes;
+  the five watchdog accesses and one Dart progress anchor retarget with equal assertions.
+  Focused JVM 64/64 (all 50 phase-5 cases), all 45 affected Dart statuses unchanged.
+  Checker zero differences across 2,548 declarations; seven compiled overload sites,
+  full lifecycle token/order and five original warning identities pass. All 28 earlier
+  destinations, manifest/protected inputs unchanged. Evidence p5/step1/. Full gate follows.
+
+- 2026-10-08 — **Phase 5 gate complete on 5d3d9a067; decoder pending-environment.**
+  Clean JVM p5-gate matches all 589 p5-step0b statuses (588 pass, same focus failure);
+  all 50 phase-5 cases pass. Checker zero differences over 2,548 declarations, all
+  97 self-tests and four historical manifests pass; 28 earlier destinations frozen.
+  Seven actual bytecode overload descriptors, 16 initializer proofs, full lifecycle
+  order and five original warning identities pass. Size passes at activity 16,487,
+  controllers 445/497/375. Lint exactly retains 1,352 issues (253 errors, 175 opt-ins);
+  analyzer all 1,758 prior identities. Release APK succeeds; R8/DEX preserves all
+  14 new classes/273 members and three negative controls. Decoder failure/output and
+  all three native hashes unchanged: pending-environment. Full quiet Flutter suite
+  exactly matches all 12,855 phase-4 identity/status pairs on the same SDK/flags
+  and stable clean tree. Step 0b: six passing additions, six original assertion proofs,
+  Claude exact g14 killed (control 50/50). Manifest/protected inputs/earlier files
+  unchanged; detached original removed. Evidence p5/step0b/, p5/step1/, p5/gate/
+  and junit/. No self independent review, push, branch switch, device/emulator or
+  bug fix. **STOPPED after phase 5**; Claude reviews separately.
+- 2026-10-08 — phase 5 post-implementation reviews of `4dd0d97e0..ecc5a3f9d`.
+  Claude: activity-side changes and both retargets read (Dart anchor now in
+  `TvProgressReporter.kt`, asserted manual-switch guards still inside
+  `sendProgress`); Claude's 18-mutation sample 17/18, survivor g14 (exact-now
+  programme boundary) closed in 0b. Independent Codex review (fresh
+  session): **No P1s, no P2/P3**; 4 historical `--at` checks, 28 frozen
+  destinations, progress/recovery/ACK/teardown ordering, `onStop`
+  non-finally vs `finish`/`onDestroy` finally all preserved. Activity
+  17,205 → 16,487. Decoder verification remains pending-environment.
+  Phase 5 complete; merged.

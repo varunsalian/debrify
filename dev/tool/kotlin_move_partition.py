@@ -133,6 +133,22 @@ def extraction(manifest, original):
     return files
 
 
+def initializer_kind(expression):
+    """Recognize only the reviewed inert forms; calls with arguments stay rejected."""
+    import re
+    if re.fullmatch(r'(?:null|false|true|[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?)', expression):
+        return 'constant'
+    if expression == 'Handler(Looper.getMainLooper())':
+        return 'handler-allocation'
+    # Type syntax contains no expression/call tokens. Explicit empty factories
+    # allocate only; state-reading arguments and factory wrappers are forbidden.
+    typed_empty = r'(?:mutableSetOf|mutableListOf|mutableMapOf|setOf|listOf|mapOf|emptySet|emptyList|emptyMap)<[A-Za-z_][A-Za-z0-9_<>,.? \t]*>\(\)'
+    if re.fullmatch(r'(?:intArrayOf\([\d, ]+\)|emptyList\(\)|' + typed_empty +
+                   r'|Runnable \{[\s\S]*\}|object : SubtitlePanelController.Callbacks \{[\s\S]*\})', expression):
+        return 'allocation'
+    return None
+
+
 def check_initializer_timing(manifest, inventory, original, errors):
     """All later property initializers require an exact, reviewed inert proof."""
     import re
@@ -152,11 +168,8 @@ def check_initializer_timing(manifest, inventory, original, errors):
         if row.get('text') != text or row.get('line') != original.count('\n', 0, node['start']) + 1 or not row.get('proof'):
             errors.append('initializer timing requires original text/line and inert proof: ' + row['original'])
         expression = text.split(' = ', 1)[-1].split(' //', 1)[0].strip()
-        kind = ('constant' if re.fullmatch(r'(?:null|false|true|0|0L)', expression) else
-                'handler-allocation' if expression == 'Handler(Looper.getMainLooper())' else 'allocation')
-        inert = kind != 'allocation' or bool(re.fullmatch(
-            r'(?:intArrayOf\([\d, ]+\)|emptyList\(\)|mutableListOf<[^\n]+>\(\)|Runnable \{[\s\S]*\}|object : SubtitlePanelController.Callbacks \{[\s\S]*\})', expression))
-        if row.get('kind') != kind or not inert:
+        kind = initializer_kind(expression)
+        if kind is None or row.get('kind') != kind:
             errors.append('initializer timing not proven inert: ' + row['original'])
 
 

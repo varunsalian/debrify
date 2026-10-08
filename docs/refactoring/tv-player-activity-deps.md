@@ -5433,3 +5433,1274 @@ Exact name/getter mapping and proof that only the helper changed: `p4/step1/help
 - Full quiet Flutter suite via `suite_evidence.py` on this worktree: all 12,855 phase-3 identity/status pairs exactly match ({'success': 12794, 'failure': 13, 'error': 28, 'skipped': 20}). Same SDK, complete done event, empty scope and stable tested tree. Helper comparison passes; no missing identities/new failures/skips. Four affected source-test files also match all 45 earlier statuses; no Dart edits/anchor retarget required.
 
 Raw evidence: `p4/step0b/`, `p4/step1/`, `p4/gate/`, `junit/p4-step0b/`, `junit/p4-gate/`. Production moves follow the approved manifest exactly; its bytes and earlier destinations are unchanged. Lockfile and all ProGuard files retain original hashes. Temporary original worktree removed; no push, branch switch, device/emulator interaction, bug fix or self independent review. STOP after phase 4; Claude's separate review follows.
+
+---
+
+## Phase 5 inventory (at `eee52b084`; re-measure on `1a33c42cb`)
+
+> Superseded where they differ (phase 5 design rounds 1–2): the sleep `sendProgress` forwarder edit is a phase-5 `patched` row on the whole activity `sleepTimerController` property (single forwarder replacement, reason, named sleep test, extra-edit negative); **no** earlier-destination/whitelist exception is used anywhere below.
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`eee52b084` (18,265 lines; class header 136, companion 18229). Read-only survey of the main
+checkout (no worktree, no build, nothing under `../debrify-wt/`). Rules are the plan's
+**Phase 3 → Collaborator pattern** plus the phase-3 post-review tightening and the phase-4 step-T
+additions: `internal class TvXController(private val activity: AppCompatActivity, private val host: Host)`;
+bytecode overload audit of every substituted `this` incl. constructor invocations, context aliases and
+an explicit list of anonymous `Runnable`/`object` receivers; computed, explicitly-qualified
+(`this@AndroidTvTorrentPlayerActivity.x`) Host forwarders; slot-anchored controller properties; moved
+initializers that run earlier than their original slot must be listed and proven inert;
+`::x.isInitialized` only through activity-owned getters; braced host templates; cross-feature reads via
+the owning controller; **no delegators**; teardown order unchanged.
+
+Method. A brace/string/comment-aware indexer resolved all **927** depth-1 members of the class and
+their spans (attached KDoc/comments included); a word-boundary scan (string templates included,
+comments excluded, hits qualified on another receiver excluded, `this@Activity.` hits included) mapped
+every reference to its enclosing member and classified read/write/mutate/call; every list below was
+then checked by hand. "Patch" = one token edit in a retained activity declaration. "Substitution" =
+one declared edit inside a moved body. "Re-point" = a later edit of a pinned Host forwarder when its
+target moves. Line counts include attached comments; a section banner separated from its declaration by
+a blank line is counted only where stated (e.g. 10888–10899).
+
+**Phase-4 state assumed** (`TvAutoSyncController`, `TvSubtitleController` incl. the five subtitle
+menu-row builders, per `refactor/tvplayer-p4` design at `a665502e8`). Checked mechanically against the
+phase-4 member list: **no phase-5 candidate (A, B1–B9) reads, writes or calls any phase-4 member, and
+no phase-4 member references a phase-5 candidate** (0 refs both directions). Phase 4 therefore adds no
+Host forwarders here; it only shifts line numbers and leaves its own token patches in `onStart`
+(17255), `onStop` (17294) and `onDestroy` (17544) (lines at `eee52b084`) that phase-5 patches sit beside.
+`resetSubtitleState` (4695) and `subtitleTrackReadiness` (1148) stay in the activity in phase 4.
+
+**Phase-3 state (pinned `added` spans in the activity):** `upNextController` 162, `skipSegmentController`
+1157, `sleepTimerController` 1186 (Host forwarder `override fun sendProgress(completed: Boolean) =
+this@AndroidTvTorrentPlayerActivity.sendProgress(completed)` at **1193**), `iptvRecordingActionsController`
+8382 (Host forwarders 8385–8394 read `currentIptvStreamUrl`, `iptvHlsForcedUrls`, `iptvChannels`,
+`currentIptvIndex`, `iptvSources`, `iptvSourceId`, `currentIptvHttpHeaders`, `iptvRecordingController`,
+`iptvRecordButton`, `legacyStoragePermissionRequestCode`).
+
+### Cross-cutting facts for phase 5
+
+- **Shared IPTV core stays in the activity** (owner) and is read/written through computed Host
+  forwarders by every IPTV candidate; it never needs a later re-point:
+  `isIptvMode` 780, `iptvChannels` 781 (7 writers in 7 decls, 106 reads), `currentIptvIndex` 782
+  (7 writers, 67 reads), `iptvSeriesAudioKey` 793, `currentIptvHttpHeaders` 801 (`@Volatile`),
+  `iptvHlsForcedUrls` 806, `currentIptvStreamUrl` 910, `iptvSources` 928, `iptvSourceId` 934.
+  Reasons: 7 of them are read by the phase-3 recording Host (8385–8391); the phase-2
+  `IptvLiveLoadErrorPolicy` supplier in `setupPlayer` reads `iptvChannels`/`currentIptvIndex` on loader
+  threads; reflective anchors: `TvIptvLoadPolicyCharacterizationTest` 34, 51–52, 59–65, 69, 86;
+  `TvPlayerOriginalAccess` 218–219; `TvRecordingCharacterizationTest` 27, 28, 40, 42, 61, 87, 100;
+  `TvRecordingMessagesCharacterizationTest` 62, 63, 93, 116, 129, 131;
+  `TvRecordingBoundaryMessagesCharacterizationTest` 42, 76; `TvScheduleCharacterizationTest` 56, 112;
+  `TvPhase3LifecycleCharacterizationTest` 111; `TvSleepTimerCharacterizationTest` 108, 113, 126;
+  `isIptvMode` also `StremioTvStartupWatchdogTest` 70, `TvSkipUiCharacterizationTest` 37,
+  `TvUpNextCharacterizationTest` 37.
+- **Borrowed handlers (activity-owned, never cleared by a controller):** `iptvBrowseHandler` 940 —
+  B1 1 s settle + 2 s watch-registration fallback, B5 60 s archive-metadata retry, B9 deferred trim
+  post (8939); cleared wholesale `onDestroy` **17464**. `progressHandler` 1286 — B2 20 s stall
+  watchdog, B6 hide (4.5 s) / tick (1 s) `postAtTime` tokens; cleared wholesale **17511**. Note: the
+  B1/B2 slot (939) and B3 slot (786) precede the initializers of `iptvBrowseHandler` (940) and
+  `progressHandler` (1286); legal only because forwarders are computed (no construction-time read) —
+  the existing "no Host member read during construction" negative covers it; add a fixture case.
+- **Flutter bridge:** every candidate calls `MainActivity.getAndroidTvPlayerChannel()` directly or a
+  phase-2 top-level request (`requestIptvStreamUrls`, `reportIptvStreamResult`, `requestIptvEpg`); no
+  seam is needed — step 0 uses the existing `TvPlayerRecordingMessenger` fake with main-looper replies.
+- **Receivers that are never substituted / shadowed names:** A `deliverProgress` `object :
+  MethodChannel.Result` (no `this`); B1 `Runnable { … return@Runnable }` SAM lambda (10921), local
+  `fun continuePlayback()` (10962) + `object : MethodChannel.Result` with expression bodies (10989–10994); B2
+  `Runnable { … return@Runnable }` (13083), `runOnUiThread { … return@runOnUiThread }` (12945, labels
+  survive `activity.runOnUiThread {`); B3 `object : MethodChannel.Result` (9994–10085) with local
+  `fun requestStillRelevant()`; B7 `pauseButton?.apply { … this@AndroidTvTorrentPlayerActivity … }`
+  (8519–8530) and `iptvPrevButton?.apply {}`/`iptvNextButton?.apply {}` (8269–8282, implicit button
+  receiver); B9 `item.apply { this.index = index }` (**10847**, receiver `this`), local `val window`
+  (**10641**, shadows `Activity.window`), local `val currentIndex` (**10740**, shadows the activity's
+  `currentIndex`).
+- **Braced templates — retained patches too:** `recordPlaybackLifecycle` 14899
+  `"sent=$progressSentCount acknowledged=$progressAckCount $details"` is a *retained* declaration whose two
+  patches must be `${progressReporter.progressSentCount}` / `${progressReporter.progressAckCount}` (an
+  unbraced `$progressReporter.x` interpolates the controller). Moved: `"index:$currentIndex"` 15072 →
+  `${host.currentIndex}`. Later (B9): 8172 `$currentIptvIndex`. Extend the unbraced-template negative to
+  retained `patched` rows.
+- **Default-argument expressions that read host state:** B3 `updateIptvStartOverButton(entry:
+  IptvChannelEntry? = iptvChannels.getOrNull(currentIptvIndex))` 9879–9880 (2 substitutions inside
+  the default, still evaluated in the callee); B6 `showIptvZapBanner(entry, docked: Boolean =
+  controlsMenuVisible)` 12068–12071. **Host interfaces with defaults:** `recordPlaybackLifecycle(event,
+  details: String = "")` (1-arg calls 14960, 14963); `switchToIptvChannel(entry, adoptVisibleBrowseList =
+  true, checkpointOutgoing = true)` (B3 calls it 1-arg at 10014).
+- **Reflection / mangling:** a moved member a test reflects by method name must be `private` or a
+  public member of the `internal` class (A `sendProgress`). Fields reflected with `getDeclaredField`
+  keep their JVM backing-field name under any Kotlin visibility (A `recoveryCompletedItemKeys`).
+- **Volatile/threading:** no candidate field is `@Volatile`; all candidate code runs on main
+  (MethodChannel results, `runOnUiThread`, main-looper handlers). `TvPlaybackRecoveryStore.stageAsync/
+  acknowledgeAsync` hop internally with already-built strings (unchanged).
+- **No `::x.isInitialized` in any phase-5 candidate** (no new activity readiness getters).
+
+---
+
+### A. Progress reporter (rank 1)
+
+`sendProgress` is reached from: the 5 s ticker (`progressRunnable` 1376), STATE_ENDED
+(`playbackListener` 1633), the sleep fire (phase-3 controller → activity Host forwarder 1193),
+`finish()` 14910, `onStop` 17268 and `onDestroy` 17418. Gated by `isIptvMode` (→ `sendIptvProgress`),
+`isStremioTvMode && startupSourcesExhausted`, the startup cursor, the manual-switch snapshot and
+restore flag; writes the item's progress back into the shared `payload` model.
+
+**Owned state** (three blocks → controller slot **1046**):
+
+| line | name | initializer | runs earlier than original slot? |
+|---|---|---|---|
+| 1046 | `recoverySequence` | `= 0L` | no (slot) |
+| 1363–1369 | `locallyCompletedItemKeys` (+ comment 1363–1368) | `mutableSetOf<String>()` | yes — allocation only, inert |
+| 1370 | `recoveryCompletedItemKeys` | `mutableSetOf<String>()` | yes — allocation only, inert |
+| 14885–14889 | `progressSentCount`, `progressAckCount`, `lastProgressLogAt`, `lastProgressAckAt`, `lastProgressBridgeAvailable` | `0`, `0`, `0L`, `0L`, `null` | yes — constants, inert |
+
+No property initializer between 1046 and 14889 reads any of them (checked).
+
+**Stays in the activity (host), with reasons:**
+- `finalProgressSnapshot` 14890 — set/cleared around `sendProgress` in `finish` (14908/14912),
+  `onStop` (17267/17269), `onDestroy` (17416/17420, try/finally); read only by `deliverProgress`
+  (14929, 14933). Keeping it = 2 host reads; moving = 6 lifecycle patches.
+- `finishProgressAttempted` 14891 and `finish()` 14903 (override; cannot leave).
+- `recordPlaybackLifecycle` 14893 — 11 lifecycle callers; uses `System.identityHashCode(this)`,
+  `isFinishing`, `isChangingConfigurations`. Keeping = 2 braced patches; moving = 11.
+- `progressHandler`, `progressRunnable` 1374, `restartProgressUpdates` 14880 — the shared 5 s ticker
+  (Up Next, IPTV recovery, twin trial, tune diagnostics) → playback core.
+- **`sendFinished` 15180 (changed from the phase-4 inventory):** it carries the whole-file Dart anchor
+  `test/manual_source_validation_contract_test.dart:472` `contains('result["startupSourcesExhausted"] =
+  true')`, and it reads startup-gate state (`startupSourcesExhausted`, `startupRecoveryConsumed`) that
+  moves with the phase-6 startup gate. Keeping it saves 1 `onDestroy` patch (17570) and 1 Dart retarget
+  (18 lines stay).
+
+**Owned functions:** `deliverProgress@14923` (KDoc 14921), `stageRecoveryCheckpoint@14973`,
+`acknowledgeRecoveryCheckpoint@15026`, `sendProgress@15030`, `sendIptvProgress@15131` (KDoc 15122),
+`sendPlaybackMaintenanceState@15156`, `sendPlaybackActivityState@15166`. **15 members, 266 lines.**
+
+**Inbound** (every reference outside the moved set):
+
+| line | enclosing | ref | kind | patch |
+|---|---|---|---|---|
+| 1193 | `sleepTimerController` Host object (phase-3 `added`) | `sendProgress` | call | `this@…Activity.sendProgress(completed)` → `this@…Activity.progressReporter.sendProgress(completed)` (edit of a phase-3 pinned span) |
+| 1376 | progressRunnable@1374 (`object : Runnable`) | `sendProgress` | call | `progressReporter.sendProgress(` |
+| 1425 | playbackListener@1422 | `sendPlaybackMaintenanceState` | call | ✓ |
+| 1633 | playbackListener@1422 | `sendProgress` | call | ✓ |
+| 14899 | recordPlaybackLifecycle@14893 | `progressSentCount` | read (template) | `${progressReporter.progressSentCount}` |
+| 14899 | recordPlaybackLifecycle@14893 | `progressAckCount` | read (template) | `${progressReporter.progressAckCount}` |
+| 14910 | finish@14903 | `sendProgress` | call | ✓ |
+| 17190 | parsePayload@17048 | `locallyCompletedItemKeys` | `.clear()` | ✓ |
+| 17191 | parsePayload@17048 | `recoveryCompletedItemKeys` | `.clear()` | ✓ |
+| 17222 | onStart@17219 | `sendPlaybackActivityState` | call | ✓ |
+| 17264 | onStop@17258 | `sendPlaybackActivityState` | call | ✓ |
+| 17268 | onStop@17258 | `sendProgress` | call | ✓ |
+| 17418 | onDestroy@17405 | `sendProgress` | call (inside try/finally) | ✓ |
+
+**12 activity patches in 8 declarations + 1 edit to the phase-3 `sleepTimerController` span** (needs the
+checker's reviewed earlier-phase whitelist entry; its Host interface and `TvSleepTimerController.kt` are
+unchanged).
+
+**Outbound host needs** (29 members, 56 refs, all read-only; the payload item is mutated through the
+read `payload` model): `player`×9, `sourcePersistenceSessionId`×6, `currentIndex`×4 (one in template
+15072), `recordPlaybackLifecycle`×4 (two 1-arg → Host default `details = ""`), `currentIptvIndex`×2,
+`finalProgressSnapshot`×2, `isIptvMode`×2, `playbackSpeeds`/`playbackSpeedIndex`×2 each,
+`resizeModeLabels`/`resizeModeIndex`×2 each, `recoveryDataGeneration`×2, and ×1 each
+`currentStremioSourceIndex`, `heldResumePositionMs()`, `iptvChannels`, `isStremioTvMode`,
+`manualSourceRestoreInProgress`, `manualSourceSwitchSnapshot`, `maxStableDurationMs`, `payload`,
+`playlistAdapter`, `playlistVisible`, `recoveryImdbId`, `recoveryProfileId`, `recoverySeriesTitle`,
+`recoveryStartedAtMs`, `recoveryTitle`, `startupFailoverCursor`, `startupSourcesExhausted`. Android:
+`filesDir` → `activity.filesDir` ×3 (15020, 15023, 15027). **No `this`** (0 overload-audit sites).
+Later re-points: ≈ 13 (display ×4 → display/controls phase; startup/manual-switch/recovery ×≈ 8 → phase 6;
+playlist ×2 → phase 7).
+
+**Timers / teardown:** none owned. Order constraints live at the call sites and are preserved in place:
+`onStop` 17262 catch-up cancel → 17264 activity-state false → 17267–17269 final snapshot →
+`super.onStop()`; `onDestroy` 17406 catch-up cancel … 17416–17421 final snapshot (before any teardown)
+… 17570 `sendFinished()` (retained) last before `super.onDestroy()`; `finish()` once-only snapshot before
+`PlaybackReturnHandoff.markReturning`. Method names/maps unchanged (`torrentPlaybackProgress` with
+`MethodChannel.Result`, `torrentPlaybackMaintenanceState`, `torrentPlaybackActivityState`); sync vs async
+staging rule unchanged.
+
+**Tests / anchors (retargets):**
+- `StremioTvStartupWatchdogTest` (own helpers on `activity.javaClass`, 30–41): `call(activity,
+  "sendProgress", true)` **108, 119**, `call(activity, "sendProgress", false)` **120**, `read(activity,
+  "recoveryCompletedItemKeys")` **122, 141** → retarget to `read(activity, "progressReporter")`; equal
+  assertions. `sendProgress` becomes a **public** member of the `internal` class (declared visibility
+  substitution) — not `internal fun` (mangled `sendProgress$app_debug`).
+- Dart `test/manual_source_validation_contract_test.dart` **337–346**: `_between(nativePlayer, 'private fun
+  sendProgress(', 'private fun commitStartupCandidate(')` + `contains('manualSourceSwitchSnapshot !=
+  null')` / `contains('manualSourceRestoreInProgress')`. Breaks on the start marker → retarget to
+  `TvProgressReporter.kt` with `'fun sendProgress('` … `'private fun sendIptvProgress('` (narrower than
+  the original ≈ 2,500-line range, so stronger; substrings survive as `host.manualSourceSwitchSnapshot !=
+  null`). Whole-file anchor 490 `"sourcePersistenceSessionId" to sourcePersistenceSessionId` keeps three
+  retained occurrences (2531, 5813, 15779) — no retarget; reviewer confirms purpose. Anchor 472 untouched
+  (sendFinished retained).
+- Behavioural, unchanged: `TvSleepTimerCharacterizationTest` 69/96 (progress before pause via the fake
+  messenger), `TvPlaybackRecoveryStoreTest`, `PlaybackProgressPolicyTest`.
+
+**Hazards:** phase-3 pinned-span edit; braced retained patches (14899); 7 visibility substitutions
+(`sendProgress`, `sendPlaybackMaintenanceState`, `sendPlaybackActivityState` public;
+`locallyCompletedItemKeys`, `recoveryCompletedItemKeys`, `progressSentCount`, `progressAckCount`
+non-private for activity access); Host default argument; `progressRunnable` is an anonymous object —
+its `progressReporter.` patch resolves to the activity property (no shadowing member on `Runnable`).
+
+**Proposed shape:** `internal class TvProgressReporter(private val activity: AppCompatActivity, private
+val host: Host)`, read-only Host of 29 members (+`fun recordPlaybackLifecycle(event: String, details:
+String = "")`, `fun heldResumePositionMs(rawPosition: Long): Long?`). **Substitutions ≈ 66** (56 host
+incl. 1 braced template, 3 `filesDir`, 7 visibility). **Activity: 12 patches (8 decls) + 1 phase-3 span;
+6 test retargets (5 Kotlin + 1 Dart).** Size ≈ 266 + ≈ 45 structural ≈ 310. **Risk: medium**
+(three lifecycle teardown paths, Trakt false-watch guards) — mitigated by no timers, no threading change,
+existing coverage.
+
+**Step-0 gaps:** progress map keys/values per mode (series/single/IPTV VOD/IPTV live skipped);
+`deliverProgress` log sampling (60 s, bridge flip, forced on final/completed) and ack handling
+(`result == true` → ack count, `acknowledgeAsync` with the right sequence; error/notImplemented/throw);
+sync vs async staging (`finalProgressSnapshot`, `completed`, `localCompleted`); local-completion
+key dedupe and `parsePayload` reset; held-resume reporting; playlist progress refresh;
+maintenance/activity-state maps; `finish()` once-only. Recovery store is file-backed (Robolectric
+`filesDir`), the messenger fake exists.
+
+---
+
+### B. IPTV live — can it be split?
+
+**Answer: partly.** The plan's "one unit: shared token protocol" holds for the **guide + browse + zap
+paging + channel switch (+ `initIptvMode`)** core only. Five satellites own their state cleanly (all
+writers inside the unit) or own nothing but a token, and can move before the core:
+
+| unit | owns its state cleanly? | evidence |
+|---|---|---|
+| B1 watch registration + startup-channel memory | **yes** | `iptvWatchRegistrationToken`, `lastLiveChannel*`: every writer/reader inside |
+| B2 Stremio resolve + candidate ladder (incl. `beginIptvPlayback`) | **yes** | all 6 ladder fields written only inside; `iptvStremioToken` 1 writer (`beginIptvPlayback`); outside reads only (5 refs) |
+| B2′ ladder *without* `beginIptvPlayback` | no | 14 of its 23 inbound refs are `beginIptvPlayback` resetting/initialising ladder state (12916–12961) |
+| B3 Start Over / catch-up | **token only** | `iptvCatchupToken` has 2 outside bumps (419, 10827); the 3 flags `iptvStartOverActive/Loading/TimelineVisible` have 9 outside writes in 3 decls (`performIptvLiveRetune`, `playbackListener`, `switchToIptvChannel`) and 3 outside reads → stay host (sleep-latch precedent) |
+| B6 zap banner | **yes** | 29 fields, all writers inside; outside reads `iptvZapBanner` ×3, `iptvZapBannerDocked` ×3 |
+| B5 EPG now/next + guide header | owns nothing | entry EPG state lives on `IptvChannelEntry`; header views bound by `initIptvMode` |
+| B4 EPG schedule pane | yes, but costly | pane fields clean except `iptvEpgAdapter` (created by `setupIptvOverlay` 8614) and `iptvEpgEntry` (read by guide callbacks 8617/8620, keys 6804); 9 view binds in `initIptvMode` → 33 patches |
+| B7 live dock styling | yes (2 maps) | but writes host `cinemaSeekMode`/`cinemaSeekWasPlaying`; Host = 30 control-dock views |
+| B8 VOD/episode nav | no | `iptvSeriesAudioKey` written by `initIptvMode`, `requestIptvCatchup`, `switchToIptvChannel` |
+| B9 core | **must move as one** | protocol table below |
+
+**Token/generation fields** (writers / readers by declaration; full matrix in Appendix 2):
+
+| field | writers | readers | verdict |
+|---|---|---|---|
+| `iptvUiContextToken` 954 | beginIptvAllCategorySearch, restoreIptvCategoryAfterSearch, requestIptvBrowse, beginIptvCategoryZapSession, activateIptvZapUiContext, onDestroy 17466 | requestIptvBrowse ×3, requestIptvZapPage ×4 | **core (shared guide↔zap)** |
+| `iptvBrowseToken` 938 | same 5 + onDestroy 17467 | requestIptvBrowse ×3 | core |
+| `iptvZapRequestToken` 949 | beginIptvAllCategorySearch, restoreIptvCategoryAfterSearch, requestIptvBrowse, beginIptvCategoryZapSession, requestIptvChannelJump, requestIptvZapPage, disableIptvZapPaging, activateIptvZapUiContext, onDestroy 17468 | requestIptvChannelJump ×3, requestIptvZapPage ×6 | core |
+| `iptvZapOwnsUiContext` 955 | initIptvMode, beginIptvAllCategorySearch, restoreIptvCategoryAfterSearch, requestIptvBrowse, beginIptvCategoryZapSession, requestIptvChannelJump, activateIptvZapUiContext | beginIptvAllCategorySearch, requestIptvBrowse ×3, bootstrapInitialIptvZapPaging, requestIptvZapPage ×3, activateIptvZapUiContext | core |
+| `iptvZapRequestInFlight` 950 | 15 writes in 8 decls (guide search ×2, browse, 4 zap fns, onDestroy 17469) | setupIptvOverlay, requestIptvZapPage, prefetchIptvZapPage, drainPendingIptvZapInputs, prefetchAdjacentIptvCategory, requestAdjacentIptvCategory | core |
+| `iptvZapPendingInputs` 951 | `.clear()` in guide search ×2, browse, 4 zap fns, onDestroy 17470 | queue/drain | core |
+| `iptvGuideUsesZapWindow` 953 | restoreIptvCategoryAfterSearch, requestIptvBrowse, 5 zap fns | setupIptvOverlay, beginIptvAllCategorySearch, iptvGuideItemCountLabel, trimHiddenIptvZapWindow | core |
+| browse context `iptvSourceName/ContentType/SelectedCategory/Categories/BrowseChannels` | init + guide pickers/search/browse + zap (`requestIptvChannelJump`, `requestIptvZapPage`, `installIptvZapWindow`, `mergeIptvZapPage`, `activateIptvZapUiContext`, …) | guide chrome/pickers + zap | core |
+| `iptvZapPagingActive`/`iptvZapCategoryTotal`/`iptvZapSourceId` | zap (+ init for SourceId) | **also banner** `paintIptvZapBannerPosition` 12359–12383, `updateIptvEpisodeControls` 12669, keys 6779 | core; banner reads via owning controller |
+| `iptvEpgToken` 987 | showIptvSchedulePane, hideIptvEpgPane, onDestroy 17465 | showIptvSchedulePane, **requestIptvCatchup ×2 (B3)** | EPG pane; B3 reads via Host |
+| `iptvCatchupToken` 786 | B3 ×3, performIptvLiveRetune 419, switchToIptvChannel 10827 | requestIptvCatchup ×2 | B3 (2 outside bump patches) |
+| `iptvStremioToken` 996 | beginIptvPlayback | beginIptvPlayback ×2, armIptvStremioStallWatchdog ×2 | B2 |
+| `iptvWatchRegistrationToken` 939 | beginIptvPlaybackAfterWatchRegistration | same | B1 |
+| `iptvZapBannerHideToken`/`TickToken` 11170/11171 (`val Any()`) | — | show/schedule/hide | B6 |
+
+Splitting the core with the protocol fields left activity-owned was measured and rejected: guide
+functions alone (1,058 lines) would need a 56-member Host with 22 written fields; zap functions alone
+(776 lines) a 47-member Host with 31 written fields — both far past the narrow-Host rule, and the
+second phase would re-point ≈ 25 pinned forwarders.
+
+---
+
+### B1 + B2. IPTV channel start: watch registration, startup-channel memory, Stremio resolve + candidate ladder (rank 2; one controller)
+
+`beginIptvPlaybackAfterWatchRegistration` → `beginIptvPlayback` → (plain URL) `setIptvMediaItem` or
+(Stremio `stremio-tv://` key) async resolve → ladder. `noteLiveChannelPlaying` (startup-channel memory)
+is armed by real playback (`onIsPlayingChanged`). One cohesive "start playback for a channel" owner;
+merging B1 and B2 turns B1's three `beginIptvPlayback` calls into internal calls.
+
+**Owned state** (→ controller slot **939**):
+
+| line | name | initializer | earlier than slot? |
+|---|---|---|---|
+| 939 | `iptvWatchRegistrationToken` | `= 0` | slot |
+| 991–996 | `iptvStremioToken` (+ comment 991–995) | `= 0` | yes — constant |
+| 997–1000 | `iptvStremioChannelKey`, `iptvStremioCandidates`, `iptvStremioCandidateIndex`, `iptvStremioWinnerReported` | `null`, `emptyList()`, `0`, `false` | yes — constants |
+| 1001–1004 | `iptvStremioStallRunnable` (+ comment) | `null` | yes |
+| 10888–10905 | `lastLiveChannelSettleMs` (+ section banner 10888–10899, KDoc 10901–10904) | `1_000L` | yes |
+| 10907–10908 | `lastLiveChannelArmedUrl`, `lastLiveChannelRunnable` | `null` | yes |
+
+All inert (constants / `emptyList()` singleton). Alternative: two controllers (B1 slot 939, B2 slot 996)
+— no earlier initializers at all, +1 cross-controller forwarder (`beginIptvPlayback`) ×3 substitutions.
+
+**Owned functions:** `noteLiveChannelPlaying@10910`, `beginIptvPlaybackAfterWatchRegistration@10949`,
+`beginIptvPlayback@12909` (KDoc 12903), `populateIptvStremioSources@12972` (KDoc 12966),
+`clearIptvStremioSources@12994`, `switchToIptvStremioSource@13007` (KDoc 13001),
+`tryNextIptvStremioCandidate@13032` (KDoc 13027), `armIptvStremioStallWatchdog@13079`,
+`cancelIptvStremioStallWatchdog@13097`, `reportIptvStremioWinnerIfNeeded@13103`.
+**20 members, ≈ 321 lines** (B1 94 + the 12-line section banner + B2 215).
+
+**Inbound:**
+
+| line | enclosing | ref | kind | note |
+|---|---|---|---|---|
+| 401 | iptvLiveRecoveryEligible@396 | `iptvStremioChannelKey` | read | patch |
+| 401 | iptvLiveRecoveryEligible@396 | `iptvStremioWinnerReported` | read | patch |
+| 1446 | playbackListener@1422 | `reportIptvStremioWinnerIfNeeded` | call | patch |
+| 1732 | playbackListener@1422 | `noteLiveChannelPlaying` | call | patch |
+| 1804 | playbackListener@1422 | `beginIptvPlayback` | call | patch |
+| 1853 | playbackListener@1422 | `tryNextIptvStremioCandidate` | call | patch |
+| 9937 | toggleIptvStartOver@9928 | `beginIptvPlayback` | call | B3 Host forwarder if B3 moves too, else patch |
+| 10058 | requestIptvCatchup@9951 | `beginIptvPlayback` | call | same |
+| 10874 | switchToIptvChannel@10821 | `beginIptvPlaybackAfterWatchRegistration` | call | patch |
+| 12627 | playIptvChannel@12618 | `beginIptvPlayback` | call | patch |
+| 12897 | retryIptvAsHlsIfUnrecognized@12861 | `iptvStremioChannelKey` | read | patch |
+| 12898 | retryIptvAsHlsIfUnrecognized@12861 | `armIptvStremioStallWatchdog` | call | patch |
+| 16046 | watchSourceSwitchOutcome@16025 | `iptvStremioChannelKey` | read | patch |
+| 16892 | switchToStremioSource@16888 | `iptvStremioChannelKey` | read | patch |
+| 16893 | switchToStremioSource@16888 | `switchToIptvStremioSource` | call | patch |
+
+(10952, 10958, 10968 — B1's own `beginIptvPlayback` calls — become internal.) **13 activity patches in
+7 declarations** with B3 in the same phase (15 in 9 without B3).
+
+**Outbound host needs** (20 members, 49 refs): `stremioSources`×5 (mutated), `currentStremioSourceIndex`
+×4 (written → `var`), `player`×5, `setIptvMediaItem`×4, `iptvChannels`×6, `currentIptvIndex`×6,
+`iptvBrowseHandler`×3 (borrowed), `progressHandler`×2 (borrowed), `sourceBrowser`×2, `currentIptvStreamUrl`
+×1 (written → `var`), `isIptvMode`×2, `iptvSourceId`, `iptvTwinPreferredUrls`, `subtitleTrackReadiness`,
+`setupStremioSources`, `stremioSourceBadge`, `updateStremioQualityBadge`, `watchSourceSwitchOutcome`,
+`dropStaleSourceSwitchFeedback`, `iptvRecordingActionsController` (phase-3 controller, read via the owning
+controller: `host.iptvRecordingActionsController.finalizeIptvRecordingIfActive()` 12914). Android:
+`this` → `activity` ×2 (Toast 12950 inside the `runOnUiThread` lambda, Toast 13058),
+`runOnUiThread` ×1 (12945), `isFinishing` ×2 (12946, 13084), `isDestroyed` ×1 (13084).
+Later re-points: ≈ 9 (source-switcher state ×8 → phase 6; `setIptvMediaItem` → playback core).
+
+**Timers / teardown:** 1 s settle `Runnable` and 2 s registration fallback on borrowed
+`iptvBrowseHandler` (retired by 17464); 20 s stall watchdog on borrowed `progressHandler` (cancelled by
+`cancelIptvStremioStallWatchdog`/READY, retired by 17511). Async `requestIptvStreamUrls` result guarded by
+`token != iptvStremioToken || isFinishing`; `recordIptvWatch` result + fallback guarded by
+`AtomicBoolean` + `iptvWatchRegistrationToken`. No `onStop`/`onDestroy` statement changes
+(pre-existing: token not bumped in `onDestroy`; settle runnable survives `onStop`).
+
+**Tests / anchors:** none reflect or source-anchor any member (searched all of
+`android/app/src/test` and `test/`). `TvFlutterRequestsCharacterizationTest` covers the phase-2
+`requestIptvStreamUrls`/`reportIptvStreamResult` functions only.
+
+**Hazards:** `beginIptvPlayback` ordering (finalize recording → token++ → ladder reset → cancel
+watchdog → clear rows → `currentIptvStreamUrl = null` → plain tune *or* `player?.stop()` + resolve)
+verbatim; non-private fields read by the activity (`iptvStremioChannelKey`, `iptvStremioWinnerReported`)
+and 5 activity-called functions → 7 visibility substitutions (+2 for B1); SAM-lambda labels; borrowed handlers
+created after the controller slot; `stremioSources` is movie-mode state shared with the sources panel
+(host, mutated in place — no snapshot).
+
+**Proposed shape:** `internal class TvIptvChannelStartController(activity: AppCompatActivity, host: Host)`;
+Host 20 members (vars: `currentStremioSourceIndex`, `currentIptvStreamUrl`). **Substitutions ≈ 64**
+(49 host, 6 Android/`this`, 9 visibility). Size ≈ 321 + 40 ≈ 360. **Risk: medium** (async resolve,
+stall watchdog, manual-pick path into movie-source state).
+
+**Step-0 gaps:** live short-circuit vs VOD registration (fake `recordIptvWatch` reply before/after the 2 s
+fallback → playback exactly once; superseded token; channel changed meanwhile); settle dedupe (pause/resume
+does not restart; zap supersedes; not playing → no write; payload incl. `sourceId` fallback);
+Stremio resolve (empty → toast; stale token; `isFinishing`), ladder advance on error, exhaustion
+(report false, keep key/rows, toast text 1 vs N), stall watchdog 20 s with token/index guards, winner
+reported once, manual pick re-arms + `watchSourceSwitchOutcome`, rows mirror/clear. Needs an IPTV-mode
+activity (reflected `isIptvMode`/`iptvChannels`/`currentIptvIndex`) and the phase-3 ExoPlayer probe.
+
+---
+
+### B3. Start Over / catch-up (rank 3)
+
+**Owned state:** `iptvCatchupToken` 786 (`= 0`; slot 786). **Stays host:** `iptvStartOverActive` 783,
+`iptvStartOverLoading` 784, `iptvStartOverTimelineVisible` 785 (written by `performIptvLiveRetune`
+414–418, `playbackListener` 1801–1802, `switchToIptvChannel` 10828–10830; read by
+`updateIptvControlPresentation` 8402, `onStart` 17244, `performIptvLiveRetune`, `playbackListener` 1792);
+buttons `iptvStartOverButton` 202, `iptvStartOverSeekButton` 203 (bound with the controls). Owning the
+three flags too = 26 patches instead of 11.
+
+**Owned functions:** `updateIptvStartOverButton@9879`, `updateIptvStartOverSeekButton@9900`,
+`showIptvStartOverTimeline@9912`, `toggleIptvStartOver@9928`, `cancelPendingIptvCatchupRequest@9944`,
+`requestIptvCatchup@9951`. **7 members, 205 lines.**
+
+**Inbound:**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 419 | performIptvLiveRetune@410 | `iptvCatchupToken` | write (`++`) |
+| 1798 | playbackListener@1422 | `cancelPendingIptvCatchupRequest` | call |
+| 4340 | setupControls@4153 | `toggleIptvStartOver` | call |
+| 4345 | setupControls@4153 | `showIptvStartOverTimeline` | call |
+| 8421 | updateIptvControlPresentation@8398 | `updateIptvStartOverButton` | call |
+| 8422 | updateIptvControlPresentation@8398 | `updateIptvStartOverSeekButton` | call |
+| 8617 | setupIptvOverlay@8533 | `requestIptvCatchup` | call (EPG adapter `onReplay`) |
+| 9682 | ensureIptvChannelEpg@9620 | `updateIptvStartOverButton` | call |
+| 10827 | switchToIptvChannel@10821 | `iptvCatchupToken` | write (`++`) |
+| 17262 | onStop@17258 | `cancelPendingIptvCatchupRequest` | call (first statement) |
+| 17406 | onDestroy@17405 | `cancelPendingIptvCatchupRequest` | call (first statement) |
+
+**11 activity patches in 9 declarations.**
+
+**Outbound host needs** (22 members, 69 refs): vars `iptvStartOverLoading`×14, `iptvStartOverActive`×9,
+`iptvStartOverTimelineVisible`×7, `iptvChannels`×7 (replay assigns `mutableListOf(replay)` 10048),
+`currentIptvIndex`×6 (2 inside the 9880 default), `iptvSeriesAudioKey`×1; reads/calls
+`resetSubtitleState`×3, `beginIptvPlayback`×2 (→ `iptvChannelStartController`, same phase),
+`commitIptvAllCategorySearch`×2, `hideIptvGuide`×2, `iptvEpgToken`×2, `iptvStartOverSeekButton`×2,
+`titleView`×2, `updateIptvControlPresentation`×2, `checkpointCurrentIptvPosition`, `iptvGuideVisible`,
+`iptvStartOverButton`, `player`, `setIptvMediaItem`, `showControlsAndFocusProgressBar`,
+`switchToIptvChannel` (Host default args), `updateIptvEpisodeControls`. Android: `this` ×2 (Toast 9916,
+9967), `this@AndroidTvTorrentPlayerActivity` ×3 inside the `MethodChannel.Result` object (10003, 10068,
+10079). Later re-points: ≈ 11 (guide ×3, switch, EPG token, dock, VOD ×2, tune, controls ×2).
+
+**Timers / teardown:** none owned; MethodChannel `requestIptvCatchup` result guarded by `iptvCatchupToken`
+and (non-control requests) `iptvGuideVisible && scheduleToken == iptvEpgToken`; cancellation at
+`onStop` 17262 and `onDestroy` 17406 (first statements, positions unchanged), `playbackListener` 1798.
+
+**Tests / anchors:** none. **Hazards:** host-state default expression (9880); local fun in a public
+function; anonymous `Result` object; replay path rewrites shared-core `iptvChannels`/`currentIptvIndex`
+through Host setters (no snapshot); 7 visibility substitutions (6 functions + token).
+
+**Proposed shape:** `internal class TvIptvStartOverController`; Host 22 (6 `var`s).
+**Substitutions ≈ 81.** Size ≈ 205 + 40 ≈ 245. **Risk: medium** (async, shared-core writes,
+guide-relevance check).
+
+**Step-0 gaps:** eligibility/labels (`currentIptvStartOverProgramme` matrix already pinned in phase 2),
+airing vs replay success paths, empty URL/error/notImplemented toasts, relevance after guide close or
+schedule-token change, `fromControls`, Go Live (`toggleIptvStartOver` when active), cancellation in
+`onStop`/`onDestroy`/player error, timeline toggle (duration 0 toast).
+
+---
+
+### B6. Zap banner, classic + styled (rank 4 by risk; best patch ratio)
+
+**Owned state:** 21 fields 11143–11173 (14 view refs, `iptvZapBannerDocked`, two layout-listener flags,
+`iptvZapBannerEntry`, `iptvZapBannerHideToken`/`TickToken` `= Any()`, `iptvZapAccent =
+Color.parseColor("#00E5FF")`) → slot 11143 (contiguous, no earlier initializers; `parseColor` is a pure
+static call); 8 styled fields 11569–11576 → slot 11569. **Owned functions (18):**
+`isRecordingCurrentIptvChannel@11299`, `zapText@11303`, `zapHint@11322`, `ensureIptvZapBanner@11358`,
+`styledZapText@11578`, `styledZapHint@11603`, `buildStyledIptvZapBanner@11639` (420 lines),
+`showIptvZapBanner@12068`, `applyIptvZapBannerMode@12154`, `scheduleIptvZapBannerTick@12197`,
+`hideIptvZapBanner@12212`, `applyStyledZapBannerMode@12226`, `paintIptvZapBannerIdentity@12293`,
+`paintIptvZapBannerPosition@12358`, `paintStyledZapBannerIdentity@12391`, `paintStyledZapBannerEpg@12453`,
+`paintIptvZapBannerEpg@12527`, `refreshIptvZapBannerPosition@12584`. **47 members, 1,304 lines.**
+`guideStyle`/`guideTokens`/`controlsSkin`/`DockSkinSpec`/`dockSkinSpec`/`guideTypefaces`/`guideTypeface`
+(11174–11298, read-once lazies used by guide, dock skins and controls) stay.
+
+**Inbound: 16 refs in 9 declarations** — `showControlsMenu` 7169, 7171; `hideControlsMenu` 7253 ×2;
+`updateSubtitleControlsLift` 7305, 7306, 7311, 7312; `showIptvGuide` 8909; `ensureIptvChannelEpg` 9684,
+9685; `installIptvZapWindow` 10614; `mergeIptvZapPage` 10648; `switchToIptvChannel` 10881 ×2;
+`playIptvChannel` 12635 (table in Appendix 1).
+
+**Size forces a split** (> 800): A = behaviour + classic (613 lines: fields, show/hide/tick/mode,
+classic builder and painters) and B = styled (691 lines). Coupling is two-way: A → B 4 calls (style
+dispatch at 11360, 12155, 12294, 12528); **B → A 35 refs to 16 members** (B's builder writes all 14 view
+refs 12039–12052, its painters read 7 of them, plus `iptvZapBannerDocked`,
+`iptvDockLayoutListenerAttached`, `applyIptvZapBannerMode`, `paintIptvZapBannerPosition`,
+`isRecordingCurrentIptvChannel`) → 16 Host forwarders in B (≈ 15 `var`) to A's now-public fields.
+**Outbound:** `dp`×122 (A 38, B 84), `formatEpgTime`×7, `guideStyle`×7, `progressHandler`×5 (borrowed),
+`guideTokens`×4, `iptvChannels`×3, `controlsMenuVisible`×2 (one in the 12070 default),
+`controlsOverlay`×2, `iptvRecordingActionsController`×2, `iptvZapPagingActive`×2,
+`iptvZapCategoryTotal`×2, `updateSubtitleControlsLift`×2, `currentIptvIndex`, `ensureIptvChannelEpg`,
+`guideTypeface`, `iptvGuideVisible`, `iptvRecordingController`, `iptvSources`, `iptvZapSourceId`.
+Android: **42 `this`** (38 view constructors — `TextView`, `LinearLayout`, `FrameLayout`, `View`,
+`ImageView`, `ProgressBar(Context, AttributeSet?, Int)` ×2 — and **4 `Glide.with(this)`** 12304, 12316,
+12397, 12407, which must keep the `FragmentActivity` overload), `findViewById` ×2 (11537, 12031),
+`resources` ×1 (11846). **Substitutions ≈ 240.** **Timers:** hide 4.5 s / tick 1 s `postAtTime` with
+identity tokens on borrowed `progressHandler`; 3 never-removed layout listeners; view animators.
+**Tests:** none. **Hazards:** implicit-receiver audit of every host name used inside `View.apply {}`
+blocks (none collide today); two-way split; ≈ 6 later re-points (EPG ×2, zap state ×3, recording).
+**Activity: 16 patches (9 decls), 0 retargets. Risk: medium** (no existing tests; four visual styles to
+characterize).
+
+### B4/B5. EPG schedule pane / now-next + header (move with the core)
+
+B4 (pane, 178 lines, 20 members): 33 patches in 8 decls — 9 view binds in `initIptvMode`, 12 in
+`setupIptvOverlay` (adapter creation, replay/record callbacks, six day buttons), 6 in `dispatchKeyEvent`.
+B5 (now/next + guide header, 157 lines, owns no field): 15 patches in 9 decls (8 come from the banner:
+7 `formatEpgTime` + 1 `ensureIptvChannelEpg`). Together 335 lines / 47 patches. Timers: B5 60 s archive retry on
+`iptvBrowseHandler`; the phase-2 `requestIptvEpg` 45 s watchdog (follow-up); onDestroy `iptvEpgToken++`
+17465. `Glide.with(this)` 9786, 10124; `findViewById` ×6 (9842–9847); `currentFocus` 10090.
+
+### B7. Live dock styling (defer to the controls / dock-skin phase)
+
+260 lines, 11 members; only **6 patches** (`performIptvLiveRetune` 420, `playbackListener` 1803,
+`initIptvMode` 8184, `showIptvStartOverTimeline` 9920, `toggleIptvStartOver` 9935,
+`updateIptvEpisodeControls` 12663) but a **37-member Host** (30 control-dock views/fields; writes
+`cinemaSeekMode`/`cinemaSeekWasPlaying`; `this` ×4 + `this@` ×1 for `ContextCompat`/
+`LiveRecordingService`) whose forwarders all re-point when the controls dock moves.
+
+### B8. VOD position / episode navigation / series audio
+
+112 lines; 19 patches in 9 decls (6 in `initIptvMode`); `iptvSeriesAudioKey` not ownable. Move with the core.
+
+### B9. Core (one unit): `initIptvMode` + guide overlay/visibility/search/pickers/favourites + browse + zap paging + channel switch
+
+2,067 lines, 91 members (46 fields 911–972 minus `iptvSources`/`iptvSourceId`/`iptvBrowseHandler`/
+`iptvWatchRegistrationToken`, which stay or belong to B1). **50 patches in 18 decls with
+`initIptvMode` moved** (77 without it — init writes 27 core fields); with B4+B5+B8: 2,514 lines, 70 refs
+→ **45 activity patches + 25 re-points** once B3 and B6 have moved. Host 52–64 members (init calls
+`bindViews`, `setupPlayer`, `setupSeekbar`, `setupControls`, `setupBackPressHandler`,
+`setupMetadataReceiver`). Teardown: `onDestroy` 17464–17470 (borrowed-handler clear + five token bumps)
+become controller-qualified patches in place. Hazards: receiver `this` 10847, shadowing locals `window`
+10641 and `currentIndex` 10740, 24 `this` + 8 `this@`, 70 `findViewById`, `iptvBrowseHandler.post` trim
+deferral, recursion guard `iptvZapDrainingInputs`. Shape: 4–5 files with one owner per token —
+zap/switch controller owns the zap protocol (tokens, in-flight, pending inputs, zap context, boundary
+cache); guide controller owns visibility/search/browse context and `iptvBrowseToken`, writing zap
+tokens through the owning controller; guide overlay builder (`setupIptvOverlay` + `applyGuideStyle` +
+pickers ≈ 700, 1 inbound patch); EPG controller (B4+B5). Whether `initIptvMode` moves (bootstrap that
+calls lifecycle setup) or stays as a patched retained declaration is that phase's design decision.
+
+Out of scope for IPTV-live (playback core, phase 7): tune pipeline `setIptvMediaItem@12714`,
+`reportDecoderFailure@12841`, `retryIptvAsHlsIfUnrecognized@12861` (19 refs in 12 decls), twin trial
+480–668, live recovery 355–479, reconnect pill 669–698.
+
+---
+
+### Ranking (activity patches per moved line, then risk)
+
+| rank | unit | lines out | activity patches (decls) | pinned-span edits | test retargets | later re-points | risk |
+|---|---|---|---|---|---|---|---|
+| 1 | A progress reporter | 266 | 12 (8) | 1 (sleep `sendProgress`) | 5 Kotlin + 1 Dart | ≈ 13 | med |
+| 2 | B1+B2 channel start + ladder | ≈ 321 | 13 (7) with B3; 15 (9) alone | 0 | 0 | ≈ 9 | med |
+| 3 | B3 Start Over | 205 | 11 (9) | 0 | 0 | ≈ 11 | med |
+| 4 | B6 zap banner (2 files) | 1,304 | 16 (9) | 0 | 0 | ≈ 6 | med (size, no tests) |
+| 5 | B7 dock styling | 260 | 6 (6) | 0 | 0 | ≈ 30 | low-med, Host 37 |
+| 6 | B4+B5 EPG | 335 | 47 (13) | 0 | 0 | — | med |
+| 7 | B9 core (+B4/B5/B8) | 2,067–2,514 | 50 (18) / 45 + 25 re-points | 0 | 0 | — | high |
+
+### Recommended phase 5 set
+
+**A + B1/B2 + B3** as three controllers:
+
+| controller | members | moved + structural |
+|---|---|---|
+| `TvProgressReporter` | 15 | 266 + 45 ≈ 310 |
+| `TvIptvChannelStartController` | 20 | 321 + 40 ≈ 360 |
+| `TvIptvStartOverController` | 7 | 205 + 40 ≈ 245 |
+
+- **≈ 792 moved lines (≈ 915 with structure) for 36 activity patches in 19 declarations** (≈ 0.045/line;
+  phase 3 ≈ 0.067, phase 4 plan ≈ 0.026) + 1 phase-3 pinned-span edit; **6 test retargets, all
+  progress** (5 reflective + 1 Dart `_between`); ≈ 211 substitutions; **7 overload-audit sites** (all
+  `Toast.makeText(Context, …)`), 0 `::isInitialized`, 3 slot-anchored `added` properties (786, 939, 1046)
+  with 16 earlier-running initializers to list as inert (A 7, B1/B2 9).
+- Three cleanly owned async protocols (catch-up token, Stremio token + ladder, watch-registration token),
+  none sharing the guide/zap token protocol; no new borrowed-resource owner; no teardown statement moves
+  (in-place token patches at `onStart` 17222, `onStop` 17262/17264/17268, `onDestroy` 17406/17418).
+- Step-T additions: patched row for a phase-3 `added` span (whitelist entry + negative), braced
+  template in a retained patch (+ negative), Host default-argument forwarders, host-state default
+  expressions in moved signatures, controller slot before a borrowed handler's initializer (fixture),
+  receiver list (`Runnable`/`Result` objects, `runOnUiThread` labels).
+
+**Alternative (best patch ratio, over budget):** B6 zap banner alone — 1,304 lines (≈ 1,400 with two
+classes) for 16 patches (≈ 0.012/line), 0 retargets, but ≈ 240 substitutions, a two-way coupled split,
+and view-tree characterization across classic + GLASS/EDITION/CONSOLE from zero.
+
+### Ordering for the rest of IPTV
+
+1. **Phase 5:** A + B1/B2 + B3 (above).
+2. **IPTV-2:** B6 zap banner (two classes; Host reads zap state, `formatEpgTime`/`ensureIptvChannelEpg`
+   from the activity, re-pointed in step 3).
+3. **IPTV-3 (one unit, multi-file):** B9 core + B4/B5 EPG + B8 VOD/episodes, one owner per token; re-points
+   ≈ 25 forwarders created in steps 1–2.
+4. **With the controls/dock-skin phase:** B7 live dock styling.
+5. **With the playback core:** tune pipeline, twin trial, live recovery, reconnect pill (and the
+   `progressHandler`/`progressRunnable` ticker).
+
+### onStart/onStop/onDestroy/finish positions touched (eee52b084)
+
+| line | statement | unit | phase 5? |
+|---|---|---|---|
+| 14910 | `finish()` once-only `sendProgress(completed = false)` | A | yes (1 token) |
+| 17222 | `sendPlaybackActivityState(true)` | A | yes |
+| 17262 | `cancelPendingIptvCatchupRequest()` (first statement) | B3 | yes |
+| 17264 / 17267–17269 | activity-state false; final snapshot | A | yes (sendProgress, activity state) |
+| 17406 | `cancelPendingIptvCatchupRequest()` (first statement) | B3 | yes |
+| 17416–17421 | final snapshot (try/finally) | A | yes (sendProgress only) |
+| 17464 | `iptvBrowseHandler.removeCallbacksAndMessages(null)` | B1 (borrowed), B5, B9 | unchanged |
+| 17465–17470 | `iptvEpgToken++`, four protocol tokens, `iptvZapPendingInputs.clear()` | B4, B9 | no |
+| 17511 | `progressHandler.removeCallbacksAndMessages(null)` | B2, B6 (borrowed) | unchanged |
+| 17570 | `sendFinished()` | retained | unchanged |
+
+### Follow-ups found while mapping (not fixed)
+
+- `iptvStremioToken` is not bumped in `onDestroy` and the resolve callback guards only `isFinishing`
+  (existing follow-up, confirmed); B1's 1 s settle runnable and 2 s registration fallback are not
+  cancelled in `onStop`.
+- `recordPlaybackLifecycle` reads progress counters through unbraced templates; any future qualification
+  must brace them.
+- Banner layout listeners (12079, 12181, 12286) are never removed; `selectIptvEpgDay` re-finds six day
+  buttons per call (existing).
+
+### Appendix 1 — machine tables for the deferred candidates (eee52b084)
+
+Generated by the same brace/string/comment-aware member indexer and word-boundary scan used for the phase-3/4 inventories (dot-qualified hits on other receivers excluded; `this@Activity.` hits included), then spot-checked by hand. `(w)` = the moved body writes/mutates that host member. Row counts are occurrences.
+
+### B4 EPG schedule pane
+
+Owned fields: `iptvEpgPanel`@975 `private var iptvEpgPanel: View? = null`; `iptvEpgLogo`@976 `private var iptvEpgLogo: android.widget.ImageView? = null`; `iptvEpgLetter`@977 `private var iptvEpgLetter: TextView? = null`; `iptvEpgChannelName`@978 `private var iptvEpgChannelName: TextView? = null`; `iptvEpgChannelGroup`@979 `private var iptvEpgChannelGroup: TextView? = null`; `iptvEpgDate`@980 `private var iptvEpgDate: TextView? = null`; `iptvEpgLoading`@981 `private var iptvEpgLoading: View? = null`; `iptvEpgEmpty`@982 `private var iptvEpgEmpty: View? = null`; `iptvEpgList`@983 `private var iptvEpgList: RecyclerView? = null`; `iptvEpgAdapter`@984 `private var iptvEpgAdapter: IptvEpgAdapter? = null`; `iptvEpgPrograms`@985 `private var iptvEpgPrograms: List<IptvEpgProgram> = emptyList()`; `iptvEpgDayOffset`@986 `private var iptvEpgDayOffset = 0`; `iptvEpgToken`@987 `private var iptvEpgToken = 0`; `iptvEpgVisible`@988 `private var iptvEpgVisible = false`; `iptvEpgEntry`@989 `private var iptvEpgEntry: IptvChannelEntry? = null`
+
+Owned functions: `showIptvSchedulePane@9724` (doc 9723), `paintIptvEpgLogo@9775`, `selectIptvEpgDay@9816`, `hideIptvEpgPane@9864`, `isFocusInIptvEpgPanel@10089`
+
+Size: 178 lines incl. attached comments; 20 members.
+
+Inbound: **33 refs in 8 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 6794 | dispatchKeyEvent@6731 | `iptvEpgVisible` | read |
+| 6795 | dispatchKeyEvent@6731 | `hideIptvEpgPane` | call |
+| 6803 | dispatchKeyEvent@6731 | `isFocusInIptvEpgPanel` | call |
+| 6804 | dispatchKeyEvent@6731 | `iptvEpgEntry` | read |
+| 6805 | dispatchKeyEvent@6731 | `hideIptvEpgPane` | call |
+| 6823 | dispatchKeyEvent@6731 | `showIptvSchedulePane` | call |
+| 8217 | initIptvMode@8131 | `iptvEpgPanel` | write |
+| 8218 | initIptvMode@8131 | `iptvEpgLogo` | write |
+| 8219 | initIptvMode@8131 | `iptvEpgLetter` | write |
+| 8220 | initIptvMode@8131 | `iptvEpgChannelName` | write |
+| 8221 | initIptvMode@8131 | `iptvEpgChannelGroup` | write |
+| 8222 | initIptvMode@8131 | `iptvEpgDate` | write |
+| 8223 | initIptvMode@8131 | `iptvEpgLoading` | write |
+| 8224 | initIptvMode@8131 | `iptvEpgEmpty` | write |
+| 8225 | initIptvMode@8131 | `iptvEpgList` | write |
+| 8612 | setupIptvOverlay@8533 | `iptvEpgList` | read |
+| 8614 | setupIptvOverlay@8533 | `iptvEpgAdapter` | write |
+| 8617 | setupIptvOverlay@8533 | `iptvEpgEntry` | read |
+| 8620 | setupIptvOverlay@8533 | `iptvEpgEntry` | read |
+| 8633 | setupIptvOverlay@8533 | `iptvEpgAdapter` | read |
+| 8633 | setupIptvOverlay@8533 | `iptvEpgList` | read |
+| 8734 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8737 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8740 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8743 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8746 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8749 | setupIptvOverlay@8533 | `selectIptvEpgDay` | call |
+| 8916 | showIptvGuide@8905 | `hideIptvEpgPane` | call |
+| 8940 | hideIptvGuide@8931 | `hideIptvEpgPane` | call |
+| 9961 | requestIptvCatchup@9951 | `iptvEpgToken` | read |
+| 9973 | requestIptvCatchup@9951 | `iptvEpgToken` | read |
+| 10105 | updateIptvGuideCurrentName@10100 | `iptvEpgVisible` | read |
+| 17465 | onDestroy@17405 | `iptvEpgToken` | write |
+
+Outbound host needs (4 distinct, 6 refs): `iptvGuideNowPlaying`×2, `iptvGuideVisible`×2, `currentIptvIndex`×1, `iptvChannels`×1
+
+Activity receivers: bare `this` at [9786]; `this@AndroidTvTorrentPlayerActivity` at []; inherited: `isFinishing` [9747], `isDestroyed` [9747], `findViewById` [9842, 9843, 9844, 9845, 9846, 9847], `currentFocus` [10090]
+
+### B5 EPG now/next + guide header
+
+
+Owned functions: `ensureIptvChannelEpg@9620` (doc 9619), `updateIptvGuideEpgHeader@9696` (doc 9695), `focusedIptvGuideEntry@9711` (doc 9710), `formatEpgTime@9720`, `updateIptvGuideCurrentName@10100`
+
+Size: 157 lines incl. attached comments; 5 members.
+
+Inbound: **15 refs in 9 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 6822 | dispatchKeyEvent@6731 | `focusedIptvGuideEntry` | call |
+| 8580 | setupIptvOverlay@8533 | `ensureIptvChannelEpg` | call |
+| 8753 | setupIptvOverlay@8533 | `updateIptvGuideCurrentName` | call |
+| 8918 | showIptvGuide@8905 | `updateIptvGuideCurrentName` | call |
+| 9002 | restoreIptvCategoryAfterSearch@8977 | `updateIptvGuideCurrentName` | call |
+| 10613 | installIptvZapWindow@10569 | `updateIptvGuideCurrentName` | call |
+| 10883 | switchToIptvChannel@10821 | `updateIptvGuideCurrentName` | call |
+| 12108 | showIptvZapBanner@12068 | `ensureIptvChannelEpg` | call |
+| 12497 | paintStyledZapBannerEpg@12453 | `formatEpgTime` | call ×2 |
+| 12502 | paintStyledZapBannerEpg@12453 | `formatEpgTime` | call |
+| 12514 | paintStyledZapBannerEpg@12453 | `formatEpgTime` | call |
+| 12558 | paintIptvZapBannerEpg@12527 | `formatEpgTime` | call ×2 |
+| 12572 | paintIptvZapBannerEpg@12527 | `formatEpgTime` | call |
+
+Outbound host needs (15 distinct, 30 refs): `iptvGuideNowLetter`×5, `iptvGuideNowLogo`×4, `currentIptvIndex`×3, `iptvChannels`×3, `iptvGuideCurrentGroup`×3, `iptvChannelAdapter`×2, `iptvGuideNowPlaying`×2, `iptvBrowseHandler`×1, `iptvEpgVisible`×1, `iptvGuideCurrentEpg`×1, `iptvGuideCurrentName`×1, `iptvGuideList`×1, `iptvZapBanner`×1, `paintIptvZapBannerEpg`×1, `updateIptvStartOverButton`×1
+
+Activity receivers: bare `this` at [9721, 10124]; `this@AndroidTvTorrentPlayerActivity` at []; inherited: `isFinishing` [9653], `isDestroyed` [9653]
+
+### B6 Zap banner (classic + styled)
+
+Owned fields: `iptvZapBanner`@11143 `private var iptvZapBanner: FrameLayout? = null`; `iptvZapBannerLogo`@11144 `private var iptvZapBannerLogo: android.widget.ImageView? = null`; `iptvZapBannerLetter`@11145 `private var iptvZapBannerLetter: TextView? = null`; `iptvZapBannerNumber`@11146 `private var iptvZapBannerNumber: TextView? = null`; `iptvZapBannerName`@11147 `private var iptvZapBannerName: TextView? = null`; `iptvZapBannerMeta`@11148 `private var iptvZapBannerMeta: TextView? = null`; `iptvZapBannerNow`@11149 `private var iptvZapBannerNow: TextView? = null`; `iptvZapBannerTimes`@11150 `private var iptvZapBannerTimes: TextView? = null`; `iptvZapBannerNext`@11151 `private var iptvZapBannerNext: TextView? = null`; `iptvZapBannerProgress`@11152 `private var iptvZapBannerProgress: ProgressBar? = null`; `iptvZapBannerHintChannel`@11153 `private var iptvZapBannerHintChannel: View? = null`; `iptvZapBannerHintJump`@11154 `private var iptvZapBannerHintJump: View? = null`; `iptvZapBannerBody`@11155 `private var iptvZapBannerBody: View? = null`; `iptvZapBannerRail`@11156 `private var iptvZapBannerRail: View? = null`; `iptvZapBannerDocked`@11162 `private var iptvZapBannerDocked = false`; `iptvDockLayoutListenerAttached`@11163 `private var iptvDockLayoutListenerAttached = false`; `iptvZapBannerLayoutListenerAttached`@11164 `private var iptvZapBannerLayoutListenerAttached = false`; `iptvZapBannerEntry`@11169 `private var iptvZapBannerEntry: IptvChannelEntry? = null`; `iptvZapBannerHideToken`@11170 `private val iptvZapBannerHideToken = Any()`; `iptvZapBannerTickToken`@11171 `private val iptvZapBannerTickToken = Any()`; `iptvZapAccent`@11173 `private val iptvZapAccent = Color.parseColor("#00E5FF")`; `iptvZapStyledScrim`@11569 `private var iptvZapStyledScrim: View? = null`; `iptvZapStyledCard`@11570 `private var iptvZapStyledCard: LinearLayout? = null`; `iptvZapGlassCardWidth`@11571 `private var iptvZapGlassCardWidth = 0`; `iptvZapStyledRule`@11572 `private var iptvZapStyledRule: View? = null`; `iptvZapStyledLive`@11573 `private var iptvZapStyledLive: TextView? = null`; `iptvZapStyledRec`@11574 `private var iptvZapStyledRec: TextView? = null`; `iptvZapStyledEnd`@11575 `private var iptvZapStyledEnd: TextView? = null`; `iptvZapStyledMeterRow`@11576 `private var iptvZapStyledMeterRow: LinearLayout? = null`
+
+Owned functions: `isRecordingCurrentIptvChannel@11299` (doc 11296), `zapText@11303`, `zapHint@11322` (doc 11321), `ensureIptvZapBanner@11358`, `styledZapText@11578`, `styledZapHint@11603` (doc 11602), `buildStyledIptvZapBanner@11639`, `showIptvZapBanner@12068` (doc 12060), `applyIptvZapBannerMode@12154` (doc 12146), `scheduleIptvZapBannerTick@12197` (doc 12190), `hideIptvZapBanner@12212`, `applyStyledZapBannerMode@12226` (doc 12223), `paintIptvZapBannerIdentity@12293` (doc 12292), `paintIptvZapBannerPosition@12358` (doc 12357), `paintStyledZapBannerIdentity@12391` (doc 12388), `paintStyledZapBannerEpg@12453` (doc 12450), `paintIptvZapBannerEpg@12527` (doc 12526), `refreshIptvZapBannerPosition@12584` (doc 12581)
+
+Size: 1304 lines incl. attached comments; 47 members.
+
+Inbound: **16 refs in 9 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 7169 | showControlsMenu@7156 | `showIptvZapBanner` | call |
+| 7171 | showControlsMenu@7156 | `hideIptvZapBanner` | call |
+| 7253 | hideControlsMenu@7248 | `hideIptvZapBanner` | call |
+| 7253 | hideControlsMenu@7248 | `iptvZapBannerDocked` | read |
+| 7305 | updateSubtitleControlsLift@7302 | `iptvZapBanner` | read |
+| 7306 | updateSubtitleControlsLift@7302 | `iptvZapBannerDocked` | read |
+| 7311 | updateSubtitleControlsLift@7302 | `iptvZapBanner` | read |
+| 7312 | updateSubtitleControlsLift@7302 | `iptvZapBannerDocked` | read |
+| 8909 | showIptvGuide@8905 | `hideIptvZapBanner` | call |
+| 9684 | ensureIptvChannelEpg@9620 | `iptvZapBanner` | read |
+| 9685 | ensureIptvChannelEpg@9620 | `paintIptvZapBannerEpg` | call |
+| 10614 | installIptvZapWindow@10569 | `refreshIptvZapBannerPosition` | call |
+| 10648 | mergeIptvZapPage@10617 | `refreshIptvZapBannerPosition` | call |
+| 10881 | switchToIptvChannel@10821 | `hideIptvZapBanner` | call |
+| 10881 | switchToIptvChannel@10821 | `showIptvZapBanner` | call |
+| 12635 | playIptvChannel@12618 | `showIptvZapBanner` | call |
+
+Outbound host needs (19 distinct, 167 refs): `dp`×122, `formatEpgTime`×7, `guideStyle`×7, `progressHandler`×5, `guideTokens`×4, `iptvChannels`×3, `controlsMenuVisible`×2, `controlsOverlay`×2, `iptvRecordingActionsController`×2, `iptvZapCategoryTotal`×2, `iptvZapPagingActive`×2, `updateSubtitleControlsLift`×2, `currentIptvIndex`×1, `ensureIptvChannelEpg`×1, `guideTypeface`×1, `iptvGuideVisible`×1, `iptvRecordingController`×1, `iptvSources`×1, `iptvZapSourceId`×1
+
+Activity receivers: bare `this` at [11308, 11323, 11365, 11373, 11387, 11392, 11409, 11428, 11438, 11458, 11474, 11502, 11514, 11527, 12304, 12316, 11585, 11604, 11644, 11651, 11666, 11740, 11756, 11765, 11772, 11779, 11797, 11818, 11829, 11861, 11862, 11880, 11890, 11924, 11947, 11961, 11979, 11982, 11989, 11999, 12397, 12407]; `this@AndroidTvTorrentPlayerActivity` at []; inherited: `findViewById` [11537, 12031], `resources` [11846]
+### B7 Live dock styling
+
+Owned fields: `cinemaIconTints`@8307 `private val cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()`; `cinemaButtonTypefaces`@8308 `private val cinemaButtonTypefaces = HashMap<View, Typeface?>()`
+
+Owned functions: `setupIptvControls@8248`, `liveIptvDockButtons@8288` (doc 8286), `applyLiveIptvControlStyle@8318` (doc 8310), `restoreCinemaDockIconTints@8368` (doc 8364), `updateIptvControlPresentation@8398`, `arrangeLiveIptvControlDock@8453` (doc 8447), `restoreOriginalControlDockOrder@8476`, `replaceControlDockOrder@8485`, `restoreCinemaIptvControlStyle@8498`
+
+Size: 260 lines incl. attached comments; 11 members.
+
+Inbound: **6 refs in 6 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 420 | performIptvLiveRetune@410 | `updateIptvControlPresentation` | call |
+| 1803 | playbackListener@1422 | `updateIptvControlPresentation` | call |
+| 8184 | initIptvMode@8131 | `setupIptvControls` | call |
+| 9920 | showIptvStartOverTimeline@9912 | `updateIptvControlPresentation` | call |
+| 9935 | toggleIptvStartOver@9928 | `updateIptvControlPresentation` | call |
+| 12663 | updateIptvEpisodeControls@12661 | `updateIptvControlPresentation` | call |
+
+Outbound host needs (37 distinct, 101 refs): `playerView`×9, `dp`×7, `iptvNextButton`×5, `iptvPrevButton`×5, `iptvRecordButton`×5, `iptvGuideButton`×4, `iptvJumpButton`×4, `nightModeButton`×4, `pauseButton`×4, `aspectButton`×3, `audioButton`×3, `guideStyle`×3, `guideTokens`×3, `hideControlsMenu`×3, `iptvRecordingActionsController`×3, `iptvStartOverButton`×3, `iptvStartOverSeekButton`×3, `originalControlDockOrder`×3, `speedButton`×3, `subtitleButton`×3, `cinemaProgressContainer`×2, `currentIptvIndex`×2, `iptvChannels`×2, `zapIptvChannel`×2, `cinemaProgressThumb`×1, `cinemaSeekMode`×1(w), `cinemaSeekWasPlaying`×1(w), `cinemaSpeedIndicator`×1, `debrifyTimeCurrent`×1, `debrifyTimeTotal`×1, `guideTypeface`×1, `hideIptvGuide`×1, `iptvGuideVisible`×1, `iptvStartOverActive`×1, `iptvStartOverTimelineVisible`×1, `updateIptvStartOverButton`×1, `updateIptvStartOverSeekButton`×1
+
+Activity receivers: bare `this` at [8328, 8427, 8428, 8519]; `this@AndroidTvTorrentPlayerActivity` at [8526]; inherited: `currentFocus` [8441]
+
+### B8 VOD position / episode nav / series audio
+
+Owned fields: `iptvSeriesAudioKey`@793 `private var iptvSeriesAudioKey: String? = null`; `iptvPreferredAudioLang`@794 `private var iptvPreferredAudioLang: String? = null`
+
+Owned functions: `checkpointCurrentIptvPosition@12606` (doc 12598), `playIptvChannel@12618`, `isIptvEpisodeMode@12643` (doc 12640), `nextIptvEpisode@12649`, `prevIptvEpisode@12654`, `updateIptvEpisodeControls@12661` (doc 12659), `setIptvPreferredAudioLang@12688` (doc 12686), `onIptvSeriesAudioPicked@12702` (doc 12700)
+
+Size: 112 lines incl. attached comments; 10 members.
+
+Inbound: **19 refs in 9 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 1656 | playbackListener@1422 | `nextIptvEpisode` | call |
+| 4397 | setupControls@4153 | `nextIptvEpisode` | call |
+| 4408 | setupControls@4153 | `prevIptvEpisode` | call |
+| 8176 | initIptvMode@8131 | `iptvSeriesAudioKey` | write |
+| 8177 | initIptvMode@8131 | `iptvPreferredAudioLang` | write |
+| 8189 | initIptvMode@8131 | `iptvPreferredAudioLang` | read |
+| 8189 | initIptvMode@8131 | `setIptvPreferredAudioLang` | call |
+| 8192 | initIptvMode@8131 | `updateIptvEpisodeControls` | call |
+| 8243 | initIptvMode@8131 | `playIptvChannel` | call |
+| 10031 | requestIptvCatchup@9951 | `checkpointCurrentIptvPosition` | call |
+| 10051 | requestIptvCatchup@9951 | `iptvSeriesAudioKey` | write |
+| 10060 | requestIptvCatchup@9951 | `updateIptvEpisodeControls` | call |
+| 10262 | bootstrapInitialIptvZapPaging@10230 | `updateIptvEpisodeControls` | call |
+| 10582 | installIptvZapWindow@10569 | `checkpointCurrentIptvPosition` | call |
+| 10835 | switchToIptvChannel@10821 | `checkpointCurrentIptvPosition` | call |
+| 10858 | switchToIptvChannel@10821 | `iptvSeriesAudioKey` | write |
+| 10885 | switchToIptvChannel@10821 | `updateIptvEpisodeControls` | call |
+| 13267 | umAudioModel@13242 | `onIptvSeriesAudioPicked` | call |
+| 14005 | showAudioTrackDialog@13968 | `onIptvSeriesAudioPicked` | call |
+
+Outbound host needs (13 distinct, 32 refs): `iptvChannels`×8, `currentIptvIndex`×5, `iptvNextButton`×4, `iptvPrevButton`×4, `isIptvMode`×2, `player`×2, `beginIptvPlayback`×1, `iptvZapPagingActive`×1, `resetSubtitleState`×1, `showIptvZapBanner`×1, `titleView`×1, `trackSelector`×1, `updateIptvControlPresentation`×1
+
+Activity receivers: bare `this` at []; `this@AndroidTvTorrentPlayerActivity` at []; inherited: none
+
+### B9 Core: initIptvMode + guide (overlay, visibility, search, pickers, favourites) + browse + zap paging + channel switch
+
+Owned fields: `iptvGuideOverlay`@911 `private var iptvGuideOverlay: View? = null`; `iptvGuideList`@912 `private var iptvGuideList: RecyclerView? = null`; `iptvGuideSearch`@913 `private var iptvGuideSearch: android.widget.EditText? = null`; `iptvGuideTitle`@914 `private var iptvGuideTitle: TextView? = null`; `iptvGuideCountText`@915 `private var iptvGuideCountText: TextView? = null`; `iptvSourceButton`@916 `private var iptvSourceButton: AppCompatButton? = null`; `iptvCategoryButton`@917 `private var iptvCategoryButton: AppCompatButton? = null`; `iptvBrowseLoading`@918 `private var iptvBrowseLoading: View? = null`; `iptvChannelAdapter`@925 `private var iptvChannelAdapter: IptvChannelAdapter? = null`; `iptvGuideVisible`@926 `private var iptvGuideVisible = false`; `iptvBrowseChannels`@927 `private var iptvBrowseChannels = mutableListOf<IptvChannelEntry>()`; `iptvLists`@932 `private var iptvLists = mutableListOf<IptvListEntry>()`; `iptvCategories`@933 `private var iptvCategories = mutableListOf<String>()`; `iptvSourceName`@935 `private var iptvSourceName: String = "IPTV"`; `iptvContentType`@936 `private var iptvContentType: String = "live"`; `iptvSelectedCategory`@937 `private var iptvSelectedCategory: String? = null`; `iptvBrowseToken`@938 `private var iptvBrowseToken = 0`; `iptvZapPageSize`@941 `private val iptvZapPageSize = 200`; `iptvZapPagingActive`@942 `private var iptvZapPagingActive = false`; `iptvZapCategory`@943 `private var iptvZapCategory: String? = null`; `iptvZapSourceId`@944 `private var iptvZapSourceId: String? = null`; `iptvZapSourceName`@945 `private var iptvZapSourceName: String = "IPTV"`; `iptvZapContentType`@946 `private var iptvZapContentType: String = "live"`; `iptvZapCategories`@947 `private var iptvZapCategories = mutableListOf<String>()`; `iptvZapCategoryTotal`@948 `private var iptvZapCategoryTotal = 0`; `iptvZapRequestToken`@949 `private var iptvZapRequestToken = 0`; `iptvZapRequestInFlight`@950 `private var iptvZapRequestInFlight = false`; `iptvZapPendingInputs`@951 `private val iptvZapPendingInputs = java.util.ArrayDeque<Int>()`; `iptvZapDrainingInputs`@952 `private var iptvZapDrainingInputs = false`; `iptvGuideUsesZapWindow`@953 `private var iptvGuideUsesZapWindow = false`; `iptvUiContextToken`@954 `private var iptvUiContextToken = 0`; `iptvZapOwnsUiContext`@955 `private var iptvZapOwnsUiContext = false`; `iptvAllCategorySearchActive`@959 `private var iptvAllCategorySearchActive = false`; `iptvSearchSavedCategory`@960 `private var iptvSearchSavedCategory: String? = null`; `iptvSearchSavedChannels`@961 `private var iptvSearchSavedChannels = mutableListOf<IptvChannelEntry>()`; `iptvSearchSavedCategories`@962 `private var iptvSearchSavedCategories = mutableListOf<String>()`; `iptvSearchSavedUsesZapWindow`@963 `private var iptvSearchSavedUsesZapWindow = false`; `iptvSearchSavedZapOwnsUiContext`@964 `private var iptvSearchSavedZapOwnsUiContext = false`; `iptvZapMaxHiddenWindow`@965 `private val iptvZapMaxHiddenWindow = 600`; `iptvZapCachedOriginCategory`@966 `private var iptvZapCachedOriginCategory: String? = null`; `iptvZapCachedDirection`@967 `private var iptvZapCachedDirection = 0`; `iptvZapCachedChannels`@968 `private var iptvZapCachedChannels = mutableListOf<IptvChannelEntry>()`; `iptvZapCachedOffset`@969 `private var iptvZapCachedOffset = 0`; `iptvZapCachedTotal`@970 `private var iptvZapCachedTotal = 0`; `iptvZapCachedCategory`@971 `private var iptvZapCachedCategory: String? = null`; `iptvZapCachedCategories`@972 `private var iptvZapCachedCategories = emptyList<String>()`
+
+Owned functions: `initIptvMode@8131`, `setupIptvOverlay@8533`, `applyGuideStyle@8764` (doc 8759), `showIptvGuide@8905`, `hideIptvGuide@8931`, `beginIptvAllCategorySearch@8947`, `restoreIptvCategoryAfterSearch@8977` (doc 8972), `commitIptvAllCategorySearch@9011`, `clearIptvAllCategorySearchState@9016`, `focusCurrentIptvGuideRow@9025`, `toggleIptvGuide@9036`, `refreshIptvBrowserChrome@9040`, `updateIptvCatalogControlVisibility@9060`, `iptvGuideItemCountLabel@9074`, `selectIptvContentType@9086`, `selectIptvSource@9099`, `showIptvSourcePicker@9121`, `showIptvCategoryPicker@9133`, `showIptvListPicker@9327` (doc 9320), `removeIptvGuideRow@9470` (doc 9464), `requestIptvBrowse@9483`, `toggleIptvFavorite@9579`, `beginIptvCategoryZapSession@10163` (doc 10158), `bootstrapInitialIptvZapPaging@10230` (doc 10225), `restoreIptvZapBootstrapFallback@10268`, `showIptvChannelJumpDialog@10297`, `requestIptvChannelJump@10351`, `requestIptvZapPage@10458`, `installIptvZapWindow@10569`, `mergeIptvZapPage@10617`, `boundedHiddenIptvZapWindow@10651`, `trimHiddenIptvZapWindow@10661`, `prefetchIptvZapPage@10671`, `queuePendingIptvZapInput@10696`, `drainPendingIptvZapInputs@10702`, `clearIptvZapBoundaryCache@10716`, `disableIptvZapPaging@10728`, `adjacentIptvCategory@10736`, `prefetchAdjacentIptvCategory@10748`, `consumeCachedAdjacentIptvCategory@10789`, `switchToIptvChannel@10821`, `isLiveIptvZapContext@11003` (doc 10998), `activateIptvZapUiContext@11008`, `zapIptvChannel@11030` (doc 11027), `requestAdjacentIptvCategory@11067`
+
+Size: 2067 lines incl. attached comments; 91 members.
+
+Inbound: **50 refs in 18 declarations**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 1656 | playbackListener@1422 | `switchToIptvChannel` | call |
+| 2021 | onCreate@1937 | `initIptvMode` | call |
+| 4334 | setupControls@4153 | `showIptvChannelJumpDialog` | call |
+| 4398 | setupControls@4153 | `switchToIptvChannel` | call |
+| 4408 | setupControls@4153 | `switchToIptvChannel` | call |
+| 6779 | dispatchKeyEvent@6731 | `iptvZapPagingActive` | read |
+| 6784 | dispatchKeyEvent@6731 | `zapIptvChannel` | call |
+| 6790 | dispatchKeyEvent@6731 | `iptvGuideVisible` | read |
+| 6796 | dispatchKeyEvent@6731 | `iptvGuideList` | read |
+| 6798 | dispatchKeyEvent@6731 | `hideIptvGuide` | call |
+| 6806 | dispatchKeyEvent@6731 | `iptvChannelAdapter` | read |
+| 6807 | dispatchKeyEvent@6731 | `iptvGuideList` | read |
+| 6831 | dispatchKeyEvent@6731 | `iptvGuideSearch` | read |
+| 7014 | dispatchKeyEvent@6731 | `showIptvChannelJumpDialog` | call |
+| 7019 | dispatchKeyEvent@6731 | `showIptvGuide` | call |
+| 7053 | dispatchKeyEvent@6731 | `isLiveIptvZapContext` | call |
+| 7055 | dispatchKeyEvent@6731 | `zapIptvChannel` | call |
+| 7074 | dispatchKeyEvent@6731 | `isLiveIptvZapContext` | call |
+| 7076 | dispatchKeyEvent@6731 | `zapIptvChannel` | call |
+| 7106 | isFocusInIptvChannelList@7105 | `iptvGuideList` | read |
+| 8117 | isCleanPlaybackState@8115 | `iptvGuideVisible` | read |
+| 8273 | setupIptvControls@8248 | `zapIptvChannel` | call |
+| 8280 | setupIptvControls@8248 | `zapIptvChannel` | call |
+| 8435 | updateIptvControlPresentation@8398 | `hideIptvGuide` | call |
+| 8435 | updateIptvControlPresentation@8398 | `iptvGuideVisible` | read |
+| 9679 | ensureIptvChannelEpg@9620 | `iptvChannelAdapter` | read |
+| 9712 | focusedIptvGuideEntry@9711 | `iptvGuideList` | read |
+| 9717 | focusedIptvGuideEntry@9711 | `iptvChannelAdapter` | read |
+| 9748 | showIptvSchedulePane@9724 | `iptvGuideVisible` | read |
+| 9870 | hideIptvEpgPane@9864 | `iptvGuideVisible` | read |
+| 9973 | requestIptvCatchup@9951 | `iptvGuideVisible` | read |
+| 10010 | requestIptvCatchup@9951 | `commitIptvAllCategorySearch` | call |
+| 10011 | requestIptvCatchup@9951 | `hideIptvGuide` | call |
+| 10014 | requestIptvCatchup@9951 | `switchToIptvChannel` | call |
+| 10055 | requestIptvCatchup@9951 | `commitIptvAllCategorySearch` | call |
+| 10056 | requestIptvCatchup@9951 | `hideIptvGuide` | call |
+| 12075 | showIptvZapBanner@12068 | `iptvGuideVisible` | read |
+| 12359 | paintIptvZapBannerPosition@12358 | `iptvZapCategoryTotal` | read |
+| 12359 | paintIptvZapBannerPosition@12358 | `iptvZapPagingActive` | read |
+| 12360 | paintIptvZapBannerPosition@12358 | `iptvZapCategoryTotal` | read |
+| 12380 | paintIptvZapBannerPosition@12358 | `iptvZapPagingActive` | read |
+| 12383 | paintIptvZapBannerPosition@12358 | `iptvZapSourceId` | read |
+| 12669 | updateIptvEpisodeControls@12661 | `iptvZapPagingActive` | read |
+| 17310 | setupBackPressHandler@17297 | `iptvGuideVisible` | read |
+| 17311 | setupBackPressHandler@17297 | `hideIptvGuide` | call |
+| 17466 | onDestroy@17405 | `iptvUiContextToken` | write |
+| 17467 | onDestroy@17405 | `iptvBrowseToken` | write |
+| 17468 | onDestroy@17405 | `iptvZapRequestToken` | write |
+| 17469 | onDestroy@17405 | `iptvZapRequestInFlight` | write |
+| 17470 | onDestroy@17405 | `iptvZapPendingInputs` | mutate |
+
+Outbound host needs (64 distinct, 265 refs): `iptvChannels`×61(w), `dp`×53, `currentIptvIndex`×28(w), `guideTokens`×11, `iptvSourceId`×11(w), `guideTypeface`×10, `iptvSources`×7(w), `selectIptvEpgDay`×6, `guideStyle`×5, `updateIptvGuideCurrentName`×5, `iptvEpgList`×3(w), `updateIptvEpisodeControls`×3, `checkpointCurrentIptvPosition`×2, `currentIndex`×2(w), `hideIptvEpgPane`×2, `hideIptvZapBanner`×2, `iptvEpgAdapter`×2(w), `iptvEpgEntry`×2, `iptvPreferredAudioLang`×2(w), `iptvSeriesAudioKey`×2(w), `isIptvMode`×2(w), `refreshIptvZapBannerPosition`×2, `beginIptvPlaybackAfterWatchRegistration`×1, `bindViews`×1, `controlsMenuVisible`×1, `dropStaleSourceSwitchFeedback`×1, `ensureIptvChannelEpg`×1, `hideControlsMenu`×1, `iptvBrowseHandler`×1, `iptvCatchupToken`×1(w), `iptvDecoderMode`×1(w), `iptvEpgChannelGroup`×1(w), `iptvEpgChannelName`×1(w), `iptvEpgDate`×1(w), `iptvEpgEmpty`×1(w), `iptvEpgLetter`×1(w), `iptvEpgLoading`×1(w), `iptvEpgLogo`×1(w), `iptvEpgPanel`×1(w), `iptvGuideCurrentEpg`×1(w), `iptvGuideCurrentGroup`×1(w), `iptvGuideCurrentName`×1(w), `iptvGuideNowLetter`×1(w), `iptvGuideNowLogo`×1(w), `iptvGuideNowPlaying`×1(w), `iptvRecordingActionsController`×1, `iptvStartOverActive`×1(w), `iptvStartOverLoading`×1(w), `iptvStartOverTimelineVisible`×1(w), `playIptvChannel`×1, `playerView`×1, `requestIptvCatchup`×1, `resetSubtitleState`×1, `seekFeedbackManager`×1(w), `setIptvPreferredAudioLang`×1, `setupBackPressHandler`×1, `setupControls`×1, `setupIptvControls`×1, `setupMetadataReceiver`×1, `setupPlayer`×1, `setupSeekbar`×1, `showIptvZapBanner`×1, `stremioSubtitleService`×1(w), `titleView`×1
+
+Activity receivers: bare `this` at [8536, 8570, 8613, 8653, 8719, 9125, 9140, 9145, 9166, 9172, 9177, 9295, 9337, 9342, 9348, 9417, 9608, 10279, 10303, 10309, 10316, 10354, 10847, 8200]; `this@AndroidTvTorrentPlayerActivity` at [9180, 9350, 9561, 10375, 10390, 10437, 10448, 10550]; inherited: `findViewById` [8652, 8658, 8660, 8663, 8704, 8712, 8716, 8722, 8725, 8730, 8733, 8736, 8739, 8742, 8745, 8748, 8784, 8795, 8797, 8799, 8801, 8802, 8803, 8807, 8808, 8834, 8847, 8855, 8863, 8864, 8865, 8866, 8873, 8889, 8891, 8895, 8898, 8900, 8901, 8902, 9052, 9063, 9064, 9065, 9069, 9070, 8195, 8203, 8204, 8205, 8206, 8207, 8208, 8209, 8210, 8211, 8212, 8213, 8214, 8215, 8216, 8217, 8218, 8219, 8220, 8221, 8222, 8223, 8224, 8225], `resources` [9138, 9335], `window` [10641, 10642, 10643, 10645, 10646]
+
+### Appendix 2 — writers/readers of every IPTV token, context and shared field (eee52b084)
+
+Enclosing declaration@line, ×n = occurrences. Declaration lines themselves excluded.
+
+```
+### iptvUiContextToken
+  W(6): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, activateIptvZapUiContext@11008, onDestroy@17405
+  R(7): requestIptvBrowse@9483×3, requestIptvZapPage@10458×4
+### iptvBrowseToken
+  W(6): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, activateIptvZapUiContext@11008, onDestroy@17405
+  R(3): requestIptvBrowse@9483×3
+### iptvZapRequestToken
+  W(9): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351, requestIptvZapPage@10458, disableIptvZapPaging@10728, activateIptvZapUiContext@11008, onDestroy@17405
+  R(9): requestIptvChannelJump@10351×3, requestIptvZapPage@10458×6
+### iptvZapOwnsUiContext
+  W(7): initIptvMode@8131, beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351, activateIptvZapUiContext@11008
+  R(9): beginIptvAllCategorySearch@8947, requestIptvBrowse@9483×3, bootstrapInitialIptvZapPaging@10230, requestIptvZapPage@10458×3, activateIptvZapUiContext@11008
+### iptvZapRequestInFlight
+  W(15): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351×4, requestIptvZapPage@10458×4, disableIptvZapPaging@10728, activateIptvZapUiContext@11008, onDestroy@17405
+  R(6): setupIptvOverlay@8533, requestIptvZapPage@10458, prefetchIptvZapPage@10671, drainPendingIptvZapInputs@10702, prefetchAdjacentIptvCategory@10748, requestAdjacentIptvCategory@11067
+### iptvZapPendingInputs
+  W(10): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, requestIptvZapPage@10458×3, disableIptvZapPaging@10728, requestAdjacentIptvCategory@11067, onDestroy@17405
+  R(4): queuePendingIptvZapInput@10696×2, drainPendingIptvZapInputs@10702×2
+### iptvZapDrainingInputs
+  W(2): drainPendingIptvZapInputs@10702×2
+  R(1): drainPendingIptvZapInputs@10702
+### iptvGuideUsesZapWindow
+  W(7): restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, activateIptvZapUiContext@11008
+  R(4): setupIptvOverlay@8533, beginIptvAllCategorySearch@8947, iptvGuideItemCountLabel@9074, trimHiddenIptvZapWindow@10661
+### iptvZapPagingActive
+  W(4): beginIptvCategoryZapSession@10163, bootstrapInitialIptvZapPaging@10230, requestIptvChannelJump@10351, disableIptvZapPaging@10728
+  R(14): dispatchKeyEvent@6731, setupIptvOverlay@8533, restoreIptvCategoryAfterSearch@8977, iptvGuideItemCountLabel@9074, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, prefetchIptvZapPage@10671, prefetchAdjacentIptvCategory@10748, isLiveIptvZapContext@11003, zapIptvChannel@11030×2, paintIptvZapBannerPosition@12358×2, updateIptvEpisodeControls@12661
+### iptvZapCategoryTotal
+  W(3): beginIptvCategoryZapSession@10163, installIptvZapWindow@10569, mergeIptvZapPage@10617
+  R(7): iptvGuideItemCountLabel@9074×2, prefetchIptvZapPage@10671, prefetchAdjacentIptvCategory@10748, zapIptvChannel@11030, paintIptvZapBannerPosition@12358×2
+### iptvZapCategory
+  W(4): initIptvMode@8131, beginIptvCategoryZapSession@10163, bootstrapInitialIptvZapPaging@10230, installIptvZapWindow@10569
+  R(10): installIptvZapWindow@10569, mergeIptvZapPage@10617, prefetchIptvZapPage@10671, adjacentIptvCategory@10736, prefetchAdjacentIptvCategory@10748×3, consumeCachedAdjacentIptvCategory@10789, activateIptvZapUiContext@11008, requestAdjacentIptvCategory@11067
+### iptvZapCategories
+  W(4): initIptvMode@8131, beginIptvCategoryZapSession@10163, installIptvZapWindow@10569, mergeIptvZapPage@10617
+  R(3): adjacentIptvCategory@10736, activateIptvZapUiContext@11008, requestAdjacentIptvCategory@11067
+### iptvZapSourceId
+  W(4): initIptvMode@8131, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351, requestIptvZapPage@10458
+  R(5): showIptvChannelJumpDialog@10297, requestIptvChannelJump@10351, requestIptvZapPage@10458, activateIptvZapUiContext@11008, paintIptvZapBannerPosition@12358
+### iptvZapSourceName
+  W(4): initIptvMode@8131, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351, requestIptvZapPage@10458
+  R(1): activateIptvZapUiContext@11008
+### iptvZapContentType
+  W(4): initIptvMode@8131, beginIptvCategoryZapSession@10163, requestIptvChannelJump@10351, requestIptvZapPage@10458
+  R(2): requestIptvZapPage@10458, activateIptvZapUiContext@11008
+### iptvBrowseLoading
+  W(1): initIptvMode@8131
+  R(6): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483×4
+### iptvBrowseChannels
+  W(8): initIptvMode@8131, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, activateIptvZapUiContext@11008
+  R(5): setupIptvOverlay@8533, beginIptvAllCategorySearch@8947, iptvGuideItemCountLabel@9074, removeIptvGuideRow@9470×2
+### iptvSourceId
+  W(6): initIptvMode@8131, selectIptvSource@9099, requestIptvBrowse@9483, requestIptvChannelJump@10351, requestIptvZapPage@10458, activateIptvZapUiContext@11008
+  R(8): initIptvMode@8131×2, iptvRecordingActionsController-Host@8382 (phase-3 pinned)×2, showIptvListPicker@9327, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, noteLiveChannelPlaying@10910
+### iptvSourceName
+  W(6): initIptvMode@8131, selectIptvSource@9099, requestIptvBrowse@9483, requestIptvChannelJump@10351, requestIptvZapPage@10458, activateIptvZapUiContext@11008
+  R(4): initIptvMode@8131×2, refreshIptvBrowserChrome@9040, beginIptvCategoryZapSession@10163
+### iptvContentType
+  W(7): initIptvMode@8131, selectIptvContentType@9086, selectIptvSource@9099, requestIptvBrowse@9483, requestIptvChannelJump@10351, requestIptvZapPage@10458, activateIptvZapUiContext@11008
+  R(13): initIptvMode@8131, setupIptvOverlay@8533, beginIptvAllCategorySearch@8947, refreshIptvBrowserChrome@9040×2, updateIptvCatalogControlVisibility@9060, selectIptvContentType@9086, selectIptvSource@9099×3, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, bootstrapInitialIptvZapPaging@10230
+### iptvSelectedCategory
+  W(11): initIptvMode@8131, beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, selectIptvContentType@9086, selectIptvSource@9099, showIptvCategoryPicker@9133, requestIptvBrowse@9483, beginIptvCategoryZapSession@10163, bootstrapInitialIptvZapPaging@10230, installIptvZapWindow@10569, activateIptvZapUiContext@11008
+  R(8): initIptvMode@8131, beginIptvAllCategorySearch@8947, refreshIptvBrowserChrome@9040, showIptvCategoryPicker@9133, requestIptvBrowse@9483×3, bootstrapInitialIptvZapPaging@10230
+### iptvCategories
+  W(7): initIptvMode@8131, restoreIptvCategoryAfterSearch@8977, selectIptvSource@9099, requestIptvBrowse@9483, installIptvZapWindow@10569, mergeIptvZapPage@10617, activateIptvZapUiContext@11008
+  R(4): initIptvMode@8131, beginIptvAllCategorySearch@8947, showIptvCategoryPicker@9133, beginIptvCategoryZapSession@10163
+### iptvLists
+  W(1): initIptvMode@8131
+  R(2): setupIptvOverlay@8533, showIptvListPicker@9327
+### iptvSources
+  W(1): initIptvMode@8131
+  R(9): iptvRecordingActionsController-Host@8382 (phase-3 pinned)×2, setupIptvOverlay@8533×2, updateIptvCatalogControlVisibility@9060, showIptvSourcePicker@9121, showIptvListPicker@9327, showIptvChannelJumpDialog@10297, paintIptvZapBannerPosition@12358
+### iptvAllCategorySearchActive
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(4): beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, commitIptvAllCategorySearch@9011, toggleIptvFavorite@9579
+### iptvSearchSavedCategory
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(1): restoreIptvCategoryAfterSearch@8977
+### iptvSearchSavedChannels
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(3): restoreIptvCategoryAfterSearch@8977, removeIptvGuideRow@9470, toggleIptvFavorite@9579
+### iptvSearchSavedCategories
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(1): restoreIptvCategoryAfterSearch@8977
+### iptvSearchSavedUsesZapWindow
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(1): restoreIptvCategoryAfterSearch@8977
+### iptvSearchSavedZapOwnsUiContext
+  W(2): beginIptvAllCategorySearch@8947, clearIptvAllCategorySearchState@9016
+  R(1): restoreIptvCategoryAfterSearch@8977
+### iptvZapCachedOriginCategory
+  W(2): clearIptvZapBoundaryCache@10716, prefetchAdjacentIptvCategory@10748
+  R(1): consumeCachedAdjacentIptvCategory@10789
+### iptvZapCachedChannels
+  W(2): clearIptvZapBoundaryCache@10716, prefetchAdjacentIptvCategory@10748
+  R(4): prefetchAdjacentIptvCategory@10748×2, consumeCachedAdjacentIptvCategory@10789×2
+### iptvGuideVisible
+  W(2): showIptvGuide@8905, hideIptvGuide@8931
+  R(11): dispatchKeyEvent@6731, isCleanPlaybackState@8115, updateIptvControlPresentation@8398, toggleIptvGuide@9036, requestIptvBrowse@9483, showIptvSchedulePane@9724, hideIptvEpgPane@9864, requestIptvCatchup@9951, boundedHiddenIptvZapWindow@10651, showIptvZapBanner@12068, setupBackPressHandler@17297
+### iptvChannels
+  W(7): initIptvMode@8131, requestIptvCatchup@9951, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, switchToIptvChannel@10821
+  R(106): iptvLiveRecoveryEligible@396, performIptvLiveRetune@410, failIptvTwinTrial@544, restoreParkedIptvTwinIfNeeded@616, restoreAcceptedIptvTwinAfterAuth@649, playbackListener@1422×2, setupPlayer@2634, getCurrentSubtitleSearchItem@6038×2, dispatchKeyEvent@6731×4, togglePlayPause@7124, showControlsMenu@7156, initIptvMode@8131×9, setupIptvControls@8248×2, iptvRecordingActionsController-Host@8382 (phase-3 pinned)×2, showIptvGuide@8905, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, updateIptvGuideEpgHeader@9696, hideIptvEpgPane@9864, updateIptvStartOverButton@9879, showIptvStartOverTimeline@9912, toggleIptvStartOver@9928, requestIptvCatchup@9951×3, updateIptvGuideCurrentName@10100×2, bootstrapInitialIptvZapPaging@10230, restoreIptvZapBootstrapFallback@10268, showIptvChannelJumpDialog@10297, requestIptvChannelJump@10351, installIptvZapWindow@10569, mergeIptvZapPage@10617×2, trimHiddenIptvZapWindow@10661×3, prefetchIptvZapPage@10671×4, prefetchAdjacentIptvCategory@10748×3, consumeCachedAdjacentIptvCategory@10789×2, switchToIptvChannel@10821×6, noteLiveChannelPlaying@10910×2, beginIptvPlaybackAfterWatchRegistration@10949, isLiveIptvZapContext@11003×2, activateIptvZapUiContext@11008×2, zapIptvChannel@11030×10, requestAdjacentIptvCategory@11067×4, paintIptvZapBannerPosition@12358×2, refreshIptvZapBannerPosition@12584, checkpointCurrentIptvPosition@12606, playIptvChannel@12618×2, isIptvEpisodeMode@12643, nextIptvEpisode@12649, prevIptvEpisode@12654, updateIptvEpisodeControls@12661×2, retryIptvAsHlsIfUnrecognized@12861, switchToIptvStremioSource@13007, tryNextIptvStremioCandidate@13032×2, umPlaybackModel@13912, sendIptvProgress@15131, onStart@17219
+### currentIptvIndex
+  W(7): initIptvMode@8131, requestIptvCatchup@9951, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, switchToIptvChannel@10821
+  R(67): iptvLiveRecoveryEligible@396, performIptvLiveRetune@410, failIptvTwinTrial@544, restoreParkedIptvTwinIfNeeded@616, restoreAcceptedIptvTwinAfterAuth@649, playbackListener@1422×2, setupPlayer@2634, getCurrentSubtitleSearchItem@6038×2, dispatchKeyEvent@6731×3, togglePlayPause@7124, showControlsMenu@7156, initIptvMode@8131×5, setupIptvControls@8248×2, iptvRecordingActionsController-Host@8382 (phase-3 pinned)×2, showIptvGuide@8905, restoreIptvCategoryAfterSearch@8977, requestIptvBrowse@9483, updateIptvGuideEpgHeader@9696, hideIptvEpgPane@9864, updateIptvStartOverButton@9879, showIptvStartOverTimeline@9912, toggleIptvStartOver@9928, requestIptvCatchup@9951×2, updateIptvGuideCurrentName@10100×2, bootstrapInitialIptvZapPaging@10230, restoreIptvZapBootstrapFallback@10268, showIptvChannelJumpDialog@10297, installIptvZapWindow@10569×2, mergeIptvZapPage@10617, prefetchIptvZapPage@10671×2, prefetchAdjacentIptvCategory@10748×2, switchToIptvChannel@10821, noteLiveChannelPlaying@10910×2, beginIptvPlaybackAfterWatchRegistration@10949, isLiveIptvZapContext@11003, zapIptvChannel@11030×2, refreshIptvZapBannerPosition@12584, checkpointCurrentIptvPosition@12606, isIptvEpisodeMode@12643, nextIptvEpisode@12649, prevIptvEpisode@12654, updateIptvEpisodeControls@12661, retryIptvAsHlsIfUnrecognized@12861, switchToIptvStremioSource@13007, tryNextIptvStremioCandidate@13032×2, umPlaybackModel@13912, sendIptvProgress@15131×2, onStart@17219
+### iptvEpgToken
+  W(3): showIptvSchedulePane@9724, hideIptvEpgPane@9864, onDestroy@17405
+  R(3): showIptvSchedulePane@9724, requestIptvCatchup@9951×2
+### iptvEpgEntry
+  W(2): showIptvSchedulePane@9724, hideIptvEpgPane@9864
+  R(3): dispatchKeyEvent@6731, setupIptvOverlay@8533×2
+### iptvEpgVisible
+  W(2): showIptvSchedulePane@9724, hideIptvEpgPane@9864
+  R(3): dispatchKeyEvent@6731, showIptvSchedulePane@9724, updateIptvGuideCurrentName@10100
+### iptvCatchupToken
+  W(5): performIptvLiveRetune@410, toggleIptvStartOver@9928, cancelPendingIptvCatchupRequest@9944, requestIptvCatchup@9951, switchToIptvChannel@10821
+  R(2): requestIptvCatchup@9951×2
+### iptvStartOverActive
+  W(5): performIptvLiveRetune@410, playbackListener@1422, toggleIptvStartOver@9928, requestIptvCatchup@9951, switchToIptvChannel@10821
+  R(12): performIptvLiveRetune@410×2, playbackListener@1422, updateIptvControlPresentation@8398, updateIptvStartOverButton@9879×3, updateIptvStartOverSeekButton@9900×2, showIptvStartOverTimeline@9912, toggleIptvStartOver@9928, onStart@17219
+### iptvStartOverLoading
+  W(10): performIptvLiveRetune@410, cancelPendingIptvCatchupRequest@9944, requestIptvCatchup@9951×7, switchToIptvChannel@10821
+  R(7): performIptvLiveRetune@410, updateIptvStartOverButton@9879×3, updateIptvStartOverSeekButton@9900, toggleIptvStartOver@9928, cancelPendingIptvCatchupRequest@9944
+### iptvStartOverTimelineVisible
+  W(6): performIptvLiveRetune@410, playbackListener@1422, showIptvStartOverTimeline@9912, toggleIptvStartOver@9928, requestIptvCatchup@9951, switchToIptvChannel@10821
+  R(5): updateIptvControlPresentation@8398, updateIptvStartOverSeekButton@9900×2, showIptvStartOverTimeline@9912×2
+### iptvStremioToken
+  W(1): beginIptvPlayback@12909
+  R(4): beginIptvPlayback@12909×2, armIptvStremioStallWatchdog@13079×2
+### iptvStremioChannelKey
+  W(2): beginIptvPlayback@12909×2
+  R(7): iptvLiveRecoveryEligible@396, retryIptvAsHlsIfUnrecognized@12861, tryNextIptvStremioCandidate@13032, armIptvStremioStallWatchdog@13079, reportIptvStremioWinnerIfNeeded@13103, watchSourceSwitchOutcome@16025, switchToStremioSource@16888
+### iptvStremioCandidates
+  W(2): beginIptvPlayback@12909×2
+  R(3): populateIptvStremioSources@12972, tryNextIptvStremioCandidate@13032, reportIptvStremioWinnerIfNeeded@13103
+### iptvStremioCandidateIndex
+  W(4): beginIptvPlayback@12909×2, switchToIptvStremioSource@13007, tryNextIptvStremioCandidate@13032
+  R(5): populateIptvStremioSources@12972, tryNextIptvStremioCandidate@13032, armIptvStremioStallWatchdog@13079×2, reportIptvStremioWinnerIfNeeded@13103
+### iptvStremioWinnerReported
+  W(5): beginIptvPlayback@12909, switchToIptvStremioSource@13007, tryNextIptvStremioCandidate@13032×2, reportIptvStremioWinnerIfNeeded@13103
+  R(3): iptvLiveRecoveryEligible@396, armIptvStremioStallWatchdog@13079, reportIptvStremioWinnerIfNeeded@13103
+### iptvStremioStallRunnable
+  W(2): armIptvStremioStallWatchdog@13079, cancelIptvStremioStallWatchdog@13097
+  R(1): cancelIptvStremioStallWatchdog@13097
+### iptvWatchRegistrationToken
+  W(1): beginIptvPlaybackAfterWatchRegistration@10949
+  R(1): beginIptvPlaybackAfterWatchRegistration@10949
+### lastLiveChannelArmedUrl
+  W(1): noteLiveChannelPlaying@10910
+  R(1): noteLiveChannelPlaying@10910
+### lastLiveChannelRunnable
+  W(2): noteLiveChannelPlaying@10910×2
+  R(2): noteLiveChannelPlaying@10910×2
+### iptvSeriesAudioKey
+  W(3): initIptvMode@8131, requestIptvCatchup@9951, switchToIptvChannel@10821
+  R(2): isIptvEpisodeMode@12643, onIptvSeriesAudioPicked@12702
+### iptvPreferredAudioLang
+  W(2): initIptvMode@8131, onIptvSeriesAudioPicked@12702
+  R(1): initIptvMode@8131
+### currentIptvStreamUrl
+  W(2): setIptvMediaItem@12714, beginIptvPlayback@12909
+  R(14): performIptvLiveRetune@410, judgeIptvTwinTrial@503, acceptIptvTwinTrial@530, failIptvTwinTrial@544, rearmIptvTwinTrialDeadline@589, parkIptvTwinTrialRestore@604, restoreParkedIptvTwinIfNeeded@616, restoreAcceptedIptvTwinAfterAuth@649, playbackListener@1422×2, iptvRecordingActionsController-Host@8382 (phase-3 pinned)×2, setIptvMediaItem@12714, retryIptvAsHlsIfUnrecognized@12861
+### iptvBrowseHandler
+  W(0): 
+  R(6): hideIptvGuide@8931, ensureIptvChannelEpg@9620, noteLiveChannelPlaying@10910×2, beginIptvPlaybackAfterWatchRegistration@10949, onDestroy@17405
+### iptvChannelAdapter
+  W(1): setupIptvOverlay@8533
+  R(21): dispatchKeyEvent@6731, setupIptvOverlay@8533×2, showIptvGuide@8905, beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, focusCurrentIptvGuideRow@9025, showIptvListPicker@9327, removeIptvGuideRow@9470, requestIptvBrowse@9483, toggleIptvFavorite@9579, ensureIptvChannelEpg@9620, focusedIptvGuideEntry@9711, beginIptvCategoryZapSession@10163, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, switchToIptvChannel@10821×2, activateIptvZapUiContext@11008
+```
+
+
+### Phase 5 step T — re-measured at `1a33c42cb`
+
+Activity: 17,205 physical lines; **2,548 PSI declarations**, exhaustively classified.
+The approved slice owns **42 members / 820 partition lines** (attached comments included),
+20 retained declarations have exact in-place patches, and three added controller properties
+are anchored to the first removed field. No production extraction has been applied.
+The original inventory above uses older line numbers; these anchors supersede them:
+
+| Destination | Owned members (original PSI start line, including attached comments) |
+|---|---|
+| `TvProgressReporter` | `recoverySequence` @ 1058, `locallyCompletedItemKeys` @ 1369, `recoveryCompletedItemKeys` @ 1376, `progressSentCount` @ 13827, `progressAckCount` @ 13828, `lastProgressLogAt` @ 13829, `lastProgressAckAt` @ 13830, `lastProgressBridgeAvailable` @ 13831, `deliverProgress` @ 13863, `stageRecoveryCheckpoint` @ 13915, `acknowledgeRecoveryCheckpoint` @ 13968, `sendProgress` @ 13972, `sendIptvProgress` @ 14064, `sendPlaybackMaintenanceState` @ 14098, `sendPlaybackActivityState` @ 14108 |
+| `TvIptvChannelStartController` | `iptvWatchRegistrationToken` @ 951, `iptvStremioToken` @ 1003, `iptvStremioChannelKey` @ 1009, `iptvStremioCandidates` @ 1010, `iptvStremioCandidateIndex` @ 1011, `iptvStremioWinnerReported` @ 1012, `iptvStremioStallRunnable` @ 1013, `lastLiveChannelSettleMs` @ 10907, `lastLiveChannelArmedUrl` @ 10913, `lastLiveChannelRunnable` @ 10914, `noteLiveChannelPlaying` @ 10916, `beginIptvPlaybackAfterWatchRegistration` @ 10955, `beginIptvPlayback` @ 12909, `populateIptvStremioSources` @ 12972, `clearIptvStremioSources` @ 12999, `switchToIptvStremioSource` @ 13007, `tryNextIptvStremioCandidate` @ 13033, `armIptvStremioStallWatchdog` @ 13084, `cancelIptvStremioStallWatchdog` @ 13103, `reportIptvStremioWinnerIfNeeded` @ 13108 |
+| `TvIptvStartOverController` | `iptvCatchupToken` @ 798, `updateIptvStartOverButton` @ 9885, `updateIptvStartOverSeekButton` @ 9906, `showIptvStartOverTimeline` @ 9918, `toggleIptvStartOver` @ 9934, `cancelPendingIptvCatchupRequest` @ 9950, `requestIptvCatchup` @ 9957 |
+
+All **16** later-running initializers are listed with their exact text, original line,
+slot and inert proof in `dev/tool/kotlin_moves/tvplayer_p5.json`. The two empty typed
+sets allocate only; `1_000L` and the remaining literals read no state. Host properties
+are computed and explicitly qualified; progress Host fields are read-only, and only
+original writes receive setters in the other two Hosts. None reads a borrowed handler
+at construction. The three Start Over status flags and all six shared guide/zap tokens
+remain activity-owned.
+
+All **28** previous destination files are frozen against `1a33c42cb`, with an empty
+whitelist. The sleep `sendProgress` forwarder is one exact patch on the entire activity
+property, justified by `TvSleepTimerCharacterizationTest.fireCancelsThenLatchesReportsBeforePauseReleasesBothScreenHoldsAndToasts`;
+an extra-edit negative rejects any additional change. No phase-3 file or manifest changes.
+
+Verification: original self-comparison and complete production-config fixture both
+have zero differences; fixture compilation succeeds. All **seven** substituted activity
+receiver sites resolve to identical JVM descriptors (two channel-start Toast sites and
+five Start Over Toast sites); no aliases or Runnable self receivers in this slice.
+The per-phase dispatcher retains each historical suite with its own manifest; all
+**97/97** tests pass, including every phase-5 negative and all 16 initializer proofs.
+Historical fixture output uses the active phase evidence directory. Raw evidence:
+`p5/checker-self-tests-passing.log`, `p5/fixtures/`, `p5/overload-audit.json`,
+`p5/fixture-compile-final.log`, `p5/remeasured-inventory.json`, original PSI and
+all-retained self-comparison.
+
+
+## Phase 5 step 0 — characterization of `1a33c42cb`
+
+Production is unchanged. Added **44 tests** against the original activity: 18 progress,
+13 channel-start/ladder, 12 Start Over and one recording handoff. The shared
+`TvPhase5OriginalTest` reuses the typed original reflection selectors and recording binary
+messenger. Tests use paused loopers and a dynamic ExoPlayer, real lifecycle stop/destroy
+where needed, and the existing fake MediaStore provider for the outgoing tee. No production
+seam or helper retarget has been added.
+
+Progress covers periodic/paused/completed/sleep/final maps for single, series, collection
+and IPTV VOD; payload updates and visible playlist refresh before bridge delivery;
+held-resume/raw-position completion, inclusive thresholds, cumulative completion sets and
+parse resets; startup/manual/missing-item guards; maintenance/activity maps; logging boundaries
+and bridge availability. Existing watchdog reflection contracts remain covered by the
+unchanged baseline suite.
+
+The recovery prerequisite reflects the store's separate **writer ExecutorService**. A latch
+blocks an entered writer task without holding the recovery-store monitor; all waits are
+bounded to five seconds and cleanup releases/drains it. Ordinary checkpoints remain queued,
+while final/completed/local-completion checkpoints persist before bridge delivery or
+pause/release. Snapshot identities/defaults/flags and eligibility guards are pinned.
+Delayed out-of-order true ACKs remove only their own session/sequence; false, error, missing
+and thrown delivery do not ACK. A delayed ACK after actual activity destruction still works.
+A player-read failure outside the delivery catch preserves the original difference:
+`onStop` leaves `finalProgressSnapshot` true, while `finish` and `onDestroy` clear it in
+`finally`. This is recorded in Follow-ups and is not fixed.
+
+Channel tests pin the complete watch/settle maps, two-second watch fallback and one-second
+memory deadline, repeat-channel token supersession, eligibility reads at callback time and
+preferred twins. The ladder pins finalize/reset/URL-clear/stop/resolve ordering, candidate
+and source-row order, token and finishing guards, advancement/exhaustion strings, twenty-second
+stall boundary, winner deduplication and manual rearming. The real outgoing tee publishes
+its exact bytes before token reset, URL clear, stop and an empty resolution response.
+Start Over pins call-time default dispatch, all button labels/content descriptions/visibility,
+catch-up maps and guards, guide-versus-controls relevance, same-entry token supersession,
+retained flags, replay metadata/defaults, timeline/focus timing and Go Live ordering.
+Explicit cancellation, stop, destroy and the player-error return-to-live path reject late
+archive replies without clearing newer loading.
+
+### Original-code mutation table
+
+Every new test has one named assertion-killed mutation on detached **`1a33c42cb` + the five
+new test files**, under `p5/original/`. Each run cleans JVM test results and selects exactly
+one named test. **44/44 killed**; compilation failures, incidental crashes and zero-test runs
+are not accepted. Full exact before/after strings, enclosing PSI selectors, patches, Gradle
+logs, XML and assertion stacks are in `p5/mutations/` and `p5/mutation-table.json`.
+The temporary original worktree has been removed.
+
+| Proof | Named test (class::method) | Original mutation | Failing assertion |
+|---|---|---|---|
+| g01 | `TvProgressReporterCharacterizationTest::periodicPausedAndCompletedPayloadsPreserveEveryArgumentAndStableDuration` | `"sourceIndex" to currentStremioSourceIndex` → `"sourceIndex" to (currentStremioSourceIndex + 1)` | Exact paused periodic map: sourceIndex expected 3, got 4. |
+| g02 | `TvProgressReporterCharacterizationTest::localCompletionUsesRawPositionInclusiveThresholdAndCumulativeDeduplication` | `>= completionThreshold` → `> completionThreshold` | At the inclusive 80% boundary localCompleted expected true, got false. |
+| g03 | `TvProgressReporterCharacterizationTest::heldResumeTargetNeverFabricatesLocalCompletionAndCompletionUsesDuration` | `else heldResumePositionMs(rawPosition) ?: rawPosition` → `else rawPosition` | Held resume target: positionMs expected 95000, got 25000. |
+| g04 | `TvProgressReporterCharacterizationTest::startupManualSwitchExhaustionAndMissingItemGuardsSuppressAllReports` | `if (isStremioTvMode && startupSourcesExhausted) return` → `if (false) return` | Exhausted startup must send no requests; assertTrue(requests.isEmpty()) failed. |
+| g05 | `TvProgressReporterCharacterizationTest::parsePayloadResetsBothPerItemCompletionSetsAndThresholdSelection` | `locallyCompletedItemKeys.clear()` → `// mutation: keep old completion keys` | Reset completion set expected empty, got [series:2:4]. |
+| g06 | `TvProgressReporterCharacterizationTest::iptvVodPayloadIsExactAndLiveInvalidDurationPositionAndIndexAreSkipped` | `"title" to entry.name` → `"title" to "Wrong"` | Exact IPTV VOD map: title expected Cinema, got Wrong. |
+| g07 | `TvProgressReporterCharacterizationTest::ordinaryTicksQueueRecoveryWhileFinalCompletedAndLocalCompletionPersistBeforeDelivery` | `synchronous = finalProgressSnapshot` → `synchronous = true` | With writer blocked, ordinary checkpoint expected null; a journal existed. |
+| g08 | `TvProgressReporterCharacterizationTest::completedCheckpointPersistsBeforeDeliveryDespiteBlockedWriter` | `synchronous \|\| progress["completed"] == true \|\| progress["localCompleted"] == true` → `synchronous \|\| progress["localCompleted"] == true` | assertNotNull("recovery checkpoint persisted") failed before completed delivery. |
+| g09 | `TvProgressReporterCharacterizationTest::recoverySnapshotPinsIdentityDefaultsAndAllCumulativeFlags` | `progress["completionThreshold"] ?: 80` → `progress["completionThreshold"] ?: 81` | Recovery completionThreshold default expected 80, got 81. |
+| g10 | `TvProgressReporterCharacterizationTest::recoveryGuardsSkipWrongModeOwnerGenerationSessionAndInvalidNumbers` | `if (isIptvMode \|\| progress["mode"] == "iptv") return` → `if (progress["mode"] == "iptv") return` | IPTV-mode recovery expected no journal; a journal existed. |
+| g11 | `TvProgressReporterCharacterizationTest::delayedOutOfOrderTrueAcksRemoveOnlyTheirExactRecoverySequences` | `if (result == true) {` → `if (result == false) {` | Second-sequence true ACK: latest length expected 0, got 1. |
+| g12 | `TvProgressReporterCharacterizationTest::falseErrorMissingAndThrowingDeliveryNeverAcknowledgeRecovery` | `if (result == true) {` → `if (result == true \|\| result == false) {` | False/error/missing/throw delivery: ACK count expected 0, got 1. |
+| g13 | `TvProgressReporterCharacterizationTest::loggingSamplesAtSixtySecondsAndBridgeChangesAndForcesCompletedFinal` | `now - lastProgressLogAt >= 60_000L` → `now - lastProgressLogAt >= 59_999L` | Before 60 seconds lastProgressLogAt expected 100, got 60099. |
+| g14 | `TvProgressReporterCharacterizationTest::sleepReportsBeforePausingAndFinishPersistsOnceBeforeHandoff` | `if (!finishProgressAttempted) {` → `if (true) {` | Two finish calls after sleep: progress request count expected 2, got 3. |
+| g15 | `TvProgressReporterCharacterizationTest::stopAndDestroySynchronouslyPersistBeforePauseAndReleaseThenAcceptLateAck` | `synchronous = finalProgressSnapshot` → `synchronous = false` | assertNotNull("recovery checkpoint persisted") failed before pause/release. |
+| g16 | `TvProgressReporterCharacterizationTest::playerReadFailureLeavesStopFlagSetButFinishAndDestroyFinallyClearIt` | `finalProgressSnapshot = true         sendProgress(completed = false)         finalProgressSnapshot = false` → `finalProgressSnapshot = true         try { sendProgress(completed = false) } finally { finalProgressSnapshot = false }` | Player-read failure: onStop finalProgressSnapshot expected true, got false. |
+| g17 | `TvProgressReporterCharacterizationTest::maintenanceAndActivityMapsKeepReadyPredicatesAndActiveOnlyFollowup` | `player?.isPlaying == true && player?.playbackState == Player.STATE_READY` → `player?.isPlaying == true \|\| player?.playbackState == Player.STATE_READY` | Playing but buffering: ready expected false, got true. |
+| g18 | `TvIptvChannelStartCharacterizationTest::watchRegistrationPinsPayloadAndReplyBeforeFallbackStartsExactlyOnce` | `"sourceId" to entry.sourceId` → `"sourceId" to "Wrong"` | Exact recordIptvWatch map: sourceId expected playlist, got Wrong. |
+| g19 | `TvIptvChannelStartCharacterizationTest::fallbackAtTwoSecondsAndErrorMissingOrLateRepliesStillStartOnlyOnce` | `}, 2_000)` → `}, 2_001)` | At exactly 2000 ms tuning count expected 1, got 0. |
+| g20 | `TvIptvChannelStartCharacterizationTest::watchTokenAndChangedChannelRejectSupersededRepliesAndFallbacks` | `if (token != iptvWatchRegistrationToken) return` → `// mutation: accept superseded registration` | Same-channel superseded watch reply: tuning count expected 1, got 2. |
+| g21 | `TvIptvChannelStartCharacterizationTest::liveAndMissingBridgeBypassWatchRoundtripAndHonorPreferredTwin` | `if (entry.isLive) {` → `if (false) {` | Live channel must bypass recordIptvWatch; empty-request assertion failed. |
+| g22 | `TvIptvChannelStartCharacterizationTest::liveMemoryWaitsOneSecondDedupesPauseResumeAndPinsFallbackSourcePayload` | `postDelayed(runnable, lastLiveChannelSettleMs)` → `postDelayed(runnable, lastLiveChannelSettleMs + 1)` | At exact 1000 ms settle deadline noteIptvLiveChannel count expected 1, got 0. |
+| g23 | `TvIptvChannelStartCharacterizationTest::liveMemoryZapsSupersedeAndReReadPlaybackAndChannelEligibility` | `if (player?.isPlaying != true) return@Runnable` → `// mutation: write paused channel` | Paused settle callback must not write: note count expected 1, got 2. |
+| g24 | `TvIptvChannelStartCharacterizationTest::beginClearsOldLadderAndUrlBeforeStopAndAsynchronousResolution` | `currentIptvStreamUrl = null` → `// mutation: retain outgoing identity` | At stop, currentIptvStreamUrl expected null, got old. |
+| g25 | `TvIptvChannelStartCharacterizationTest::resolveSupersessionAndFinishingGuardRejectLateCandidates` | `if (token != iptvStremioToken \|\| isFinishing) return@runOnUiThread` → `if (isFinishing) return@runOnUiThread` | Superseded resolver must not tune; empty-tuning assertion failed. |
+| g26 | `TvIptvChannelStartCharacterizationTest::emptyResolveKeepsStoppedStateAndUsesProviderMessageOrChannelFallback` | `message ?: "${entry.name} is not playable right now"` → `"Wrong"` | Empty resolver toast expected Addon unavailable, got Wrong. |
+| g27 | `TvIptvChannelStartCharacterizationTest::candidateOrderMirrorsSourceRowsAdvancesSilentlyAndPreservesEscapeHatchAfterExhaustion` | `val next = iptvStremioCandidateIndex + 1` → `val next = iptvStremioCandidateIndex + 2` | Next candidate index expected 1, got 0. |
+| g28 | `TvIptvChannelStartCharacterizationTest::singleSourceExhaustionHasSingularToastAndMissingKeyNeverClaimsError` | `$name: its only source didn't play — pick it in Sources to retry` → `Wrong source message` | Singular exhaustion toast expected Cinema: its only source did not play (full literal pinned), got Wrong source message. |
+| g29 | `TvIptvChannelStartCharacterizationTest::stallDeadlineIsTwentySecondsAndTokenIndexWinnerAndLivenessAreReRead` | `postDelayed(runnable, 20_000)` → `postDelayed(runnable, 19_999)` | At 19999 ms candidate index expected 0, got 1. |
+| g30 | `TvIptvChannelStartCharacterizationTest::winnerReportsExactlyOnceAndManualSourceSwitchRearmsLadderAndOutcomeWatcher` | `if (iptvStremioWinnerReported) return` → `// mutation: duplicate winner report` | Winner reports once: count expected 1, got 2. |
+| g31 | `TvIptvChannelStartRecordingCharacterizationTest::outgoingTeePublishesBeforeTokenResetUrlClearStopAndResolveEvenWhenResolveIsEmpty` | `iptvRecordingActionsController.finalizeIptvRecordingIfActive()` → `// mutation: recording survives new channel` | At resolver delivery assertFalse(tee.isActive) failed; outgoing recording was still active. |
+| g32 | `TvIptvStartOverCharacterizationTest::defaultButtonArgumentReadsCurrentEntryAtEachInvocationAndPinsEveryLabel` | `iptvChannels.getOrNull(currentIptvIndex)` → `iptvChannels.getOrNull(0)` | Default argument must re-read current entry: button visibility expected GONE (8), got VISIBLE (0). |
+| g33 | `TvIptvStartOverCharacterizationTest::catchupPayloadAndArchiveFutureMissingBridgeGuardsAreExact` | `"archiveEnabled" to (channelEntry.tvArchive == "1")` → `"archiveEnabled" to false` | Exact catch-up map: archiveEnabled expected true, got false. |
+| g34 | `TvIptvStartOverCharacterizationTest::controlsReplyIgnoresGuideVisibilityAndEpgGenerationAndTunesArchiveWithRetainedFlags` | `(fromControls \|\| (iptvGuideVisible && scheduleToken == iptvEpgToken))` → `(iptvGuideVisible && scheduleToken == iptvEpgToken)` | Controls reply independent of guide/EPG: startOverActive expected true, got false. |
+| g35 | `TvIptvStartOverCharacterizationTest::guideReplyRequiresVisibleGuideAndSameScheduleAndClearsOnlyCurrentLoading` | `(fromControls \|\| (iptvGuideVisible && scheduleToken == iptvEpgToken))` → `(fromControls \|\| scheduleToken == iptvEpgToken)` | Hidden-guide reply must not tune; empty-tuning assertion failed. |
+| g36 | `TvIptvStartOverCharacterizationTest::catchupTokenSupersessionPreventsOldSuccessFromTuningOrClearingNewLoading` | `val relevant = token == iptvCatchupToken &&` → `val relevant = true &&` | Old catch-up reply must not tune or clear newer loading; empty-tuning assertion failed. |
+| g37 | `TvIptvStartOverCharacterizationTest::unavailableErrorAndMissingRepliesKeepFlagsAndPinMessages` | `"Replay is not available"` → `"Replay unavailable"` | Unavailable replay toast expected Replay is not available, got Replay unavailable. |
+| g38 | `TvIptvStartOverCharacterizationTest::pastProgrammeBecomesVodReplayPreservingHeadersAndResumeWithDefaultGuideDispatch` | `(response["resumePositionMs"] as? Number)?.toLong() ?: 0L` → `0L` | Past replay resumePositionMs expected 7654, got 0. |
+| g39 | `TvIptvStartOverCharacterizationTest::pastReplayDefaultsToProgrammeTitleAndZeroResume` | `response["title"] as? String ?: programme.title` → `response["title"] as? String ?: "Wrong"` | Absent replay title expected Programme, got Wrong. |
+| g40 | `TvIptvStartOverCharacterizationTest::timelineRequiresActivePositiveDurationThenTogglesVisibilityAndFocus` | `iptvStartOverTimelineVisible = !iptvStartOverTimelineVisible` → `iptvStartOverTimelineVisible = true` | Second timeline toggle: timelineVisible expected false, got true. |
+| g41 | `TvIptvStartOverCharacterizationTest::goLiveToggleSupersedesCatchupAndResetsFlagsBeforeChannelStart` | `iptvCatchupToken++` → `// mutation: keep pending catchup token` | At live media handoff catchup token expected 1, got 0. |
+| g42 | `TvIptvStartOverCharacterizationTest::cancelStopAndDestroyInvalidatePendingCallbacksBeforePauseOrRelease` | `iptvCatchupToken++` → `// mutation: cancellation leaves request current` | Explicit cancellation catchup token expected 2, got 1. |
+| g43 | `TvProgressReporterCharacterizationTest::visiblePlaylistRefreshObservesUpdatedItemBeforeDeliveryAndHiddenPlaylistDoesNotRefresh` | `playlistAdapter?.updateCurrentProgress()` → `// mutation: omit visible playlist refresh` | Before bridge delivery refresh order expected [refresh], got []. |
+| g44 | `TvIptvStartOverCharacterizationTest::archivePlayerErrorCancelsCatchupBeforeReturningLiveAndLateReplyCannotRestartArchive` | `cancelPendingIptvCatchupRequest()` → `// mutation: leave pending archive current` | Player error invalidates pending archive: catchup token expected 2, got 1. |
+
+Two invalid harness attempts are retained separately and excluded from the 44 proofs: the
+g22 deadline mutation initially hit an empty-list accessor, so the test gained a cardinality
+assertion; the first g44 attempt used PlaybackException where ExoPlayer requires the covariant
+ExoPlaybackException return type. The repaired original tests pass and both mutations now
+fail named assertions. The rejected intermediate JVM archive is kept separately; it is not
+the accepted `p5-step0` baseline. Earlier passing 42-test runs are also retained for provenance.
+
+### JVM and lint evidence
+
+- Clean original `junit/baseline-1a33c42cb/`: **539 identities**, 538 pass and the existing
+  `TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached` failure;
+  original revision, zero dirty files and unchanged run fingerprint.
+- Final `junit/p5-step0/`: **583 identities**, 582 pass and that same failure, stable tree
+  on `e1859e450` plus the five new test files. Every one of the 539 earlier statuses is
+  identical; all **44 additions pass**. `android_junit_evidence.py compare p5-step0 --against
+  baseline-1a33c42cb` passes. Exact added identities are in `p5/jvm-additions.json`.
+- Original `./gradlew :app:lintDebug` issue set: **1,352 issues** (253 Error, 1,099 Warning).
+  Existing errors make lint fail; raw XML/text/HTML/log and normalized issues are archived in
+  `p5/lint-baseline-1a33c42cb/` for the later gate comparison.
+
+Gradle runs from `android/` with the Android Studio JBR (`21.0.10`); Flutter's redirected
+JVM XML location is used. Original focused positive log: `p5/characterizations-original-final-44-passing.log`;
+accepted final XML: `p5/characterizations-final-xml/` (copied from the complete JVM archive,
+whose production bytes equal the original). Final test sources/hashes: `p5/test-source/`.
+JVM run/comparison metadata, raw mutation runs and rejected attempts stay under `p5/` and `junit/`.
+
+No production moves, protected-input changes, bug fixes, push, branch switch or device/emulator
+interaction. All 28 earlier destinations remain unchanged. STOP before Step 1; Claude's separate
+sample/review and any Step 0b follow later.
+
+
+## Phase 5 step 0b — controlled programme-time boundaries
+
+Six new original-surface cases pin start/stop at now − 1 ms, exactly now and now + 1 ms.
+Robolectric instrumentation of the original activity and future controller routes their
+System.currentTimeMillis calls through the paused clock; the test explicitly sets/verifies
+that clock. No real-time waits or production seam. At exact start the request is accepted;
+at exact stop it is past replay. An airing request stays airing when its reply arrives after
+the stop time, pinning request-time capture.
+
+The complete moved-code sweep finds two programme comparisons in requestIptvCatchup
+(startMs > now and now < stopMs), both covered on either side and at equality. The other
+moved time comparison is progress logging's inclusive 60-second elapsed boundary, already
+pinned and assertion-killed by step-0 g13; recovery updatedAtMs reads have no time comparison.
+No channel-start method has a now/startMs/stopMs comparison. Earlier IptvEntryRules stays frozen.
+
+| Proof | Named test | Original mutation | Failing assertion |
+|---|---|---|---|
+| b01 | `TvIptvCatchupClockBoundaryTest::futureStartOneMillisecondAheadDoesNotRequestOrMutateLoadingAndToken` | `programme.startMs > now` → `programme.startMs > now + 1` | java.lang.AssertionError: future programme is rejected expected:<0> but was:<1> |
+| b02 | `TvIptvCatchupClockBoundaryTest::exactStartIsRequestedAsAiringWithLoadingAndOriginalStartPayload` | `programme.startMs > now` → `programme.startMs >= now` | java.lang.AssertionError: programme starting exactly now is requested expected:<1> but was:<0> |
+| b03 | `TvIptvCatchupClockBoundaryTest::startOneMillisecondAgoIsStillRequestedAsAiring` | `programme.startMs > now` → `programme.startMs >= now - 1` | java.lang.AssertionError: past start remains eligible expected:<1> but was:<0> |
+| b04 | `TvIptvCatchupClockBoundaryTest::exactStopIsPastReplayWithoutStartOverLoadingOrLiveFlags` | `now < programme.stopMs` → `now <= programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<false> but was:<true> |
+| b05 | `TvIptvCatchupClockBoundaryTest::stopOneMillisecondAheadIsAiringEvenWhenReplyArrivesAfterStop` | `now < programme.stopMs` → `now + 1 < programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<true> but was:<false> |
+| b06 | `TvIptvCatchupClockBoundaryTest::stopOneMillisecondAgoIsPastReplay` | `now < programme.stopMs` → `now - 2 < programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<false> but was:<true> |
+
+All six mutations fail named assertions on detached 1a33c42cb plus phase-5 test files.
+Claude's exact g14 before/after strings were rerun against all 50 phase-5 tests: control
+50/50 passes; g14 is killed by exactStartIsRequestedAsAiringWithLoadingAndOriginalStartPayload
+(expected one request, got zero), with no compile error/crash accepted. Raw logs/XML/patches
+and definitions: p5/step0b/mutations/ and p5/step0b/claude-survivors/.
+
+Clean p5-step0b: 589 identities (588 pass, same existing focus failure). All 583 p5-step0
+statuses are identical; six passing additions. Identity helper comparison passes, stable
+fingerprints and complete XML. Baselines live in junit/; original positive logs/XML, clock
+fixture, test hashes and restored original compiled bytecode in p5/step0b/. An initial copy
+command used the wrong working directory and exited before tests; it is excluded from evidence
+counts. Production/protected inputs/manifest unchanged; original worktree removed before moves.
+
+
+## Phase 5 step 1 — manifest moves
+
+Applied all 42 moved members and 20 exact patched activity declarations, including the
+whole sleepTimerController property row's single sendProgress forwarder. Three controller
+properties occupy their pinned original field slots; AppCompatActivity injection, computed
+explicitly qualified Host getters/setters, 16 inert initializer proofs and cross-controller
+ownership follow the manifest unchanged. The shared guide/zap tokens and three Start Over
+status flags remain activity-owned. No delegators, borrowed-resource cleanup or behavior edits.
+
+| Retarget | Before → after | Assertions |
+|---|---|---|
+| Shared TvPlayerOriginalAccess | 42 moved method/field names → owning progressReporter / iptvChannelStartController / iptvStartOverController | Characterization bodies and expectations unchanged, including omitted-argument dispatch |
+| StremioTvStartupWatchdogTest | Three sendProgress invocations → reporter through helper; two recoveryCompletedItemKeys reads → reporter field through shared helper | Test bodies unchanged; reflection invocation behavior retained |
+| manual_source_validation_contract_test.dart | Activity sendProgress→commitStartupCandidate range → TvProgressReporter sendProgress→sendIptvProgress range | Every expect expression unchanged; both manual-switch guards retained |
+
+Kotlin checker: 2,548 declarations, zero differences; earlier 28 destinations frozen.
+Forced debug compile preserves all five original warning identities. Actual compiled overload
+audit: seven identical descriptors; full onStart/onPause/onStop/onDestroy/finish tokens match
+only declared patches and preserve statement order. Focused 64 JVM tests pass (all 50 phase-5
+characterizations plus 14 watchdog tests); 45 affected Dart statuses exactly match phase 4.
+Activity 17,205 → 16,487 lines; controllers 445/497/375. Ran size --update, retaining only
+the activity ratchet and restoring unrelated already-shrunken entries to their pre-task bytes;
+size check passes. Manifest, earlier destinations, lockfile and all ProGuard files unchanged.
+Raw move/retarget/compile/overload/lifecycle/initializer/size/test evidence under p5/step1/.
+Full gate follows.
+
+
+## Phase 5 gate — tested move tree 5d3d9a067
+
+- Kotlin checker: 2,548 declarations, zero differences; all 97 historical/phase-5
+  self-tests pass. Historical p1@dcbd9aafe, p2@ec365eb80, p3@eee52b084 and
+  p4@1a33c42cb pass. All 28 earlier destinations frozen at 1a33c42cb, empty whitelist.
+  Original self-comparison passes. Activity 16,487; controllers 445/497/375; size passes.
+- Actual compiled overload audit: seven identical descriptors. All 16 exact initializer
+  timing proofs are inert; full onStart/onPause/onStop/onDestroy/finish token sequences
+  equal original after only declared patches, preserving teardown and borrowed-resource
+  cleanup order. Forced debug compile preserves all five original warning identities.
+- Clean JVM p5-gate exactly matches all 589 p5-step0b identities/statuses: 588 pass and
+  the same TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached
+  failure. All 50 phase-5 characterizations pass, dirty count zero and stable fingerprints.
+- Lint still fails on original errors, with exactly the same 1,352 normalized issues
+  (253 Error / 1,099 Warning, all 175 opt-in errors). No additions/removals, retaining
+  rule/severity/message plus original PSI symbol/location correspondence. Analyzer
+  diagnostics exactly match all 1,758 phase-4 identities.
+- JAVA_HOME=Android Studio JBR flutter build apk --release --no-pub succeeds, no install.
+  R8 mapping and independent DEX definitions preserve all 14 new classes and 273 members
+  (155 explicit mappings, 118 implicit DEX identities), including the three controllers,
+  Host/default implementations, callbacks and all three activity Host anonymous objects.
+  No new Kt facade is emitted by these class-only files. Three negative controls pass.
+  Mapping/configuration/build hashes and complete bytecode inventory archived.
+- Decoder verification remains pending-environment: script exits 1 with byte-identical
+  phase-4 output; all three packaged libmpv hashes match phase 4 (and previous phases).
+  Same nine missing subtitle decoders and three audio filters per ABI. No workaround or
+  decoder-parity claim. Temporary decoder files stay under p5/gate/tmp/.
+- Full quiet Flutter suite via suite_evidence.py exactly matches all 12,855 phase-4
+  identity/status pairs ({'success': 12794, 'failure': 13, 'error': 28, 'skipped': 20}), same SDK/flags, complete done event, empty scope and
+  stable clean tested tree. Helper comparison passes; no missing tests/new failures/skips.
+  Focused source-test run separately matches all 45 earlier statuses with equal Dart
+  assertions after its single progress-anchor retarget.
+
+Step 0b adds six controlled-clock cases; all six original mutations and Claude exact g14
+are killed on assertions (original all-50 control passes). Evidence: p5/step0b/, p5/step1/,
+p5/gate/, junit/p5-step0b/ and junit/p5-gate/. Manifest, lockfile, every ProGuard file and
+all 28 earlier destinations unchanged. Original detached worktree removed. No bug fixes,
+push, branch switch, device/emulator interaction or self independent review. STOP after
+phase 5; Claude reviews separately.

@@ -12,7 +12,7 @@ from check_kotlin_overloads import audit, bytecode
 class Phase4OverloadsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.folder = k.evidence_root(k.ROOT) / 'p4/fixtures/overloads'
+        cls.folder = k.evidence_root(k.ROOT) / (k.EVIDENCE_PHASE + '/fixtures/phase4-overloads')
         cls.original = (k.ROOT / 'dev/tool/fixtures/kotlin_overloads/phase4.kt').read_text()
         unit = k.parse({'base': cls.original})['base']
         nodes = list(k.walk(unit['declarations']))

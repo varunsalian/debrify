@@ -398,7 +398,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
         if (!entry.isLive) return false
         if (sleepStopLatched || sleepTimerController.sleepTimerMode == SleepTimerMode.END_OF_ITEM) return false
-        if (iptvStremioChannelKey != null && !iptvStremioWinnerReported) return false
+        if (iptvChannelStartController.iptvStremioChannelKey != null && !iptvChannelStartController.iptvStremioWinnerReported) return false
         if (player?.playWhenReady != true) return false
         return true
     }
@@ -416,7 +416,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvStartOverActive = false
             iptvStartOverLoading = false
             iptvStartOverTimelineVisible = false
-            iptvCatchupToken++
+            iptvStartOverController.iptvCatchupToken++
             updateIptvControlPresentation(entry)
         }
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
@@ -795,7 +795,45 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvStartOverActive = false
     private var iptvStartOverLoading = false
     private var iptvStartOverTimelineVisible = false
-    private var iptvCatchupToken = 0
+    private val iptvStartOverController: TvIptvStartOverController = TvIptvStartOverController(
+        this,
+        object : TvIptvStartOverController.Host {
+            override fun beginIptvPlayback(entry: IptvChannelEntry): Unit = this@AndroidTvTorrentPlayerActivity.iptvChannelStartController.beginIptvPlayback(entry)
+            override fun checkpointCurrentIptvPosition(): Unit = this@AndroidTvTorrentPlayerActivity.checkpointCurrentIptvPosition()
+            override fun commitIptvAllCategorySearch(): Unit = this@AndroidTvTorrentPlayerActivity.commitIptvAllCategorySearch()
+            override var currentIptvIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentIptvIndex = value }
+            override fun hideIptvGuide(): Unit = this@AndroidTvTorrentPlayerActivity.hideIptvGuide()
+            override var iptvChannels: MutableList<IptvChannelEntry>
+                get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvChannels = value }
+            override val iptvEpgToken: Int get() = this@AndroidTvTorrentPlayerActivity.iptvEpgToken
+            override val iptvGuideVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.iptvGuideVisible
+            override var iptvSeriesAudioKey: String?
+                get() = this@AndroidTvTorrentPlayerActivity.iptvSeriesAudioKey
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvSeriesAudioKey = value }
+            override var iptvStartOverActive: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverActive
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverActive = value }
+            override val iptvStartOverButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverButton
+            override var iptvStartOverLoading: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverLoading
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverLoading = value }
+            override val iptvStartOverSeekButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverSeekButton
+            override var iptvStartOverTimelineVisible: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible = value }
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.resetSubtitleState()
+            override fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String): Unit = this@AndroidTvTorrentPlayerActivity.setIptvMediaItem(entry, streamUrl)
+            override fun showControlsAndFocusProgressBar(): Unit = this@AndroidTvTorrentPlayerActivity.showControlsAndFocusProgressBar()
+            override fun switchToIptvChannel(entry: IptvChannelEntry, adoptVisibleBrowseList: Boolean, checkpointOutgoing: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.switchToIptvChannel(entry, adoptVisibleBrowseList, checkpointOutgoing)
+            override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
+            override fun updateIptvControlPresentation(entry: IptvChannelEntry?): Unit = this@AndroidTvTorrentPlayerActivity.updateIptvControlPresentation(entry)
+            override fun updateIptvEpisodeControls(): Unit = this@AndroidTvTorrentPlayerActivity.updateIptvEpisodeControls()
+        },
+    )
 
     // Xtream series audio memory: the `<playlistId>::<seriesId>` key the Flutter
     // store uses, and the language resolved from it at launch. A native audio
@@ -948,7 +986,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvContentType: String = "live"
     private var iptvSelectedCategory: String? = null
     private var iptvBrowseToken = 0
-    private var iptvWatchRegistrationToken = 0
+    private val iptvChannelStartController: TvIptvChannelStartController = TvIptvChannelStartController(
+        this,
+        object : TvIptvChannelStartController.Host {
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override var currentIptvStreamUrl: String?
+                get() = this@AndroidTvTorrentPlayerActivity.currentIptvStreamUrl
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentIptvStreamUrl = value }
+            override var currentStremioSourceIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex = value }
+            override fun dropStaleSourceSwitchFeedback(): Unit = this@AndroidTvTorrentPlayerActivity.dropStaleSourceSwitchFeedback()
+            override val iptvBrowseHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.iptvBrowseHandler
+            override val iptvChannels: MutableList<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val iptvRecordingActionsController: TvIptvRecordingActionsController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingActionsController
+            override val iptvSourceId: String? get() = this@AndroidTvTorrentPlayerActivity.iptvSourceId
+            override val iptvTwinPreferredUrls: MutableMap<String, String> get() = this@AndroidTvTorrentPlayerActivity.iptvTwinPreferredUrls
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
+            override fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String): Unit = this@AndroidTvTorrentPlayerActivity.setIptvMediaItem(entry, streamUrl)
+            override fun setupStremioSources(): Unit = this@AndroidTvTorrentPlayerActivity.setupStremioSources()
+            override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
+            override val stremioSourceBadge: View? get() = this@AndroidTvTorrentPlayerActivity.stremioSourceBadge
+            override val stremioSources: MutableList<StremioSource> get() = this@AndroidTvTorrentPlayerActivity.stremioSources
+            override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
+            override fun updateStremioQualityBadge(): Unit = this@AndroidTvTorrentPlayerActivity.updateStremioQualityBadge()
+            override fun watchSourceSwitchOutcome(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.watchSourceSwitchOutcome(sourceIndex)
+        },
+    )
     private val iptvBrowseHandler = Handler(Looper.getMainLooper())
     private val iptvZapPageSize = 200
     private var iptvZapPagingActive = false
@@ -1000,21 +1066,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvEpgVisible = false
     private var iptvEpgEntry: IptvChannelEntry? = null
 
-    // Stremio-addon IPTV channels: their `url` is a stremio-tv:// key, not a
-    // stream — Flutter resolves it into an ordered candidate URL list on
-    // demand, and playback walks the candidates serially on error until one
-    // plays or the list runs out (then the channel goes quiet, like a dead
-    // M3U stream). Token guards stale async resolves after a channel switch.
-    private var iptvStremioToken = 0
-    private var iptvStremioChannelKey: String? = null
-    private var iptvStremioCandidates: List<IptvStremioCandidate> = emptyList()
-    private var iptvStremioCandidateIndex = 0
-    private var iptvStremioWinnerReported = false
-    // Per-candidate stall watchdog: live streams can buffer forever without
-    // ever erroring, and the ladder only advances on error — this converts a
-    // never-READY candidate into a failure. Cancelled by STATE_READY.
-    private var iptvStremioStallRunnable: Runnable? = null
-
     // Stremio Sources state
     private var stremioSources = mutableListOf<StremioSource>()
     private var currentStremioSourceIndex = 0
@@ -1055,7 +1106,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var showSourceAddonLogos = false
     private var recoveryImdbId: String? = null
     private val recoveryStartedAtMs = System.currentTimeMillis()
-    private var recoverySequence = 0L
+    private val progressReporter: TvProgressReporter = TvProgressReporter(
+        this,
+        object : TvProgressReporter.Host {
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override val currentStremioSourceIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
+            override val finalProgressSnapshot: Boolean get() = this@AndroidTvTorrentPlayerActivity.finalProgressSnapshot
+            override fun heldResumePositionMs(actualMs: Long): Long? = this@AndroidTvTorrentPlayerActivity.heldResumePositionMs(actualMs)
+            override val iptvChannels: MutableList<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val isStremioTvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isStremioTvMode
+            override val manualSourceRestoreInProgress: Boolean get() = this@AndroidTvTorrentPlayerActivity.manualSourceRestoreInProgress
+            override val manualSourceSwitchSnapshot: ManualSourceSwitchSnapshot? get() = this@AndroidTvTorrentPlayerActivity.manualSourceSwitchSnapshot
+            override val maxStableDurationMs: Long get() = this@AndroidTvTorrentPlayerActivity.maxStableDurationMs
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val playbackSpeedIndex: Int get() = this@AndroidTvTorrentPlayerActivity.playbackSpeedIndex
+            override val playbackSpeeds: Array<Float> get() = this@AndroidTvTorrentPlayerActivity.playbackSpeeds
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playlistAdapter: PlaylistOverlayAdapter? get() = this@AndroidTvTorrentPlayerActivity.playlistAdapter
+            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistVisible
+            override fun recordPlaybackLifecycle(event: String, details: String): Unit = this@AndroidTvTorrentPlayerActivity.recordPlaybackLifecycle(event, details)
+            override val recoveryDataGeneration: Int get() = this@AndroidTvTorrentPlayerActivity.recoveryDataGeneration
+            override val recoveryImdbId: String? get() = this@AndroidTvTorrentPlayerActivity.recoveryImdbId
+            override val recoveryProfileId: String? get() = this@AndroidTvTorrentPlayerActivity.recoveryProfileId
+            override val recoverySeriesTitle: String? get() = this@AndroidTvTorrentPlayerActivity.recoverySeriesTitle
+            override val recoveryStartedAtMs: Long get() = this@AndroidTvTorrentPlayerActivity.recoveryStartedAtMs
+            override val recoveryTitle: String? get() = this@AndroidTvTorrentPlayerActivity.recoveryTitle
+            override val resizeModeIndex: Int get() = this@AndroidTvTorrentPlayerActivity.resizeModeIndex
+            override val resizeModeLabels: Array<String> get() = this@AndroidTvTorrentPlayerActivity.resizeModeLabels
+            override val sourcePersistenceSessionId: Int get() = this@AndroidTvTorrentPlayerActivity.sourcePersistenceSessionId
+            override val startupFailoverCursor: StartupFailoverCursor? get() = this@AndroidTvTorrentPlayerActivity.startupFailoverCursor
+            override val startupSourcesExhausted: Boolean get() = this@AndroidTvTorrentPlayerActivity.startupSourcesExhausted
+        },
+    )
     private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
@@ -1250,7 +1334,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 get() = this@AndroidTvTorrentPlayerActivity.sleepStopLatched
                 set(value) { this@AndroidTvTorrentPlayerActivity.sleepStopLatched = value }
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
-            override fun sendProgress(completed: Boolean) = this@AndroidTvTorrentPlayerActivity.sendProgress(completed)
+            override fun sendProgress(completed: Boolean) = this@AndroidTvTorrentPlayerActivity.progressReporter.sendProgress(completed)
             override fun releaseScreenForSleep() = this@AndroidTvTorrentPlayerActivity.releaseScreenForSleep()
         },
     )
@@ -1366,20 +1450,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // ~100% and scrobble the item as fully watched. Both reset per item.
     private var maxStableDurationMs: Long = 0L
     private var lastRealPositionMs: Long = 0L
-    // One local-threshold report per content identity. Flutter owns the durable
-    // completed state; this only prevents sending a write-trigger on every
-    // five-second progress pulse after the threshold has been crossed.
-    // A fetched direct episode replaces the one-entry playlist in place, so
-    // its index is always 0. Deduplicate completion by episode identity rather
-    // than index or only the first direct episode could cross the threshold.
-    private val locallyCompletedItemKeys = mutableSetOf<String>()
-    private val recoveryCompletedItemKeys = mutableSetOf<String>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
     private val progressRunnable = object : Runnable {
         override fun run() {
-            sendProgress(completed = false)
+            progressReporter.sendProgress(completed = false)
             upNextController.maybeShowUpNext()
             player?.let {
                 iptvTuneDiagnostics.onProgress(it.currentPosition, it.isPlaying)
@@ -1428,7 +1504,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val playbackListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (isFinishing || isDestroyed) return
-            sendPlaybackMaintenanceState()
+            progressReporter.sendPlaybackMaintenanceState()
             if (events.contains(Player.EVENT_TRACKS_CHANGED) ||
                 events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                 if (player.playbackState == Player.STATE_READY) {
@@ -1449,7 +1525,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         iptvLiveRecovery.onReady()
                         rearmIptvTwinTrialDeadline()
                     }
-                    reportIptvStremioWinnerIfNeeded()
+                    iptvChannelStartController.reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
                     // Debrid-resolved torrents commit at READY: the debrid API
                     // vouched for the link moments ago, and READY proves the
@@ -1636,7 +1712,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         return
                     }
                     recordPlaybackLifecycle("playback_completed")
-                    sendProgress(completed = true)
+                    progressReporter.sendProgress(completed = true)
 
                     // "Stop at the end of this episode". Playback has already
                     // finished, so this only has to suppress every advance
@@ -1735,7 +1811,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             // Startup-channel memory — armed by real playback only, never by a
             // tune, so a dead stream cannot become "the last channel watched".
-            if (isPlaying) noteLiveChannelPlaying()
+            if (isPlaying) iptvChannelStartController.noteLiveChannelPlaying()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -1801,13 +1877,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (iptvLiveRecoveryEligible() && retryIptvAsHlsIfUnrecognized(error)) return
                 val entry = iptvChannels.getOrNull(currentIptvIndex)
                 if (entry != null && entry.isLive) {
-                    cancelPendingIptvCatchupRequest()
+                    iptvStartOverController.cancelPendingIptvCatchupRequest()
                     // Archive rejection must not enter the live AUTH ladder.
                     if (iptvLiveRecoveryEligible()) {
                         iptvStartOverActive = false
                         iptvStartOverTimelineVisible = false
                         updateIptvControlPresentation(entry)
-                        beginIptvPlayback(entry)
+                        iptvChannelStartController.beginIptvPlayback(entry)
                     }
                     return
                 }
@@ -1856,7 +1932,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Stremio-addon IPTV channels: a dead candidate URL is expected —
             // step down the ladder. Everything else keeps the pre-existing
             // behavior (no handler existed; playback simply stops).
-            if (isLiveIptvError && tryNextIptvStremioCandidate()) return
+            if (isLiveIptvError && iptvChannelStartController.tryNextIptvStremioCandidate()) return
             // Generic live recovery — the last resort after every specific
             // handler above declined. Classified: auth-class surrenders
             // immediately, decoder-class gets one retry, the rest climb the
@@ -4343,12 +4419,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         iptvStartOverButton?.setOnClickListener {
             hideControlsMenu()
-            toggleIptvStartOver()
+            iptvStartOverController.toggleIptvStartOver()
         }
         iptvStartOverButton?.onFocusChangeListener = extendTimerOnFocus
 
         iptvStartOverSeekButton?.setOnClickListener {
-            showIptvStartOverTimeline()
+            iptvStartOverController.showIptvStartOverTimeline()
         }
         iptvStartOverSeekButton?.onFocusChangeListener = extendTimerOnFocus
 
@@ -8424,8 +8500,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
-        updateIptvStartOverButton(entry)
-        updateIptvStartOverSeekButton()
+        iptvStartOverController.updateIptvStartOverButton(entry)
+        iptvStartOverController.updateIptvStartOverSeekButton()
         // Visibility follows the ACTIVE recorder: the engine records pre-Q
         // once storage is granted (and shows the button so it CAN be
         // granted); the tee remains Q+-only.
@@ -8620,7 +8696,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvEpgAdapter = IptvEpgAdapter(
             emptyList(),
             onReplay = { program ->
-                iptvEpgEntry?.let { entry -> requestIptvCatchup(entry, program) }
+                iptvEpgEntry?.let { entry -> iptvStartOverController.requestIptvCatchup(entry, program) }
             },
             onRecordFuture = { program ->
                 iptvEpgEntry?.let { entry -> iptvRecordingActionsController.promptScheduleRecording(entry, program) }
@@ -9685,7 +9761,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvChannelAdapter?.notifyEpgFor(entry)
             if (entry.isCurrent) {
                 updateIptvGuideEpgHeader()
-                updateIptvStartOverButton(entry)
+                iptvStartOverController.updateIptvStartOverButton(entry)
                 // A visible zap banner for this channel paints the fresh data.
                 if (iptvZapBanner?.visibility == View.VISIBLE) {
                     paintIptvZapBannerEpg(entry)
@@ -9880,216 +9956,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         iptvEpgPrograms = emptyList()
         iptvEpgAdapter?.updatePrograms(emptyList())
-    }
-
-    private fun updateIptvStartOverButton(entry: IptvChannelEntry? =
-        iptvChannels.getOrNull(currentIptvIndex)
-    ) {
-        val button = iptvStartOverButton ?: return
-        val available = entry != null &&
-            (iptvStartOverActive || currentIptvStartOverProgramme(entry) != null)
-        button.visibility = if (available) View.VISIBLE else View.GONE
-        button.isEnabled = available && !iptvStartOverLoading
-        button.text = when {
-            iptvStartOverLoading -> "Preparing…"
-            iptvStartOverActive -> "Go Live"
-            else -> "Start Over"
-        }
-        button.contentDescription = when {
-            iptvStartOverLoading -> "Preparing start over"
-            iptvStartOverActive -> "Return to live channel"
-            else -> "Start programme from beginning"
-        }
-        updateIptvStartOverSeekButton()
-    }
-
-    private fun updateIptvStartOverSeekButton() {
-        val button = iptvStartOverSeekButton ?: return
-        button.visibility = if (iptvStartOverActive) View.VISIBLE else View.GONE
-        button.isEnabled = iptvStartOverActive && !iptvStartOverLoading
-        button.text = if (iptvStartOverTimelineVisible) "Hide Timeline" else "Seek"
-        button.contentDescription = if (iptvStartOverTimelineVisible) {
-            "Hide start over timeline"
-        } else {
-            "Show start over timeline"
-        }
-    }
-
-    private fun showIptvStartOverTimeline() {
-        if (!iptvStartOverActive) return
-        val duration = player?.duration ?: 0L
-        if (duration <= 0L) {
-            Toast.makeText(this, "Timeline is still loading", Toast.LENGTH_SHORT).show()
-            return
-        }
-        iptvStartOverTimelineVisible = !iptvStartOverTimelineVisible
-        updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
-        if (iptvStartOverTimelineVisible) {
-            showControlsAndFocusProgressBar()
-        } else {
-            iptvStartOverSeekButton?.requestFocus()
-        }
-    }
-
-    private fun toggleIptvStartOver() {
-        if (iptvStartOverLoading) return
-        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
-        if (iptvStartOverActive) {
-            iptvCatchupToken++
-            iptvStartOverActive = false
-            iptvStartOverTimelineVisible = false
-            updateIptvControlPresentation(entry)
-            resetSubtitleState()
-            beginIptvPlayback(entry)
-            return
-        }
-        val programme = currentIptvStartOverProgramme(entry) ?: return
-        requestIptvCatchup(entry, programme, fromControls = true)
-    }
-
-    private fun cancelPendingIptvCatchupRequest() {
-        iptvCatchupToken++
-        if (!iptvStartOverLoading) return
-        iptvStartOverLoading = false
-        updateIptvStartOverButton()
-    }
-
-    private fun requestIptvCatchup(
-        channelEntry: IptvChannelEntry,
-        programme: IptvEpgProgram,
-        fromControls: Boolean = false,
-    ) {
-        val now = System.currentTimeMillis()
-        if (!programme.hasArchive || programme.startMs > now) return
-        val airing = now < programme.stopMs
-        val channel = MainActivity.getAndroidTvPlayerChannel() ?: return
-        val token = ++iptvCatchupToken
-        val scheduleToken = iptvEpgToken
-        if (airing) {
-            iptvStartOverLoading = true
-            updateIptvStartOverButton(channelEntry)
-        }
-        Toast.makeText(
-            this,
-            if (airing) "Preparing start over…" else "Preparing replay…",
-            Toast.LENGTH_SHORT,
-        ).show()
-        fun requestStillRelevant(): Boolean {
-            val relevant = token == iptvCatchupToken &&
-                (fromControls || (iptvGuideVisible && scheduleToken == iptvEpgToken))
-            if (!relevant && token == iptvCatchupToken && airing) {
-                iptvStartOverLoading = false
-                updateIptvStartOverButton()
-            }
-            return relevant
-        }
-        channel.invokeMethod(
-            "requestIptvCatchup",
-            mapOf(
-                "channelUrl" to channelEntry.url,
-                "startMs" to programme.startMs,
-                "channelName" to channelEntry.name,
-                "logoUrl" to channelEntry.logoUrl,
-                "playlistId" to channelEntry.sourceId,
-                "httpHeaders" to channelEntry.httpHeaders,
-                "archiveDisabled" to (channelEntry.tvArchive == "0"),
-                "archiveEnabled" to (channelEntry.tvArchive == "1"),
-                "archiveDurationDays" to channelEntry.tvArchiveDuration,
-                "startOver" to airing,
-            ),
-            object : io.flutter.plugin.common.MethodChannel.Result {
-                override fun success(result: Any?) {
-                    if (!requestStillRelevant()) return
-                    val response = result as? Map<*, *>
-                    val url = response?.get("url") as? String
-                    if (url.isNullOrEmpty()) {
-                        iptvStartOverLoading = false
-                        updateIptvStartOverButton()
-                        Toast.makeText(
-                            this@AndroidTvTorrentPlayerActivity,
-                            "Replay is not available",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        return
-                    }
-                    if (airing) {
-                        commitIptvAllCategorySearch()
-                        hideIptvGuide()
-                        val current = iptvChannels.getOrNull(currentIptvIndex)
-                        if (current?.url != channelEntry.url) {
-                            switchToIptvChannel(channelEntry)
-                        }
-                        val selected = iptvChannels.getOrNull(currentIptvIndex)
-                        if (selected == null || selected.url != channelEntry.url) {
-                            iptvStartOverLoading = false
-                            updateIptvStartOverButton()
-                            return
-                        }
-                        iptvStartOverLoading = false
-                        iptvStartOverActive = true
-                        iptvStartOverTimelineVisible = false
-                        resetSubtitleState()
-                        setIptvMediaItem(selected, url)
-                        titleView.text = selected.displayName
-                        updateIptvStartOverButton(selected)
-                        return
-                    }
-                    checkpointCurrentIptvPosition()
-                    val replay = IptvChannelEntry(
-                        index = 0,
-                        channelNumber = null,
-                        name = response["title"] as? String ?: programme.title,
-                        url = url,
-                        logoUrl = channelEntry.logoUrl,
-                        group = channelEntry.name,
-                        isLive = false,
-                        isCurrent = true,
-                        resumePositionMs =
-                            (response["resumePositionMs"] as? Number)?.toLong() ?: 0L,
-                        httpHeaders = channelEntry.httpHeaders,
-                        contentType = "vod",
-                        sourceId = channelEntry.sourceId,
-                        sourceName = channelEntry.sourceName,
-                    )
-                    iptvChannels.forEach { it.isCurrent = false }
-                    iptvChannels = mutableListOf(replay)
-                    currentIptvIndex = 0
-                    iptvSeriesAudioKey = null
-                    // Starting a replay is a real playback switch, just like
-                    // selecting a live search result. Do not restore the
-                    // category that preceded Search while closing the guide.
-                    commitIptvAllCategorySearch()
-                    hideIptvGuide()
-                    resetSubtitleState()
-                    beginIptvPlayback(replay)
-                    titleView.text = replay.name
-                    updateIptvEpisodeControls()
-                }
-
-                override fun error(code: String, message: String?, details: Any?) {
-                    if (!requestStillRelevant()) return
-                    iptvStartOverLoading = false
-                    updateIptvStartOverButton()
-                    Toast.makeText(
-                        this@AndroidTvTorrentPlayerActivity,
-                        message ?: "Replay is not available",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                }
-
-                override fun notImplemented() {
-                    if (requestStillRelevant()) {
-                        iptvStartOverLoading = false
-                        updateIptvStartOverButton()
-                        Toast.makeText(
-                            this@AndroidTvTorrentPlayerActivity,
-                            "Replay is not available",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                }
-            },
-        )
     }
 
     private fun isFocusInIptvEpgPanel(): Boolean {
@@ -10830,7 +10696,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         checkpointOutgoing: Boolean = true,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToIptvChannel: ${entry.name} (index=${entry.index})")
-        iptvCatchupToken++
+        iptvStartOverController.iptvCatchupToken++
         iptvStartOverActive = false
         iptvStartOverLoading = false
         iptvStartOverTimelineVisible = false
@@ -10877,7 +10743,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Persist on-demand metadata before playback so the progress row can
         // join Continue Watching even when this item was discovered in-player.
-        beginIptvPlaybackAfterWatchRegistration(selected)
+        iptvChannelStartController.beginIptvPlaybackAfterWatchRegistration(selected)
 
         // Update title
         titleView.text = selected.displayName
@@ -10889,116 +10755,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateIptvGuideCurrentName()
         // Index moved — a previous episode may have (dis)appeared.
         updateIptvEpisodeControls()
-    }
-
-    // ========================================================================
-    // Startup-channel memory
-    //
-    // Remembers the last LIVE channel that actually reached a playing state, so
-    // "start on my last channel" re-tunes what was being watched rather than
-    // what was launched — zapping is how live IPTV is used.
-    //
-    // Fire-and-forget, and deliberately NOT on the tune path: the live branch
-    // of beginIptvPlaybackAfterWatchRegistration short-circuits precisely so
-    // zapping stays instant, and nothing here may reintroduce a round trip in
-    // front of playback.
-    // ========================================================================
-
-    /// A channel counts once it has been playing for this long. Zapping through
-    /// twenty channels supersedes one pending post rather than writing twenty
-    /// times, and the write lands while the app is alive — an abrupt force-stop
-    /// runs no lifecycle callback, so flush-on-stop alone would lose it.
-    private val lastLiveChannelSettleMs = 1_000L
-
-    private var lastLiveChannelArmedUrl: String? = null
-    private var lastLiveChannelRunnable: Runnable? = null
-
-    private fun noteLiveChannelPlaying() {
-        if (!isIptvMode) return
-        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
-        if (!entry.isLive) return
-        // Already counting down for this channel — a pause/resume must not
-        // restart the settle window.
-        if (lastLiveChannelArmedUrl == entry.url && lastLiveChannelRunnable != null) return
-
-        lastLiveChannelRunnable?.let { iptvBrowseHandler.removeCallbacks(it) }
-        lastLiveChannelArmedUrl = entry.url
-
-        val runnable = Runnable {
-            lastLiveChannelRunnable = null
-            // Re-read: the user may have zapped on during the settle window,
-            // and the channel that settled is the one that counts.
-            val current = iptvChannels.getOrNull(currentIptvIndex)
-            if (current == null || !current.isLive || current.url != entry.url) return@Runnable
-            if (player?.isPlaying != true) return@Runnable
-            // sourceId is backfilled from the launch-level id for entries that
-            // carried none, so fall back to it here for the same reason.
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "noteIptvLiveChannel",
-                mapOf(
-                    "url" to current.url,
-                    "name" to current.name,
-                    "sourceId" to (current.sourceId ?: iptvSourceId),
-                    "channelNumber" to current.channelNumber,
-                    "group" to current.group,
-                    "logoUrl" to current.logoUrl,
-                    "httpHeaders" to current.httpHeaders,
-                ),
-            )
-        }
-        lastLiveChannelRunnable = runnable
-        // Posted to iptvBrowseHandler so onDestroy's removeCallbacksAndMessages
-        // already retires it.
-        iptvBrowseHandler.postDelayed(runnable, lastLiveChannelSettleMs)
-    }
-
-    private fun beginIptvPlaybackAfterWatchRegistration(entry: IptvChannelEntry) {
-        val token = ++iptvWatchRegistrationToken
-        if (entry.isLive) {
-            beginIptvPlayback(entry)
-            return
-        }
-
-        val channel = MainActivity.getAndroidTvPlayerChannel()
-        if (channel == null) {
-            beginIptvPlayback(entry)
-            return
-        }
-
-        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
-        fun continuePlayback() {
-            if (!delivered.compareAndSet(false, true)) return
-            if (token != iptvWatchRegistrationToken) return
-            val current = iptvChannels.getOrNull(currentIptvIndex)
-            if (current !== entry && current?.url != entry.url) return
-            beginIptvPlayback(entry)
-        }
-
-        // A detached Flutter engine can leave MethodChannel callbacks silent.
-        // Metadata is best-effort in that case; playback must still proceed.
-        iptvBrowseHandler.postDelayed({ continuePlayback() }, 2_000)
-        channel.invokeMethod(
-            "recordIptvWatch",
-            mapOf(
-                "url" to entry.url,
-                "name" to entry.name,
-                "logoUrl" to entry.logoUrl,
-                "group" to entry.group,
-                "sourceId" to entry.sourceId,
-                "httpHeaders" to entry.httpHeaders,
-                "seriesId" to entry.seriesId,
-                "seriesName" to (entry.seriesName ?: entry.group),
-                "season" to entry.season,
-                "episode" to entry.episode,
-                "hasNextEpisode" to entry.hasNextEpisode,
-            ),
-            object : io.flutter.plugin.common.MethodChannel.Result {
-                override fun success(result: Any?) = continuePlayback()
-                override fun error(code: String, message: String?, details: Any?) =
-                    continuePlayback()
-                override fun notImplemented() = continuePlayback()
-            },
-        )
     }
 
     /** True when LEFT/RIGHT should zap instead of seek: an IPTV session with
@@ -12630,7 +12386,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Clear subtitle identity/results when changing channels.
         resetSubtitleState()
 
-        beginIptvPlayback(entry)
+        iptvChannelStartController.beginIptvPlayback(entry)
 
         // Update the title content. Visibility stays synchronized with controls.
         titleView.text = entry.displayName
@@ -12900,219 +12656,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // (arming re-cancels the one ticking since candidate start — a slow
         // panel can eat most of that window on the failed sniff alone, and
         // the ladder would advance past a candidate that plays when forced).
-        if (iptvStremioChannelKey != null) {
-            armIptvStremioStallWatchdog()
+        if (iptvChannelStartController.iptvStremioChannelKey != null) {
+            iptvChannelStartController.armIptvStremioStallWatchdog()
         }
         return true
-    }
-
-    /**
-     * Start playback for an IPTV channel. Plain channels play their URL
-     * directly; Stremio-addon channels first resolve their candidate stream
-     * URLs through the Flutter bridge (cached on the Dart side), then play
-     * candidate 0 — [tryNextIptvStremioCandidate] walks the rest on error.
-     */
-    private fun beginIptvPlayback(entry: IptvChannelEntry) {
-        // The channel change starts HERE, so the outgoing channel's recording
-        // ends here too. Waiting for setIptvMediaItem would strand it whenever
-        // a Stremio resolve returns nothing: the row would stay pending while
-        // the UI already shows the new channel.
-        iptvRecordingActionsController.finalizeIptvRecordingIfActive()
-
-        iptvStremioToken++
-        val token = iptvStremioToken
-        iptvStremioChannelKey = null
-        iptvStremioCandidates = emptyList()
-        iptvStremioCandidateIndex = 0
-        iptvStremioWinnerReported = false
-        cancelIptvStremioStallWatchdog()
-        clearIptvStremioSources()
-
-        // The outgoing stream's URL must not be attributable from here on: a
-        // Stremio zap stops the player and resolves async — stop() does NOT
-        // clear playerError, so a stale error delivering mid-resolve would
-        // otherwise pass the liveness gate and restart the OLD stream under
-        // the new channel's identity. setIptvMediaItem re-sets this.
-        currentIptvStreamUrl = null
-
-        if (!isStremioIptvUrl(entry.url)) {
-            // A channel whose `.m3u8` wedged and whose `.ts` twin proved
-            // itself this session starts on the twin directly.
-            setIptvMediaItem(entry, iptvTwinPreferredUrls[entry.url] ?: entry.url)
-            return
-        }
-
-        // The guide/title/index already committed to this channel — stop the
-        // outgoing stream now so a slow (or failed) resolve can't leave the
-        // previous channel playing under the new channel's UI state.
-        player?.stop()
-
-        requestIptvStreamUrls(entry.url, entry.name) { candidates, message ->
-            runOnUiThread {
-                if (token != iptvStremioToken || isFinishing) return@runOnUiThread
-                if (candidates.isEmpty()) {
-                    android.util.Log.w("AndroidTvPlayer", "No playable streams for ${entry.name}")
-                    Toast.makeText(
-                        this,
-                        message ?: "${entry.name} is not playable right now",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@runOnUiThread
-                }
-                iptvStremioChannelKey = entry.url
-                iptvStremioCandidates = candidates
-                iptvStremioCandidateIndex = 0
-                populateIptvStremioSources()
-                setIptvMediaItem(entry, candidates[0].url)
-                armIptvStremioStallWatchdog()
-            }
-        }
-    }
-
-    /**
-     * Mirror the channel's candidate links into the existing Stremio sources
-     * panel (as direct streams, 1:1 with [iptvStremioCandidates] so the two
-     * index spaces stay interchangeable) — giving live channels the same
-     * manual source picker movie playback has.
-     */
-    private fun populateIptvStremioSources() {
-        stremioSources.clear()
-        iptvStremioCandidates.forEachIndexed { i, c ->
-            stremioSources.add(
-                StremioSource(
-                    index = i,
-                    name = c.label,
-                    infohash = "",
-                    directUrl = c.url,
-                    streamType = "directUrl",
-                    sizeBytes = 0L,
-                    seeders = 0,
-                    source = null,
-                    quality = iptvQualityFromLabel(c.label),
-                )
-            )
-        }
-        currentStremioSourceIndex = iptvStremioCandidateIndex
-        setupStremioSources()
-    }
-
-    /** Leaving a Stremio channel (or re-resolving one) — retire its source rows. */
-    private fun clearIptvStremioSources() {
-        if (!isIptvMode || stremioSources.isEmpty()) return
-        stremioSources.clear()
-        currentStremioSourceIndex = 0
-        stremioSourceBadge?.visibility = View.GONE
-    }
-
-    /**
-     * Manual pick from the sources panel while a Stremio IPTV channel plays.
-     * Keeps the ladder in step (an error after the pick advances from the
-     * picked link) and skips the movie path's position seek — meaningless on
-     * a live stream.
-     */
-    private fun switchToIptvStremioSource(url: String, sourceIndex: Int) {
-        android.util.Log.d("AndroidTvPlayer", "switchToIptvStremioSource: index=$sourceIndex")
-        iptvStremioCandidateIndex = sourceIndex
-        iptvStremioWinnerReported = false
-        currentStremioSourceIndex = sourceIndex
-        updateStremioQualityBadge()
-        sourceBrowser?.render()
-        val entry = iptvChannels.getOrNull(currentIptvIndex)
-        if (entry != null) {
-            setIptvMediaItem(entry, url)
-        } else {
-            subtitleTrackReadiness.onMediaReplacement()
-            player?.setMediaItem(MediaItem.fromUri(url))
-            player?.prepare()
-            player?.play()
-        }
-        armIptvStremioStallWatchdog()
-        watchSourceSwitchOutcome(sourceIndex)
-    }
-
-    /**
-     * Advance the serial candidate ladder after a playback error. Returns
-     * false when the current playback isn't a Stremio channel (the error
-     * isn't ours to handle).
-     */
-    private fun tryNextIptvStremioCandidate(): Boolean {
-        val key = iptvStremioChannelKey ?: return false
-        val candidates = iptvStremioCandidates
-        if (candidates.isEmpty()) return false
-        // The ladder owns error messaging from here (silent advance, toast only
-        // when every candidate dies) — a manual pick's watcher must not speak.
-        dropStaleSourceSwitchFeedback()
-        val next = iptvStremioCandidateIndex + 1
-        if (next >= candidates.size) {
-            // Every candidate died: have Flutter forget the stale list so a
-            // later attempt re-resolves fresh links, then go quiet. KEEP the
-            // key and candidate rows though — the sources panel stays usable
-            // as a manual escape hatch (a pick routes back through the live
-            // switch; nulling the key here would send it down the movie
-            // pipeline, which seeks to a stale live position).
-            cancelIptvStremioStallWatchdog()
-            reportIptvStreamResult(key, null, false)
-            iptvStremioWinnerReported = false
-            val name = iptvChannels.getOrNull(currentIptvIndex)?.name ?: "Channel"
-            // Distinct from the "resolve came back empty" toast: links existed
-            // but every one died. Point at the escape hatch we kept alive.
-            val attempted = candidates.size
-            val message = if (attempted == 1)
-                "$name: its only source didn't play — pick it in Sources to retry"
-            else
-                "$name: tried all $attempted sources, none played — pick one in Sources to retry"
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-            return true
-        }
-        iptvStremioCandidateIndex = next
-        iptvStremioWinnerReported = false
-        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
-        android.util.Log.d(
-            "AndroidTvPlayer",
-            "IPTV stremio ladder: trying candidate ${next + 1}/${candidates.size} for ${entry.name}"
-        )
-        // Keep the sources menu's active row in step with the auto-advance.
-        if (stremioSources.isNotEmpty()) {
-            currentStremioSourceIndex = next
-            sourceBrowser?.render()
-        }
-        setIptvMediaItem(entry, candidates[next].url)
-        armIptvStremioStallWatchdog()
-        return true
-    }
-
-    /** See [iptvStremioStallRunnable]. Re-armed per candidate. */
-    private fun armIptvStremioStallWatchdog() {
-        cancelIptvStremioStallWatchdog()
-        val token = iptvStremioToken
-        val candidateIndex = iptvStremioCandidateIndex
-        val runnable = Runnable {
-            if (isFinishing || isDestroyed) return@Runnable
-            if (token != iptvStremioToken || candidateIndex != iptvStremioCandidateIndex) return@Runnable
-            if (iptvStremioWinnerReported || iptvStremioChannelKey == null) return@Runnable
-            android.util.Log.w(
-                "AndroidTvPlayer",
-                "IPTV stremio ladder: candidate ${candidateIndex + 1} never reached READY, advancing"
-            )
-            tryNextIptvStremioCandidate()
-        }
-        iptvStremioStallRunnable = runnable
-        progressHandler.postDelayed(runnable, 20_000)
-    }
-
-    private fun cancelIptvStremioStallWatchdog() {
-        iptvStremioStallRunnable?.let { progressHandler.removeCallbacks(it) }
-        iptvStremioStallRunnable = null
-    }
-
-    /** First READY on a Stremio candidate — cache the winner on the Dart side. */
-    private fun reportIptvStremioWinnerIfNeeded() {
-        if (iptvStremioWinnerReported) return
-        val key = iptvStremioChannelKey ?: return
-        val url = iptvStremioCandidates.getOrNull(iptvStremioCandidateIndex)?.url ?: return
-        iptvStremioWinnerReported = true
-        cancelIptvStremioStallWatchdog()
-        reportIptvStreamResult(key, url, true)
     }
 
     // Track selection
@@ -13823,12 +13370,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.removeCallbacks(progressRunnable)
         progressHandler.postDelayed(progressRunnable, PROGRESS_INTERVAL_MS)
     }
-
-    private var progressSentCount = 0
-    private var progressAckCount = 0
-    private var lastProgressLogAt = 0L
-    private var lastProgressAckAt = 0L
-    private var lastProgressBridgeAvailable: Boolean? = null
     private var finalProgressSnapshot = false
     private var finishProgressAttempted = false
 
@@ -13838,7 +13379,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             message = "pid=${android.os.Process.myPid()} activity=${System.identityHashCode(this)} " +
                 "session=$sourcePersistenceSessionId finishing=$isFinishing " +
                 "changingConfigurations=$isChangingConfigurations " +
-                "sent=$progressSentCount acknowledged=$progressAckCount $details",
+                "sent=${progressReporter.progressSentCount} acknowledged=${progressReporter.progressAckCount} $details",
         )
     }
 
@@ -13849,7 +13390,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!finishProgressAttempted) {
             finalProgressSnapshot = true
             try {
-                sendProgress(completed = false)
+                progressReporter.sendProgress(completed = false)
             } finally {
                 finalProgressSnapshot = false
             }
@@ -13858,265 +13399,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
         recordPlaybackLifecycle("finish_requested")
         super.finish()
-    }
-
-    /** Observe delivery, including a missing/detached Flutter engine. No media
-     * identity or URL is logged. A callback confirms the Dart handler finished. */
-    private fun deliverProgress(map: HashMap<String, Any?>) {
-        map["sourcePersistenceSessionId"] = sourcePersistenceSessionId
-        val recoverySequenceForMap = ++recoverySequence
-        stageRecoveryCheckpoint(
-            map,
-            recoverySequenceForMap,
-            synchronous = finalProgressSnapshot,
-        )
-        val channel = MainActivity.getAndroidTvPlayerChannel()
-        val now = SystemClock.elapsedRealtime()
-        val forceLog = finalProgressSnapshot || map["completed"] == true
-        val logSample = forceLog || lastProgressLogAt == 0L ||
-            now - lastProgressLogAt >= 60_000L ||
-            lastProgressBridgeAvailable != (channel != null)
-        if (logSample) {
-            lastProgressLogAt = now
-            recordPlaybackLifecycle(
-                "progress_checkpoint",
-                "bridgeAvailable=${channel != null} positionMs=${map["positionMs"]} " +
-                    "durationMs=${map["durationMs"]} completed=${map["completed"]} " +
-                    "lastAckAgeMs=${if (lastProgressAckAt == 0L) -1 else now - lastProgressAckAt}",
-            )
-        }
-        lastProgressBridgeAvailable = channel != null
-        if (channel == null) return
-        progressSentCount++
-        try {
-            channel.invokeMethod("torrentPlaybackProgress", map, object : io.flutter.plugin.common.MethodChannel.Result {
-                override fun success(result: Any?) {
-                    if (result == true) {
-                        progressAckCount++
-                        lastProgressAckAt = SystemClock.elapsedRealtime()
-                        acknowledgeRecoveryCheckpoint(recoverySequenceForMap)
-                    }
-                    if (logSample) recordPlaybackLifecycle("progress_ack", "accepted=${result == true}")
-                }
-                override fun error(code: String, message: String?, details: Any?) {
-                    if (logSample) recordPlaybackLifecycle("progress_ack_error")
-                }
-                override fun notImplemented() {
-                    if (logSample) recordPlaybackLifecycle("progress_handler_missing")
-                }
-            })
-        } catch (error: RuntimeException) {
-            if (logSample) DiagnosticFileLog.recordError(
-                source = "android_tv_player", event = "progress_delivery_failed", throwable = error,
-            )
-        }
-    }
-
-    private fun stageRecoveryCheckpoint(
-        progress: Map<String, Any?>,
-        sequence: Long,
-        synchronous: Boolean,
-    ) {
-        // IPTV VOD has a separate Dart store; never disguise it as a movie.
-        if (isIptvMode || progress["mode"] == "iptv") return
-        val ownerProfileId = recoveryProfileId ?: return
-        if (recoveryDataGeneration <= 0 || sourcePersistenceSessionId <= 0) return
-        val positionMs = (progress["positionMs"] as? Number)?.toLong() ?: 0L
-        val durationMs = (progress["durationMs"] as? Number)?.toLong() ?: 0L
-        if (positionMs <= 0L || durationMs <= 0L) return
-
-        val snapshot = JSONObject()
-            .put("version", 1)
-            .put("sessionId", sourcePersistenceSessionId)
-            .put("sequence", sequence)
-            .put("profileId", ownerProfileId)
-            .put("dataGeneration", recoveryDataGeneration)
-            .put("startedAtMs", recoveryStartedAtMs)
-            .put("updatedAtMs", System.currentTimeMillis())
-            .put("contentType", progress["contentType"] ?: "single")
-            .put("title", recoveryTitle)
-            .put("seriesTitle", recoverySeriesTitle)
-            .put("imdbId", recoveryImdbId)
-            .put("resumeId", progress["resumeId"])
-            .put("url", progress["url"])
-            .put("itemIndex", progress["itemIndex"] ?: 0)
-            .put("season", progress["season"])
-            .put("episode", progress["episode"])
-            .put("positionMs", positionMs)
-            .put("durationMs", durationMs)
-            .put("speed", progress["speed"] ?: 1.0)
-            .put("aspect", progress["aspect"] ?: "contain")
-            .put("completed", progress["completed"] == true)
-            .put("completionReached", progress["completionReached"] == true)
-            .put("localCompleted", progress["localCompleted"] == true)
-            .put("localCompletionEligible", progress["localCompletionEligible"] == true)
-            // localCompleted is edge-triggered and eligibility can become
-            // false after a seek. This per-item cumulative bit preserves the
-            // completion decision across every later checkpoint.
-            .put("localCompletionReached", progress["localCompletionReached"] == true)
-            .put("localCompletionTracking", progress["localCompletionTracking"] == true)
-            .put("completionThreshold", progress["completionThreshold"] ?: 80)
-            .toString()
-
-        if (synchronous || progress["completed"] == true || progress["localCompleted"] == true) {
-            TvPlaybackRecoveryStore.stage(filesDir, snapshot)
-            return
-        }
-        TvPlaybackRecoveryStore.stageAsync(filesDir, snapshot)
-    }
-
-    private fun acknowledgeRecoveryCheckpoint(sequence: Long) {
-        TvPlaybackRecoveryStore.acknowledgeAsync(filesDir, sourcePersistenceSessionId, sequence)
-    }
-
-    private fun sendProgress(completed: Boolean) {
-        // IPTV mode builds no payload (initIptvMode returns before it is
-        // parsed), so it reports against the current channel instead.
-        if (isIptvMode) {
-            sendIptvProgress(completed)
-            return
-        }
-        // Failure closes the startup cursor before activity teardown reports
-        // its final checkpoint. A rejected channel must stay untracked.
-        if (isStremioTvMode && startupSourcesExhausted) return
-        // READY and isPlaying may arrive before the video renderer produces a
-        // frame. Do not persist/scrobble a candidate the startup gate has not
-        // committed.
-        if (startupFailoverCursor?.committed == false ||
-            manualSourceSwitchSnapshot != null ||
-            manualSourceRestoreInProgress
-        ) return
-        val model = payload ?: return
-        val item = model.items.getOrNull(currentIndex) ?: return
-        // Use the largest stable duration seen — ExoPlayer can briefly report a
-        // short duration right after a source re-prepare, which would otherwise
-        // inflate progress% and scrobble a false watch on Trakt.
-        val duration = maxOf(player?.duration ?: 0L, maxStableDurationMs)
-        val rawPosition = if (completed) duration else player?.currentPosition ?: 0
-        // Resume hold: while the chosen resume target has not landed (dropped
-        // by the anti-yank, or clamped away by the stream), report the TARGET
-        // instead of the live position — otherwise this ping would overwrite
-        // the very bookmark the resume promised, in the local store and on
-        // every connected tracker alike. Completion below stays on the RAW
-        // position: a held target must never fabricate a watched mark.
-        val position = if (completed) rawPosition
-            else heldResumePositionMs(rawPosition) ?: rawPosition
-        val completionThreshold = if (model.contentType == "series") {
-            model.episodeCompletionThreshold
-        } else {
-            model.movieCompletionThreshold
-        }
-        val completionKey = if (
-            model.contentType == "series" && item.season != null && item.episode != null
-        ) {
-            "series:${item.season}:${item.episode}"
-        } else {
-            "index:$currentIndex"
-        }
-        val localCompletionEligible =
-            model.localCompletionTracking &&
-            duration > 0L &&
-            rawPosition > 0L &&
-            rawPosition.toDouble() * 100.0 / duration.toDouble() >= completionThreshold
-        val localCompleted = localCompletionEligible && locallyCompletedItemKeys.add(completionKey)
-        val localCompletionReached = locallyCompletedItemKeys.contains(completionKey)
-        if (completed) recoveryCompletedItemKeys.add(completionKey)
-        val completionReached = recoveryCompletedItemKeys.contains(completionKey)
-
-        // Update the item's progress in the payload for live UI updates
-        val updatedItem = item.copy(
-            resumePositionMs = position,
-            durationMs = duration
-        )
-        model.items[currentIndex] = updatedItem
-
-        // Notify playlist adapter to update progress display (if playlist is visible)
-        if (playlistVisible) {
-            playlistAdapter?.updateCurrentProgress()
-        }
-
-        val map = hashMapOf<String, Any?>(
-            "contentType" to model.contentType,
-            "itemIndex" to currentIndex,
-            "resumeId" to item.resumeId,
-            "sourceIndex" to currentStremioSourceIndex,
-            "positionMs" to position.toInt().coerceAtLeast(0),
-            "durationMs" to duration.toInt().coerceAtLeast(0),
-            "season" to item.season,
-            "episode" to item.episode,
-            "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
-            "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
-            "completed" to completed,
-            "completionReached" to completionReached,
-            "localCompleted" to localCompleted,
-            "localCompletionEligible" to localCompletionEligible,
-            "localCompletionReached" to localCompletionReached,
-            "localCompletionTracking" to model.localCompletionTracking,
-            "completionThreshold" to completionThreshold,
-            "url" to item.url,
-            "isPlaying" to (player?.isPlaying ?: false),
-            "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
-        )
-
-        deliverProgress(map)
-    }
-
-    /**
-     * Report position for the IPTV channel currently playing, so Flutter can
-     * save a resume point for on-demand items (movies) and draw progress on
-     * their rows.
-     *
-     * Live channels are skipped: ExoPlayer reports TIME_UNSET for them, and a
-     * position into a live stream means nothing. That check doubles as the
-     * live/VOD filter — the Flutter side stores whatever it receives.
-     */
-    private fun sendIptvProgress(completed: Boolean) {
-        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
-        if (entry.isLive) return
-
-        val duration = player?.duration ?: 0L
-        if (duration <= 0L) return
-        val position = if (completed) duration else player?.currentPosition ?: 0L
-        if (position <= 0L) return
-
-        val map = hashMapOf<String, Any?>(
-            "mode" to "iptv",
-            "itemIndex" to currentIptvIndex,
-            "url" to entry.url,
-            "title" to entry.name,
-            "positionMs" to position.toInt().coerceAtLeast(0),
-            "durationMs" to duration.toInt().coerceAtLeast(0),
-            "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
-            "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
-            "completed" to completed,
-            "isPlaying" to (player?.isPlaying ?: false),
-        )
-
-        deliverProgress(map)
-    }
-
-    private fun sendPlaybackMaintenanceState() {
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-            "torrentPlaybackMaintenanceState",
-            mapOf(
-                "sourcePersistenceSessionId" to sourcePersistenceSessionId,
-                "ready" to (player?.isPlaying == true && player?.playbackState == Player.STATE_READY),
-            ),
-        )
-    }
-
-    private fun sendPlaybackActivityState(active: Boolean) {
-        try {
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "torrentPlaybackActivityState",
-                mapOf("sourcePersistenceSessionId" to sourcePersistenceSessionId, "active" to active),
-            )
-            if (active) sendPlaybackMaintenanceState()
-        } catch (error: RuntimeException) {
-            DiagnosticFileLog.recordError(
-                source = "android_tv_player", event = "activity_state_delivery_failed", throwable = error,
-            )
-        }
     }
 
     private fun sendFinished() {
@@ -14985,7 +14267,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     showStatusPillTransient("✓ $name")
                 } else if (state == Player.STATE_IDLE) {
                     cancelSourceSwitchWait()
-                    if (isIptvMode && iptvStremioChannelKey != null) {
+                    if (isIptvMode && iptvChannelStartController.iptvStremioChannelKey != null) {
                         // The IPTV candidate ladder handles this failure itself
                         // (silent auto-advance; its own toast when all die) —
                         // an error pill here would contradict it.
@@ -15831,8 +15113,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Live Stremio IPTV channel: the movie path below seeks to the
         // previous position and runs PikPak/YouTube bookkeeping — all wrong
         // for a live stream. Route to the dedicated live switch.
-        if (isIptvMode && iptvStremioChannelKey != null) {
-            switchToIptvStremioSource(url, sourceIndex)
+        if (isIptvMode && iptvChannelStartController.iptvStremioChannelKey != null) {
+            iptvChannelStartController.switchToIptvStremioSource(url, sourceIndex)
             return
         }
         val sourceHeaders = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
@@ -16129,8 +15411,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } ?: emptyList()
             addonFetchState.clear()
             addonPackProbing.clear()
-            locallyCompletedItemKeys.clear()
-            recoveryCompletedItemKeys.clear()
+            progressReporter.locallyCompletedItemKeys.clear()
+            progressReporter.recoveryCompletedItemKeys.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -16161,7 +15443,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         recordPlaybackLifecycle("activity_start")
-        sendPlaybackActivityState(true)
+        progressReporter.sendPlaybackActivityState(true)
         // Never undo a sleep-timer stop — this runs every time the activity
         // comes back, including after the screen has slept.
         if (!sleepStopLatched) {
@@ -16201,13 +15483,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // A MethodChannel result may arrive after Home. Invalidate it before
         // pausing so it cannot call setIptvMediaItem and restart background
         // playback underneath this lifecycle stop.
-        cancelPendingIptvCatchupRequest()
+        iptvStartOverController.cancelPendingIptvCatchupRequest()
         recordPlaybackLifecycle("activity_stop")
-        sendPlaybackActivityState(false)
+        progressReporter.sendPlaybackActivityState(false)
         // Checkpoint before teardown or background process eviction. Keep the
         // startup/source-switch guards intact when taking this snapshot.
         finalProgressSnapshot = true
-        sendProgress(completed = false)
+        progressReporter.sendProgress(completed = false)
         finalProgressSnapshot = false
         super.onStop()
         // Publish the recording HERE, not just in onDestroy: Home / app-switch
@@ -16345,7 +15627,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        cancelPendingIptvCatchupRequest()
+        iptvStartOverController.cancelPendingIptvCatchupRequest()
         displayModeController?.clear()
         displayModeController = null
         mediaPreparationScope.cancel()
@@ -16357,7 +15639,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Retry before tearing down the player, keeping sendProgress's guards.
         finalProgressSnapshot = true
         try {
-            sendProgress(completed = false)
+            progressReporter.sendProgress(completed = false)
         } finally {
             finalProgressSnapshot = false
         }

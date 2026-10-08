@@ -17,6 +17,9 @@ void main() {
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
+  final nativeProgressReporter = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt',
+  ).readAsStringSync();
   final playerBridge = File(
     'lib/services/android_tv_player_bridge.dart',
   ).readAsStringSync();
@@ -335,9 +338,9 @@ void main() {
       'private fun startPlayback(',
     );
     final progress = _between(
-      nativePlayer,
-      'private fun sendProgress(',
-      'private fun commitStartupCandidate(',
+      nativeProgressReporter,
+      'fun sendProgress(',
+      'private fun sendIptvProgress(',
     );
 
     expect(resolver, contains('reason=stale_manual_token'));
