@@ -930,6 +930,10 @@ Start Over / catch-up on an archive-enabled channel.
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase-5 original player-read failure occurs outside `deliverProgress`'s
+  catch: `onStop` leaves `finalProgressSnapshot` true, while `finish` and
+  `onDestroy` clear it in `finally`. Characterization pins the difference;
+  any exception-handling change belongs in a separate behavior fix.
 - `requestIptvEpg`'s private 45 s watchdog Handler is never cancelled in
   `onDestroy`; it can deliver `null` into `ensureIptvChannelEpg` (no
   `isDestroyed` guard). `iptvStremioToken` is not bumped in `onDestroy`.
@@ -1443,3 +1447,27 @@ Start Over / catch-up on an archive-enabled channel.
   matching the checker wrapper. All historical fixture output stays under
   `p5/`; the direct dispatcher also passes **97/97** tests. Evidence:
   `p5/direct-dispatch-self-tests.log`. No production changes.
+
+- 2026-10-08 — **Phase 5 step 0 complete.** Added 44 original-surface
+  characterizations (18 progress, 13 channel-start/ladder, 12 Start Over,
+  one recording handoff) using typed selectors, binary messenger replies,
+  an entered/bounded separate recovery-writer executor barrier, real
+  stop/destroy and tee publication. Queued ordinary versus synchronous
+  final/completed/local-completion recovery, exact progress maps, delayed
+  out-of-order/after-destroy ACKs, the non-finally onStop player-read failure,
+  playlist refresh order, channel/ladder deadlines and token supersession,
+  call-time Start Over defaults and lifecycle/player-error cancellation
+  are pinned. All 44 new tests pass on `1a33c42cb`; **44/44** original-code
+  mutations fail named assertions. Two invalid harness attempts are
+  archived separately and excluded; repaired positives/proofs pass.
+  Clean `baseline-1a33c42cb`: 539 identities (538 pass, existing focus
+  failure 1). Final `p5-step0`: 583 (582 pass, same failure), all 539 prior
+  statuses identical and 44 passing additions; identity comparison passes.
+  Original lint archived: 1,352 issues (253 Error / 1,099 Warning), existing
+  errors retained for later issue-set comparison. Mutation table appended
+  to deps; raw logs/XML, exact patches and final test hashes under `p5/` and
+  `junit/`. All production/protected inputs and 28 earlier destinations
+  unchanged; detached original removed. Step T commits `ae3e8e64f` and
+  `e1859e450` retain 97/97 checker tests, zero-diff original comparison and
+  seven identical compiled overload descriptors. **STOP before production
+  moves**; Claude's separate sample/review and any Step 0b follow later.

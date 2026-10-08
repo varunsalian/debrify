@@ -6472,3 +6472,129 @@ Historical fixture output uses the active phase evidence directory. Raw evidence
 `p5/checker-self-tests-passing.log`, `p5/fixtures/`, `p5/overload-audit.json`,
 `p5/fixture-compile-final.log`, `p5/remeasured-inventory.json`, original PSI and
 all-retained self-comparison.
+
+
+## Phase 5 step 0 — characterization of `1a33c42cb`
+
+Production is unchanged. Added **44 tests** against the original activity: 18 progress,
+13 channel-start/ladder, 12 Start Over and one recording handoff. The shared
+`TvPhase5OriginalTest` reuses the typed original reflection selectors and recording binary
+messenger. Tests use paused loopers and a dynamic ExoPlayer, real lifecycle stop/destroy
+where needed, and the existing fake MediaStore provider for the outgoing tee. No production
+seam or helper retarget has been added.
+
+Progress covers periodic/paused/completed/sleep/final maps for single, series, collection
+and IPTV VOD; payload updates and visible playlist refresh before bridge delivery;
+held-resume/raw-position completion, inclusive thresholds, cumulative completion sets and
+parse resets; startup/manual/missing-item guards; maintenance/activity maps; logging boundaries
+and bridge availability. Existing watchdog reflection contracts remain covered by the
+unchanged baseline suite.
+
+The recovery prerequisite reflects the store's separate **writer ExecutorService**. A latch
+blocks an entered writer task without holding the recovery-store monitor; all waits are
+bounded to five seconds and cleanup releases/drains it. Ordinary checkpoints remain queued,
+while final/completed/local-completion checkpoints persist before bridge delivery or
+pause/release. Snapshot identities/defaults/flags and eligibility guards are pinned.
+Delayed out-of-order true ACKs remove only their own session/sequence; false, error, missing
+and thrown delivery do not ACK. A delayed ACK after actual activity destruction still works.
+A player-read failure outside the delivery catch preserves the original difference:
+`onStop` leaves `finalProgressSnapshot` true, while `finish` and `onDestroy` clear it in
+`finally`. This is recorded in Follow-ups and is not fixed.
+
+Channel tests pin the complete watch/settle maps, two-second watch fallback and one-second
+memory deadline, repeat-channel token supersession, eligibility reads at callback time and
+preferred twins. The ladder pins finalize/reset/URL-clear/stop/resolve ordering, candidate
+and source-row order, token and finishing guards, advancement/exhaustion strings, twenty-second
+stall boundary, winner deduplication and manual rearming. The real outgoing tee publishes
+its exact bytes before token reset, URL clear, stop and an empty resolution response.
+Start Over pins call-time default dispatch, all button labels/content descriptions/visibility,
+catch-up maps and guards, guide-versus-controls relevance, same-entry token supersession,
+retained flags, replay metadata/defaults, timeline/focus timing and Go Live ordering.
+Explicit cancellation, stop, destroy and the player-error return-to-live path reject late
+archive replies without clearing newer loading.
+
+### Original-code mutation table
+
+Every new test has one named assertion-killed mutation on detached **`1a33c42cb` + the five
+new test files**, under `p5/original/`. Each run cleans JVM test results and selects exactly
+one named test. **44/44 killed**; compilation failures, incidental crashes and zero-test runs
+are not accepted. Full exact before/after strings, enclosing PSI selectors, patches, Gradle
+logs, XML and assertion stacks are in `p5/mutations/` and `p5/mutation-table.json`.
+The temporary original worktree has been removed.
+
+| Proof | Named test (class::method) | Original mutation | Failing assertion |
+|---|---|---|---|
+| g01 | `TvProgressReporterCharacterizationTest::periodicPausedAndCompletedPayloadsPreserveEveryArgumentAndStableDuration` | `"sourceIndex" to currentStremioSourceIndex` → `"sourceIndex" to (currentStremioSourceIndex + 1)` | Exact paused periodic map: sourceIndex expected 3, got 4. |
+| g02 | `TvProgressReporterCharacterizationTest::localCompletionUsesRawPositionInclusiveThresholdAndCumulativeDeduplication` | `>= completionThreshold` → `> completionThreshold` | At the inclusive 80% boundary localCompleted expected true, got false. |
+| g03 | `TvProgressReporterCharacterizationTest::heldResumeTargetNeverFabricatesLocalCompletionAndCompletionUsesDuration` | `else heldResumePositionMs(rawPosition) ?: rawPosition` → `else rawPosition` | Held resume target: positionMs expected 95000, got 25000. |
+| g04 | `TvProgressReporterCharacterizationTest::startupManualSwitchExhaustionAndMissingItemGuardsSuppressAllReports` | `if (isStremioTvMode && startupSourcesExhausted) return` → `if (false) return` | Exhausted startup must send no requests; assertTrue(requests.isEmpty()) failed. |
+| g05 | `TvProgressReporterCharacterizationTest::parsePayloadResetsBothPerItemCompletionSetsAndThresholdSelection` | `locallyCompletedItemKeys.clear()` → `// mutation: keep old completion keys` | Reset completion set expected empty, got [series:2:4]. |
+| g06 | `TvProgressReporterCharacterizationTest::iptvVodPayloadIsExactAndLiveInvalidDurationPositionAndIndexAreSkipped` | `"title" to entry.name` → `"title" to "Wrong"` | Exact IPTV VOD map: title expected Cinema, got Wrong. |
+| g07 | `TvProgressReporterCharacterizationTest::ordinaryTicksQueueRecoveryWhileFinalCompletedAndLocalCompletionPersistBeforeDelivery` | `synchronous = finalProgressSnapshot` → `synchronous = true` | With writer blocked, ordinary checkpoint expected null; a journal existed. |
+| g08 | `TvProgressReporterCharacterizationTest::completedCheckpointPersistsBeforeDeliveryDespiteBlockedWriter` | `synchronous \|\| progress["completed"] == true \|\| progress["localCompleted"] == true` → `synchronous \|\| progress["localCompleted"] == true` | assertNotNull("recovery checkpoint persisted") failed before completed delivery. |
+| g09 | `TvProgressReporterCharacterizationTest::recoverySnapshotPinsIdentityDefaultsAndAllCumulativeFlags` | `progress["completionThreshold"] ?: 80` → `progress["completionThreshold"] ?: 81` | Recovery completionThreshold default expected 80, got 81. |
+| g10 | `TvProgressReporterCharacterizationTest::recoveryGuardsSkipWrongModeOwnerGenerationSessionAndInvalidNumbers` | `if (isIptvMode \|\| progress["mode"] == "iptv") return` → `if (progress["mode"] == "iptv") return` | IPTV-mode recovery expected no journal; a journal existed. |
+| g11 | `TvProgressReporterCharacterizationTest::delayedOutOfOrderTrueAcksRemoveOnlyTheirExactRecoverySequences` | `if (result == true) {` → `if (result == false) {` | Second-sequence true ACK: latest length expected 0, got 1. |
+| g12 | `TvProgressReporterCharacterizationTest::falseErrorMissingAndThrowingDeliveryNeverAcknowledgeRecovery` | `if (result == true) {` → `if (result == true \|\| result == false) {` | False/error/missing/throw delivery: ACK count expected 0, got 1. |
+| g13 | `TvProgressReporterCharacterizationTest::loggingSamplesAtSixtySecondsAndBridgeChangesAndForcesCompletedFinal` | `now - lastProgressLogAt >= 60_000L` → `now - lastProgressLogAt >= 59_999L` | Before 60 seconds lastProgressLogAt expected 100, got 60099. |
+| g14 | `TvProgressReporterCharacterizationTest::sleepReportsBeforePausingAndFinishPersistsOnceBeforeHandoff` | `if (!finishProgressAttempted) {` → `if (true) {` | Two finish calls after sleep: progress request count expected 2, got 3. |
+| g15 | `TvProgressReporterCharacterizationTest::stopAndDestroySynchronouslyPersistBeforePauseAndReleaseThenAcceptLateAck` | `synchronous = finalProgressSnapshot` → `synchronous = false` | assertNotNull("recovery checkpoint persisted") failed before pause/release. |
+| g16 | `TvProgressReporterCharacterizationTest::playerReadFailureLeavesStopFlagSetButFinishAndDestroyFinallyClearIt` | `finalProgressSnapshot = true         sendProgress(completed = false)         finalProgressSnapshot = false` → `finalProgressSnapshot = true         try { sendProgress(completed = false) } finally { finalProgressSnapshot = false }` | Player-read failure: onStop finalProgressSnapshot expected true, got false. |
+| g17 | `TvProgressReporterCharacterizationTest::maintenanceAndActivityMapsKeepReadyPredicatesAndActiveOnlyFollowup` | `player?.isPlaying == true && player?.playbackState == Player.STATE_READY` → `player?.isPlaying == true \|\| player?.playbackState == Player.STATE_READY` | Playing but buffering: ready expected false, got true. |
+| g18 | `TvIptvChannelStartCharacterizationTest::watchRegistrationPinsPayloadAndReplyBeforeFallbackStartsExactlyOnce` | `"sourceId" to entry.sourceId` → `"sourceId" to "Wrong"` | Exact recordIptvWatch map: sourceId expected playlist, got Wrong. |
+| g19 | `TvIptvChannelStartCharacterizationTest::fallbackAtTwoSecondsAndErrorMissingOrLateRepliesStillStartOnlyOnce` | `}, 2_000)` → `}, 2_001)` | At exactly 2000 ms tuning count expected 1, got 0. |
+| g20 | `TvIptvChannelStartCharacterizationTest::watchTokenAndChangedChannelRejectSupersededRepliesAndFallbacks` | `if (token != iptvWatchRegistrationToken) return` → `// mutation: accept superseded registration` | Same-channel superseded watch reply: tuning count expected 1, got 2. |
+| g21 | `TvIptvChannelStartCharacterizationTest::liveAndMissingBridgeBypassWatchRoundtripAndHonorPreferredTwin` | `if (entry.isLive) {` → `if (false) {` | Live channel must bypass recordIptvWatch; empty-request assertion failed. |
+| g22 | `TvIptvChannelStartCharacterizationTest::liveMemoryWaitsOneSecondDedupesPauseResumeAndPinsFallbackSourcePayload` | `postDelayed(runnable, lastLiveChannelSettleMs)` → `postDelayed(runnable, lastLiveChannelSettleMs + 1)` | At exact 1000 ms settle deadline noteIptvLiveChannel count expected 1, got 0. |
+| g23 | `TvIptvChannelStartCharacterizationTest::liveMemoryZapsSupersedeAndReReadPlaybackAndChannelEligibility` | `if (player?.isPlaying != true) return@Runnable` → `// mutation: write paused channel` | Paused settle callback must not write: note count expected 1, got 2. |
+| g24 | `TvIptvChannelStartCharacterizationTest::beginClearsOldLadderAndUrlBeforeStopAndAsynchronousResolution` | `currentIptvStreamUrl = null` → `// mutation: retain outgoing identity` | At stop, currentIptvStreamUrl expected null, got old. |
+| g25 | `TvIptvChannelStartCharacterizationTest::resolveSupersessionAndFinishingGuardRejectLateCandidates` | `if (token != iptvStremioToken \|\| isFinishing) return@runOnUiThread` → `if (isFinishing) return@runOnUiThread` | Superseded resolver must not tune; empty-tuning assertion failed. |
+| g26 | `TvIptvChannelStartCharacterizationTest::emptyResolveKeepsStoppedStateAndUsesProviderMessageOrChannelFallback` | `message ?: "${entry.name} is not playable right now"` → `"Wrong"` | Empty resolver toast expected Addon unavailable, got Wrong. |
+| g27 | `TvIptvChannelStartCharacterizationTest::candidateOrderMirrorsSourceRowsAdvancesSilentlyAndPreservesEscapeHatchAfterExhaustion` | `val next = iptvStremioCandidateIndex + 1` → `val next = iptvStremioCandidateIndex + 2` | Next candidate index expected 1, got 0. |
+| g28 | `TvIptvChannelStartCharacterizationTest::singleSourceExhaustionHasSingularToastAndMissingKeyNeverClaimsError` | `$name: its only source didn't play — pick it in Sources to retry` → `Wrong source message` | Singular exhaustion toast expected Cinema: its only source did not play (full literal pinned), got Wrong source message. |
+| g29 | `TvIptvChannelStartCharacterizationTest::stallDeadlineIsTwentySecondsAndTokenIndexWinnerAndLivenessAreReRead` | `postDelayed(runnable, 20_000)` → `postDelayed(runnable, 19_999)` | At 19999 ms candidate index expected 0, got 1. |
+| g30 | `TvIptvChannelStartCharacterizationTest::winnerReportsExactlyOnceAndManualSourceSwitchRearmsLadderAndOutcomeWatcher` | `if (iptvStremioWinnerReported) return` → `// mutation: duplicate winner report` | Winner reports once: count expected 1, got 2. |
+| g31 | `TvIptvChannelStartRecordingCharacterizationTest::outgoingTeePublishesBeforeTokenResetUrlClearStopAndResolveEvenWhenResolveIsEmpty` | `iptvRecordingActionsController.finalizeIptvRecordingIfActive()` → `// mutation: recording survives new channel` | At resolver delivery assertFalse(tee.isActive) failed; outgoing recording was still active. |
+| g32 | `TvIptvStartOverCharacterizationTest::defaultButtonArgumentReadsCurrentEntryAtEachInvocationAndPinsEveryLabel` | `iptvChannels.getOrNull(currentIptvIndex)` → `iptvChannels.getOrNull(0)` | Default argument must re-read current entry: button visibility expected GONE (8), got VISIBLE (0). |
+| g33 | `TvIptvStartOverCharacterizationTest::catchupPayloadAndArchiveFutureMissingBridgeGuardsAreExact` | `"archiveEnabled" to (channelEntry.tvArchive == "1")` → `"archiveEnabled" to false` | Exact catch-up map: archiveEnabled expected true, got false. |
+| g34 | `TvIptvStartOverCharacterizationTest::controlsReplyIgnoresGuideVisibilityAndEpgGenerationAndTunesArchiveWithRetainedFlags` | `(fromControls \|\| (iptvGuideVisible && scheduleToken == iptvEpgToken))` → `(iptvGuideVisible && scheduleToken == iptvEpgToken)` | Controls reply independent of guide/EPG: startOverActive expected true, got false. |
+| g35 | `TvIptvStartOverCharacterizationTest::guideReplyRequiresVisibleGuideAndSameScheduleAndClearsOnlyCurrentLoading` | `(fromControls \|\| (iptvGuideVisible && scheduleToken == iptvEpgToken))` → `(fromControls \|\| scheduleToken == iptvEpgToken)` | Hidden-guide reply must not tune; empty-tuning assertion failed. |
+| g36 | `TvIptvStartOverCharacterizationTest::catchupTokenSupersessionPreventsOldSuccessFromTuningOrClearingNewLoading` | `val relevant = token == iptvCatchupToken &&` → `val relevant = true &&` | Old catch-up reply must not tune or clear newer loading; empty-tuning assertion failed. |
+| g37 | `TvIptvStartOverCharacterizationTest::unavailableErrorAndMissingRepliesKeepFlagsAndPinMessages` | `"Replay is not available"` → `"Replay unavailable"` | Unavailable replay toast expected Replay is not available, got Replay unavailable. |
+| g38 | `TvIptvStartOverCharacterizationTest::pastProgrammeBecomesVodReplayPreservingHeadersAndResumeWithDefaultGuideDispatch` | `(response["resumePositionMs"] as? Number)?.toLong() ?: 0L` → `0L` | Past replay resumePositionMs expected 7654, got 0. |
+| g39 | `TvIptvStartOverCharacterizationTest::pastReplayDefaultsToProgrammeTitleAndZeroResume` | `response["title"] as? String ?: programme.title` → `response["title"] as? String ?: "Wrong"` | Absent replay title expected Programme, got Wrong. |
+| g40 | `TvIptvStartOverCharacterizationTest::timelineRequiresActivePositiveDurationThenTogglesVisibilityAndFocus` | `iptvStartOverTimelineVisible = !iptvStartOverTimelineVisible` → `iptvStartOverTimelineVisible = true` | Second timeline toggle: timelineVisible expected false, got true. |
+| g41 | `TvIptvStartOverCharacterizationTest::goLiveToggleSupersedesCatchupAndResetsFlagsBeforeChannelStart` | `iptvCatchupToken++` → `// mutation: keep pending catchup token` | At live media handoff catchup token expected 1, got 0. |
+| g42 | `TvIptvStartOverCharacterizationTest::cancelStopAndDestroyInvalidatePendingCallbacksBeforePauseOrRelease` | `iptvCatchupToken++` → `// mutation: cancellation leaves request current` | Explicit cancellation catchup token expected 2, got 1. |
+| g43 | `TvProgressReporterCharacterizationTest::visiblePlaylistRefreshObservesUpdatedItemBeforeDeliveryAndHiddenPlaylistDoesNotRefresh` | `playlistAdapter?.updateCurrentProgress()` → `// mutation: omit visible playlist refresh` | Before bridge delivery refresh order expected [refresh], got []. |
+| g44 | `TvIptvStartOverCharacterizationTest::archivePlayerErrorCancelsCatchupBeforeReturningLiveAndLateReplyCannotRestartArchive` | `cancelPendingIptvCatchupRequest()` → `// mutation: leave pending archive current` | Player error invalidates pending archive: catchup token expected 2, got 1. |
+
+Two invalid harness attempts are retained separately and excluded from the 44 proofs: the
+g22 deadline mutation initially hit an empty-list accessor, so the test gained a cardinality
+assertion; the first g44 attempt used PlaybackException where ExoPlayer requires the covariant
+ExoPlaybackException return type. The repaired original tests pass and both mutations now
+fail named assertions. The rejected intermediate JVM archive is kept separately; it is not
+the accepted `p5-step0` baseline. Earlier passing 42-test runs are also retained for provenance.
+
+### JVM and lint evidence
+
+- Clean original `junit/baseline-1a33c42cb/`: **539 identities**, 538 pass and the existing
+  `TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached` failure;
+  original revision, zero dirty files and unchanged run fingerprint.
+- Final `junit/p5-step0/`: **583 identities**, 582 pass and that same failure, stable tree
+  on `e1859e450` plus the five new test files. Every one of the 539 earlier statuses is
+  identical; all **44 additions pass**. `android_junit_evidence.py compare p5-step0 --against
+  baseline-1a33c42cb` passes. Exact added identities are in `p5/jvm-additions.json`.
+- Original `./gradlew :app:lintDebug` issue set: **1,352 issues** (253 Error, 1,099 Warning).
+  Existing errors make lint fail; raw XML/text/HTML/log and normalized issues are archived in
+  `p5/lint-baseline-1a33c42cb/` for the later gate comparison.
+
+Gradle runs from `android/` with the Android Studio JBR (`21.0.10`); Flutter's redirected
+JVM XML location is used. Original focused positive log: `p5/characterizations-original-final-44-passing.log`;
+accepted final XML: `p5/characterizations-final-xml/` (copied from the complete JVM archive,
+whose production bytes equal the original). Final test sources/hashes: `p5/test-source/`.
+JVM run/comparison metadata, raw mutation runs and rejected attempts stay under `p5/` and `junit/`.
+
+No production moves, protected-input changes, bug fixes, push, branch switch or device/emulator
+interaction. All 28 earlier destinations remain unchanged. STOP before Step 1; Claude's separate
+sample/review and any Step 0b follow later.
