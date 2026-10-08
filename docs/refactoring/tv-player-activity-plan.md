@@ -2667,3 +2667,15 @@ episode next/previous, startup channel restore, Start Over after a switch.
   exception. Detached original removed; lockfile and ProGuard unchanged.
   No bug fix, push, branch switch, device/emulator, or self independent review.
   **STOPPED after phase 11**; Claude reviews separately.
+- 2026-10-09 — phase 11 post-implementation reviews of `4c31e5e1c..90ede8bc7`.
+  Claude's first independent sample was weak for step 0 (8/18 killed); a
+  thorough 0b followed (96 tests, 541 systematic mutations, per-function
+  coverage matrix over 44 functions / 800 sites); Claude's **second**
+  independent sample then 13/16 (2 equivalent: n13/n16; n01 closed in 0c).
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; one owner
+  for all 48 core fields, fieldless collaborators, stale-reply asymmetry,
+  paging/wrapping, switch side effects, key routing and teardown preserved.
+  Activity 12,717 → 11458. Decoder verification remains pending-environment.
+  Phase 11 complete; merged. **Lesson:** a first-sample kill rate below ~75 %
+  triggers a systematic statement-level sweep and a second independent sample
+  before moves.
