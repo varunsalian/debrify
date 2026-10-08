@@ -6663,3 +6663,44 @@ the activity ratchet and restoring unrelated already-shrunken entries to their p
 size check passes. Manifest, earlier destinations, lockfile and all ProGuard files unchanged.
 Raw move/retarget/compile/overload/lifecycle/initializer/size/test evidence under p5/step1/.
 Full gate follows.
+
+
+## Phase 5 gate — tested move tree 5d3d9a067
+
+- Kotlin checker: 2,548 declarations, zero differences; all 97 historical/phase-5
+  self-tests pass. Historical p1@dcbd9aafe, p2@ec365eb80, p3@eee52b084 and
+  p4@1a33c42cb pass. All 28 earlier destinations frozen at 1a33c42cb, empty whitelist.
+  Original self-comparison passes. Activity 16,487; controllers 445/497/375; size passes.
+- Actual compiled overload audit: seven identical descriptors. All 16 exact initializer
+  timing proofs are inert; full onStart/onPause/onStop/onDestroy/finish token sequences
+  equal original after only declared patches, preserving teardown and borrowed-resource
+  cleanup order. Forced debug compile preserves all five original warning identities.
+- Clean JVM p5-gate exactly matches all 589 p5-step0b identities/statuses: 588 pass and
+  the same TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached
+  failure. All 50 phase-5 characterizations pass, dirty count zero and stable fingerprints.
+- Lint still fails on original errors, with exactly the same 1,352 normalized issues
+  (253 Error / 1,099 Warning, all 175 opt-in errors). No additions/removals, retaining
+  rule/severity/message plus original PSI symbol/location correspondence. Analyzer
+  diagnostics exactly match all 1,758 phase-4 identities.
+- JAVA_HOME=Android Studio JBR flutter build apk --release --no-pub succeeds, no install.
+  R8 mapping and independent DEX definitions preserve all 14 new classes and 273 members
+  (155 explicit mappings, 118 implicit DEX identities), including the three controllers,
+  Host/default implementations, callbacks and all three activity Host anonymous objects.
+  No new Kt facade is emitted by these class-only files. Three negative controls pass.
+  Mapping/configuration/build hashes and complete bytecode inventory archived.
+- Decoder verification remains pending-environment: script exits 1 with byte-identical
+  phase-4 output; all three packaged libmpv hashes match phase 4 (and previous phases).
+  Same nine missing subtitle decoders and three audio filters per ABI. No workaround or
+  decoder-parity claim. Temporary decoder files stay under p5/gate/tmp/.
+- Full quiet Flutter suite via suite_evidence.py exactly matches all 12,855 phase-4
+  identity/status pairs ({'success': 12794, 'failure': 13, 'error': 28, 'skipped': 20}), same SDK/flags, complete done event, empty scope and
+  stable clean tested tree. Helper comparison passes; no missing tests/new failures/skips.
+  Focused source-test run separately matches all 45 earlier statuses with equal Dart
+  assertions after its single progress-anchor retarget.
+
+Step 0b adds six controlled-clock cases; all six original mutations and Claude exact g14
+are killed on assertions (original all-50 control passes). Evidence: p5/step0b/, p5/step1/,
+p5/gate/, junit/p5-step0b/ and junit/p5-gate/. Manifest, lockfile, every ProGuard file and
+all 28 earlier destinations unchanged. Original detached worktree removed. No bug fixes,
+push, branch switch, device/emulator interaction or self independent review. STOP after
+phase 5; Claude reviews separately.

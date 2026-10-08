@@ -1493,3 +1493,20 @@ Start Over / catch-up on an archive-enabled channel.
   Checker zero differences across 2,548 declarations; seven compiled overload sites,
   full lifecycle token/order and five original warning identities pass. All 28 earlier
   destinations, manifest/protected inputs unchanged. Evidence p5/step1/. Full gate follows.
+
+- 2026-10-08 — **Phase 5 gate complete on 5d3d9a067; decoder pending-environment.**
+  Clean JVM p5-gate matches all 589 p5-step0b statuses (588 pass, same focus failure);
+  all 50 phase-5 cases pass. Checker zero differences over 2,548 declarations, all
+  97 self-tests and four historical manifests pass; 28 earlier destinations frozen.
+  Seven actual bytecode overload descriptors, 16 initializer proofs, full lifecycle
+  order and five original warning identities pass. Size passes at activity 16,487,
+  controllers 445/497/375. Lint exactly retains 1,352 issues (253 errors, 175 opt-ins);
+  analyzer all 1,758 prior identities. Release APK succeeds; R8/DEX preserves all
+  14 new classes/273 members and three negative controls. Decoder failure/output and
+  all three native hashes unchanged: pending-environment. Full quiet Flutter suite
+  exactly matches all 12,855 phase-4 identity/status pairs on the same SDK/flags
+  and stable clean tree. Step 0b: six passing additions, six original assertion proofs,
+  Claude exact g14 killed (control 50/50). Manifest/protected inputs/earlier files
+  unchanged; detached original removed. Evidence p5/step0b/, p5/step1/, p5/gate/
+  and junit/. No self independent review, push, branch switch, device/emulator or
+  bug fix. **STOPPED after phase 5**; Claude reviews separately.
