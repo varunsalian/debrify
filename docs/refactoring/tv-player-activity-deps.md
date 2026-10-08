@@ -8936,3 +8936,67 @@ those belong after the authorized extraction step. Follow-ups stay as-is:
 onDestroy cancels after player release, so listener removal there is a no-op;
 resolver acceptance checks happen before UI dispatch only. Independent review
 and sample are Claude's separate session.
+
+## Phase 8 step 0b — survivor closure and boundary sweep
+
+Original `53906805d`; no production edits. All 72 phase-8 characterizations pass
+on the final fixture. Added 27 tests and strengthened discovered-MIME payload
+coverage. The sweep pins route precedence/empty URLs; all eight resolver failure
+branches for both manual and startup candidates; every moved apply rejection
+reason; whole payload copies, headers and explicit/discovered MIME; both badge
+refresh sites. Original-code proofs below are assertion failures, never compile
+errors or crashes. Every new/strengthened test has a named proof.
+
+Raw evidence: `p8/step0b/control-xml/`, `mutations/` (30 definitions, patches,
+full Gradle logs and XML), `claude-survivors/` (the exact four first-occurrence
+mutations, run against all 72 tests). One final fixture signature covers all
+30 proofs. An interrupted preliminary run before the final control was discarded
+and rerun completely; it is not accepted evidence.
+
+| Named test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvSourceSwitchBoundaryCharacterizationTest::nonDirectStreamWithDirectUrlStillUsesSingleResolver` | b01: `source.isDirectStream && !source.directUrl.isNullOrEmpty() → !source.directUrl.isNullOrEmpty()` | java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvSourceSwitchBoundaryCharacterizationTest::directStreamWithoutUsableUrlUsesSingleResolver` | b02: `!source.directUrl.isNullOrEmpty() → source.directUrl != null` | java.lang.AssertionError: expected:<2> but was:<1> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistResolverTakesPrecedenceOverUsableDirectUrl` | b03: `if (hasPlaylistResolver) { → if (hasPlaylistResolver && !source.isDirectStream) {` | java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleEmptyManualReasonIsExact` | b04: `failManualSourceCandidate("empty-resolve") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: empty-resolve; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wrong-rea… |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleEmptyStartupReasonIsExact` | b05: `failStartupResolution(source.index, "empty-resolve") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[empty-resolve]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleErrorManualReasonIsExact` | b06: `failManualSourceCandidate("resolve:$errorCode") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: resolve:error; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wrong-rea… |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleErrorStartupReasonIsExact` | b07: `failStartupResolution(source.index, "resolve:$errorCode") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[resolve:error]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleMissingManualReasonIsExact` | b08: `failManualSourceCandidate("resolve-not-implemented") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: resolve-not-implemented; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason… |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleMissingStartupReasonIsExact` | b09: `failStartupResolution(source.index, "resolve-not-implemented") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[resolve-not-implemented]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleExceptionManualReasonIsExact` | b10: `failManualSourceCandidate("resolve-exception") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: resolve-exception; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wrong… |
+| `TvSourceSwitchBoundaryCharacterizationTest::singleExceptionStartupReasonIsExact` | b11: `failStartupResolution(source.index, "resolve-exception") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[resolve-excepti]on> but was:<[wrong-reas]on> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistEmptyManualReasonIsExact` | b12: `failManualSourceCandidate("empty-playlist") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: empty-playlist; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wrong-re… |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistEmptyStartupReasonIsExact` | b13: `failStartupResolution(source.index, "empty-playlist") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[empty-playlist]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistErrorManualReasonIsExact` | b14: `failManualSourceCandidate("playlist:$errorCode") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: playlist:error; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wrong-re… |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistErrorStartupReasonIsExact` | b15: `failStartupResolution(source.index, "playlist:$errorCode") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[playlist:error]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistMissingManualReasonIsExact` | b16: `failManualSourceCandidate("playlist-not-implemented") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: playlist-not-implemented; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reaso… |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistMissingStartupReasonIsExact` | b17: `failStartupResolution(source.index, "playlist-not-implemented") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[playlist-not-implemented]> but was:<[wrong-reason]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistExceptionManualReasonIsExact` | b18: `failManualSourceCandidate("playlist-exception") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact manual failure reason: playlist-exception; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=wron… |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistExceptionStartupReasonIsExact` | b19: `failStartupResolution(source.index, "playlist-exception") → failStartupResolution(source.index, "wrong-reason")` | org.junit.ComparisonFailure: exact startup failure reason expected:<[playlist-excepti]on> but was:<[wrong-reas]on> |
+| `TvSourceSwitchBoundaryCharacterizationTest::directReplacementCarriesMimeHeadersAndAllOtherPayloadFields` | b20: `item.copy(url = url, httpHeaders = headers, mimeType = mimeType) → item.copy(url = url, httpHeaders = headers)` | java.lang.AssertionError: replacement payload preserves every field except URL, headers and MIME expected:<PlaybackItem(id=item, title=Film, url=https://phase8.invalid/new.mp4, httpHeaders={X-Phase8=payload}… |
+| `TvSourceSwitchBoundaryCharacterizationTest::directReplacementCarriesMimeHeadersAndAllOtherPayloadFields` | b21: `item.copy(url = url, httpHeaders = headers, mimeType = mimeType) → item.copy(url = url, mimeType = mimeType)` | java.lang.AssertionError: replacement payload preserves every field except URL, headers and MIME expected:<PlaybackItem(id=item, title=Film, url=https://phase8.invalid/new.mp4, httpHeaders={X-Phase8=payload}… |
+| `TvSourceSwitchBoundaryCharacterizationTest::directReplacementCarriesMimeHeadersAndAllOtherPayloadFields` | b22: `item.copy(url = url, httpHeaders = headers, mimeType = mimeType) → item.copy(url = url, httpHeaders = headers, mimeType = mimeType, title = "mutated")` | java.lang.AssertionError: replacement payload preserves every field except URL, headers and MIME expected:<PlaybackItem(id=item, title=Film, url=https://phase8.invalid/new.mp4, httpHeaders={X-Phase8=payload}… |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistReplacementPreservesIncomingHeadersAndMetadata` | b23: `copy(resumePositionMs = resumePositionMs) → copy(resumePositionMs = resumePositionMs, httpHeaders = emptyMap())` | java.lang.AssertionError: parsed payload fields survive the resume copy expected:<PlaybackItem(id=Incoming, title=Film, url=https://phase8.invalid/pack.mp4, httpHeaders={X-Phase8=pack}, mimeType=null, hdVide… |
+| `TvSourceSwitchBoundaryCharacterizationTest::directApplyRefreshesQualityBadge` | b24: `updateStremioQualityBadge() → Unit` | org.junit.ComparisonFailure: expected:<[Sources]> but was:<[stale direct badge]> |
+| `TvSourceSwitchBoundaryCharacterizationTest::playlistApplyRefreshesQualityBadge` | b25: `updateStremioQualityBadge() → Unit` | org.junit.ComparisonFailure: expected:<[Sources]> but was:<[stale playlist badge]> |
+| `TvSourceSwitchMimeCharacterizationTest::protectedMimeProbeUsesHeadersThenRecursesOnceToApplyDiscoveredMime` | b26: `item.copy(url = url, httpHeaders = headers, mimeType = mimeType) → item.copy(url = url, httpHeaders = headers)` | java.lang.AssertionError: discovered MIME persists in the payload expected:<application/x-mpegURL> but was:<null> |
+| `TvSourceSwitchBoundaryCharacterizationTest::parsedEmptyPackManualReasonIsExact` | b27: `failManualSourceCandidate("playlist-empty-after-parse") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact apply failure reason: playlist-empty-after-parse; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reas… |
+| `TvSourceSwitchBoundaryCharacterizationTest::invalidPackManualReasonIsExact` | b28: `failManualSourceCandidate("playlist-items-invalid") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact apply failure reason: playlist-items-invalid; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason=w… |
+| `TvSourceSwitchBoundaryCharacterizationTest::missingEpisodePackManualReasonIsExact` | b29: `failManualSourceCandidate("playlist-missing-episode") → failManualSourceCandidate("wrong-reason")` | java.lang.AssertionError: exact apply failure reason: playlist-missing-episode; actual=event=manual_candidate_reject sourceIndex=1 type=torrent addonPresent=false sourcePresent=false mediaServer=false reason… |
+| `TvSourceSwitchBoundaryCharacterizationTest::missingEpisodePackStartupReasonIsExact` | b30: `failStartupResolution(sourceIndex, "playlist-missing-episode") → failStartupResolution(sourceIndex, "wrong-reason")` | org.junit.ComparisonFailure: expected:<[playlist-missing-episode]> but was:<[wrong-reason]> |
+
+Claude survivor rerun: **j05, j08, j11, j12 all killed**, 72 tests executed
+per mutation; failures are named `AssertionError`/`ComparisonFailure` only.
+The playlist badge mutation uses the exact first occurrence; the independent
+direct-apply badge proof covers the second occurrence.
+
+JVM `p8-step0b`: 759 identities (758 pass, the same existing source-browser
+focus failure); `p8-step0`: 732. Every old status is identical and all 27
+additions pass. Full XML and tree fingerprint are complete/stable. No failure
+allowlist or baseline recording accepted a regression.
+
+Follow-up (preserved): `PlaybackItem.fromMap`/`fromJson` ignore a supplied
+`mimeType`. Pack parsing therefore retains null MIME, while the direct and
+discovered switch paths explicitly write MIME into the replaced payload item.
+The new whole-item assertions pin both existing behaviors; no parser fix here.

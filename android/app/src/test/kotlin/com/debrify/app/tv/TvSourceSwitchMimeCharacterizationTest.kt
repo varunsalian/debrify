@@ -45,6 +45,7 @@ internal class TvSourceSwitchMimeCharacterizationTest : TvPhase8OriginalTest() {
             server.release.countDown(); awaitCondition { probe.media.isNotEmpty() }
             assertEquals(1, probe.media.size); assertEquals("application/x-mpegURL", probe.media.single().localConfiguration!!.mimeType)
             assertEquals(server.url, model().items[0].url)
+            assertEquals("discovered MIME persists in the payload", "application/x-mpegURL", model().items[0].mimeType)
         }
     }
     @Test fun tokenSupersessionDuringProtectedMimeProbeDiscardsLateApply() {

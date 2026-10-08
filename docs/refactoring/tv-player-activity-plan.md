@@ -1996,3 +1996,13 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   p8/ and junit/. Detached original removed. All production/protected inputs
   unchanged; no production moves, bug fixes, push, device interaction or
   self independent review. **STOPPED after phase 8 Step T/0**.
+- 2026-10-08 — phase 8 Step 0b: all four Claude survivors killed on original
+  `53906805d`, with all 72 phase-8 tests per exact mutation. Added 27 tests
+  and one stronger discovered-MIME assertion; 30/30 named assertion proofs
+  cover every new/strengthened test. Sweep pins routes, all manual/startup
+  resolver and apply reason strings, whole payload fields and both badge
+  refresh sites. p8-step0b has 759 identities (758 pass/same focus failure),
+  every p8-step0 status unchanged plus 27 passing additions. Raw evidence
+  p8/step0b/ and junit/p8-step0b/; mutation table appended to deps. Original
+  pack parser ignores MIME metadata: preserved and recorded as a follow-up.
+  Detached original removed after proofs. Production moves are next.
