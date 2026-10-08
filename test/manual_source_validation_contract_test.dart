@@ -17,6 +17,12 @@ void main() {
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
+  final nativeSourceSwitcher = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt',
+  ).readAsStringSync();
+  final nativeSourceApplier = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt',
+  ).readAsStringSync();
   final nativeProgressReporter = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt',
   ).readAsStringSync();
@@ -71,9 +77,9 @@ void main() {
     'recovery uses automatic probes without changing manual source resolution',
     () {
       expect(
-        nativePlayer,
+        nativeSourceSwitcher,
         contains(
-          '"automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null)',
+          '"automaticRecovery" to (host.startupFailoverDispatching && host.startupRecoveryCandidateIndices != null)',
         ),
       );
       expect(
@@ -308,8 +314,8 @@ void main() {
     'Android TV rejects one manual candidate and restores without failover',
     () {
       final selection = _between(
-        nativePlayer,
-        'private fun onStremioSourceSelected(',
+        nativeSourceSwitcher,
+        'fun onStremioSourceSelected(',
         'private fun resolveStremioSourceViaFlutter(',
       );
       final reject = _between(
@@ -351,9 +357,9 @@ void main() {
 
   test('manual series packs must contain the selected episode', () {
     expect(
-      nativePlayer,
+      nativeSourceApplier,
       contains(
-        '(requireExactStartupEpisode || manualSourceSwitchSnapshot != null)',
+        '(requireExactStartupEpisode || host.manualSourceSwitchSnapshot != null)',
       ),
     );
     expect(flutterPlayer, contains('containsRequestedEpisode = false'));

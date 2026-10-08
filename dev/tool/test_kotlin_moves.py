@@ -210,8 +210,13 @@ def run(manifest_path=k.MANIFEST):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase6.Phase6MovesTest))
     if manifest['phase'] >= 7:
         import test_kotlin_moves_phase7
-        test_kotlin_moves_phase7.MANIFEST = manifest
+        test_kotlin_moves_phase7.MANIFEST = (manifest if manifest['phase'] == 7 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p7.json').read_text()))
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase7.Phase7MovesTest))
+    if manifest['phase'] >= 8:
+        import test_kotlin_moves_phase8
+        test_kotlin_moves_phase8.MANIFEST = manifest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase8.Phase8MovesTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 

@@ -1088,6 +1088,82 @@ Stremio TV mode — open/close the guide, search, switch channels (incl. a
 failing channel), next-item auto-advance, guide closes once playback is
 ready, back-key behaviour inside the guide list and search box.
 
+## Phase 8 — Stremio source switcher (selection + badge + apply)
+
+Branch `refactor/tvplayer-p8` off the phase-7 merge `53906805d` (activity 14,637 lines). Evidence under
+`refactor-evidence/tvplayer/p8/`. The inventory is the "Phase 8 inventory"
+section of the deps report (measured at `a4ed4f368`; re-measure on the
+phase-7 merge — phase 7's guide-wait members sat between switcher members).
+All collaborator rules from phases 3–7 apply.
+
+**Scope decision (switcher first, gate next).** The full gate + switcher +
+badge unit is ≈ 1,398 lines with 109 patches, 31 initializer proofs, 15
+`onDestroy` patches and 45 reflective watchdog-test sites. Phase 8 moves only
+the switcher (≈ 768 lines; 23 patches in 19 declarations + 4 Host forwarder
+re-points + 1 visibility patch; 1 initializer proof; ≈ 207 substitutions;
+3 Dart anchor edits) and leaves every risky gate element — watchdog protocol,
+the `onDestroy` block, listener/`resolveAndPlay` patches, the 45 reflective
+sites, `finish()`, 29 of the 31 proofs — for phase 9 (gate, possibly paired
+with PikPak to settle `pikPakRetryId`, measured then). Cost: ≈ 20 % more total
+churn (11 Host forwarders into the gate, re-pointed when the gate moves).
+
+**Structure** (phase-6 shape, no new checker feature):
+`TvSourceSwitchController.kt` (selection + badge, ≈ 435 lines) eagerly
+constructs `TvSourceSwitchApplier.kt` (switch apply, ≈ 450 lines) and passes
+itself; one 51-member Host; activity property at the switcher's first owned
+slot (≈ 12920 at `a4ed4f368`).
+
+**Ownership / hazards.**
+- `stremioResolutionToken` stays activity-owned (Host `var`; bumped by episode
+  fetch, gate and switcher).
+- `pikPakRetryId` stays activity-owned and is read **live** at fire time
+  inside the reprepare Runnable (never snapshotted).
+- `ShufflePlaybackAttempt` (private nested) becomes `internal` so the applier
+  and the Host's `playItem` can name it; its JVM binary name is unchanged, so
+  both reflective tests stay valid.
+- `playItem` has two call shapes; the per-controller Host exposes exactly the
+  shapes used (no interface defaults).
+- `activeVodHeaders` is `@Volatile`; the applier writes it through a Host
+  setter that writes the same field.
+- Unbraced templates in moved code are braced per occurrence.
+- The 4 Host forwarder re-points all belong to the `iptvChannelStartController`
+  activity property: one whole-property `patched` row with exactly four
+  substitutions. `progressReporter` references retained gate state and stays
+  unchanged until the gate phase.
+- 3 Dart anchors are retargeted (`automaticRecovery`, the
+  `onStremioSourceSelected` start marker, `requireExactStartupEpisode`) with
+  equal-or-stronger assertions.
+
+### Step T
+
+Phase-8 extraction fixture + negatives (missed `applier.`/`controller.`
+qualification, snapshot of `pikPakRetryId`, dropped `playItem` shape,
+non-volatile write path); per-phase dispatcher keeping all historical
+suites; compiled overload audit; earlier destinations frozen at the phase-7
+merge.
+
+### Step 0 — characterization of the original
+
+Source selection flows (manual pick, automatic recovery pick, same-source
+reselect, episode-exact requirement), badge text/visibility, apply path
+(media item rebuild, headers incl. the volatile `activeVodHeaders`, seek
+restore, resolver token checks — both moved resolvers check the switch token
+**only before** `runOnUiThread` dispatch (error/notImplemented likewise):
+characterized by delivering a captured reply on a bounded worker thread,
+superseding the token before draining the paused main looper, and verifying
+the accepted UI action still runs; the playlist resolver's live cursor read
+inside the UI block is preserved and no second guard is introduced; PikPak reprepare runnable reading the live retry id, shuffle
+attempt interplay, `stremioResolutionToken` supersession), the sources panel
+render/selection highlight, `cancelSourceSwitchWait` in `onDestroy`.
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–7 additions. Device checklist (end of series):
+switching sources from the Sources panel during movie and series playback
+(resume position kept), automatic recovery to the next source after a dead
+link, badge text, PikPak cold-storage source switch, switching during shuffle.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
@@ -1887,3 +1963,87 @@ ready, back-key behaviour inside the guide list and search box.
   `hideGuideOnReady`, unguarded guide-data replies, watchdog assertions
   byte-identical. Activity 15,167 → 14,637. Decoder verification remains
   pending-environment. Phase 7 complete; merged.
+- 2026-10-08 — phase 8 design round 1 (Codex): **No P1s**; P2s folded
+  (resolver token checks only before dispatch, with a worker-thread
+  characterization; all four re-points are one `iptvChannelStartController`
+  patched row; `progressReporter` unchanged). Phase 8 design approved.
+- 2026-10-08 — phase 8 Step T: re-measured on `53906805d` (activity
+  14,637 lines). Manifest classifies all 2,335 declarations: 15 moved
+  subtrees, 20 whole-declaration patched rows (23 caller substitutions in
+  18 declarations, the four IPTV Host re-points in one property, and the
+  retained ShufflePlaybackAttempt visibility patch). One exact inert
+  initializer proof, eager fieldless applier construction, 51 computed Host
+  forwarders, all 34 earlier destinations frozen. Complete production-config
+  fixture compiles (controller 447/applier 450 lines); same-name Host capture
+  negative also compiles and is rejected for its changed cross call and Host
+  span. Original self-comparison: zero differences. Dispatcher keeps every
+  historical manifest/suite; 152 tests pass including 18 phase-8 cases, all
+  required negatives, and the historical phase-7 check at its merge. One
+  compiled Toast receiver descriptor matches exactly. Evidence `p8/`;
+  production unchanged. Public reflected members in internal controllers
+  follow the phase-3 unmangled-name rule. Step 0 next; no production moves.
+- 2026-10-08 — phase 8 Step 0: 45 original characterization tests pass;
+  49/49 scoped original mutations fail their named assertions, all on the
+  final fixture signature. Worker replies pin token acceptance before UI
+  dispatch and live cursor evaluation; real apply path pins headers, resume,
+  targets, metadata, shuffle and PikPak interplay. Bounded loopback MIME probe
+  verifies headers, recursive apply and supersession. Badge/end-action and
+  after-release cancellation are pinned. Clean baseline-53906805d has 687
+  identities (686 pass/one existing focus failure); p8-step0 has 732 (731
+  pass/same failure), all original statuses identical plus 45 new passes.
+  Original lint archived: 1,352 issues (253 errors/1,099 warnings, 175 opt-ins).
+  Mutation table and re-measured inventory appended to deps; raw evidence in
+  p8/ and junit/. Detached original removed. All production/protected inputs
+  unchanged; no production moves, bug fixes, push, device interaction or
+  self independent review. **STOPPED after phase 8 Step T/0**.
+- 2026-10-08 — phase 8 Step 0b: all four Claude survivors killed on original
+  `53906805d`, with all 72 phase-8 tests per exact mutation. Added 27 tests
+  and one stronger discovered-MIME assertion; 30/30 named assertion proofs
+  cover every new/strengthened test. Sweep pins routes, all manual/startup
+  resolver and apply reason strings, whole payload fields and both badge
+  refresh sites. p8-step0b has 759 identities (758 pass/same focus failure),
+  every p8-step0 status unchanged plus 27 passing additions. Raw evidence
+  p8/step0b/ and junit/p8-step0b/; mutation table appended to deps. Original
+  pack parser ignores MIME metadata: preserved and recorded as a follow-up.
+  Detached original removed after proofs. Production moves are next.
+- 2026-10-08 — phase 8 Step 1: materialized the approved manifest exactly.
+  Activity 14,637 → 13,937 lines; source switch controller 447/applier 450.
+  Applier is eager/fieldless; controller sits at its original first owned slot.
+  All 51 Host forwarders computed and explicitly qualified, retained volatile
+  headers and live retry-id read preserved. Whole IPTV property receives only
+  the four pinned re-points; nested ShufflePlaybackAttempt changes visibility
+  only. Shared reflection helper retargets 15 members, no assertions changed;
+  three Dart anchors retargeted with the same assertions (19 tests pass).
+  Source-switch, IPTV-start and watchdog JVM tests pass. Checker zero differences
+  over 2,335 declarations, all seven historical manifests and 34 frozen earlier
+  files pass; compiled overload 1/1, initializer proof and teardown order pass.
+  Size baseline updated with --update (also ratchets existing upstream shrinkage).
+  Protected inputs/manifests unchanged. Full gate next on the clean move commit.
+- 2026-10-08 — **phase 8 gate complete on `dfa683648`; decoder
+  pending-environment.** Step 0b `6d8c94c98` adds 27 passes, strengthens one
+  MIME assertion, kills 30/30 named original mutations and Claude's exact
+  j05/j08/j11/j12 against all 72 characterizations. Extraction `dfa683648`
+  preserves scope and manifest exactly. Checker zero differences over 2,335
+  declarations; 152 self-tests, seven historical manifests, 34 frozen earlier
+  files, compiled receiver 1/1, initializer proof and teardown order all pass.
+  Clean JVM gate exactly matches all 759 p8-step0b statuses (758 pass/same
+  focus failure). Lint exact original 1,352 issues (253 errors/175 opt-ins);
+  five compiler warnings and all 1,758 analyzer diagnostics unchanged.
+  Size passes at activity 13,937/controller 447/applier 450. Release succeeds,
+  R8/DEX verifies 7 classes/189 members including Host/anonymous objects.
+  Decoder output, missing sets and three native hashes exactly match phase 7:
+  pending-environment. Full quiet Flutter suite exactly matches all
+  12855 phase-7 identities/statuses on the same SDK, stable clean tree;
+  affected source suite also exactly matches 45 identities. All assertions
+  retained at retargeted helper/three Dart anchors. Evidence p8/step0b/,
+  p8/step1/, p8/gate/, junit/p8-step0b/ and junit/p8-gate/. Protected inputs
+  and earlier destinations unchanged, original worktree removed. No self
+  independent review, push, branch switch, device/emulator or bug fix.
+  **STOPPED after phase 8**; Claude reviews separately.
+- 2026-10-08 — phase 8 post-implementation reviews of `6fdfaf8c6..17a25ec67`.
+  Claude's 15-mutation sample 11/15; survivors j05/j08/j11/j12 (route
+  predicate, reason strings, payload mimeType, badge refresh) closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; gate state
+  untouched, live `pikPakRetryId` reads, volatile setter target, 43 compiled
+  Toast descriptors, watchdog file byte-identical. Activity 14,637 → 13,937.
+  Decoder verification remains pending-environment. Phase 8 complete; merged.

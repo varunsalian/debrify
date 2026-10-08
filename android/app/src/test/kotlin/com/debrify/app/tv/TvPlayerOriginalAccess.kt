@@ -65,6 +65,21 @@ internal object TvPlayerOriginalAccess {
     )
 
     private val controllerOwners = mapOf(
+        "cancelSourceSwitchWait" to "sourceSwitchController",
+        "dropStaleSourceSwitchFeedback" to "sourceSwitchController",
+        "hideStremioSourceBadge" to "sourceSwitchController",
+        "hideStremioSourceBadgeImmediately" to "sourceSwitchController",
+        "onStremioSourceSelected" to "sourceSwitchController",
+        "resolveSourceToPlaylistViaFlutter" to "sourceSwitchController",
+        "resolveStremioSourceViaFlutter" to "sourceSwitchController",
+        "setupStremioSources" to "sourceSwitchController",
+        "showStremioSourceBadge" to "sourceSwitchController",
+        "sourceSwitchReadyListener" to "sourceSwitchController",
+        "sourceSwitchTimeoutRunnable" to "sourceSwitchController",
+        "switchToSourcePlaylist" to "sourceSwitchController.applier",
+        "switchToStremioSource" to "sourceSwitchController.applier",
+        "updateStremioQualityBadge" to "sourceSwitchController",
+        "watchSourceSwitchOutcome" to "sourceSwitchController",
         "cancelGuideWait" to "stremioTvGuideController",
         "filterStremioTvChannels" to "stremioTvGuideController",
         "guidePanelReadyListener" to "stremioTvGuideController",

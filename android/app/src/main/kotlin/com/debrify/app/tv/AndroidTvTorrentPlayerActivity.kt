@@ -996,7 +996,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var currentStremioSourceIndex: Int
                 get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
                 set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex = value }
-            override fun dropStaleSourceSwitchFeedback(): Unit = this@AndroidTvTorrentPlayerActivity.dropStaleSourceSwitchFeedback()
+            override fun dropStaleSourceSwitchFeedback(): Unit = this@AndroidTvTorrentPlayerActivity.sourceSwitchController.dropStaleSourceSwitchFeedback()
             override val iptvBrowseHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.iptvBrowseHandler
             override val iptvChannels: MutableList<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
             override val iptvRecordingActionsController: TvIptvRecordingActionsController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingActionsController
@@ -1006,13 +1006,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
             override fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String): Unit = this@AndroidTvTorrentPlayerActivity.setIptvMediaItem(entry, streamUrl)
-            override fun setupStremioSources(): Unit = this@AndroidTvTorrentPlayerActivity.setupStremioSources()
+            override fun setupStremioSources(): Unit = this@AndroidTvTorrentPlayerActivity.sourceSwitchController.setupStremioSources()
             override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
             override val stremioSourceBadge: View? get() = this@AndroidTvTorrentPlayerActivity.stremioSourceBadge
             override val stremioSources: MutableList<StremioSource> get() = this@AndroidTvTorrentPlayerActivity.stremioSources
             override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
-            override fun updateStremioQualityBadge(): Unit = this@AndroidTvTorrentPlayerActivity.updateStremioQualityBadge()
-            override fun watchSourceSwitchOutcome(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.watchSourceSwitchOutcome(sourceIndex)
+            override fun updateStremioQualityBadge(): Unit = this@AndroidTvTorrentPlayerActivity.sourceSwitchController.updateStremioQualityBadge()
+            override fun watchSourceSwitchOutcome(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.sourceSwitchController.watchSourceSwitchOutcome(sourceIndex)
         },
     )
     private val iptvBrowseHandler = Handler(Looper.getMainLooper())
@@ -2149,7 +2149,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupSeekbar()
         setupPlaylist()
         setupControls()
-        setupStremioSources()
+        sourceSwitchController.setupStremioSources()
 
         // Check for Stremio TV guide data in payload
         try {
@@ -2664,7 +2664,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         val source = stremioSources.firstOrNull { it.index == index } ?: return
                         sourceSelectionLog("player_manual_pick", index, currentStremioSourceIndex)
                         sourceBrowser?.hide()
-                        onStremioSourceSelected(source)
+                        sourceSwitchController.onStremioSourceSelected(source)
                     }
 
                     override fun onHidden() {
@@ -4584,7 +4584,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // feedback — without this, the pending watcher would report the NEW
         // item's READY/IDLE as the OLD switch's outcome. (switchToSourcePlaylist
         // registers its watcher AFTER calling playItem, so it's unaffected.)
-        dropStaleSourceSwitchFeedback()
+        sourceSwitchController.dropStaleSourceSwitchFeedback()
 
         // Reset buffering state for new content
         hasEverBeenReady = false
@@ -5374,7 +5374,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         queuedShuffleGeneration = null
     }
 
-    private class ShufflePlaybackAttempt(
+    internal class ShufflePlaybackAttempt(
         var navigation: Int,
         val generation: Int,
         val autoAdvance: Boolean,
@@ -7293,9 +7293,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (::startupGateView.isInitialized &&
             startupGateView.visibility == View.VISIBLE
         ) {
-            hideStremioSourceBadgeImmediately()
+            sourceSwitchController.hideStremioSourceBadgeImmediately()
         } else {
-            showStremioSourceBadge()
+            sourceSwitchController.showStremioSourceBadge()
         }
 
         overlay.animate().cancel()
@@ -7344,7 +7344,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             overlay.alpha = 0f
             overlay.translationY = 0f
             hideTitleImmediately()
-            hideStremioSourceBadge()
+            sourceSwitchController.hideStremioSourceBadge()
             cancelScheduledHideControlsMenu()
             return
         }
@@ -7366,7 +7366,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .start()
 
         // Hide Stremio source quality badge
-        hideStremioSourceBadge()
+        sourceSwitchController.hideStremioSourceBadge()
 
         overlay.animate()
             .alpha(0f)
@@ -10709,7 +10709,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // it stood when the player was launched.
         if (checkpointOutgoing) checkpointCurrentIptvPosition()
         // A channel zap orphans any pending source-switch watcher (see playItem)
-        dropStaleSourceSwitchFeedback()
+        sourceSwitchController.dropStaleSourceSwitchFeedback()
 
         // Browsing can replace the source/category without replacing playback.
         // Adopt the visible result set only when the chosen row is outside the
@@ -11633,7 +11633,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             mrow(
                 src.displayTitle, value = meta, selected = src.index == currentStremioSourceIndex,
-                onOk = { onStremioSourceSelected(src); unifiedMenu?.hide() }
+                onOk = { sourceSwitchController.onStremioSourceSelected(src); unifiedMenu?.hide() }
             )
         }.toMutableList()
     }
@@ -12165,7 +12165,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         isAutoAdvancing = autoAdvance
                         adoptSourceList(map)
                         if (shuffleAttempt != null) watchShufflePlayback(shuffleAttempt)
-                        switchToSourcePlaylist(
+                        sourceSwitchController.applier.switchToSourcePlaylist(
                             fetchedSourceIndex,
                             items,
                             targetSeason = season,
@@ -12243,7 +12243,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             return@runOnUiThread
                         }
                         adoptSourceList(map)
-                        switchToSourcePlaylist(
+                        sourceSwitchController.applier.switchToSourcePlaylist(
                             fetchedSourceIndex,
                             items,
                             targetSeason = targetSeason,
@@ -12334,7 +12334,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Visibility is decided per candidate in armStartupCandidate: a
         // debrid-direct first open keeps the player surface (pre-ladder
         // look); the gate appears only when failover starts retrying.
-        hideStremioSourceBadgeImmediately()
+        sourceSwitchController.hideStremioSourceBadgeImmediately()
         val item = model.items.getOrNull(currentIndex)
         startupLog(
             "event=begin sourceCount=${stremioSources.size} selectedIndex=$currentStremioSourceIndex " +
@@ -12487,7 +12487,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
         pikPakGateReprepare = null
         stremioResolutionToken++
-        cancelSourceSwitchWait()
+        sourceSwitchController.cancelSourceSwitchWait()
         setResolvingState(false)
 
         val model = payload
@@ -12507,7 +12507,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             (model?.items?.lastIndex ?: 0).coerceAtLeast(0),
         )
         snapshot.title?.let { titleView.text = it }
-        updateStremioQualityBadge()
+        sourceSwitchController.updateStremioQualityBadge()
         sourceBrowser?.render()
 
         val replaced = manualSourceMediaReplaced
@@ -12663,7 +12663,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pikPakGateReprepare = null
         startupFailoverGeneration++
         startupGateView.visibility = View.GONE
-        if (controlsMenuVisible) showStremioSourceBadge()
+        if (controlsMenuVisible) sourceSwitchController.showStremioSourceBadge()
         hideStatusPill()
         restartProgressUpdates()
         reportValidatedSourceCommit(currentStremioSourceIndex)
@@ -12695,7 +12695,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             pikPakGateReprepare = null
             startupFailoverGeneration++
             stremioResolutionToken++ // invalidate any resolver callback for the failed row
-            cancelSourceSwitchWait()
+            sourceSwitchController.cancelSourceSwitchWait()
             setResolvingState(false)
             player?.stop()
 
@@ -12770,12 +12770,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 warning = true,
             )
             currentStremioSourceIndex = nextIndex
-            updateStremioQualityBadge()
+            sourceSwitchController.updateStremioQualityBadge()
             sourceBrowser?.render()
             armStartupCandidate(nextIndex)
             val next = stremioSources.getOrNull(nextIndex)
             if (next != null) {
-                onStremioSourceSelected(next)
+                sourceSwitchController.onStremioSourceSelected(next)
             } else {
                 // Unreachable today (nextIndex is always < size), but never
                 // recurse under the dispatch guard — it would swallow the call
@@ -12896,323 +12896,88 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         DiagnosticFileLog.record(source = "source_selection", event = event, message = message)
         android.util.Log.i("SourceSelect", message)
     }
-
-    private fun setupStremioSources() {
-        if (stremioSources.isEmpty()) return
-
-        android.util.Log.d("AndroidTvPlayer", "setupStremioSources: ${stremioSources.size} sources, current=$currentStremioSourceIndex")
-
-        // Setup quality badge
-        updateStremioQualityBadge()
-        sourceBrowser?.render()
-
-        // Sources use their own full-screen browser; the unified menu remains
-        // the home for player settings such as audio and subtitles.
-        stremioSourceBadge?.setOnClickListener {
-            hideControlsMenu()
-            unifiedMenu?.hide()
-            sourceBrowser?.show()
-        }
-    }
-
-    private fun updateStremioQualityBadge() {
-        if (stremioSources.isEmpty()) return
-        stremioSourceBadgeText?.text = "Sources"
-    }
-
-    private var sourceSwitchReadyListener: Player.Listener? = null
-    private var sourceSwitchTimeoutRunnable: Runnable? = null
-
-    /**
-     * Feedback for an in-flight source switch: the status pill stays up until
-     * the player reaches READY (success tick) or IDLE (error message) —
-     * mirroring the old sources panel, which stayed open with a row spinner
-     * until the same two states, with the same 10s give-up.
-     */
-    private fun watchSourceSwitchOutcome(sourceIndex: Int) {
-        // Clean up any previous listener/timeout
-        cancelSourceSwitchWait()
-
-        val name = stremioSources.getOrNull(sourceIndex)?.displayTitle ?: "source"
-
-        // Timeout fallback — stop reporting after 10s regardless
-        val timeout = Runnable {
-            cancelSourceSwitchWait()
-            hideStatusPill()
-        }
-        sourceSwitchTimeoutRunnable = timeout
-        progressHandler.postDelayed(timeout, 10_000)
-
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) {
-                    cancelSourceSwitchWait()
-                    showStatusPillTransient("✓ $name")
-                } else if (state == Player.STATE_IDLE) {
-                    cancelSourceSwitchWait()
-                    if (isIptvMode && iptvChannelStartController.iptvStremioChannelKey != null) {
-                        // The IPTV candidate ladder handles this failure itself
-                        // (silent auto-advance; its own toast when all die) —
-                        // an error pill here would contradict it.
-                        hideStatusPill()
-                    } else {
-                        // Playback error — tell the user instead of going silent
-                        showStatusPillTransient("Couldn't play $name — pick another source")
-                    }
-                }
-            }
-        }
-        sourceSwitchReadyListener = listener
-        player?.addListener(listener)
-    }
-
-    private fun cancelSourceSwitchWait() {
-        sourceSwitchReadyListener?.let { player?.removeListener(it) }
-        sourceSwitchReadyListener = null
-        sourceSwitchTimeoutRunnable?.let { progressHandler.removeCallbacks(it) }
-        sourceSwitchTimeoutRunnable = null
-    }
-
-    /**
-     * Navigation away from an in-flight source switch (next episode, playlist
-     * pick, channel zap, ladder advance): drop the pending outcome watcher AND
-     * its "Switching to…" pill, so a later item's READY/IDLE can't be reported
-     * as the abandoned switch's result. No-op when nothing is pending.
-     */
-    private fun dropStaleSourceSwitchFeedback() {
-        if (sourceSwitchReadyListener == null) return
-        cancelSourceSwitchWait()
-        hideStatusPill()
-    }
-
-    private fun onStremioSourceSelected(source: StremioSource) {
-        android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}, hasPlaylistResolver=$hasPlaylistResolver")
-
-        // A manual pick made before the first frame remains protected, but it
-        // becomes the new head of the ordered ladder. Internal failover calls
-        // arrive with startupFailoverDispatching set and retain their cursor.
-        if (startupFailoverCursor?.committed == false && !startupFailoverDispatching) {
-            val cursor = StartupFailoverCursor(
-                startIndex = source.index,
-                // This callback came from a source row the user explicitly
-                // chose. Even before the initial gate has committed, failure
-                // belongs to that row and must not silently select another.
-                maxAttempts = 1,
-            )
-            cursor.beginInitial(stremioSources.size)
-            startupFailoverCursor = cursor
-            currentStremioSourceIndex = source.index
-            armStartupCandidate(source.index)
-        } else if (startupFailoverCursor?.committed != false) {
-            beginManualSourceCandidate(source.index)
-        }
-
-        // Cancel any pending source switch wait from previous selection
-        cancelSourceSwitchWait()
-
-        // Cancel any ongoing PikPak retry from previous source
-        cancelPikPakRetry()
-
-        // Increment token to invalidate any in-flight resolution
-        stremioResolutionToken++
-
-        // Immediate feedback (replaces the old panel's row spinner); stays up
-        // through resolution, then watchSourceSwitchOutcome takes over.
-        showStatusPill("Switching to ${source.displayTitle}…")
-
-        if (hasPlaylistResolver) {
-            startupLog(
-                "event=resolve route=playlist token=$stremioResolutionToken " +
-                    startupSourceFields(source.index),
-            )
-            // Torrent search mode — resolve to full playlist via Flutter
-            resolveSourceToPlaylistViaFlutter(source, stremioResolutionToken)
-        } else if (source.isDirectStream && !source.directUrl.isNullOrEmpty()) {
-            startupLog(
-                "event=resolve route=direct_url token=$stremioResolutionToken " +
-                    startupSourceFields(source.index),
-            )
-            // Direct URL — use immediately
-            switchToStremioSource(source.directUrl, source.index)
-        } else {
-            startupLog(
-                "event=resolve route=single_url token=$stremioResolutionToken " +
-                    startupSourceFields(source.index),
-            )
-            // Torrent — resolve single URL via Flutter bridge
-            resolveStremioSourceViaFlutter(source, stremioResolutionToken)
-        }
-    }
-
-    private fun resolveStremioSourceViaFlutter(source: StremioSource, token: Int) {
-        try {
-            val args = hashMapOf<String, Any?>("sourceIndex" to source.index)
-            android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - sending to Flutter: index=${source.index}, token=$token")
-
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "requestStremioSourceResolve",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        if (token != stremioResolutionToken) {
-                            startupLog(
-                                "event=resolve_result ok=false reason=stale_token route=single_url " +
-                                    "token=$token currentToken=$stremioResolutionToken " +
-                                    startupSourceFields(source.index),
-                            )
-                            android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - stale token $token (current: $stremioResolutionToken), discarding")
-                            return
-                        }
-                        android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - Flutter returned: $result")
-                        val map = result as? Map<*, *>
-                        val url = map?.get("url") as? String
-                        if (!url.isNullOrEmpty()) {
-                            startupLog(
-                                "event=resolve_result ok=true route=single_url " +
-                                    startupSourceFields(source.index),
-                            )
-                            runOnUiThread { switchToStremioSource(url, source.index) }
-                        } else {
-                            startupLog(
-                                "event=resolve_result ok=false reason=empty_resolution route=single_url " +
-                                    startupSourceFields(source.index),
-                                warning = true,
-                            )
-                            android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - null URL returned")
-                            runOnUiThread {
-                                if (!failManualSourceCandidate("empty-resolve") &&
-                                    !failStartupResolution(source.index, "empty-resolve")
-                                ) {
-                                    showStatusPillTransient("Couldn't switch — failed to resolve source")
-                                }
-                            }
-                        }
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        if (token != stremioResolutionToken) return
-                        android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - error: $errorCode - $errorMessage")
-                        runOnUiThread {
-                            if (!failManualSourceCandidate("resolve:$errorCode") &&
-                                !failStartupResolution(source.index, "resolve:$errorCode")
-                            ) {
-                                showStatusPillTransient("Couldn't switch — source resolution failed")
-                            }
-                        }
-                    }
-
-                    override fun notImplemented() {
-                        if (token != stremioResolutionToken) return
-                        android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - not implemented")
-                        runOnUiThread {
-                            if (!failManualSourceCandidate("resolve-not-implemented") &&
-                                !failStartupResolution(source.index, "resolve-not-implemented")
-                            ) {
-                                showStatusPillTransient("Couldn't switch source")
-                            }
-                        }
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - exception: ${e.message}", e)
-            if (!failManualSourceCandidate("resolve-exception") &&
-                !failStartupResolution(source.index, "resolve-exception")
-            ) {
-                showStatusPillTransient("Couldn't switch source")
-            }
-        }
-    }
-
-    private fun resolveSourceToPlaylistViaFlutter(source: StremioSource, token: Int) {
-        try {
-            val args = hashMapOf<String, Any?>(
-                "sourceIndex" to source.index,
-                "automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null),
-            )
-            android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - sending to Flutter: index=${source.index}, token=$token")
-
-            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-                "requestSourcePlaylistResolve",
-                args,
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        if (token != stremioResolutionToken) {
-                            startupLog(
-                                "event=resolve_result ok=false reason=stale_token route=playlist " +
-                                    "token=$token currentToken=$stremioResolutionToken " +
-                                    startupSourceFields(source.index),
-                            )
-                            android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - stale token $token (current: $stremioResolutionToken), discarding")
-                            return
-                        }
-                        android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - Flutter returned: ${result != null}")
-                        val map = result as? Map<*, *>
-                        val itemsList = map?.get("items") as? List<*>
-                        if (itemsList != null && itemsList.isNotEmpty()) {
-                            startupLog(
-                                "event=resolve_result ok=true route=playlist itemCount=${itemsList.size} " +
-                                    startupSourceFields(source.index),
-                            )
-                            runOnUiThread {
-                                switchToSourcePlaylist(
-                                    source.index,
-                                    itemsList,
-                                    requireExactStartupEpisode =
-                                        startupFailoverCursor?.committed == false,
-                                )
-                            }
-                        } else {
-                            startupLog(
-                                "event=resolve_result ok=false reason=empty_playlist route=playlist " +
-                                    startupSourceFields(source.index),
-                                warning = true,
-                            )
-                            android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - null or empty items returned")
-                            runOnUiThread {
-                                if (!failManualSourceCandidate("empty-playlist") &&
-                                    !failStartupResolution(source.index, "empty-playlist")
-                                ) {
-                                    showStatusPillTransient("Source unavailable — not cached or not a video")
-                                }
-                            }
-                        }
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        if (token != stremioResolutionToken) return
-                        android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - error: $errorCode - $errorMessage")
-                        runOnUiThread {
-                            if (!failManualSourceCandidate("playlist:$errorCode") &&
-                                !failStartupResolution(source.index, "playlist:$errorCode")
-                            ) {
-                                showStatusPillTransient("Couldn't switch — failed to resolve source")
-                            }
-                        }
-                    }
-
-                    override fun notImplemented() {
-                        if (token != stremioResolutionToken) return
-                        android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - not implemented")
-                        runOnUiThread {
-                            if (!failManualSourceCandidate("playlist-not-implemented") &&
-                                !failStartupResolution(source.index, "playlist-not-implemented")
-                            ) {
-                                showStatusPillTransient("Couldn't switch source")
-                            }
-                        }
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - exception: ${e.message}", e)
-            if (!failManualSourceCandidate("playlist-exception") &&
-                !failStartupResolution(source.index, "playlist-exception")
-            ) {
-                showStatusPillTransient("Couldn't switch source")
-            }
-        }
-    }
+    private val sourceSwitchController: TvSourceSwitchController = TvSourceSwitchController(
+        this,
+        object : TvSourceSwitchController.Host {
+            override var activeVodHeaders: Pair<Set<String>, Map<String, String>>
+                get() = this@AndroidTvTorrentPlayerActivity.activeVodHeaders
+                set(value) { this@AndroidTvTorrentPlayerActivity.activeVodHeaders = value }
+            override fun armStartupCandidate(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.armStartupCandidate(sourceIndex)
+            override fun attemptPikPakPlaybackLoop(item: PlaybackItem, attemptNumber: Int, retryId: Int): Unit = this@AndroidTvTorrentPlayerActivity.attemptPikPakPlaybackLoop(item, attemptNumber, retryId)
+            override fun beginManualSourceCandidate(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.beginManualSourceCandidate(sourceIndex)
+            override fun buildMergedSource(videoUrl: String, audioUrl: String): MergingMediaSource? = this@AndroidTvTorrentPlayerActivity.buildMergedSource(videoUrl, audioUrl)
+            override fun cancelPikPakRetry(): Unit = this@AndroidTvTorrentPlayerActivity.cancelPikPakRetry()
+            override var currentIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentIndex = value }
+            override var currentStremioSourceIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex = value }
+            override fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit): Unit = this@AndroidTvTorrentPlayerActivity.discoverProtectedMime(url, headers, ready)
+            override fun failManualSourceCandidate(reason: String): Boolean = this@AndroidTvTorrentPlayerActivity.failManualSourceCandidate(reason)
+            override fun failStartupResolution(sourceIndex: Int, reason: String): Boolean = this@AndroidTvTorrentPlayerActivity.failStartupResolution(sourceIndex, reason)
+            override val hasPlaylistResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasPlaylistResolver
+            override fun heldResumePositionMs(actualMs: Long): Long? = this@AndroidTvTorrentPlayerActivity.heldResumePositionMs(actualMs)
+            override fun hideControlsMenu(): Unit = this@AndroidTvTorrentPlayerActivity.hideControlsMenu()
+            override fun hidePikPakRetryOverlay(): Unit = this@AndroidTvTorrentPlayerActivity.hidePikPakRetryOverlay()
+            override fun hideStatusPill(): Unit = this@AndroidTvTorrentPlayerActivity.hideStatusPill()
+            override val iptvChannelStartController: TvIptvChannelStartController get() = this@AndroidTvTorrentPlayerActivity.iptvChannelStartController
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override var isPikPakRetrying: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.isPikPakRetrying
+                set(value) { this@AndroidTvTorrentPlayerActivity.isPikPakRetrying = value }
+            override var manualSourceCandidateUrl: String?
+                get() = this@AndroidTvTorrentPlayerActivity.manualSourceCandidateUrl
+                set(value) { this@AndroidTvTorrentPlayerActivity.manualSourceCandidateUrl = value }
+            override var manualSourceMediaReplaced: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.manualSourceMediaReplaced
+                set(value) { this@AndroidTvTorrentPlayerActivity.manualSourceMediaReplaced = value }
+            override val manualSourceSwitchSnapshot: ManualSourceSwitchSnapshot? get() = this@AndroidTvTorrentPlayerActivity.manualSourceSwitchSnapshot
+            override var mediaPreparationGeneration: Int
+                get() = this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration
+                set(value) { this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration = value }
+            override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
+            override val ottSourcesButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.ottSourcesButton
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override var percentSeekApplied: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.percentSeekApplied
+                set(value) { this@AndroidTvTorrentPlayerActivity.percentSeekApplied = value }
+            override var pikPakRetryCount: Int
+                get() = this@AndroidTvTorrentPlayerActivity.pikPakRetryCount
+                set(value) { this@AndroidTvTorrentPlayerActivity.pikPakRetryCount = value }
+            override var pikPakRetryId: Int
+                get() = this@AndroidTvTorrentPlayerActivity.pikPakRetryId
+                set(value) { this@AndroidTvTorrentPlayerActivity.pikPakRetryId = value }
+            override fun playItem(index: Int, suppressTrakt: Boolean, suppressResume: Boolean, shuffleAttempt: ShufflePlaybackAttempt?): Unit = this@AndroidTvTorrentPlayerActivity.playItem(index, suppressTrakt, suppressResume, shuffleAttempt)
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
+            override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.rebuildPlaylistContent()
+            override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.requestMetadataFromFlutter()
+            override var resumeHoldArmedAtMs: Long
+                get() = this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs
+                set(value) { this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs = value }
+            override fun showStatusPill(text: String): Unit = this@AndroidTvTorrentPlayerActivity.showStatusPill(text)
+            override fun showStatusPillTransient(text: String): Unit = this@AndroidTvTorrentPlayerActivity.showStatusPillTransient(text)
+            override val shuffleBag: MutableList<Int> get() = this@AndroidTvTorrentPlayerActivity.shuffleBag
+            override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
+            override var startupFailoverCursor: StartupFailoverCursor?
+                get() = this@AndroidTvTorrentPlayerActivity.startupFailoverCursor
+                set(value) { this@AndroidTvTorrentPlayerActivity.startupFailoverCursor = value }
+            override val startupFailoverDispatching: Boolean get() = this@AndroidTvTorrentPlayerActivity.startupFailoverDispatching
+            override val startupRecoveryCandidateIndices: List<Int>? get() = this@AndroidTvTorrentPlayerActivity.startupRecoveryCandidateIndices
+            override fun startupSourceFields(index: Int): String = this@AndroidTvTorrentPlayerActivity.startupSourceFields(index)
+            override var stremioResolutionToken: Int
+                get() = this@AndroidTvTorrentPlayerActivity.stremioResolutionToken
+                set(value) { this@AndroidTvTorrentPlayerActivity.stremioResolutionToken = value }
+            override val stremioSourceBadge: View? get() = this@AndroidTvTorrentPlayerActivity.stremioSourceBadge
+            override val stremioSourceBadgeText: TextView? get() = this@AndroidTvTorrentPlayerActivity.stremioSourceBadgeText
+            override val stremioSources: MutableList<StremioSource> get() = this@AndroidTvTorrentPlayerActivity.stremioSources
+            override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
+            override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
+            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
+            override fun updateCatalogEpisodeControls(): Unit = this@AndroidTvTorrentPlayerActivity.updateCatalogEpisodeControls()
+        },
+    )
 
     /**
      * "Load more sources" for a series source tab: asks Flutter to run the
@@ -13292,7 +13057,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         (map["packsFetched"] as? Boolean)?.let { seriesPacksFetched = it }
         (map["episodesFetched"] as? Boolean)?.let { seriesEpisodesFetched = it }
         (map["movieFetched"] as? Boolean)?.let { movieSourcesFetched = it }
-        updateStremioQualityBadge()
+        sourceSwitchController.updateStremioQualityBadge()
         unifiedMenu?.render()
         sourceBrowser?.render()
         if (startupRecoveryFetching) {
@@ -13426,7 +13191,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         currentStremioSourceIndex = currentStremioSourceIndex
             .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
-        updateStremioQualityBadge()
+        sourceSwitchController.updateStremioQualityBadge()
         unifiedMenu?.render()
     }
 
@@ -13443,471 +13208,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupRecoveryFetching = false
             progressHandler.post { if (!isFinishing && !isDestroyed) failStartupCandidate("recovery-results") }
         }
-    }
-
-    private fun switchToSourcePlaylist(
-        sourceIndex: Int,
-        rawItems: List<*>,
-        targetSeason: Int? = null,
-        targetEpisode: Int? = null,
-        suppressTargetResume: Boolean = false,
-        requireExactStartupEpisode: Boolean = false,
-        shuffleAttempt: ShufflePlaybackAttempt? = null,
-    ) {
-        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
-
-        val model = payload ?: return
-        if (shuffleAttempt != null) {
-            val outgoingItems = model.items.toList()
-            val outgoingIndex = currentIndex
-            val outgoingSource = currentStremioSourceIndex
-            val outgoingType = model.contentType
-            shuffleAttempt.restorePreparation = {
-                model.items.clear()
-                model.items.addAll(outgoingItems)
-                currentIndex = outgoingIndex
-                currentStremioSourceIndex = outgoingSource
-                rebuildNavigationMaps(model, outgoingType)
-                updateCatalogEpisodeControls()
-            }
-        }
-
-        // Capture playback position + current item identity so the new source
-        // resumes the same content instead of restarting from the beginning.
-        // An unlanded resume outranks the live position (same rule as
-        // switchToStremioSource): carry the HELD bookmark into the new pack,
-        // not the ~0 a dropped/clamped resume left playback at. playItem's
-        // READY re-arm restarts the hold window for the new source.
-        // An explicit episode-guide target is different content: land there
-        // instead, and never carry the current position onto it.
-        val liveSwitchPos = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
-        val resumePositionMs = heldResumePositionMs(liveSwitchPos) ?: liveSwitchPos
-        val currentItem = model.items.getOrNull(currentIndex)
-        val explicitTarget = targetSeason != null && targetEpisode != null
-        val resumeSeason = targetSeason ?: currentItem?.season
-        val resumeEpisode = targetEpisode ?: currentItem?.episode
-        val sameContent = !explicitTarget ||
-            (targetSeason == currentItem?.season && targetEpisode == currentItem?.episode)
-
-        // Parse metadata entry (first item with __meta__ flag)
-        var contentType = model.contentType
-        val itemMaps = mutableListOf<Map<*, *>>()
-        for (raw in rawItems) {
-            val map = raw as? Map<*, *> ?: continue
-            if (map["__meta__"] == true) {
-                contentType = (map["contentType"] as? String) ?: contentType
-                continue
-            }
-            itemMaps.add(map)
-        }
-
-        if (itemMaps.isEmpty()) {
-            android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no valid items after parsing")
-            if (!failManualSourceCandidate("playlist-empty-after-parse")) {
-                showStatusPillTransient("Source unavailable")
-            }
-            return
-        }
-
-        // Parse items into PlaybackItem list
-        val newItems = mutableListOf<PlaybackItem>()
-        for (map in itemMaps) {
-            try {
-                newItems.add(PlaybackItem.fromMap(map))
-            } catch (e: Exception) {
-                android.util.Log.w("AndroidTvPlayer", "switchToSourcePlaylist - failed to parse item: ${e.message}")
-            }
-        }
-
-        if (newItems.isEmpty()) {
-            android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no items parsed successfully")
-            if (!failManualSourceCandidate("playlist-items-invalid")) {
-                showStatusPillTransient("Source unavailable")
-            }
-            return
-        }
-
-        if ((requireExactStartupEpisode || manualSourceSwitchSnapshot != null) &&
-            resumeSeason != null &&
-            resumeEpisode != null &&
-            !startupPlaylistSatisfiesEpisode(
-                newItems.map { it.season to it.episode },
-                resumeSeason,
-                resumeEpisode,
-            )
-        ) {
-            startupLog(
-                "event=candidate_reject reason=playlist_missing_episode " +
-                    "targetSeason=$resumeSeason targetEpisode=$resumeEpisode " +
-                    "itemCount=${newItems.size} ${startupSourceFields(sourceIndex)}",
-                warning = true,
-            )
-            android.util.Log.w(
-                "AndroidTvPlayer",
-                "Startup playlist source $sourceIndex omits S${resumeSeason}E$resumeEpisode",
-            )
-            if (!failManualSourceCandidate("playlist-missing-episode") &&
-                !failStartupResolution(sourceIndex, "playlist-missing-episode")
-            ) {
-                showStatusPillTransient("Source does not contain this episode")
-            }
-            return
-        }
-
-        // A singleton direct stream has no pack filenames from which Flutter
-        // can infer an episode. Preserve the catalog identity across a manual
-        // source switch as well as an adjacent-episode fetch.
-        if (contentType == "series" && newItems.size == 1 &&
-            (newItems[0].season == null || newItems[0].episode == null) &&
-            resumeSeason != null && resumeEpisode != null) {
-            newItems[0] = newItems[0].copy(
-                season = resumeSeason,
-                episode = resumeEpisode,
-            )
-        }
-
-        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
-
-        // Carry the FETCHED episode metadata (TVMaze titles/artwork/ratings)
-        // from the outgoing items onto the new source's matching episodes.
-        // The new payload's titles are the new pack's raw filenames, and the
-        // metadata re-request below round-trips through Flutter — without
-        // this hand-off the dock identity regresses to the release name for
-        // that window (or for good, if the re-request fails). An old title
-        // counts as fetched only when a metadata push actually replaced it
-        // (title differs from the preserved sourceTitle).
-        val oldBySeasonEpisode = model.items
-            .filter { it.season != null && it.episode != null }
-            .associateBy { it.season to it.episode }
-        for (i in newItems.indices) {
-            val ni = newItems[i]
-            if (ni.season == null || ni.episode == null) continue
-            val old = oldBySeasonEpisode[ni.season to ni.episode]
-            val oldFetchedTitle = old?.title?.takeIf {
-                it.isNotBlank() && old.sourceTitle != null && it != old.sourceTitle
-            }
-            val guide = model.guideEpisodes.firstOrNull {
-                it.season == ni.season && it.episode == ni.episode
-            }
-            newItems[i] = ni.copy(
-                title = resolveSwitchedEpisodeTitle(
-                    episode = ni.episode,
-                    incomingTitle = ni.title,
-                    sourceTitle = ni.sourceTitle,
-                    guideTitle = guide?.title,
-                    previousEpisodeTitle = oldFetchedTitle,
-                ),
-                artwork = ni.artwork ?: guide?.artwork ?: old?.artwork,
-                description = ni.description ?: guide?.description ?: old?.description,
-                rating = ni.rating ?: guide?.rating ?: old?.rating,
-            )
-        }
-
-        // Movies / single-file payloads have no S/E to match on: when the
-        // switch stays on the SAME content, the identity must not change
-        // just because the file name did — keep the outgoing title (the
-        // clean movie name on catalog launches) plus artwork/rating. The
-        // quality chips still re-parse from the NEW source via sourceTitle.
-        if (newItems.size == 1 && newItems[0].season == null &&
-            sameContent && currentItem != null
-        ) {
-            val ni = newItems[0]
-            newItems[0] = ni.copy(
-                title = currentItem.title.ifBlank { ni.title },
-                artwork = ni.artwork ?: currentItem.artwork,
-                description = ni.description ?: currentItem.description,
-                rating = ni.rating ?: currentItem.rating,
-            )
-        }
-
-        // Find which item in the new source's playlist matches what the user was
-        // watching, so we resume the same content rather than restarting at file 0.
-        //  - Single item: unambiguous — it's the content (movie, or one episode).
-        //  - Series (multi-file): match by season+episode.
-        //  - Collection (multi-file movie torrent): match by title; if names
-        //    differ across sources, keep the same list position but don't carry
-        //    the timestamp onto what could be a different movie.
-        var targetIndex = 0
-        var matchedSameContent = false
-        if (newItems.size == 1) {
-            targetIndex = 0
-            matchedSameContent = sameContent
-        } else if (resumeSeason != null && resumeEpisode != null) {
-            val matched = newItems.indexOfFirst {
-                it.season == resumeSeason && it.episode == resumeEpisode
-            }
-            if (matched >= 0) {
-                targetIndex = matched
-                matchedSameContent = sameContent
-            } else {
-                // The exact episode isn't in this source. Do NOT fall back to
-                // file 0 — in torrent order that's often an extras/bonus clip
-                // (a season pack may list "Extras/" or a featurette first).
-                // Land on the first REAL episode (skip season 0 / specials),
-                // and tell the user we couldn't find what they were watching.
-                val firstReal = newItems.indexOfFirst {
-                    val s = it.season
-                    s != null && s != 0 && it.episode != null
-                }
-                targetIndex = if (firstReal >= 0) firstReal else 0
-                Toast.makeText(
-                    this,
-                    "S${resumeSeason}E${resumeEpisode} not in this source — playing from the start",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        } else if (currentItem != null) {
-            val byTitle = newItems.indexOfFirst {
-                it.title.isNotEmpty() && it.title == currentItem.title
-            }
-            if (byTitle >= 0) {
-                targetIndex = byTitle
-                matchedSameContent = true
-            } else {
-                targetIndex = currentIndex.coerceIn(0, newItems.lastIndex)
-            }
-        }
-        if (matchedSameContent && resumePositionMs > 0 && targetIndex in newItems.indices) {
-            newItems[targetIndex] = newItems[targetIndex].copy(resumePositionMs = resumePositionMs)
-            android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - resuming item $targetIndex at $resumePositionMs ms")
-        } else {
-            android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - playing item $targetIndex from start (matchedSameContent=$matchedSameContent)")
-        }
-
-        // Update source state
-        currentStremioSourceIndex = sourceIndex
-        updateStremioQualityBadge()
-        sourceBrowser?.render()
-
-        // Cancel any ongoing PikPak retry
-        cancelPikPakRetry()
-
-        // Replace payload items and content type
-        model.items.clear()
-        model.items.addAll(newItems)
-        shuffleBag.clear()
-
-        // Rebuild navigation maps for new items
-        rebuildNavigationMaps(model, contentType)
-
-        // Point currentIndex at the item we're about to play BEFORE rebuilding
-        // the UI: setupSeasonTabs / buildList default the season tab and the
-        // active highlight off currentIndex. If it still held the OLD source's
-        // index (into a differently-ordered list), the now-playing episode could
-        // land outside the selected tab and be neither shown nor highlighted.
-        // playItem() re-affirms currentIndex = targetIndex momentarily later.
-        currentIndex = targetIndex
-
-        // Rebuild playlist UI (without re-adding RecyclerView listeners)
-        rebuildPlaylistContent()
-
-        // Re-run the TVMaze pipeline for the new payload: launch was the only
-        // requester, so a switched-in source would otherwise keep raw pack
-        // filenames wherever the carry-over above had no match (episodes the
-        // old source lacked, or a first switch before any push arrived).
-        // No-ops for non-series content; rebuildNavigationMaps already set
-        // model.contentType above.
-        requestMetadataFromFlutter()
-
-        // Update the title content for the next controls reveal.
-        val currentSource = stremioSources.getOrNull(sourceIndex)
-        if (currentSource != null) {
-            titleView.text = currentSource.displayTitle
-        }
-
-        // Resume the previously-playing item; the captured position is carried
-        // on the item above as resumePositionMs. Suppress tracker/startAt percent
-        // seeks so they can't override our explicit resume position — but ONLY
-        // when the new source landed on the SAME content: a fallback episode
-        // (exact episode missing from the new source) has no captured position
-        // and must keep its own per-episode tracker resume, matching the Dart
-        // player's landedOnSameContent behaviour.
-        //
-        // EXCEPT during startup failover: the failed candidate never rendered,
-        // so there is no live position to protect (resumePositionMs is 0) —
-        // latching here would burn the launch tracker percent (watched on
-        // another device) and start the episode at 0:00. The single-URL
-        // failover route keeps that percent; this route must match.
-        if (startupFailoverCursor?.committed != false) {
-            percentSeekApplied = true
-        }
-        if (manualSourceSwitchSnapshot != null) {
-            manualSourceMediaReplaced = true
-            manualSourceCandidateUrl = newItems.getOrNull(targetIndex)?.url
-        }
-        playItem(
-            targetIndex,
-            suppressTrakt = matchedSameContent,
-            suppressResume = suppressTargetResume,
-            shuffleAttempt = shuffleAttempt,
-        )
-
-        // Report the switch outcome once playback settles
-        if (startupFailoverCursor?.committed != false &&
-            manualSourceSwitchSnapshot == null
-        ) {
-            watchSourceSwitchOutcome(sourceIndex)
-        }
-    }
-
-    private fun switchToStremioSource(url: String, sourceIndex: Int, mimeType: String? = null, mimeDiscovered: Boolean = false) {
-        // Live Stremio IPTV channel: the movie path below seeks to the
-        // previous position and runs PikPak/YouTube bookkeeping — all wrong
-        // for a live stream. Route to the dedicated live switch.
-        if (isIptvMode && iptvChannelStartController.iptvStremioChannelKey != null) {
-            iptvChannelStartController.switchToIptvStremioSource(url, sourceIndex)
-            return
-        }
-        val sourceHeaders = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
-        if (!mimeDiscovered && ProtectedStreamHttp.needsDiscovery(url, sourceHeaders)) {
-            discoverProtectedMime(url, sourceHeaders) { discovered ->
-                switchToStremioSource(url, sourceIndex, discovered, mimeDiscovered = true)
-            }
-            return
-        }
-        mediaPreparationGeneration++
-        android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
-
-        // Capture current position for resume. If a resume hold is active the
-        // live position is a not-yet-landed artifact — carry the HELD target
-        // into the new source so the switch restores the bookmark, not ~0.
-        // The hold's settle window restarts: the new source gets its own full
-        // chance to land the restore before real playback wins.
-        val livePos = player?.currentPosition ?: 0L
-        val heldPos = heldResumePositionMs(livePos)
-        if (heldPos != null) {
-            resumeHoldArmedAtMs = android.os.SystemClock.elapsedRealtime()
-        }
-        val currentPos = heldPos ?: livePos
-        val headers = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
-        activeVodHeaders = setOfNotNull(originKey(Uri.parse(url))) to headers
-        payload?.items?.getOrNull(currentIndex)?.let { item ->
-            payload?.items?.set(currentIndex, item.copy(url = url, httpHeaders = headers, mimeType = mimeType))
-        }
-
-        // Update state
-        currentStremioSourceIndex = sourceIndex
-        updateStremioQualityBadge()
-        sourceBrowser?.render()
-
-        // Cancel any ongoing PikPak retry before switching
-        cancelPikPakRetry()
-
-        // Switch ExoPlayer source, preserving position. For high-res YouTube the
-        // current item carries a separate audio track that ALL qualities share,
-        // so merge the newly picked (video-only) url with that audio — otherwise
-        // switching to a video-only quality would go silent. Non-YouTube sources
-        // (no separate audio) use the single url as-is.
-        val currentAudioUrl = payload?.items?.getOrNull(currentIndex)?.audioUrl
-        val mergedSource = if (!currentAudioUrl.isNullOrEmpty()) {
-            buildMergedSource(url, currentAudioUrl)
-        } else {
-            null
-        }
-        if (manualSourceSwitchSnapshot != null) {
-            manualSourceMediaReplaced = true
-            manualSourceCandidateUrl = url
-        }
-        if (mergedSource != null) {
-            subtitleTrackReadiness.onMediaReplacement()
-            player?.setMediaSource(mergedSource)
-        } else {
-            subtitleTrackReadiness.onMediaReplacement()
-            player?.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(mimeType).build())
-        }
-        player?.prepare()
-        if (currentPos > 0) {
-            player?.seekTo(currentPos)
-        }
-        player?.play()
-
-        // Report the switch outcome once playback settles
-        if (startupFailoverCursor?.committed != false &&
-            manualSourceSwitchSnapshot == null
-        ) {
-            watchSourceSwitchOutcome(sourceIndex)
-        }
-
-        // Update the title content for the next controls reveal.
-        val currentSource = stremioSources.getOrNull(sourceIndex)
-        if (currentSource != null) {
-            titleView.text = currentSource.displayTitle
-        }
-
-        // For PikPak URLs, start cold storage retry monitoring
-        if (url.contains("mypikpak.com")) {
-            android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: PikPak URL detected, starting retry logic")
-            pikPakRetryId++
-            val myRetryId = pikPakRetryId
-            pikPakRetryCount = 0
-            isPikPakRetrying = false
-            hidePikPakRetryOverlay()
-            // Build a temporary PlaybackItem for the retry loop
-            val tempItem = PlaybackItem(
-                id = "stremio_source_$sourceIndex",
-                title = currentSource?.displayTitle ?: "",
-                url = url,
-                index = sourceIndex,
-                season = null,
-                episode = null,
-                artwork = null,
-                description = null,
-                resumePositionMs = currentPos,
-                durationMs = 0L,
-                updatedAt = 0L,
-                resumeId = null,
-                sizeBytes = currentSource?.sizeBytes,
-                rating = null,
-                provider = PROVIDER_PIKPAK,
-            )
-            attemptPikPakPlaybackLoop(tempItem, 0, myRetryId)
-        }
-    }
-
-    private fun showStremioSourceBadge() {
-        if (ottSkinInstalled) {
-            // The dock button is the sources affordance under OTT; the
-            // top-right badge stays hidden. Availability can change per item
-            // (Stremio-TV zaps replace the source list), so sync every show.
-            ottSourcesButton?.visibility =
-                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
-            return
-        }
-        if (stremioSources.isEmpty()) return
-        stremioSourceBadge?.animate()?.cancel()
-        stremioSourceBadge?.visibility = View.VISIBLE
-        stremioSourceBadge?.alpha = 0f
-        stremioSourceBadge?.translationX = 30f
-        stremioSourceBadge?.animate()
-            ?.alpha(1f)
-            ?.translationX(0f)
-            ?.setDuration(250)
-            ?.setInterpolator(DecelerateInterpolator(1.5f))
-            ?.start()
-    }
-
-    private fun hideStremioSourceBadge() {
-        stremioSourceBadge?.animate()?.cancel()
-        stremioSourceBadge?.animate()
-            ?.alpha(0f)
-            ?.translationX(20f)
-            ?.setDuration(200)
-            ?.setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
-            ?.withEndAction {
-                stremioSourceBadge?.visibility = View.GONE
-                stremioSourceBadge?.translationX = 0f
-            }
-            ?.start()
-    }
-
-    /** Startup validation owns the same corner as this badge. Unlike the
-     *  ordinary controls fade, gate activation must clear it synchronously so
-     *  no frame can cover the only source-checking feedback. */
-    private fun hideStremioSourceBadgeImmediately() {
-        stremioSourceBadge?.animate()?.cancel()
-        stremioSourceBadge?.visibility = View.GONE
-        stremioSourceBadge?.alpha = 0f
-        stremioSourceBadge?.translationX = 0f
     }
 
     private fun parsePayload(raw: String): PlaybackPayload? {
@@ -14422,7 +13722,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Clean up Stremio sources
         focusRecoveryHandler.removeCallbacksAndMessages(null)
         focusRecoveryRunnable = null
-        cancelSourceSwitchWait()
+        sourceSwitchController.cancelSourceSwitchWait()
         stremioSources.clear()
 
         // Clear tab references
@@ -14450,7 +13750,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 0,
                 stremioSources.lastIndex.coerceAtLeast(0)
             )
-            setupStremioSources()
+            sourceSwitchController.setupStremioSources()
         }
     }
 
@@ -14519,7 +13819,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         replacePayloadWithStremioTvItem(channel, map, title, url)
         updateStremioSourcesFromPlaybackMap(map)
         stremioTvGuideController.updateStremioTvGuideHeader()
-        updateStremioQualityBadge()
+        sourceSwitchController.updateStremioQualityBadge()
         if (ottSkinInstalled) {
             ottSourcesButton?.visibility =
                 if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
