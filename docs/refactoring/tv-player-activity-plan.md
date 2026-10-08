@@ -1387,17 +1387,35 @@ negatives (non-literal string, non-empty constructor); phase-11 extraction
 fixture (owner + two fieldless collaborators, owner-only shared state,
 cross-qualification) + negatives (a collaborator field, a collaborator
 reading Host directly for shared state, missed qualification, label
-rewrite); per-phase dispatcher keeping all historical suites; compiled audit;
+rewrite); **receiver-lambda exclusions:** the PSI collector exhaustively
+inventories reviewed `this` expressions that bind to a receiver lambda (the
+two entry-owned `this.index` sites, the `EditText.apply` receiver), pins each
+with its source context, and rejects an omitted or misclassified exclusion or
+any substitution of those expressions; the 7 Toast and 6 inherited-call audit
+sites are retained; per-phase dispatcher keeping all historical suites; compiled audit;
 earlier destinations frozen at the phase-10 merge.
 
 ### Step 0 — characterization of the original
 
-From zero: guide open/close, browse requests and token supersession (UI
-context token, browse token), search, zap paging (window install/merge,
-paging totals, pending inputs, in-flight guard, page requests and stale
-replies), channel switch (startup-channel memory interplay via the phase-5
-controller, Start Over interplay), adjacent category, zap keys (DPAD up/down,
-number entry), VOD/episode navigation, borrowed `iptvBrowseHandler` posts
+From zero, **through the real IPTV bootstrap and its installed callbacks**
+(not only reflection), so the phase-11 re-points inside retained
+`setupIptvOverlay` are verified: series/episode/live row selection,
+scroll-prefetch guards, submit-only search, numeric-dialog submission. Guide
+open/close, browse requests and token supersession (UI context token, browse
+token), search, zap paging (window install/merge, paging totals, pending
+inputs, in-flight guard, page requests) with the **asymmetric stale-reply
+contract** for all three reply kinds (success/error/notImplemented), each
+varied independently by request token, UI token and ownership: an old
+request preserves a newer in-flight flag; a matching request with stale
+context or lost ownership **clears** the in-flight flag first and then
+suppresses callbacks, queue clearing and Toasts; channel-jump replies check
+only the request token (pinned separately); inline and queued main-looper
+replies; assertion-failing mutations of cleanup ordering and each guard.
+Channel switch (startup-channel memory interplay via the phase-5 controller,
+Start Over interplay), adjacent category, the real key matrix (CHANNEL_UP/
+CHANNEL_DOWN and DPAD left/right zap; UP short press opens the guide, long
+press the jump dialog; repeat/action handling; controls-visible/focus and
+live/VOD gates), number entry, VOD/episode navigation, borrowed `iptvBrowseHandler` posts
 (trim, 60 s archive retry), `onDestroy` statements. Fake Flutter channel with
 paired inline/queued replies. Mutation proofs on the original; Claude's
 independent sample; 0b.
@@ -2495,3 +2513,7 @@ episode next/previous, startup channel restore, Start Over after a switch.
   callback timing and lifecycle order preserved; Maven index refresh touched
   derived metadata only. Activity 13,320 → 12,717. Decoder verification
   remains pending-environment. Phase 10 complete; merged.
+- 2026-10-08 — phase 11 design round 1 (Codex): **No P1s**; P2s folded
+  (receiver-lambda exclusion audit; production bootstrap/callback-routed
+  step 0 and the corrected key matrix; asymmetric stale-reply cleanup
+  contract with independently varied guards). Phase 11 design approved.
