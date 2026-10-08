@@ -1297,15 +1297,30 @@ slots, readiness getters, Host `var` increment, missed
 `host.startupGateController.` qualification, snapshotting `pikPakRetryId`);
 per-phase dispatcher keeping all historical suites; compiled audit (incl.
 `TextView(this)` constructor and inherited `findViewById`); earlier
-destinations frozen at the phase-9 merge.
+destinations frozen at the phase-9 merge. **Auditor extension:** the PSI
+collector also records the 18 `runOnUiThread` calls and the 10
+`isFinishing`/`isDestroyed` property reads (mapped to their JVM getters);
+all 32 inventoried inherited-receiver sites carry before/after
+owner–descriptor–opcode pins, with omission and wrong-dispatch negatives;
+historical suites retained.
 
 ### Step 0 — characterization of the original
 
 Heavy (episode fetch and fetch-more have no characterization today):
 episode fetch (request, adjacent fetch, token supersession, in-flight guard,
-pill messages, payload merge), fetch-more (request, result adoption, empty /
+pill messages, payload merge) and fetch-more with **paired inline and queued
+reply cases** (the phase-8 bounded `workerReply` seam): token, continuation or
+payload are changed before the main queue drains, pinning deferred lock
+clearing, stale rejection inside the UI block, the live payload/index reads of
+the adjacent fallback, the unguarded `notImplemented`, and fetch-more's
+deferred finishing guard — with assertion-failing timing mutations; fetch-more (request, result adoption, empty /
 error / notImplemented, recovery handoff to the gate, candidate counts),
-PikPak retry (backoff schedule, metadata wait polling, exhaustion routing,
+PikPak retry under a **virtual clock**: `waitForPikPakMetadata` uses
+`System.currentTimeMillis()`, which PAUSED looper mode does not redirect, so
+the clock instrumentation covers both the original activity and the future
+controller (incl. its nested `Runnable`); pinned boundaries: cumulative
+monitoring timeouts at 10/22/36/54/80/108 s and auto-advance at 109.5 s
+(backoff schedule, metadata wait polling, exhaustion routing,
 `onPause` cancel, retry id supersession, reactivation indicator), status
 pill (lazy creation, show/transient/hide timing on the borrowed handler).
 Mutation proofs on the original; Claude's independent sample; 0b.
@@ -2309,3 +2324,7 @@ episode fetch from the player, status pill messages.
   characterized, live retry/player reads; the 1 GB heap override was
   evidence-only (committed build config unchanged). Activity 13,937 → 13320.
   Decoder verification remains pending-environment. Phase 9 complete; merged.
+- 2026-10-08 — phase 10 design round 1 (Codex): **No P1s**; P2s folded
+  (auditor extension for 18 `runOnUiThread` + 10 lifecycle getters; PikPak
+  virtual-clock instrumentation with 10/22/36/54/80/108 s + 109.5 s pins;
+  paired inline/queued reply timing cases). Phase 10 design approved.
