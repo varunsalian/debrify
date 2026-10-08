@@ -6598,3 +6598,41 @@ JVM run/comparison metadata, raw mutation runs and rejected attempts stay under 
 No production moves, protected-input changes, bug fixes, push, branch switch or device/emulator
 interaction. All 28 earlier destinations remain unchanged. STOP before Step 1; Claude's separate
 sample/review and any Step 0b follow later.
+
+
+## Phase 5 step 0b — controlled programme-time boundaries
+
+Six new original-surface cases pin start/stop at now − 1 ms, exactly now and now + 1 ms.
+Robolectric instrumentation of the original activity and future controller routes their
+System.currentTimeMillis calls through the paused clock; the test explicitly sets/verifies
+that clock. No real-time waits or production seam. At exact start the request is accepted;
+at exact stop it is past replay. An airing request stays airing when its reply arrives after
+the stop time, pinning request-time capture.
+
+The complete moved-code sweep finds two programme comparisons in requestIptvCatchup
+(startMs > now and now < stopMs), both covered on either side and at equality. The other
+moved time comparison is progress logging's inclusive 60-second elapsed boundary, already
+pinned and assertion-killed by step-0 g13; recovery updatedAtMs reads have no time comparison.
+No channel-start method has a now/startMs/stopMs comparison. Earlier IptvEntryRules stays frozen.
+
+| Proof | Named test | Original mutation | Failing assertion |
+|---|---|---|---|
+| b01 | `TvIptvCatchupClockBoundaryTest::futureStartOneMillisecondAheadDoesNotRequestOrMutateLoadingAndToken` | `programme.startMs > now` → `programme.startMs > now + 1` | java.lang.AssertionError: future programme is rejected expected:<0> but was:<1> |
+| b02 | `TvIptvCatchupClockBoundaryTest::exactStartIsRequestedAsAiringWithLoadingAndOriginalStartPayload` | `programme.startMs > now` → `programme.startMs >= now` | java.lang.AssertionError: programme starting exactly now is requested expected:<1> but was:<0> |
+| b03 | `TvIptvCatchupClockBoundaryTest::startOneMillisecondAgoIsStillRequestedAsAiring` | `programme.startMs > now` → `programme.startMs >= now - 1` | java.lang.AssertionError: past start remains eligible expected:<1> but was:<0> |
+| b04 | `TvIptvCatchupClockBoundaryTest::exactStopIsPastReplayWithoutStartOverLoadingOrLiveFlags` | `now < programme.stopMs` → `now <= programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<false> but was:<true> |
+| b05 | `TvIptvCatchupClockBoundaryTest::stopOneMillisecondAheadIsAiringEvenWhenReplyArrivesAfterStop` | `now < programme.stopMs` → `now + 1 < programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<true> but was:<false> |
+| b06 | `TvIptvCatchupClockBoundaryTest::stopOneMillisecondAgoIsPastReplay` | `now < programme.stopMs` → `now - 2 < programme.stopMs` | java.lang.AssertionError: stop boundary selects start-over versus replay expected:<false> but was:<true> |
+
+All six mutations fail named assertions on detached 1a33c42cb plus phase-5 test files.
+Claude's exact g14 before/after strings were rerun against all 50 phase-5 tests: control
+50/50 passes; g14 is killed by exactStartIsRequestedAsAiringWithLoadingAndOriginalStartPayload
+(expected one request, got zero), with no compile error/crash accepted. Raw logs/XML/patches
+and definitions: p5/step0b/mutations/ and p5/step0b/claude-survivors/.
+
+Clean p5-step0b: 589 identities (588 pass, same existing focus failure). All 583 p5-step0
+statuses are identical; six passing additions. Identity helper comparison passes, stable
+fingerprints and complete XML. Baselines live in junit/; original positive logs/XML, clock
+fixture, test hashes and restored original compiled bytecode in p5/step0b/. An initial copy
+command used the wrong working directory and exited before tests; it is excluded from evidence
+counts. Production/protected inputs/manifest unchanged; original worktree removed before moves.

@@ -1471,3 +1471,14 @@ Start Over / catch-up on an archive-enabled channel.
   `e1859e450` retain 97/97 checker tests, zero-diff original comparison and
   seven identical compiled overload descriptors. **STOP before production
   moves**; Claude's separate sample/review and any Step 0b follow later.
+
+- 2026-10-08 — **Phase 5 step 0b complete before moves.** Six controlled-clock
+  cases pin both programme start/stop comparisons at equality and ±1 ms, including
+  request-time airing captured across a delayed reply. All six original-code
+  mutations fail named assertions; Claude exact g14 rerun against all 50 phase-5
+  tests is killed (control 50/50). The moved 60-second elapsed logging comparison
+  retains step-0 coverage/proof; no other moved time comparison exists. Clean
+  p5-step0b: 589 identities (588 pass, same focus failure), all 583 p5-step0
+  statuses identical with six passing additions. Table/raw XML/logs/clock source
+  and original bytecode under p5/step0b/ and junit/p5-step0b/. Production, manifest
+  and protected inputs unchanged; detached original removed before Step 1.
