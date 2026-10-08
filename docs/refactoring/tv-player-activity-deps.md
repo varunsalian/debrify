@@ -11769,7 +11769,7 @@ re-points cover 24 declarations, plus the original two whole-property Host
 rows with eight/four token re-points. The 40 earlier destinations are frozen
 at the phase-10 merge.
 
-**Receiver-design clarification required before completing step T.** The
+**Receiver-design finding (resolved in `6deb8cf7e`).** The originally
 approved phase-11 Step T describes three receiver-lambda `this` expressions.
 The original has two: `restoreIptvZapBootstrapFallback` line 9971
 (`entry.apply { this.index = index }`) and `switchToIptvChannel` line 10539
@@ -11797,3 +11797,15 @@ lint issue archive is `p11/lint-original/`: 1,352 issues, 253 errors, 1,099
 warnings, including 175 unsafe opt-in issues. Step-0 characterization and
 mutation proofs have not started while the receiver-design question is
 pending; no `p11-step0` baseline or mutation table is claimed.
+
+
+Phase-11 receiver alignment after `6deb8cf7e`: exactly two entry-owned
+receiver-lambda exclusions remain in the manifest. Its additional constructor
+fixture pins original `showIptvChannelJumpDialog` line 10001 and substitutes
+`EditText(this)` → `EditText(activity)` in a compiled extraction stand-in,
+proving the identical Context constructor descriptor and `invokespecial`
+opcode. A changed constructor and an omitted audit fail; a forged constructor
+receiver-lambda exclusion fails. This supplies the constructor proof without
+expanding the 92-member phase-11 production scope: the real dialog remains
+Activity-owned. The production extraction still has 13 receiver sites (seven
+Toasts, six inherited calls); the compiled constructor fixture adds one.

@@ -2551,3 +2551,14 @@ episode next/previous, startup channel restore, Start Over after a switch.
   (source + bytecode evidence in the deps report). Plan corrected (Claude
   approved): two exclusions; the `EditText(this)` site is substituted and
   constructor-audited. Step 0 resumes.
+
+- 2026-10-08 — phase 11 step T completed after Claude approved the receiver
+  finding (`6deb8cf7e`). Manifest retains exactly two entry-owned `this.index`
+  exclusions. A linked compiled constructor fixture substitutes Activity
+  `this` with injected `activity`, preserving `EditText(Context)` and
+  `invokespecial`; omitted/misclassified exclusions, omitted constructor audit
+  and changed constructor are rejected. It supplements the 13 production
+  receiver pins without moving the retained numeric dialog. Historical 222
+  cases and the prior 38 extraction cases remain passing; six new constructor
+  provenance/audit cases pass (266 unique checker cases). The 47 initializer
+  proofs and 40 frozen destinations are unchanged. No production moves.

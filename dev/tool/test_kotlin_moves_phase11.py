@@ -190,3 +190,15 @@ class Phase11MovesTest(unittest.TestCase):
         current[pager] = current[pager].replace('guide.iptvZapRequestToken', 'host.iptvZapRequestToken')
         self.verify(current, 'pinned destination:')
         self.verify(current, 'token mismatch:')
+
+    def test_constructor_fixture_pins_original_activity_site(self):
+        proof, = self.manifest['constructor_audit_fixtures']
+        node = next(n for n in k.walk(k.parse({'original': self.original})['original']['declarations'])
+                    if n['id'] == proof['original'])
+        self.assertEqual('val input = EditText(this).apply {', proof['context'])
+        self.assertEqual(proof['context'], self.original.splitlines()[proof['line'] - 1].strip())
+        self.assertIn('EditText(this)', self.original[node['start']:node['end']])
+        self.assertEqual('EditText(activity)', proof['after'])
+        self.assertEqual('(Landroid/content/Context;)V', proof['expected']['descriptor'])
+        self.assertEqual('invokespecial', proof['expected']['opcode'])
+        self.assertTrue((k.ROOT / proof['fixture']).is_file())

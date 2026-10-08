@@ -236,6 +236,8 @@ def run(manifest_path=k.MANIFEST):
         import test_kotlin_moves_phase11
         test_kotlin_moves_phase11.MANIFEST = manifest
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase11.Phase11MovesTest))
+        from test_kotlin_overloads_phase11 import Phase11OverloadsTest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase11OverloadsTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 

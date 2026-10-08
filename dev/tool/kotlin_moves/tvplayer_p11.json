@@ -7198,5 +7198,22 @@
       "android/app/src/main/kotlin/com/debrify/app/tv/UnifiedMenuRows.kt"
     ],
     "whitelist": []
-  }
+  },
+  "constructor_audit_fixtures": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showIptvChannelJumpDialog()",
+      "line": 10001,
+      "context": "val input = EditText(this).apply {",
+      "before": "EditText(this)",
+      "after": "EditText(activity)",
+      "fixture": "dev/tool/fixtures/kotlin_overloads/phase11.kt",
+      "test": "Phase11OverloadsTest.test_compiled_two_entry_receivers_and_activity_constructor",
+      "expected": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "reason": "Activity constructor argument outside apply; audit this-to-activity overload without expanding phase-11 production scope (the dialog remains in the Activity)."
+    }
+  ]
 }
