@@ -11053,3 +11053,697 @@ Lint investigation: first current report used a stale generated Maven index (las
 Release `JAVA_HOME=Android Studio JBR flutter build apk --release --no-pub` succeeds. R8 mapping plus independent DEX definitions confirm all 16 moved/generated classes and 223 members preserve identity (137 explicit mappings, 86 implicit identities), including the Kotlin facade, three Hosts and their activity anonymous objects; three negative controls pass. ProGuard and pubspec.lock hashes unchanged. Decoder verification remains **pending-environment**: same phase-1 missing nine decoders/three filters per ABI, identical script output to phase 9 and identical native-library hashes to phase 1/9. No install or device action.
 
 Affected Dart source-text tests: 45 exact baseline identities. Full Flutter `suite_evidence.py` comparison against phase-9 gate: 12,855 identities across 1,232 suites, exact statuses (12,794 success, 13 failure, 28 error, 20 skipped), no new failure/error/skip/missing identity and unchanged clean tested tree. Dart formatting unchanged; analyzer has the same 1,758 diagnostics. Raw logs, XML/JSONL, compiled audit, mapping/DEX inventory, lint metadata and gate summary under `p10/gate/`. Existing failures and decoder environment limitation are carried, not accepted as new regressions. No bug fixes, push, branch switch or independent-review substitute.
+
+---
+
+## Phase 11 inventory (IPTV core + phase-12 preview; at `8a4d40d1c`; re-measure on `00c60870e`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`8a4d40d1c` (phase-9 merge, **13,320 lines**, class header 136). This is a read-only survey of the main
+checkout: no build, no worktree, nothing under `../debrify-wt/`. Phase 10 (status pill, PikPak retry,
+source fetch; in progress elsewhere) is treated as three controllers. **None of its moved members references
+any member listed here, and no member listed here references them**. The scan found 0 references in
+either direction. Its only shared declarations are `playbackListener` and `onDestroy`, which both phases
+patch independently. The `onDestroy` statements are adjacent (phase 10: `cancelPikPakRetry()` /
+`pikPakRetryHandler` right after this unit's block).
+
+All phase 3–10 collaborator rules apply:
+- `AppCompatActivity` injection plus the compiled audit (constructors, aliases, Runnable/receiver
+  exclusions, implicit inherited receivers with owner/descriptor/opcode pins);
+- computed, explicitly qualified Host forwarders and no delegators;
+- slot-anchored controller properties, with an inert proof for **every** moved property after the
+  controller's first slot;
+- readiness getters only via the activity;
+- braced host templates;
+- cross-feature reads via the owning controller;
+- nested destination construction (phase 6/8 precedent) and sibling controllers;
+- teardown order unchanged, ≤ 800 lines/file.
+
+**Method.** The phase-10 indexer (`scratchpad/p11/idx.py`, brace/string/comment-aware) found 703 depth-1
+members at `8a4d40d1c`. The rest of the tooling is in `scratchpad/p11/`:
+- `refs.py`: word-boundary reference scan per name (templates included, `this@Activity.` hits included,
+  other-receiver hits excluded);
+- `own.py`: map of the 13 existing controller properties with their Host spans;
+- `plan.py`, `full.py`: per-phase partition, with patches, re-points, cross-file references and outbound
+  lists;
+- `unit.py`: receiver/inherited audit.
+
+Every list below was checked by hand against the source.
+
+The unit sizes reproduce the phase-5 Appendix 1 figures exactly, so the IPTV code has not changed since
+`eee52b084`: B9 2,067, B4 178, B5 157, B8 112. The 6 guide-header views (`iptvGuideCurrentName` …
+`iptvGuideNowLetter`, 969–974) add 6 lines. **Total 2,520 lines.**
+
+Terms:
+- "Patch": one token edit in a retained activity declaration.
+- "Temporary patch": a patch inside a declaration that a *later* phase moves. It becomes a moved-body
+  substitution then.
+- "Re-point": one edited forwarder in an existing controller property's Host object, i.e. a whole-property
+  `patched` row (phase 5/8/9 precedent).
+- "Substitution": one declared edit inside a moved body.
+
+---
+
+### 1. Summary and recommendation
+
+**The user's sketch does not fit the budget.** The sketch is "phase 11 = core unit (+ `initIptvMode`) as a
+multi-file set, phase 12 = EPG + VOD". The core unit is B9 = 2,067 lines, so phase 11 would be 72 % over
+the ~1,200 budget. B9 must therefore be cut, without splitting the 6 shared fields.
+
+The cut that respects that constraint has three parts:
+- The **protocol core** goes first, with *all* 46 B9 fields in one owner. That owner is the single owner of
+  `iptvUiContextToken`, `iptvBrowseToken`, `iptvZapRequestToken`, `iptvZapOwnsUiContext`,
+  `iptvZapRequestInFlight` and `iptvZapPendingInputs`. Every writer of those 6 fields is in the owner's
+  destination set, except `onDestroy`, which keeps 5 in-place patches, and `initIptvMode` (1 write), which
+  stays retained.
+- **Guide view-building code** (overlay builder, style, pickers, favourites/list membership, channel-jump
+  dialog) goes second, together with EPG. This code reads and writes core state but owns none of the shared
+  fields.
+- **`initIptvMode` stays a retained, patched bootstrap.** It calls `bindViews`/`setupPlayer`/`setupSeekbar`/
+  `setupControls`/`setupIptvControls`/`setupBackPressHandler`/`setupMetadataReceiver` and binds view fields
+  for four owners. It is composition-root work.
+
+| option | phase 11 | phase 12 | P11 patches (temporary) | P12 patches | re-points (P11 / P12) | P11 Host | P11 proofs | verdict |
+|---|---|---|---|---|---|---|---|---|
+| **R (recommended)**: core + VOD first | **1,250** (3 files) | **1,154** (3 files) | **134 in 24 decls (67 in 12 later-moving decls)** | 26 in 4 decls | 11 forwarders (12 token edits) in 2 props / 5 forwarders in 3 props | 23 members | 47 (2 new classifier forms) | fits budget; narrow Hosts; risk concentrated in P11 |
+| R′: core without VOD | 1,138 | 1,266 | 123 (67) | 37 | 6 (in 2 props) / 10 (in 3 props) | 25 (+3 VOD forwarders) | 45 | P12 over budget; re-points the start-over Host twice |
+| Reversed: overlay/pickers/EPG first | 1,154 | 1,250 | 32 (6) | 67 | 3 / 12 + **≈ 32 new temporary forwarders** | P11 Hosts ≈ 32 core forwarders + 13 | 20 | overlay writes core `iptvChannelAdapter`/`iptvSelectedCategory` through Host setters for a phase; wide Hosts (the phase-5 narrow-Host objection) |
+| B (user sketch): full B9 + `initIptvMode` | 2,067 (5 files) | 453 (2 files) | 38 (6) | 13 | 4 forwarders (8 tokens) in 2 props / ≈ 25 forwarders | ≈ 60 (incl. 7 lifecycle setups, 15 EPG/header view setters) | 47 | fewest total edits, but 2,067 lines; documented exception only |
+
+**Recommendation: option R.**
+
+- **Phase 11, "IPTV guide protocol core"**: 1,250 moved lines, 92 members.
+  - `TvIptvGuideController` (owner; all 48 fields + 14 guide/browse/search functions, ≈ 430 lines).
+  - It eagerly constructs two fieldless nested collaborators: `TvIptvZapPager` (13 members, ≈ 525) and
+    `TvIptvChannelNavigator` (zap keys, adjacent category, channel switch and VOD/episode navigation;
+    17 members, ≈ 420).
+  - One activity property at slot `iptvSeriesAudioKey` (838), and one 23-member Host shared by all three
+    classes.
+- **Phase 12, "IPTV guide chrome"**: 1,154 lines.
+  - `TvIptvGuideChromeController` (owner; EPG pane + now/next header + 21 view/EPG fields, ≈ 400).
+  - It eagerly constructs fieldless `TvIptvGuideOverlayBuilder` (overlay setup, style, source picker,
+    channel-jump dialog, ≈ 475) and `TvIptvGuidePickers` (category/list pickers, favourites, row removal,
+    ≈ 415).
+  - One activity property at slot `iptvGuideCurrentName` (969), and one 13-member Host.
+
+Phase 12 runs entirely on existing checker features (all 20 proofs are supported forms). Phase 11 needs two
+narrow classifier forms (§2.3).
+
+Why core-first beats the old phase-6 ordering (overlay+EPG first):
+- **Hosts stay narrow.** The overlay builder reaches ≈ 28 core names and the pickers 11. Moving them first
+  would mean ≈ 32 temporary forwarders into activity-retained core state, all re-pointed one phase later. It
+  would also mean writing two core fields (`iptvChannelAdapter` from `setupIptvOverlay`,
+  `iptvSelectedCategory` from the category picker) through Host setters.
+- **Phase 12 then reaches all core state through one Host getter**, `host.iptvGuideController.` (phase-9
+  `host.sourceSwitchController.` precedent).
+- **The cost is the 67 temporary patches in phase 11.** They are mechanical `iptvGuideController[.pager|
+  .navigator].` prefixes in 12 declarations that phase 12 moves, and they become 67 `host.iptvGuideController.`
+  substitutions there.
+
+---
+
+### 2. Phase 11: IPTV guide protocol core (`TvIptvGuideController` + `TvIptvZapPager` + `TvIptvChannelNavigator`)
+
+#### 2.1 Members (lines at `8a4d40d1c`, attached comments included)
+
+**Owner `TvIptvGuideController.kt`: 62 members, 356 lines.**
+
+Fields (48, in original order):
+- `iptvSeriesAudioKey` 838–843 (with its 5-line comment) and `iptvPreferredAudioLang` 844;
+- `iptvGuideOverlay` 961, `iptvGuideList` 962, `iptvGuideSearch` 963, `iptvGuideTitle` 964,
+  `iptvGuideCountText` 965, `iptvSourceButton` 966, `iptvCategoryButton` 967, `iptvBrowseLoading` 968;
+- `iptvChannelAdapter` 975, `iptvGuideVisible` 976, `iptvBrowseChannels` 977;
+- `iptvLists` 980–982 (comment), `iptvCategories` 983;
+- `iptvSourceName` 985, `iptvContentType` 986, `iptvSelectedCategory` 987, `iptvBrowseToken` 988;
+- `iptvZapPageSize` 1019, `iptvZapPagingActive` 1020, `iptvZapCategory` 1021, `iptvZapSourceId` 1022,
+  `iptvZapSourceName` 1023, `iptvZapContentType` 1024, `iptvZapCategories` 1025, `iptvZapCategoryTotal` 1026;
+- `iptvZapRequestToken` 1027, `iptvZapRequestInFlight` 1028, `iptvZapPendingInputs` 1029,
+  `iptvZapDrainingInputs` 1030, `iptvGuideUsesZapWindow` 1031, `iptvUiContextToken` 1032,
+  `iptvZapOwnsUiContext` 1033;
+- `iptvAllCategorySearchActive` 1034–1037 (comment), `iptvSearchSavedCategory` 1038,
+  `iptvSearchSavedChannels` 1039, `iptvSearchSavedCategories` 1040, `iptvSearchSavedUsesZapWindow` 1041,
+  `iptvSearchSavedZapOwnsUiContext` 1042;
+- `iptvZapMaxHiddenWindow` 1043, `iptvZapCachedOriginCategory` 1044, `iptvZapCachedDirection` 1045,
+  `iptvZapCachedChannels` 1046, `iptvZapCachedOffset` 1047, `iptvZapCachedTotal` 1048,
+  `iptvZapCachedCategory` 1049, `iptvZapCachedCategories` 1050.
+
+Functions (14, 298 lines):
+- `showIptvGuide` 8997–9021, `hideIptvGuide` 9023–9037;
+- `beginIptvAllCategorySearch` 9039–9062, `restoreIptvCategoryAfterSearch` 9064–9101,
+  `commitIptvAllCategorySearch` 9103–9106, `clearIptvAllCategorySearchState` 9108–9115;
+- `focusCurrentIptvGuideRow` 9117–9126, `toggleIptvGuide` 9128–9130;
+- `refreshIptvBrowserChrome` 9132–9150, `updateIptvCatalogControlVisibility` 9152–9164,
+  `iptvGuideItemCountLabel` 9166–9176;
+- `selectIptvContentType` 9178–9189, `selectIptvSource` 9191–9211;
+- `requestIptvBrowse` 9575–9669.
+
+**Nested `TvIptvZapPager.kt`: 13 functions, 499 lines.**
+- `beginIptvCategoryZapSession` 10040–10105, `bootstrapInitialIptvZapPaging` 10107–10148,
+  `restoreIptvZapBootstrapFallback` 10150–10177;
+- `requestIptvChannelJump` 10233–10338, `requestIptvZapPage` 10340–10449;
+- `installIptvZapWindow` 10451–10497, `mergeIptvZapPage` 10499–10531, `boundedHiddenIptvZapWindow`
+  10533–10541, `trimHiddenIptvZapWindow` 10543–10551;
+- `prefetchIptvZapPage` 10553–10576, `queuePendingIptvZapInput` 10578–10582,
+  `drainPendingIptvZapInputs` 10584–10596, `disableIptvZapPaging` 10610–10616.
+
+**Nested `TvIptvChannelNavigator.kt`: 17 functions, 395 lines.**
+- Category boundary cache: `clearIptvZapBoundaryCache` 10598–10608, `adjacentIptvCategory` 10618–10628,
+  `prefetchAdjacentIptvCategory` 10630–10669, `consumeCachedAdjacentIptvCategory` 10671–10701.
+- Switching and zap keys: `switchToIptvChannel` 10703–10768, `isLiveIptvZapContext` 10770–10778,
+  `activateIptvZapUiContext` 10780–10797, `zapIptvChannel` 10799–10837, `requestAdjacentIptvCategory`
+  10839–10903.
+- VOD/episode navigation and series audio: `checkpointCurrentIptvPosition` 11050–11068, `playIptvChannel`
+  11070–11088, `isIptvEpisodeMode` 11092–11099, `nextIptvEpisode` 11101–11104, `prevIptvEpisode`
+  11106–11109, `updateIptvEpisodeControls` 11111–11136, `setIptvPreferredAudioLang` 11138–11150,
+  `onIptvSeriesAudioPicked` 11152–11163.
+
+Members stay in original relative order within each class. Pager and navigator members interleave in the
+source (e.g. `clearIptvZapBoundaryCache` sits between `drainPendingIptvZapInputs` and
+`disableIptvZapPaging`).
+
+**Retained, with reasons.** These stay in the activity:
+- the B9 bootstrap `initIptvMode` 8223–8338 (patched, §2.4);
+- `iptvSources` 978 and `iptvSourceId` 984: read by the phase-3 recording Host and the zap-banner Host;
+  written by `initIptvMode`;
+- `iptvChannels`/`currentIptvIndex` (106/67 readers incl. the loader-thread `IptvLiveLoadErrorPolicy`
+  supplier, playback core, progress);
+- `iptvBrowseHandler` 1018 (borrowed);
+- the six guide-header views 969–974 (phase 12 owner).
+
+No `@Volatile`, `lateinit`, `by lazy`, `::isInitialized` or companion constant is among the moved members.
+
+#### 2.2 File split and cross-qualification
+
+| file | moved | structure (est.) | total (est.) |
+|---|---|---|---|
+| `TvIptvGuideController.kt` (activity property) | 356 | imports ≈ 20, header/ctor 5, `Host` (23 members, 1 line each) ≈ 26, 2 eager nested constructions | ≈ 410–430 |
+| `TvIptvZapPager.kt` `(activity, host, guide)` | 499 | ≈ 25 | ≈ 525 |
+| `TvIptvChannelNavigator.kt` `(activity, host, guide)` | 395 | ≈ 25 | ≈ 420 |
+
+Shape (phase-8 eager fieldless applier precedent, ×2):
+
+```kotlin
+internal val pager = TvIptvZapPager(activity, host, this)
+internal val navigator = TvIptvChannelNavigator(activity, host, this)
+```
+
+Both nested classes are fieldless, so there is no nested-construction proof. State lives only in the owner,
+so nested code reaches all shared state through the owner.
+
+Cross-file references, each a declared substitution with occurrence count; a missed qualification fails to
+compile because no Host member shares a name with an owner/pager/navigator member:
+
+| source → target | refs | distinct names | form |
+|---|---|---|---|
+| pager → owner | 126 | 27 | `guide.x` |
+| navigator → owner (incl. 2 VOD-field reads/writes) | 70 | 32 | `guide.x` |
+| navigator → pager | 20 | 5: `requestIptvZapPage`, `installIptvZapWindow`, `prefetchIptvZapPage`, `queuePendingIptvZapInput`, `drainPendingIptvZapInputs` | `guide.pager.x` |
+| pager → navigator | 10 | 6: `clearIptvZapBoundaryCache`, `prefetchAdjacentIptvCategory`, `switchToIptvChannel`, `zapIptvChannel`, `checkpointCurrentIptvPosition`, `updateIptvEpisodeControls` | `guide.navigator.x` |
+| owner → pager | 2 | `bootstrapInitialIptvZapPaging`, `trimHiddenIptvZapWindow` | `pager.x` |
+| **total** | **228** | | |
+
+The recursion guard survives across files. The flow is `drainPendingIptvZapInputs` (pager) →
+`guide.navigator.zapIptvChannel` → `guide.pager.queuePendingIptvZapInput`, still guarded by
+`guide.iptvZapDrainingInputs`. The guard fields stay in one owner.
+
+**Visibility changes** (declared):
+- owner: 56 of 62 members `private` → `internal`. Six stay private: the 4 `iptvSearchSaved*` fields other
+  than `iptvSearchSavedChannels`, `clearIptvAllCategorySearchState` and
+  `updateIptvCatalogControlVisibility`.
+- pager: 10 of 13 non-private. `installIptvZapWindow` becomes **`public`**, because it is reflected and
+  must have an unmangled name. `mergeIptvZapPage`, `boundedHiddenIptvZapWindow` and
+  `restoreIptvZapBootstrapFallback` stay private; `mergeIptvZapPage` is reflected but stays private, which
+  is allowed.
+- navigator: 12 of 17 non-private.
+
+Total: 78.
+
+#### 2.3 Owned state and initializer proofs
+
+The slot is the first removed field, `iptvSeriesAudioKey` (838). The activity property `iptvGuideController`
+goes there:
+- after `iptvStartOverController` (798–836, whose Host is re-pointed to it);
+- before `currentIptvHttpHeaders` 846, the twin-trial block, `iptvChannelStartController` 989,
+  `iptvBrowseHandler` 1018, `startupGateController` 1078 and `iptvZapBannerController` 10904.
+
+**All 47 later fields run earlier and each needs an exact inert proof** (checker forms per
+`kotlin_move_partition.initializer_kind`):
+
+| form | count | fields |
+|---|---|---|
+| constant `null`/`false`/`0`/int | 34 | every view ref, flag, token, `iptvZapPageSize` 200, `iptvZapMaxHiddenWindow` 600, … (`iptvPreferredAudioLang` included) |
+| typed empty factory (supported) | 8 | `iptvBrowseChannels`, `iptvLists`, `iptvCategories`, `iptvZapCategories`, `iptvSearchSavedChannels`, `iptvSearchSavedCategories`, `iptvZapCachedChannels` (`mutableListOf<T>()`), `iptvZapCachedCategories` (`emptyList<String>()`) |
+| **plain string literal, NOT supported** | 4 | `iptvSourceName = "IPTV"`, `iptvContentType = "live"`, `iptvZapSourceName = "IPTV"`, `iptvZapContentType = "live"` |
+| **`java.util.ArrayDeque<Int>()`, NOT supported** | 1 | `iptvZapPendingInputs` |
+
+**Step-T classifier extension, narrowly constrained.**
+- A quoted literal with no `$`, no escapes and no newline → `constant`.
+- Exactly `java.util.ArrayDeque<T>()` with explicit type arguments and no arguments → `allocation`.
+- Negatives: `"$x"`, `"\n"`, `ArrayDeque(list)`, `ArrayDeque<Int>(n)`, an untyped `ArrayDeque()`.
+
+Construction-order facts:
+- No retained initializer between 838 and 1050 reads any moved field.
+- Earlier-constructed controllers whose Hosts will forward into the owner are `iptvStartOverController`
+  (798) and the existing Hosts. Their forwarders are computed and never read at construction. Add the
+  existing "Host read during construction" fixture case for a forwarder into a later-slot controller.
+- Nested `pager`/`navigator` construction is eager and fieldless. It is pinned structurally, with
+  construction position inside the owner pinned.
+
+#### 2.4 Every inbound reference (lines at `8a4d40d1c`)
+
+**Activity patches: 134 in 24 declarations.**
+
+Target forms:
+- 109 `iptvGuideController.`;
+- 19 `iptvGuideController.navigator.`;
+- 6 `iptvGuideController.pager.`.
+
+*Permanent: 67 in 12 declarations (11 retained beyond phase 12, plus `initIptvMode`).*
+
+| declaration | n | references |
+|---|---|---|
+| `playbackListener@1514` | 2 | 1748 `nextIptvEpisode()?.let { switchToIptvChannel(it) }` (navigator ×2) |
+| `setupControls@4245` | 4 | 4489 `nextIptvEpisode`, 4490 `switchToIptvChannel`, 4500 `prevIptvEpisode` + `switchToIptvChannel` (navigator) |
+| `dispatchKeyEvent@6823` | 13 | 6871 `iptvZapPagingActive`, 6876 `zapIptvChannel`, 6882 `iptvGuideVisible`, 6888 `iptvGuideList`, 6890 `hideIptvGuide`, 6898 `iptvChannelAdapter`, 6899 `iptvGuideList`, 6923 `iptvGuideSearch`, 7111 `showIptvGuide`, 7145/7166 `isLiveIptvZapContext`, 7147/7168 `zapIptvChannel` |
+| `isFocusInIptvChannelList@7197` | 1 | 7198 `iptvGuideList` |
+| `isCleanPlaybackState@8207` | 1 | 8209 `iptvGuideVisible` |
+| `initIptvMode@8223` | 33 | writes 8232 `iptvSourceName`, 8233 `iptvContentType`, 8236 `iptvSelectedCategory`, 8239 `iptvLists`, 8240 `iptvCategories`, 8244–8248 `iptvZapSourceId`/`SourceName`/`ContentType`/`Category`/`Categories`, **8249 `iptvZapOwnsUiContext = true`**, 8256 `iptvBrowseChannels`, 8268 `iptvSeriesAudioKey`, 8269 `iptvPreferredAudioLang`, 8295–8302 eight guide view binds; reads 8245/8246/8247/8248/8254 (×5), 8281 `iptvPreferredAudioLang`; calls 8281 `setIptvPreferredAudioLang`, 8284 `updateIptvEpisodeControls`, 8335 `playIptvChannel` (navigator), 8328 `toggleIptvGuide` (inside a click lambda), 8336 `bootstrapInitialIptvZapPaging` (pager) |
+| `setupIptvControls@8340` (B7, moves with controls) | 2 | 8365/8372 `zapIptvChannel` |
+| `updateIptvControlPresentation@8490` (B7) | 2 | 8527 `iptvGuideVisible` + `hideIptvGuide` |
+| `umAudioModel@11485` | 1 | 11510 `onIptvSeriesAudioPicked` |
+| `showAudioTrackDialog@11781` | 1 | 11818 `onIptvSeriesAudioPicked` |
+| `setupBackPressHandler@12855` | 2 | 12868 `iptvGuideVisible`, 12869 `hideIptvGuide` |
+| `onDestroy@12963` | 5 | 13024 `iptvUiContextToken++`, 13025 `iptvBrowseToken++`, 13026 `iptvZapRequestToken++`, 13027 `iptvZapRequestInFlight = false`, 13028 `iptvZapPendingInputs.clear()` |
+
+*Temporary: 67 in 12 declarations that phase 12 moves.*
+
+| declaration | n | references |
+|---|---|---|
+| `setupIptvOverlay@8625` | 41 | 8626 `iptvGuideList`; 8638 **`iptvChannelAdapter =` (the only writer)**; 8639 `iptvBrowseChannels`; 8642/8786/8801 `requestIptvBrowse`; 8648 `iptvContentType`; 8649/8654 `commitIptvAllCategorySearch`; 8650/8655/8818 `hideIptvGuide`; 8651 `disableIptvZapPaging`ᴾ; 8652 `switchToIptvChannel`ᴺ; 8656 `beginIptvCategoryZapSession`ᴾ; 8666 `iptvLists`; 8686/8696 `iptvChannelAdapter`; 8689 `iptvZapPagingActive`, 8690 `iptvGuideUsesZapWindow`, **8691 `iptvZapRequestInFlight` (read)**; 8698/8699 `prefetchIptvZapPage`ᴾ; 8754/8820 `iptvSourceButton`; 8761/8772/8779/8788/8800/8806 `iptvGuideSearch`; 8765 `iptvGuideCountText`; 8766 `iptvGuideItemCountLabel`; 8773/8805 `beginIptvAllCategorySearch`; 8797 `restoreIptvCategoryAfterSearch`; 8798 `focusCurrentIptvGuideRow`; 8810 `selectIptvSource`; 8821 `iptvCategoryButton`; 8823 `selectIptvContentType`; 8844 `refreshIptvBrowserChrome` |
+| `applyGuideStyle@8856` | 1 | 8968 `iptvGuideSearch` |
+| `showIptvSourcePicker@9213` | 1 | 9220 `selectIptvSource` |
+| `showIptvCategoryPicker@9225` | 7 | 9227 `iptvCategories`, 9305 `iptvSelectedCategory`, 9311 `commitIptvAllCategorySearch`, **9312 `iptvSelectedCategory =`**, 9313 `iptvGuideSearch`, 9314 `refreshIptvBrowserChrome`, 9315 `requestIptvBrowse` |
+| `showIptvListPicker@9419` | 2 | 9467 `iptvLists`, 9478 `iptvChannelAdapter` |
+| `removeIptvGuideRow@9562` | 5 | 9567/9570 `iptvBrowseChannels`, 9568 `iptvSearchSavedChannels`, 9570 `iptvChannelAdapter`, 9571 `refreshIptvBrowserChrome` |
+| `toggleIptvFavorite@9671` | 3 | 9673 `iptvAllCategorySearchActive`, 9674 `iptvSearchSavedChannels`, 9682 `iptvChannelAdapter` |
+| `ensureIptvChannelEpg@9712` | 1 | 9771 `iptvChannelAdapter` |
+| `focusedIptvGuideEntry@9803` | 2 | 9804 `iptvGuideList`, 9809 `iptvChannelAdapter` |
+| `showIptvSchedulePane@9816` | 1 | 9840 `iptvGuideVisible` |
+| `hideIptvEpgPane@9956` | 1 | 9962 `iptvGuideVisible` |
+| `showIptvChannelJumpDialog@10179` | 2 | 10182 `iptvZapSourceId`, 10211 `requestIptvChannelJump`ᴾ |
+
+(ᴾ = `.pager.`, ᴺ = `.navigator.`)
+
+**Existing-controller Host forwarders to re-point: 11 forwarders / 12 token edits in 2 whole-property
+`patched` rows.** Each new target is `this@AndroidTvTorrentPlayerActivity.iptvGuideController[.navigator].x`.
+
+- `iptvStartOverController` (phase 5, 798–836): 7 forwarders / 8 token edits.
+  - 802 `checkpointCurrentIptvPosition()` → `.navigator.`;
+  - 803 `commitIptvAllCategorySearch()`;
+  - 807 `hideIptvGuide()`;
+  - 812 `iptvGuideVisible`;
+  - 813–815 `iptvSeriesAudioKey` get + set (2 tokens);
+  - 831 `switchToIptvChannel(entry, adoptVisibleBrowseList, checkpointOutgoing)` → `.navigator.`. Keep the
+    explicit 3-argument forwarder; a negative must reject a hard-coded default.
+  - 834 `updateIptvEpisodeControls()` → `.navigator.`.
+
+  811 `iptvEpgToken` is phase 12.
+- `iptvZapBannerController` (phase 6, 10904–10927): 4 forwarders / 4 tokens.
+  - 10917 `iptvGuideVisible`, 10921 `iptvZapCategoryTotal`, 10922 `iptvZapPagingActive`,
+    10923 `iptvZapSourceId`.
+  - 10911 `ensureIptvChannelEpg` and 10912 `formatEpgTime` are phase 12.
+
+**Not touched.** These reference no phase-11 member, verified by scan: `iptvChannelStartController`
+(989–1017), `iptvRecordingActionsController` (8474–8488, which forwards retained
+`iptvSources`/`iptvSourceId`), `progressReporter`, `startupGateController`, `sourceSwitchController`,
+`stremioTvGuideController`, `subtitleController`, the phase-3 controllers, and the phase-10 controllers.
+
+#### 2.5 Outbound host needs: one shared 23-member Host
+
+All forwarders are computed and explicitly qualified.
+
+| member | kind | users | refs |
+|---|---|---|---|
+| `iptvChannels: MutableList<IptvChannelEntry>` | `var` (5 writes: install, merge, trim, fallback, switch) | owner 3, pager 17, navigator 38 | 58 |
+| `currentIptvIndex: Int` | `var` (5 writes) | 3 / 11 / 12 | 26 |
+| `iptvSourceId: String?` | `var` (5 writes) | 3 / 3 / 1 | 7 |
+| `iptvZapBannerController` | `val` (cross-feature via owner: `showIptvZapBanner`/`hideIptvZapBanner`/`refreshIptvZapBannerPosition`) | 1 / 2 / 3 | 6 |
+| `updateIptvGuideCurrentName()` | fun (**temporary; re-pointed in P12**) | 2 / 1 / 1 | 4 |
+| `hideIptvEpgPane()` | fun (**temporary; re-pointed in P12**) | owner | 2 |
+| `iptvPrevButton`, `iptvNextButton: AppCompatButton?` | `val` | navigator | 4 + 4 |
+| `isIptvMode` | `val` | navigator | 3 |
+| `resetSubtitleState()` | fun | navigator | 2 |
+| `iptvChannelStartController` | `val` (`beginIptvPlaybackAfterWatchRegistration`, `beginIptvPlayback`) | navigator | 2 |
+| `titleView: TextView` | `val` (lateinit; computed getter keeps access-time semantics) | navigator | 2 |
+| `player: ExoPlayer?` | `val` (read live) | navigator | 2 |
+| `iptvBrowseHandler: Handler` | `val` (**borrowed**, declared at 1018 after the slot; never read at construction) | owner | 1 |
+| `iptvSources: List<IptvSourceEntry>` | `val` | owner | 1 |
+| `iptvStartOverController` | `val` (`iptvCatchupToken++` in switch) | navigator | 1 |
+| `iptvStartOverActive`, `iptvStartOverLoading`, `iptvStartOverTimelineVisible` | `var` (written by switch) | navigator | 1 each |
+| `sourceSwitchController` | `val` (`dropStaleSourceSwitchFeedback`) | navigator | 1 |
+| `controlsMenuVisible` | `val` | navigator | 1 |
+| `updateIptvControlPresentation(entry)` | fun | navigator | 1 |
+| `trackSelector: DefaultTrackSelector?` | `val` | navigator | 1 |
+
+Host substitutions: owner 16, pager 34, navigator 82 = **132**. Two navigator hits are the shadowing local
+`currentIndex`, which is not substituted. No `dp`, no `guideTokens`, no Glide, no `progressHandler` in
+phase 11.
+
+#### 2.6 Receivers, inherited members, overload audit
+
+**`this` → `activity`: 7 sites, all `Toast.makeText(Context, …)`.**
+- 10236 (bare);
+- `this@AndroidTvTorrentPlayerActivity` inside `MethodChannel.Result` objects: 9653 (`requestIptvBrowse`),
+  10257, 10272, 10319, 10330 (`requestIptvChannelJump`), 10432 (`requestIptvZapPage`).
+
+**Receiver `this`, never substituted (reviewed list):**
+- 10161 `entry.apply { this.index = index }` (pager, `restoreIptvZapBootstrapFallback`);
+- 10729 `item.apply { this.index = index }` (navigator, `switchToIptvChannel`);
+- 10732 `entry.apply { index = 0 }` (implicit entry receiver).
+
+**Implicit inherited receivers → `activity.`: 6 `findViewById`** at 9144 (`refreshIptvBrowserChrome`) and
+9155, 9156, 9157, 9161, 9162 (`updateIptvCatalogControlVisibility`). Pin the expected owner, descriptor and
+opcode (phase-9 auditor).
+
+There are no `runOnUiThread`, `isFinishing`/`isDestroyed`, `resources`, `currentFocus` or `finish()` sites in
+phase 11.
+
+#### 2.7 Timers, handlers, async, teardown
+
+- **Handlers.**
+  - `iptvBrowseHandler.post { trimHiddenIptvZapWindow() }` (`hideIptvGuide` 9031, becomes
+    `host.iptvBrowseHandler.post { pager.trimHiddenIptvZapWindow() }`) uses a borrowed handler, cleared only
+    wholesale at `onDestroy` 13022 (unchanged).
+  - There are no `progressHandler` uses and no `Runnable` objects.
+  - View-queue posts are never cancelled (pinned as-is): `iptvGuideList?.post`/`postDelayed(…, 150)`
+    (`showIptvGuide`), `focusCurrentIptvGuideRow` ×2, `requestIptvBrowse` ×2.
+- **Flutter (`MainActivity.getAndroidTvPlayerChannel()`, method names unchanged).**
+  - `requestIptvBrowse` ×3: browse in owner, channel jump and zap page in pager. Replies are guarded by
+    `iptvBrowseToken`/`iptvUiContextToken`/`iptvZapRequestToken` + `iptvZapOwnsUiContext`.
+  - `saveIptvSeriesAudio` (fire-and-forget, navigator).
+  - Lambda labels `return@requestIptvZapPage` (10091, 10129, 10134, 10655, 10658, 10854, 10885) survive
+    the qualified calls `guide.pager.requestIptvZapPage { … }`, because the implicit label is the function
+    name. Characterize and compile-prove them.
+- **Teardown.** `onDestroy` 13024–13028 become five in-place single-reference patches
+  (`iptvGuideController.x`). Their position is unchanged:
+  - after `iptvBrowseHandler.removeCallbacksAndMessages(null)` 13022 and `iptvEpgToken++` 13023 (phase 12);
+  - before phase 10's `cancelPikPakRetry()`.
+
+  Never fold them into a controller call. There are no `onStart`/`onStop`/`onPause`/`finish` references.
+
+#### 2.8 The six shared fields after phase 11 (current writer/reader sets equal Appendix 2)
+
+| field | owner | writers (destination) | readers (destination) |
+|---|---|---|---|
+| `iptvUiContextToken` | `TvIptvGuideController` | begin/restore search, `requestIptvBrowse` (owner); `beginIptvCategoryZapSession` (pager); `activateIptvZapUiContext` (nav); `onDestroy` (patch) | `requestIptvBrowse` ×3; `requestIptvZapPage` ×4 |
+| `iptvBrowseToken` | owner | same 5 + `onDestroy` | `requestIptvBrowse` ×3 |
+| `iptvZapRequestToken` | owner | 3 owner + `beginIptvCategoryZapSession`, `requestIptvChannelJump`, `requestIptvZapPage`, `disableIptvZapPaging` (pager), `activateIptvZapUiContext` (nav), `onDestroy` | `requestIptvChannelJump` ×3, `requestIptvZapPage` ×6 |
+| `iptvZapOwnsUiContext` | owner | `initIptvMode` (retained patch, `= true`), 3 owner, `beginIptvCategoryZapSession`, `requestIptvChannelJump` (pager), `activateIptvZapUiContext` | owner ×4, `bootstrapInitialIptvZapPaging`, `requestIptvZapPage` ×3, `activateIptvZapUiContext` |
+| `iptvZapRequestInFlight` | owner | 3 owner, `beginIptvCategoryZapSession`, `requestIptvChannelJump` ×4, `requestIptvZapPage` ×4, `disableIptvZapPaging`, `activateIptvZapUiContext`, `onDestroy` | `setupIptvOverlay` (temp patch → P12 `host.iptvGuideController.`), `requestIptvZapPage`, `prefetchIptvZapPage`, `drainPendingIptvZapInputs` (pager); `prefetchAdjacentIptvCategory`, `requestAdjacentIptvCategory` (nav) |
+| `iptvZapPendingInputs` (`val`) | owner | `.clear()`: 3 owner, `beginIptvCategoryZapSession`, `requestIptvZapPage` ×3, `disableIptvZapPaging`, `requestAdjacentIptvCategory`, `onDestroy` | `queuePendingIptvZapInput` ×2, `drainPendingIptvZapInputs` ×2 |
+
+Ownership is single. Every non-owner access goes through `guide.` (nested) or `iptvGuideController.`
+(activity).
+
+#### 2.9 Reflective tests and Dart anchors
+
+**Kotlin: 31 sites, all through the shared `TvPlayerOriginalAccess` helper.** These need **7
+`controllerOwners` entries**; assertions stay byte-identical.
+
+| name | route | sites |
+|---|---|---|
+| `iptvGuideVisible` | `iptvGuideController` | `TvIptvStartOverCharacterizationTest` ×8, `TvPhase6OriginalTest` ×1, `TvZapBannerTimingCharacterizationTest` ×1 |
+| `iptvZapPagingActive` | `iptvGuideController` | `TvZapBannerIdentityCharacterizationTest` ×3, `TvZapBannerPagingCharacterizationTest` ×5 |
+| `iptvZapCategoryTotal` | `iptvGuideController` | identity ×3, paging ×4 |
+| `iptvZapSourceId` | `iptvGuideController` | identity ×2, paging ×1 |
+| `iptvSeriesAudioKey` | `iptvGuideController` | start-over ×1 |
+| `installIptvZapWindow` | `iptvGuideController.pager` | identity ×1 (typed `callTyped`; **must be public** in the internal class) |
+| `mergeIptvZapPage` | `iptvGuideController.pager` | identity ×1 (stays private) |
+
+The dotted-path routing exists (`iptvZapBannerController.styled`). Rescan owner routes after step 0 adds
+accesses.
+
+**Dart: no source-text anchor.** `test/iptv_category_picker_test.dart` mentions
+`beginIptvAllCategorySearch` only in comments. Other Dart hits (`iptvLists`, `iptvCategories`, …) are
+Dart-side keys.
+
+#### 2.10 Hazards (each a step-T fixture/negative)
+
+- **Shadowed locals.**
+  - `val window` in `mergeIptvZapPage` (10523–10528, 5 uses; shadows `Activity.window`): must not become
+    `activity.window`.
+  - `val currentIndex` in `adjacentIptvCategory` (10622/10626; shadows the activity's `currentIndex`): must
+    not become `host.`.
+  - Parameter `title` in `refreshIptvBrowserChrome`/`requestIptvBrowse` (shadows `Activity.title`).
+- **Receiver `this`:** `this.index` ×2 and implicit `index` (§2.6).
+- **Default arguments.**
+  - `requestIptvBrowse(action, query = iptvGuideSearch?.text?.toString()?.trim().orEmpty(), …)` reads owner
+    state in the default, so it is evaluated in the callee at call time. Retained/temporary callers pass no
+    `query` (8642, 8786, 8801, 9315 use defaults). Do not route the call through a Host.
+  - Constant defaults on `switchToIptvChannel` (3 one-argument callers + the start-over Host explicit
+    3-argument forwarder), `prefetchIptvZapPage(force)`, `requestIptvZapPage(anchor, fromEnd, onFailure)`,
+    `refreshIptvBrowserChrome(title)`, `prefetch/requestAdjacentIptvCategory(attempt)`.
+- **Two-level qualification:** `guide.pager.`/`guide.navigator.` in nested code, and
+  `iptvGuideController.pager.`/`.navigator.` in activity patches and Host forwarders. Negatives: a missed
+  hop, or a swapped pager/navigator target.
+- **Overloads:** none among the 92 moved names. No Glide. 7 `Toast` sites (§2.6).
+- **Templates:** no string template anywhere in the activity references a unit field, so there are 0 braced
+  edits. Keep the negative.
+- **Runnable self references:** none. Lambdas posted to the borrowed handler are not objects.
+- **Order hazards.**
+  - The owner is constructed at 838, before `iptvChannelStartController` (989) and the borrowed
+    `iptvBrowseHandler` (1018).
+  - The start-over controller (798) is constructed *before* the owner, but its re-pointed forwarders are
+    computed.
+  - Fixture: a construction-time read of a re-pointed forwarder must fail.
+- **Smart-cast stability:** Host `val`s are interface getters (unstable). The moved code uses no smart cast
+  on host vals (all used Host vals are non-null types or `?.`-chained). Confirmed by inspection; compile
+  proves it.
+
+#### 2.11 Counts and risk
+
+| item | count |
+|---|---|
+| moved lines / members | 1,250 / 92 (48 fields, 44 functions) |
+| new files (est.) | 3 (≈ 430 / 525 / 420) |
+| activity patches | 134 in 24 decls (67 permanent in 12 + 67 temporary in 12) |
+| re-points | 11 forwarders / 12 token edits in 2 `patched` properties |
+| added activity declarations | 1 property + Host object (≈ 40 lines) |
+| substitutions | ≈ 373: 132 host + 228 cross-file + 7 receivers + 6 inherited |
+| visibility changes | 78 (1 public) |
+| initializer proofs | 47 (2 new classifier forms) |
+| reflective retargets | 31 sites / 7 owner-map entries; Dart 0 |
+| lifecycle patches | 5 (`onDestroy`, in place) |
+| activity after | ≈ 13,320 − phase 10 − 1,250 + ≈ 40 |
+
+**Risk: high.**
+- It is the token protocol with async `MethodChannel` replies.
+- There is **zero existing characterization** of browse, search, zap paging, channel jump, adjacent-category
+  prefetch or switch (`grep` finds none). Step 0 is built from scratch, like phase 6.
+- The cross-file qualification count is the largest so far.
+- Mitigations:
+  - all qualification errors are compile errors (disjoint names);
+  - the six shared fields keep exactly one owner;
+  - teardown order is unchanged;
+  - no `finish()`/override dispatch;
+  - no Glide.
+
+**Step 0 (original, recording messenger with main-looper replies, PAUSED looper):**
+- browse request/reply incl. stale `iptvBrowseToken`/`iptvUiContextToken` replies and the
+  `iptvZapOwnsUiContext` hand-off;
+- all-category search begin/restore/commit/clear, incl. saved zap window/ownership;
+- category zap session + initial bootstrap + fallback;
+- channel-jump dialog → found / not-found / error / notImplemented / null bridge, with in-flight +
+  token supersession;
+- `requestIptvZapPage` paging (offset, anchor, `fromEnd`, `onFailure`), window install/merge/hidden-window
+  bound 600/trim (incl. trim posted on guide hide);
+- prefetch thresholds; pending CH± input queue + drain + recursion guard;
+- adjacent-category prefetch cache and consume;
+- `zapIptvChannel` wrap/paging/live gating; `isLiveIptvZapContext`;
+- `switchToIptvChannel`:
+  - adopt-browse vs copy, `this.index` rewrite;
+  - start-over flags and catch-up token bump;
+  - checkpoint before index move;
+  - switcher feedback drop;
+  - watch-registration call order;
+  - banner show (live) / hide (VOD);
+  - series-audio key; header + episode controls;
+- episode navigation: next/prev/mode/button state; checkpoint fraction 0.02–0.95;
+- preferred audio language → `DefaultTrackSelector` parameters; `saveIptvSeriesAudio` payload;
+- `onDestroy` bumps making late replies inert.
+
+Mutation proofs; Claude sample; 0b.
+
+---
+
+### 3. Phase 12: IPTV guide chrome (`TvIptvGuideChromeController` + `TvIptvGuideOverlayBuilder` + `TvIptvGuidePickers`)
+
+#### 3.1 Members (lines at `8a4d40d1c`)
+
+**Owner `TvIptvGuideChromeController.kt`: 341 lines.**
+- Fields (21):
+  - header views `iptvGuideCurrentName` 969, `iptvGuideCurrentGroup` 970, `iptvGuideCurrentEpg` 971,
+    `iptvGuideNowPlaying` 972, `iptvGuideNowLogo` 973, `iptvGuideNowLetter` 974;
+  - EPG pane `iptvEpgPanel` 1052–1053 (comment), `iptvEpgLogo` 1054 … `iptvEpgList` 1061, `iptvEpgAdapter`
+    1062, `iptvEpgPrograms` 1063, `iptvEpgDayOffset` 1064, `iptvEpgToken` 1065, `iptvEpgVisible` 1066,
+    `iptvEpgEntry` 1067.
+- Functions (10):
+  - `ensureIptvChannelEpg` 9711–9785, `updateIptvGuideEpgHeader` 9787–9800, `focusedIptvGuideEntry`
+    9802–9810, `formatEpgTime` 9812–9813;
+  - `showIptvSchedulePane` 9815–9865, `paintIptvEpgLogo` 9867–9906, `selectIptvEpgDay` 9908–9954,
+    `hideIptvEpgPane` 9956–9969, `isFocusInIptvEpgPanel` 9971–9980, `updateIptvGuideCurrentName`
+    9982–10038.
+
+**Nested `TvIptvGuideOverlayBuilder.kt` (fieldless): 434 lines.**
+- `setupIptvOverlay` 8625–8849, `applyGuideStyle` 8851–8995, `showIptvSourcePicker` 9213–9223,
+  `showIptvChannelJumpDialog` 10179–10231.
+
+**Nested `TvIptvGuidePickers.kt` (fieldless): 379 lines.**
+- `showIptvCategoryPicker` 9225–9409, `showIptvListPicker` 9412–9554, `removeIptvGuideRow` 9556–9572,
+  `toggleIptvFavorite` 9671–9704.
+
+The slot is the first removed field, `iptvGuideCurrentName` (969). After phase 11 it sits between
+`currentIptvStreamUrl` and `iptvSources`.
+
+**20 proofs, all supported forms:** 19 `null`/`0`/`false` and 1 `emptyList()` (`iptvEpgPrograms`). No
+classifier work.
+
+The EPG fields at 1052–1067 run earlier, past `iptvChannelStartController` (989) and `iptvBrowseHandler`
+(1018). They are inert.
+
+#### 3.2 Inbound
+
+**Activity patches: 26 in 4 declarations.**
+- `setupControls` 4426: `showIptvChannelJumpDialog` → `.overlay.`
+- `dispatchKeyEvent`, 8 sites:
+  - 6886 `iptvEpgVisible`, 6887/6897 `hideIptvEpgPane`, 6895 `isFocusInIptvEpgPanel`, 6896 `iptvEpgEntry`,
+    6914 `focusedIptvGuideEntry`, 6915 `showIptvSchedulePane`;
+  - 7106 `showIptvChannelJumpDialog` → `.overlay.`
+- `initIptvMode`, 16 sites: 8303–8317, i.e. 6 header + 9 EPG view binds; and 8319 `setupIptvOverlay()` →
+  `iptvGuideChromeController.overlay.setupIptvOverlay()`.
+- `onDestroy` 13023 `iptvEpgToken++`, in place.
+
+**Re-points: 5 forwarders in 3 properties.**
+- `iptvStartOverController` 811 `iptvEpgToken`.
+- `iptvZapBannerController` 10911 `ensureIptvChannelEpg` and 10912 `formatEpgTime`.
+- The phase-11 `iptvGuideController` property Host: `hideIptvEpgPane()` and `updateIptvGuideCurrentName()`.
+  This is the phase-11 *added* span; it becomes a phase-12 `patched` row, the phase-5 sleep-forwarder
+  precedent. The phase-11 destination files stay byte-identical.
+
+**Moved-body substitutions inherited from phase 11:** 67 `iptvGuideController.` → `host.iptvGuideController.`
+(overlay 41+1+1+2, pickers 7+2+5+3, owner 1+2+1+1).
+
+**Cross-file:**
+- overlay → owner: 14 refs / 6 names (`ensureIptvChannelEpg`, `iptvEpgAdapter` **write** at 8706,
+  `iptvEpgEntry`, `iptvEpgList`, `selectIptvEpgDay` ×6, `updateIptvGuideCurrentName`) as `chrome.x`.
+- overlay → pickers: 3 refs (`showIptvCategoryPicker`, `showIptvListPicker`, `toggleIptvFavorite`) as
+  `chrome.pickers.x`.
+
+**Reflective:** `iptvEpgToken`, `TvIptvStartOverCharacterizationTest` ×4, routed by 1 owner-map entry
+(`iptvGuideChromeController`). **Dart: none.**
+
+#### 3.3 Outbound: one 13-member Host
+
+`dp` (53 refs), `guideTypeface` (10), `guideTokens` (11), `guideStyle` (5), `iptvSources` (5),
+`iptvSourceId` (1), `iptvChannels` (5), `currentIptvIndex` (5), `iptvStartOverController` (2: replay
+callback, EPG catch-up), `iptvRecordingActionsController` (1: record callback), `iptvZapBannerController`
+(2), `iptvBrowseHandler` (1, borrowed: 60 s archive-metadata retry), `iptvGuideController` (cross-feature
+getter, 67+ uses).
+
+All `dp` calls inside View/`GradientDrawable` `.apply {}` blocks resolve to the activity (no View `dp`
+member), so `host.dp` is correct.
+
+#### 3.4 Receivers, inherited members, overload audit (24 + 53 sites)
+
+**`this` → `activity`: 24 sites.**
+- overlay: `LinearLayoutManager` 8628, 8705; `Toast` 8662, 8811, 10185; `ContextCompat.getColorStateList`
+  8745; `AlertDialog.Builder` 9217, 10198; `EditText` 10191.
+- pickers: `LinearLayout` 9232, 9429; `EditText` 9237; `TextView` 9264, 9434; `RecyclerView` 9269, 9440;
+  `AlertDialog.Builder(ctx, theme)` 9387, 9509; `Toast` 9700; `this@` `LinearLayoutManager` 9272, 9442.
+- owner: `DateFormat.getTimeFormat` 9813; **`Glide.with(this)` 9878, 10006 (must keep the
+  `FragmentActivity` overload)**.
+
+**Excluded receiver:** 9258 `TextViewCompat.setCompoundDrawableTintList(this, …)` inside
+`EditText(this).apply { … }`. That `this` is the EditText, so do not substitute it.
+
+**Implicit inherited, 53 sites:**
+- `findViewById` ×46 (overlay 40: 8744–8994; owner 6: 9934–9939);
+- `resources` ×2 (9230, 9427);
+- `isFinishing`/`isDestroyed` ×2 each: 9745 inside the 60 s `postDelayed` lambda, and 9839 inside the
+  `requestIptvEpg` callback;
+- `currentFocus` 9972.
+
+**Shadowing:** `title` lambda parameter (`applyGuideStyle` 8939) and local (`showIptvSchedulePane` 9847).
+
+#### 3.5 Timers and teardown
+
+- `ensureIptvChannelEpg`'s 60 s archive retry uses the borrowed `iptvBrowseHandler` and is cleared only
+  wholesale (13022).
+- `requestIptvEpg`'s private 45 s watchdog is an existing follow-up and stays as-is.
+- The schedule reply is guarded by `iptvEpgToken`; `onDestroy` bumps it in place.
+- View posts (`iptvEpgList.post`, `categoryList.post` ×2, `listView.post`) are never cancelled; pinned
+  as-is.
+- Flutter: `setIptvChannelInList`, `getIptvChannelListMembership` (pickers), `setIptvFavorite`
+  (fire-and-forget).
+
+#### 3.6 Counts and risk
+
+| item | count |
+|---|---|
+| moved lines / members | 1,154 / 39 (21 fields, 18 functions) |
+| files (est.) | ≈ 400 / 475 / 415 |
+| activity patches | 26 in 4 decls |
+| re-points | 5 forwarders in 3 properties |
+| proofs | 20 (supported forms) |
+| substitutions | ≈ 330: ≈ 101 host + 67 `host.iptvGuideController.` + 17 cross + 24 receivers + 53 inherited + visibility |
+| reflective retargets | 4 sites / 1 entry; Dart 0 |
+| lifecycle | 1 (`onDestroy`) |
+
+**Risk: medium.** View builders with a large compiled audit (77 sites incl. 2 Glide), an excluded receiver
+`this`, and no existing wiring characterization. Phase 1 covered only the adapters.
+
+**Step 0:**
+- overlay construction per guide style (4 styles, separate activity instances, phase-6 lesson);
+- adapter callbacks: select / long-press series sentinel / favourite / list / replay / record;
+- search field focus/IME/Back;
+- source/category/list pickers incl. membership load-before-toggle and favourites;
+- channel-jump dialog gating (favourites/list source toast);
+- EPG pane: show/hide/day buttons/stale token/null-reply/destroy;
+- now/next header: Glide owner, letter fallback;
+- 60 s archive retry.
+
+---
+
+### 4. `initIptvMode` decision
+
+Keep it **retained**: 116 lines, patched 33 times in P11 and 16 times in P12.
+
+Moving it would need a Host with 7 lifecycle-setup forwarders (`bindViews`, `setupPlayer`, `setupSeekbar`,
+`setupControls`, `setupIptvControls`, `setupBackPressHandler`, `setupMetadataReceiver`), plus
+`StremioSubtitleService(this)` (8292) and the `seekFeedbackManager`/`stremioSubtitleService`/
+`iptvDecoderMode`/`isIptvMode` writes. It also has an unbraced `$currentIptvIndex` template at 8264 that
+would need bracing if moved. It is bootstrap/composition-root code.
+
+Recorded in the activity's end-state exception, next to `bindViews`/`parsePayload`. Revisit when the
+playback-start phase moves `onCreate`'s helpers.
+
+---
+
+### 5. Ordering note and the rest of IPTV
+
+- Phase 11 (core + VOD) → phase 12 (chrome).
+- B7 live dock styling (`setupIptvControls`, `updateIptvControlPresentation` …) stays for the controls
+  phase. Its 4 patches in P11 are permanent until then.
+- The tune pipeline, twin trial and live recovery stay for the playback core.
+- **Re-measure on the phase-10 merge.** Fields 838–1067 lie before phase 10's field removals, so their slots
+  are stable. Functions after ≈ 6449 shift by phase 10's removals.
+
+### 6. Follow-ups found while mapping (not fixed)
+
+- Guide/picker/EPG view-queue posts (`post`/`postDelayed(150)`) are never cancelled.
+- The 60 s EPG archive retry is cleared only wholesale.
+- `saveIptvSeriesAudio`, `setIptvFavorite` and `setIptvChannelInList` are unguarded fire-and-forget calls.
+- (Existing) `requestIptvEpg`'s 45 s watchdog is not cancelled in `onDestroy`.
+- The only writer of `iptvChannelAdapter` (`setupIptvOverlay`) runs inside `initIptvMode`. Any phase that
+  moves `initIptvMode` must keep that order.

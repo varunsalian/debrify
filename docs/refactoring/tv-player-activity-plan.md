@@ -1332,6 +1332,83 @@ PikPak cold-storage source (retry backoff, reactivation indicator,
 exhaustion), "fetch more sources" after all initial sources fail, next/previous
 episode fetch from the player, status pill messages.
 
+## Phase 11 — IPTV core (guide + browse + zap paging + channel switch + VOD navigation)
+
+Branch `refactor/tvplayer-p11` off the phase-10 merge `00c60870e` (activity 12,717 lines). Evidence under
+`refactor-evidence/tvplayer/p11/`. Inventory: "Phase 11 inventory" in the
+deps report (measured at `8a4d40d1c`; field slots 838–1067 stay, functions
+after ≈ 6449 shift — re-measure on the phase-10 merge). All collaborator rules
+from phases 3–10 apply. **Highest-risk phase**: the async token protocol, and
+browse/zap/switch have no characterization today.
+
+**IPTV split (unchanged rule):** the six shared token/context fields
+(`iptvUiContextToken`, `iptvBrowseToken`, `iptvZapRequestToken`,
+`iptvZapOwnsUiContext`, `iptvZapRequestInFlight`, `iptvZapPendingInputs`)
+are written by guide and zap code, so ownership is not split: one owner holds
+every core field.
+
+**Selected (≈ 1,250 lines):**
+- `TvIptvGuideController` (≈ 430 lines) owns **all 48 core fields** (incl. the
+  six shared fields) plus 14 guide/browse/search functions; activity property
+  at the `iptvSeriesAudioKey` slot; one 23-member Host.
+- It eagerly constructs two **fieldless** collaborators that reach shared
+  state only through the owner: `TvIptvZapPager` (13 members, ≈ 525) and
+  `TvIptvChannelNavigator` (zap keys, adjacent category, channel switch, VOD
+  navigation; 17 members, ≈ 420). Every cross-file qualification (≈ 228) is
+  compile-checked (a miss does not compile).
+- 47 inert initializer proofs; the classifier gains two narrow forms: string
+  literals and `java.util.ArrayDeque<Int>()` (typed, no arguments).
+- 134 activity patches in 24 declarations, of which 67 (12 declarations) are
+  temporary prefixes inside overlay/picker/EPG code that phase 12 moves; 5
+  in-place `onDestroy` patches; Host re-points: Start Over controller (7
+  forwarders, 8 token edits) and zap-banner controller (4).
+- `initIptvMode` **stays** in the activity as patched bootstrap code (moving
+  it needs 7 lifecycle-setup forwarders and writes across four owners); its
+  116 lines join the documented end-state exception.
+- Timers: only the borrowed `iptvBrowseHandler` (guide-hide trim post, 60 s
+  EPG archive retry); no `progressHandler`; teardown order unchanged.
+
+**Hazards.** Shadowed locals (`window`, `currentIndex`, `title`), `this.index`
+×2, a receiver `this` inside `EditText.apply` (not substituted), the
+`requestIptvBrowse` default argument reading state (call-time evaluation),
+labels `return@requestIptvZapPage` ×7, 6 inherited-receiver audit sites.
+
+**Retargets.** 31 reflective sites via 7 owner-map entries;
+`installIptvZapWindow` becomes a public member. No Dart anchors.
+
+**Phase 12 (next):** `TvIptvGuideChromeController` (EPG pane + now/next
+header, 21 fields) with fieldless overlay-builder and picker collaborators,
+≈ 1,154 lines, medium risk (53 inherited-receiver sites, 2 `Glide.with`).
+
+### Step T
+
+Classifier extension (string literal, typed empty `ArrayDeque`) with
+negatives (non-literal string, non-empty constructor); phase-11 extraction
+fixture (owner + two fieldless collaborators, owner-only shared state,
+cross-qualification) + negatives (a collaborator field, a collaborator
+reading Host directly for shared state, missed qualification, label
+rewrite); per-phase dispatcher keeping all historical suites; compiled audit;
+earlier destinations frozen at the phase-10 merge.
+
+### Step 0 — characterization of the original
+
+From zero: guide open/close, browse requests and token supersession (UI
+context token, browse token), search, zap paging (window install/merge,
+paging totals, pending inputs, in-flight guard, page requests and stale
+replies), channel switch (startup-channel memory interplay via the phase-5
+controller, Start Over interplay), adjacent category, zap keys (DPAD up/down,
+number entry), VOD/episode navigation, borrowed `iptvBrowseHandler` posts
+(trim, 60 s archive retry), `onDestroy` statements. Fake Flutter channel with
+paired inline/queued replies. Mutation proofs on the original; Claude's
+independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–10 additions. Device checklist (end of series): IPTV
+guide (open/close, browse categories, search), zapping up/down and by number
+across category pages, channel switch while the guide is open/closed, VOD
+episode next/previous, startup channel restore, Start Over after a switch.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
