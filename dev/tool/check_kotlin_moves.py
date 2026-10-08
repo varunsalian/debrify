@@ -210,6 +210,28 @@ def check(manifest, original, current):
     if manifest['phase'] >= 4:
         from kotlin_move_partition import check_initializer_timing
         check_initializer_timing(manifest, inventory, original, errors)
+    if manifest['phase'] >= 11:
+        from check_kotlin_overloads import receiver_inventory
+        moved = {r['original']: r for r in rows if r['fate'] == 'moved'}
+        try:
+            receiver_inventory(manifest, original, base, inventory, moved)
+            for name, row in moved.items():
+                node = inventory[name]
+                before = [s for s in base['all_this_sites']
+                          if node['start'] <= s['start'] < node['end'] and 'lambda_receiver' in s]
+                if not before:
+                    continue
+                if row['destination'] not in parsed:
+                    continue  # The exhaustive source-set check reports this below.
+                destination = parsed[row['destination']]
+                target = next(n for n in walk(destination['declarations']) if n['id'] == row['target'])
+                after = [s for s in destination['all_this_sites']
+                         if target['start'] <= s['start'] < target['end'] and 'lambda_receiver' in s]
+                keys = ('text', 'lambda_callee', 'lambda_receiver')
+                if [[s[key] for key in keys] for s in before] != [[s[key] for key in keys] for s in after]:
+                    errors.append('receiver-lambda expression substituted or binding changed: ' + name)
+        except (ValueError, StopIteration) as error:
+            errors.append(str(error))
 
     source = manifest['source']
     if set(current) != {source, *manifest['destinations']}:

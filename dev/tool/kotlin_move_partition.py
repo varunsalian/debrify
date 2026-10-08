@@ -140,6 +140,12 @@ def initializer_kind(expression):
         return 'constant'
     if expression == 'Any()':
         return 'allocation'
+    # Phase 11: only a quoted constant (no interpolation or escapes), and an
+    # explicitly typed empty Java deque. Constructor arguments remain excluded.
+    if re.fullmatch(r'"[^"\\$\r\n]*"', expression):
+        return 'constant'
+    if re.fullmatch(r'java\.util\.ArrayDeque<[A-Za-z_][A-Za-z0-9_<>,.? \t]*>\(\)', expression):
+        return 'allocation'
     # A Kotlin quoted literal without interpolation, escapes or call arguments.
     # parseColor is deterministic for the reviewed literal; no state is read.
     color = re.fullmatch(r'Color\.parseColor\("([^"\\$\n]*)"\)', expression)

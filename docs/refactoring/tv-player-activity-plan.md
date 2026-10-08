@@ -1332,6 +1332,105 @@ PikPak cold-storage source (retry backoff, reactivation indicator,
 exhaustion), "fetch more sources" after all initial sources fail, next/previous
 episode fetch from the player, status pill messages.
 
+## Phase 11 — IPTV core (guide + browse + zap paging + channel switch + VOD navigation)
+
+Branch `refactor/tvplayer-p11` off the phase-10 merge `00c60870e` (activity 12,717 lines). Evidence under
+`refactor-evidence/tvplayer/p11/`. Inventory: "Phase 11 inventory" in the
+deps report (measured at `8a4d40d1c`; field slots 838–1067 stay, functions
+after ≈ 6449 shift — re-measure on the phase-10 merge). All collaborator rules
+from phases 3–10 apply. **Highest-risk phase**: the async token protocol, and
+browse/zap/switch have no characterization today.
+
+**IPTV split (unchanged rule):** the six shared token/context fields
+(`iptvUiContextToken`, `iptvBrowseToken`, `iptvZapRequestToken`,
+`iptvZapOwnsUiContext`, `iptvZapRequestInFlight`, `iptvZapPendingInputs`)
+are written by guide and zap code, so ownership is not split: one owner holds
+every core field.
+
+**Selected (≈ 1,250 lines):**
+- `TvIptvGuideController` (≈ 430 lines) owns **all 48 core fields** (incl. the
+  six shared fields) plus 14 guide/browse/search functions; activity property
+  at the `iptvSeriesAudioKey` slot; one 23-member Host.
+- It eagerly constructs two **fieldless** collaborators that reach shared
+  state only through the owner: `TvIptvZapPager` (13 members, ≈ 525) and
+  `TvIptvChannelNavigator` (zap keys, adjacent category, channel switch, VOD
+  navigation; 17 members, ≈ 420). Every cross-file qualification (≈ 228) is
+  compile-checked (a miss does not compile).
+- 47 inert initializer proofs; the classifier gains two narrow forms: string
+  literals and `java.util.ArrayDeque<Int>()` (typed, no arguments).
+- 134 activity patches in 24 declarations, of which 67 (12 declarations) are
+  temporary prefixes inside overlay/picker/EPG code that phase 12 moves; 5
+  in-place `onDestroy` patches; Host re-points: Start Over controller (7
+  forwarders, 8 token edits) and zap-banner controller (4).
+- `initIptvMode` **stays** in the activity as patched bootstrap code (moving
+  it needs 7 lifecycle-setup forwarders and writes across four owners); its
+  116 lines join the documented end-state exception.
+- Timers: only the borrowed `iptvBrowseHandler` (guide-hide trim post, 60 s
+  EPG archive retry); no `progressHandler`; teardown order unchanged.
+
+**Hazards.** Shadowed locals (`window`, `currentIndex`, `title`), `this.index`
+×2 (receiver lambdas, not substituted), the activity `this` passed to
+`EditText(this)` (substituted, constructor-audited), the
+`requestIptvBrowse` default argument reading state (call-time evaluation),
+labels `return@requestIptvZapPage` ×7, 6 inherited-receiver audit sites.
+
+**Retargets.** 31 reflective sites via 7 owner-map entries;
+`installIptvZapWindow` becomes a public member. No Dart anchors.
+
+**Phase 12 (next):** `TvIptvGuideChromeController` (EPG pane + now/next
+header, 21 fields) with fieldless overlay-builder and picker collaborators,
+≈ 1,154 lines, medium risk (53 inherited-receiver sites, 2 `Glide.with`).
+
+### Step T
+
+Classifier extension (string literal, typed empty `ArrayDeque`) with
+negatives (non-literal string, non-empty constructor); phase-11 extraction
+fixture (owner + two fieldless collaborators, owner-only shared state,
+cross-qualification) + negatives (a collaborator field, a collaborator
+reading Host directly for shared state, missed qualification, label
+rewrite); **receiver-lambda exclusions:** the PSI collector exhaustively
+inventories reviewed `this` expressions that bind to a receiver lambda
+(exactly the two entry-owned `this.index` sites; the `this` in
+`EditText(this)` is the **activity** passed to the constructor outside the
+lambda — it is substituted to `activity` and covered by the compiled
+constructor-overload audit), pins each
+with its source context, and rejects an omitted or misclassified exclusion or
+any substitution of those expressions; the 7 Toast and 6 inherited-call audit
+sites are retained; per-phase dispatcher keeping all historical suites; compiled audit;
+earlier destinations frozen at the phase-10 merge.
+
+### Step 0 — characterization of the original
+
+From zero, **through the real IPTV bootstrap and its installed callbacks**
+(not only reflection), so the phase-11 re-points inside retained
+`setupIptvOverlay` are verified: series/episode/live row selection,
+scroll-prefetch guards, submit-only search, numeric-dialog submission. Guide
+open/close, browse requests and token supersession (UI context token, browse
+token), search, zap paging (window install/merge, paging totals, pending
+inputs, in-flight guard, page requests) with the **asymmetric stale-reply
+contract** for all three reply kinds (success/error/notImplemented), each
+varied independently by request token, UI token and ownership: an old
+request preserves a newer in-flight flag; a matching request with stale
+context or lost ownership **clears** the in-flight flag first and then
+suppresses callbacks, queue clearing and Toasts; channel-jump replies check
+only the request token (pinned separately); inline and queued main-looper
+replies; assertion-failing mutations of cleanup ordering and each guard.
+Channel switch (startup-channel memory interplay via the phase-5 controller,
+Start Over interplay), adjacent category, the real key matrix (CHANNEL_UP/
+CHANNEL_DOWN and DPAD left/right zap; UP short press opens the guide, long
+press the jump dialog; repeat/action handling; controls-visible/focus and
+live/VOD gates), number entry, VOD/episode navigation, borrowed `iptvBrowseHandler` posts
+(trim, 60 s archive retry), `onDestroy` statements. Fake Flutter channel with
+paired inline/queued replies. Mutation proofs on the original; Claude's
+independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–10 additions. Device checklist (end of series): IPTV
+guide (open/close, browse categories, search), zapping up/down and by number
+across category pages, channel switch while the guide is open/closed, VOD
+episode next/previous, startup channel restore, Start Over after a switch.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
@@ -2418,3 +2517,165 @@ episode fetch from the player, status pill messages.
   callback timing and lifecycle order preserved; Maven index refresh touched
   derived metadata only. Activity 13,320 → 12,717. Decoder verification
   remains pending-environment. Phase 10 complete; merged.
+- 2026-10-08 — phase 11 design round 1 (Codex): **No P1s**; P2s folded
+  (receiver-lambda exclusion audit; production bootstrap/callback-routed
+  step 0 and the corrected key matrix; asymmetric stale-reply cleanup
+  contract with independently varied guards). Phase 11 design approved.
+
+- 2026-10-08 — phase 11 step T tooling prepared on `refactor/tvplayer-p11`.
+  Re-measured clean original `00c60870e`: Activity 12,717 lines, 2,295 PSI
+  declarations; all-retained self-comparison zero differences. Draft manifest:
+  92 moved members, one 48-field owner, eager fieldless pager/navigator,
+  47 initializer proofs, 224 cross-file references (four further name hits
+  are unchanged return labels), 132 Host substitutions, 134 Activity token
+  re-points plus the two eight/four Host-property patches. Extraction fixture
+  compiles (425/524/431 lines); all 13 receiver sites retain pinned JVM
+  dispatch. Historical 222 checker cases pass; final phase-11 38 cases pass,
+  including every omitted initializer proof and receiver misclassification
+  negatives. Initial four draft fixture-harness failures were corrected and
+  rerun; raw logs retained. All 40 earlier destination files remain frozen.
+  **Pending design clarification:** the plan names an `EditText.apply`
+  receiver-lambda `this`, but original line 10001 passes Activity `this` to
+  the constructor outside the lambda. Only the two entry-owned `this.index`
+  expressions are receiver-lambda exclusions. Source/bytecode evidence and
+  the proposed correct distinction are in the deps report and
+  `p11/receiver-design-finding.json`; clarification requested before declaring
+  step T complete and continuing the ordered characterization step.
+  Clean original JVM baseline `baseline-00c60870e`: 904 identities, 903 pass,
+  unchanged source-browser focus failure. Original lint archive: 1,352 issues
+  (253 errors, 1,099 warnings, 175 unsafe opt-ins). No new JVM tests, mutations
+  or `p11-step0` run yet. No production edits, lockfile or ProGuard changes;
+  no push or device interaction. Evidence under `p11/` and `junit/`.
+- 2026-10-08 — step T stopped on a design mismatch (correctly): only two
+  receiver-lambda `this` exclusions exist; `EditText(this)` passes the activity
+  (source + bytecode evidence in the deps report). Plan corrected (Claude
+  approved): two exclusions; the `EditText(this)` site is substituted and
+  constructor-audited. Step 0 resumes.
+
+- 2026-10-08 — phase 11 step T completed after Claude approved the receiver
+  finding (`6deb8cf7e`). Manifest retains exactly two entry-owned `this.index`
+  exclusions. A linked compiled constructor fixture substitutes Activity
+  `this` with injected `activity`, preserving `EditText(Context)` and
+  `invokespecial`; omitted/misclassified exclusions, omitted constructor audit
+  and changed constructor are rejected. It supplements the 13 production
+  receiver pins without moving the retained numeric dialog. Historical 222
+  cases and the prior 38 extraction cases remain passing; six new constructor
+  provenance/audit cases pass (266 unique checker cases). The 47 initializer
+  proofs and 40 frozen destinations are unchanged. No production moves.
+
+- 2026-10-08 — **Phase 11 Step 0 complete** on original `00c60870e`: 134 new
+  characterization tests pass through real live/VOD bootstrap and installed
+  callbacks. Every new test has an original named assertion proof; all 162
+  mutations are killed, including retained caller wiring and asymmetric
+  success/error/notImplemented stale-reply cleanup for inline/queued timing.
+  Real remote-key matrix, paging boundaries, number entry, outgoing checkpoint,
+  startup memory, Start Over, borrowed-handler trim/archive retry and teardown
+  are pinned. Mutation table appended to the deps report; raw evidence `p11/`.
+  Clean `baseline-00c60870e` has 904 identities (903 pass, unchanged focus
+  failure); `p11-step0` has 1,038 (1,037 pass, same failure), no skips:
+  134 passing additions only, stable run fingerprint, matched 1 GiB/JBR 21.0.10.
+  Original lint remains archived: 1,352 issues (253 errors/1,099 warnings,
+  175 unsafe opt-ins). Reflection rescan finds 67 routes (37 fields/30 funcs);
+  29 additional reflected functions need public unmangled members at Step 1.
+  Step T commit `d83360125`: exactly two receiver-lambda exclusions, Context
+  constructor audit and negatives; 266 unique checker cases, original 2,295
+  declarations classified with zero differences, 47 initializer proofs and
+  40 frozen earlier destinations. Detached original removed. Production,
+  lockfile and ProGuard unchanged; no push, branch switch or device/emulator.
+  **STOPPED before production moves**, awaiting Claude's separate sample/review.
+
+- 2026-10-09 — **Phase 11 Step 0b complete; STOPPED before moves.**
+  Claude's exact ten survivors (m02/m04/m05/m06/m08/m09/m11/m13/m14/m16)
+  are assertion-killed on original `00c60870e`, each against all 230 phase-11
+  cases; no compile/crash proofs. The original final cohort passes 230/230.
+  Added 96 tests, each with an isolated named mutation proof; 541 distinct
+  systematic original mutants are assertion-killed (542 accepted runs) across
+  all 44 moved functions. Five
+  named proofs repeated after final refinements; rejected discovery attempts
+  retained separately. PSI-based per-function matrix inventories all 800 sites
+  (199 writes/416 calls/105 ifs/77 returns/two whens/one loop), distinguishing
+  direct proofs from nested value/guard groups. Mutation tables and the complete
+  matrix are appended to the deps report; raw evidence `p11/step0b/`.
+  JVM `p11-step0b`: 1,134 identities (1,133 pass, same known focus failure,
+  no skips), all 1,038 `p11-step0` statuses retained, 96 passing additions only;
+  complete stable run, matched 1 GiB/JBR 21.0.10. Original lint archive reused.
+  Final reflection rescan: 89 routes, 45 fields/all 44 functions, 908 literal
+  sites/779 direct selectors; 43 further functions require public unmangled
+  members plus matching manifest/fixture pins when Step 1 is authorized.
+  Detached original removed; production, lockfile and ProGuard unchanged.
+  No production moves, gate, push, branch switch, device/emulator, bug fix or
+  self independent review. Claude's second independent sample is next.
+
+- 2026-10-09 — **Phase 11 Step 0c complete before moves.** Claude exact n01
+  is assertion-killed on original `00c60870e` against all 233 phase-11 cases;
+  unchanged-original control passes 233/233. Three added tests sweep all three
+  nullable server-message Toasts, including null/default, empty text and paired
+  inline/queued delivery. All nine named original mutation proofs pass. n13/n16
+  are recorded as equivalent because the page-request entry point supplies the
+  same offset clamp and in-flight guard. Stable matched-heap JVM `p11-step0c`:
+  1,137 identities (1,136 pass, same known focus failure); all 1,134 prior
+  statuses retained, three passing additions only. Mutation table and sweep are
+  appended to the deps report; raw evidence `p11/step0c/`,
+  `junit/p11-step0c/`. Final rescan: 89 routes, 45 fields/44 functions,
+  913 quoted sites/784 direct selectors. Production/protected inputs unchanged;
+  detached original removed after proofs. Approved Step 1 moves and gate follow.
+
+- 2026-10-09 — **Phase 11 Step 1 production moves complete.** Materialized
+  all 92 manifest rows into the guide owner (48 core fields), fieldless pager
+  and fieldless navigator (425/524/431 lines); activity 12,717 → 11,458,
+  size baseline lowered with `--update`. One slot-anchored eager controller,
+  computed qualified Host forwarders, whole-property Start Over/banner patches,
+  retained patched `initIptvMode`, and in-place teardown patches match the
+  manifest. Rescan supplies 89 reflection owner routes; 43 additional public
+  function visibility pins join the originally public install function, without
+  changing any characterization assertion. No watchdog or Dart moved-member
+  selectors need a further retarget. All 233 phase-11 characterizations pass.
+  Checker: 2,295 declarations classified, zero differences; p1–p10 historical
+  checks and 40 frozen earlier files pass. Compiled audit pins all 13 production
+  receivers, two receiver-lambda exclusions remain; five original Kotlin warnings,
+  47 initializer proofs and full lifecycle order are unchanged. Historical and
+  current checker self-tests and the full clean-tree gate follow. Evidence
+  `p11/step1/`, `p11/gate/`. No bug fix, dependency or ProGuard change.
+
+- 2026-10-09 — **Phase 11 gate complete on `74c99a786`; STOPPED.**
+  Checker: 2,295 original declarations classified, zero differences; all 266
+  self-tests (including complete phase-11 extraction and negatives), p1–p10
+  historical merge checks and 40 frozen earlier destination files pass. All 13
+  production receiver pins, exactly two entry-lambda exclusions, the retained
+  EditText(Context) site and its compiled substituted constructor fixture pass.
+  All 47 initializer proofs, eager fieldless construction, protected inputs,
+  unchanged assertion bytes and full lifecycle teardown order are verified.
+  Clean matched-heap JVM `p11-gate` exactly matches `p11-step0c`: 1,137
+  identities (1,136 pass, same known source-browser focus failure), no skips;
+  all 233 phase-11 characterizations pass. All five Kotlin warning identities
+  remain. Lint exactly matches archived original `00c60870e`: 1,352 issues,
+  253 errors/1,099 warnings, 175 opt-in errors. Analyzer matches all 1,758
+  phase-10 diagnostics. Release APK succeeds without installation; R8/DEX
+  preserves every new controller/Host/anonymous class and member (8 classes,
+  303 members, three negative controls). Decoder check remains
+  **pending-environment**: output, missing decoder/filter manifests and all three
+  native hashes are identical to phase 10 and phase 1, without a workaround.
+  Full clean-tree Flutter suite via `suite_evidence.py` exactly matches all
+  12,855 phase-10 identity/status pairs (12,794 success, 13 failure, 28 error,
+  20 skipped; 1,232 suites); affected Dart checks match all 45 prior outcomes.
+  Step 0c adds three passing JVM cases, nine named original proofs and the exact
+  all-233 n01 kill; n13/n16 are documented equivalent. Evidence `p11/step0c/`,
+  `p11/step1/`, `p11/gate/`, `junit/p11-step0c/`, `junit/p11-gate/`.
+  Public reflection pins were updated from the Step-0b rescan; only the shared
+  helper routes changed, and no Dart/watchdog selector retarget was necessary.
+  Matched 1 GiB test workers remain an evidence-only pre-existing harness
+  exception. Detached original removed; lockfile and ProGuard unchanged.
+  No bug fix, push, branch switch, device/emulator, or self independent review.
+  **STOPPED after phase 11**; Claude reviews separately.
+- 2026-10-09 — phase 11 post-implementation reviews of `4c31e5e1c..90ede8bc7`.
+  Claude's first independent sample was weak for step 0 (8/18 killed); a
+  thorough 0b followed (96 tests, 541 systematic mutations, per-function
+  coverage matrix over 44 functions / 800 sites); Claude's **second**
+  independent sample then 13/16 (2 equivalent: n13/n16; n01 closed in 0c).
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; one owner
+  for all 48 core fields, fieldless collaborators, stale-reply asymmetry,
+  paging/wrapping, switch side effects, key routing and teardown preserved.
+  Activity 12,717 → 11458. Decoder verification remains pending-environment.
+  Phase 11 complete; merged. **Lesson:** a first-sample kill rate below ~75 %
+  triggers a systematic statement-level sweep and a second independent sample
+  before moves.
