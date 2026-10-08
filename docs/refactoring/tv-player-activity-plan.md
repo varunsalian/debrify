@@ -1007,6 +1007,87 @@ zap banner in classic and each styled guide style while zapping channels
 (up/down, number entry), logos, EPG now/next, LIVE/REC badges, the
 favourites-gated jump hint, floating vs docked banner.
 
+## Phase 7 — Stremio TV guide ("lite")
+
+Branch `refactor/tvplayer-p7` off the phase-6 merge `a4ed4f368` (activity 15,167 lines). Evidence under
+`refactor-evidence/tvplayer/p7/`. Source: section B of the "Phase 6
+inventory" (measured at `1a33c42cb`; re-measure on the phase-6 merge). All
+collaborator rules from phases 3–6 apply.
+
+**Selected:** `TvStremioTvGuideController` — 30 members, ≈ 529 lines: the
+guide-ready wait (`hideGuideWhenReady`, `cancelGuideWait`, listener +
+timeout fields), guide init/setup/show/hide/toggle/filter/header,
+focus-in-list check, lazy guide-data requests, `requestStremioTvNext` and
+`switchToStremioTvChannel`, plus the contiguous owned state block
+(`stremioTvChannels`, 9 view refs, adapter, visibility/in-progress flags,
+`stremioTvSwitchToken`). `isStremioTvMode` stays in the activity (Host
+`var` forwarder). The media-start trio (`updateStremioSourcesFromPlaybackMap`,
+`replacePayloadWithStremioTvItem`, `playStremioTvPlaybackMap`) stays for the
+playback-start phase; the controller reaches `playStremioTvPlaybackMap`
+through a Host forwarder (re-pointed when the trio moves).
+
+16 activity patches in 6 declarations; 12-member Host; ≈ 68 declared
+substitutions (21 host, 36 Android incl. `runOnUiThread` ×12 and
+`finish()` ×6 — which must stay `activity.finish()` so the activity's
+`finish` override still runs — `findViewById` ×9, `currentFocus`, 8 `this`
+sites; 11 visibility changes). Overload audit: `LinearLayoutManager(this)`,
+`Glide.with(this)`, 2 `Toast` + 4 `this@…` Toasts inside
+`MethodChannel.Result`. `playerView.findViewById` stays host-qualified (not
+the inherited `findViewById`). Default argument `finishOnFailure = false`
+stays evaluated at call time. **Initializer timing:** 17 owned properties
+(15 in the contiguous block, plus the guide-wait listener/runnable) move into
+the controller, constructed at the first property's slot, so **16**
+initializers run earlier and each gets an exact inert proof (no
+contiguous-block exemption). The Host forwarder to the retained trio is the
+real five-argument `playStremioTvPlaybackMap(channel, map, url, title,
+hideGuideOnReady)` (Next passes `false`, switching passes `true`).
+
+**Step T.** Per-phase dispatcher: the phase-6 suite keeps running with the
+historical phase-6 manifest; a complete phase-7 extraction fixture and
+negatives (incl. omitting a contiguous-field proof, a forwarder dropping or
+hard-coding `hideGuideOnReady`) run separately; compiled audit of all eight
+receiver sites; the 33 earlier destination files are frozen against
+`a4ed4f368`. One reflective retarget:
+`StremioTvStartupWatchdogTest` calls `initStremioTvGuide` by name — it
+becomes a **public** member of the internal controller and the test's local
+`call` helper routes it to the controller (assertions byte-identical).
+
+**Follow-ups pinned as-is (not fixed):** `stremioTvSwitchToken` is not bumped
+in `onDestroy`; the guide-ready listener and 10 s wait are not cancelled
+there.
+
+### Step 0 — characterization of the original
+
+Guide init from JSON (channel parsing, current flag, inline now/next,
+`isStremioTvMode` set, playlist button repurposed only for
+`PlaylistMode.NONE`); show/hide/toggle with focus and scroll-to-current
+(`post` + 150 ms); search filter; header binding (poster vs letter, Glide
+lifecycle owner); lazy guide-data for the visible range and row merge;
+`requestStremioTvNext` (no current channel → toast and optional finish, null
+bridge, success → trio with no guide wait, empty URL, error, notImplemented,
+stale token, 1.5 s overlay hide); `switchToStremioTvChannel` (flags, stale
+token, rollback of `isCurrent`/`isSwitchingChannel` marks on failure, and a
+**successful switch through the real retained trio** with a recording player:
+media-start order, channel/adapter updates, guide-wait registration and
+READY-triggered hiding — contrasted with Next's no-wait path); guide-data
+replies, which do **not** check the switch token (only Next/switch callbacks
+do): a reply after token advancement, partial replies (only valid returned
+entries clear loading; omitted ones stay loading), malformed replies, a null
+bridge (guide-data loading stays set; a switch stays in progress with its new
+current/switching marks), error/notImplemented/send-exception cleanup — all
+pinned as-is; guide-ready
+wait (`READY` hides, `IDLE` clears switching marks, 10 s fallback,
+`cancelGuideWait` removes the listener from the current player). Fake
+Flutter channel with async main-looper replies (phase-2 messenger).
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phase 3–6 additions. Device checklist (end of series):
+Stremio TV mode — open/close the guide, search, switch channels (incl. a
+failing channel), next-item auto-advance, guide closes once playback is
+ready, back-key behaviour inside the guide list and search box.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
@@ -1702,3 +1783,107 @@ favourites-gated jump hint, floating vs docked banner.
   `FragmentActivity`) + historical 37 Toast sites reproduce. Activity
   16,487 → 15,167. Decoder verification remains pending-environment.
   Phase 6 complete; merged.
+- 2026-10-08 — phase 7 design round 1 (Codex): P1 folded (16 inert
+  initializer proofs, not 2); P2s folded (phase-7 fixture dispatch + earlier
+  destinations frozen at `a4ed4f368` + 8-site audit; five-argument trio
+  forwarder with `hideGuideOnReady` and a successful-switch characterization;
+  guide-data callback contract corrected and characterized as-is).
+- 2026-10-08 — phase 7 design round 2 (Codex): **No P1s**, no new findings. Phase 7 design approved.
+
+- 2026-10-08 — **Phase 7 step T complete; production untouched.** Re-measured
+  a4ed4f368: 15,167 lines / 2,417 declarations, 30 selected members, 16
+  occurrences in six activity patches, 17 properties / 16 exact inert
+  proofs, first-field slot 1,192. Complete extraction fixture compiles
+  (586-line controller), zero checker differences; 8/8 compiled receiver
+  descriptors including Glide FragmentActivity. All 134 dispatcher tests
+  pass (16 new Phase-7 cases; historical Phase 6 uses its own manifest);
+  33 earlier destinations frozen at a4ed4f368, no whitelist. The measured
+  Host has 11 members; finish is the separate activity dependency, all six
+  calls use activity.finish(). Five-argument trio forwarder pinned with
+  drop/hard-code negatives; omitted contiguous initializer proof rejects.
+  Clean original baseline (636/635 pass) and lint (1,352 issues) archived
+  before fixture mutation; full provenance/evidence p7/ and junit/.
+  No production moves or lockfile/ProGuard edits. Step 0 follows.
+
+- 2026-10-08 — **Phase 7 step 0 complete; STOP before production moves.**
+  Original a4ed4f368 passes **37/37** new cases: attached guide UI/focus/search,
+  Glide ownership, visible-range lazy loading, async/partial/malformed/null
+  bridge contracts, Next/switch success through the real playback trio,
+  production Next/ENDED/key/clean-state callers, stale replies/rollback,
+  READY/IDLE/10 s waits and unchanged destroy semantics. **52/52** mutations
+  fail named assertions on the original, every new test covered; final
+  fixture hashes recorded. Final `p7-step0`: **673 identities / 672 pass /
+  the existing focus failure**; all 636 clean `baseline-a4ed4f368` statuses
+  identical, 37 passing additions only, complete XML/stable fingerprints.
+  Original lint archived (1,352 issues, 253 errors/1,099 warnings, 175 opt-ins).
+  Checker repeated **134/134**, 2,417 original declarations/zero differences;
+  16 inert proofs, eight compiled receiver descriptors, 33 frozen earlier
+  files retained. Six manifest rows now name their fixture/behavior tests;
+  move/patch/proof configuration unchanged. Two provisional full runs rejected
+  for attached-view Robolectric synchronization interference; explicit
+  activity/controller instrumentation and saved/restored frame settings
+  resolve it. Original control/all proofs rerun with final fixture. Table,
+  follow-ups and rejected-attempt details in deps; raw p7/ and junit/.
+  Production, existing assertions, lockfile and ProGuard untouched; original
+  worktree removed. No production moves, retargets, push, branch switch,
+  device/emulator interaction or self independent review. **STOP**; Claude
+  runs the independent sample/review and any 0b follows separately.
+
+- 2026-10-08 — **Phase 7 step 0b complete before moves.** Fourteen original
+  cases close i03/i08 and sweep every guide-wait cleanup call, both overlay
+  cancellations, uppercase header/row fallbacks, type/rating/number/year/Next
+  formatting and recycled-row Glide clearing. Original control 51/51;
+  17/17 named assertion proofs with final fixture hashes, exact Claude i03/i08
+  killed against all 51 cases. Clean-run `p7-step0b`: 687 identities, 686 pass,
+  unchanged focus failure; all 673 p7-step0 statuses identical, 14 passing
+  additions only, complete XML/stable fingerprints. Provisional fixture and
+  mutation attempts rejected/archived; no behavior allowance changed.
+  Table/evidence in deps and p7/step0b/, junit/p7-step0b/; detached original
+  removed. Production, manifests, protected inputs and previous assertions
+  unchanged. Step 1 and gate follow; no self independent review.
+
+- 2026-10-08 — **Phase 7 step 1 moves complete.** Exact manifest extraction:
+  30 members, controller 586 lines, activity 15,167 → 14,637; slot-anchored
+  construction, all 16 inert proofs and the live explicitly qualified Host
+  preserved. Real five-argument forwarder retains hideGuideOnReady; all six
+  finish calls use the activity override. Only shared reflection routing
+  (30 names) and the watchdog's local init helper change; all assertions and
+  Dart tests unchanged. Focused 65/65 pass (51 Phase 7 + 14 watchdog), fresh
+  debug compile retains five warning identities. Checker zero differences
+  across 2,417 declarations; compiled receiver audit 8/8, Glide remains
+  FragmentActivity. All 33 earlier files and five lifecycle bodies/order
+  byte-identical; scoped size baseline lowered with --update. No status-pill
+  move, production deviation, bug fix or self independent review. Full gate
+  follows; evidence p7/step1/ and p7/gate/.
+
+- 2026-10-08 — **Phase 7 gate complete; STOP for Claude's review.** Clean
+  committed `6133bb444` tree: all 687 JVM identity/status pairs exactly match
+  p7-step0b (686 pass, unchanged focus failure), complete XML/stable inputs;
+  51 Phase-7 + 14 watchdog focused cases pass. Checker all 2,417 declarations,
+  zero differences; 134/134 self-tests; all six historical --at checks
+  (p6@a4ed4f368), 33 frozen earlier destinations/no whitelist. Compiled
+  audit 8/8, Glide FragmentActivity; 16 exact inert proofs and all five full
+  lifecycle/teardown bodies retained. Five compiler warnings unchanged;
+  lint exactly retains all 1,352 a4ed4f368 issues (253 errors/175 opt-ins),
+  analyzer all 1,758 prior diagnostics. Affected source tests exactly retain
+  44 passes/one existing failure. Release APK succeeds; R8/DEX all 10 new
+  classes/136 members and three mapping negatives pass. Decoder remains
+  pending-environment: valid APK failure output, all three native hashes
+  and missing sets match Phase 6; prior-log filename comparator mistake
+  rejected/corrected, no native/script workaround. Full quiet Flutter suite
+  exactly matches all 12855 Phase-6 statuses (12794
+  success/13 failure/28 error/20
+  skipped), same SDK/flags, complete/stable clean tree. Step 0b adds 14
+  passing cases, 17 original assertion proofs, exact i03/i08 killed in all
+  51-case runs. Evidence/table/retargets recorded in deps, p7/ and junit/;
+  manifests/protected inputs/earlier files unchanged, original trees removed.
+  No production deviation, bug fix, push, branch switch, device/emulator
+  interaction or self independent review. **STOPPED after phase 7**.
+- 2026-10-08 — phase 7 post-implementation reviews of `43a39dea9..cfd2a3f17`.
+  Claude's 18-mutation sample 16/18; survivors i03 (hide cancels the guide
+  wait) and i08 (uppercase header letter) closed in 0b. Independent Codex
+  review (fresh session): **No P1s, no P2/P3**; 16 inert proofs, 8 compiled
+  receiver descriptors, `finish()` virtual dispatch, true/false
+  `hideGuideOnReady`, unguarded guide-data replies, watchdog assertions
+  byte-identical. Activity 15,167 → 14,637. Decoder verification remains
+  pending-environment. Phase 7 complete; merged.
