@@ -1245,6 +1245,78 @@ commit after first frame), manual source pick before and after first frame
 (incl. a failing pick and restore), exhaustion of all sources (activity
 finishes and reports), Stremio TV channel startup.
 
+## Phase 10 — status pill, PikPak cold-storage retry, source fetch (fetch-more + episode fetch)
+
+Branch `refactor/tvplayer-p10` off the phase-9 merge `8a4d40d1c` (activity 13,320 lines). Evidence under
+`refactor-evidence/tvplayer/p10/`. Inventory: "Phase 10 inventory" in the deps
+report (measured at `c4906cd2f` with phase 9 taken from its committed
+manifest; re-measure on the phase-9 merge). All collaborator rules from
+phases 3–9 apply.
+
+**Selected (≈ 640 lines, three sibling controllers):**
+- `TvStatusPillController` (≈ 75 lines) at the `statusPill` slot; keeps
+  borrowing `externalSubtitleHandler` (never clears it).
+- `TvPikPakRetryController` (≈ 240) at the `isPikPakRetrying` slot; owns its
+  retry `Handler` and `pikPakRetryId` (read live everywhere, incl. the gate's
+  fire-time reads through its Host); 4 PikPak companion constants move with it.
+- `TvSourceFetchController` (≈ 425) at the `episodeFetchInFlight` slot,
+  holding fetch-more and episode fetch together (fetch-more owns no field of
+  its own; merging keeps both `adoptSourceList` calls internal).
+  `stremioResolutionToken` stays activity-owned; episode fetch bumps it via a
+  Host `var` (`++host.stremioResolutionToken`).
+
+27 activity patches in 13 declarations (incl. one-token in-place lifecycle
+patches in `onPause` and `onDestroy` ×2); 17 Host forwarder re-points (20
+token edits) as `patched` activity-property rows in the subtitle Host (3),
+switcher Host (9) and phase-9 gate Host (5); 4 inert initializer proofs (pill
+`Runnable`, PikPak `0`s and `Handler`); 2 new activity-owned readiness getters
+(`startupGateStatusReady`, `pikPakReactivationIndicatorReady`); ≈ 176
+substitutions (incl. 18 `host.startupGateController.`, 4
+`host.sourceSwitchController.`, one already-braced template). Status-pill
+direct callers left in the activity afterwards: 2 (`playbackListener`,
+`playShowShuffle`). `playPikPakVideoWithRetry` stays (media start → playback
+start phase).
+
+**Hazards.** 4 `Runnable` self-references in `waitForPikPakMetadata`,
+`TextView(this)` constructor, `findViewById`, 2 Toasts, 18 `runOnUiThread`,
+named argument `allowResolverFallback`, the Host `var` increment. Follow-up
+pinned as-is: the PikPak metadata `checkHandler` is never cleared; the PikPak
+exhaustion branch checks `isFinishing` but not `isDestroyed`.
+
+**Retargets.** Reflection: 28 direct sites on main + those added by phase 9 —
+7 new owner-map entries, one more `when` branch in the watchdog `call` helper,
+a one-line `ShufflePlaybackFlowTest` field-helper change; `waitForPikPakMetadata`,
+`cancelPikPakRetry`, `showStatusPill` become public members. Dart: the
+`map["recoveryCandidateCount"]` check reads the new `TvSourceFetchController.kt`
+(literal unchanged).
+
+### Step T
+
+Phase-10 extraction fixture + negatives (three sibling controllers at their
+slots, readiness getters, Host `var` increment, missed
+`host.startupGateController.` qualification, snapshotting `pikPakRetryId`);
+per-phase dispatcher keeping all historical suites; compiled audit (incl.
+`TextView(this)` constructor and inherited `findViewById`); earlier
+destinations frozen at the phase-9 merge.
+
+### Step 0 — characterization of the original
+
+Heavy (episode fetch and fetch-more have no characterization today):
+episode fetch (request, adjacent fetch, token supersession, in-flight guard,
+pill messages, payload merge), fetch-more (request, result adoption, empty /
+error / notImplemented, recovery handoff to the gate, candidate counts),
+PikPak retry (backoff schedule, metadata wait polling, exhaustion routing,
+`onPause` cancel, retry id supersession, reactivation indicator), status
+pill (lazy creation, show/transient/hide timing on the borrowed handler).
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–9 additions. Device checklist (end of series):
+PikPak cold-storage source (retry backoff, reactivation indicator,
+exhaustion), "fetch more sources" after all initial sources fail, next/previous
+episode fetch from the player, status pill messages.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.

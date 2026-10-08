@@ -9964,3 +9964,826 @@ pubspec.lock, both protected ProGuard files and historical manifests remain
 unchanged. No device, emulator, install, push or branch change. Evidence:
 `p9/gate/summary.json` and its raw per-check logs/archives, `junit/p9-gate/`.
 Phase 9 complete with the documented decoder environment limitation; stopped.
+
+---
+
+## Phase 10 inventory (at `c4906cd2f` + committed phase-9 manifest; re-measure on `8a4d40d1c`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`c4906cd2f` (phase-8 merge, **13,937 lines**, class header 136, companion ≈ 13905–13936). This was a
+read-only survey of the main checkout. I made no build and did not read `../debrify-wt/`.
+
+Phase 9 (`refactor/tvplayer-p9`, design + step T + step 0 committed at `4338d2713`, production move not
+yet made) is treated as a controller exactly as its committed manifest `dev/tool/kotlin_moves/tvplayer_p9.json`
+pins it (read with `git show`):
+- `TvStartupGateController` (46 members + 5 constants), activity property `startupGateController` at slot
+  `startupFailoverCursor` (1078), with one 32-member Host (`added[0]`, 43 lines);
+- 17 `patched` rows, among them the four PikPak bodies (8 `startupGateController.` tokens), `applyMoreTorrentSources`
+  (6 patches / 7 tokens), `failMoreTorrentSources` (3), and the `progressReporter` (4) and `sourceSwitchController`
+  (14) forwarder re-points.
+
+All line numbers below are at `c4906cd2f`. Once phase 9 merges, lines 1157–12285 shift by ≈ +7 (43-line
+gate property replaces 22 + 14 field lines) and lines after 12898 shift by ≈ −606. The phase-9 step-T fixture
+gives the activity as **13,320** lines. All phase 3–9 collaborator rules apply:
+- `AppCompatActivity` injection plus the compiled overload audit, including constructors, aliases, Runnable
+  receivers and implicit inherited receivers;
+- computed, explicitly qualified Host forwarders, with no delegators;
+- slot-anchored controller properties;
+- an inert proof for **every** moved property after the controller's first slot;
+- activity-owned `isInitialized` getters and braced host templates;
+- cross-feature reads via the owning controller;
+- teardown order unchanged, and ≤ 800 lines per file.
+
+**Method.** I re-ran the phase-9 indexer on `c4906cd2f` (**747** depth-1 members; `scratchpad/p10/idx.py`,
+`refs.py`, `units10.py`, `inbound.py`, `unit.py`). Then:
+- word-boundary reference scan per name, with templates and `this@Activity.` hits included;
+- owner map over the four sub-units, the gate (as phase 9 moves it) and the twelve existing controller properties;
+- outbound/receiver audit per unit;
+- phase-9 manifest rows extracted to `scratchpad/p10/tvplayer_p9.json`;
+- phase-9 branch test files copied to `scratchpad/p10/p9tests/`.
+
+Every list was checked by hand.
+
+Unit sizes reproduce the phase-6 figures exactly: PK 9 / 206, PILL 6 / 51, EF 3 / 159 and S2 7 / 224, for a
+cluster total of **640**.
+
+Terms: "Patch" = one token edit in a retained activity declaration. "Re-point" = one edited Host forwarder in
+an existing controller property, i.e. a `patched` row on that whole activity property (phase-5/9 precedent).
+"Substitution" = one declared edit inside a moved body.
+
+---
+
+### Summary and recommendation
+
+| option | lines out | activity patches | re-points | new Hosts | proofs | lifecycle patches | reflective work | Dart | new files |
+|---|---|---|---|---|---|---|---|---|---|
+| **R** (recommended): 3 sibling controllers — `TvStatusPillController` (PILL), `TvPikPakRetryController` (PK), `TvSourceFetchController` (S2+EF) | 640 (+4 companion) | **27 in 13 decls** | **17 forwarders / 20 token edits in 3 properties** (subtitle 3, switcher 9/12, gate 5) | 2 + 11 + 22 = 35 members | **4** (no classifier extension) | 3 (`onPause` 13544; `onDestroy` 13638, 13639) | 7 owner-map entries + 1 watchdog `when` branch + 1 `ShufflePlaybackFlowTest` helper line; 28 direct (main) + 7 direct (p9 branch) + 23 `pill()` indirect sites | **1 edit + 1 file read** | 3 files: ≈ 75 + ≈ 240 + ≈ 425 |
+| R + `playPikPakVideoWithRetry` rides with PK | 694 | 22 in 13 decls (−6, +1 in `startPlayback`) | 17 | PK Host 11 → ≈ 21 | 4 | 3 | same | same | PK ≈ 300 |
+| R′: S2 and EF as separate siblings | 640 | **34 in 14** (S2 must own in-flight state to have a slot: +7 incl. `parsePayload`) | 18 (+ gate `moreSourcesLoadingMode`) | + EF→S2 `adoptSourceList` forwarder | 6 | 3 | + 2 map entries (none reflected today) | 1 + 1 | 4 files |
+| R″: one combined controller | 640 | 27 | 17 (all to one target) | 1 × ≈ 45 | **6** (slot 1354 → PK fields, EF field run earlier) | 3 | same | same | 1 file ≈ 770 (near cap, poor cohesion) |
+
+**Recommendation: phase 10 = option R** (≈ 644 moved lines, ≈ 740 new-file lines). The 640 lines are
+below the ~700 target, but:
+- the cluster is closed;
+- the only natural rider, `playPikPakVideoWithRetry` (54), is a media-start path. The plan assigns it to the
+  playback-start phase, and it would add ≈ 10 forwarders to save 5 patches;
+- the next unit (IPTV core + EPG + VOD, ≈ 2,500) cannot be paired without blowing past 1,200 lines.
+
+Reasons:
+
+- **It finishes the gate's recovery protocol.** After phase 9 the gate reaches all four sub-units through
+  5 Host forwarders (`requestMoreTorrentSources`, `failMoreTorrentSources`, `pikPakRetryId`, `hideStatusPill`,
+  `showStatusPillTransient`). The PK and S2 bodies carry 18 `startupGateController.` tokens left by phase 9.
+- **Low lifecycle risk.**
+  - Only 3 lifecycle statements change, each a one-token in-place patch (`onPause` 13544, `onDestroy`
+    13638/13639).
+  - There is no `finish()`, no override dispatch, and no `onStart`/`onStop`/`finish` reference.
+  - It needs no initializer-classifier extension: `Runnable { … }`, constants and
+    `Handler(Looper.getMainLooper())` are all supported already.
+- **One owner per piece of state.**
+
+  | state | owner after phase 10 |
+  |---|---|
+  | `pikPakRetryId`/`Count`/`isPikPakRetrying`/`pikPakRetryHandler` | PK |
+  | `episodeFetchInFlight` | fetch controller |
+  | `statusPill` | pill controller |
+  | `stremioResolutionToken` | stays in the activity (shared with retained `resolveAndPlay`/`discoverProtectedMime`, gate, switcher) |
+  | S2's payload-derived flags/lists | stay in the activity (written by `parsePayload`) |
+
+- **Why S2 and EF are one controller.**
+  - The checker only allows a controller slot at a **removed original field**
+    (`kotlin_move_partition.py:43–52`, "added slot must be a removed original field").
+  - S2 owns no field unless it takes the in-flight state, which costs +7 patches incl. `parsePayload` and
+    +2 proofs. EF owns exactly one field (`episodeFetchInFlight`).
+  - Merging them gives the pair a clean slot. It also turns the only EF→S2 edge (`adoptSourceList` ×2) into
+    an internal call. Both units ask Flutter for a replacement source list and adopt it append-only.
+- **Status pill ends with only 2 activity callers.**
+  - Production call sites total **40**: 19 direct in the activity (at the phase-8 merge), 17 in the switcher
+    files and 4 in the subtitle controller, plus 6 Host forwarders.
+  - After phase 9: 14 direct (the gate's 5 move into the gate file), 8 forwarders.
+  - After phase 10: **2 direct** (`playbackListener` 1829, `playShowShuffle` 5489) and 9 forwarders.
+  - EF's 11 and S2's 1 move with their units.
+
+Risk: **medium.**
+- PK is timing-heavy: backoff 0/2/4/8/16/18 s on a 10 s metadata window, ≈ 70 s virtual time per
+  exhaustion path.
+- EF and S2 have **no** existing JVM characterization, apart from the gate-recovery handoff the phase-9
+  tests drive through `requestMoreTorrentSources`.
+- 17 re-points touch three earlier-phase properties (phases 4, 8/9 and 9).
+
+---
+
+### 1. Members (lines at `c4906cd2f`, attached comments included)
+
+**PK — PikPak cold-storage retry engine: 9 members, 206 lines** (+ 4 companion constants)
+
+- Fields 1384–1387 (comment 1383 `// PikPak cold storage retry state` attaches to the first): `isPikPakRetrying`
+  1384, `pikPakRetryCount` 1385 (write-only — existing follow-up), `pikPakRetryId` 1386,
+  `pikPakRetryHandler = Handler(Looper.getMainLooper())` 1387.
+- Functions: `attemptPikPakPlaybackLoop(PlaybackItem, Int, Int)` 6505–6599,
+  `waitForPikPakMetadata(PlaybackItem, Int, Int, Long = 0, (Boolean) -> Unit)` 6601–6668,
+  `showPikPakRetryOverlay(String)` 6671–6687, `hidePikPakRetryOverlay()` 6689–6696, `cancelPikPakRetry()`
+  6698–6710.
+- Companion (PK-only users 6524, 6530, 6531, 6549, 6591, 6609 → file-private `const val` in the PK file):
+  `PIKPAK_MAX_RETRIES` 13932, `PIKPAK_METADATA_TIMEOUT_MS` 13933, `PIKPAK_BASE_DELAY_MS` 13934,
+  `PIKPAK_MAX_DELAY_MS` 13935 (trailing same-line comments).
+  - No qualified reference anywhere in Kotlin/Java/Dart/tests.
+  - `TorboxTvPlayerActivity.java` has its own unrelated Java constants of the same names, which are
+    unaffected.
+- **Stays:**
+  - `playPikPakVideoWithRetry` 6450–6503 (media start; banner 6446–6448 stays with it; option R+ moves it);
+  - views `pikPakReactivationIndicator` 1391 and `pikPakReactivationText` 1392 (lateinit, bound in
+    `bindViews`, set reflectively by the watchdog and phase-3 tests, cleaned at `onDestroy` 13642–13645).
+
+**PILL — status pill: 6 members, 51 lines**
+
+- Fields `statusPill: TextView?` 1354 and `statusPillHideRunnable = Runnable { hideStatusPill() }` 1355. They
+  sit right after the borrowed `externalSubtitleHandler` 1353, which stays in the activity.
+- Functions: `ensureStatusPill()` 11820–11843, `showStatusPill(String)` 11845–11855,
+  `showStatusPillTransient(String)` 11857–11861 (KDoc 11857), `hideStatusPill()` 11863–11871.
+- Banner 11816–11818 (`// ── Status pill ──…`, separated by blank 11819) is an intervening comment run that
+  attaches to `ensureStatusPill`. The manifest decides whether it heads the pill file (recommended) or stays.
+
+**EF — episode fetch: 3 members, 159 lines**
+
+- `episodeFetchInFlight` 12124 (no comment).
+- `requestEpisodeFetch(Int, Int, Boolean = false, Boolean = autoAdvance, ShufflePlaybackAttempt? = null,
+  (() -> Unit)? = null, (() -> Boolean)? = null)` 12126–12196 (KDoc 12126–12128).
+- `requestAdjacentEpisodeFetch(String?, Int, Int, Boolean = false, Int = 1)` 12198–12284 (KDoc 12198–12199).
+- After EF comes the "Stremio Source Switcher" banner 12286–12288. Phase 9 decides it moves with/heads the gate.
+
+**S2 — fetch more / per-addon fetch: 7 members, 224 lines**
+
+- `requestMoreTorrentSources(String)` 12982–13031 (KDoc 12982–12989; starts right after the
+  `sourceSwitchController` property 12899–12980).
+- `applyMoreTorrentSources(String, Map<*, *>?)` 13033–13075.
+- `requestAddonTorrentSources(String)` 13077–13119 (KDoc 13077–13080).
+- `applyAddonEpisodeSources(String, Map<*, *>?, Int?)` 13121–13170.
+- `failAddonFetch(String)` 13172–13175.
+- `adoptSourceList(Map<*, *>?)` 13177–13196 (KDoc 13177–13178).
+- `failMoreTorrentSources(Boolean = false)` 13198–13211. `parsePayload` follows at 13213.
+- **S2 state stays in the activity** (option R). It is payload-derived (written in `parsePayload` 13333–13354)
+  and read by `bindViews`' source-browser callbacks, the unified menu and the gate.
+  - `seriesSourceTabs` 1172, `seriesPacksFetched` 1173, `seriesEpisodesFetched` 1174, `movieMoreSources` 1177,
+    `movieSourcesFetched` 1178, `moreSourcesLoadingMode` 1179 (in-flight; also reset by `parsePayload` 13338
+    and read by the gate's 30 s fallback through its Host);
+  - `TvSourceAddon` (public nested data class) 1185, `sourceAddons` 1186, `addonFetchState` 1187,
+    `addonPackProbing` 1188.
+  - The phase-9 recovery test sets `movieMoreSources` reflectively on the activity, so keeping it avoids a
+    retarget.
+
+**Top-level helpers / types the bodies use without a Host:**
+- `MainActivity.getAndroidTvPlayerChannel()`;
+- `StremioSource.fromMap`, `PlaybackItem`, `PlaybackPayload`, `SeasonEpisode`;
+- `AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt` (internal nested; import as the switcher files do);
+- `AndroidTvTorrentPlayerActivity.TvSourceAddon` (public nested; only in the fetch Host's type);
+- `UnifiedMenuController`, `TvSourceBrowserController` (Host types);
+- `io.flutter.plugin.common.MethodChannel.Result` (fully qualified in the bodies).
+
+### 2. Owned state, initializer forms, proofs
+
+| controller (slot) | fields moved | initializer forms | proofs |
+|---|---|---|---|
+| PILL (slot = `statusPill` 1354) | `statusPill`, `statusPillHideRunnable` | `null`; `Runnable { hideStatusPill() }` | **1** (`allocation` — the classifier's `Runnable \{[\s\S]*\}` form; the lambda is not invoked at construction; it now captures the controller, whose `hideStatusPill` is the same body) |
+| PK (slot = `isPikPakRetrying` 1384, comment 1383) | 1385, 1386, 1387 | `0`, `0`, `Handler(Looper.getMainLooper())` | **3** (`constant`, `constant`, `handler-allocation`; contiguous, so the Handler is created at the same point in initializer order) |
+| Fetch (slot = `episodeFetchInFlight` 12124) | `episodeFetchInFlight` only | `false` | first — **none** |
+
+**Total 4 proofs.** All forms are already accepted by `initializer_kind` (`dev/tool/kotlin_move_partition.py:136`).
+No moved initializer crosses a retained one. Nothing reads PILL/PK/fetch state during construction:
+- every earlier reader is a computed Host forwarder (gate 1078, subtitle 1213), a listener object method
+  (`playbackListener` 1507), or a later function;
+- the switcher property (12899) and the gate Host forward into PK/PILL/fetch at call time only.
+
+Readiness getters (activity-owned `added` declarations anchored at the PK slot; there is no existing getter
+for either view):
+- `private val startupGateStatusReady: Boolean get() = ::startupGateStatus.isInitialized` (for 6677);
+- `private val pikPakReactivationIndicatorReady: Boolean get() = ::pikPakReactivationIndicator.isInitialized`
+  (for 6691).
+
+### 3. Every inbound reference (outside the cluster)
+
+**Retained activity code — 27 patches in 13 declarations** (each becomes `<owner>Controller.x`):
+
+| declaration | line | reference | unit | new text |
+|---|---|---|---|---|
+| `playbackListener@1507` (3) | 1781 | `requestEpisodeFetch(` (ENDED, named `autoAdvance = true`) | EF | `sourceFetchController.requestEpisodeFetch(` |
+| | 1789 | `requestAdjacentEpisodeFetch(` | EF | `sourceFetchController.…` |
+| | 1829 | `showStatusPillTransient("Previous source could not be restored")` (onPlayerError, after the phase-9-patched `startupGateController.manualSourceRestoreInProgress = false`) | PILL | `statusPillController.showStatusPillTransient(…)` |
+| `bindViews@2494` (2) | 2644 | `requestMoreTorrentSources(mode)` inside the source-browser callbacks object (`requestLoadMore`) | S2 | `sourceFetchController.…` |
+| | 2659 | `requestAddonTorrentSources(groupId)` (`requestGroupFetch`) | S2 | ″ |
+| `setupSeriesPlaylist@3617` (1) | 3629 | `requestEpisodeFetch(season, episode)` (lambda `onFetchEpisode`) | EF | ″ |
+| `playItem@4539` (1) | 4598 | `cancelPikPakRetry()` | PK | `pikPakRetryController.cancelPikPakRetry()` |
+| `playNext@5211` (2) | 5242 | `requestEpisodeFetch(nextTarget.season, nextTarget.episode)` | EF | ″ |
+| | 5246 | `requestAdjacentEpisodeFetch(` | EF | ″ |
+| `playPrevious@5266` (2) | 5280, 5285 | same two | EF | ″ |
+| `watchShufflePlayback@5418` (1) | 5423 | `isPikPakRetrying` (the same line's `currentPlaybackItemIsPikPak()` is phase 9's gate patch) | PK | `pikPakRetryController.isPikPakRetrying` |
+| `playShowShuffle@5452` (4) | 5457, 5469 | `if (episodeFetchInFlight)` (5469 is inside the local `retryWhenIdle()` run 50 ms later on `progressHandler`, so a live read) | EF | `sourceFetchController.episodeFetchInFlight` |
+| | 5489 | `showStatusPillTransient("No other playable episode found for shuffle")` | PILL | `statusPillController.…` |
+| | 5498 | `requestEpisodeFetch(target.season, …, autoAdvance =, suppressResume = true, shuffleAttempt =, shouldContinue =, onUnavailable =)` | EF | ″ |
+| `playPikPakVideoWithRetry@6450` (6) | 6457 | `pikPakRetryId++` | PK | `pikPakRetryController.pikPakRetryId++` |
+| | 6458 | `val myRetryId = pikPakRetryId` | PK | ″ |
+| | 6461 | `pikPakRetryCount = 0` | PK | ″ |
+| | 6462 | `isPikPakRetrying = false` | PK | ″ |
+| | 6463 | `hidePikPakRetryOverlay()` | PK | ″ |
+| | 6502 | `attemptPikPakPlaybackLoop(item, 0, myRetryId)` | PK | ″ |
+| `umAddLoadMoreRow@11643` (1) | 11653 | `onOk = { requestMoreTorrentSources(mode) }` | S2 | ″ |
+| `onPause@13537` (1) | 13544 | `cancelPikPakRetry()` | PK | ″ |
+| `onDestroy@13570` (2) | 13638 | `cancelPikPakRetry()` | PK | ″ |
+| | 13639 | `pikPakRetryHandler.removeCallbacksAndMessages(null)` | PK | `pikPakRetryController.pikPakRetryHandler.…` |
+| `playStremioTvPlaybackMap@13809` (1) | 13834 | `cancelPikPakRetry()` | PK | ″ |
+
+By unit: PK 12, EF 10, S2 3, PILL 2. This matches the phase-6 "gate-2: 27" estimate.
+- Calls with named or default arguments go **directly** to the controller (internal functions keep their
+  defaults), so call-site defaults stay evaluated as today. Two defaults reference only an earlier parameter
+  (`suppressResume = autoAdvance`) or constants.
+- Patched declarations that phase 9 also patched (`playbackListener`, `bindViews`, `watchShufflePlayback`,
+  `onDestroy`) are compared against the phase-9-merged text.
+
+**Earlier-controller Host forwarders to re-point (17 forwarders, 20 token edits, 3 `patched` properties).**
+Destination files do not change: the bodies already read `host.x`.
+
+| activity property | phase | forwarder (exact, at `c4906cd2f` or phase-9 `added[0]`) | new target |
+|---|---|---|---|
+| `subtitleController` 1213–1268 | 4 | 1235 `override fun hideStatusPill(): Unit = this@AndroidTvTorrentPlayerActivity.hideStatusPill()` | `this@AndroidTvTorrentPlayerActivity.statusPillController.hideStatusPill()` |
+| ″ | | 1248 `override fun showStatusPill(message: String): Unit = …showStatusPill(message)` | `….statusPillController.showStatusPill(message)` |
+| ″ | | 1249 `override fun showStatusPillTransient(message: String): Unit = …showStatusPillTransient(message)` | ″ |
+| `sourceSwitchController` 12899–12980 (phase-8 `added`, phase-9 `patched`) | 8 | 12906 `override fun attemptPikPakPlaybackLoop(item: PlaybackItem, attemptNumber: Int, retryId: Int): Unit = …attemptPikPakPlaybackLoop(item, attemptNumber, retryId)` | `….pikPakRetryController.attemptPikPakPlaybackLoop(…)` |
+| ″ | | 12909 `override fun cancelPikPakRetry(): Unit = …cancelPikPakRetry()` | PK |
+| ″ | | 12922 `override fun hidePikPakRetryOverlay(): Unit = …` | PK |
+| ″ | | 12923 `override fun hideStatusPill(): Unit = …` | PILL |
+| ″ | | 12926–12928 `override var isPikPakRetrying: Boolean` get + set | PK (2 edits) |
+| ″ | | 12945–12947 `override var pikPakRetryCount: Int` get + set | PK (2) |
+| ″ | | 12948–12950 `override var pikPakRetryId: Int` get + set | PK (2) |
+| ″ | | 12959 `override fun showStatusPill(text: String): Unit = …showStatusPill(text)` | PILL |
+| ″ | | 12960 `override fun showStatusPillTransient(text: String): Unit = …` | PILL |
+| `startupGateController` (phase-9 `added[0]`, slot 1078) | 9 | `override fun failMoreTorrentSources(): Unit = this@AndroidTvTorrentPlayerActivity.failMoreTorrentSources()` | `….sourceFetchController.failMoreTorrentSources()` (default `alreadyCleared = false` still evaluated in the callee call) |
+| ″ | | `override fun hideStatusPill(): Unit = …hideStatusPill()` | PILL |
+| ″ | | `override val pikPakRetryId: Int get() = …pikPakRetryId` | `….pikPakRetryController.pikPakRetryId` (stays a computed **read-only** live read — fire-time reads in the reprepare `Runnable`) |
+| ″ | | `override fun requestMoreTorrentSources(mode: String): Unit = …requestMoreTorrentSources(mode)` | fetch |
+| ″ | | `override fun showStatusPillTransient(message: String): Unit = …` | PILL |
+
+Gate Host forwarders that **stay** activity-targeted: `moreSourcesLoadingMode`, `movieMoreSources`,
+`seriesSourceTabs` (S2 state stays).
+
+Each row is a whole-property `patched` declaration with exact before→after forwarder patches, a reason, a
+named supplement test, and an extra-edit negative. Supplements:
+- subtitle: `TvPhase4BoundaryCharacterizationTest` pill assertions;
+- switcher: `TvSourceSwitchApplyCharacterizationTest` PikPak cases, `TvSourceSwitchFeedbackCharacterizationTest`;
+- gate: phase-9 `recoveryFetchKeepsCursorAliveAndIts30SecondFallbackExhausts`,
+  `reprepareReadsReplacementPlayerRetryAndMediaGenerationAtFireTime`, and the commit/reject pill cases.
+
+No other controller forwards a cluster name: `upNextController` 162, `autoSyncController` 730,
+`iptvStartOverController` 798, `iptvChannelStartController` 989, `progressReporter` 1109,
+`stremioTvGuideController` 1192, `skipSegmentController` 1304, `sleepTimerController` 1333,
+`iptvRecordingActionsController` 8467 and `iptvZapBannerController` 10897 were all scanned. (The auto-sync pill
+is a separate feature with its own test `pill()`.)
+
+### 4. Cross-unit edges
+
+- **EF → PILL**: 11 `showStatusPillTransient` (12142, 12147, 12162, 12184, 12191, 12210, 12216, 12236, 12242,
+  12272, 12279) go through the fetch Host's `showStatusPillTransient` forwarder, which targets
+  `statusPillController`.
+- **S2 → PILL**: 1 (13203), through the same forwarder.
+- **EF → S2**: `adoptSourceList` ×2 (12166, 12245). This is internal in option R (private member, no
+  qualification).
+- **EF → switcher**: `sourceSwitchController.applier.switchToSourcePlaylist(` ×2 (12168, 12246).
+  Substitution `sourceSwitchController.` → `host.sourceSwitchController.` (owning-controller object,
+  phase-8/9 precedent).
+- **S2 → switcher**: `sourceSwitchController.updateStremioQualityBadge()` ×2 (13060, 13194), same substitution.
+- **PK → gate** (phase-9 patched tokens): 8 `startupGateController.` → `host.startupGateController.`:
+  - `cancelPikPakGateReprepare()` 6552, 6628, 6703;
+  - `failManualSourceCandidate("pikpak-exhausted")` 6565;
+  - `startupFailoverCursor?.committed == false` 6568, 6678;
+  - `failStartupCandidate("pikpak-exhausted")` 6569;
+  - `schedulePikPakGateReprepare(retryId)` 6658.
+- **S2 → gate** (phase-9 patched tokens): 10 `startupGateController.` → `host.startupGateController.`:
+  - `applyMoreTorrentSources`: 13063, 13064, 13068 ×2, 13070, 13072, 13073;
+  - `failMoreTorrentSources`: 13207, 13208, 13209 (inside the `progressHandler.post { … }` lambda).
+- **Gate → PK/S2/PILL**: the 5 gate-Host re-points above.
+- **Switcher → PK/PILL**: the 9 switcher-Host re-points (17 pill + 9 PK `host.` sites in the two switcher
+  files, unchanged text).
+- **Subtitle → PILL**: 3 re-points (4 call sites in `TvSubtitleController.kt`, unchanged).
+- **PK ↔ PILL, PK ↔ fetch**: none.
+
+The gate, switcher, PK and fetch Hosts each forward an owning-controller object
+(`startupGateController`/`sourceSwitchController`). The new Hosts must **not** declare any gate or switcher
+member name (same-name capture negative).
+
+### 5. Outbound host needs
+
+**PILL Host — 2 members, 11 references:**
+- `dp(value: Int): Int` ×8 (11828, 11829, 11831 ×4, 11832, 11838 — all inside `TextView(…).apply {}` /
+  `GradientDrawable().apply {}` / `.also {}`; neither receiver has a `host` member);
+- `externalSubtitleHandler: Handler` ×3 (11846, 11860, 11864; **borrowed** — the activity still clears it
+  wholesale at `onDestroy` 13710; the controller only `removeCallbacks(statusPillHideRunnable)` /
+  `postDelayed(…, 1400)` as today).
+
+Android (2): `TextView(this)` 11822 → `TextView(activity)` (constructor overload audit), and the implicit
+inherited `findViewById<ViewGroup>(android.R.id.content)` 11840 → `activity.findViewById<ViewGroup>(…)`
+(phase-9 implicit-receiver audit).
+
+**PK Host — 11 members, 22 references + 2 readiness:**
+- `player: ExoPlayer?` ×2 (6516, 6625 — the latter at Runnable fire time);
+- `pikPakReactivationIndicator: View` ×6 (6683–6685, 6692–6694) plus 1 readiness;
+- `pikPakReactivationText: TextView` ×1 (6682);
+- `startupGateStatus: TextView` ×1 (6680) plus 1 readiness;
+- `isStremioTvMode: Boolean` (val) ×1 (6657, fire time);
+- `failShufflePlayback(): Boolean` (6564), `playNext(): Unit` (6579, inside the 1.5 s `postDelayed` lambda),
+  `tryAutoSelectAddonSubtitle(): Unit` (6640);
+- `startupGateStatusReady: Boolean`, `pikPakReactivationIndicatorReady: Boolean`;
+- `startupGateController: TvStartupGateController` ×8.
+
+Android (10):
+- `isFinishing` ×4 (6573, 6590, 6673, 6691), `isDestroyed` ×2 (6673, 6691);
+- `runOnUiThread` ×3 (6574, 6672, 6690). The `return@runOnUiThread` labels at 6673/6691 stay valid;
+  `return@waitForPikPakMetadata` labels stay (same-class call);
+- `Toast.makeText(this, …)` 6575 (inside a `runOnUiThread` lambda inside the `waitForPikPakMetadata` trailing
+  lambda → the activity `this`).
+
+Locals/params not to substitute: `item`, `attemptNumber`, `retryId`, `success`, `delayMs`, `calculatedDelay`,
+`additionalMonitoringMs`, `onComplete`, `startTime`, `totalTimeoutMs`, `checkHandler`, `checkRunnable`,
+`elapsed`, `currentPlayer`, `message`.
+
+**Fetch Host (S2+EF) — 22 members (7 `var`), 92 references:**
+- EF:
+  - `showStatusPillTransient(message: String)` ×12 (EF 11 + S2 1), forwarding to `statusPillController`;
+  - `var stremioResolutionToken: Int` ×6 (`val token = ++…` 12146, 12214; reads 12155, 12182, 12230, 12259);
+  - `yieldEpisodeFetchToQueuedShuffle(): Boolean` ×3;
+  - `var isAutoAdvancing: Boolean` ×1 (w 12165);
+  - `watchShufflePlayback(attempt: ShufflePlaybackAttempt)` ×1;
+  - `payload: PlaybackPayload?` ×3 (EF 1, S2 2);
+  - `currentIndex: Int` (val) ×3;
+  - `guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int, allowResolverFallback: Boolean): SeasonEpisode?` ×1
+    (12265; the call uses the **named** argument `allowResolverFallback = true`, so the parameter name must
+    match; no interface default);
+  - `sourceSwitchController: TvSourceSwitchController` ×4 (EF 2, S2 2).
+- S2:
+  - `sourceBrowser: TvSourceBrowserController?` ×14;
+  - `stremioSources: MutableList<StremioSource>` ×8 (4 mutate; incl. the **braced** template
+    `${stremioSources.size}` 13054 → `${host.stremioSources.size}`);
+  - `addonPackProbing: MutableSet<String>` ×5 (mutate);
+  - `var moreSourcesLoadingMode: String?` ×4 (3 w);
+  - `unifiedMenu: UnifiedMenuController?` ×4;
+  - `var currentStremioSourceIndex: Int` ×4 (2 w + 2 r on 13050, 13192);
+  - `addonFetchState: MutableMap<String, String>` ×4 (3 mutate);
+  - `var seriesPacksFetched`, `var seriesEpisodesFetched`, `var movieSourcesFetched` ×1 w each;
+  - `sourceAddons: List<AndroidTvTorrentPlayerActivity.TvSourceAddon>` ×1;
+  - `progressHandler: Handler` ×1 (borrowed, `post` only);
+  - `startupGateController: TvStartupGateController` ×10.
+
+Android (20):
+- `runOnUiThread` ×15 — EF 12153, 12180, 12189, 12228, 12257, 12277; S2 13017, 13022, 13027, 13105, 13111,
+  13115, 13148, 13156, 13163. All are inside `object : MethodChannel.Result` methods, where the implicit
+  receiver is the outer activity. EF's 11 `return@runOnUiThread` labels stay;
+- `isFinishing`/`isDestroyed` ×2/×2 (13034 guard; 13209 inside the `progressHandler.post` lambda);
+- `Toast.makeText(this, …)` 13181 (plain body of `adoptSourceList` → activity).
+
+Locals/params not to substitute: `season`, `episode`, `autoAdvance`, `suppressResume`, `shuffleAttempt`,
+`onUnavailable`, `shouldContinue`, `imdbId`, `currentSeason`, `currentEpisode`, `direction`, `label`,
+`directionLabel`, `channel`, `token`, `map`, `items`, `fetchedSourceIndex`, `model`, `current`, `target`,
+`targetSeason`, `targetEpisode`, `mode`, `groupId`, `curItem`, `newSources`, `before`, `srcMap`, `idx`, `src`,
+`addonIds`, `packIds`, `alreadyCleared`, `season` (S2 param).
+- `autoAdvance` and `onUnavailable` are **also** constructor-property names of the nested
+  `ShufflePlaybackAttempt`. They are not activity members, so the indexer's hit is a false positive.
+- The parameters shadow nothing in the activity.
+
+### 6. Shared tokens, timers, handlers, teardown
+
+**Tokens.**
+
+`pikPakRetryId` — owner becomes **PK** (`internal var`).
+
+| role | where | site |
+|---|---|---|
+| writer | PK `cancelPikPakRetry` 6700 | `++` |
+| writer | retained `playPikPakVideoWithRetry` 6457 | `pikPakRetryController.pikPakRetryId++` |
+| writer | phase-8 applier `host.pikPakRetryId++` (`TvSourceSwitchApplier.kt:424`) | via the re-pointed switcher Host `var` |
+| reader | PK 6507, 6537 (inside the `waitForPikPakMetadata` callback) and 6615 (inside the 500 ms `object : Runnable`, fire time) | own field |
+| reader | retained 6458 (capture) | patched |
+| reader | applier 425 (capture) | switcher Host |
+| reader | gate `schedulePikPakGateReprepare` (capture plus 2 **fire-time** reads in the reprepare `Runnable`) | re-pointed gate Host `val` |
+
+A snapshot anywhere is a negative.
+
+`stremioResolutionToken` — owner **stays the activity** (1074).
+
+| role | where | site |
+|---|---|---|
+| writer | gate ×2 | gate Host var |
+| writer | switcher 202 | switcher Host var |
+| writer | EF ×2 (`val token = ++host.stremioResolutionToken`) | fetch Host var: get, inc, set, result = new value, same semantics, main thread |
+| reader | retained `resolveAndPlay` 4644/4663/4667 and `discoverProtectedMime` 4724/4729 | direct |
+| reader | switcher ×15 | switcher Host |
+| reader | EF ×4 | fetch Host |
+
+S2 has **no** token: its replies are unguarded except `applyMoreTorrentSources`' finishing guard (pin as-is).
+
+- `episodeFetchInFlight` — owner becomes the **fetch controller**. Its 8 writes and 2 reads are in EF; the
+  2 reads in `playShowShuffle` (one inside the 50 ms `retryWhenIdle` repost) are patched as live reads.
+- `isAutoAdvancing` — stays in the activity (upNext Host var). EF writes it through the fetch Host var.
+- `mediaPreparationGeneration` — not touched by the cluster. The gate reads it via its own Host.
+
+**Timers / handlers.**
+
+| timer | handler / owner | timing | stopped by |
+|---|---|---|---|
+| PK `pikPakRetryHandler` | **owned**, moves | 1.5 s `postDelayed({ playNext() })` 6578 on exhaustion | `cancelPikPakRetry` 6706 (`removeCallbacksAndMessages(null)`), `onDestroy` 13639 |
+| PK `waitForPikPakMetadata` local `checkHandler = Handler(Looper.getMainLooper())` 6610 with `object : Runnable` | local | 500 ms polls (6662, 6667) | never cleared by teardown; stops on its next tick via the `pikPakRetryId` check (existing follow-up; pin) |
+| PK `hidePikPakRetryOverlay` / `showPikPakRetryOverlay` | `runOnUiThread` | runs inline on the main thread | — |
+| PILL `statusPillHideRunnable` | **borrowed** `externalSubtitleHandler` | 1,400 ms (`postDelayed` 11860) | `removeCallbacks` in show/hide (11846, 11864); the activity's wholesale clear at `onDestroy` 13710 (unchanged) |
+| PILL view animations | `animate()` | 180 ms fade-in / 220 ms fade-out + `withEndAction { GONE }` | never cancelled on destroy (pin) |
+| S2 `progressHandler.post { … failStartupCandidate("recovery-results") }` 13209 | **borrowed** | post | wholesale `progressHandler` clear (unchanged position) |
+| EF | none | MethodChannel replies via `runOnUiThread` only | — |
+
+**Lifecycle positions (statement order unchanged; in-place single-token patches; never folded into a
+controller method):**
+
+| line | statement | unit | phase 10 |
+|---|---|---|---|
+| 13544 | `onPause`: `cancelPikPakRetry()` (after `super.onPause()` and the `ActivityTracker` reset; the only feature cancelled in `onPause`) | PK | patch |
+| 13589–13603 | the 15 gate statements (phase 9) | G | unchanged |
+| 13638 / 13639 | `onDestroy`: `cancelPikPakRetry()` / `pikPakRetryHandler.removeCallbacksAndMessages(null)` | PK | 2 patches (`pikPakRetryController.`; `pikPakRetryHandler` becomes an `internal val`) |
+| 13641–13645 | `if (::pikPakReactivationIndicator.isInitialized) { animate().cancel(); visibility = GONE }` (view stays) | — | unchanged |
+| 13710 | `externalSubtitleHandler.removeCallbacksAndMessages(null)` (borrowed by pill + subtitles) | — | unchanged |
+| wholesale `progressHandler.removeCallbacksAndMessages(null)` | (borrowed by gate, switcher, banner, STV, S2 post) | — | unchanged |
+
+`onStart`, `onStop` and `finish` contain no cluster reference.
+
+Behaviour to pin in step 0: inside `onDestroy`, `cancelPikPakRetry()` → `hidePikPakRetryOverlay()` runs its
+`runOnUiThread` body inline. On API ≥ 17 `isDestroyed` is already `true` during `onDestroy`
+(`performDestroy` sets `mDestroyed` first), so the hide returns early. The explicit 13641–13645 cleanup is
+what hides the indicator. Characterize under Robolectric SDK 28, do not assume.
+
+### 7. Reflective sites in Kotlin tests (exact)
+
+**Main checkout (`c4906cd2f`):**
+
+| test file | lines | access | name | route |
+|---|---|---|---|---|
+| `StremioTvStartupWatchdogTest` (own `call` helper 37–46: `when` → `progressReporter`/`stremioTvGuideController`, else activity; `declaredMethods.first { name && parameterCount }`) | 181 | call (5 args incl. lambda) | `waitForPikPakMetadata` | **new `when` branch** `"waitForPikPakMetadata", "cancelPikPakRetry" -> TvPlayerOriginalAccess.field(activity, "pikPakRetryController")!!` (phase 9 adds its own gate branch first; one extra branch, phase-7/9 precedent) |
+| ″ | 197, 226, 242 | call | `cancelPikPakRetry` | ″ |
+| ″ | 60 | raw `field(…)` set | `pikPakReactivationIndicator` | **unchanged** (view stays) |
+| `TvSourceSwitchApplyCharacterizationTest` (via `TvPhase3OriginalTest.field/set/invoke` → `TvPlayerOriginalAccess`, name-routed) | 50 | set ×3 | `pikPakRetryId`, `pikPakRetryCount`, `isPikPakRetrying` | map |
+| ″ | 52 | field ×2 | `pikPakRetryId`, `pikPakRetryCount` | map |
+| ″ | 53 | field | `isPikPakRetrying` | map |
+| ″ | 54 | field | `pikPakReactivationIndicator` | unchanged |
+| ″ | 56 | invoke (`callTyped`) | `cancelPikPakRetry` | map; **must be public** |
+| ″ | 63 | set + field | `pikPakRetryId` | map |
+| `TvSourceSwitchSelectionCharacterizationTest` | 20 / 25 | set / field | `pikPakRetryId` | map |
+| `TvPhase8OriginalTest` | 63 | `pill() = field("statusPill")` helper — 17 indirect uses on main (Apply 2, Feedback 8, Resolver 6, Selection 1) + 6 on the phase-9 branch | `statusPill` | map |
+| `TvSourceSwitchResolverCharacterizationTest` | 23, 42, 48, 65 | field | `statusPill` | map |
+| `TvPhase4BoundaryCharacterizationTest` | 48, 49, 51, 79 | field | `statusPill` | map |
+| `TvSubtitleRenderingCharacterizationTest` | 68 | field | `statusPill` | map |
+| `TvSourceSwitchFeedbackCharacterizationTest` | 48, 55 | invoke (`callTyped(String)`) | `showStatusPill` | map; **must be public** |
+| `ShufflePlaybackFlowTest` (own raw `field` helper 18–20: `activity.javaClass.getDeclaredField`) | 37 | set | `episodeFetchInFlight` | **helper retarget**: body → `TvPlayerOriginalAccess.set(activity, name, value)` (routes `episodeFetchInFlight`, keeps `queuedShuffle*` on the activity) — or, equivalently, a one-name branch; assertions byte-identical |
+| `TvPhase3OriginalTest` | 44 | bind | `pikPakReactivationIndicator` | unchanged |
+
+Main total: **28 direct sites** plus 17 `pill()` indirect uses.
+
+**Phase-9 branch tests (`4338d2713`; re-scan on the phase-9 merge):**
+
+| file | lines | name | route |
+|---|---|---|---|
+| `TvStartupGateGuardCharacterizationTest` | 45 | `field("pikPakRetryId")` | map |
+| `TvStartupGateTimingCharacterizationTest` | 63–67 | loop `guard in listOf("player", "pikPakRetryId", "mediaPreparationGeneration")` → `set(guard, field(guard)+1)` | map (dynamic name) |
+| ″ | 77, 79, 80, 81, 83 | `field("pikPakRetryId")` | map |
+| `TvStartupGateCommitCharacterizationTest` | 44, 52, 75, 111, 120 | `pill()` | map (indirect) |
+| ″ | 117 | `gateHost("showStatusPillTransient", …)` → the **switcher Host** interface method via `callTyped` | unaffected (Host method stays; its forwarder is re-pointed — this is the named supplement) |
+| `TvStartupGateTimingCharacterizationTest` | 38 | `pill()` | map (indirect) |
+| `TvStartupGateRecoveryCharacterizationTest` | 49, 149 | `set("movieMoreSources", true)` | unchanged (S2 state stays) |
+| ″ | 53 | `requestMap("requestMoreTorrentSources")` | Flutter method name — not reflection |
+
+**Helper routing (assertions byte-identical; diff limited to the helpers):**
+- `TvPlayerOriginalAccess.controllerOwners` (after phase 9's 30 gate entries) gains **7** entries:
+  - `"isPikPakRetrying"`, `"pikPakRetryCount"`, `"pikPakRetryId"`, `"cancelPikPakRetry"` → `"pikPakRetryController"`;
+  - `"statusPill"`, `"showStatusPill"` → `"statusPillController"`;
+  - `"episodeFetchInFlight"` → `"sourceFetchController"`.
+  - Fields keep their backing JVM names under `internal`/`private`. `isPikPakRetrying` is an `is`-prefixed
+    property, so its backing field is still `isPikPakRetrying`.
+- Watchdog `call`: 1 added `when` branch.
+- `ShufflePlaybackFlowTest.field`: 1 helper-body line.
+- **Public** functions of the internal classes (reflected; `internal` names are mangled): PK
+  `waitForPikPakMetadata`, `cancelPikPakRetry`; PILL `showStatusPill`. Never reflect an `internal fun`. The
+  `$default` bridge of `waitForPikPakMetadata` has a different JVM name, so `first { parameterCount == 5 }`
+  still selects the real method.
+
+### 8. Dart source-text anchors
+
+Only `test/manual_source_validation_contract_test.dart` is affected:
+
+| # | test line (`c4906cd2f`; ≈ +3 after phase 9 adds its gate read) | exact string | current site | phase 10 |
+|---|---|---|---|---|
+| 1 | 177 | `expect(nativePlayer, contains('map["recoveryCandidateCount"]'));` | S2 13069 (`applyMoreTorrentSources`; `map` is a parameter → literal unchanged) | **file → new read `nativeSourceFetch = File('android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt').readAsStringSync()`; literal unchanged** |
+
+Unaffected (checked):
+- 166 `startupPikPakTorrentAcquisitionAttempted = true` (gate, phase 9);
+- 175 `"'recoveryCandidateCount': automatic.length"` (Dart launcher);
+- 211 `"case 'requestMoreTorrentSources':"` (Dart bridge);
+- 288–308 "PikPak keeps cold-storage retries…" (Flutter code only);
+- all three `_between(nativePlayer, …)` markers (gate / `resolveAndPlay`);
+- no whole-file `isNot(contains(…))` on `nativePlayer`;
+- `test/android_tv_auto_advance_resume_test.dart`: the `playItem` range gets the 4598 patch but neither of its
+  two literals;
+- `test/android_tv_mdblist_progress_source_test.dart` (47 is Dart);
+- `test/profiles/profile_source_guard_test.dart` (scans no `tv/` file);
+- `NativeAudioRoutingTest` (renderer-capability literal only).
+
+Edits: **1 + 1 file read.** No retarget weakens an assertion. The anchor is whole-file `contains`; a
+follow-up could narrow it to a `_between` of `applyMoreTorrentSources` in the new file.
+
+### 9. Hazards
+
+1. **Runnable / object self-references**: never substitute. PK `waitForPikPakMetadata`'s `object : Runnable`
+   `this` at 6617, 6637, 6649, 6662. Everything else needs no runnable-receiver row:
+   - PILL `Runnable { hideStatusPill() }` and the PK 1.5 s lambda have no `this`;
+   - EF/S2 `object : MethodChannel.Result` bodies contain no `this`.
+2. **Activity `this` / overload / inherited-receiver audit sites**:
+
+   | unit | sites |
+   |---|---|
+   | PILL | `TextView(this)` constructor 11822; implicit `findViewById<ViewGroup>(android.R.id.content)` 11840 |
+   | PK | `Toast.makeText(this, …)` 6575; `runOnUiThread` ×3, `isFinishing` ×4, `isDestroyed` ×2 |
+   | fetch | `Toast.makeText(this, …)` 13181; `runOnUiThread` ×15 (inside anonymous `Result` objects — implicit outer receiver), `isFinishing` ×2, `isDestroyed` ×2 (one pair inside the `post` lambda) |
+
+   No Glide, view constructors beyond `TextView`, context aliases or `finish()`.
+3. **`isFinishing`/`isDestroyed` asymmetries to pin as-is:**
+   - PK exhaustion toast checks only `!isFinishing` (6573);
+   - EF `Result` callbacks never check finishing/destroyed: their only liveness is the token,
+     `shouldContinue` and `yieldEpisodeFetchToQueuedShuffle()` (which includes `!isFinishing && !isDestroyed`);
+     `notImplemented` paths skip even the token check;
+   - S2 addon-fetch callbacks have no guard; `applyMoreTorrentSources` guards at entry.
+4. **Templates**: there are **no unbraced** host-name templates in the cluster.
+   - One braced host reference, `${stremioSources.size}` 13054, gets plain qualification inside the braces.
+   - `${PIKPAK_MAX_RETRIES + 1}` ×2 resolves to the file-private const unchanged.
+   - EF/S2 `$label`, `$directionLabel`, `$mode`, `$before`, `$errorCode`, `$errorMessage`, `${curItem?…}`
+     are locals.
+   - A checker negative still proves an unbraced host template fails.
+5. **`apply`/`also` receivers in PILL**: `host.dp(…)` sits inside `TextView.apply {}` and
+   `GradientDrawable.apply {}`. I confirmed that neither `TextView`/`View` nor `GradientDrawable` has a
+   `host` or `activity` member. EF's `hashMapOf(…).apply { put(…) }` references no host name.
+6. **Named arguments / defaults through Hosts**:
+   - `guideAdjacent(…, allowResolverFallback = true)`: the forwarder parameter must be named
+     `allowResolverFallback`, with no interface default.
+   - The gate forwarder `failMoreTorrentSources()` is 0-arg: the callee default `alreadyCleared = false` is
+     evaluated in the forwarder call.
+   - Inbound EF calls with named args (`autoAdvance =`, `suppressResume =`, `shuffleAttempt =`,
+     `shouldContinue =`, `onUnavailable =`) go **directly** to the controller, not through a Host.
+   - `waitForPikPakMetadata`'s `additionalMonitoringMs = 0`, `requestAdjacentEpisodeFetch`'s
+     `autoAdvance = false`/`direction = 1`, and `requestEpisodeFetch`'s `suppressResume = autoAdvance`
+     (an earlier parameter) all move with the class.
+7. **Prefix increment through a Host var**: `val token = ++host.stremioResolutionToken` ×2. Fixture plus test:
+   the captured token equals the post-increment value, and the field is written once.
+8. **Controllers constructed before their forward targets** (all computed reads, never at construction):
+
+   | forwarder in | constructed at | forwards to |
+   |---|---|---|
+   | gate Host | 1078 | PILL 1354, PK 1384, fetch 12124 |
+   | subtitle Host | 1213 | PILL 1354 |
+   | fetch Host | 12124 | switcher ≈ 12899, gate 1078, PILL |
+
+   The existing "reads Host during construction" negative covers this.
+9. **Live reads inside deferred work**:
+   - PK: `pikPakRetryId` (Runnable plus callback), `player` and `isStremioTvMode` (Runnable), and
+     `startupGateController.startupFailoverCursor` (lambda) — all via the owner field or computed Host;
+   - EF: `stremioResolutionToken` and `payload`/`currentIndex` (error path) at reply time;
+   - `playShowShuffle`'s 50 ms re-check of `episodeFetchInFlight` through the patched controller read;
+   - the gate's 30 s fallback reading `moreSourcesLoadingMode` via its (unchanged) Host.
+
+   A snapshot `val` anywhere is a negative.
+10. **Owned vs borrowed handlers**:
+    - `pikPakRetryHandler` becomes PK-owned. The activity's `onDestroy` clear stays in place as
+      `pikPakRetryController.pikPakRetryHandler.removeCallbacksAndMessages(null)`; `cancelPikPakRetry`
+      clears it too (unchanged).
+    - `externalSubtitleHandler` and `progressHandler` are borrowed; the controllers never clear them
+      wholesale.
+11. **Same-name capture**:
+    - the PILL Host must not declare pill names;
+    - the PK Host must not declare PK names, gate names (`cancelPikPakGateReprepare`,
+      `schedulePikPakGateReprepare`, `failManualSourceCandidate`, `failStartupCandidate`,
+      `startupFailoverCursor`) or switcher names;
+    - the fetch Host must not declare `requestEpisodeFetch`, `adoptSourceList`, … or any gate/switcher member
+      name.
+
+    A missed `host.` on `startupGateController.`/`sourceSwitchController.` cannot compile in the new files,
+    but it is a checker negative too.
+12. **Patched earlier-phase properties**:
+    - `subtitleController` (phase-4 `added`; first patch since phase 4, phase-5 sleep precedent);
+    - `sourceSwitchController` (phase-8 `added`, phase-9 `patched` → phase-10 patch on the phase-9-merged
+      text);
+    - `startupGateController` (phase-9 `added` → phase-10 `patched`).
+
+    Destination files `TvSubtitleController.kt`, `TvSourceSwitchController.kt`, `TvSourceSwitchApplier.kt`
+    and `TvStartupGateController.kt` stay byte-identical (frozen against the phase-9 merge, empty whitelist).
+13. **Phase-9 tokens inside moved bodies**: PK (8) and S2 (10) bodies are compared against the
+    phase-9-merged original. The 18 `startupGateController.` → `host.startupGateController.` substitutions are
+    declared with exact contexts and counts.
+14. **`ShufflePlaybackAttempt`** (internal nested; binary name unchanged since phase 8) is named by EF's
+    signature and the fetch Host's `watchShufflePlayback`. Import
+    `com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt` (switcher precedent).
+    `ShufflePlaybackFlowTest`'s `attempt()` reflects it by simple name and stays valid.
+15. **`TvSourceAddon`** (public nested data class, binary name pinned by phase 6's decision) is named only in
+    the fetch Host type, via an import.
+
+### 10. Split into files, Host design and counts
+
+**Option R (recommended)**
+
+| file | contents | est. lines |
+|---|---|---|
+| `TvStatusPillController.kt` | package; ≈ 10 imports (`Color`, `Typeface`, `GradientDrawable`, `Gravity`, `View`, `ViewGroup`, `FrameLayout`, `TextView`, `Handler`, `AppCompatActivity`); `internal class TvStatusPillController(private val activity: AppCompatActivity, private val host: Host)`; `interface Host` (2); banner + PILL members in order | ≈ 1 + 11 + 4 + 4 + 54 + 1 ≈ **75** |
+| `TvPikPakRetryController.kt` | ≈ 9 imports (`Handler`, `Looper`, `View`, `TextView`, `Toast`, `AppCompatActivity`, `Player`, `ExoPlayer`, `OptIn`/`UnstableApi` if the audit requires); 4 file-private consts; class; `interface Host` (11); PK members | ≈ 1 + 10 + 5 + 4 + 13 + 206 + 1 ≈ **240** |
+| `TvSourceFetchController.kt` | ≈ 8 imports (`Handler`, `Toast`, `AppCompatActivity`, `MainActivity`, `ShufflePlaybackAttempt`, `TvSourceAddon`, …); class; `interface Host` (22, ≈ 29 lines); EF then S2 in original order | ≈ 1 + 9 + 4 + 29 + 383 + 1 ≈ **425** |
+
+Activity additions:
+
+```kotlin
+private val statusPillController: TvStatusPillController = TvStatusPillController(
+    this,
+    object : TvStatusPillController.Host {
+        override fun dp(value: Int): Int = this@AndroidTvTorrentPlayerActivity.dp(value)
+        override val externalSubtitleHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.externalSubtitleHandler
+    },
+)                                                     // slot statusPill (1354), ≈ 7 lines
+private val pikPakRetryController: TvPikPakRetryController = TvPikPakRetryController(
+    this,
+    object : TvPikPakRetryController.Host {
+        override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+        override val startupGateController: TvStartupGateController get() = this@AndroidTvTorrentPlayerActivity.startupGateController
+        override val startupGateStatusReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.startupGateStatusReady
+        // … 11 one-line forwarders
+    },
+)                                                     // slot isPikPakRetrying (1384), ≈ 16 lines
+private val startupGateStatusReady: Boolean get() = ::startupGateStatus.isInitialized
+private val pikPakReactivationIndicatorReady: Boolean get() = ::pikPakReactivationIndicator.isInitialized
+private val sourceFetchController: TvSourceFetchController = TvSourceFetchController(
+    this,
+    object : TvSourceFetchController.Host {
+        override fun showStatusPillTransient(message: String): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.showStatusPillTransient(message)
+        override var stremioResolutionToken: Int
+            get() = this@AndroidTvTorrentPlayerActivity.stremioResolutionToken
+            set(value) { this@AndroidTvTorrentPlayerActivity.stremioResolutionToken = value }
+        override fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int, allowResolverFallback: Boolean): SeasonEpisode? =
+            this@AndroidTvTorrentPlayerActivity.guideAdjacent(model, currentItem, direction, allowResolverFallback)
+        // … 7 vars × 3 lines + 15 one-liners
+    },
+)                                                     // slot episodeFetchInFlight (12124), ≈ 42 lines
+```
+
+Net activity ≈ −640 − 4 (consts) + ≈ 67 ≈ **−577** from the phase-9 merge (13,320 → ≈ 12,740).
+
+Counts (R):
+- **Substitutions ≈ 176:**
+  - PILL 16: host 11, Android 2, visibility 3 — `showStatusPill` public (reflected); `showStatusPillTransient`
+    and `hideStatusPill` internal; `statusPill`, `statusPillHideRunnable`, `ensureStatusPill` stay private.
+  - PK 42:
+    - host 22 incl. 8 `host.startupGateController.`, readiness 2, Android 10;
+    - visibility 8: 3 vars + handler `internal`; `attemptPikPakPlaybackLoop`, `hidePikPakRetryOverlay`
+      `internal`; `waitForPikPakMetadata`, `cancelPikPakRetry` `public`; `showPikPakRetryOverlay` stays
+      private.
+  - Fetch 118:
+    - host 92: EF 27, S2 65 incl. 10 `host.startupGateController.`, 4 `host.sourceSwitchController.`, 1 braced
+      template;
+    - Android 20;
+    - visibility 6: `episodeFetchInFlight`, `requestEpisodeFetch`, `requestAdjacentEpisodeFetch`,
+      `requestMoreTorrentSources`, `requestAddonTorrentSources`, `failMoreTorrentSources` → `internal`;
+      `applyMoreTorrentSources`, `applyAddonEpisodeSources`, `failAddonFetch` and `adoptSourceList` stay
+      private.
+- **Activity:**
+  - 27 patches in 13 declarations, including 3 lifecycle patches;
+  - 17 re-points / 20 token edits in 3 patched properties;
+  - 3 added slot-anchored properties plus 2 added readiness getters;
+  - 4 companion constants moved (the companion is a split container);
+  - never-substitute receivers: 4;
+  - overload/inherited-audit sites: 2 Toast, 1 `TextView` ctor, 1 `findViewById`, 18 `runOnUiThread`,
+    6 `isFinishing`, 4 `isDestroyed`.
+- **Proofs 4.** Reflective helper diff: 7 map entries + 1 `when` branch + 1 `ShufflePlaybackFlowTest`
+  helper line. Dart: 1 edit + 1 read.
+
+**Rejected variants:**
+- **R′ (S2 and EF as separate siblings).** S2 needs a field slot. Owning `moreSourcesLoadingMode` adds patches
+  at `bindViews` 2641, `umAddLoadMoreRow` 11649 and `parsePayload` 13338, plus a gate re-point. Owning the
+  addon maps as well adds 2652, 2656, 13353, 13354 and 2 proofs (`mutableMapOf<String, String>()`,
+  `mutableSetOf<String>()` crossing `sourceAddons = emptyList()` and the nested data class). It also adds an
+  EF→S2 forwarder for `adoptSourceList` and a fourth file.
+- **R″ (one class).** Slot 1354 forces PK's 4 fields and `episodeFetchInFlight` to run earlier (5 extra
+  proofs). It gives one ≈ 45-member Host and an ≈ 770-line file, and mixes a shared UI service with recovery
+  engines.
+- **Nesting (e.g. fetch constructs PILL).** Rejected: the pill has 4 independent owners (subtitle, switcher,
+  gate, fetch) plus 2 activity callers. Nesting would hide its single owner behind another feature.
+
+### 11. Step T / step 0 notes
+
+**Step T.**
+- Per-phase dispatcher: all historical suites with their manifests, including the phase-9 suite (182
+  self-tests at phase-9 step T).
+- A complete phase-10 extraction fixture:
+  - three destinations, three `added` properties with slots `statusPill`/`isPikPakRetrying`/`episodeFetchInFlight`;
+  - two readiness getters anchored at the PK slot;
+  - 4 proofs, 3 patched earlier-phase properties with exact forwarder patches (3 / 12 / 5);
+  - 18 `host.startupGateController.` and 4 `host.sourceSwitchController.` substitutions against
+    phase-9-merged text;
+  - the 4 companion constants as file-private.
+- Negatives:
+  - snapshot forwarder `val pikPakRetryId` in the gate Host, or `episodeFetchInFlight`/`stremioResolutionToken`
+    in the fetch Host;
+  - a missed re-point (forwarder still targeting the removed activity member, which also fails compile);
+  - an extra edit in each patched property;
+  - an `onPause`/`onDestroy` PK statement reordered or folded into a controller call;
+  - `++host.stremioResolutionToken` rewritten as a read-then-write pair;
+  - an omitted PILL Runnable proof or PK Handler proof;
+  - a Host declaring a gate/switcher/own member name;
+  - an unbraced host template;
+  - a `guideAdjacent` forwarder with a renamed/defaulted parameter;
+  - a `TextView(activity)` resolving to a different constructor;
+  - `findViewById` routed through a Host.
+- Compiled overload/inherited-receiver audit for the sites in §9.2.
+- All earlier destinations (incl. `TvStartupGateController.kt` and both switcher files) frozen against the
+  phase-9 merge.
+- No classifier or auditor extension is expected; the phase-9 implicit-receiver collector covers
+  `findViewById`, `runOnUiThread`, `isFinishing` and `isDestroyed`.
+
+**Step 0 gaps (EF and S2 have no direct characterization today):**
+- **PILL**:
+  - single lazily-built tree: text size 13, white, `sans-serif-medium`, 0xD9101014 fill, `dp(18)` radius,
+    `dp(1)` 0x33FFFFFF stroke, padding, `dp(240)` elevation, initial GONE, `BOTTOM|CENTER_HORIZONTAL`,
+    `dp(48)` margin, parent `android.R.id.content`, reused on later calls;
+  - show: alpha 0 → 1 over 180 ms; cancels a pending hide;
+  - transient: hide posted at **exactly 1,400 ms** on `externalSubtitleHandler` (1,399 vs 1,400 boundary);
+    a re-show inside the window cancels it;
+  - hide: no-op when absent or not VISIBLE; 220 ms fade then GONE;
+  - the wholesale `onDestroy` clear retires a pending hide;
+  - one pill shared by subtitle, switcher, gate, fetch and the two activity callers.
+- **PK**:
+  - backoff schedule (attempt n: 10 s metadata window + 0/2/4/8/16/18 s capped);
+  - success on `STATE_READY` or `duration > 0` (cancels the gate reprepare, clears state, hides, then
+    `tryAutoSelectAddonSubtitle`);
+  - cancellation by `pikPakRetryId` at the loop entry, in the callback and in the poll;
+  - exhaustion order: cancel reprepare → clear → hide → shuffle fail → manual fail → uncommitted startup
+    cursor → toast + 1.5 s `playNext` on the owned handler;
+  - the `!isFinishing`-only toast guard;
+  - Stremio TV reprepare scheduling on a player error, with the live id;
+  - overlay text mirrored to `startupGateStatus` only while the cursor is uncommitted and the view is bound;
+  - the uninitialized-indicator guard;
+  - `onPause`/`onDestroy`/`playItem`/`playStremioTvPlaybackMap` cancellation;
+  - `onDestroy`'s inline hide behaviour (§6).
+- **EF**:
+  - in-flight lock; null channel → pill;
+  - `++token` supersession and stale replies; `shouldContinue == false`; yield to a queued shuffle;
+  - unavailable → `onUnavailable` vs pill;
+  - success → `isAutoAdvancing`, `adoptSourceList` (preferred-missing toast, append-only clamp, badge, menu
+    render), `watchShufflePlayback`, `switchToSourcePlaylist` arguments;
+  - error/notImplemented (notImplemented ignores the token);
+  - adjacent fetch: payload incl. optional `imdbId`, direction labels, missing target,
+    `episode_guide_unavailable` → `guideAdjacent(…, allowResolverFallback = true)` →
+    `requestEpisodeFetch(autoAdvance)`;
+  - the `playShowShuffle` 50 ms wait loop.
+- **S2**:
+  - load-more lock; null channel → `failMoreTorrentSources` (browser error vs pill);
+  - request map (current item season/episode); renders;
+  - apply: finishing guard, null map → `alreadyCleared`, list replacement + clamp, fetched flags, badge;
+  - the recovery handoff (already driven by the phase-9 recovery tests);
+  - addon fetch: sourceKey filter, `fetching` guard, null channel → browser error, episodes call → apply
+    (fetched, adopt, `packAddonIds` → second `packs` call, probing add/remove on each reply kind and on a
+    null channel), failure state.
+- Use a recording fake channel with async main-looper replies (phase-2 messenger) and PAUSED looper.
+  Mutation proofs on the original; Claude's independent sample; 0b.
+
+### 12. What follows (re-measure before each)
+
+The phase-6 re-plan's order shifts by one, because the gate took phase 9 alone and this cluster is phase 10:
+
+1. **Phases 11–12: IPTV core + EPG + VOD** (≈ 2,500, phase-6 estimate; the IPTV-named member spans at
+   `c4906cd2f` are ≈ 8216–10900 plus the browse/zap helpers). Multi-file, one owner per token.
+   - 11: guide overlay builder and pickers (`setupIptvOverlay` 225, `applyGuideStyle` 145,
+     `showIptvCategoryPicker` 185, `showIptvListPicker` 143, ≈ 700 with helpers) + EPG pane/now-next
+     (≈ 335).
+   - 12: zap/switch protocol (`requestIptvZapPage`, `installIptvZapWindow`, `switchToIptvChannel`,
+     `requestIptvChannelJump`, …), guide visibility/search/browse (`requestIptvBrowse`), `initIptvMode`
+     (116) and VOD, ≈ 1,500 — a documented over-guideline exception (the six shared token/context fields).
+   - This re-points the zap banner's ≈ 6 forwarders.
+   - **No coupling with phase 10:** IPTV code calls no pill, PK, fetch or EF member.
+2. **13**: IPTV tune pipeline + live recovery/twin trial (≈ 640).
+3. **14**: controls I.
+4. **15**: controls II with the Next overlay.
+5. **16**: playlist overlay + guide skin.
+6. **17**: navigation + shuffle (with `ShufflePlaybackFlowTest` retargets) + subtitle fetch.
+7. **18**: playback start, including `playPikPakVideoWithRetry` (its 6 PK patches become PK-Host-free calls
+   to `pikPakRetryController`) and `stremioResolutionToken` ownership.
+8. **19**: unified-menu model split by owner (`umAddLoadMoreRow`/`umSourcesModel` then sit next to the fetch
+   controller's state).
+9. Routers last.
+
+### 13. Follow-ups found while mapping (not fixed; pin as-is)
+
+- `pikPakRetryCount` is write-only. PK's `checkHandler` is untracked. The exhaustion toast checks only
+  `isFinishing` (existing).
+- EF `notImplemented` callbacks skip the token check. EF and S2 `Result` callbacks do UI work (pill,
+  `sourceBrowser.render`, Toast in `adoptSourceList`) without a finishing/destroyed guard.
+  `episodeFetchInFlight` stays locked if Flutter never replies.
+- The pill's fade animations and `withEndAction` are not cancelled on destroy. The pill view is never
+  removed (harmless).
+- `hidePikPakRetryOverlay` from `onDestroy` is effectively a no-op (`isDestroyed` already true); the explicit
+  indicator cleanup does the work.
+- Dart row 1 is a whole-file `contains`; consider a `_between` of `applyMoreTorrentSources` in a separate
+  test-only change.
