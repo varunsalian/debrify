@@ -1623,3 +1623,12 @@ favourites-gated jump hint, floating vs docked banner.
   retains descriptors, including four Glide FragmentActivity calls. Five
   historical `--at` checks and 31 earlier destinations frozen at
   `e71ddac3a` pass, without whitelist. Evidence: `p6/`; Step 0 follows.
+
+- 2026-10-08 — phase 6 Step-T size follow-up: the initial fixture copied
+  the activity's full imports (801/846 lines). Exact reviewed destination
+  subsets now produce **689/729-line** files; activity imports remain frozen.
+  Final phase-6 suite **21/21** passes; historical suites unchanged. Fixture
+  recompiles; original bytecode was rebuilt from restored `e71ddac3a` before
+  the repeated **42/42** overload audit. The transient prefix/newline failure
+  was rejected, not accepted as parity. Evidence `p6/finalize-imports.log`,
+  `reviewed-destination-imports.json`, `phase6-final-self-tests.log`.

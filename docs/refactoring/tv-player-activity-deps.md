@@ -7696,3 +7696,9 @@ Logs/JSON: `p6/self-original.log`, `checker-self-tests.log`,
 `classifier-final.log`, `fixture-compile.log`, `host-capture-compile.log`,
 `overload-audit.json`, `historical-p*.log`, `earlier-destinations.log`.
 Production sources, previous manifests, lockfile and ProGuard unchanged.
+
+Step-T size follow-up: the exact destination import lists were narrowed
+(no activity import change); final production fixture files are 689 and
+729 lines. Final phase-6 negatives/positive: 21/21 pass; the historical
+97 tests remain passing from the dispatcher run. Recompiled from the
+restored original and final fixture: 42/42 overload descriptors identical.
