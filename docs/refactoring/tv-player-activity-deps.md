@@ -7822,13 +7822,13 @@ Production remains unchanged.
 
 | New test | Original mutation | Failing assertion |
 |---|---|---|
-| `TvZapBannerPagingCharacterizationTest::classicPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::classicPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 \|\| iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
 | `TvZapBannerPagingCharacterizationTest::classicPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
-| `TvZapBannerPagingCharacterizationTest::consolePagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::consolePagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 \|\| iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
 | `TvZapBannerPagingCharacterizationTest::consolePagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
-| `TvZapBannerPagingCharacterizationTest::editionPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::editionPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 \|\| iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
 | `TvZapBannerPagingCharacterizationTest::editionPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
-| `TvZapBannerPagingCharacterizationTest::glassPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 || iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
+| `TvZapBannerPagingCharacterizationTest::glassPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvChannels.size > 1 \|\| iptvZapPagingActive` → `iptvChannels.size > 1` | `java.lang.AssertionError: paging alone enables channel hint expected:<0> but was:<8>` |
 | `TvZapBannerPagingCharacterizationTest::glassPagingTransitionsRejectStaleTotalsAndGateHints` | `iptvZapPagingActive && iptvZapCategoryTotal > 0` → `iptvZapCategoryTotal > 0` | `org.junit.ComparisonFailure: inactive paging ignores stale category total expected:<·  1 of 2[]> but was:<·  1 of 2[,000]>` |
 
 All eight proofs fail on assertions, with one selected test each; no compile,
@@ -7836,3 +7836,57 @@ crash or zero-test proof. Raw definitions, patches, XML and logs: `p6/step0b/`.
 `junit/p6-step0b` has **636 identities: 635 pass, one unchanged focus failure**.
 All 632 `p6-step0` statuses are identical; only four passing additions.
 Complete XML and stable tree fingerprints; detached original removed.
+
+### Phase 6 step 1 and gate — production extraction
+
+Commits `035d3b738` (0b) and `c21519da7` (moves); full gate tests the clean
+committed `c21519da7` tree. Materialized the approved manifest exactly:
+47 members into `TvIptvZapBannerController` (689 lines) and its eagerly
+constructed `TvIptvZapBannerStyledRenderer` (729 lines); 16 activity
+occurrences in nine declarations, 19 computed explicitly qualified Host
+members. Activity 16,487 → 15,167 physical lines; scoped size baseline
+updated with `--update`, unrelated stale entries retained. Both new files
+are below 800 lines. Style/token lazies stay activity-owned.
+
+Reflection retargets: all 47 original names resolve through
+`iptvZapBannerController`; the renderer’s 14 names traverse its `styled`
+field. Only `TvPlayerOriginalAccess.kt` changed: all 106 other Kotlin test
+files, including every Phase-6 assertion, remain byte-identical. No Dart
+anchors or assertions move. The 47 Phase-6 cases pass; focused Dart source
+suite exactly matches Phase 5 (44 success, existing profile-source guard
+failure). Full Android suite exactly preserves all 636 `p6-step0b` statuses
+(635 pass, existing source-browser focus failure), with complete XML,
+zero dirty files and stable fingerprints.
+
+Checker: all 2,567 original declarations classified, zero differences;
+original self-comparison also zero; all 118 dispatcher/self-tests pass.
+Historical checks: p1@dcbd9aafe, p2@ec365eb80, p3@eee52b084,
+p4@1a33c42cb, p5@e71ddac3a. All 31 earlier destinations byte-identical to
+e71ddac3a; no whitelist. All 28 inert initializer proofs retained,
+including renderer-first-field effective slot and eager nested construction.
+Compiled debug overload audit: 42/42 identical descriptors, four Glide
+FragmentActivity calls. Full onStart/onPause/onStop/onDestroy/finish tokens
+identical; no lifecycle patches. Debug compiler retains exactly five existing
+production warning identities. Lint issue multiset exactly matches archived
+e71ddac3a: 1,352 issues (253 Error, 1,099 Warning, 175 opt-in errors).
+Analyzer exactly retains all 1,758 Phase-5 diagnostic identities.
+
+Release APK succeeds with Android Studio JBR (`flutter build apk --release
+--no-pub`, no install). R8 mapping + APK DEX check preserves all seven new
+classes and 152 members (both controllers, Host, all anonymous objects and
+activity Host implementation); all three mapping negatives reject.
+Decoder: pending-environment; valid APK invocation yields the same failure
+output, same missing nine subtitle decoders/three auto-sync filters per ABI,
+and identical three libmpv hashes as Phase 5. The first invocation omitted
+its required APK argument and is archived as invalid, not accepted evidence.
+
+Full quiet Flutter suite via `suite_evidence.py`: all 12855
+identity/status pairs exactly match the Phase-5 gate (12794
+success, 13 failure, 28 error, 20
+skipped; 1232 suites). Same Flutter/Dart SDK and `--no-pub` flags;
+complete done event and clean committed input unchanged throughout.
+No failure allowance or baseline regression accepted. Raw artifacts and
+comparisons: `p6/step0b/`, `p6/step1/`, `p6/gate/`, `junit/p6-step0b/`,
+`junit/p6-gate/`. Production manifest, earlier phase manifests, lockfile and
+ProGuard unchanged; detached original removed. No bug fix, push, branch
+switch, emulator/device interaction or self independent review. STOP.

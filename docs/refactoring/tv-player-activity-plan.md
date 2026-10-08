@@ -1662,3 +1662,34 @@ favourites-gated jump hint, floating vs docked banner.
   (635 pass, existing focus failure); all 632 step-0 statuses unchanged, four
   passing additions only. Evidence `p6/step0b/`, table in deps; production
   unchanged and original worktree removed. Step 1 follows.
+
+- 2026-10-08 — **Phase 6 step 1 complete (`c21519da7`).** Exact manifest
+  extraction: classic controller 689 lines, eager nested styled renderer 729;
+  activity 16,487 → 15,167. All 47 characterizations pass unchanged; only the
+  shared reflection helper retargets 47 names (14 via nested `styled`).
+  No Dart retargets. Scoped size baseline updated with `--update`.
+  Computed 19-member Host, eager renderer first field and all 28 inert
+  proofs preserved; no lifecycle edits. Evidence `p6/step1/`.
+- 2026-10-08 — **Phase 6 gate complete; STOP for Claude’s review.** Tested
+  clean committed `c21519da7` tree. Checker: all 2,567 declarations, zero
+  differences; 118/118 self-tests; five historical `--at` checks (p5 at
+  e71ddac3a); 31 frozen earlier destinations, no whitelist. Compiled audit
+  42/42, all four Glide FragmentActivity calls; 28 initializer proofs and
+  identical teardown/lifecycle tokens. JVM exactly preserves all 636
+  p6-step0b identities (635 pass, existing focus failure). Five production
+  compiler warnings unchanged; lint exactly retains all 1,352 e71ddac3a
+  issues (253 errors, 175 opt-ins); analyzer all 1,758 prior identities.
+  Focused source tests exactly retain 44 passes/one existing failure.
+  Release APK succeeds; R8/DEX all seven new classes/152 members and three
+  negative controls pass. Decoder pending-environment: valid APK check,
+  failure output and all three native hashes identical to Phase 5; rejected
+  missing-argument invocation recorded separately. Full quiet Flutter suite
+  exactly matches all 12855 Phase-5 identity/status pairs
+  (12794 success/13 failure/28
+  error/20 skipped), same SDK/flags and stable clean tree.
+  Step 0b: four passing additions, eight original assertion proofs, exact
+  Claude h11 killed in all four styles (47/47 control). Evidence p6/step0b/,
+  p6/step1/, p6/gate/ and junit/; table/retargets in deps. Manifest/protected
+  inputs/earlier files unchanged; original worktree removed. No production
+  deviation, bug fix, push, branch switch, device/emulator or self independent
+  review. **STOPPED after phase 6**; Claude reviews separately.
