@@ -1007,6 +1007,66 @@ zap banner in classic and each styled guide style while zapping channels
 (up/down, number entry), logos, EPG now/next, LIVE/REC badges, the
 favourites-gated jump hint, floating vs docked banner.
 
+## Phase 7 — Stremio TV guide ("lite")
+
+Branch `refactor/tvplayer-p7` off the phase-6 merge `a4ed4f368` (activity 15,167 lines). Evidence under
+`refactor-evidence/tvplayer/p7/`. Source: section B of the "Phase 6
+inventory" (measured at `1a33c42cb`; re-measure on the phase-6 merge). All
+collaborator rules from phases 3–6 apply.
+
+**Selected:** `TvStremioTvGuideController` — 30 members, ≈ 529 lines: the
+guide-ready wait (`hideGuideWhenReady`, `cancelGuideWait`, listener +
+timeout fields), guide init/setup/show/hide/toggle/filter/header,
+focus-in-list check, lazy guide-data requests, `requestStremioTvNext` and
+`switchToStremioTvChannel`, plus the contiguous owned state block
+(`stremioTvChannels`, 9 view refs, adapter, visibility/in-progress flags,
+`stremioTvSwitchToken`). `isStremioTvMode` stays in the activity (Host
+`var` forwarder). The media-start trio (`updateStremioSourcesFromPlaybackMap`,
+`replacePayloadWithStremioTvItem`, `playStremioTvPlaybackMap`) stays for the
+playback-start phase; the controller reaches `playStremioTvPlaybackMap`
+through a Host forwarder (re-pointed when the trio moves).
+
+16 activity patches in 6 declarations; 12-member Host; ≈ 68 declared
+substitutions (21 host, 36 Android incl. `runOnUiThread` ×12 and
+`finish()` ×6 — which must stay `activity.finish()` so the activity's
+`finish` override still runs — `findViewById` ×9, `currentFocus`, 8 `this`
+sites; 11 visibility changes). Overload audit: `LinearLayoutManager(this)`,
+`Glide.with(this)`, 2 `Toast` + 4 `this@…` Toasts inside
+`MethodChannel.Result`. `playerView.findViewById` stays host-qualified (not
+the inherited `findViewById`). Default argument `finishOnFailure = false`
+stays evaluated at call time. Two earlier-running initializers (`null`
+listener/runnable) get inert proofs. One reflective retarget:
+`StremioTvStartupWatchdogTest` calls `initStremioTvGuide` by name — it
+becomes a **public** member of the internal controller and the test's local
+`call` helper routes it to the controller (assertions byte-identical).
+
+**Follow-ups pinned as-is (not fixed):** `stremioTvSwitchToken` is not bumped
+in `onDestroy`; the guide-ready listener and 10 s wait are not cancelled
+there.
+
+### Step 0 — characterization of the original
+
+Guide init from JSON (channel parsing, current flag, inline now/next,
+`isStremioTvMode` set, playlist button repurposed only for
+`PlaylistMode.NONE`); show/hide/toggle with focus and scroll-to-current
+(`post` + 150 ms); search filter; header binding (poster vs letter, Glide
+lifecycle owner); lazy guide-data for the visible range and row merge;
+`requestStremioTvNext` (no current channel → toast and optional finish, null
+bridge, success → trio, empty URL, error, notImplemented, stale token,
+1.5 s overlay hide); `switchToStremioTvChannel` (flags, stale token,
+rollback of `isCurrent`/`isSwitchingChannel` marks on failure); guide-ready
+wait (`READY` hides, `IDLE` clears switching marks, 10 s fallback,
+`cancelGuideWait` removes the listener from the current player). Fake
+Flutter channel with async main-looper replies (phase-2 messenger).
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phase 3–6 additions. Device checklist (end of series):
+Stremio TV mode — open/close the guide, search, switch channels (incl. a
+failing channel), next-item auto-advance, guide closes once playback is
+ready, back-key behaviour inside the guide list and search box.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
