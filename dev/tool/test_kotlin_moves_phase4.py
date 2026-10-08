@@ -41,7 +41,7 @@ class Phase4MovesTest(unittest.TestCase):
         self.verify(self.current)
         self.assertEqual(66, sum(r['fate'] == 'moved' for r in self.manifest['declarations']))
         self.assertEqual(28, len(self.manifest['initializer_timing']))
-        folder = k.evidence_root(k.ROOT) / 'p4/fixtures/production'
+        folder = k.evidence_root(k.ROOT) / (k.EVIDENCE_PHASE + '/fixtures/phase4-production')
         for path, text in self.current.items():
             target = folder / path
             target.parent.mkdir(parents=True, exist_ok=True)

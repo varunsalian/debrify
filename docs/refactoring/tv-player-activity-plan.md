@@ -1423,3 +1423,17 @@ Start Over / catch-up on an archive-enabled channel.
   per-phase fixture dispatch + earlier destinations frozen at `1a33c42cb`);
   P2 recovery-writer executor barrier and ACK/exception cases.
 - 2026-10-08 — phase 5 design round 2 (Codex): **No P1s**; P2 inventory wording superseded by the plan (note at the inventory head). Phase 5 design approved.
+
+- 2026-10-08 — **Phase 5 step T complete.** Re-measured `1a33c42cb`: 2,548
+  declarations, 42 moved subtrees / 820 partition lines, 20 patched retained
+  declarations, three slot-anchored controller properties and 16 exact inert
+  initializer proofs. Narrow classifier support for typed empty factories and
+  underscored/suffixed literals; state/effectful negatives reject matching
+  forged proofs. Phase-scoped dispatcher preserves the phase-4 manifest/suite;
+  all **97/97** historical and phase-5 checker tests pass. Original all-retained
+  self-comparison and complete production-config extraction fixture: zero
+  differences. Fixture compiles; all seven activity receiver invocation
+  descriptors unchanged; no context aliases/Runnable self sites. All 28
+  earlier destinations frozen at `1a33c42cb`, no whitelist. Sleep wiring is
+  one patched activity-property row with named existing characterization and
+  extra-edit negative. Evidence: `p5/`; production unchanged.

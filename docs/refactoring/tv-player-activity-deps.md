@@ -6433,3 +6433,42 @@ Enclosing declaration@line, ×n = occurrences. Declaration lines themselves excl
   W(1): setupIptvOverlay@8533
   R(21): dispatchKeyEvent@6731, setupIptvOverlay@8533×2, showIptvGuide@8905, beginIptvAllCategorySearch@8947, restoreIptvCategoryAfterSearch@8977, focusCurrentIptvGuideRow@9025, showIptvListPicker@9327, removeIptvGuideRow@9470, requestIptvBrowse@9483, toggleIptvFavorite@9579, ensureIptvChannelEpg@9620, focusedIptvGuideEntry@9711, beginIptvCategoryZapSession@10163, restoreIptvZapBootstrapFallback@10268, installIptvZapWindow@10569, mergeIptvZapPage@10617, trimHiddenIptvZapWindow@10661, switchToIptvChannel@10821×2, activateIptvZapUiContext@11008
 ```
+
+
+### Phase 5 step T — re-measured at `1a33c42cb`
+
+Activity: 17,205 physical lines; **2,548 PSI declarations**, exhaustively classified.
+The approved slice owns **42 members / 820 partition lines** (attached comments included),
+20 retained declarations have exact in-place patches, and three added controller properties
+are anchored to the first removed field. No production extraction has been applied.
+The original inventory above uses older line numbers; these anchors supersede them:
+
+| Destination | Owned members (original PSI start line, including attached comments) |
+|---|---|
+| `TvProgressReporter` | `recoverySequence` @ 1058, `locallyCompletedItemKeys` @ 1369, `recoveryCompletedItemKeys` @ 1376, `progressSentCount` @ 13827, `progressAckCount` @ 13828, `lastProgressLogAt` @ 13829, `lastProgressAckAt` @ 13830, `lastProgressBridgeAvailable` @ 13831, `deliverProgress` @ 13863, `stageRecoveryCheckpoint` @ 13915, `acknowledgeRecoveryCheckpoint` @ 13968, `sendProgress` @ 13972, `sendIptvProgress` @ 14064, `sendPlaybackMaintenanceState` @ 14098, `sendPlaybackActivityState` @ 14108 |
+| `TvIptvChannelStartController` | `iptvWatchRegistrationToken` @ 951, `iptvStremioToken` @ 1003, `iptvStremioChannelKey` @ 1009, `iptvStremioCandidates` @ 1010, `iptvStremioCandidateIndex` @ 1011, `iptvStremioWinnerReported` @ 1012, `iptvStremioStallRunnable` @ 1013, `lastLiveChannelSettleMs` @ 10907, `lastLiveChannelArmedUrl` @ 10913, `lastLiveChannelRunnable` @ 10914, `noteLiveChannelPlaying` @ 10916, `beginIptvPlaybackAfterWatchRegistration` @ 10955, `beginIptvPlayback` @ 12909, `populateIptvStremioSources` @ 12972, `clearIptvStremioSources` @ 12999, `switchToIptvStremioSource` @ 13007, `tryNextIptvStremioCandidate` @ 13033, `armIptvStremioStallWatchdog` @ 13084, `cancelIptvStremioStallWatchdog` @ 13103, `reportIptvStremioWinnerIfNeeded` @ 13108 |
+| `TvIptvStartOverController` | `iptvCatchupToken` @ 798, `updateIptvStartOverButton` @ 9885, `updateIptvStartOverSeekButton` @ 9906, `showIptvStartOverTimeline` @ 9918, `toggleIptvStartOver` @ 9934, `cancelPendingIptvCatchupRequest` @ 9950, `requestIptvCatchup` @ 9957 |
+
+All **16** later-running initializers are listed with their exact text, original line,
+slot and inert proof in `dev/tool/kotlin_moves/tvplayer_p5.json`. The two empty typed
+sets allocate only; `1_000L` and the remaining literals read no state. Host properties
+are computed and explicitly qualified; progress Host fields are read-only, and only
+original writes receive setters in the other two Hosts. None reads a borrowed handler
+at construction. The three Start Over status flags and all six shared guide/zap tokens
+remain activity-owned.
+
+All **28** previous destination files are frozen against `1a33c42cb`, with an empty
+whitelist. The sleep `sendProgress` forwarder is one exact patch on the entire activity
+property, justified by `TvSleepTimerCharacterizationTest.fireCancelsThenLatchesReportsBeforePauseReleasesBothScreenHoldsAndToasts`;
+an extra-edit negative rejects any additional change. No phase-3 file or manifest changes.
+
+Verification: original self-comparison and complete production-config fixture both
+have zero differences; fixture compilation succeeds. All **seven** substituted activity
+receiver sites resolve to identical JVM descriptors (two channel-start Toast sites and
+five Start Over Toast sites); no aliases or Runnable self receivers in this slice.
+The per-phase dispatcher retains each historical suite with its own manifest; all
+**97/97** tests pass, including every phase-5 negative and all 16 initializer proofs.
+Historical fixture output uses the active phase evidence directory. Raw evidence:
+`p5/checker-self-tests-passing.log`, `p5/fixtures/`, `p5/overload-audit.json`,
+`p5/fixture-compile-final.log`, `p5/remeasured-inventory.json`, original PSI and
+all-retained self-comparison.
