@@ -215,6 +215,8 @@ def check(manifest, original, current):
         moved = {r['original']: r for r in rows if r['fate'] == 'moved'}
         try:
             receiver_inventory(manifest, original, base, inventory, moved)
+            from check_kotlin_overloads import receiver_lambda_transformations
+            transforms = receiver_lambda_transformations(manifest, original, base, inventory, moved)
             for name, row in moved.items():
                 node = inventory[name]
                 before = [s for s in base['all_this_sites']
@@ -228,7 +230,12 @@ def check(manifest, original, current):
                 after = [s for s in destination['all_this_sites']
                          if target['start'] <= s['start'] < target['end'] and 'lambda_receiver' in s]
                 keys = ('text', 'lambda_callee', 'lambda_receiver')
-                if [[s[key] for key in keys] for s in before] != [[s[key] for key in keys] for s in after]:
+                expected_receivers = [[s[key] for key in keys] for s in before]
+                for index, site in enumerate(before):
+                    transform = transforms.get((name, site['start']))
+                    if transform:
+                        expected_receivers[index][-1] = transform['after']
+                if expected_receivers != [[s[key] for key in keys] for s in after]:
                     errors.append('receiver-lambda expression substituted or binding changed: ' + name)
         except (ValueError, StopIteration) as error:
             errors.append(str(error))

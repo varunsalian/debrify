@@ -216,6 +216,8 @@ public final class KotlinPsi {
                                     if ((callee.equals("apply") || callee.equals("run")) && call.getParent() instanceof KtQualifiedExpression) {
                                         site.put("lambda_callee", callee);
                                         site.put("lambda_receiver", ((KtQualifiedExpression)call.getParent()).getReceiverExpression().getText());
+                                        site.put("lambda_receiver_start", offset(((KtQualifiedExpression)call.getParent()).getReceiverExpression().getTextRange().getStartOffset()));
+                                        site.put("lambda_receiver_end", offset(((KtQualifiedExpression)call.getParent()).getReceiverExpression().getTextRange().getEndOffset()));
                                         break;
                                     }
                                 }
@@ -282,17 +284,19 @@ public final class KotlinPsi {
                 // Record each implicit read separately, including reads in deferred lambdas.
                 for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
                     String name = ref.getReferencedName();
-                    if (!name.equals("isFinishing") && !name.equals("isDestroyed")) continue;
+                    if (!name.equals("isFinishing") && !name.equals("isDestroyed") &&
+                        !name.equals("resources") && !name.equals("currentFocus")) continue;
                     if (ref.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)ref.getParent()).getSelectorExpression() == ref) continue;
                     PsiElement scope = ref.getParent();
                     while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
                     if (!(scope instanceof KtClass)) continue;
+                    String getter = name.equals("resources") ? "getResources" : name.equals("currentFocus") ? "getCurrentFocus" : name;
                     inheritedSites.add(map("start", offset(ref.getTextRange().getStartOffset()),
                         "call_start", offset(ref.getTextRange().getStartOffset()),
-                        "call_end", offset(ref.getTextRange().getEndOffset()), "callee", name,
-                        "receiver", "implicit-inherited", "introduced_phase", 10,
-                        "property_read", true, "lexical_class", ((KtClass)scope).getName()));
+                        "call_end", offset(ref.getTextRange().getEndOffset()), "callee", getter,
+                        "receiver", "implicit-inherited", "introduced_phase", getter.equals(name) ? 10 : 12,
+                        "property_read", true, "property_name", name, "lexical_class", ((KtClass)scope).getName()));
                 }
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,

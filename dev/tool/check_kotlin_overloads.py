@@ -104,6 +104,43 @@ def receiver_lambda_inventory(manifest, original, unit, nodes, moved):
     return expected
 
 
+def receiver_lambda_transformations(manifest, original, unit, nodes, moved):
+    """Allow only the reviewed EditText activity argument, never inner this."""
+    if manifest['phase'] < 12:
+        return {}
+    expected, offsets = [], []
+    for site in unit['all_this_sites']:
+        if site.get('lambda_receiver') != 'EditText(this)':
+            continue
+        row = next((r for name, r in moved.items()
+                    if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
+        if not row:
+            continue
+        start, end = site['lambda_receiver_start'], site['lambda_receiver_end']
+        constructor = [s for s in unit['all_this_sites'] if s.get('callee') == 'EditText'
+                       and s.get('receiver') == 'activity' and s.get('call_start') == start
+                       and s.get('call_end') == end and 'lambda_receiver' not in s]
+        if len(constructor) != 1 or original[start:end] != 'EditText(this)':
+            raise ValueError('constructor-receiver transformation requires the original Activity argument')
+        expected.append(dict(original=row['original'], line=original.count('\n', 0, site['start']) + 1,
+            constructor_line=original.count('\n', 0, constructor[0]['start']) + 1,
+            context=original.splitlines()[original.count('\n', 0, start)].strip(),
+            before='EditText(this)', after='EditText(activity)', callee='EditText'))
+        offsets.append((row['original'], site['start']))
+    actual = manifest.get('receiver_lambda_transformations', [])
+    keys = tuple(expected[0]) if expected else ()
+    if ([{key: row.get(key) for key in keys} for row in actual] != expected or
+            any(set(row) != {*keys, 'reason'} or not row.get('reason') for row in actual)):
+        raise ValueError('constructor-receiver transformation coverage differs from original PSI')
+    pin = dict(owner='android/widget/EditText', descriptor='(Landroid/content/Context;)V', opcode='invokespecial')
+    for row in actual:
+        audits = [s for s in manifest['overload_audit'] if s['original'] == row['original']
+                  and s['line'] == row['constructor_line'] and s['callee'] == 'EditText']
+        if len(audits) != 1 or any(audits[0].get(key) != pin for key in ('expected_before', 'expected_after')):
+            raise ValueError('constructor-receiver transformation requires pinned constructor audit')
+    return dict(zip(offsets, actual))
+
+
 def receiver_inventory(manifest, original, unit, nodes, moved):
     """Require every activity receiver, alias use and Runnable self site by PSI."""
     def row_at(offset):
@@ -114,6 +151,8 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
     expected_runnable, expected_alias, calls = [], [], []
     if manifest['phase'] >= 11:
         receiver_lambda_inventory(manifest, original, unit, nodes, moved)
+    if manifest['phase'] >= 12:
+        receiver_lambda_transformations(manifest, original, unit, nodes, moved)
     for site in unit['all_this_sites']:
         row = row_at(site['start'])
         if not row:

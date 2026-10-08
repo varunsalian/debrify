@@ -2783,3 +2783,19 @@ now/next header with logo and letter fallback.
   `resources`/`currentFocus` getter audit; 20 reflective accesses / 5 names;
   now/next fetch + enrichment characterization incl. after-destroy behaviour).
   Phase 12 design approved.
+
+- 2026-10-09 — **Phase 12 Step T complete; no production moves.** Re-measured
+  `b870a16b1`: 39 selected members, 294 exact substitutions, 20 initializer
+  proofs, 13-member computed Host, eager fieldless overlay/pickers and all
+  seven whole-declaration patches (26 activity + five Host re-points). Original
+  self-comparison classifies all 2,139 declarations with zero differences; all
+  43 earlier destinations are frozen. The full production-config extraction
+  fixture compiles and passes all 77 before/after receiver pins (24 context /
+  constructor + 53 inherited), including both FragmentActivity Glide overloads.
+  The constructor-receiver rule permits exactly the reviewed EditText Activity
+  argument while preserving the single inner tint receiver; resources/currentFocus
+  getters have owner–descriptor–opcode pins and compiled negatives. All **298**
+  dispatcher self-tests pass (266 historical + 32 phase-12), including complete
+  extraction, all 20 missing-proof negatives and phase-11 at its merge. Evidence
+  `p12/`, including compiled original/extraction archives and raw self-test logs.
+  Production, lockfile and ProGuard remain unchanged. Step 0 follows.

@@ -12938,3 +12938,81 @@ Raw logs, XML, bytecode/mapping inventories and identity comparisons are in
 `p11/gate/`, `junit/p11-gate/`; the 233-case move control and exact test-retarget
 proofs are in `p11/step1/`. No production redesign, dependency/lockfile or
 ProGuard change, bug fix, device interaction or self independent review.
+
+## Phase 12 inventory and Step T — re-measured at `b870a16b1`
+
+This inventory supersedes section 3's older line numbers. No production move
+is included in Step T. The activity remains 11,458 lines; all 2,139 PSI
+declarations are classified. The complete production-config extraction fixture
+contains 39 moved members (21 fields and 18 functions), one 13-member computed
+Host and eager fieldless overlay/picker collaborators. Its physical sizes are
+394 / 469 / 416 lines (activity fixture 10,297).
+
+| Original member | Original lines | Planned destination |
+| --- | --- | --- |
+| `iptvGuideCurrentName` | 993–993 | `TvIptvGuideChromeController.kt` |
+| `iptvGuideCurrentGroup` | 994–994 | `TvIptvGuideChromeController.kt` |
+| `iptvGuideCurrentEpg` | 995–995 | `TvIptvGuideChromeController.kt` |
+| `iptvGuideNowPlaying` | 996–996 | `TvIptvGuideChromeController.kt` |
+| `iptvGuideNowLogo` | 997–997 | `TvIptvGuideChromeController.kt` |
+| `iptvGuideNowLetter` | 998–998 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgPanel` | 1032–1033 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgLogo` | 1034–1034 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgLetter` | 1035–1035 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgChannelName` | 1036–1036 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgChannelGroup` | 1037–1037 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgDate` | 1038–1038 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgLoading` | 1039–1039 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgEmpty` | 1040–1040 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgList` | 1041–1041 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgAdapter` | 1042–1042 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgPrograms` | 1043–1043 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgDayOffset` | 1044–1044 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgToken` | 1045–1045 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgVisible` | 1046–1046 | `TvIptvGuideChromeController.kt` |
+| `iptvEpgEntry` | 1047–1047 | `TvIptvGuideChromeController.kt` |
+| `ensureIptvChannelEpg` | 9188–9262 | `TvIptvGuideChromeController.kt` |
+| `updateIptvGuideEpgHeader` | 9264–9277 | `TvIptvGuideChromeController.kt` |
+| `focusedIptvGuideEntry` | 9279–9287 | `TvIptvGuideChromeController.kt` |
+| `formatEpgTime` | 9289–9290 | `TvIptvGuideChromeController.kt` |
+| `showIptvSchedulePane` | 9292–9342 | `TvIptvGuideChromeController.kt` |
+| `paintIptvEpgLogo` | 9344–9383 | `TvIptvGuideChromeController.kt` |
+| `selectIptvEpgDay` | 9385–9431 | `TvIptvGuideChromeController.kt` |
+| `hideIptvEpgPane` | 9433–9446 | `TvIptvGuideChromeController.kt` |
+| `isFocusInIptvEpgPanel` | 9448–9457 | `TvIptvGuideChromeController.kt` |
+| `updateIptvGuideCurrentName` | 9459–9515 | `TvIptvGuideChromeController.kt` |
+| `setupIptvOverlay` | 8415–8639 | `TvIptvGuideOverlayBuilder.kt` |
+| `applyGuideStyle` | 8641–8785 | `TvIptvGuideOverlayBuilder.kt` |
+| `showIptvSourcePicker` | 8787–8797 | `TvIptvGuideOverlayBuilder.kt` |
+| `showIptvChannelJumpDialog` | 9517–9569 | `TvIptvGuideOverlayBuilder.kt` |
+| `showIptvCategoryPicker` | 8799–8983 | `TvIptvGuidePickers.kt` |
+| `showIptvListPicker` | 8986–9128 | `TvIptvGuidePickers.kt` |
+| `removeIptvGuideRow` | 9130–9146 | `TvIptvGuidePickers.kt` |
+| `toggleIptvFavorite` | 9148–9181 | `TvIptvGuidePickers.kt` |
+
+The manifest pins **294** original identifier substitutions (the design's
+≈330 was an estimate), 26 activity re-points in four declarations and five
+Host re-points in three whole-property patched rows. In particular the
+phase-11 `iptvGuideController` property is now an original PSI property, with
+exactly two reviewed Host edits. All 43 earlier destination files remain
+byte-identical to `b870a16b1`. Twenty later fields have inert initializer
+proofs; the owner property occupies the first removed field slot.
+
+The compiled full extraction fixture pins **77 sites**: 24 constructor/context
+receivers (including both `Glide.with(FragmentActivity)` calls) and 53 inherited
+receivers (46 `findViewById`, two `getResources`, two each lifecycle getter and
+one `getCurrentFocus`). A standalone compiled fixture exercises overridden
+resource/focus getters and the EditText constructor. Compiling negatives pin
+the wrong resource receiver and widened focus getter owner. The Activity
+constructor argument changes only from `EditText(this)` to `EditText(activity)`;
+the single reviewed inner tint `this` keeps its EditText receiver. Omitted
+constructor/getter audits, omitted or forged transformation metadata, inner
+receiver changes, wrong owner qualification, fieldless state, lazy construction,
+slot movement, extra Host edits and teardown changes fail for their stated
+reasons. Historical suites dispatch with their own manifests, unchanged.
+
+Evidence: `p12/remeasured-inventory.json`, `original-psi.json`,
+`fixtures/phase12/`, `compiled-original/`, `compiled-fixture/`,
+`overload-audit.json`, `fixtures/phase12-overloads/`, `self-tests.log`,
+`original-self.log` and `earlier.log`. No lockfile, ProGuard, production or
+device change.
