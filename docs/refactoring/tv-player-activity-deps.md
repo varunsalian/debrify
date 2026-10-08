@@ -10823,3 +10823,157 @@ cases pass; the unchanged historical/extraction subset contributes 208 cases,
 for 222 unique validated checker/auditor cases. This supplements the initial
 219-case full run; p10/checker-self-test-summary.json records the exact union.
 The production 32-site audit and manifest are unchanged.
+
+## Phase 10 step 0 — original characterization (`8a4d40d1c`)
+
+All 79 new characterization cases pass on the original production code:
+seven status-pill, twenty-five PikPak retry, twenty-seven episode-fetch and
+twenty fetch-more/addon cases. Typed reflection selectors and the retained
+public switcher Host drive original bodies; real Activity/layout/queues are
+used with the recording binary messenger and player probe. No production seam,
+controller, dependency, bug fix or device interaction is introduced.
+
+PikPak uses a virtual wall clock with the activity and future retry-controller
+package (including nested Runnable) instrumented. Its real 500 ms polling pins
+10/22/36/54/80/108 s cumulative timeouts and 109.5 s auto-advance. READY and
+positive-duration success, subtitle-selection order, live player/id reads,
+exhaustion precedence, the finishing-only toast guard, reprepare, view readiness,
+250 ms overlay animation and pause/item/TV-start/destroy cancellation are covered.
+Direct destroy distinguishes its guarded inline hide from explicit GONE cleanup.
+
+Pill coverage pins lazy/reused tree geometry, drawable/stroke/typography, parent,
+180/220 ms fades, exact 1,399/1,400 ms transient boundary, cancellation on re-show,
+visibility distinctions, shared consumers and borrowed-handler destruction clear.
+Episode/default dispatch, supersession, continuation, explicit shuffle priority,
+source/playlist adoption, target identity/resume and adjacent guide fallback are
+covered. Binary replies run both inline and on a bounded worker without draining
+the UI queue: assertions pin deferred lock clearing and token/continuation checks,
+live payload/index reads, unguarded notImplemented and fetch-more's finishing
+check at UI evaluation time. Fetch-more/addon coverage pins current episode maps,
+locks, append-only replacement/clamping, fetched flags, badge, errors, recovery
+candidate values, configured sourceKey filtering, episodes-then-packs sequencing,
+captured season, probe membership retirement and unguarded addon publication.
+
+Every case has one accepted original-code assertion-killed mutation, listed below.
+Raw definitions, patches, logs, XML and per-run fixture hashes are under
+p10/mutations/. Three isolated test-fixture strengthenings are recorded in
+fixture-history.json; shared setup is unchanged, affected proofs were re-run,
+and rejected crash/secondary-teardown/survival attempts are not counted.
+A completed 889-test JVM run before the cleanup strengthening is retained as
+p10/jvm-before-fixture-cleanup/; the final baseline is recorded separately.
+
+Clean baseline-8a4d40d1c has 810 identities (809 pass, the known focus failure),
+dirty count zero. Final p10-step0 has 889 identities (888 pass, the same failure):
+all original statuses retained, exactly 79 passing additions, no missing identity,
+new failure or skip. Both clean runs use JBR 21.0.10 and the identical evidence-only
+1024 MiB test-worker override documented in phase 9; repository build settings
+remain unchanged. Original lint is archived in p10/lint-original/: 1,352 issues,
+253 errors/1,099 warnings, 175 UnsafeOptInUsageError; its exit 1 is pre-existing.
+
+Reflection rescan: p10/reflection-owner-rescan.json records 77 literal sites for
+15 moved names, plus dynamic retry-id accesses and the raw shuffle field helper.
+At moves, preserve the public watchdog routes and field/private owner-map routes;
+retarget phase-10 fetch and default-dispatch helpers via direct typed Kotlin
+calls to internal controller members (no reflection of mangled internal methods,
+no expanded production visibility, equal assertions/default semantics).
+Host-object reflection stays on its retained Host. One Dart file read/anchor
+retarget remains for the production-move phase. No production moves are made here.
+
+### TvStatusPillCharacterizationTest
+
+| Test | Original mutation | Failing assertion |
+|---|---|---|
+| `lazyTreeHasOriginalTypographyDrawablePaddingAndParentAndIsReused` | `textSize = 13f` → `textSize = 14f` | `expected:<13.0> but was:<14.0>` |
+| `showStartsAtZeroAndFadesInFor180Milliseconds` | `setDuration(180)` → `setDuration(181)` | `expected:<180> but was:<181>` |
+| `transientSchedulesExactly1400AndHideFadesFor220Milliseconds` | `1400` → `1399` | `expected:<1532> but was:<1531>` |
+| `reshowCancelsBorrowedHideAndKeepsTheSinglePillVisible` | `externalSubtitleHandler.removeCallbacks(statusPillHideRunnable)` → `// omitted hide cancellation` | `expected:<0> but was:<8>` |
+| `hideIsAbsentAndInvisibleNoOpAndUsesGoneAtEnd` | `if (pill.visibility != View.VISIBLE) return` → `if (pill.visibility == View.GONE) return` | `expected:<4> but was:<8>` |
+| `destructionClearsPendingHideOnTheBorrowedHandler` | `externalSubtitleHandler.removeCallbacksAndMessages(null)` → `// omitted borrowed-handler clear` | `assertion rejects pending hide retired at destroy` |
+| `subtitleSwitcherGateAndFetchUseTheSamePill` | `pill.text = message` → `pill.text = "wrong"` | `expected:<[subtitle]> but was:<[wrong]>` |
+
+### TvPikPakRetryCharacterizationTest
+
+| Test | Original mutation | Failing assertion |
+|---|---|---|
+| `virtualClockPinsAllSixTimeoutsAnd109500AdvanceBoundary` | `= 2000` → `= 2500` | `attempt 2 at timeout expected:<2> but was:<1>` |
+| `metadataPollIs500AndReadyShortCircuitsZeroDuration` | `currentPlayer.playbackState == Player.STATE_READY \|\|` → `false \|\|` | `expected:<[true]> but was:<[]>` |
+| `positiveDurationSucceedsAndClearsStateAndReprepareBeforeCallback` | `isPikPakRetrying = false` → `isPikPakRetrying = true` | `expected:<false> but was:<true>` |
+| `monitoringAdditionalWindowTimesOutAtExactly10500` | `PIKPAK_METADATA_TIMEOUT_MS + additionalMonitoringMs` → `PIKPAK_METADATA_TIMEOUT_MS` | `assertion rejects extended timeout` |
+| `staleIdAtLoopEntryClearsAndNeverStartsPolling` | `if (pikPakRetryId != retryId)` → `if (false && pikPakRetryId != retryId)` | `expected:<0> but was:<4>` |
+| `staleIdAtPollCallsFalseWithoutReadingPlayer` | `if (pikPakRetryId != retryId)` → `if (false && pikPakRetryId != retryId)` | `expected:<[false]> but was:<[]>` |
+| `cancelledMonitoringCallbackCannotStartTheNextAttempt` | `pikPakRetryId++` → `// omitted retry invalidation` | `assertion rejects cancel invalidates callbacks` |
+| `playerReplacementIsReadAtPollTime` | `val currentPlayer = player` → `val currentPlayer: ExoPlayer? = null` | `expected:<[true]> but was:<[]>` |
+| `coldTvErrorSchedulesReprepareWithTheLiveId` | `startupGateController.schedulePikPakGateReprepare(retryId)` → `// omitted live-id reprepare` | `assertion rejects cold TV retries request` |
+| `uncommittedBoundGateReceivesOverlayTextAnd250Fade` | `startupGateStatus.text = message` → `startupGateStatus.text = "wrong"` | `expected:<[Reactivating video... (Attempt 2/6)]> but was:<[wrong]>` |
+| `committedGateTextIsNotOverwrittenByRetryOverlay` | `startupGateController.startupFailoverCursor?.committed == false` → `startupGateController.startupFailoverCursor?.committed != null` | `expected:<[committed]> but was:<[Reactivating video... (Attempt 2/6)]>` |
+| `successSelectsSubtitlesBeforeDeliveringTheTrueCallback` | `tryAutoSelectAddonSubtitle()` → `// omitted subtitle selection` | `subtitle selection precedes completion expected:<1> but was:<0>` |
+| `nullPlayerClearsRetryWithoutStartingMonitoring` | `pikPakRetryCount = 0` → `pikPakRetryCount = 1` | `expected:<0> but was:<1>` |
+| `unboundGateStatusStillShowsTheReactivationOverlay` | `pikPakReactivationIndicator.visibility = View.VISIBLE` → `pikPakReactivationIndicator.visibility = View.GONE` | `expected:<0> but was:<8>` |
+| `finishingAndDestroyedSuppressShowAndHideUiMutations` | `if (isFinishing \|\| isDestroyed \|\|` → `if (` | `expected:<0> but was:<8>` |
+| `shuffleExhaustionOwnsTheFailureBeforeManualGateAndAutoAdvance` | `if (failShufflePlayback())` → `if (false && failShufflePlayback())` | `expected:<1> but was:<0>` |
+| `exhaustionManualFailureRestoresInsteadOfAdvancing` | `if (startupGateController.failManualSourceCandidate("pikpak-exhausted"))` → `if (false && startupGateController.failManualSourceCandidate("pikpak-exhausted"))` | `expected null, but was:<ManualSourceSwitchSnapshot(sourceIndex=0, itemIndex=0, contentType=series, items=[PlaybackItem(id=item, title=Fetched title, url=https://example.test/a, httpHeaders={}, mimeType=null, hdVideoUr…` |
+| `exhaustionUncommittedStartupFailsItsCursorBeforeToast` | `startupGateController.failStartupCandidate("pikpak-exhausted")` → `// omitted startup failure` | `expected:<true> but was:<false>` |
+| `exhaustionFinishingSuppressesToastAndDelayedAdvance` | `if (!isFinishing)` → `if (true)` | `expected null, but was:<End of playlist>` |
+| `exhaustionDestroyedStillToastsBecauseOnlyFinishingIsChecked` | `if (!isFinishing)` → `if (!isFinishing && !isDestroyed)` | `expected:<Video failed to load. Skipping to next...> but was:<null>` |
+| `onPauseInvalidatesRetryAndCancelsOwnedDelayedAdvance` | `cancelPikPakRetry()` → `// omitted pause cancellation` | `expected:<1> but was:<0>` |
+| `playItemCancelsRetryBeforeStartingReplacementMedia` | `cancelPikPakRetry()` → `// omitted item cancellation` | `expected:<1> but was:<0>` |
+| `stremioTvMediaStartCancelsRetryWithoutPassingPlayItem` | `cancelPikPakRetry()` → `// omitted TV cancellation` | `expected:<1> but was:<0>` |
+| `destroyExplicitlyHidesIndicatorEvenThoughInlineHideIsGuarded` | `pikPakReactivationIndicator.visibility = View.GONE` → `pikPakReactivationIndicator.visibility = View.INVISIBLE` | `expected:<8> but was:<4>` |
+| `hideWithAnUnboundIndicatorIsSafe` | `isFinishing \|\| isDestroyed \|\| !::pikPakReactivationIndicator.isInitialized` → `isFinishing \|\| isDestroyed` | `unbound indicator hide is safe expected null, but was:<kotlin.UninitializedPropertyAccessException: lateinit property pikPakReactivationIndicator has not been initialized>` |
+
+### TvEpisodeFetchCharacterizationTest
+
+| Test | Original mutation | Failing assertion |
+|---|---|---|
+| `requestPinsMapIncrementedTokenLockAndInFlightGuard` | `val token = ++stremioResolutionToken` → `val token = stremioResolutionToken++` | `captured prefix token accepts its own reply` |
+| `episodeDefaultSuppressResumeIsEvaluatedFromAutoAdvance` | `suppressResume: Boolean = autoAdvance` → `suppressResume: Boolean = false` | `expected:<0> but was:<123>` |
+| `adjacentDefaultDirectionAndAutoAdvancePreserveForwardResume` | `direction: Int = 1` → `direction: Int = -1` | `expected:<1> but was:<-1>` |
+| `missingChannelShowsExactMessageWithoutLockOrTokenMutation` | `Couldn't fetch $label` → `Cannot fetch $label` | `expected:<C[ouldn']t fetch S02E05> but was:<C[anno]t fetch S02E05>` |
+| `successfulEpisodeAdoptsSourcesAndPassesTargetResumeAndShuffleAttempt` | `isAutoAdvancing = autoAdvance` → `isAutoAdvancing = false` | `auto flag set before source adoption expected:<true> but was:<false>` |
+| `successfulEpisodeWithResumeEnabledKeepsFetchedBookmark` | `suppressTargetResume = suppressResume` → `suppressTargetResume = true` | `expected:<123> but was:<0>` |
+| `malformedSuccessInvokesUnavailableInsteadOfReplacingMediaOrShowingPill` | `if (onUnavailable != null) onUnavailable()` → `if (onUnavailable != null) Unit` | `expected:<1> but was:<0>` |
+| `malformedSuccessWithoutCallbackShowsNoPlayableMessage` | `No playable source found for $label` → `No source found for $label` | `expected:<No [playable ]source found for S02...> but was:<No []source found for S02...>` |
+| `inlineSuccessAppliesBeforeLaterTokenSupersession` | `if (token != stremioResolutionToken \|\| shouldContinue?.invoke() == false)` → `if (token == stremioResolutionToken \|\| shouldContinue?.invoke() == false)` | `inline callback applied before later supersession` |
+| `inlineErrorReadsContinuationBeforeItsChange` | `if (onUnavailable != null) onUnavailable()` → `if (onUnavailable != null) Unit` | `expected:<1> but was:<0>` |
+| `falseContinuationSuppressesSuccessAndUnavailable` | `token != stremioResolutionToken \|\| shouldContinue?.invoke() == false` → `token != stremioResolutionToken` | `assertion rejects continuation rejection` |
+| `queuedShuffleOwnsNavigationAndEpisodeSuccessYields` | `if (yieldEpisodeFetchToQueuedShuffle()) return@runOnUiThread` → `// omitted queued-shuffle yield` | `assertion rejects explicit shuffle wins` |
+| `errorHonorsUnavailableAndItsExactFallbackMessage` | `No playable source found for $label` → `No source found for $label` | `expected:<No [playable ]source found for S02...> but was:<No []source found for S02...>` |
+| `inlineNotImplementedIgnoresSupersededToken` | `override fun notImplemented() {` → `override fun notImplemented() {                     if (token != stremioResolutionToken) return` | `assertion rejects unguarded notImplemented` |
+| `adjacentMapPinsOptionalImdbDirectionLabelAndInFlightGuard` | `"direction" to direction` → `"direction" to 1` | `expected:<{imdbId=tt12345, currentSeason=2, currentEpisode=4, direction=-1}> but was:<{imdbId=tt12345, currentSeason=2, currentEpisode=4, direction=1}>` |
+| `adjacentWithoutImdbOmitsItAndMissingBridgeKeepsNextMessage` | `Couldn't fetch next episode` → `Could not fetch next episode` | `expected:<Could[n']t fetch next episode> but was:<Could[ no]t fetch next episode>` |
+| `adjacentSuccessRequiresTargetIdentityAndCarriesAutoAdvanceResumeFlag` | `suppressTargetResume = autoAdvance` → `suppressTargetResume = false` | `expected:<0> but was:<123>` |
+| `adjacentMissingTargetShowsDirectionSpecificFailure` | `No playable $directionLabel episode found` → `No playable episode found` | `expected:<No playable [previous ]episode found> but was:<No playable []episode found>` |
+| `inlineAdjacentFallbackUsesCurrentGuideAndAllowsResolverFallback` | `allowResolverFallback = true` → `allowResolverFallback = false` | `expected:<2> but was:<1>` |
+| `queuedAdjacentSuccessRejectsSupersededTokenInsideUi` | `if (token != stremioResolutionToken) return@runOnUiThread` → `// omitted UI token check` | `assertion rejects stale adjacent success rejected` |
+| `queuedAdjacentErrorYieldsToExplicitShuffle` | `if (yieldEpisodeFetchToQueuedShuffle()) return@runOnUiThread` → `// omitted shuffle yield` | `expected:<[Finding next episode…]> but was:<[No playable next episode found]>` |
+| `shuffleWaitRetriesAfter50MillisAndReadsTheLiveFetchLock` | `}, 50)` → `}, 51)` | `assertion rejects 50 ms live-lock retry boundary` |
+| `queuedSuccessClearsLockThenRejectsTokenChangedBeforeUiRuns` | `runOnUiThread {                         episodeFetchInFlight = false                         if (token != stremioResolutionToken \|\| shouldContinue?.invoke() == false) return@runOnUiThread` → `if (token != stremioResolutionToken \|\| shouldContinue?.invoke() == false) return                     runOnUiThread {                         episodeFetchInFlight = false` | `stale UI success rejected` |
+| `queuedErrorReadsContinuationAfterItsChangeAndClearsLock` | `runOnUiThread {                         episodeFetchInFlight = false                         if (token != stremioResolutionToken \|\| shouldContinue?.invoke() == false) return@runOnUiThread` → `if (token != stremioResolutionToken \|\| shouldContinue?.invoke() == false) return                     runOnUiThread {                         episodeFetchInFlight = false` | `continuation read inside UI block expected:<0> but was:<1>` |
+| `queuedNotImplementedIgnoresSupersededTokenAndDefersClear` | `override fun notImplemented() {` → `override fun notImplemented() {                     episodeFetchInFlight = false` | `assertion rejects lock cleared before UI dispatch` |
+| `queuedAdjacentFallbackReadsChangedPayloadAtUiTime` | payload/index read moved before UI dispatch (exact patch in m58/definition.json) | `fallback reads live payload on UI expected:<1> but was:<2>` |
+| `queuedAdjacentFallbackReadsChangedIndexAtUiTime` | payload/index read moved before UI dispatch (exact patch in m59/definition.json) | `expected:<1> but was:<2>` |
+
+### TvSourceFetchCharacterizationTest
+
+| Test | Original mutation | Failing assertion |
+|---|---|---|
+| `moreRequestUsesCurrentPlaylistEpisodeLocksAndRendersLoading` | `getOrNull(currentIndex)` → `getOrNull(0)` | `expected:<{mode=episodes, season=8, episode=3}> but was:<{mode=episodes, season=2, episode=4}>` |
+| `missingMoreBridgeShowsPillAndVisibleBrowserShowsDifferentError` | `Couldn't load more sources — try again` → `Cannot load more sources` | `expected:<C[ouldn't load more sources — try again]> but was:<C[annot load more sources]>` |
+| `successfulMoreReplacesAppendOnlySourcesClampsIndexSetsFlagsAndBadge` | `sourceSwitchController.updateStremioQualityBadge()` → `// omitted badge refresh` | `expected:<[Sources]> but was:<[stale]>` |
+| `emptySourceListKeepsExistingSourceAndIndexWhileClearingLock` | `newSources != null && newSources.isNotEmpty()` → `newSources != null` | `expected:<[StremioSource(index=0, name=Source 0, infohash=, directUrl=null, httpHeaders={}, streamType=torrent, sizeBytes=0, seeders=0, source=null, addonId=null, quality=HD, coverageType=null, badgeDescription=null, …` |
+| `invalidSourceEntriesAreSkippedAndTheirOriginalIndicesAreKept` | `StremioSource.fromMap(srcMap, idx)` → `StremioSource.fromMap(srcMap, 0)` | `expected:<1> but was:<0>` |
+| `inlineMoreSuccessAppliesBeforeFinishingChanges` | `if (isFinishing \|\| isDestroyed) return` → `if (!isFinishing \|\| isDestroyed) return` | `expected null, but was:<packs>` |
+| `destroyedMoreSuccessLeavesLoadingAndSourcesUntouched` | `if (isFinishing \|\| isDestroyed) return` → `if (isFinishing) return` | `expected:<packs> but was:<null>` |
+| `nullMoreReplyClearsLoadingAndShowsError` | `Couldn't load more sources` → `Cannot load more sources` | `expected:<C[ouldn']t load more sources> but was:<C[anno]t load more sources>` |
+| `moreErrorAndNotImplementedClearLoadingAndShowExactMessage` | `if (!alreadyCleared) moreSourcesLoadingMode = null` → `if (alreadyCleared) moreSourcesLoadingMode = null` | `expected null, but was:<packs>` |
+| `queuedMoreFailureDefersLockClearAndRecoveryUntilUi` | `override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {` → `override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {                     moreSourcesLoadingMode = null` | `expected:<packs> but was:<null>` |
+| `recoveryResultPreservesCandidateCountIndicesAndNextMode` | `startupGateController.startupRecoveryProducedCandidates \|\|` → `false \|\|` | `expected:<true> but was:<false>` |
+| `addonFiltersConfiguredSourceKeyAndFetchesEpisodesFirstOnlyOnce` | `it.sourceKey == groupId` → `it.id == groupId` | `configured sourceKey emits one episode request expected:<1> but was:<0>` |
+| `addonNullChannelShowsBrowserErrorWithoutEnteringFetching` | `Couldn't fetch — try again` → `Cannot fetch addon` | `expected:<C[ouldn't fetch — try agai]n> but was:<C[annot fetch addo]n>` |
+| `addonSuccessMarksFetchedAdoptsAndEmptyProbeDoesNotRequestPacks` | `addonFetchState[groupId] = "fetched"` → `addonFetchState[groupId] = "fetching"` | `expected:<fetch[ed]> but was:<fetch[ing]>` |
+| `addonPackProbeUsesOnlyStringIdsAndCapturedSeason` | `"season" to season` → `"season" to 0` | `expected:<{addonIds=[one, two], mode=packs, season=2}> but was:<{mode=packs, season=0, addonIds=[one, two]}>` |
+| `addonProbeErrorAndNotImplementedRetireProbingAndKeepFetchedState` | `addonPackProbing.remove(groupId)` → `// omitted probe retirement` | `assertion rejects all probe reply paths retire membership` |
+| `addonProbeNullChannelRetiresProbingWithoutPackRequest` | `addonPackProbing.remove(groupId)` → `// omitted probe retirement` | `assertion rejects null-channel pack probe retires membership` |
+| `addonNullErrorAndNotImplementedRepliesAllMarkFailed` | `addonFetchState[groupId] = "failed"` → `addonFetchState[groupId] = "fetching"` | `expected:<f[ailed]> but was:<f[etching]>` |
+| `queuedAddonReplyStillAdoptsAfterDestroyedBecauseItHasNoGuard` | `if (map == null) {` → `if (isDestroyed) return         if (map == null) {` | `expected:<fetch[ed]> but was:<fetch[ing]>` |
+| `queuedMoreSuccessDefersFinishingGuardAndLeavesLoadingLocked` | finishing guard moved before UI dispatch (exact patch in m79/definition.json) | `expected:<packs> but was:<null>` |

@@ -2350,3 +2350,24 @@ episode fetch from the player, status pill messages.
   222 unique checker/auditor cases are validated; logs and identity union in
   p10/checker-self-test-summary.json. Production manifest and its 32 compiled
   receiver sites are unchanged. No production moves.
+
+- 2026-10-08 — **Phase 10 step 0 complete before production moves.**
+  Seventy-nine original-code cases (pill 7, PikPak 25, episode fetch 27,
+  fetch-more/addon 20), each with a named assertion-killed mutation on
+  `8a4d40d1c`. PikPak virtual clock pins 10/22/36/54/80/108 s and 109.5 s;
+  paired inline/worker replies pin UI-time locks, stale/continuation checks,
+  live adjacent payload/index reads, unguarded notImplemented and deferred
+  fetch-more finishing checks. Three isolated fixture strengthenings remove
+  teardown/unchecked-access noise and isolate the default argument; only
+  accepted assertion proofs count. Mutation table appended to deps; raw logs,
+  XML, definitions, fixture versions and owner rescan under p10/.
+  Clean `baseline-8a4d40d1c`: 810 = 809 pass + known focus failure, clean tree.
+  Final `p10-step0`: 889 = 888 pass + same failure; additions-only comparison,
+  79 passing additions and no missing/new failing/skipped identity. Matching
+  evidence-only 1024 MiB workers, JBR 21.0.10; repository build settings unchanged.
+  Original lint: 1,352 issues (253 errors, 1,099 warnings, 175 unsafe opt-ins),
+  archived for the later gate. Fifteen reflected names / 77 literal sites
+  rescanned; future internal fetch/default helpers will route through typed
+  Kotlin calls, with equal assertions and no visibility expansion.
+  Protected inputs and production bytes unchanged; original worktree removed.
+  **STOPPED before phase-10 production moves.**
