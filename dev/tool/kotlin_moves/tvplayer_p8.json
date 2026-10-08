@@ -1119,8 +1119,8 @@
           "count": 1
         }
       ],
-      "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "reason": "Re-point exactly four computed Host forwarders to sourceSwitchController; preserve the whole remaining property and initialization slot.",
+      "test": "TvIptvChannelStartCharacterizationTest.winnerReportsExactlyOnceAndManualSourceSwitchRearmsLadderAndOutcomeWatcher; Phase8MovesTest.test_iptv_whole_property_cannot_hide_extra_edit"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property iptvBrowseHandler",
@@ -2034,7 +2034,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun setupMetadataReceiver()",
@@ -2068,7 +2068,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.browserReselectDoesNothingButAnotherRowDispatchesSelection"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun iptvMediaCodecSelector()",
@@ -2332,7 +2332,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.cancelUsesCurrentPlayerAndRemovesTimeoutWhileDropClearsOnlyPendingFeedback"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun resolveAndPlay(Int,PlaybackItem)",
@@ -2455,8 +2455,8 @@
           "count": 1
         }
       ],
-      "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "reason": "Expose the retained nested type to the applier and Host signature without changing its body or JVM binary name.",
+      "test": "TvSourceSwitchApplyCharacterizationTest.shufflePackClearsBagPassesAttemptAndRestoresOutgoingPreparation; Phase8MovesTest.test_shuffle_visibility_patch_cannot_hide_extra_edit"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property pendingShufflePlayback",
@@ -2690,7 +2690,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.classicBadgePinsShowAnimationAndImmediateHideCancelsIt"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun hideControlsMenu()",
@@ -2704,7 +2704,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.classicBadgePinsShowAnimationAndImmediateHideCancelsIt"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun updateSubtitleControlsLift()",
@@ -3223,7 +3223,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.cancelUsesCurrentPlayerAndRemovesTimeoutWhileDropClearsOnlyPendingFeedback"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun isLiveIptvZapContext()",
@@ -3427,7 +3427,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.browserReselectDoesNothingButAnotherRowDispatchesSelection"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun umAddLoadMoreRow(MutableList<UnifiedMenuController.Row>,String,Boolean)",
@@ -3576,7 +3576,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchApplyCharacterizationTest.explicitDifferentEpisodeStartsWithOwnResumeAndSuppressFlagReachesPlayItem"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun requestAdjacentEpisodeFetch(String?,Int,Int,Boolean,Int)",
@@ -3590,7 +3590,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchApplyCharacterizationTest.explicitDifferentEpisodeStartsWithOwnResumeAndSuppressFlagReachesPlayItem"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun beginStartupFailoverIfEligible()",
@@ -3604,7 +3604,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.classicBadgePinsShowAnimationAndImmediateHideCancelsIt"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun beginManualSourceCandidate(Int)",
@@ -3633,7 +3633,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchApplyCharacterizationTest.exactEpisodeOrManualSnapshotRejectsWrongPackWithoutReplacingMedia"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun armStartupCandidate(Int)",
@@ -3652,7 +3652,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun failStartupCandidate(String)",
@@ -3676,7 +3676,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchApplyCharacterizationTest.exactEpisodeOrManualSnapshotRejectsWrongPackWithoutReplacingMedia"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun failStartupResolution(Int,String)",
@@ -4238,7 +4238,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun requestAddonTorrentSources(String)",
@@ -4267,7 +4267,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun failMoreTorrentSources(Boolean)",
@@ -4871,7 +4871,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchFeedbackCharacterizationTest.destroyCancelsSourceWaitOnlyAfterReleaseWithNullPlayer"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun updateStremioSourcesFromPlaybackMap(Map<*, *>)",
@@ -4885,7 +4885,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun replacePayloadWithStremioTvItem(StremioTvGuideChannel,Map<*, *>,String,String)",
@@ -4904,7 +4904,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "Phase-8 original characterization and exhaustive extraction fixture"
+      "test": "TvSourceSwitchSelectionCharacterizationTest.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property PAYLOAD_KEY",

@@ -8745,3 +8745,194 @@ the `playItem` default problem but costs ≈ 85–100 forwarders instead of 53.
 - `cancelSourceSwitchWait()` in `onDestroy` (14464) runs after the player is released, so its
   `player?.removeListener` is a no-op there; the listener dies with the player (pin as-is).
 - Dart anchor 11 loses its G instance silently once G moves; anchors 1 and 9 are whole-file `contains`.
+
+
+## Phase 8 step 0 — original source switcher
+
+Measured and characterized at **53906805d** (14,637 activity lines). Scope is
+selection/resolve/badge plus the fieldless apply collaborator; startup/manual
+gating, PikPak, status pill, fetch-more and episode fetch remain activity-owned.
+No production edits or helper retargets in Step T/0. Step 0 links the manifest's
+patched rows to concrete named tests; fates, substitutions, spans, initializer
+proof and audit sites stay unchanged.
+
+### Re-measured selected declarations
+
+| Original member | Lines at 53906805d | Destination |
+|---|---|---|
+| `setupStremioSources` | 12900–12916 | `TvSourceSwitchController` |
+| `updateStremioQualityBadge` | 12918–12921 | `TvSourceSwitchController` |
+| `sourceSwitchReadyListener` | 12923–12923 | `TvSourceSwitchController` |
+| `sourceSwitchTimeoutRunnable` | 12924–12924 | `TvSourceSwitchController` |
+| `watchSourceSwitchOutcome` | 12926–12967 | `TvSourceSwitchController` |
+| `cancelSourceSwitchWait` | 12969–12974 | `TvSourceSwitchController` |
+| `dropStaleSourceSwitchFeedback` | 12976–12986 | `TvSourceSwitchController` |
+| `onStremioSourceSelected` | 12988–13045 | `TvSourceSwitchController` |
+| `resolveStremioSourceViaFlutter` | 13047–13125 | `TvSourceSwitchController` |
+| `resolveSourceToPlaylistViaFlutter` | 13127–13215 | `TvSourceSwitchController` |
+| `showStremioSourceBadge` | 13867–13887 | `TvSourceSwitchController` |
+| `hideStremioSourceBadge` | 13889–13901 | `TvSourceSwitchController` |
+| `hideStremioSourceBadgeImmediately` | 13903–13911 | `TvSourceSwitchController` |
+| `switchToSourcePlaylist` | 13448–13751 | `TvSourceSwitchApplier` |
+| `switchToStremioSource` | 13753–13865 | `TvSourceSwitchApplier` |
+
+The controller slot is `sourceSwitchReadyListener` at 12923; the timeout's
+`null` initializer at 12924 has the sole earlier-running inert proof. The
+51-member Host keeps live activity reads and writes, including the original
+volatile headers field and the PikPak retry identity. Whole-property IPTV
+re-points: exactly four. Re-measurement yields 23 caller substitutions in
+**18** declarations (the inventory's approximate 19 was superseded), plus
+that property and the whole retained ShufflePlaybackAttempt visibility patch:
+20 patched rows total. The fixture pins 15 moved subtrees, both class headers,
+Host, eager applier position, nested construction and original declaration order.
+Public reflected functions inside internal classes preserve unmangled selector
+names under the phase-3 rule; private resolver names remain unchanged.
+
+### Behavior and original mutation evidence
+
+**45/45** new tests pass against the original. The fixture uses the actual
+activity, inflated layout, source browser, selection/apply methods, retained
+gate, retained playItem and MIME discovery. Only the Flutter transport and
+player are fakes. Typed reflection pins exact signatures and default bridges;
+ShufflePlaybackAttempt retains its original binary name. Movie/unscoped input
+fixtures omit absent season/episode keys: explicit JSON-null keys instead
+become zero through the already-characterized retained fromMap conversion.
+
+Coverage: manual-before-commit and automatic-recovery selection, committed
+manual snapshots, stale resolver supersession and browser same-source guard;
+setup/render/current highlight and browser opening; both resolver success,
+empty/malformed, error/notImplemented, send-exception and null-bridge paths;
+all six success/error/notImplemented replies delivered on bounded worker
+threads, with token advancement **after** acceptance and **before** main-loop
+drain; live startup cursor read inside the playlist UI block. The latter
+acceptance timing is deliberately preserved, without adding a second guard.
+
+Apply coverage includes MediaItem/MIME/header rebuild, volatile active-header
+field identity, ordinary and held bookmark seeks, merged audio, IPTV ladder
+handoff, PikPak retry identity and the retained reprepare's live guard,
+movie/series/collection targeting and resume rules, metadata carry-over and
+refresh, singleton catalog identity, exact-episode/manual rejection, specials
+fallback toast, all four playItem arguments, startup percent behavior and
+shuffle preparation rollback. Badge coverage pins classic show/hide timing,
+translations, GONE versus INVISIBLE, synchronous hide and OTT availability.
+Outcome coverage pins READY/IDLE messages, IPTV-key suppression, the exact
+10-second deadline, current-player cancellation, stale-feedback cleanup and
+the existing after-release cancellation in onDestroy.
+
+The MIME fixture is a bounded latch-controlled loopback HEAD server (no public
+network or device). It demonstrates headers and discovered MIME recursion,
+and rejects a result superseded while IO is blocked. All worker/server threads
+are joined; owned coroutine jobs and handlers are cancelled during cleanup.
+
+**49/49 original mutations killed**, covering every new test. Six proofs add a
+second UI token guard (each callback branch); six remove the existing pre-post
+stale guard (each callback branch). Every proof ran on detached original
+53906805d + the final six test files, whose fixture signature matches the
+passing control run. Each archived run contains exactly its one named case and
+an AssertionError/ComparisonFailure. No compile failures, empty runs or
+worker/server crashes were accepted. Exact replacements/scopes, patches,
+Gradle logs, XML and failure stacks are under `p8/mutations/`; definitions in
+`p8/mutations.json`, runner `p8/run_mutations.py`, control XML and identities in
+`p8/original-control*`. The detached original worktree is removed after use.
+
+Table aliases are `TvSourceSwitchSelectionCharacterizationTest` (Selection),
+`TvSourceSwitchResolverCharacterizationTest` (Resolver),
+`TvSourceSwitchApplyCharacterizationTest` (Apply),
+`TvSourceSwitchFeedbackCharacterizationTest` (Feedback), and
+`TvSourceSwitchMimeCharacterizationTest` (Mime). The last column gives the
+actual failing assertion message and its test source line; full stacks remain
+in evidence.
+
+| Proof | Named test | Original mutation | Failing assertion |
+|---|---|---|---|
+| m01 | `Selection.manualPickBeforeCommitStartsSingleAttemptAndCancelsOldWork` | `maxAttempts = 1` → `maxAttempts = 2` | java.lang.AssertionError: expected null, but was:<0> (TvSourceSwitchSelectionCharacterizationTest.kt:23) |
+| m02 | `Selection.automaticRecoveryPreservesCursorAndPinsRecoveryArgument` | `startupFailoverDispatching && startupRecoveryCandidateIndices != null` → `startupFailoverDispatching` | java.lang.AssertionError: expected:<false> but was:<true> (TvSourceSwitchSelectionCharacterizationTest.kt:35) |
+| m03 | `Selection.committedManualDirectPickSnapshotsOutgoingAndAppliesImmediately` | `beginManualSourceCandidate(source.index)` → `Unit` | java.lang.AssertionError (TvSourceSwitchSelectionCharacterizationTest.kt:40) |
+| m04 | `Selection.torrentPickRequestsSingleUrlAndSupersedesEarlierResolution` | `stremioResolutionToken++` → `Unit` | java.lang.AssertionError: expected:<3> but was:<1> (TvSourceSwitchSelectionCharacterizationTest.kt:48) |
+| m05 | `Selection.setupRendersSourcesHighlightsCommittedIndexAndBadgeOpensBrowser` | `sourceBrowser?.render()` → `Unit` | java.lang.AssertionError (TvSourceSwitchSelectionCharacterizationTest.kt:54) |
+| m06 | `Selection.browserReselectDoesNothingButAnotherRowDispatchesSelection` | `if (index == currentStremioSourceIndex) return` → `if (false) return` | java.lang.AssertionError: expected:<0> but was:<1> (TvSourceSwitchSelectionCharacterizationTest.kt:62) |
+| m07 | `Selection.emptySourceSetupLeavesBadgeTextAndClickUntouched` | `if (stremioSources.isEmpty()) return` → `if (false) return` | org.junit.ComparisonFailure: expected:<[sentinel]> but was:<[Sources]> (TvSourceSwitchSelectionCharacterizationTest.kt:68) |
+| m08 | `Resolver.singleSuccessAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted reply survives later token expected:<1> but was:<0> (TvSourceSwitchResolverCharacterizationTest.kt:21) |
+| m09 | `Resolver.singleErrorAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted failure UI action still runs (TvSourceSwitchResolverCharacterizationTest.kt:23) |
+| m10 | `Resolver.singleMissingAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted failure UI action still runs (TvSourceSwitchResolverCharacterizationTest.kt:23) |
+| m11 | `Resolver.playlistSuccessAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted reply survives later token expected:<1> but was:<0> (TvSourceSwitchResolverCharacterizationTest.kt:21) |
+| m12 | `Resolver.playlistErrorAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted failure UI action still runs (TvSourceSwitchResolverCharacterizationTest.kt:23) |
+| m13 | `Resolver.playlistMissingAcceptedOnWorkerRunsAfterTokenSupersession` | Add `if (token != stremioResolutionToken) return@runOnUiThread` inside accepted UI action | java.lang.AssertionError: accepted failure UI action still runs (TvSourceSwitchResolverCharacterizationTest.kt:23) |
+| m14 | `Resolver.playlistAcceptedReplyReadsCursorInsideUiBlock` | `startupFailoverCursor?.committed == false` → `false` | java.lang.AssertionError (TvSourceSwitchResolverCharacterizationTest.kt:36) |
+| m15 | `Resolver.staleSingleRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError (TvSourceSwitchResolverCharacterizationTest.kt:42) |
+| m16 | `Resolver.staleSingleRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError: expected null, but was:<android.widget.TextView{…}> (TvSourceSwitchResolverCharacterizationTest.kt:42) |
+| m17 | `Resolver.staleSingleRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError: expected null, but was:<android.widget.TextView{…}> (TvSourceSwitchResolverCharacterizationTest.kt:42) |
+| m18 | `Resolver.stalePlaylistRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError (TvSourceSwitchResolverCharacterizationTest.kt:48) |
+| m19 | `Resolver.stalePlaylistRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError: expected null, but was:<android.widget.TextView{…}> (TvSourceSwitchResolverCharacterizationTest.kt:48) |
+| m20 | `Resolver.stalePlaylistRepliesAreDiscardedForEveryResultBranch` | `if (token != stremioResolutionToken)` → `if (false)` | java.lang.AssertionError: expected null, but was:<android.widget.TextView{…}> (TvSourceSwitchResolverCharacterizationTest.kt:48) |
+| m21 | `Resolver.emptyAndMalformedSingleResultsPinFailureMessage` | `Couldn't switch — failed to resolve source` → `mutation` | org.junit.ComparisonFailure: expected:<[Couldn't switch — failed to resolve source]> but was:<[mutation]> (TvSourceSwitchResolverCharacterizationTest.kt:53) |
+| m22 | `Resolver.emptyAndMalformedPlaylistResultsPinFailureMessage` | `Source unavailable — not cached or not a video` → `mutation` | org.junit.ComparisonFailure: expected:<[Source unavailable — not cached or not a video]> but was:<[mutation]> (TvSourceSwitchResolverCharacterizationTest.kt:59) |
+| m23 | `Resolver.absentBridgeIsSilentAndSendExceptionsUseCatchFailureForBothResolvers` | `showStatusPillTransient("Couldn't switch source")` → `showStatusPillTransient("mutation")` | org.junit.ComparisonFailure: expected:<[Couldn't switch source]> but was:<[mutation]> (TvSourceSwitchResolverCharacterizationTest.kt:68) |
+| m24 | `Apply.directRebuildPreservesPositionMimeHeadersAndOriginalVolatileField` | `activeVodHeaders = setOfNotNull(originKey(Uri.parse(url))) to headers` → `activeVodHeaders = emptySet<String>() to emptyMap()` | java.lang.AssertionError: expected:<([https://phase8.invalid:443], {Authorization=phase8-test, User-Agent=fixture})> but was:<([], {})> (TvSourceSwitchApplyCharacterizationTest.kt:24) |
+| m25 | `Apply.directHeldBookmarkOutranksLivePositionAndRestartsHoldWindow` | `val currentPos = heldPos ?: livePos` → `val currentPos = livePos` | java.lang.AssertionError (TvSourceSwitchApplyCharacterizationTest.kt:32) |
+| m26 | `Apply.directQualitySwitchKeepsSeparateAudioAndUsesMergedSource` | `buildMergedSource(url, currentAudioUrl)` → `null` | java.lang.AssertionError: expected:<[merged, prepare, seek:25000, play, listen:add]> but was:<[media:https://phase8.invalid/new.mp4, prepare, seek:25000, play, listen:add]> (TvSourceSwitchApplyCharacterizationTest.kt:38) |
+| m27 | `Apply.iptvDirectSwitchUsesLiveLadderInsteadOfVodSeekAndHeaderState` | `if (isIptvMode && iptvChannelStartController.iptvStremioChannelKey != null)` → `if (false)` | java.lang.AssertionError: expected:<1> but was:<0> (TvSourceSwitchApplyCharacterizationTest.kt:45) |
+| m28 | `Apply.pikPakSwitchIncrementsRetryIdentityResetsStateAndCarriesBookmark` | `pikPakRetryId++` → `Unit` | java.lang.AssertionError: expected:<42> but was:<41> (TvSourceSwitchApplyCharacterizationTest.kt:52) |
+| m29 | `Apply.retainedPikPakReprepareReadsLiveRetryIdAtFireTime` | `retryToken != pikPakRetryId \|\|` → `false \|\|` | java.lang.AssertionError (TvSourceSwitchApplyCharacterizationTest.kt:64) |
+| m30 | `Apply.singletonMovieKeepsIdentityBookmarkAndSuppressesRemotePercent` | `title = currentItem.title.ifBlank { ni.title }` → `title = ni.title` | org.junit.ComparisonFailure: expected:<[Film]> but was:<[New filename]> (TvSourceSwitchApplyCharacterizationTest.kt:71) |
+| m31 | `Apply.seriesReorderedPackMatchesEpisodeCarriesFetchedMetadataAndRequestsRefresh` | `requestMetadataFromFlutter()` → `Unit` | java.lang.AssertionError: expected:<1> but was:<0> (TvSourceSwitchApplyCharacterizationTest.kt:80) |
+| m32 | `Apply.explicitDifferentEpisodeStartsWithOwnResumeAndSuppressFlagReachesPlayItem` | `suppressResume = suppressTargetResume` → `suppressResume = false` | java.lang.AssertionError: expected:<0> but was:<123> (TvSourceSwitchApplyCharacterizationTest.kt:86) |
+| m33 | `Apply.missingEpisodeSkipsSpecialsUsesLongToastAndKeepsIncomingTrackerResume` | `s != null && s != 0 && it.episode != null` → `s != null && it.episode != null` | java.lang.AssertionError: expected:<1> but was:<0> (TvSourceSwitchApplyCharacterizationTest.kt:90) |
+| m34 | `Apply.exactEpisodeOrManualSnapshotRejectsWrongPackWithoutReplacingMedia` | `requireExactStartupEpisode \|\| manualSourceSwitchSnapshot != null` → `requireExactStartupEpisode && manualSourceSwitchSnapshot != null` | java.lang.AssertionError: expected:<[PlaybackItem(id=item, title=Fetched title, url=https://example.test/a, httpHeaders={}, mimeType=null, hdVideoUrl=null, audioUrl=null, index=0,… (TvSourceSwitchApplyCharacterizationTest.kt:96) |
+| m35 | `Apply.singletonUnscopedSeriesInheritsCatalogEpisodeAndMetaEntryIsNotPlayable` | `episode = resumeEpisode,` → `episode = resumeEpisode + 1,` | java.lang.AssertionError: expected:<4> but was:<5> (TvSourceSwitchApplyCharacterizationTest.kt:103) |
+| m36 | `Apply.collectionTitleMatchAndIndexFallbackKeepDifferentResumeContracts` | `it.title == currentItem.title` → `it.title == "mutation"` | java.lang.AssertionError: expected:<1> but was:<0> (TvSourceSwitchApplyCharacterizationTest.kt:108) |
+| m37 | `Apply.emptyParsedPackLeavesPayloadAndPinsUnavailableMessage` | `showStatusPillTransient("Source unavailable")` → `showStatusPillTransient("mutation")` | org.junit.ComparisonFailure: expected:<[Source unavailable]> but was:<[mutation]> (TvSourceSwitchApplyCharacterizationTest.kt:114) |
+| m38 | `Apply.startupPackDoesNotBurnLaunchPercentOrRegisterOutcomeWatcher` | `if (startupFailoverCursor?.committed != false) { percentSeekApplied = true` → `if (true) { percentSeekApplied = true` | java.lang.AssertionError: expected:<false> but was:<true> (TvSourceSwitchApplyCharacterizationTest.kt:118) |
+| m39 | `Apply.shufflePackClearsBagPassesAttemptAndRestoresOutgoingPreparation` | `shuffleAttempt = shuffleAttempt,` → `shuffleAttempt = null,` | java.lang.AssertionError: expected:<true> but was:<false> (TvSourceSwitchApplyCharacterizationTest.kt:125) |
+| m40 | `Apply.defaultArgumentBridgesKeepDirectAndPlaylistCallShapes` | `mimeType: String? = null` → `mimeType: String? = "video/mp4"` | java.lang.AssertionError: expected null, but was:<video/mp4> (TvSourceSwitchApplyCharacterizationTest.kt:133) |
+| m41 | `Feedback.classicBadgePinsShowAnimationAndImmediateHideCancelsIt` | `setDuration(250)` → `setDuration(200)` | java.lang.AssertionError: expected:<250> but was:<200> (TvSourceSwitchFeedbackCharacterizationTest.kt:20) |
+| m42 | `Feedback.hideBadgeEndActionUsesGoneAndResetsTranslation` | `visibility = View.GONE` → `visibility = View.INVISIBLE` | java.lang.AssertionError: expected:<8> but was:<4> (TvSourceSwitchFeedbackCharacterizationTest.kt:30) |
+| m43 | `Feedback.ottShowUsesButtonAvailabilityAndKeepsCornerBadgeHidden` | `if (stremioSources.isEmpty()) View.GONE else View.VISIBLE` → `if (stremioSources.isEmpty()) View.INVISIBLE else View.VISIBLE` | java.lang.AssertionError: expected:<8> but was:<4> (TvSourceSwitchFeedbackCharacterizationTest.kt:36) |
+| m44 | `Feedback.watcherReadyAndIdlePinMessagesAndIptvKeySuppressesError` | `✓ $name` → `mutation $name` | org.junit.ComparisonFailure: expected:<[✓] Source 1> but was:<[mutation] Source 1> (TvSourceSwitchFeedbackCharacterizationTest.kt:40) |
+| m45 | `Feedback.watcherHasTenSecondDeadlineAndUnknownNameFallback` | `postDelayed(timeout, 10_000)` → `postDelayed(timeout, 10_001)` | java.lang.AssertionError: expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$watchSourceSwitchOutcome$listener$1@3d351980> (TvSourceSwitchFeedbackCharacterizationTest.kt:50) |
+| m46 | `Feedback.cancelUsesCurrentPlayerAndRemovesTimeoutWhileDropClearsOnlyPendingFeedback` | `progressHandler.removeCallbacks(it)` → `Unit` | java.lang.AssertionError: expected:<0> but was:<8> (TvSourceSwitchFeedbackCharacterizationTest.kt:59) |
+| m47 | `Feedback.destroyCancelsSourceWaitOnlyAfterReleaseWithNullPlayer` | `cancelSourceSwitchWait()` → `Unit` | java.lang.AssertionError: expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$watchSourceSwitchOutcome$listener$1@8ba18cb> (TvSourceSwitchFeedbackCharacterizationTest.kt:68) |
+| m48 | `Mime.protectedMimeProbeUsesHeadersThenRecursesOnceToApplyDiscoveredMime` | `switchToStremioSource(url, sourceIndex, discovered, mimeDiscovered = true)` → `switchToStremioSource(url, sourceIndex, null, mimeDiscovered = true)` | java.lang.AssertionError: expected:<application/x-mpegURL> but was:<null> (TvSourceSwitchMimeCharacterizationTest.kt:46) |
+| m49 | `Mime.tokenSupersessionDuringProtectedMimeProbeDiscardsLateApply` | `sourceToken == stremioResolutionToken &&` → `true &&` | java.lang.AssertionError (TvSourceSwitchMimeCharacterizationTest.kt:59) |
+
+### Baselines, checker and remaining work
+
+Clean JVM `baseline-53906805d`: **687** identities, **686 pass / 1 existing
+failure**, stable tree, complete XML, JBR 21.0.10. Post-Step-0 `p8-step0` on
+this worktree: **732** identities, **731 pass / the same 1 failure**, stable
+tree and complete XML. `android_junit_evidence.py compare p8-step0 --against
+baseline-53906805d` passes; strict identity check proves all 687 statuses are
+identical and exactly 45 added identities pass (`p8/jvm-additions-only.json`).
+The unchanged failure is
+`TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+No new failure or skip was accepted; Gradle exit 1 records that existing test.
+
+Original `./gradlew :app:lintDebug` (clean 53906805d) is archived in
+`p8/lint-original/`: **1,352** issues (**253 Error / 1,099 Warning**), including
+175 UnsafeOptInUsageError identities; exit 1 is the observed baseline. XML,
+HTML, text, full issue attributes/locations and metadata are retained for the
+later moved-symbol comparison.
+
+Step T: **152** dispatcher self-tests pass (all 134 historical tests plus 18
+phase-8 tests); updated retry snapshot negative also passes its dedicated
+run. Complete fixture compiles; the same-name Host capture negative compiles
+and the checker rejects its changed cross call and Host span. Original
+self-comparison classifies **2,335** declarations with zero differences;
+**34** earlier destinations remain frozen; one Toast overload descriptor
+matches before/after compilation. Earlier manifests run with their own
+configuration, including p7 at 53906805d. Evidence summaries and raw checker,
+fixture-build and overload logs are under `p8/`.
+
+An initial stand-alone fixture run used the shared default evidence phase;
+its generated phase-8/Host-capture artifacts were relocated into `p8/` and
+final runs explicitly selected p8. No historical manifest or production input
+was changed. The initial control's null-key fixture assumptions were corrected
+to provider-compatible absent-key inputs, and the original's extra token bump
+when superseding a manual snapshot was pinned; no application fixes.
+
+**STOP after Step T/0.** Production, pubspec.lock and ProGuard files remain
+byte-identical to 53906805d. No release/full-Flutter/device gate was run here;
+those belong after the authorized extraction step. Follow-ups stay as-is:
+onDestroy cancels after player release, so listener removal there is a no-op;
+resolver acceptance checks happen before UI dispatch only. Independent review
+and sample are Claude's separate session.

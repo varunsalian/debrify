@@ -1982,3 +1982,17 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   compiled Toast receiver descriptor matches exactly. Evidence `p8/`;
   production unchanged. Public reflected members in internal controllers
   follow the phase-3 unmangled-name rule. Step 0 next; no production moves.
+- 2026-10-08 — phase 8 Step 0: 45 original characterization tests pass;
+  49/49 scoped original mutations fail their named assertions, all on the
+  final fixture signature. Worker replies pin token acceptance before UI
+  dispatch and live cursor evaluation; real apply path pins headers, resume,
+  targets, metadata, shuffle and PikPak interplay. Bounded loopback MIME probe
+  verifies headers, recursive apply and supersession. Badge/end-action and
+  after-release cancellation are pinned. Clean baseline-53906805d has 687
+  identities (686 pass/one existing focus failure); p8-step0 has 732 (731
+  pass/same failure), all original statuses identical plus 45 new passes.
+  Original lint archived: 1,352 issues (253 errors/1,099 warnings, 175 opt-ins).
+  Mutation table and re-measured inventory appended to deps; raw evidence in
+  p8/ and junit/. Detached original removed. All production/protected inputs
+  unchanged; no production moves, bug fixes, push, device interaction or
+  self independent review. **STOPPED after phase 8 Step T/0**.
