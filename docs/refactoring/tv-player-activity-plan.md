@@ -1967,3 +1967,18 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   (resolver token checks only before dispatch, with a worker-thread
   characterization; all four re-points are one `iptvChannelStartController`
   patched row; `progressReporter` unchanged). Phase 8 design approved.
+- 2026-10-08 — phase 8 Step T: re-measured on `53906805d` (activity
+  14,637 lines). Manifest classifies all 2,335 declarations: 15 moved
+  subtrees, 20 whole-declaration patched rows (23 caller substitutions in
+  18 declarations, the four IPTV Host re-points in one property, and the
+  retained ShufflePlaybackAttempt visibility patch). One exact inert
+  initializer proof, eager fieldless applier construction, 51 computed Host
+  forwarders, all 34 earlier destinations frozen. Complete production-config
+  fixture compiles (controller 447/applier 450 lines); same-name Host capture
+  negative also compiles and is rejected for its changed cross call and Host
+  span. Original self-comparison: zero differences. Dispatcher keeps every
+  historical manifest/suite; 152 tests pass including 18 phase-8 cases, all
+  required negatives, and the historical phase-7 check at its merge. One
+  compiled Toast receiver descriptor matches exactly. Evidence `p8/`;
+  production unchanged. Public reflected members in internal controllers
+  follow the phase-3 unmangled-name rule. Step 0 next; no production moves.
