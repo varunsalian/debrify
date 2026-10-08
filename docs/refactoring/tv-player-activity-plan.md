@@ -928,6 +928,67 @@ Trakt/Simkl progress after watching; IPTV channel start incl. a Stremio
 IPTV channel with failing first candidates; startup channel remembered;
 Start Over / catch-up on an archive-enabled channel.
 
+## Phase 6 — IPTV zap banner (classic controller + styled renderer)
+
+Branch `refactor/tvplayer-p6` off the phase-5 merge `e71ddac3a` (activity 16,487 lines). Evidence under
+`refactor-evidence/tvplayer/p6/`. The feasibility inventory is the "Phase 6
+inventory" section of the deps report (measured at `1a33c42cb`; re-measure
+on the phase-5 merge — both phase 5 and the banner patch
+`switchToIptvChannel`). All collaborator rules from phases 3–5 apply.
+
+**Re-planned remainder (honest scope).** The phase-6 inventory measured the
+rest of the activity: ≈ 12 more phases after this one (order: 7 Stremio TV
+guide "lite"; 8 startup/manual gate + source switcher + badge; 9 fetch-more
++ episode fetch + PikPak + status pill; 10–11 IPTV core + EPG + VOD; 12
+IPTV tune pipeline + live recovery; then controls I/II (Next overlay in II),
+playlist overlay + guide skin, shuffle + subtitle fetch, playback start +
+media pipeline + metadata receiver, unified menu split by owner; the two
+routers — `playbackListener` and `dispatchKeyEvent` — last, possibly never).
+**Expected end state:** the activity cannot reach 800 lines under these
+rules — Host wiring alone is ≈ 800 lines and grows as code leaves. Realistic
+final size ≈ 2,800–3,600 lines (≈ 2,100–2,700 if the routers move), holding
+lifecycle/teardown order, the composition root and Host objects, shared
+single-owner state, `bindViews`/`parsePayload`. That will be recorded as a
+documented end exception with responsibilities and an exit path when the
+series reaches it.
+
+**Selected:** the zap banner (≈ 1,304 lines, 47 members): 16 activity patches
+in 9 declarations; no test or Dart retargets; no lifecycle edits; no
+coupling with phase-5 controllers. Structure (inventory's recommendation):
+`TvIptvZapBannerController` (classic, ≈ 660 lines) constructs
+`TvIptvZapBannerStyledRenderer` (≈ 700 lines) and passes itself; the styled
+code's 38 references to 19 classic members become explicit `classic.x`
+substitutions and the classic code's 4 dispatch calls become `styled.x`, so
+any missed qualification fails to compile. The activity provides a single
+19-member Host. Extension functions are rejected (size-rule evasion). Eight
+trivial `null`/`0` initializers run earlier and get inert proofs. ≈ 281
+declared substitutions incl. 122 `dp` calls and 42 overload-audit sites
+(4 `Glide.with`).
+
+**Step T.** Checker support for a destination class that constructs a second
+destination class (both pinned structurally; the renderer's constructor
+argument pinned), the `classic.`/`styled.` cross-qualification substitutions
+with occurrence counts, and negatives (missed qualification compiled against
+a same-name Host member, renderer constructed lazily vs eagerly, swapped
+dispatch target). Per-phase dispatcher; earlier destinations frozen at the
+phase-5 merge.
+
+### Step 0 — characterization of the original
+
+Classic and styled banner: show/hide timing, now/next/EPG text, channel
+number/name/logo (Glide request lifecycle owner), favourite/live/archive
+badges, progress, paging behaviour hooks, focus, layout-listener-driven
+measurements (pinned as-is; listener removal is a recorded follow-up), the
+four styled painters' outputs (non-pixel, Paint-copying canvas as in phase
+1), and switching between classic and styled at runtime. Mutation proofs on
+the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phase 3–5 gate additions. Device checklist (end of series):
+zap banner in classic and each styled guide style while zapping channels
+(up/down, number entry), logos, EPG now/next, favourites/live/archive badges.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s

@@ -6704,3 +6704,962 @@ p5/gate/, junit/p5-step0b/ and junit/p5-gate/. Manifest, lockfile, every ProGuar
 all 28 earlier destinations unchanged. Original detached worktree removed. No bug fixes,
 push, branch switch, device/emulator interaction or self independent review. STOP after
 phase 5; Claude reviews separately.
+
+---
+
+## Phase 6 inventory (at `1a33c42cb`; re-measure on `e71ddac3a`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`1a33c42cb` (phase-4 merge, 17,205 lines; class header 136, companion 17171–17205). This is a read-only
+survey of the main checkout: no worktree, no build, nothing under `../debrify-wt/`. The rules are the
+plan's **Phase 3 → Collaborator pattern**, plus the phase-3 post-review tightening and the phase-4 step-T
+additions:
+
+- `internal class TvXController(private val activity: AppCompatActivity, private val host: Host)`.
+- A compiled overload audit of every substituted `this`, covering constructors, context aliases and the
+  reviewed list of anonymous `Runnable`/`object` receivers.
+- Host forwarders that are computed and explicitly qualified (`this@AndroidTvTorrentPlayerActivity.x`).
+- Controller properties anchored to the slots of the fields they replace.
+- Moved initializers that now run earlier must be constants, typed empty collections or allocations, and
+  each needs a proof.
+- `::x.isInitialized` checks only through getters that the activity owns.
+- Braced host templates.
+- Reads across features go through the owning controller.
+- No delegators.
+- Teardown order unchanged.
+- Each file ≤ 800 lines.
+
+Method: the phase-5 indexer (`scratchpad/p5/idx.py`, brace/string/comment-aware, now in `scratchpad/p6/`)
+resolved all **869** depth-1 class members and their spans, including attached KDoc. A word-boundary scan
+then mapped every reference to its enclosing member and classified it as read, write, mutate or call. That
+scan includes string templates and `this@Activity.` hits. It excludes comments and hits qualified on
+another receiver.
+
+- An aggregator (`p6/agg.py`) splits the inbound references of any candidate set into four groups:
+  - retained-activity patches;
+  - references from members that phase 5 moves (these become phase-5 Host forwarders, so they count as
+    **re-points**);
+  - references from pinned phase-3/4 Host spans;
+  - references between controllers inside the set.
+- A receiver audit (`p6/recv.py`) lists every host/`this`/inherited reference inside a lambda with
+  receiver or an anonymous object.
+
+Every list below was then checked by hand. "Patch" means one token edit in a retained activity
+declaration. "Substitution" means one declared edit inside a moved body.
+
+**Phase-5 state assumed** (A progress reporter, B1/B2 IPTV channel start + Stremio ladder, B3 Start Over;
+being executed elsewhere and treated as controllers). Their 42 member declarations at this SHA are listed
+in `p6/p5decls.txt`. References from them into phase-6 candidates are counted as **phase-5 forwarder
+re-points**, not patches:
+
+- progress reporter → gate state: `startupFailoverCursor`, `startupSourcesExhausted`,
+  `manualSourceSwitchSnapshot`, `manualSourceRestoreInProgress`;
+- channel-start ladder → switcher: `setupStremioSources`, `updateStremioQualityBadge`,
+  `watchSourceSwitchOutcome`, `dropStaleSourceSwitchFeedback`.
+
+In the other direction, phase-6 code reads the phase-5 ladder in three places, always via the owning
+controller: `iptvStremioChannelKey` ×2 (14988, 15834) and `switchToIptvStremioSource` ×1 (15835). The
+banner and the Stremio TV guide have **zero** references to or from phase-5 members.
+
+**Phase-3/4 pinned spans touched:** only the subtitle controller's Host. It forwards `hideStatusPill`
+(1148), `showStatusPill` (1161) and `showStatusPillTransient` (1162); these become 3 re-points when the
+status pill moves. No other pinned forwarder names a phase-6 candidate. `isStremioTvMode` is forwarded by
+the Up Next Host at 170 but stays in the activity.
+
+---
+
+### Cross-cutting facts for phase 6
+
+- **Shared state that stays in the activity** (its owner) and is reached by computed Host forwarders,
+  never mirrored:
+  - `stremioSources` 1019 (`var`, mutated in place). Readers and writers span the playback core, the
+    phase-5 ladder, the Stremio TV media start, the unified menu, `parsePayload`, the gate and the
+    switcher.
+  - `currentStremioSourceIndex` 1020. It has 8 writers across gate, switcher, fetch, the Stremio TV media
+    start, the phase-5 ladder and `parsePayload`.
+  - `stremioResolutionToken` 1023. Writers: gate ×2, switcher ×1, episode fetch ×2. Readers:
+    `resolveAndPlay` ×3, `discoverProtectedMime` ×2, switcher ×10, episode fetch ×4. This is a token
+    shared with playback start, so it gets one owner later, with playback start.
+  - `hasPlaylistResolver` 1024: navigation ×7, `parsePayload` writes it.
+  - `isStremioTvMode` 1107: 12 readers, the Up Next Host forwarder, and three reflective tests.
+  - The "load more" payload configuration (1088–1095, 1102–1104): `seriesSourceTabs`,
+    `seriesPacksFetched`, `seriesEpisodesFetched`, `movieMoreSources`, `movieSourcesFetched`,
+    `moreSourcesLoadingMode`, `sourceAddons`, `addonFetchState`, `addonPackProbing`. `parsePayload`,
+    `bindViews` (source-browser callbacks) and `umSourcesModel` write or read it. Making it
+    controller-owned would add **+30 patches** (S2 alone goes from 7 to 37 inbound).
+  - Nested `data class TvSourceAddon` 1101 is public and referenced only at 1102 and 16125. It **stays**
+    with `sourceAddons`; moving it would change its binary name.
+  - The lateinit views `startupGateView` 140 and `startupGateStatus` 141 are set reflectively by
+    `StremioTvStartupWatchdogTest:51–52,253`. `pikPakReactivationIndicator`/`Text` 1304/1305 are set by
+    the watchdog test (:55) and by `TvPhase3OriginalTest:44`. The `nextOverlay`/`nextText`/`nextSubtext`/
+    `nextBackdrop` views at 156–161 are set by the watchdog test (:54) and by `TvPhase3OriginalTest:43`.
+- **Borrowed handlers** (the activity owns them; a controller never clears them):
+  - `progressHandler` 1293 is used by the banner hide/tick `postAtTime` tokens, the gate's five watchdog
+    `Runnable`s, the 10 s switcher and guide waits, the 30 s recovery-fetch fallback and the 1.5 s Stremio
+    TV hide. It is cleared wholesale at `onDestroy` **16453**.
+  - `externalSubtitleHandler` 1266 carries the status pill's 1.4 s hide. It is cleared at **16487**, after
+    the player is released.
+- **Owned handlers:** `pikPakRetryHandler` 1300 (PikPak). Its `onDestroy` clear at 16416 becomes a patch
+  in place.
+- **Flutter bridge:** every candidate calls `MainActivity.getAndroidTvPlayerChannel()` directly. The
+  method names don't change:
+  - `requestStremioTvGuideData`, `requestStremioTvNext`, `requestStremioTvChannelSwitch`;
+  - `requestStremioSourceResolve`, `requestSourcePlaylistResolve`;
+  - `requestMoreTorrentSources`, `requestAddonTorrentSources` ×2;
+  - `requestEpisodeFetch` ×2, `startupSourceFailed`.
+
+  No seam is needed, because step 0 uses the existing `TvPlayerRecordingMessenger` fake with main-looper
+  replies.
+- **Receivers that are never substituted (reviewed list):**
+  - `object : Runnable` self `this`: 14432, 14597 (gate watchdog re-arm), 6538, 6558, 6570, 6583 (PikPak
+    `checkRunnable`).
+  - Anonymous `MethodChannel.Result` objects, all without `this`: switcher 15132, 15215; fetch 15327,
+    15415, 15458; episode fetch 14186, 14261; Stremio TV 16759, 17019, 17100. They use `this@Activity` at
+    17028, 17054, 17112 and 17137.
+  - `object : Player.Listener`: switcher 14981 and guide wait 15040.
+  - `object : TextWatcher` and `RecyclerView.OnScrollListener` (Stremio TV setup).
+  - Labels `return@runOnUiThread` survive `activity.runOnUiThread {`: EF ×13, STV 17030 and 17118.
+    `return@Runnable` appears at 14869–14870.
+  - No host name collides with a member of `Player.Listener`, `MethodChannel.Result`, `Runnable`, a View
+    or `ExoPlayer` inside these blocks (receiver audit).
+- **Braced templates required** (host-qualified names inside moved templates): 4 in the gate
+  (`$currentStremioSourceIndex` at 14375, 14831 and 14921; `$hasPlaylistResolver` at 14377) and 9 in the
+  switcher (14938, 15066, and `$stremioResolutionToken` at 15102, 15109, 15116, 15137, 15140, 15220 and
+  15223). `generation` at 14593/14637 is a local. The banner and the Stremio TV guide have none.
+- **`::x.isInitialized` in candidates:** only PikPak, at 6598 (`::startupGateStatus`) and 6612
+  (`::pikPakReactivationIndicator`). Each needs an activity-owned readiness getter. `::nextBackdrop` (5797)
+  is only relevant if the Next overlay moves; it is not recommended.
+- **Overload-audit sites (`this` → `activity`):**
+
+  | Unit | Sites | Breakdown |
+  |---|---|---|
+  | Banner | 42 | 38 view constructors: `TextView`/`LinearLayout`/`FrameLayout`/`View`/`ImageView`, and `ProgressBar(Context, AttributeSet?, Int)` ×2 at 11533 and 11746. **4 `Glide.with(this)`** at 12310, 12322, 12403 and 12413, which must keep the `FragmentActivity` overload. |
+  | Stremio TV | 8 | `LinearLayoutManager(Context, Int, Boolean)` 16578, `Glide.with(this)` 16684, `Toast.makeText` ×6 (16994, 17001, and 17028, 17054, 17112, 17137 via `this@`) |
+  | Gate cluster | 5 | `Toast` at 14782, 15493, 15731 and 6496; `TextView` at 13592 |
+
+- **Inherited members to qualify:**
+  - `finish()`: Stremio TV ×6, gate ×1. Note that `activity.finish()` dispatches virtually to the
+    activity's `finish()` override, which takes the progress snapshot. Pin this in step 0.
+  - `findViewById`: banner ×2, Stremio TV ×9, gate ×3, pill ×1.
+  - `currentFocus`: Stremio TV ×1. `resources`: banner ×1.
+  - `runOnUiThread`: Stremio TV ×12, switcher ×8, fetch ×9, episode fetch ×17, PikPak ×5.
+  - `isFinishing`/`isDestroyed`: gate 2/2, fetch 2/2, PikPak 4/2.
+- **Default arguments on moved members:**
+  - `showIptvZapBanner(entry, docked: Boolean = controlsMenuVisible)` 12074: a host read inside the
+    default expression, still evaluated in the callee.
+  - `requestStremioTvNext(finishOnFailure: Boolean = false)` 16989: called with 1 or 0 arguments.
+  - Gate functions have none.
+- **Reflection and name mangling:** members reflected by name must be `private` or public members of the
+  `internal` class, never `internal fun`. Affected functions:
+  - `initStremioTvGuide`;
+  - `beginStartupFailoverIfEligible`, `commitStartupCandidate`, `beginManualSourceCandidate`,
+    `commitManualSourceCandidate`, `schedulePikPakGateReprepare`;
+  - `waitForPikPakMetadata`, `cancelPikPakRetry`.
+
+  Fields keep their JVM backing name under any visibility.
+- **Volatile/threading:** no candidate field is `@Volatile`. All candidate code runs on main
+  (`runOnUiThread`, main-looper handlers, or `MethodChannel` results hopped to UI).
+
+---
+
+### A. IPTV zap banner, classic + styled (rank 1)
+
+**Size forces two files** (> 800). The natural seam is the one the code already documents at 11568–11573:
+"the shared BEHAVIORAL fns (show/hide, ticker, position text, hint gating) work on both trees through the
+same field refs". The parts are:
+
+- **A** (behaviour + classic tree) = 613 lines;
+- **B** (styled renderer: GLASS/EDITION/CONSOLE) = 691 lines.
+
+**Owned state, A** (slot **11149**; banner comment 11138–11147 travels with it):
+
+| line | name | initializer | earlier than its original slot? |
+|---|---|---|---|
+| 11149–11162 | 14 view refs `iptvZapBanner`, `…Logo`, `…Letter`, `…Number`, `…Name`, `…Meta`, `…Now`, `…Times`, `…Next`, `…Progress`, `…HintChannel`, `…HintJump`, `…Body`, `…Rail` | `null` | no (contiguous block, nothing interleaved) |
+| 11164–11170 | `iptvZapBannerDocked` (KDoc), `iptvDockLayoutListenerAttached`, `iptvZapBannerLayoutListenerAttached` | `false` | no |
+| 11172–11175 | `iptvZapBannerEntry` (KDoc) | `null` | no |
+| 11176–11177 | `iptvZapBannerHideToken`, `iptvZapBannerTickToken` | `Any()` | no; allocation-only identity tokens |
+| 11179 | `iptvZapAccent` | `Color.parseColor("#00E5FF")` | no; pure static |
+
+**Owned state, B** (original slot **11575**; banner comment 11568–11573):
+
+- `iptvZapStyledScrim`, `…Card`, `iptvZapGlassCardWidth` (`0`), `…Rule`, `…Live`, `…Rec`, `…End`,
+  `…MeterRow`. All are `null`/`0`.
+
+**Stay in the activity:** `guideStyle`/`guideTokens`/`controlsSkin`/`DockSkinSpec`/`dockSkinSpec`/
+`guideTypefaces`/`guideTypeface` (11181–11300). These are read-once lazies shared with the IPTV guide, dock
+skins and controls. Forwarding a lazy through a computed getter keeps first-access timing.
+
+**Owned functions:**
+
+- **A (12):** `isRecordingCurrentIptvChannel@11305` (KDoc 11302), `zapText@11309`, `zapHint@11328`,
+  `ensureIptvZapBanner@11364` (203 lines), `showIptvZapBanner@12074` (KDoc 12066),
+  `applyIptvZapBannerMode@12160`, `scheduleIptvZapBannerTick@12203`, `hideIptvZapBanner@12218`,
+  `paintIptvZapBannerIdentity@12299`, `paintIptvZapBannerPosition@12364`, `paintIptvZapBannerEpg@12533`,
+  `refreshIptvZapBannerPosition@12590`.
+- **B (6):** `styledZapText@11584`, `styledZapHint@11609`, `buildStyledIptvZapBanner@11645` (420 lines),
+  `applyStyledZapBannerMode@12232`, `paintStyledZapBannerIdentity@12397`, `paintStyledZapBannerEpg@12459`.
+
+That is **47 members and 1,304 lines** (A: 33/613, B: 14/691).
+
+**Inbound (activity): 16 references in 9 declarations, 0 from phase-3/4/5 code.**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 7175 | showControlsMenu@7162 | `showIptvZapBanner` | call |
+| 7177 | showControlsMenu@7162 | `hideIptvZapBanner` | call |
+| 7259 | hideControlsMenu@7254 | `hideIptvZapBanner` | call |
+| 7259 | hideControlsMenu@7254 | `iptvZapBannerDocked` | read |
+| 7311, 7317 | updateSubtitleControlsLift@7308 | `iptvZapBanner` | read ×2 |
+| 7312, 7318 | updateSubtitleControlsLift@7308 | `iptvZapBannerDocked` | read ×2 |
+| 8915 | showIptvGuide@8911 | `hideIptvZapBanner` | call |
+| 9690 | ensureIptvChannelEpg@9626 | `iptvZapBanner` | read |
+| 9691 | ensureIptvChannelEpg@9626 | `paintIptvZapBannerEpg` | call |
+| 10620 | installIptvZapWindow@10575 | `refreshIptvZapBannerPosition` | call |
+| 10654 | mergeIptvZapPage@10623 | `refreshIptvZapBannerPosition` | call |
+| 10887 | switchToIptvChannel@10827 | `hideIptvZapBanner`, `showIptvZapBanner` | call ×2 |
+| 12641 | playIptvChannel@12624 | `showIptvZapBanner` | call |
+
+`switchToIptvChannel` also carries a phase-5 B1 patch. Re-measure on the phase-5 merge; the two token
+patches are disjoint.
+
+**Cross references between the two halves (quantified):**
+
+- **B → A: 38 references to 19 A members** (16 fields + 3 functions):
+
+  | B function | references to A |
+  |---|---|
+  | `buildStyledIptvZapBanner` | **14 writes** (12045–12058): all 14 view refs, written once each from its locals |
+  | `applyStyledZapBannerMode` | **10**: reads `iptvZapBanner` 12233, `…Rail` 12243, `…Progress` 12271/12279, `…Body` 12283/12287; `iptvDockLayoutListenerAttached` read 12290 and write 12291; `iptvZapBannerDocked` 12293; call `applyIptvZapBannerMode` 12293 |
+  | `paintStyledZapBannerIdentity` | **5**: `…Letter` 12399, `…Logo` 12400, `…Number` 12447, `…Name` 12452; call `paintIptvZapBannerPosition` 12453 |
+  | `paintStyledZapBannerEpg` | **9**: `…Now`/`…Times`/`…Next`/`…Progress` 12460–12463, `…Name` ×4 (12472, 12473, 12476, 12478); call `isRecordingCurrentIptvChannel` 12529 |
+
+- **A → B: 4 style-dispatch calls:** `buildStyledIptvZapBanner` 11366, `applyStyledZapBannerMode` 12161,
+  `paintStyledZapBannerIdentity` 12300, `paintStyledZapBannerEpg` 12534.
+- B never touches A's tokens, entry, accent or the handler; all timing stays in A.
+
+**Outbound host needs** (union 19 members, 167 references, all read-only):
+
+- A (70): `dp`×38, `progressHandler`×5 (borrowed), `guideTokens`×4, `iptvChannels`×3, `formatEpgTime`×3,
+  `iptvRecordingActionsController`×2 (phase 3, via the owning controller), `controlsMenuVisible`×2 (one in
+  the 12076 default), `updateSubtitleControlsLift`×2, `iptvZapPagingActive`×2, `iptvZapCategoryTotal`×2,
+  and ×1 each `iptvRecordingController`, `iptvGuideVisible`, `ensureIptvChannelEpg`, `controlsOverlay`,
+  `iptvSources`, `iptvZapSourceId`, `currentIptvIndex`.
+- B (97): `dp`×84, `guideStyle`×7, `formatEpgTime`×4, `guideTypeface`×1, `controlsOverlay`×1.
+- **Android:** A has `this` ×16 (14 constructors + 2 Glide) and `findViewById` ×1 (11543). B has
+  `this` ×26 (24 constructors + 2 Glide), `resources` ×1 (11852, activity-level, not inside an `apply`)
+  and `findViewById` ×1 (12037). All 42 `this` are activity `this`. None sits inside a receiver lambda
+  where `this` would rebind, because `View(this)` would not compile against a view receiver.
+- **Later re-points (≈ 6):** zap-paging state ×3, `formatEpgTime`/`ensureIptvChannelEpg` and
+  `iptvGuideVisible` when the IPTV core and EPG move.
+
+**Timers / teardown:**
+
+- Hide after 4.5 s, floating only (12140), and a 1 s tick chain (12205). Both use `postAtTime(…, token,
+  …)` on the borrowed `progressHandler`, cancelled by token in show/hide.
+- The handler is retired by the wholesale clear at 16453.
+- Three layout listeners are never removed: 12079, 12181, 12286. View animators are not cancelled.
+- **No `onStart`/`onStop`/`onPause`/`onDestroy` statement changes.**
+
+**Tests / anchors:** none reflect, bind or source-anchor any banner member (all of `android/app/src/test`
+and `test/` searched). There are **0 retargets**. Characterization starts from zero.
+
+**Structure options for the A/B pair** (the B → A coupling decides the substitution risk):
+
+| option | shape | activity additions | B→A edits | earlier-running initializers | notes |
+|---|---|---|---|---|---|
+| **(ii) recommended** | A `TvIptvZapBannerController(activity, host)` owns the 14+7 fields and the behaviour. It constructs `private val styled = TvIptvZapBannerStyledRenderer(activity, host, this)` with B's 8 fields. B shares A's `Host` type and holds `classic: TvIptvZapBannerController` | 1 controller property + 1 Host object, 19 read-only forwarders | 38 `classic.x` + 4 `styled.x` | 8 (B's `null`/`0` fields now run at 11149 instead of 11575; intervening activity initializers are lazies or allocations) | Fewest artifacts. Every missed qualification is a **compile error**, because B has no unqualified access to A or the activity. Parameter name `classic` is free; avoid `banner`, which is a B local at 11650/12233. Declare A final (default `internal class`). |
+| (ii′) slot-preserving | As (ii), but B is a second activity property at slot 11575 that takes the already-constructed A. A reaches B through 4 Host forwarders | 2 properties, 2 Host objects (19 + 5) + 4 A→B forwarders | 38 `classic.x` + 4 `host.x` | 0 | No inert proofs; 4 more pinned forwarders |
+| (i) peer Hosts (p5 sketch) | Two independent controllers; B's Host forwards A's 16 fields (15 written → `var` get/set) + 3 functions through `this@Activity.iptvZapBannerController.x` | 2 properties, Host objects 19 + 24, ≈ 23 cross forwarders (≈ 50 activity lines) | 38 `host.x` + 4 `host.x` | 0 | Purely intra-feature plumbing pinned in the activity; widest re-point surface |
+| rejected | Extension functions on A in a second file | 0 | 0 | — | Mixin-style evasion of the size rule (AGENTS.md). Needs A's privates widened, and would change implicit-receiver resolution inside 40+ view `apply {}` blocks |
+
+**Visibility substitutions:** 23 A members become non-private:
+
+- 6 the activity reaches: `showIptvZapBanner`, `hideIptvZapBanner`, `iptvZapBannerDocked`,
+  `iptvZapBanner`, `paintIptvZapBannerEpg`, `refreshIptvZapBannerPosition`;
+- 19 B reaches; 2 overlap with the activity's set.
+
+B adds 4 (the dispatch targets). No reflection, so plain `internal` is fine.
+
+**Substitutions, option (ii): ≈ 281.**
+
+| | dp | other host | `this` | Android | cross | visibility | total |
+|---|---|---|---|---|---|---|---|
+| A | 38 | 32 | 16 | 1 | 4 | 23 | 114 |
+| B | 84 | 13 | 26 | 2 | 38 | 4 | 167 |
+
+**Activity: 16 patches in 9 declarations, 0 lifecycle edits, 0 test retargets, 0 Dart anchors.**
+
+**Size:**
+
+- A ≈ 613 + 45 (header, 19-member Host, `styled` property) ≈ **660**.
+- B ≈ 691 + 10 ≈ **700**.
+- Activity wiring ≈ +23, so the net is −1,281.
+
+**Hazards:**
+
+- Host reads inside default-argument expressions (`controlsMenuVisible` at 12076).
+- 4 Glide overloads.
+- `ProgressBar` 3-argument constructors.
+- Lazy forwarders (`guideStyle`, `guideTokens`, `guideTypeface`) must stay computed.
+- Read the phase-3 lazy `recordingEngineEnabled` at the same moment, via
+  `host.iptvRecordingActionsController.recordingEngineEnabled` (11306).
+- Rename-free locals: `banner`, `t`, `logo`, `rail`, and so on.
+
+**Risk: medium.** It is mechanical and has no async protocol or lifecycle edit, but it is large (≈ 281
+substitutions, 42 audit sites) and **has no existing coverage**.
+
+**Step-0 gaps** (Robolectric, PAUSED looper, attached content view, fake Glide-safe images):
+
+- For each of CLASSIC/GLASS/EDITION/CONSOLE, built-tree assertions: ids/order, text sizes/colours/
+  typefaces, hint rows, REC tag, meter row, glass card width clamp `min(dp620, width − dp56) ≥ dp220`.
+- Show while floating vs docked:
+  - entrance animations (300 ms from +30 with `DecelerateInterpolator(1.5f)` vs 160 ms fade);
+  - same-channel in-place repaint vs identity repaint;
+  - suppression while the guide is visible;
+  - default `docked = controlsMenuVisible`, evaluated at call time.
+- 4.5 s auto-hide only when floating; the 1 s tick re-posts only while visible; tick and hide are
+  cancelled by token.
+- Hide clears entry and docked state and fades out over 180 ms.
+- Mode switch with the dock-layout listener re-applying once.
+- Position text for the zap-paging window total vs list index; `refreshIptvZapBannerPosition` from window
+  install/merge.
+- EPG paint: now/next/times/progress/"N min left".
+- `isRecordingCurrentIptvChannel` matrix: engine on with a task, tee active, neither.
+- Glide request-manager lifecycle (phase-3 Up Next precedent: mutate to `applicationContext`).
+
+---
+
+### B. Stremio TV guide: overlay + channel switching (rank 2)
+
+**Owned state** (slot **1108**; `isStremioTvMode` 1107 **stays** in the activity):
+
+- 1108–1122: `stremioTvChannels` (`mutableListOf()`), 9 view refs (`null`), `stremioTvChannelAdapter`,
+  `stremioTvGuideVisible`, `stremioTvChannelSwitchInProgress`, `stremioTvNextInProgress`,
+  `stremioTvSwitchToken = 0`. The block is contiguous.
+- `guidePanelReadyListener` 15023 and `guidePanelTimeoutRunnable` 15024, both `null`. These **run
+  earlier** (2 inert proofs).
+
+**Owned functions (STV-lite, recommended):**
+
+- `hideGuideWhenReady@15026`, `cancelGuideWait@15058`;
+- `initStremioTvGuide@16522`, `setupStremioTvGuide@16565`, `showStremioTvGuide@16620`,
+  `hideStremioTvGuide@16645`, `toggleStremioTvGuide@16655`, `filterStremioTvChannels@16659`;
+- `updateStremioTvGuideHeader@16673`, `isFocusInStremioTvGuideList@16715`,
+  `requestGuideDataForVisibleChannels@16726`;
+- `requestStremioTvNext@16989`, `switchToStremioTvChannel@17080`.
+
+That is **30 members and 529 lines**. The **media-start trio**, `updateStremioSourcesFromPlaybackMap@16830`,
+`replacePayloadWithStremioTvItem@16847` and `playStremioTvPlaybackMap@16899` (156 lines), is playback start.
+It resets subtitles, cancels PikPak, releases the resume hold, mutates the payload, sets pending seeks and
+calls `updateTitle`/`fetchStremioSubtitles`, so it moves with playback start. Folding it in ("STV-full",
+685 lines) cuts patches to 13 in 5 declarations but widens the Host from 12 to ≈ 32 members, with 9 `var`s
+on playback-core state.
+
+**Inbound (STV-lite): 16 references in 6 declarations.**
+
+| line | enclosing | ref | kind |
+|---|---|---|---|
+| 1690 | playbackListener@1428 | `stremioTvChannels` | read |
+| 1691 | playbackListener@1428 | `requestStremioTvNext` | call |
+| 2080 | onCreate@1943 | `initStremioTvGuide` | call |
+| 5148 | playNext@5132 | `stremioTvChannels` | read |
+| 5149 | playNext@5132 | `requestStremioTvNext` | call |
+| 6848 | dispatchKeyEvent@6737 | `stremioTvGuideVisible` | read |
+| 6852 | dispatchKeyEvent@6737 | `hideStremioTvGuide` | call |
+| 6856, 6861 | dispatchKeyEvent@6737 | `isFocusInStremioTvGuideList` | call ×2 |
+| 6862 | dispatchKeyEvent@6737 | `stremioTvGuideSearch` | read |
+| 7034 | dispatchKeyEvent@6737 | `stremioTvChannels` | read |
+| 7036 | dispatchKeyEvent@6737 | `showStremioTvGuide` | call |
+| 8123 | isCleanPlaybackState@8121 | `stremioTvGuideVisible` | read |
+| 16911 | playStremioTvPlaybackMap@16899 (retained trio) | `updateStremioTvGuideHeader` | call |
+| 16983 | playStremioTvPlaybackMap@16899 | `stremioTvChannelAdapter` | read |
+| 16985 | playStremioTvPlaybackMap@16899 | `hideGuideWhenReady` | call |
+
+**Outbound host needs (STV-lite): 12 members, 21 references.**
+
+- `hideNextOverlay()`×5, `progressHandler`×3 (borrowed), `player`×2, `nextText`×2, `nextSubtext`×2,
+  `isStremioTvMode`×1 (**write**, `var` forwarder, 16523), `playerView`×1 (16610,
+  `playerView.findViewById`), `playlistMode`×1, `hideControlsMenu()`×1, `fadeInNextOverlay()`×1.
+- `playStremioTvPlaybackMap(map, channel)`×2 (17037, 17122): a forwarder to the retained trio, re-pointed
+  later.
+- **Android:**
+  - `this` ×4: `LinearLayoutManager` 16578, `Glide.with` 16684, `Toast` 16994 and 17001.
+  - `this@AndroidTvTorrentPlayerActivity` ×4 (Toast, inside `MethodChannel.Result`).
+  - `findViewById` ×9 (16566–16574), `currentFocus` ×1 (16717), `runOnUiThread` ×12, `finish()` ×6.
+- **Later re-points (≈ 5):** the 4 Next-overlay members, plus the trio.
+
+**Timers / async / teardown:**
+
+- **Guide-ready wait:** a 10 s `progressHandler` timeout plus a `Player.Listener` added to the current
+  player, removed by `cancelGuideWait`.
+- **Switch protocol:** token `stremioTvSwitchToken` (++ in both `requestStremioTvNext` and
+  `switchToStremioTvChannel`), with in-progress flags that are mutually exclusive.
+- Every `Result` callback checks the token, then runs on the UI thread.
+- The next-item path hides the overlay after a 1.5 s `progressHandler` post (17044).
+- `RecyclerView.post` / `postDelayed(150)` run on the list's own handler.
+- There are **no lifecycle statements** today. The token is not bumped in `onDestroy` and the wait is not
+  cancelled there (follow-up).
+
+**Tests / anchors:** **1 reflective retarget**, `StremioTvStartupWatchdogTest:68`
+`call(activity, "initStremioTvGuide", JSONObject())`. Make `initStremioTvGuide` a **public** member. The
+test's local helpers (see section C) route by name; `TvUpNextCharacterizationTest:37` (`isStremioTvMode`)
+is unaffected because the field stays. No Dart anchors. `TvStremioGuideCharacterizationTest` covers only
+the phase-1 adapter.
+
+**Hazards:**
+
+- `finish()` ×6 inside `Result` objects and `runOnUiThread` blocks must stay `activity.finish()`, which
+  dispatches to the override.
+- `Glide.with` overload.
+- Default argument `finishOnFailure = false`.
+- `playerView.findViewById` is host-qualified, not the inherited `findViewById`.
+- `stremioTvChannels` is read by the activity, so it needs visibility.
+- 3 patches land inside the retained trio and are re-substituted when the trio moves.
+
+**Proposed shape:** `internal class TvStremioTvGuideController(activity, host)`. Host 12 (one `var`).
+
+**Substitutions ≈ 68:**
+
+- 21 host;
+- 36 Android: `this`/`this@` ×8, `findViewById` ×9, `currentFocus` ×1, `runOnUiThread` ×12, `finish` ×6;
+- 11 visibility: `requestStremioTvNext`, `initStremioTvGuide` (public), `hideStremioTvGuide`,
+  `isFocusInStremioTvGuideList`, `showStremioTvGuide`, `stremioTvChannels`, `stremioTvGuideVisible`,
+  `stremioTvGuideSearch`, `stremioTvChannelAdapter`, `updateStremioTvGuideHeader`, `hideGuideWhenReady`.
+
+**Activity: 16 patches (6 declarations); 1 retarget.** Size ≈ 529 + 30 ≈ **560**.
+
+**Risk: medium-low.** It has a clean single token, a narrow Host and no lifecycle edits. The async paths
+need fakes.
+
+**Step-0 gaps:**
+
+- Guide init from JSON: channel parsing, current flag, inline now/next, `isStremioTvMode` set, playlist
+  button repurposed only when `PlaylistMode.NONE`.
+- Show/hide/toggle with focus and scroll to current (`post` + 150 ms).
+- Search filter; header binding (poster vs letter).
+- Lazy guide-data request for the visible range, with merge into rows.
+- `requestStremioTvNext`:
+  - no current channel → toast (+ finish when requested); null bridge;
+  - success → trio; empty URL → toast; error and notImplemented;
+  - stale token ignored; 1.5 s overlay hide.
+- `switchToStremioTvChannel`: flags, stale token, rollback of the `isCurrent`/`isSwitchingChannel` marks
+  on failure.
+- Guide-ready wait:
+  - `READY` hides; `IDLE` clears switching marks; 10 s fallback;
+  - `cancelGuideWait` removes the listener from the current player.
+- Watchdog interplay already pinned by `StremioTvStartupWatchdogTest`.
+
+---
+
+### C. Source switcher + startup/manual-switch gate + "fetch more sources" recovery, with PikPak retry and status pill (one cluster)
+
+The plan's "move together" holds, and the measurement explains why:
+
+- **The gate's own state is playback-core state.** 75 of the cluster's 114 activity references sit in
+  `playbackListener` (27), `resolveAndPlay` (16), `onDestroy` (18), `parsePayload` (7) and
+  `iptvDiagAnalyticsListener` (5), plus `bindViews`/`onCreate`/`sendFinished`.
+- **Gate ↔ switcher coupling is two-way and dense:** 51 switcher→gate references against 7 gate→switcher.
+
+**Unit split** (all lines at `1a33c42cb`):
+
+| unit | members | lines | contents |
+|---|---|---|---|
+| **G** startup/manual gate | 46 | 630 | fields 1030–1048, 1059, 1063–1072 (comments 1027–1029, 1060–1062); `beginStartupFailoverIfEligible@14325`, `beginManualSourceCandidate@14383`, `commitManualSourceCandidate@14446`, `failManualSourceCandidate@14512`, `armStartupCandidate@14576`, `commitStartupCandidate@14642`, `failStartupCandidate@14711` (114 lines), `failStartupResolution@14826`, `startupCandidateElapsedMs@14839`, `currentPlaybackItemIsPikPak@14843`, `cancelPikPakGateReprepare@14846`, `schedulePikPakGateReprepare@14856`, `startupWatchdogShouldExtend@14888`, `startupSourceFields@14902`, `mediaServerPlaybackLog@14916`, `sourceSelectionLog@14925`; companion `STARTUP_FAILOVER_TIMEOUT_MS`, `STARTUP_WATCHDOG_RECHECK_MS`, `STARTUP_SLOW_SOURCE_MAX_WAIT_MS`, `STARTUP_PIKPAK_MAX_WAIT_MS`, `PIKPAK_GATE_REPREPARE_DELAY_MS` (+ comments; single-unit users → file-private) |
+| **S1a** source selection/resolve | 10 | 308 | `sourceSwitchReadyListener` 14958, `sourceSwitchTimeoutRunnable` 14959; `setupStremioSources@14935`, `updateStremioQualityBadge@14953`, `watchSourceSwitchOutcome@14967`, `cancelSourceSwitchWait@15004`, `dropStaleSourceSwitchFeedback@15017`, `onStremioSourceSelected@15065`, `resolveStremioSourceViaFlutter@15124`, `resolveSourceToPlaylistViaFlutter@15204` |
+| **S1b** switch apply | 2 | 417 | `switchToSourcePlaylist@15525` (304 lines), `switchToStremioSource@15830` |
+| **BADGE** | 3 | 43 | `showStremioSourceBadge@15944`, `hideStremioSourceBadge@15966`, `hideStremioSourceBadgeImmediately@15983` (views `stremioSourceBadge`/`Text` stay; bound in `bindViews`, read by keys/cinema) |
+| **S2** fetch more / addon fetch | 7 | 224 | `requestMoreTorrentSources@15302`, `applyMoreTorrentSources@15345`, `requestAddonTorrentSources@15393`, `applyAddonEpisodeSources@15433`, `failAddonFetch@15484`, `adoptSourceList@15491`, `failMoreTorrentSources@15510` (its state stays in the activity; see the cross-cutting facts) |
+| **PK** PikPak cold-storage engine | 9 | 206 | `isPikPakRetrying` 1297, `pikPakRetryCount` 1298 (write-only), `pikPakRetryId` 1299, `pikPakRetryHandler` 1300; `attemptPikPakPlaybackLoop@6426`, `waitForPikPakMetadata@6522`, `showPikPakRetryOverlay@6592`, `hidePikPakRetryOverlay@6610`, `cancelPikPakRetry@6619`; companion `PIKPAK_MAX_RETRIES`, `…METADATA_TIMEOUT_MS`, `…BASE_DELAY_MS`, `…MAX_DELAY_MS`. `playPikPakVideoWithRetry@6371` (54 lines; media start) **stays** for playback start |
+| **PILL** status pill | 6 | 51 | `statusPill` 1267, `statusPillHideRunnable` 1268 (`Runnable { hideStatusPill() }`, allocation); `ensureStatusPill@13590`, `showStatusPill@13615`, `showStatusPillTransient@13628` (1,400 ms), `hideStatusPill@13633` |
+| **EF** episode fetch (optional rider) | 3 | 159 | `episodeFetchInFlight` 14159, `requestEpisodeFetch@14164`, `requestAdjacentEpisodeFetch@14235`. This holds 11 of the pill's 34 cluster callers |
+
+**Matrix of references between units** (source → target: names / references; `(w)` marks a write):
+
+- **G →** S1a 3/5 (`cancelSourceSwitchWait`×2, `updateStremioQualityBadge`×2, `onStremioSourceSelected`);
+  BADGE 2/2; S2 2/2 (`requestMoreTorrentSources`, `failMoreTorrentSources`); PK 1/3 (`pikPakRetryId`,
+  read at fire time inside the reprepare `Runnable`); PILL 2/5.
+- **S1a →** G 8/34 (`startupSourceFields`×9, `failManualSourceCandidate`×8, `failStartupResolution`×8,
+  `startupFailoverCursor`×4 (w), `startupFailoverDispatching`×2, `armStartupCandidate`,
+  `beginManualSourceCandidate`, `startupRecoveryCandidateIndices`); S1b 2/3; PK 1/1; PILL 3/14.
+- **S1b →** G 7/17 (`manualSourceSwitchSnapshot`×5, `failManualSourceCandidate`×3,
+  `startupFailoverCursor`×3, `manualSourceMediaReplaced`×2 (w), `manualSourceCandidateUrl`×2 (w),
+  `startupSourceFields`, `failStartupResolution`); S1a 2/4; PK 6/8 (`pikPakRetryId++` (w),
+  `pikPakRetryCount` (w), `isPikPakRetrying` (w), `hidePikPakRetryOverlay`, `attemptPikPakPlaybackLoop`,
+  `cancelPikPakRetry`×2); PILL 1/3.
+- **S2 →** G 5/10 (`startupRecoveryFetching`×4 (w), `…ProducedCandidates`×2 (w),
+  `…CandidateIndices` (w), `…NextMode` (w), `failStartupCandidate`×2); S1a 1/2; PILL 1/1.
+- **PK →** G 5/8 (`cancelPikPakGateReprepare`×3, `schedulePikPakGateReprepare`,
+  `failManualSourceCandidate`, `failStartupCandidate`, `startupFailoverCursor`×2).
+- **EF →** S1b 1/2 (`switchToSourcePlaylist`); S2 1/2 (`adoptSourceList`); PILL 1/11.
+
+**Inbound from retained activity code, whole cluster (G+S1a+S1b+BADGE+S2+PK+PILL+EF):
+114 references in 23 declarations.** Every reference:
+
+- `iptvDiagAnalyticsListener@702` (5): 708 `mediaServerPlaybackLog`, 710/711 `manualSourceRestoreInProgress`
+  (r/w), 714 `commitManualSourceCandidate`, 715 `commitStartupCandidate`.
+- `playbackListener@1428` (27):
+  - 1461, 1581, 1770 `startupFailoverCursor`; 1464, 1747, 1755, 1774 `currentPlaybackItemIsPikPak`;
+  - 1466 `commitStartupCandidate`; 1580 `startupSourcesExhausted`;
+  - 1582, 1589, 1748, 1749(w) `manualSourceRestoreInProgress`; 1582, 1590, 1753 `manualSourceSwitchSnapshot`;
+  - 1584, 1785 `failStartupCandidate`; 1591, 1765 `failManualSourceCandidate`;
+  - 1742 `mediaServerPlaybackLog`; 1755 `manualSourceMediaReplaced`;
+  - 1763, 1783 `schedulePikPakGateReprepare`; 1750 `showStatusPillTransient`;
+  - 1702 `requestEpisodeFetch`; 1710 `requestAdjacentEpisodeFetch`.
+- `onCreate@1943` (2): 2073 `setupStremioSources`, 2113 `beginStartupFailoverIfEligible`.
+- `bindViews@2415` (7): 2423 `startupFailoverCursor`/`startupMaxAttempts`/`startupTryNextOnFailure`,
+  2565 `requestMoreTorrentSources`, 2580 `requestAddonTorrentSources`, 2586 `sourceSelectionLog`,
+  2588 `onStremioSourceSelected`.
+- `setupSeriesPlaylist@3538` (1): 3550 `requestEpisodeFetch`.
+- `playItem@4460` (2): 4508 `dropStaleSourceSwitchFeedback`, 4519 `cancelPikPakRetry`.
+- `resolveAndPlay@4553` (16):
+  - 4558 `startupFailoverCursor`; 4559, 4595, 4600, 4606 `startupFailoverGeneration`;
+  - 4563, 4583 `manualSourceSwitchIndex`; 4582 `manualSourceSwitchSnapshot`;
+  - 4572, 4589, 4601, 4615, 4634 `startupSourceFields`;
+  - 4620 `failManualSourceCandidate`, 4621 `failStartupResolution`, 4631 `manualSourceCandidateUrl` (w).
+- `playNext@5132` (2): 5163 `requestEpisodeFetch`, 5167 `requestAdjacentEpisodeFetch`.
+- `playPrevious@5187` (2): 5201, 5206 (same two).
+- `watchShufflePlayback@5339` (2): 5344 `currentPlaybackItemIsPikPak`, `isPikPakRetrying`.
+- `playShowShuffle@5373` (4): 5378, 5390 `episodeFetchInFlight`; 5410 `showStatusPillTransient`;
+  5419 `requestEpisodeFetch`.
+- `playPikPakVideoWithRetry@6371` (6): 6378(w), 6379 `pikPakRetryId`; 6382 `pikPakRetryCount` (w);
+  6383 `isPikPakRetrying` (w); 6384 `hidePikPakRetryOverlay`; 6423 `attemptPikPakPlaybackLoop`.
+- `showControlsMenu@7162` (2): 7217 `hideStremioSourceBadgeImmediately`, 7219 `showStremioSourceBadge`.
+- `hideControlsMenu@7254` (2): 7268, 7290 `hideStremioSourceBadge`.
+- `switchToIptvChannel@10827` (1): 10843 `dropStaleSourceSwitchFeedback`.
+- `umSourceRows@13395` (1): 13406 `onStremioSourceSelected`.
+- `umAddLoadMoreRow@13413` (1): 13423 `requestMoreTorrentSources`.
+- `sendFinished@14122` (2, retained after phase 5): 14126 `startupSourcesExhausted`, 14128
+  `startupRecoveryConsumed`.
+- `parsePayload@15990` (7): 16086 `startupTryNextOnFailure` (w), 16087 `startupMaxAttempts` (w),
+  16088 `startupResolverProvider` (w), 16090 `startupRecoveryAvailable` (w), 16091
+  `startupHasRemainingSavedSources` (w), 16096 `startupMaxAttempts`/`startupTryNextOnFailure`.
+- `onPause@16314` (1): 16321 `cancelPikPakRetry`.
+- `onDestroy@16347` (18):
+  - 16366/16367 `startupFailoverTimeout`; 16368/16369 `startupCommitCheck`;
+  - 16370/16371 `manualSourceSwitchTimeout`; 16372/16373 `manualSourceCommitCheck`;
+  - 16374/16375 `pikPakGateReprepare`; 16376 `manualSourceSwitchSnapshot`; 16377 `manualSourceSwitchIndex`;
+  - 16378 `manualSourceRestoreInProgress`; 16379 `startupFailoverGeneration`++; 16380 `startupFailoverCursor`;
+  - 16415 `cancelPikPakRetry`; 16416 `pikPakRetryHandler`; 16502 `cancelSourceSwitchWait`.
+- `updateStremioSourcesFromPlaybackMap@16830` (1): 16843 `setupStremioSources`.
+- `playStremioTvPlaybackMap@16899` (2): 16912 `updateStremioQualityBadge`, 16924 `cancelPikPakRetry`.
+
+Plus: **8 phase-5 forwarder re-points** (listed under "Phase-5 state assumed" at the top) and
+**3 phase-4 re-points** (subtitle Host 1148, 1161, 1162).
+
+**Outbound host needs per unit** (distinct names / references, excluding cluster-internal names; `(w)`
+marks a write through a `var` forwarder):
+
+- **G 27/128:**
+  - `progressHandler`×25 (borrowed), `stremioSources`×19, `currentStremioSourceIndex`×19 (w),
+    `player`×11, `currentIndex`×9 (w), `payload`×7, `isStremioTvMode`×7;
+  - `titleView`×3, `startupGateView`×3 (lateinit, host), `startupGateStatus`×1, `isIptvMode`×2;
+  - `restartProgressUpdates`×2, `reportValidatedSourceCommit`×2, `stremioResolutionToken`×2 (w),
+    `setResolvingState`×2, `sourceBrowser`×2, `mediaPreparationGeneration`×2;
+  - `hasPlaylistResolver`, `heldResumePositionMs`, `rebuildPlaylistContent`, `playItem`,
+    `controlsMenuVisible`, `sourcePersistenceSessionId`, `seriesSourceTabs`, `movieMoreSources`,
+    `moreSourcesLoadingMode`.
+  - Android: `findViewById`×3, `isFinishing`/`isDestroyed` 2/2, `finish`×1, Toast `this`×1.
+- **S1a 13/37:** `stremioResolutionToken`×16 (w, 7 in templates), `stremioSources`×5,
+  `currentStremioSourceIndex`×2 (w), `sourceBrowser`×2, `progressHandler`×2, `player`×2,
+  `hasPlaylistResolver`×2, `stremioSourceBadge`, `stremioSourceBadgeText`, `hideControlsMenu`,
+  `unifiedMenu`, `isIptvMode`, `iptvStremioChannelKey` (phase-5 controller). Android: `runOnUiThread`×8.
+- **S1b 24/50:**
+  - writes: `currentIndex`×8 (w), `currentStremioSourceIndex`×4 (w), `shuffleBag` (mutate),
+    `percentSeekApplied` (w), `mediaPreparationGeneration` (w, `++` 15845), `resumeHoldArmedAtMs` (w),
+    `activeVodHeaders` (w);
+  - reads: `player`×7, `payload`×4, `stremioSources`×4, `heldResumePositionMs`×2, `sourceBrowser`×2,
+    `titleView`×2, `subtitleTrackReadiness`×2, `isIptvMode`;
+  - calls and types: `ShufflePlaybackAttempt`, `updateCatalogEpisodeControls`, `rebuildPlaylistContent`,
+    `requestMetadataFromFlutter`, `playItem`, `iptvStremioChannelKey`, `switchToIptvStremioSource`
+    (phase 5), `discoverProtectedMime`, `buildMergedSource`.
+  - Android: Toast `this` 15731.
+- **BADGE 4/17:** `stremioSourceBadge`×13, `stremioSources`×2, `ottSkinInstalled`, `ottSourcesButton`.
+- **S2 14/52:**
+  - `sourceBrowser`×14, `stremioSources`×8 (mutate), `currentStremioSourceIndex`×4 (w),
+    `addonPackProbing`×5 (mutate), `addonFetchState`×4 (mutate), `moreSourcesLoadingMode`×4 (w),
+    `unifiedMenu`×4;
+  - `payload`×2, `currentIndex`×2, `seriesPacksFetched` (w), `seriesEpisodesFetched` (w),
+    `movieSourcesFetched` (w), `sourceAddons`, `progressHandler`.
+  - Android: `runOnUiThread`×9, `isFinishing`/`isDestroyed` 2/2, Toast `this` 15493.
+- **PK 8/16:**
+  - `pikPakReactivationIndicator`×7 (lateinit; `::isInitialized` at 6612 → readiness getter),
+    `startupGateStatus`×2 (`::isInitialized` at 6598 → readiness getter), `player`×2;
+  - `failShufflePlayback`, `playNext`, `tryAutoSelectAddonSubtitle`, `isStremioTvMode`,
+    `pikPakReactivationText`.
+  - Android: `runOnUiThread`×5, `isFinishing`×4, `isDestroyed`×2, Toast `this` 6496, 4 Runnable selfs.
+- **PILL 2/11:** `dp`×8, `externalSubtitleHandler`×3 (borrowed). Android: `TextView(this)` 13592,
+  `findViewById` 13610.
+- **EF 10/15:** `stremioResolutionToken`×6 (w), `yieldEpisodeFetchToQueuedShuffle`×3,
+  `ShufflePlaybackAttempt`, `isAutoAdvancing` (w), `watchShufflePlayback`, `payload`, `currentIndex`,
+  `guideAdjacent`. `autoAdvance` and `onUnavailable` are parameters. Android: `runOnUiThread`×17.
+
+**Timers / handlers / teardown:**
+
+- **G:** five `Runnable`s on the borrowed `progressHandler`:
+  - startup timeout (12 s, re-arms itself every 3 s via `postDelayed(this, …)` while
+    `startupWatchdogShouldExtend` allows, capped at 45 s, or 120 s for PikPak);
+  - startup commit check (200 ms metadata grace);
+  - manual-switch timeout (12 s + 3 s re-arm);
+  - manual commit check (200 ms);
+  - `pikPakGateReprepare` (4 s; the captured `pikPakRetryId` and `mediaPreparationGeneration` are compared
+    at fire time).
+  - Also a 30 s recovery-fetch fallback (14766) and a `post { failStartupCandidate("missing-source") }`
+    (14819).
+  - All five fields are cleared explicitly at `onDestroy` 16366–16375, then
+    `startupFailoverGeneration++` and the cursor is nulled (16379–16380). These **15 statements stay in
+    place as patches** before `startupGateView` is hidden at 16381 (the view stays in the activity).
+- **S1a:** a 10 s switch-outcome timeout on `progressHandler`, plus a `Player.Listener` on the player;
+  `cancelSourceSwitchWait` at `onDestroy` **16502** becomes a patch in place.
+- **S2:** no timers, only `runOnUiThread` callbacks guarded by `isFinishing`/`isDestroyed`.
+- **PK:** owns `pikPakRetryHandler` (1.5 s exhausted → `playNext` at 6499) and an untracked local
+  `checkHandler` that polls every 500 ms (existing follow-up). Cancelled at:
+  - `onPause` **16321**, the only feature cancelled in `onPause`;
+  - `onDestroy` **16415/16416**;
+  - 7 navigation sites.
+- **PILL:** 1.4 s hide on the borrowed `externalSubtitleHandler`, retired at 16487.
+- **EF:** none.
+
+**Tests / anchors, with exact retarget needs:**
+
+- **`StremioTvStartupWatchdogTest`** uses its own `field`/`read`/`call` helpers on `activity.javaClass`.
+  Phase 6 affects **49 sites**:
+
+  | target | type | lines |
+  |---|---|---|
+  | `beginStartupFailoverIfEligible` | call ×12 | 103, 128, 137, 148, 161, 181, 198, 243, 258, 269, 280, 288 |
+  | `commitStartupCandidate` | call ×6 | 110, 152, 164, 211, 249, 271 |
+  | `beginManualSourceCandidate` | call ×2 | 199, 289 |
+  | `commitManualSourceCandidate` | call ×1 | 210 |
+  | `schedulePikPakGateReprepare` | call ×1 | 203 |
+  | `startupFailoverCursor` | read ×9 | 106, 132, 153, 165, 187, 244, 259, 274, 282 |
+  | `startupFailoverTimeout` | read ×5 | 107, 131, 155, 245, 275 |
+  | `startupSourcesExhausted` | read ×4 | 112, 169, 251, 264 |
+  | `pikPakGateReprepare` | read ×2 | 220, 224 |
+  | `manualSourceSwitchSnapshot` | read ×2 | 290, 293 |
+  | `manualSourceSwitchTimeout` | read ×1 | 291 |
+  | `waitForPikPakMetadata` | call ×1 | 176 (5 parameters) |
+  | `cancelPikPakRetry` | call ×3 | 192, 221, 237 |
+
+  Plus `initStremioTvGuide` at 68 (section B).
+
+  These stay unchanged: `startupGateView`/`startupGateStatus`/`titleView`/`nextOverlay`/
+  `pikPakReactivationIndicator` field sets, `parsePayload`, `payload`, `player`, `playbackListener`,
+  `currentIndex`, and `currentStremioSourceIndex`, which stays in the activity. The phase-5 `sendProgress`
+  and `recoveryCompletedItemKeys` retargets are already done there. Lines 60–61
+  (`stremioSources`/`startupTryNextOnFailure`/`startupMaxAttempts`) are **JSON payload keys**, not
+  reflection.
+
+  **Recommended retarget:** change only the three helpers so they resolve the owner from a
+  name → controller-field map, the same pattern as `TvPlayerOriginalAccess`. All 49 call sites and every
+  assertion stay byte-identical, and the reviewer checks a diff limited to the helpers. The reflected
+  functions must be **public** members of `internal` classes (`declaredMethods.first { name && parameterCount }`
+  would miss mangled `internal` names).
+- **`TvPhase4BoundaryCharacterizationTest`** 48, 49, 51, 79 and
+  **`TvSubtitleRenderingCharacterizationTest`** 68 read `field("statusPill")` through
+  `TvPlayerOriginalAccess`. Fix with **one map entry** (`"statusPill" to "<pill controller field>"`); the
+  assertions don't change.
+- **`ShufflePlaybackFlowTest:37`** sets `episodeFetchInFlight` on the activity. Retarget only if EF owns
+  the field. Recommended: the field stays in the activity (shuffle and navigation read it), giving
+  0 retargets.
+- **Dart `test/manual_source_validation_contract_test.dart`** (the `nativePlayer` file reads the activity
+  only), **9 edits**. Add a read of each new controller file.
+  1. 71–74 `contains('"automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null)')`:
+     the anchor is in S1a 15208. **The literal changes**, because the gate state is now host-qualified, to
+     `"automaticRecovery" to (host.startupFailoverDispatching && host.startupRecoveryCandidateIndices != null)`.
+     Retarget to the S1a file with the exact new literal.
+  2. 152–153 `startupResolverProvider.equals("pikpak", ignoreCase = true)` (G 14367, 14744, 14793):
+     the literal is unchanged because the field is gate-owned. Switch the file to the gate.
+  3. 156–157 `startupPikPakTorrentAcquisitionAttempted = true` (G 14798): switch the file to the gate.
+  4. 168 `map["recoveryCandidateCount"]` (S2 15381): switch the file to fetch.
+  5. 169 `startupRecoveryIsConsumed(` (G 14749): switch the file to the gate.
+  6. 351–353 `(requireExactStartupEpisode || manualSourceSwitchSnapshot != null)` (S1b 15607):
+     **the literal changes** to `… || host.manualSourceSwitchSnapshot != null)`. Switch the file to S1b.
+  7. 307–311 `selection = _between('private fun onStremioSourceSelected(', 'private fun resolveStremioSourceViaFlutter(')`:
+     the start marker changes, because the function is non-private (called from `bindViews`,
+     `umSourceRows` and the gate). Switch the file to S1a. `contains('maxAttempts = 1')` survives (15077
+     is a named argument).
+  8. 312–316 `reject = _between('private fun failManualSourceCandidate(', 'private fun armStartupCandidate(')`:
+     both markers change (both are called from outside the gate). Switch the file to the gate.
+     `contains('playItem(currentIndex, suppressTrakt = true)')` **changes** to
+     `host.playItem(host.currentIndex, suppressTrakt = true)`. The others survive:
+     `manualSourceRestoreInProgress = true`, `putAll(snapshot.perItemImdbIds)`, the toast text, and the
+     `isNot nextIndex(` / `isNot onStremioSourceSelected(` checks.
+  9. 464–468 `startupFailure = _between('private fun failStartupCandidate(', 'private fun failStartupResolution(')`:
+     both markers change. Switch the file to the gate. The contents survive.
+
+  These stay valid unchanged:
+  - 472 `result["startupSourcesExhausted"] = true` (retained `sendFinished`);
+  - 489–490 `"sourcePersistenceSessionId" to sourcePersistenceSessionId` (still in retained `bindViews`
+    2537 and `reportValidatedSourceCommit` 5819);
+  - 493–496 `payloadCheck.optInt(...)` (`onCreate`);
+  - 332–336 `resolveAndPlay`…`startPlayback`: its `failManualSourceCandidate("initial-resolve")` becomes
+    `startupGate.failManualSourceCandidate("initial-resolve")`, and the substring still matches. The
+    reviewer confirms the purpose.
+  - 337–341 is phase 5's `sendProgress` anchor and is already retargeted there.
+  - `test/android_tv_auto_advance_resume_test.dart` and `android_tv_mdblist_progress_source_test.dart`
+    are unaffected.
+
+**Proposed shape** (≤ 800 lines per file):
+
+- `TvStartupGateController` (G; ≈ 630 + Host ≈ 40 members → **≈ 700**).
+- `TvSourceSwitchController` (S1a + BADGE; ≈ 351 + Host ≈ 30 → **≈ 400**).
+- `TvSourceSwitchApplier` (S1b; ≈ 417 + Host ≈ 40 → **≈ 470**). It has **no own fields**: anchor its
+  property to the first removed member, or construct it inside S1a as in banner option (ii). This is a
+  design decision.
+- `TvSourceFetchController` (S2, plus EF if it rides; ≈ 224 / 383 + Host ≈ 20).
+- `TvPikPakRetryController` (PK; ≈ 206 + Host ≈ 18 → ≈ 240).
+- `TvStatusPillController` (PILL; ≈ 51 + Host 2 → ≈ 70).
+
+Each cross-unit edge is a computed Host forwarder through the owning controller, which comes to ≈ 45
+cross forwarders. The Host objects in the activity total **≈ 150–160 forwarders (≈ 200 lines)**. Add
+2 readiness getters: `startupGateStatusReady`, `pikPakReactivationIndicatorReady`.
+
+**Initializer timing:**
+
+- G at slot 1030 runs 1059 and 1063–1072 earlier than their original positions (11 constants:
+  `false`/`null`/`0L`) — they move past activity fields 1049–1058, including
+  `recoveryStartedAtMs = System.currentTimeMillis()`, which stays put.
+- S1a (14958), PK (1297; the Handler allocation is contiguous) and PILL (1267) are contiguous, so no
+  proofs are needed.
+
+**Substitutions (≈ 590):** G ≈ 192 (128 host incl. 4 braced, 17 cross, 9 Android, **≈ 38 visibility**:
+nearly every gate member is touched from outside, the measure of how little the gate is encapsulated),
+S1a ≈ 103 (incl. 9 braced), S1b ≈ 85, BADGE ≈ 20, S2 ≈ 83, PK ≈ 44, PILL ≈ 16, EF ≈ 49.
+
+**Hazards:**
+
+- **`pikPakRetryId`** is a shared token. G captures it at schedule time and compares it at fire time
+  inside the `Runnable` (14859, 14865, 14867); S1b writes it with `++`; PK owns it. It needs one owner
+  (PK) and computed forwarders, so it is read at fire time and never snapshotted.
+- **`stremioResolutionToken`** is shared with playback start (Host `var`).
+- **`startupFailoverGeneration`** is read 4× by the retained `resolveAndPlay` inside async callbacks, so
+  the read stays live through `startupGate.x`.
+- **`finish()`** in G (14790) must dispatch to the override.
+- **Two-way G↔S1 forwarders:** G is constructed first (slot 1030) and must reach S1 only through computed
+  forwarders, with no construction-time read. The plan already covers this with a negative.
+- 13 braced templates.
+- Runnable self `this` ×6.
+- `onDestroy` keeps 18 in-place patches with **order unchanged**.
+- The exhaustive checker must treat the 3 field-less controllers' slots as anchored `added` declarations.
+
+**Risk: high.** This is the most stateful, async and teardown-heavy unit left outside the playback core.
+Existing characterization is narrow (the watchdog test, 13 cases) and the Dart contracts are text-only.
+
+**Step-0 gaps:**
+
+- Startup gate: eligibility matrix (IPTV, Stremio TV, aiostreams, PikPak, single vs multi attempt),
+  12 s timeout, 3 s re-arm with the 45 s/120 s caps, 200 ms commit grace, error-slate and duration
+  checks, failover to the next source, recovery fetch with its 30 s fallback, exhaustion → toast + finish
+  + `startupSourcesExhausted`, the `startupSourceFailed` payload.
+- Manual switch: snapshot/restore transaction (`manualSourceRestoreInProgress`, `perItemImdbIds` restore,
+  `playItem(..., suppressTrakt = true)`), stale-token resolve rejection, switch-outcome listener and 10 s
+  timeout with pill messages, `dropStaleSourceSwitchFeedback`.
+- `switchToSourcePlaylist`: episode-targeting matrix (exact episode, missing-episode toast), shuffle
+  reset, metadata re-request.
+- `switchToStremioSource`: PikPak branch re-arming `pikPakRetryId`, the IPTV branch handing off to the
+  phase-5 ladder.
+- Fetch more and addon fetch: fetched flags, probing set, adopt with the preferred-source-missing toast,
+  failure paths.
+- PikPak: metadata wait (5 s, buffering not an error), backoff 2/4/8/16/18 s, exhaustion → shuffle/manual/
+  startup failure or `playNext` after 1.5 s, the overlay, `onPause` cancellation.
+- Pill: ensure/show/transient 1.4 s/hide, and the shared-handler interplay with the subtitle ticker.
+- The JVM baseline must include the existing watchdog cases before the helper retarget.
+
+**Phasing the cluster (it cannot fit in 800–1,300):**
+
+| option | phase(s) | lines | activity patches | bridging cost |
+|---|---|---|---|---|
+| one phase | all 8 units | 2,038 | 114 (23 declarations) + 8 p5 + 3 p4 re-points | none |
+| **two phases (recommended)** | **gate-1** = G+S1a+S1b+BADGE; then **gate-2** = S2+EF+PK+PILL | 1,398 / 640 | gate-1: 109 references in 25 declarations, of which **24** sit in gate-2 code (PK 8, S2 12, EF 2, plus STV-trio 2) and get re-substituted in gate-2. gate-2: 27 (PK 12, EF 10, S2 3, PILL 2) | ≈ 24 extra patches; ≈ 16 gate-1 forwarders re-pointed in gate-2 (`requestMoreTorrentSources`, `failMoreTorrentSources`, `pikPakRetryId`/`Count`/`isPikPakRetrying`, `hidePikPakRetryOverlay`, `attemptPikPakPlaybackLoop`, `cancelPikPakRetry`, `show`/`showTransient`/`hideStatusPill`, `adoptSourceList`, …) |
+| reverse order | gate-2 first | 640 / 1,398 | gate-2 first puts 34 pill and 12 PK patches into G/S1, re-edited later | worse: edits are per call site, not per forwarder name |
+
+Gate-1 is about 100 lines over the 1,300 guideline but cannot shrink further. G alone would put 51 + 7
+cross-unit edits on the activity side; S1 alone splits a transaction protocol.
+
+---
+
+### D. "Next" overlay (auto-advance / loading overlay): do not move standalone
+
+**Owned:** `nextOverlay` 156, `nextText` 157, `nextSubtext` 158 and `nextBackdrop` 161 (lateinit views,
+bound at `bindViews` 2444–2447). Functions: `showNextOverlay@8094`, `fadeInNextOverlay@8100`,
+`hideNextOverlay@8107`, `setNextOverlayBackdrop@5796`. That is 41 lines. The image branch is dead: the
+only caller, 5791, passes `null`.
+
+**Inbound: 25 references in 6 declarations:**
+
+- `bindViews` ×4 (writes);
+- `playbackListener` 1671, 1673, 1683, 1685;
+- `setResolvingState` 5786–5791 (5);
+- `isCleanPlaybackState` 8128; `showBufferingIndicatorDebounced` 16328;
+- Stremio TV `requestStremioTvNext` ×10.
+
+**Hazards:** `::nextBackdrop.isInitialized` (5797) needs a readiness getter; 2 `Glide.with(this)` calls;
+2 reflective field sets (`StremioTvStartupWatchdogTest:54`, `TvPhase3OriginalTest:43`).
+
+**Verdict:** the patch/line ratio is about 0.6. The overlay belongs to the loading overlay
+(`setResolvingState`, called from `resolveAndPlay` and the gate), so move it with title/OTT identity and
+the loading overlay in the controls/presentation phase. Until then the Stremio TV and gate controllers
+forward `nextText`, `nextSubtext`, `fadeInNextOverlay()`, `hideNextOverlay()` and `setResolvingState()`.
+
+---
+
+### Ranking (activity patches per moved line, then risk)
+
+| rank | unit | lines out | activity patches (decls) | re-points created/consumed | test retargets | risk |
+|---|---|---|---|---|---|---|
+| 1 | **A zap banner** (2 files) | 1,304 | **16 (9)** | ≈ 6 later | 0 | medium (no coverage; ≈ 281 substitutions) |
+| 2 | **B Stremio TV guide (lite)** | 529 | **16 (6)** | ≈ 5 later | 1 reflective | medium-low |
+| 2′ | B Stremio TV guide (full, + media trio) | 685 | 13 (5) | — | 1 | medium (Host 32, playback-core writes) |
+| 3 | C gate-1 (G+S1a+S1b+BADGE) | 1,398 | 109 (25) | consumes 8 (p5) | 49 sites via 1 helper + 9 Dart | high |
+| 4 | C gate-2 (S2+EF+PK+PILL) | 640 | 27 (+24 re-substituted) | consumes ≈ 16 + 3 (p4) | 1 helper map entry | medium |
+| — | C whole cluster at once | 2,038 | 114 (23) | consumes 8 + 3 | as above | high |
+| — | Status pill alone | 51 | 36 (14) + 3 p4 re-points | — | 1 map entry | low (but 34 of these calls re-edit in the cluster) |
+| — | PikPak alone | 206 | 24 (10) | — | 4 reflective sites | medium-high (token owner split from the gate) |
+| — | Next overlay alone | 41 | 25 (6) | — | 2 field sets | low; ratio 0.6, so don't |
+
+### Recommended phase 6 set
+
+**The IPTV zap banner, classic + styled, as option (ii)**:
+`TvIptvZapBannerController` (≈ 660) + `TvIptvZapBannerStyledRenderer` (≈ 700).
+
+- **1,304 moved lines for 16 activity patches in 9 declarations.** That is ≈ 0.012 per line, the best of
+  any unit in the file. There are 0 test retargets, 0 Dart anchors, 0 lifecycle edits and no async
+  protocol. It is independent of phase 5 (0 references either way).
+- It completes p5's queued "IPTV-2", and it shrinks the IPTV core that a later phase must move by 1,304
+  lines.
+- Cost: ≈ 281 substitutions (122 `dp`, 42 overload-audit sites incl. 4 Glide), 8 inert-initializer proofs,
+  1 Host of 19 read-only forwarders, and characterization from zero across 4 styles.
+- **Step-T additions:**
+  - a controller constructing a sibling renderer in its initializer (pinned structural span; negative:
+    the renderer reads A or the host during construction);
+  - an explicit cross-object qualifier (`classic.`) substitution class with an occurrence count;
+  - a negative for an unqualified A-name left in B, proven by a compile failure in the fixture;
+  - a Host read inside a moved default-argument expression;
+  - 42 compiled overload descriptors.
+
+**Alternative** if characterization budget is the constraint: STV-lite (529 lines, 16 patches,
+1 retarget). It is below the 800 floor. No cohesive partner exists to pad it: the Next overlay and the
+media trio both worsen the ratio. It fits as a short phase 7.
+
+### Order for the remaining units
+
+Line counts are current member spans at `1a33c42cb`, excluding phase 5.
+
+1. **Phase 6:** zap banner (1,304).
+2. **Phase 7:** Stremio TV guide, lite (529). This doubles as the warm-up for `MethodChannel` token
+   protocols before the gate.
+3. **Phase 8:** gate-1, startup/manual gate + source switch + badge (1,398; documented as over the
+   guideline and inseparable). It consumes the 8 phase-5 re-points.
+4. **Phase 9:** gate-2, fetch more + episode fetch + PikPak engine + status pill (640). It consumes ≈ 16
+   gate-1 forwarders and the 3 phase-4 pill forwarders.
+5. **Phases 10–11:** IPTV core + EPG + VOD (B9+B4+B5+B8, ≈ 2,526 after B6 has left), per p5's multi-file
+   shape with one owner per token.
+   - 10 = guide overlay builder and pickers (`setupIptvOverlay`/`applyGuideStyle`/pickers ≈ 700, ≈ 1
+     inbound patch) + EPG pane and now/next (B4+B5 ≈ 335).
+   - 11 = zap/switch protocol + guide visibility/search/browse + `initIptvMode` + VOD (≈ 1,500, documented
+     exception: the token protocol cannot be split).
+   - This re-points the banner's ≈ 6 forwarders.
+6. **Phase 12:** IPTV playback pipeline: tune (`setIptvMediaItem`/decoder failure/HLS retry/codec
+   selector ≈ 220) + live recovery, twin trial, reconnect pill and decoder/diag listeners (≈ 420), ≈ 640
+   total. It re-points the phase-5 ladder's `setIptvMediaItem`.
+7. **Phase 13:** controls I: OTT skin + `setupControls` (≈ 412) + B7 live dock styling (≈ 275, its 37-member
+   Host is now mostly intra-unit) + display/speed/audio/night (≈ 168), ≈ 855.
+8. **Phase 14:** controls II: controls overlay, seekbar, cinema scrub and progress ticker (≈ 724) +
+   title/OTT identity, loading overlay and the **Next overlay** (≈ 343), ≈ 1,070.
+9. **Phase 15:** playlist overlay + navigation focus (≈ 821) + guide skin (≈ 375), ≈ 1,200.
+10. **Phase 16:** navigation + shuffle (≈ 343, with `ShufflePlaybackFlowTest` retargets) + subtitle
+    fetch/search/auto-select (≈ 915). Split if needed.
+11. **Phase 17:** playback start (`playItem`/`resolveAndPlay`/`startPlayback`/`playMediaDirect`/merged
+    source/`playPikPakVideoWithRetry`/Stremio TV media trio, ≈ 600) + media pipeline factory
+    (`setupPlayer` ≈ 398) + metadata receiver (≈ 294). Owns `stremioResolutionToken`.
+12. **Phase 18:** unified-menu model, split per owning controller (≈ 445).
+13. **Last, possibly never:**
+    - `playbackListener` (512, an `object : Player.Listener` property fanning out to about every feature);
+    - `dispatchKeyEvent` (363, the key router, an override).
+
+    Verbatim extraction needs Hosts of about 100 members, or a non-verbatim split by event or key group
+    that the current rules forbid. Decide after phase 17 whether they stay as a documented exception.
+
+That is **about 12 more phases after phase 6**, not the 7 of the original map.
+
+### Honest estimate of the activity's final size
+
+What **necessarily remains** under the current rules (verbatim moves, no delegators, unchanged class
+header, activity owns lifecycle and teardown order):
+
+| item | lines (est.) |
+|---|---|
+| imports (shrinks as code leaves) | ≈ 100 |
+| class header, companion (`PAYLOAD_KEY` + residual constants) | ≈ 30 |
+| shared state and single-owner fields: player/trackSelector/payload/`currentIndex`/`playlistMode`, Stremio source list + index + resolution token, IPTV core list/index/sources/headers (`@Volatile`)/forced URLs, `isIptvMode`/`isStremioTvMode`, handlers and scopes, ≈ 32 lateinit views, recovery/session ids, presets | ≈ 450–650 |
+| controller properties with Host objects: today 6 controllers = 141 lines; ≈ 28–32 controllers at about 25–35 lines each, with the gate, IPTV core and playback start being wide | ≈ 750–1,000 |
+| readiness getters (`::x.isInitialized`) | ≈ 15–25 |
+| lifecycle: `onCreate` 173, `onStart`/`onStop`/`onResume`/`onPause` ≈ 100, `onDestroy` 169 (43-step order; becomes controller-qualified but stays), `finish` 17, `onRequestPermissionsResult` 11, `setupBackPressHandler` 43, buffering indicator 21, `recordPlaybackLifecycle` 9 | ≈ 545 |
+| `bindViews` (lateinit view binding the activity owns; per-feature parts can leave) and `parsePayload` (writes about 30 owner fields; a struct return would be non-verbatim) | ≈ 200–360 |
+| **Subtotal, with routers extracted** | **≈ 2,100–2,700** |
+| `playbackListener` + `dispatchKeyEvent` if they stay verbatim | +875 |
+| **Realistic end state** | **≈ 2,800–3,600** |
+
+**The activity can never reach ≤ 800 lines under these rules.** The Host wiring alone is about 800 lines,
+and it grows as code leaves: each 1,000 lines extracted adds roughly 40–100 lines of forwarders. The end
+state needs the documented exception the plan already anticipates. The remaining responsibilities are:
+
+- Android entry point and manifest FQN;
+- lifecycle order;
+- composition root (controller properties, Host objects);
+- the shared player and single-owner state;
+- payload intake;
+- possibly the two routers.
+
+Its exit milestone would be a separate, reviewed rule change, for example moving Host objects into the
+activity's class header (the activity implements the Host interfaces), or allowing non-verbatim router
+splits. That is not part of this series.
+
+### onStart / onStop / onPause / onDestroy / finish positions touched (`1a33c42cb`)
+
+| line | statement | unit | phase |
+|---|---|---|---|
+| 16321 | `onPause`: `cancelPikPakRetry()` (after `super.onPause()`) | PK | gate-2 (1 token) |
+| 16366–16375 | `onDestroy`: five `…?.let { progressHandler.removeCallbacks(it) }` + `= null` | G | gate-1 (10 tokens, order unchanged) |
+| 16376–16380 | `manualSourceSwitchSnapshot`/`…Index = null`, `manualSourceRestoreInProgress = false`, `startupFailoverGeneration++`, `startupFailoverCursor = null` | G | gate-1 (5 tokens) |
+| 16381 | `if (::startupGateView.isInitialized) startupGateView.visibility = GONE` | view stays | unchanged |
+| 16415–16416 | `cancelPikPakRetry()`; `pikPakRetryHandler.removeCallbacksAndMessages(null)` | PK | gate-2 (2 tokens) |
+| 16453 | `progressHandler.removeCallbacksAndMessages(null)` (borrowed by banner, Stremio TV, G, S1a) | — | unchanged |
+| 16487 | `externalSubtitleHandler.removeCallbacksAndMessages(null)` (pill borrowed) | — | unchanged |
+| 16502 | `cancelSourceSwitchWait()` | S1a | gate-1 (1 token) |
+| 16503 | `stremioSources.clear()` | stays | unchanged |
+| 16512 | `sendFinished()` (retained; 2 patches inside it for the gate state) | — | unchanged position |
+
+The banner and Stremio TV guide touch **no** lifecycle statement. `onStart`/`onStop`/`finish` contain no
+phase-6 references.
+
+### Follow-ups found while mapping (not fixed)
+
+- Stremio TV guide:
+  - `stremioTvSwitchToken` is not bumped in `onDestroy`;
+  - the `Result` callbacks guard only the token, not `isFinishing`/`isDestroyed`, before UI work and
+    `finish()`;
+  - the guide-ready `Player.Listener` and the 10 s wait are not cancelled in `onDestroy` (the timeout is
+    retired only by the wholesale `progressHandler` clear);
+  - the list `post`/`postDelayed(150)` calls are never cancelled.
+- Zap banner: three layout listeners (12079, 12181, 12286) are never removed, and the animators are not
+  cancelled on destroy (existing).
+- The gate's 30 s recovery-fetch fallback (14766) and the `missing-source` post (14819) are retired only
+  by the wholesale clear. `pikPakRetryCount` is write-only. PikPak's `checkHandler` is untracked
+  (existing).
+- `setNextOverlayBackdrop`'s image branch is dead: its only caller passes `null` (existing).
+- Dart whole-file anchors 1 and 6 (section C) assert host-qualified literals once moved. Consider
+  retargeting them to `_between` ranges of the owning function for an equal-or-stronger assertion.
+
+### Appendix: working files
+
+Everything is in `scratchpad/p6/`:
+
+- `idx.pkl`, `members.txt` (869 members at `1a33c42cb`);
+- `units6.py`, `agg.py`, `recv.py`, `ctx.py`;
+- the reports `rep_banner.txt`, `rep_stv.txt`, `rep_gate.txt`, `rep_switcher.txt`, `rep_small.txt`,
+  `rep_var.txt` and `agg.txt`, and the row-level `appendix_rows.txt` (every inbound reference per unit
+  set, including the gate-1 and gate-2 splits);
+- `p5decls.txt`.
