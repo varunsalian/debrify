@@ -8219,3 +8219,529 @@ not move; existing destroy/cancellation follow-ups remain pinned as-is.
 No production deviation, bug fix, push, branch switch, device/emulator
 interaction or self independent review. **STOP after Phase 7**; Claude's
 separate review follows.
+
+---
+
+## Phase 8 inventory (at `a4ed4f368`; re-measure on `53906805d`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `a4ed4f368`
+(phase-6 merge, **15,167 lines**, class header 136, companion 15133–15166). Read-only survey of the main
+checkout: no worktree, no build, nothing under `../debrify-wt/`. Phase 7 (Stremio TV guide "lite", branch
+`refactor/tvplayer-p7`, design + step T/0 committed, not merged) is treated as a controller: its 30
+members, 16 activity patches and 12-member Host are taken from its plan section. All phase 3–6 collaborator
+rules apply (AppCompatActivity injection + compiled overload audit incl. constructors/aliases/Runnable
+receivers; computed, explicitly-qualified Host forwarders; slot-anchored controller properties; an inert
+proof for **every** moved property that runs after the controller's first slot, no contiguous exemption;
+activity-owned `isInitialized` getters; braced host templates; cross-feature reads via the owning
+controller; no delegators; teardown order unchanged; ≤ 800 lines per file; nested destination construction
+allowed with effective-slot mapping).
+
+Method: the phase-6 indexer (`scratchpad/p6/idx.py`) re-run on `a4ed4f368` (**788** depth-1 members), a
+word-boundary reference scan per name (string templates and `this@Activity.` hits included; comments and
+foreign-receiver hits excluded), an owner map over the four units plus the ten existing controller
+properties, and a receiver audit of every reference inside `object :`/`Runnable {`/scope lambdas. Every
+list below was then checked by hand against the source. Working files: `scratchpad/p8/` (`units8.py`,
+`inbound.py`, `recv8.py`, `inb_*.txt`, `out_gate1.txt`, `hostneeds.txt`, `shared.txt`). Counts reproduce the
+phase-6 inventory's figures for the same units (46/10/2/3 members; 630/308/417/43 lines), so the units were
+not changed by phases 5–6, only shifted.
+
+"Patch" = one token edit in a retained activity declaration. "Re-point" = one edited Host forwarder in an
+existing controller property (a `patched` row on that whole activity property, as phase 5 did for the sleep
+forwarder). "Substitution" = one declared edit inside a moved body.
+
+---
+
+### Summary and recommendation
+
+| option | lines out | activity edits | edits/line | Host | proofs | Kotlin test retargets | Dart edits | lifecycle patches |
+|---|---|---|---|---|---|---|---|---|
+| **W** whole gate-1 (G+S1a+S1b+BADGE) | 1,398 (+9 companion) | **109** patches in 25 decls + **8** re-points (2 properties) + 1 visibility patch | 0.084 | 1 × 53 (nested) | **31** | 45 watchdog sites (helper) + 7 progress-test sets + 1 field (8 map entries + `call` routing) | **8** | 16 (`onDestroy` 14328–14342, 14464) |
+| **S** switcher first (S1a+S1b+BADGE) | **768** | **23** patches in 19 decls + **4** re-points (1 property) + 1 visibility patch | **0.036** | 1 × 51 | **1** | 1 map entry (`sourceSwitchReadyListener`) | **3** | 1 (`onDestroy` 14464) |
+| then G (phase 9) | 630 (+9) | 93 patches + 4 p5 re-points + 11 S-Host re-points | 0.172 | 1 × ≈ 32 | 29 | as W minus the field entry | 5 | 15 |
+| BADGE alone | 43 | 6 patches in 4 decls | 0.14 | 4 | 0 | 0 | 0 | 0 |
+| S1a+BADGE alone (no applier) | 351 | 25 patches + 4 re-points | 0.083 | ≈ 20 + 2 S1b forwarders | 1 | 1 | 2 | 1 |
+
+**Recommendation: phase 8 = option S** — the source switcher (`TvSourceSwitchController`, S1a + BADGE)
+with an eagerly constructed `TvSourceSwitchApplier` (S1b); the startup/manual gate G moves next as its own
+phase (630 lines; or paired with the PikPak engine, ≈ 836, which also gives `pikPakRetryId` its owner in the
+same phase — to be measured in the phase-9 inventory). Justification:
+
+- **The bridge is cheaper than the phase-6 estimate assumed.** "G alone would put 51 + 7 cross-unit edits on
+  the activity side" counted per reference. Under the Host pattern the 51 S→G references are in-body
+  `host.x` substitutions that W needs anyway (as `gate.x`); the activity carries only **11 computed
+  forwarders** (re-pointed to `startupGateController.x` in phase 9) plus 7 patches inside G's body that are
+  re-substituted when G moves. Total churn S + G ≈ 135 + 7 versus 117 for W (+≈ 20 %).
+- **Risk isolation.** Everything that makes W high-risk is in G: the 5-Runnable watchdog protocol, the
+  15-statement `onDestroy` block, 24 `playbackListener` + 16 `resolveAndPlay` patches (4 inside templates),
+  the 45 reflective watchdog sites, `finish()` dispatch, two Runnable self receivers, 29 of the 31 proofs,
+  5 of the 8 Dart edits. Option S touches none of them: 1 lifecycle patch, 1 proof, 1 overload-audit site,
+  0 watchdog retargets, 3 Dart edits.
+- **Tooling reuse.** S is exactly the phase-6 shape (one controller eagerly constructing one field-less
+  sibling, `switcher.`/`applier.` cross-qualifiers, one Host). W with a single Host needs a **new** checker
+  class (Host member serving two call shapes of `playItem`: overloads or interface default values) and a
+  two-children nested construction.
+- **Size.** 768 lines sits at the 800 floor; W is 1,398 (> 1,300 guideline, documented-exception territory).
+- Cost of S: two Host objects duplicate ≈ 15 shared names (`stremioSources`, `player`, `payload`, …,
+  ≈ +30 activity lines for the rest of the series); the manual-switch transaction temporarily spans
+  controller + activity (state single-owned by the activity, reached only through computed forwarders, so
+  no behaviour change). BADGE alone or S1a+BADGE alone are strictly worse (phase overhead for 43 lines;
+  S1a+BADGE leaves 4 S1b→S1a patches to redo and adds 2 S1a→S1b forwarders).
+
+The full W inventory follows (it is also the G-phase inventory); option S is broken out in its own
+section with exact edit lists.
+
+---
+
+### 1. Members (current lines, attached comments included)
+
+**G — startup/manual-switch gate: 46 members, 630 lines** (+ 9 companion lines)
+
+- Fields block 1 (1078–1099; comment 1078–1080 attaches to the first): `startupFailoverCursor` 1081,
+  `startupFailoverGeneration` 1082, `startupFailoverTimeout` 1083, `startupCommitCheck` 1084,
+  `startupFirstFrameAtElapsedMs` 1085, `startupCandidateStartedElapsedMs` 1086, `startupFailoverDispatching`
+  1087, `startupTryNextOnFailure` 1088, `startupMaxAttempts` 1089, `startupResolverProvider` 1090,
+  `startupRecoveryAvailable` 1091, `startupHasRemainingSavedSources` 1092, `startupRecoveryFetching` 1093,
+  `startupRecoveryConsumed` 1094, `startupRecoveryProducedCandidates` 1095, `startupRecoveryNextMode` 1096,
+  `startupRecoveryCandidateIndices` 1097, `startupFailedReleases` 1098, `startupSourcesExhausted` 1099.
+- Between the blocks and **staying**: `sourcePersistenceSessionId` 1100, `recovery*` 1101–1107,
+  `recoveryStartedAtMs = System.currentTimeMillis()` 1108, `progressReporter` property 1109–1142.
+- Fields block 2 (1143–1156; comment 1144–1146 attaches to `manualSourceSwitchSnapshot`):
+  `startupPikPakTorrentAcquisitionAttempted` 1143, `manualSourceSwitchSnapshot` 1147,
+  `manualSourceSwitchIndex` 1148, `manualSourceSwitchTimeout` 1149, `manualSourceCommitCheck` 1150,
+  `manualSourceFirstFrameAtElapsedMs` 1151, `manualSourceCandidateStartedElapsedMs` 1152,
+  `pikPakGateReprepare` 1153, `manualSourceMediaReplaced` 1154, `manualSourceCandidateUrl` 1155,
+  `manualSourceRestoreInProgress` 1156.
+- Functions: `beginStartupFailoverIfEligible` 12287–12343, `beginManualSourceCandidate(Int)` 12345–12406,
+  `commitManualSourceCandidate` 12408–12472, `failManualSourceCandidate(String, Boolean = true)`
+  12474–12536, `armStartupCandidate(Int)` 12538–12602, `commitStartupCandidate` 12604–12671,
+  `failStartupCandidate(String)` 12673–12786 (114), `failStartupResolution(Int, String)` 12788–12799,
+  `startupCandidateElapsedMs` 12801–12803, `currentPlaybackItemIsPikPak` 12805–12806,
+  `cancelPikPakGateReprepare` 12808–12811, `schedulePikPakGateReprepare(Int? = null)` 12813–12839 (KDoc
+  12813–12817), `startupWatchdogShouldExtend(Long)` 12841–12862, `startupSourceFields(Int)` 12864–12876,
+  `mediaServerPlaybackLog(String, Int? = null, Int? = null)` 12878–12885,
+  `sourceSelectionLog(String, Int, Int? = null, String? = null)` 12887–12895.
+- Companion (G-only users → file-private `const val` in the gate file): `STARTUP_FAILOVER_TIMEOUT_MS` 15148,
+  `STARTUP_WATCHDOG_RECHECK_MS` 15151 (+ comment 15149–15150), `STARTUP_SLOW_SOURCE_MAX_WAIT_MS` 15153
+  (+ 15152), `STARTUP_PIKPAK_MAX_WAIT_MS` 15156 (+ 15154–15155), `PIKPAK_GATE_REPREPARE_DELAY_MS` 15157.
+  No qualified reference anywhere (Kotlin, Java, tests). The template `"timeoutMs=$STARTUP_FAILOVER_TIMEOUT_MS"`
+  (12404) resolves to the file-private constant unchanged.
+
+**S1a — source selection / resolve: 10 members, 308 lines**
+
+`setupStremioSources` 12897–12913, `updateStremioQualityBadge` 12915–12918, `sourceSwitchReadyListener`
+12920, `sourceSwitchTimeoutRunnable` 12921, `watchSourceSwitchOutcome(Int)` 12923–12964 (KDoc 12923–12928),
+`cancelSourceSwitchWait` 12966–12971, `dropStaleSourceSwitchFeedback` 12973–12983 (KDoc 12973–12978),
+`onStremioSourceSelected(StremioSource)` 13027–13084, `resolveStremioSourceViaFlutter(StremioSource, Int)`
+13086–13164, `resolveSourceToPlaylistViaFlutter(StremioSource, Int)` 13166–13254.
+Interleaved and **not** in the unit: phase 7's `guidePanelReadyListener` 12985, `guidePanelTimeoutRunnable`
+12986, `hideGuideWhenReady` 12988–13018, `cancelGuideWait` 13020–13025 (leave with phase 7), then gate-2's
+S2 13256–13485.
+
+**S1b — switch apply: 2 members, 417 lines (no fields)**
+
+`switchToSourcePlaylist(Int, List<*>, Int? = null, Int? = null, Boolean = false, Boolean = false,
+ShufflePlaybackAttempt? = null)` 13487–13790 (304), `switchToStremioSource(String, Int, String? = null,
+Boolean = false)` 13792–13904.
+
+**BADGE: 3 members, 43 lines (no fields)**
+
+`showStremioSourceBadge` 13906–13926, `hideStremioSourceBadge` 13928–13940,
+`hideStremioSourceBadgeImmediately` 13942–13950 (KDoc 13942–13944). Views `stremioSourceBadge` 1072 and
+`stremioSourceBadgeText` 1073 **stay** (bound in `bindViews`, set reflectively by
+`TvIptvChannelStartCharacterizationTest:89`).
+
+**Stays in the activity (owner) and is reached by Host forwarders:** `stremioSources` 1070,
+`currentStremioSourceIndex` 1071, `stremioResolutionToken` 1074, `hasPlaylistResolver` 1075, both badge
+views, lateinit `startupGateView` 140 / `startupGateStatus` 141 (reflectively set by the watchdog test),
+`ShufflePlaybackAttempt` 5374 (nested type; see hazards).
+
+### 2. Owned state, initializer forms, proofs
+
+| controller (slot) | field | initializer | runs earlier? |
+|---|---|---|---|
+| G (slot 1078) | `startupFailoverCursor` | `null` | no (first) |
+| G | 1082–1099 (18 fields) | `0`, `null`×5, `0L`×2, `false`×8, `1`, `mutableSetOf<List<Any?>>()` | yes — 18 proofs |
+| G | 1143–1156 (11 fields) | `false`×4, `null`×6, `0L`×2 … (exact: `false` 1143/1154/1156, `null` 1147–1150/1153/1155, `0L` 1151/1152) | yes — 11 proofs; they now also run **before** `recoveryStartedAtMs = System.currentTimeMillis()` (1108) and `progressReporter` construction (1109), which stay |
+| S1a | `sourceSwitchReadyListener` | `null` | W: yes (runs at G's slot, effective-slot mapping); S: no (first) |
+| S1a | `sourceSwitchTimeoutRunnable` | `null` | yes — 1 proof |
+
+Proof totals by form (W, 31): `null` 13 (11 G + 2 S1a), `false` 11, `0L` 4, int literal 2 (`0`, `1`),
+typed empty collection 1. All forms are already in the classifier (phase 5/6); no extension needed.
+**Option S: 1 proof** (`sourceSwitchTimeoutRunnable = null`); the applier has no fields, so its eager
+construction is a pinned allocation with nothing moved behind it.
+
+### 3. Every inbound reference (W = G+S1a+S1b+BADGE)
+
+**Retained activity code — 87 patches in 16 declarations:**
+
+- `iptvDiagAnalyticsListener@702` (5): 708 `mediaServerPlaybackLog`, 710 `manualSourceRestoreInProgress`
+  (r), 711 (w), 714 `commitManualSourceCandidate`, 715 `commitStartupCandidate`.
+- `playbackListener@1504` (24): 1537, 1657, 1846 `startupFailoverCursor`; 1540, 1823, 1831, 1850
+  `currentPlaybackItemIsPikPak`; 1542 `commitStartupCandidate`; 1656 `startupSourcesExhausted`; 1658, 1665,
+  1824, 1825(w) `manualSourceRestoreInProgress`; 1658, 1666, 1829 `manualSourceSwitchSnapshot`; 1660, 1861
+  `failStartupCandidate`; 1667, 1841 `failManualSourceCandidate`; 1818 `mediaServerPlaybackLog`; 1831
+  `manualSourceMediaReplaced`; 1839, 1859 `schedulePikPakGateReprepare`.
+- `onCreate@2019` (2): 2149 `setupStremioSources`, 2189 `beginStartupFailoverIfEligible`.
+- `bindViews@2491` (5): 2499 `startupFailoverCursor`/`startupTryNextOnFailure`/`startupMaxAttempts` (inside
+  already-braced `${…}` templates), 2662 `sourceSelectionLog`, 2664 `onStremioSourceSelected`.
+- `playItem@4536` (1): 4584 `dropStaleSourceSwitchFeedback`.
+- `resolveAndPlay@4629` (16): 4634 `startupFailoverCursor`; 4635, 4671 `startupFailoverGeneration`, 4676 and
+  4682 **unbraced** `$startupFailoverGeneration` → `${startupGateController.startupFailoverGeneration}`;
+  4639, 4659 `manualSourceSwitchIndex`; 4658 `manualSourceSwitchSnapshot`; 4648, 4665, 4677, 4691, 4710
+  `startupSourceFields`; 4696 `failManualSourceCandidate`; 4697 `failStartupResolution`; 4707
+  `manualSourceCandidateUrl` (w).
+- `watchShufflePlayback@5415` (1): 5420 `currentPlaybackItemIsPikPak`.
+- `showControlsMenu@7238` (2): 7293 `hideStremioSourceBadgeImmediately`, 7295 `showStremioSourceBadge`.
+- `hideControlsMenu@7330` (2): 7344, 7366 `hideStremioSourceBadge`.
+- `switchToIptvChannel@10693` (1): 10709 `dropStaleSourceSwitchFeedback`.
+- `umSourceRows@11622` (1): 11633 `onStremioSourceSelected`.
+- `sendFinished@12084` (2): 12088 `startupSourcesExhausted`, 12090 `startupRecoveryConsumed`.
+- `parsePayload@13952` (7): 14048 `startupTryNextOnFailure` (w), 14049 `startupMaxAttempts` (w), 14050
+  `startupResolverProvider` (w), 14052 `startupRecoveryAvailable` (w), 14053
+  `startupHasRemainingSavedSources` (w), 14058 **unbraced** `$startupTryNextOnFailure` and
+  `$startupMaxAttempts` → braced.
+- `onDestroy@14309` (16): 14328–14342 (15 statements, see §6), 14464 `cancelSourceSwitchWait`.
+- `updateStremioSourcesFromPlaybackMap@14792` (1, phase-7 trio stays): 14805 `setupStremioSources`.
+- `playStremioTvPlaybackMap@14861` (1, trio): 14874 `updateStremioQualityBadge`.
+
+**Gate-2 code still in the activity — 22 patches in 9 declarations** (re-substituted when gate-2 moves):
+
+- PK (8): `attemptPikPakPlaybackLoop@6502` 6549 `cancelPikPakGateReprepare`, 6562 `failManualSourceCandidate`,
+  6565 `startupFailoverCursor`, 6566 `failStartupCandidate`; `waitForPikPakMetadata@6598` 6625
+  `cancelPikPakGateReprepare`, 6655 `schedulePikPakGateReprepare(retryId)`; `showPikPakRetryOverlay@6668`
+  6675 `startupFailoverCursor`; `cancelPikPakRetry@6695` 6700 `cancelPikPakGateReprepare`.
+- EF (2): `requestEpisodeFetch@12126` 12165, `requestAdjacentEpisodeFetch@12197` 12243
+  `switchToSourcePlaylist(`.
+- S2 (12): `applyMoreTorrentSources@13307` 13334 `updateStremioQualityBadge`, 13337/13338
+  `startupRecoveryFetching` (r/w), 13342 `startupRecoveryProducedCandidates` (r+w), 13344
+  `startupRecoveryCandidateIndices` (w), 13346 `startupRecoveryNextMode` (w), 13347 `failStartupCandidate`;
+  `adoptSourceList@13453` 13468 `updateStremioQualityBadge`; `failMoreTorrentSources@13472` 13481/13482
+  `startupRecoveryFetching` (r/w), 13483 `failStartupCandidate` (inside `progressHandler.post { … }`).
+
+Total W: **109 patches in 25 declarations** (matches the phase-6 measurement).
+
+**Existing controller Host forwarders to re-point (8, two `patched` activity properties):**
+
+| property (lines) | forwarder line | member | new target (W / S) |
+|---|---|---|---|
+| `iptvChannelStartController` (989–1017, phase 5) | 999 | `fun dropStaleSourceSwitchFeedback()` | `startupGateController.sourceSwitch.x` / `sourceSwitchController.x` |
+| ″ | 1009 | `fun setupStremioSources()` | ″ |
+| ″ | 1014 | `fun updateStremioQualityBadge()` | ″ |
+| ″ | 1015 | `fun watchSourceSwitchOutcome(sourceIndex: Int)` | ″ |
+| `progressReporter` (1109–1142, phase 5) | 1120 | `val manualSourceRestoreInProgress` | `startupGateController.x` / unchanged in S |
+| ″ | 1121 | `val manualSourceSwitchSnapshot` | ″ |
+| ″ | 1139 | `val startupFailoverCursor` | ″ |
+| ″ | 1140 | `val startupSourcesExhausted` | ″ |
+
+No phase-3 (`upNext` 162, `skipSegment` 1301, `sleepTimer` 1330), phase-4 (`autoSync` 730, `subtitle`
+1210 — it forwards only pill members, gate-2), phase-5 Start Over (798), phase-3 recording (8464) or
+phase-6 banner (10894) forwarder names any unit member. Phase 7's STV-lite Host (12 members) names none, and
+no STV-lite body references any unit member (0 edges either way); the phase-7 test files on
+`refactor/tvplayer-p7` reference no unit name.
+
+**Visibility patch on a retained declaration (both options):** `private class ShufflePlaybackAttempt`
+(5374) → `internal class` — S1b's parameter type (and, under S/W, the Host `playItem` signature) must name
+it from another class. Binary name `AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt` and simple name
+are unchanged, so `ShufflePlaybackFlowTest:27` (`declaredClasses … simpleName`) and
+`TvPhase3WiringCharacterizationTest:42` (binary name) are unaffected. Destination files import
+`com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt` (body tokens unchanged).
+
+### 4. Cross-unit edges (source → target: refs)
+
+- G → S1a 5 (`cancelSourceSwitchWait` 12487, 12695; `updateStremioQualityBadge` 12507, 12770;
+  `onStremioSourceSelected` 12775); G → BADGE 2 (`hideStremioSourceBadgeImmediately` 12334,
+  `showStremioSourceBadge` 12663).
+- S1a → G 34 (11 names below minus 3 S1b-only): `startupSourceFields` ×9, `failManualSourceCandidate` ×8,
+  `failStartupResolution` ×8, `startupFailoverCursor` ×4 (w at 13042), `startupFailoverDispatching` ×2,
+  `startupRecoveryCandidateIndices`, `armStartupCandidate`, `beginManualSourceCandidate`.
+- S1a → S1b 3 (`switchToStremioSource` 13075, 13113; `switchToSourcePlaylist` 13197).
+- S1b → G 17 (`manualSourceSwitchSnapshot` ×5, `failManualSourceCandidate` ×3, `startupFailoverCursor` ×3,
+  `manualSourceMediaReplaced` ×2 (w), `manualSourceCandidateUrl` ×2 (w), `startupSourceFields`,
+  `failStartupResolution`).
+- S1b → S1a 4 (`updateStremioQualityBadge` 13718, 13829; `watchSourceSwitchOutcome` 13788, 13867).
+- BADGE → none.
+
+### 5. Outbound host needs (activity-owned, incl. gate-2 members still in the activity)
+
+`(w)` = written through a `var` forwarder.
+
+- **G — 31 names / 137 refs:** `progressHandler`×25 (borrowed), `stremioSources`×19,
+  `currentStremioSourceIndex`×19 (w ×2), `player`×11, `currentIndex`×9 (w ×1), `payload`×7,
+  `isStremioTvMode`×7, `titleView`×3, `startupGateView`×3, `hideStatusPill`×3 (PILL), `pikPakRetryId`×3
+  (PK, read inside the reprepare Runnable), `isIptvMode`×2, `restartProgressUpdates`×2,
+  `reportValidatedSourceCommit`×2, `showStatusPillTransient`×2 (PILL), `stremioResolutionToken`×2 (w, `++`),
+  `setResolvingState`×2, `sourceBrowser`×2, `mediaPreparationGeneration`×2, `hasPlaylistResolver`,
+  `heldResumePositionMs`, `rebuildPlaylistContent`, `playItem` (2-arg named form 12522),
+  `startupGateStatus`, `controlsMenuVisible`, `sourcePersistenceSessionId`, `seriesSourceTabs`,
+  `movieMoreSources`, `requestMoreTorrentSources` (S2), `moreSourcesLoadingMode`, `failMoreTorrentSources()`
+  (S2, 0-arg call of a defaulted function). Android: `findViewById` ×3 (12578, 12585, 12587),
+  `isFinishing`/`isDestroyed` ×2/×2 (12729, 12828), `finish()` ×1 (12752), `Toast.makeText(this, …)` 12744.
+  Local `generation` (12545–12599) is not a host name.
+- **S1a — 17 names / 52 refs:** `stremioResolutionToken`×16 (w ×1 `++` 13056; 7 in templates),
+  `showStatusPillTransient`×10, `stremioSources`×5, `hideStatusPill`×3, `currentStremioSourceIndex`×2 (w),
+  `sourceBrowser`×2, `progressHandler`×2, `player`×2, `hasPlaylistResolver`×2, `stremioSourceBadge`,
+  `stremioSourceBadgeText`, `hideControlsMenu`, `unifiedMenu`, `isIptvMode`, `iptvChannelStartController`
+  (12950, owning-controller read: `.iptvStremioChannelKey`), `cancelPikPakRetry` (PK), `showStatusPill`.
+  Android: `runOnUiThread` ×8 (13113, 13121, 13134, 13146, 13196, 13211, 13224, 13236).
+- **S1b — 29 names / 60 refs:** writes `currentIndex`×8 (w ×2), `currentStremioSourceIndex`×4 (w ×3),
+  `pikPakRetryId` (`++` 13879 then read 13880), `pikPakRetryCount` (w), `isPikPakRetrying` (w),
+  `mediaPreparationGeneration` (`++` 13807), `percentSeekApplied` (w), `resumeHoldArmedAtMs` (w),
+  `activeVodHeaders` (w; `@Volatile` 750 — the setter forwarder writes the same volatile field),
+  `shuffleBag` (mutate `.clear()`); reads `player`×7, `payload`×4, `stremioSources`×4,
+  `heldResumePositionMs`×2, `sourceBrowser`×2, `titleView`×2, `subtitleTrackReadiness`×2,
+  `iptvChannelStartController`×2 (13796–13797 `.iptvStremioChannelKey`, `.switchToIptvStremioSource`),
+  `isIptvMode`; calls `showStatusPillTransient`×3, `cancelPikPakRetry`×2, `updateCatalogEpisodeControls`,
+  `rebuildPlaylistContent`, `requestMetadataFromFlutter`, `playItem` (4-arg named form 13777),
+  `discoverProtectedMime` (trailing lambda), `buildMergedSource`, `hidePikPakRetryOverlay`,
+  `attemptPikPakPlaybackLoop`. Type: `ShufflePlaybackAttempt`. Android: `Toast.makeText(this, …)` 13693.
+- **BADGE — 4 names / 17 refs:** `stremioSourceBadge`×13, `stremioSources`×2, `ottSkinInstalled`,
+  `ottSourcesButton`.
+
+Union for one Host (W): **53** members (55 names minus `finish` and the type). Option S Host: **51** =
+40 activity names + 11 forwarders to G (`armStartupCandidate`, `beginManualSourceCandidate`,
+`failManualSourceCandidate(reason)` (all 11 calls pass one argument), `failStartupResolution`,
+`startupSourceFields`, `startupFailoverCursor` (var), `startupFailoverDispatching`,
+`startupRecoveryCandidateIndices`, `manualSourceSwitchSnapshot`, `manualSourceMediaReplaced` (var),
+`manualSourceCandidateUrl` (var)). Kinds for S: 13 `var`, 19 `fun`, 19 `val`.
+
+### 6. Shared tokens, timers, handlers, teardown
+
+**`stremioResolutionToken` (1074) — owner stays the activity** (Host `var` forwarder in every option).
+Writers: G 12486, 12694 (`++`); S1a 13056 (`++`); EF 12143, 12211 (`++`, gate-2). Readers: S1a ×15
+(13064–13234), EF ×4, retained `resolveAndPlay` 4641, 4660, 4664 (`$stremioResolutionToken`, retained),
+`discoverProtectedMime` 4721, 4726. Moving it into the switcher would add 11 patches (5 in playback start,
+6 in EF) and a second move when playback start (phase 17 in the plan) becomes its owner. `host.x++`
+compiles to get + set on the forwarder — identical on the main thread.
+
+**`pikPakRetryId` (1383) — owner PK (gate-2), in the activity during phase 8.** Writers:
+`playPikPakVideoWithRetry` 6454 (retained, playback start), PK `cancelPikPakRetry` 6697, S1b 13879. Readers:
+PK 6504, 6534, 6612; G `schedulePikPakGateReprepare` 12821 (captured at schedule time), 12827 and 12829
+(**compared at fire time inside the reprepare `Runnable`** — must stay a computed `host.pikPakRetryId`
+read, never a snapshot); S1b 13880. Option S: S1b goes through Host `var` forwarders (`pikPakRetryId`,
+`pikPakRetryCount`, `isPikPakRetrying`) plus `hidePikPakRetryOverlay`, `attemptPikPakPlaybackLoop`,
+`cancelPikPakRetry` — 6 forwarders re-pointed when PK moves. Pairing G with PK in phase 9 puts writer,
+fire-time reader and owner in one phase.
+
+**`startupFailoverGeneration`** — written by G and `onDestroy` (`++` 14341), read by retained
+`resolveAndPlay` in async callbacks (4635 capture, 4671/4676/4682 live) → live `startupGateController.x`.
+
+**Timers (all on the borrowed `progressHandler` 1376 unless noted):**
+
+- G: `manualSourceSwitchTimeout` (`object : Runnable` 12377; 12 s via `STARTUP_FAILOVER_TIMEOUT_MS` 12401,
+  re-arms itself 3 s at **12394 `postDelayed(this, …)`**); `manualSourceCommitCheck` (`Runnable` 12428,
+  200 ms 12433); `startupFailoverTimeout` (`object : Runnable` 12546, 12 s 12567, re-arm **12559
+  `postDelayed(this, …)`**, caps 45 s / 120 s PikPak in `startupWatchdogShouldExtend`); `startupCommitCheck`
+  (`Runnable` 12630, 200 ms 12635); `pikPakGateReprepare` (`Runnable` 12823, 4 s 12838; labels
+  `return@Runnable` 12831–12832); 30 s recovery-fetch fallback lambda 12728–12732 and
+  `post { failStartupCandidate("missing-source") }` 12781 (both retired only by the wholesale clear — existing
+  follow-up).
+- S1a: 10 s `sourceSwitchTimeoutRunnable` (12936/12941) + `object : Player.Listener` (12943) added to
+  `host.player` (12963); `cancelSourceSwitchWait` removes both (12966–12971).
+- S1b, BADGE: none owned (BADGE uses view-property animators only; S1b triggers PK's handler).
+
+**Lifecycle positions (unchanged order; in-place patches):**
+
+| line | statement | unit | W | S |
+|---|---|---|---|---|
+| 14283 | `onPause`: `cancelPikPakRetry()` | PK | — | — |
+| 14328–14337 | five `…?.let { progressHandler.removeCallbacks(it) }` + `= null` (startupFailoverTimeout, startupCommitCheck, manualSourceSwitchTimeout, manualSourceCommitCheck, pikPakGateReprepare) | G | 10 patches | — |
+| 14338–14342 | `manualSourceSwitchSnapshot = null`, `manualSourceSwitchIndex = null`, `manualSourceRestoreInProgress = false`, `startupFailoverGeneration++`, `startupFailoverCursor = null` | G | 5 patches | — |
+| 14343 | `if (::startupGateView.isInitialized) startupGateView.visibility = GONE` (view stays) | — | unchanged | unchanged |
+| 14377–14378 | `cancelPikPakRetry()`; `pikPakRetryHandler.removeCallbacksAndMessages(null)` | PK | — | — |
+| 14415 | `progressHandler.removeCallbacksAndMessages(null)` (borrowed by G, S1a, banner, STV) | — | unchanged | unchanged |
+| 14449 | `externalSubtitleHandler.removeCallbacksAndMessages(null)` | — | unchanged | unchanged |
+| 14464 | `cancelSourceSwitchWait()` (after player release; listener removal reads `host.player` at call time, pinned as-is) | S1a | 1 patch | 1 patch |
+| 14465 | `stremioSources.clear()` | stays | unchanged | unchanged |
+| 14474 | `sendFinished()` (2 patches inside for gate state under W) | — | position unchanged | unchanged |
+
+`onStart`/`onStop`/`finish` contain no unit reference. No `::x.isInitialized` inside any unit (the only
+one near G, 14343, stays in `onDestroy`), so **no readiness getters** are needed in phase 8.
+
+### 7. Reflective sites in Kotlin tests (exact)
+
+**`StremioTvStartupWatchdogTest`** — local helpers `field` (30, `getDeclaredField` on the activity —
+**sets only views that stay**: `startupGateView` 52, `startupGateStatus` 53, `titleView` 54, `nextOverlay` 55,
+`pikPakReactivationIndicator` 56; `payload` 66), `read` (34, **already** routes through
+`TvPlayerOriginalAccess.field`), `call` (37, routes only `"sendProgress"` to `progressReporter`; uses
+`declaredMethods.first { name && parameterCount }`, so reflected functions must be **public** members of the
+internal class — `internal` names are mangled). G sites (45):
+
+| name | kind | lines |
+|---|---|---|
+| `beginStartupFailoverIfEligible` | call ×12 | 104, 129, 138, 149, 162, 182, 199, 244, 259, 270, 281, 289 |
+| `commitStartupCandidate` | call ×6 | 111, 153, 165, 212, 250, 272 |
+| `beginManualSourceCandidate` | call ×2 (1 arg) | 200, 290 |
+| `commitManualSourceCandidate` | call ×1 | 211 |
+| `schedulePikPakGateReprepare` | call ×1 (`null`) | 204 |
+| `startupFailoverCursor` | read ×9 | 107, 133, 154, 166, 188, 245, 260, 275, 283 |
+| `startupFailoverTimeout` | read ×5 | 108, 132, 156, 246, 276 |
+| `startupSourcesExhausted` | read ×4 | 113, 170, 252, 265 |
+| `pikPakGateReprepare` | read ×2 | 221, 225 |
+| `manualSourceSwitchSnapshot` | read ×2 | 291, 294 |
+| `manualSourceSwitchTimeout` | read ×1 | 292 |
+
+Not phase 8: `waitForPikPakMetadata` 177 and `cancelPikPakRetry` 193, 222, 238 (PK, gate-2);
+`initStremioTvGuide` 69 (phase 7). Unchanged: `parsePayload` 57 (retained), `read(…"startupGateView")` 254,
+`read(…"currentStremioSourceIndex")` 295 (stay in the activity). Lines 61–62 are JSON payload keys.
+
+**`TvProgressReporterCharacterizationTest`** (via `TvPlayerOriginalAccess.set`, name-routed): 82, 83
+`startupSourcesExhausted`; 84 `startupFailoverCursor`; 86, 87 `manualSourceRestoreInProgress`; 88, 89
+`manualSourceSwitchSnapshot` (G, 7 sites). 22 `currentStremioSourceIndex` stays.
+
+**`TvIptvChannelStartCharacterizationTest`**: 166 `field("sourceSwitchReadyListener")` (S1a). 87/124/168
+`stremioSources`, 89/96 `stremioSourceBadge`, 128/166/168 `currentStremioSourceIndex` stay.
+
+**Helper routing (assertions byte-identical, diff limited to helpers):**
+
+- Option S (phase 8): one `TvPlayerOriginalAccess.controllerOwners` entry
+  `"sourceSwitchReadyListener" to "sourceSwitchController"`. Nothing in the watchdog test changes.
+- Option W / G phase: entries `"startupFailoverCursor"`, `"startupFailoverTimeout"`,
+  `"startupSourcesExhausted"`, `"pikPakGateReprepare"`, `"manualSourceSwitchSnapshot"`,
+  `"manualSourceSwitchTimeout"`, `"manualSourceRestoreInProgress"` → `"startupGateController"` (covers all
+  23 watchdog reads and the 7 progress-test sets; fields keep their backing name under any visibility),
+  plus (W only) `"sourceSwitchReadyListener"` → `"startupGateController.sourceSwitch"`. The watchdog `call`
+  helper is the one non-map edit: route the five names through the same owner map (e.g. make
+  `TvPlayerOriginalAccess.memberOwner` callable and use it in `call`, extending whatever routing phase 7
+  lands for `initStremioTvGuide`). The five reflected functions become **public**; every other non-private
+  member is `internal`.
+
+### 8. Dart source-text anchors
+
+Only `test/manual_source_validation_contract_test.dart` is affected (`nativePlayer` = the activity file,
+`nativeProgressReporter` = `TvProgressReporter.kt`; new reads of the destination files are added).
+`test/android_tv_auto_advance_resume_test.dart` (`playItem` range 20–22: the patched
+`dropStaleSourceSwitchFeedback()` at 4584 does not touch its assertions) and
+`test/android_tv_mdblist_progress_source_test.dart` (metadata-receiver range) are unaffected;
+`profile_source_guard_test.dart` scans no `tv/` directory; `NativeAudioRoutingTest` reads `setupPlayer` only.
+
+| # | test lines | exact string(s) | current line / unit | option S (phase 8) | option W / G phase |
+|---|---|---|---|---|---|
+| 1 | 71–77 | `'"automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null)'` (whole-file) | 13170 S1a | **retarget to `TvSourceSwitchController.kt`; literal changes** to `"automaticRecovery" to (host.startupFailoverDispatching && host.startupRecoveryCandidateIndices != null)` | W: same file, literal `(gate.startupFailoverDispatching && gate.startupRecoveryCandidateIndices != null)`; after S the G phase leaves it unchanged |
+| 2 | 154–157 | `'startupResolverProvider.equals("pikpak", ignoreCase = true)'` | 12329, 12706, 12755 G | unaffected | file → gate; literal unchanged |
+| 3 | 158–161 | `'startupPikPakTorrentAcquisitionAttempted = true'` | 12760 G | unaffected | file → gate; unchanged |
+| 4 | 171 | `'map["recoveryCandidateCount"]'` | 13343 S2 | unaffected | unaffected (gate-2) |
+| 5 | 172 | `'startupRecoveryIsConsumed('` (top-level call) | 12711 G | unaffected | file → gate; unchanged |
+| 6 | 310–313, 330 | `_between('private fun onStremioSourceSelected(', 'private fun resolveStremioSourceViaFlutter(')` + `contains('maxAttempts = 1')` | 13027–13086 S1a | **file → switch controller; start marker changes** to `'fun onStremioSourceSelected('` (member becomes internal); end marker unchanged (stays private); `maxAttempts = 1` (13039, named argument) survives | W: same |
+| 7 | 315–329 | `_between('private fun failManualSourceCandidate(', 'private fun armStartupCandidate(')`; `contains('manualSourceRestoreInProgress = true')`, `contains('playItem(currentIndex, suppressTrakt = true)')`, `contains('putAll(snapshot.perItemImdbIds)')`, toast text, `isNot(contains('nextIndex('))`, `isNot(contains('onStremioSourceSelected('))` | 12474–12538 G | unaffected | file → gate; **both markers change** (`'fun failManualSourceCandidate('`, `'fun armStartupCandidate('`); **`playItem` literal changes** to `host.playItem(host.currentIndex, suppressTrakt = true)`; others survive (`model.perItemImdbIds.putAll(…)` 12499 is local `model`); under W the negative `onStremioSourceSelected(` check still holds (the reject body calls none) |
+| 8 | 335–347 | `_between('private fun resolveAndPlay(', 'private fun startPlayback(')` + `'reason=stale_manual_token'`, `'failManualSourceCandidate("initial-resolve")'` | 4629 retained | unaffected | text still matches as a substring of `startupGateController.failManualSourceCandidate("initial-resolve")`; reviewer confirms purpose. `progress` half (TvProgressReporter `host.` names) unchanged |
+| 9 | 353–357 | `'(requireExactStartupEpisode || manualSourceSwitchSnapshot != null)'` (whole-file) | 13569 S1b | **file → applier; literal changes** to `(requireExactStartupEpisode || host.manualSourceSwitchSnapshot != null)` | W: `gate.manualSourceSwitchSnapshot`; after S unchanged in the G phase |
+| 10 | 466–475 | `_between('private fun failStartupCandidate(', 'private fun failStartupResolution(')` + `'startupSourcesExhausted = true'` (12735), `isNot('reportRejectedSource')`; `result["startupSourcesExhausted"] = true` (12089, retained) | 12673 G | unaffected | file → gate; **both markers change** (`'fun failStartupCandidate('`, `'fun failStartupResolution('`); contents survive; the `result[...]` check stays on the activity |
+| 11 | 491–494 | `'"sourcePersistenceSessionId" to sourcePersistenceSessionId'` (whole-file) | 2613, 5895, 12086 retained; 12683 G | unaffected | still passes via retained sites, but the G instance (`startupSourceFailed` payload) becomes `host.sourcePersistenceSessionId` and silently drops out; recommend an added gate-file assertion (equal-or-stronger) |
+| 12 | 495–499 | `payloadCheck.optInt(...)` | 2093 `onCreate` | unaffected | unaffected |
+
+Edits: **S = 3** (rows 1, 6, 9; 2 new file reads). **W = 8** (rows 1, 2, 3, 5, 6, 7, 9, 10) + the row-11
+strengthening. G phase after S = 5 (rows 2, 3, 5, 7, 10) + row 11. Phase-6 follow-up stands: rows 1 and 9
+are whole-file `contains`; consider `_between` ranges of the owning function.
+
+### 9. Hazards
+
+1. **Two-way G↔S coupling** (51 S→G, 7 G→S). W: explicit `gate.`/`sourceSwitch.`/`sourceApplier.`
+   qualifiers (65 substitutions). S: 11 Host forwarders to the activity, re-pointed in phase 9.
+2. **`ShufflePlaybackAttempt` is a `private` nested class** used in S1b's signature and in the Host's
+   `playItem`: one retained visibility patch (`internal`) + destination imports.
+3. **`playItem` call shapes through a Host.** G: `playItem(currentIndex, suppressTrakt = true)`; S1b: all four
+   arguments named. Per-controller Hosts need no interface defaults (`fun playItem(index, suppressTrakt)` for
+   G; 4-parameter forwarder for S, parameter names must match the named arguments). A single W Host needs
+   either interface default values copied from 4536–4540 or two overloads — new checker class + negative
+   (changed default / swapped overload). `failMoreTorrentSources()` (G, 0-arg) and
+   `failManualSourceCandidate(reason)` (1-arg everywhere) forward with the activity's defaults evaluated in
+   the forwarder call.
+4. **Runnable self `this`** 12394, 12559 (G only) on the reviewed never-substitute list; the reprepare
+   `Runnable { … return@Runnable }` (12823–12838) has no `this`.
+5. **`finish()`** 12752 (G) → `activity.finish()` dispatches to the activity's `finish()` override (12066,
+   progress snapshot). Pin in step 0.
+6. **Overload audit sites:** S = 1 (`Toast.makeText(this, …)` 13693); W = 2 (+12744) plus inherited
+   `findViewById` ×3 (12578, 12585, 12587; must stay `AppCompatActivity.findViewById(int)`), `isFinishing`,
+   `isDestroyed`, `finish`, `runOnUiThread` ×8. No Glide, no view constructors, no context aliases.
+7. **Receivers:** `object : Player.Listener` 12943 (S1a), two anonymous `MethodChannel.Result` objects
+   13094, 13177 (S1a, no `this`), `object : Runnable` 12377, 12546, `Runnable {` 12428, 12630, 12823, 12936.
+   No Host name collides with a `Runnable`/`Player.Listener`/`MethodChannel.Result` member.
+8. **Braced templates:** moved code W = 13 (G: `$currentStremioSourceIndex` 12337, 12793, 12883;
+   `$hasPlaylistResolver` 12339. S1a: `$currentStremioSourceIndex` 12900, `$hasPlaylistResolver` 13028,
+   `$stremioResolutionToken` 13064, 13071, 13078, 13099, 13102, 13182, 13185); S = 9 (S1a's). Retained
+   code under W: 4 (4676, 4682, 14058 ×2) must become braced `${startupGateController.x}`. S1b/BADGE: none.
+9. **Earlier-running initializers** (§2) incl. the 11 block-2 fields that move ahead of
+   `recoveryStartedAtMs`/`progressReporter`; nothing reads them during construction (progress Host is
+   computed).
+10. **Controller constructed before its Host target exists**: `iptvChannelStartController` (989) forwards to
+    the new controller(s) declared at 1078 (W) / 12920 (S) — computed forwarders only, never invoked during
+    property initialization (checker negative exists from phase 3).
+11. **`@Volatile activeVodHeaders`** (750) written by S1b through a setter forwarder; the volatile write is
+    still to the same field.
+12. **Default arguments on moved members** are constants only (`showFailure = true`, `retryId = null`,
+    log params, `switchToSourcePlaylist` ×5, `switchToStremioSource` ×2); `$default` bridges move with the
+    class; the reflective `schedulePikPakGateReprepare(null)` passes the argument explicitly.
+13. **Phase-7 interleaving:** STV's guide-wait members (12985–13025) sit between S1a members; phase 7 also
+    patches `onCreate` and `playStremioTvPlaybackMap`, both patched again here. Re-measure on the phase-7
+    merge; no semantic overlap (0 references either way).
+14. **Borrowed handler only:** G and S1a post on `progressHandler` and never clear it; the activity's
+    wholesale clear (14415) keeps its position before `cancelSourceSwitchWait()` (14464).
+15. **Exhaustive checker:** S's applier and BADGE carry no fields — the applier is a pinned eager
+    construction inside the switch controller (phase-6 renderer pattern); under W both siblings are pinned
+    constructions inside the gate.
+
+### 10. Split into files and cross-qualification
+
+**Option S (recommended for phase 8)**
+
+| file | contents | est. lines |
+|---|---|---|
+| `TvSourceSwitchController.kt` | `internal class TvSourceSwitchController(private val activity: AppCompatActivity, private val host: Host)`; `interface Host` (51 members); `internal val applier = TvSourceSwitchApplier(activity, host, this)` (pinned, eager, before the first field); S1a (fields 12920/12921 keep their slot order) + BADGE, original order | ≈ 20 imports + 6 header + 53 Host + 1 + 351 ≈ **435** |
+| `TvSourceSwitchApplier.kt` | `internal class TvSourceSwitchApplier(private val activity: AppCompatActivity, private val host: TvSourceSwitchController.Host, private val switcher: TvSourceSwitchController)`; S1b | ≈ 25 + 6 + 417 ≈ **450** |
+
+- Activity: `private val sourceSwitchController: TvSourceSwitchController = TvSourceSwitchController(this,
+  object : TvSourceSwitchController.Host { … 51 computed forwarders … })` at slot **12920** (first removed
+  field). Net activity ≈ −768 + 55 ≈ **14,454** at this base.
+- Cross-qualifiers: S1a → S1b `applier.` ×3; S1b → S1a `switcher.` ×4. G names via `host.` (11
+  forwarders). `iptvChannelStartController.` → `host.iptvChannelStartController.` ×3 (owning controller
+  forwarded as an object, phase-6 precedent `iptvRecordingActionsController`).
+- Substitutions ≈ **207**: host 180 (S1a 52 + 34 G-forwarded, BADGE 17, S1b 60 + 17 G-forwarded; 9 braced),
+  cross 7, Android 9 (`runOnUiThread` ×8, Toast `this` ×1), visibility 11 (S1a: `setupStremioSources`,
+  `updateStremioQualityBadge`, `watchSourceSwitchOutcome`, `cancelSourceSwitchWait`,
+  `dropStaleSourceSwitchFeedback`, `onStremioSourceSelected`; S1b both; BADGE all three → `internal`;
+  `sourceSwitchReadyListener` stays private — field reflection).
+- Activity edits: 23 patches in 19 declarations (`onCreate` 2149; `bindViews` 2664; `playItem` 4584;
+  `showControlsMenu` 7293, 7295; `hideControlsMenu` 7344, 7366; `switchToIptvChannel` 10709;
+  `umSourceRows` 11633; EF 12165, 12243 → `sourceSwitchController.applier.switchToSourcePlaylist(`; G
+  12334, 12487, 12507, 12663, 12695, 12770, 12775; S2 13334, 13468; `onDestroy` 14464; trio 14805,
+  14874) + 4 re-points (999, 1009, 1014, 1015) + `ShufflePlaybackAttempt` visibility.
+- Step T additions: two-class fixture reusing the phase-6 eager-sibling machinery (field-less applier),
+  `switcher.`/`applier.` counts, negatives (missed qualifier compiled against a same-name Host member — the
+  Host must not declare `updateStremioQualityBadge`/`watchSourceSwitchOutcome`/`switchTo*`; lazy vs eager
+  applier; retained-class visibility patch with an extra edit), 1 compiled overload descriptor, the
+  `iptvChannelStartController` patched-property row, earlier destinations frozen at the phase-7 merge.
+- Step 0 gaps: `setupStremioSources`/`updateStremioQualityBadge`; `onStremioSourceSelected` branches
+  (playlist resolver / direct URL / single URL; uncommitted cursor → `maxAttempts = 1` + arm vs
+  `beginManualSourceCandidate`; token bump; PikPak cancel; pill); both resolvers (success, empty, error,
+  notImplemented, send exception, null channel, stale token before and inside `runOnUiThread`,
+  `automaticRecovery` argument); switch-outcome listener (READY/error/10 s/IPTV-key branch,
+  `cancelSourceSwitchWait` on the current player, `dropStaleSourceSwitchFeedback`); `switchToSourcePlaylist`
+  episode-targeting matrix incl. missing-episode toast and `requireExactStartupEpisode` with a manual
+  snapshot, shuffle `restorePreparation`/`shuffleBag`, metadata re-request, `playItem` arguments;
+  `switchToStremioSource` (IPTV hand-off to the phase-5 ladder, protected-MIME discovery, merged audio,
+  PikPak branch `pikPakRetryId++` then capture, `mediaPreparationGeneration++`, resume hold,
+  `activeVodHeaders`); badge show/hide/immediate incl. OTT-skin button path and animator end action.
+
+**Option W (whole unit) — if chosen instead**
+
+| file | contents | est. lines |
+|---|---|---|
+| `TvStartupGateController.kt` | G + 5 file-private consts; single `interface Host` (53, with the two `playItem` shapes); pinned eager `internal val sourceSwitch = TvSourceSwitchController(activity, host, this)` and `internal val sourceApplier = TvSourceSwitchApplier(activity, host, this)` | ≈ 22 + 6 + 57 + 2 + 630 + 9 ≈ **725** |
+| `TvSourceSwitchController.kt` | S1a + BADGE; `gate.` for G, `gate.sourceApplier.` for S1b | ≈ **390** |
+| `TvSourceSwitchApplier.kt` | S1b; `gate.` for G, `gate.sourceSwitch.` for S1a | ≈ **450** |
+
+Activity property `startupGateController` at slot **1078**; retained patches target
+`startupGateController.x`, `startupGateController.sourceSwitch.x`, `startupGateController.sourceApplier.x`
+(EF). Substitutions ≈ **399** (host 266, cross 65, Android 19, visibility 49 — G 38 incl. 5 public).
+31 proofs; 8 re-points in 2 patched properties; 16 lifecycle patches. Net activity ≈ −1,350 → ≈ 13,817.
+A multi-Host W variant (one Host per class, cross edges via Host forwarders through the activity) avoids
+the `playItem` default problem but costs ≈ 85–100 forwarders instead of 53.
+
+### 11. Follow-ups found while mapping (not fixed)
+
+- The gate's 30 s recovery fallback (12728) and `missing-source` post (12781) are retired only by the
+  wholesale `progressHandler` clear (unchanged from phase 6).
+- `cancelSourceSwitchWait()` in `onDestroy` (14464) runs after the player is released, so its
+  `player?.removeListener` is a no-op there; the listener dies with the player (pin as-is).
+- Dart anchor 11 loses its G instance silently once G moves; anchors 1 and 9 are whole-file `contains`.

@@ -1088,6 +1088,75 @@ Stremio TV mode — open/close the guide, search, switch channels (incl. a
 failing channel), next-item auto-advance, guide closes once playback is
 ready, back-key behaviour inside the guide list and search box.
 
+## Phase 8 — Stremio source switcher (selection + badge + apply)
+
+Branch `refactor/tvplayer-p8` off the phase-7 merge `53906805d` (activity 14,637 lines). Evidence under
+`refactor-evidence/tvplayer/p8/`. The inventory is the "Phase 8 inventory"
+section of the deps report (measured at `a4ed4f368`; re-measure on the
+phase-7 merge — phase 7's guide-wait members sat between switcher members).
+All collaborator rules from phases 3–7 apply.
+
+**Scope decision (switcher first, gate next).** The full gate + switcher +
+badge unit is ≈ 1,398 lines with 109 patches, 31 initializer proofs, 15
+`onDestroy` patches and 45 reflective watchdog-test sites. Phase 8 moves only
+the switcher (≈ 768 lines; 23 patches in 19 declarations + 4 Host forwarder
+re-points + 1 visibility patch; 1 initializer proof; ≈ 207 substitutions;
+3 Dart anchor edits) and leaves every risky gate element — watchdog protocol,
+the `onDestroy` block, listener/`resolveAndPlay` patches, the 45 reflective
+sites, `finish()`, 29 of the 31 proofs — for phase 9 (gate, possibly paired
+with PikPak to settle `pikPakRetryId`, measured then). Cost: ≈ 20 % more total
+churn (11 Host forwarders into the gate, re-pointed when the gate moves).
+
+**Structure** (phase-6 shape, no new checker feature):
+`TvSourceSwitchController.kt` (selection + badge, ≈ 435 lines) eagerly
+constructs `TvSourceSwitchApplier.kt` (switch apply, ≈ 450 lines) and passes
+itself; one 51-member Host; activity property at the switcher's first owned
+slot (≈ 12920 at `a4ed4f368`).
+
+**Ownership / hazards.**
+- `stremioResolutionToken` stays activity-owned (Host `var`; bumped by episode
+  fetch, gate and switcher).
+- `pikPakRetryId` stays activity-owned and is read **live** at fire time
+  inside the reprepare Runnable (never snapshotted).
+- `ShufflePlaybackAttempt` (private nested) becomes `internal` so the applier
+  and the Host's `playItem` can name it; its JVM binary name is unchanged, so
+  both reflective tests stay valid.
+- `playItem` has two call shapes; the per-controller Host exposes exactly the
+  shapes used (no interface defaults).
+- `activeVodHeaders` is `@Volatile`; the applier writes it through a Host
+  setter that writes the same field.
+- Unbraced templates in moved code are braced per occurrence.
+- 4 Host forwarder re-points in phase-5 controllers' Hosts (`iptvChannelStartController`,
+  `progressReporter`) are reviewed `patched` rows on those activity properties.
+- 3 Dart anchors are retargeted (`automaticRecovery`, the
+  `onStremioSourceSelected` start marker, `requireExactStartupEpisode`) with
+  equal-or-stronger assertions.
+
+### Step T
+
+Phase-8 extraction fixture + negatives (missed `applier.`/`controller.`
+qualification, snapshot of `pikPakRetryId`, dropped `playItem` shape,
+non-volatile write path); per-phase dispatcher keeping all historical
+suites; compiled overload audit; earlier destinations frozen at the phase-7
+merge.
+
+### Step 0 — characterization of the original
+
+Source selection flows (manual pick, automatic recovery pick, same-source
+reselect, episode-exact requirement), badge text/visibility, apply path
+(media item rebuild, headers incl. the volatile `activeVodHeaders`, seek
+restore, PikPak reprepare runnable reading the live retry id, shuffle
+attempt interplay, `stremioResolutionToken` supersession), the sources panel
+render/selection highlight, `cancelSourceSwitchWait` in `onDestroy`.
+Mutation proofs on the original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–7 additions. Device checklist (end of series):
+switching sources from the Sources panel during movie and series playback
+(resume position kept), automatic recovery to the next source after a dead
+link, badge text, PikPak cold-storage source switch, switching during shuffle.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase-5 original player-read failure occurs outside `deliverProgress`'s
