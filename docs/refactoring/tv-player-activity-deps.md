@@ -12869,3 +12869,43 @@ Production source, `pubspec.lock` and ProGuard remain byte-identical to
 `00c60870e`. No bug fix, production move, gate build, push, branch switch or
 device/emulator work was performed. **Stopped after Step 0b**, pending Claude's
 second independent mutation sample.
+
+
+## Phase 11 step 0c — nullable server error text (`00c60870e`)
+
+Claude's second independent sample killed 13 of 16 fresh mutants. The remaining
+real survivor, n01, is now killed by the exact first-occurrence patch against all
+233 phase-11 tests. The unchanged-original control passes 233/233. n13 and n16
+are **equivalent**, not killed: `requestIptvZapPage` itself clamps offset to zero
+and returns early while a request is in flight, so removing those earlier
+prefetch guards changes neither the emitted request nor state or side effects.
+
+A manifest-span sweep found exactly three server-message-or-default Toasts:
+`requestIptvBrowse`, `requestIptvChannelJump`, and `requestIptvZapPage`. Three new
+tests pin each non-null server message, null-only fallback, retained empty string,
+exactly one Toast, and delivery-time behavior for both inline and queued replies.
+There are no corresponding pill expressions in the moved slice. Nine isolated
+original mutations (drop server text, change default, treat empty as absent) all
+fail their named assertion; compiler failures and crashes are not counted.
+
+Evidence: `p11/step0c/text-forms.json`, `mutations/` (definitions, patches,
+JUnit XML and raw Gradle logs), `original-control/`,
+`claude-survivors-final/n01/`, and `independent-sample.json`. Original production,
+lockfile and ProGuard remain unchanged. JVM `p11-step0c` has 1,137 identities
+(1,136 pass; the unchanged known source-browser focus failure), preserving all
+1,134 `p11-step0b` statuses with three passing additions and no skips, with the
+same JBR and 1 GiB worker. Reflection rescan still needs 89 owner routes,
+45 fields/all 44 moved functions (913 quoted sites/784 direct selectors).
+
+| Test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvIptvErrorTextCharacterizationTest::browseErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load IPTV catalog" → message ?: "wrong fallback"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Unable to load IPTV catalog]> but was:<[wrong fallback]>` (`requestIptvBrowse-default`) |
+| `TvIptvErrorTextCharacterizationTest::browseErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load IPTV catalog" → message?.takeIf { it.isNotEmpty() } ?: "Unable to load IPTV catalog"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[]> but was:<[Unable to load IPTV catalog]>` (`requestIptvBrowse-empty`) |
+| `TvIptvErrorTextCharacterizationTest::browseErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load IPTV catalog" → "Unable to load IPTV catalog"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Provider-specific failure]> but was:<[Unable to load IPTV catalog]>` (`requestIptvBrowse-server`) |
+| `TvIptvErrorTextCharacterizationTest::channelJumpErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to look up that channel" → message ?: "wrong fallback"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Unable to look up that channel]> but was:<[wrong fallback]>` (`requestIptvChannelJump-default`) |
+| `TvIptvErrorTextCharacterizationTest::channelJumpErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to look up that channel" → message?.takeIf { it.isNotEmpty() } ?: "Unable to look up that channel"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[]> but was:<[Unable to look up that channel]>` (`requestIptvChannelJump-empty`) |
+| `TvIptvErrorTextCharacterizationTest::channelJumpErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to look up that channel" → "Unable to look up that channel"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Provider-specific failure]> but was:<[Unable to look up that channel]>` (`requestIptvChannelJump-server`) |
+| `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load more channels" → message ?: "wrong fallback"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Unable to load more channels]> but was:<[wrong fallback]>` (`requestIptvZapPage-default`) |
+| `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load more channels" → message?.takeIf { it.isNotEmpty() } ?: "Unable to load more channels"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[]> but was:<[Unable to load more channels]>` (`requestIptvZapPage-empty`) |
+| `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | `message ?: "Unable to load more channels" → "Unable to load more channels"` | `org.junit.ComparisonFailure: preserve nullable server message exactly expected:<[Provider-specific failure]> but was:<[Unable to load more channels]>` (`requestIptvZapPage-server`) |
+| `TvIptvErrorTextCharacterizationTest::zapPageErrorUsesServerMessageAndNullOnlyFallbackInlineAndQueued` | Claude exact n01: `message ?: "Unable to load more channels" → "Unable to load more channels"` | `org.junit.ComparisonFailure: expected Provider-specific failure, got Unable to load more channels`; all 233 tests run |

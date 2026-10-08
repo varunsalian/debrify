@@ -2605,3 +2605,17 @@ episode next/previous, startup channel restore, Start Over after a switch.
   Detached original removed; production, lockfile and ProGuard unchanged.
   No production moves, gate, push, branch switch, device/emulator, bug fix or
   self independent review. Claude's second independent sample is next.
+
+- 2026-10-09 — **Phase 11 Step 0c complete before moves.** Claude exact n01
+  is assertion-killed on original `00c60870e` against all 233 phase-11 cases;
+  unchanged-original control passes 233/233. Three added tests sweep all three
+  nullable server-message Toasts, including null/default, empty text and paired
+  inline/queued delivery. All nine named original mutation proofs pass. n13/n16
+  are recorded as equivalent because the page-request entry point supplies the
+  same offset clamp and in-flight guard. Stable matched-heap JVM `p11-step0c`:
+  1,137 identities (1,136 pass, same known focus failure); all 1,134 prior
+  statuses retained, three passing additions only. Mutation table and sweep are
+  appended to the deps report; raw evidence `p11/step0c/`,
+  `junit/p11-step0c/`. Final rescan: 89 routes, 45 fields/44 functions,
+  913 quoted sites/784 direct selectors. Production/protected inputs unchanged;
+  detached original removed after proofs. Approved Step 1 moves and gate follow.
