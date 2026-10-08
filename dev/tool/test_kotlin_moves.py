@@ -200,8 +200,13 @@ def run(manifest_path=k.MANIFEST):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase4OverloadsTest))
     if manifest['phase'] >= 5:
         import test_kotlin_moves_phase5
-        test_kotlin_moves_phase5.MANIFEST = manifest
+        test_kotlin_moves_phase5.MANIFEST = (manifest if manifest['phase'] == 5 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p5.json').read_text()))
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase5.Phase5MovesTest))
+    if manifest['phase'] >= 6:
+        import test_kotlin_moves_phase6
+        test_kotlin_moves_phase6.MANIFEST = manifest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase6.Phase6MovesTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 

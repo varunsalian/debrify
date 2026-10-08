@@ -138,6 +138,18 @@ def initializer_kind(expression):
     import re
     if re.fullmatch(r'(?:null|false|true|[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?)', expression):
         return 'constant'
+    if expression == 'Any()':
+        return 'allocation'
+    # A Kotlin quoted literal without interpolation, escapes or call arguments.
+    # parseColor is deterministic for the reviewed literal; no state is read.
+    color = re.fullmatch(r'Color\.parseColor\("([^"\\$\n]*)"\)', expression)
+    if color and (re.fullmatch(r'#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?', color[1])
+                  or color[1].lower() in {
+                      'black', 'darkgray', 'gray', 'lightgray', 'white', 'red',
+                      'green', 'blue', 'yellow', 'cyan', 'magenta', 'aqua',
+                      'fuchsia', 'darkgrey', 'grey', 'lightgrey', 'lime',
+                      'maroon', 'navy', 'olive', 'purple', 'silver', 'teal'}):
+        return 'constant'
     if expression == 'Handler(Looper.getMainLooper())':
         return 'handler-allocation'
     # Type syntax contains no expression/call tokens. Explicit empty factories
@@ -157,6 +169,29 @@ def check_initializer_timing(manifest, inventory, original, errors):
               and '/companion ' not in r['original']]
     slots = {r['destination']: min((x['original'] for x in fields if x['destination'] == r['destination']),
                                    key=lambda name: inventory[name]['start']) for r in fields}
+    if manifest['phase'] >= 6:
+        nested = manifest.get('nested_construction', [])
+        children = {row['destination']: row for row in nested}
+        if len(children) != len(nested):
+            errors.append('duplicate nested construction destination')
+        direct = {next(r['destination'] for r in manifest['declarations']
+                       if r['original'] == row['slot']): row['slot']
+                  for row in manifest['added'] if row['slot'] in inventory}
+        def effective(path, trail=()):
+            if path in trail:
+                raise ValueError('nested construction cycle')
+            if path in children:
+                row = children[path]
+                owner = manifest['destinations'].get(row['owner_destination'], {})
+                pinned = owner.get('pinned_spans', {})
+                if (row['initializer'] not in pinned or pinned[row['initializer']] != row['text']
+                        or row['initializer'] not in owner.get('order', {}).get(row['container'], [])):
+                    errors.append('nested construction initializer/position must be pinned: ' + path)
+                return effective(row['owner_destination'], (*trail, path))
+            if path not in direct:
+                raise ValueError('destination lacks effective construction slot: ' + path)
+            return direct[path]
+        slots = {path: effective(path) for path in slots}
     expected = {r['original']: slots[r['destination']] for r in fields if r['original'] != slots[r['destination']]}
     rows = manifest.get('initializer_timing', [])
     if len(rows) != len(expected) or {r['original']: r['slot'] for r in rows} != expected:

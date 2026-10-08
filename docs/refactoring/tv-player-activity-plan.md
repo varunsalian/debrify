@@ -1606,3 +1606,20 @@ favourites-gated jump hint, floating vs docked banner.
   activity instances, cached style, view-mutating painters, LIVE/REC badges,
   favourites hint gating, hide leaves the pending callback).
 - 2026-10-08 — phase 6 design round 2 (Codex): **No P1s**; P2 inventory superseded-note and P3 checklist fixed. Phase 6 design approved.
+
+- 2026-10-08 — **Phase 6 step T complete (production untouched).** Re-measured
+  `e71ddac3a`: 16,487 activity lines / 2,567 PSI declarations; 47 moved
+  members / 1,344 partition lines (including attached trivia), 16 activity
+  occurrences patched in nine declarations, one slot-anchored controller
+  property. Nested eager renderer construction/argument/position is pinned;
+  effective slots require all **28** exact inert proofs, including the
+  renderer's first field. Classifier allows only zero-argument `Any()` and
+  valid literal-only `Color.parseColor`, rejecting state/effectful reads.
+  Complete production fixture compiles; checker original self-comparison
+  and extraction have zero differences. **118/118** dispatcher tests pass
+  (all historical suites retained); the compilable same-name Host capture
+  negative fails the exact moved-body comparison. All 38 `classic.` / four
+  `styled.` cross references are counted. Compiled overload audit **42/42**
+  retains descriptors, including four Glide FragmentActivity calls. Five
+  historical `--at` checks and 31 earlier destinations frozen at
+  `e71ddac3a` pass, without whitelist. Evidence: `p6/`; Step 0 follows.

@@ -7665,3 +7665,34 @@ Everything is in `scratchpad/p6/`:
   `rep_var.txt` and `agg.txt`, and the row-level `appendix_rows.txt` (every inbound reference per unit
   set, including the gate-1 and gate-2 splits);
 - `p5decls.txt`.
+
+## Phase 6 step T — re-measured original and tooling
+
+Base `e71ddac3a` (activity 16,487 lines; 2,567 PSI declarations). The
+manifest is `dev/tool/kotlin_moves/tvplayer_p6.json`; raw re-measurement,
+original PSI and complete extraction fixtures are under `p6/`. Original
+classic slot: line 10905; styled fields: lines 11331–11338, effectively
+constructed at the classic slot. 47 whole moved members / 1,344 partition
+lines including attached comments/trivia; 16 activity occurrences in nine
+declarations. Cross references remain 38 styled→classic and four
+classic→styled; Host has 19 computed explicitly-qualified forwarders.
+
+All 28 later-running initializers have exact original text/line and inert
+proofs. The renderer's first field has a proof; there is no contiguous-block
+exemption. Nested construction is an exact pinned first initializer inside
+the classic class, with `(activity, host, this)` arguments and effective
+slot mapping. 118 checker/overload self-tests pass, including every
+historical phase suite and the new negative fixtures. The Host capture
+negative compiles successfully and is rejected for its changed moved body.
+The valid complete fixture compiles; all 42 bytecode call descriptors match
+(four Glide calls use FragmentActivity). Five historical manifests pass
+at their merge SHAs; 31 earlier destination files match `e71ddac3a`.
+
+Commands: `check_kotlin_moves.py --manifest …p6.json --self-compare-original`,
+`--self-test`, `--check-earlier`, historical `--at` for phases 1–5;
+`check_kotlin_overloads.py` using archived original/fixture class files;
+`:app:compileDebugKotlin` for both production and Host-capture fixtures.
+Logs/JSON: `p6/self-original.log`, `checker-self-tests.log`,
+`classifier-final.log`, `fixture-compile.log`, `host-capture-compile.log`,
+`overload-audit.json`, `historical-p*.log`, `earlier-destinations.log`.
+Production sources, previous manifests, lockfile and ProGuard unchanged.
