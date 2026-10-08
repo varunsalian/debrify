@@ -1479,14 +1479,25 @@ inside `EditText(this).apply {}` — that `this` is the EditText; shadowed
 `onDestroy`, uncancelled view posts pinned as-is, `requestIptvEpg` 45 s
 watchdog unchanged (follow-up).
 
-**Retargets.** 4 reflective sites (`iptvEpgToken` in
-`TvIptvStartOverCharacterizationTest`) via 1 owner-map entry; no Dart anchors.
+**Retargets.** 20 reflective accesses across 5 names (`iptvEpgToken` ×4,
+`iptvGuideCurrentName` ×7, `iptvEpgPanel` ×4, `iptvEpgVisible` ×4,
+`showIptvChannelJumpDialog` ×1, incl. phase-11 sweep tests): four field
+routes to the chrome owner and the dialog route to `.overlay` (dialog method
+public in the internal class, unmangled); assertions preserved; rescanned
+after step 0. No Dart anchors.
 
 ### Step T
 
 Phase-12 extraction fixture (owner + two fieldless collaborators, the
-`iptvEpgAdapter` cross-file write) + negatives; receiver exclusion for the
-`EditText.apply` site; compiled audit of 24 + 53 sites; per-phase dispatcher
+`iptvEpgAdapter` cross-file write) + negatives; receiver handling for
+`EditText(this).apply { … this … }`: the checker permits exactly the reviewed
+constructor-receiver transformation (`EditText(this)` → `EditText(activity)`)
+while preserving the inner `this` binding (positive fixture with both
+expressions; negatives for rewriting the inner `this`, changing its receiver,
+or omitting the constructor audit); the PSI collector also records
+`resources` and `currentFocus` property reads, resolved to `getResources()` /
+`getCurrentFocus()` with before/after owner–descriptor–opcode pins and
+omission/wrong-receiver negatives; compiled audit of 24 + 53 sites; per-phase dispatcher
 keeping all historical suites; earlier destinations frozen at the phase-11
 merge.
 
@@ -1499,7 +1510,15 @@ replay, record); search field focus/IME/Back; source/category/list pickers
 incl. membership load-before-toggle and favourites; channel-jump dialog
 gating (favourites/list source toast); EPG pane show/hide, day buttons, stale
 token, null reply, destroy; now/next header (Glide lifecycle owner, letter
-fallback); the 60 s archive retry. Mutation proofs on the original; Claude's
+fallback); the 60 s archive retry; **now/next fetching and enrichment**:
+the captured `requestedCatchupMetadata` vs live `entry.isCurrent`
+distinction (paired main-looper replies where current-channel identity
+changes during a cheap request), silent-request/watchdog delivery after
+destruction (enrichment replies are unguarded after destroy and can post
+another borrowed-handler retry — pinned as-is), enrichment bookkeeping,
+follow-up request arguments, metadata clearing before the retry's lifecycle
+guard, and freshness boundaries under clock instrumentation covering both the
+original activity and the future chrome owner — mutation-proved. Mutation proofs on the original; Claude's
 independent sample (≥ 75 % kill rate required, else sweep + second sample);
 0b.
 
@@ -2759,3 +2778,8 @@ now/next header with logo and letter fallback.
   Phase 11 complete; merged. **Lesson:** a first-sample kill rate below ~75 %
   triggers a systematic statement-level sweep and a second independent sample
   before moves.
+- 2026-10-09 — phase 12 design round 1 (Codex): **No P1s**; P2s folded
+  (constructor-receiver transformation with inner-`this` preservation;
+  `resources`/`currentFocus` getter audit; 20 reflective accesses / 5 names;
+  now/next fetch + enrichment characterization incl. after-destroy behaviour).
+  Phase 12 design approved.
