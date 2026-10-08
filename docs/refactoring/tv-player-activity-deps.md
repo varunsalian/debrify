@@ -8162,3 +8162,60 @@ compiled audit **8/8** retains every JVM descriptor, including
 using `--update`; unrelated existing stale entries preserved. Controller ≤800.
 Evidence `p7/step1/`, structure/overload artifacts in `p7/gate/`.
 Full gate follows; no bug fix or borrowed-resource/lifecycle redesign.
+
+### Phase 7 gate — committed production extraction
+
+Commits `ee3b5cd6f` (0b) and `6133bb444` (moves). All gates test the clean,
+committed `6133bb444` tree. JVM `p7-gate` exactly retains all **687**
+`p7-step0b` identity/status pairs (686 pass, unchanged source-browser focus
+failure); complete XML, zero dirty files and stable fingerprints. All 51
+Phase-7 characterizations and 14 watchdog cases pass. Original 0b control:
+51/51; all 17 named assertion proofs and exact Claude i03/i08 reruns killed.
+
+Checker: **2,417** original declarations exhaustively classified, zero
+differences; original self-comparison also zero; **134/134** per-phase
+self-tests pass. Historical checks all pass: p1@dcbd9aafe, p2@ec365eb80,
+p3@eee52b084, p4@1a33c42cb, p5@e71ddac3a, p6@a4ed4f368. All **33**
+earlier destinations byte-identical to a4ed4f368, no whitelist. Compiled
+overload audit **8/8** retains invocation descriptors, including Glide's
+FragmentActivity overload; all **16** exact inert initializer proofs and
+five full lifecycle/teardown token bodies retained. Five existing production
+compiler warning identities unchanged; scoped size ratchet passes, controller
+586 lines and activity 14,637.
+
+Lint issue multiset exactly matches archived a4ed4f368: **1,352** issues,
+253 Error/1,099 Warning, 175 UnsafeOptInUsageError; original and gate lint
+exit 1. Analyzer exactly matches all **1,758** Phase-6 diagnostic identities.
+The four affected Dart source-test suites exactly retain all **45** statuses
+(44 success, existing profile-source guard failure); no Dart retargets.
+Only the two documented reflection helpers change, with all assertions and
+other Kotlin/Dart test bytes preserved.
+
+Release APK succeeds (`flutter build apk --release --no-pub`, Android Studio
+JBR, no install). R8 mapping plus APK DEX checks preserve all **10** new
+classes and **136** members (controller, Host, nested/anonymous objects and
+activity Host implementation): 86 explicit member mappings, 50 identities
+verified independently in DEX; all three negative controls reject. Mapping,
+seeds/usage/configuration and APK/hash provenance archived. ProGuard unchanged.
+Decoder remains **pending-environment**: valid APK invocation returns the
+identical Phase-6 failure output; all three native library hashes and missing
+nine subtitle decoders/three auto-sync filters per ABI are identical. An
+initial evidence comparator used an incorrect prior log filename; rejected
+trace archived, corrected comparison passes without changing the decoder
+script or native libraries.
+
+Full quiet Flutter suite via `suite_evidence.py`: **12855**
+identity/status pairs exactly match the Phase-6 gate (12794
+success, 13 failure, 28 error,
+20 skipped; 1232 suites). Same Flutter 3.44.8 /
+Dart 3.12.2 SDK and --no-pub flags; complete done event, clean committed
+input and stable tree throughout. No allowance or baseline regression accepted.
+
+Evidence: `p7/step0b/`, `p7/step1/`, `p7/gate/`, `junit/p7-step0b/`,
+`junit/p7-gate/`; the original base JVM/lint remain archived. Manifest and
+all earlier phase manifests, pubspec.lock and ProGuard unchanged. Temporary
+original worktrees removed. The status pill and retained media-start trio do
+not move; existing destroy/cancellation follow-ups remain pinned as-is.
+No production deviation, bug fix, push, branch switch, device/emulator
+interaction or self independent review. **STOP after Phase 7**; Claude's
+separate review follows.

@@ -1855,3 +1855,27 @@ ready, back-key behaviour inside the guide list and search box.
   byte-identical; scoped size baseline lowered with --update. No status-pill
   move, production deviation, bug fix or self independent review. Full gate
   follows; evidence p7/step1/ and p7/gate/.
+
+- 2026-10-08 — **Phase 7 gate complete; STOP for Claude's review.** Clean
+  committed `6133bb444` tree: all 687 JVM identity/status pairs exactly match
+  p7-step0b (686 pass, unchanged focus failure), complete XML/stable inputs;
+  51 Phase-7 + 14 watchdog focused cases pass. Checker all 2,417 declarations,
+  zero differences; 134/134 self-tests; all six historical --at checks
+  (p6@a4ed4f368), 33 frozen earlier destinations/no whitelist. Compiled
+  audit 8/8, Glide FragmentActivity; 16 exact inert proofs and all five full
+  lifecycle/teardown bodies retained. Five compiler warnings unchanged;
+  lint exactly retains all 1,352 a4ed4f368 issues (253 errors/175 opt-ins),
+  analyzer all 1,758 prior diagnostics. Affected source tests exactly retain
+  44 passes/one existing failure. Release APK succeeds; R8/DEX all 10 new
+  classes/136 members and three mapping negatives pass. Decoder remains
+  pending-environment: valid APK failure output, all three native hashes
+  and missing sets match Phase 6; prior-log filename comparator mistake
+  rejected/corrected, no native/script workaround. Full quiet Flutter suite
+  exactly matches all 12855 Phase-6 statuses (12794
+  success/13 failure/28 error/20
+  skipped), same SDK/flags, complete/stable clean tree. Step 0b adds 14
+  passing cases, 17 original assertion proofs, exact i03/i08 killed in all
+  51-case runs. Evidence/table/retargets recorded in deps, p7/ and junit/;
+  manifests/protected inputs/earlier files unchanged, original trees removed.
+  No production deviation, bug fix, push, branch switch, device/emulator
+  interaction or self independent review. **STOPPED after phase 7**.
