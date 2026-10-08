@@ -2583,3 +2583,25 @@ episode next/previous, startup channel restore, Start Over after a switch.
   40 frozen earlier destinations. Detached original removed. Production,
   lockfile and ProGuard unchanged; no push, branch switch or device/emulator.
   **STOPPED before production moves**, awaiting Claude's separate sample/review.
+
+- 2026-10-09 — **Phase 11 Step 0b complete; STOPPED before moves.**
+  Claude's exact ten survivors (m02/m04/m05/m06/m08/m09/m11/m13/m14/m16)
+  are assertion-killed on original `00c60870e`, each against all 230 phase-11
+  cases; no compile/crash proofs. The original final cohort passes 230/230.
+  Added 96 tests, each with an isolated named mutation proof; 541 distinct
+  systematic original mutants are assertion-killed (542 accepted runs) across
+  all 44 moved functions. Five
+  named proofs repeated after final refinements; rejected discovery attempts
+  retained separately. PSI-based per-function matrix inventories all 800 sites
+  (199 writes/416 calls/105 ifs/77 returns/two whens/one loop), distinguishing
+  direct proofs from nested value/guard groups. Mutation tables and the complete
+  matrix are appended to the deps report; raw evidence `p11/step0b/`.
+  JVM `p11-step0b`: 1,134 identities (1,133 pass, same known focus failure,
+  no skips), all 1,038 `p11-step0` statuses retained, 96 passing additions only;
+  complete stable run, matched 1 GiB/JBR 21.0.10. Original lint archive reused.
+  Final reflection rescan: 89 routes, 45 fields/all 44 functions, 908 literal
+  sites/779 direct selectors; 43 further functions require public unmangled
+  members plus matching manifest/fixture pins when Step 1 is authorized.
+  Detached original removed; production, lockfile and ProGuard unchanged.
+  No production moves, gate, push, branch switch, device/emulator, bug fix or
+  self independent review. Claude's second independent sample is next.

@@ -80,6 +80,7 @@ internal open class TvPhase11OriginalTest : TvPhase5OriginalTest() {
         call("installIptvZapWindow",arrayOf(MutableList::class.java,intType,intType,stringType,listType,boolType),entries,offset,total,category,listOf("News","Movies"),preserve)
     protected fun reply(kind: String = "success", value: Any? = response(), queued: Boolean = false,
                         request: Int = messenger.requests.lastIndex, message: String? = "detail") {
+        assertTrue("reply requires an emitted bridge request", request in messenger.requests.indices)
         val binary = messenger.requests[request].reply!!
         val envelope = when(kind) {
             "error" -> StandardMethodCodec.INSTANCE.encodeErrorEnvelope("E11",message,null)
