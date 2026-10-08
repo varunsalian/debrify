@@ -65,6 +65,53 @@ internal object TvPlayerOriginalAccess {
     )
 
     private val controllerOwners = mapOf(
+        "applyIptvZapBannerMode" to "iptvZapBannerController",
+        "applyStyledZapBannerMode" to "iptvZapBannerController.styled",
+        "buildStyledIptvZapBanner" to "iptvZapBannerController.styled",
+        "ensureIptvZapBanner" to "iptvZapBannerController",
+        "hideIptvZapBanner" to "iptvZapBannerController",
+        "iptvDockLayoutListenerAttached" to "iptvZapBannerController",
+        "iptvZapAccent" to "iptvZapBannerController",
+        "iptvZapBanner" to "iptvZapBannerController",
+        "iptvZapBannerBody" to "iptvZapBannerController",
+        "iptvZapBannerDocked" to "iptvZapBannerController",
+        "iptvZapBannerEntry" to "iptvZapBannerController",
+        "iptvZapBannerHideToken" to "iptvZapBannerController",
+        "iptvZapBannerHintChannel" to "iptvZapBannerController",
+        "iptvZapBannerHintJump" to "iptvZapBannerController",
+        "iptvZapBannerLayoutListenerAttached" to "iptvZapBannerController",
+        "iptvZapBannerLetter" to "iptvZapBannerController",
+        "iptvZapBannerLogo" to "iptvZapBannerController",
+        "iptvZapBannerMeta" to "iptvZapBannerController",
+        "iptvZapBannerName" to "iptvZapBannerController",
+        "iptvZapBannerNext" to "iptvZapBannerController",
+        "iptvZapBannerNow" to "iptvZapBannerController",
+        "iptvZapBannerNumber" to "iptvZapBannerController",
+        "iptvZapBannerProgress" to "iptvZapBannerController",
+        "iptvZapBannerRail" to "iptvZapBannerController",
+        "iptvZapBannerTickToken" to "iptvZapBannerController",
+        "iptvZapBannerTimes" to "iptvZapBannerController",
+        "iptvZapGlassCardWidth" to "iptvZapBannerController.styled",
+        "iptvZapStyledCard" to "iptvZapBannerController.styled",
+        "iptvZapStyledEnd" to "iptvZapBannerController.styled",
+        "iptvZapStyledLive" to "iptvZapBannerController.styled",
+        "iptvZapStyledMeterRow" to "iptvZapBannerController.styled",
+        "iptvZapStyledRec" to "iptvZapBannerController.styled",
+        "iptvZapStyledRule" to "iptvZapBannerController.styled",
+        "iptvZapStyledScrim" to "iptvZapBannerController.styled",
+        "isRecordingCurrentIptvChannel" to "iptvZapBannerController",
+        "paintIptvZapBannerEpg" to "iptvZapBannerController",
+        "paintIptvZapBannerIdentity" to "iptvZapBannerController",
+        "paintIptvZapBannerPosition" to "iptvZapBannerController",
+        "paintStyledZapBannerEpg" to "iptvZapBannerController.styled",
+        "paintStyledZapBannerIdentity" to "iptvZapBannerController.styled",
+        "refreshIptvZapBannerPosition" to "iptvZapBannerController",
+        "scheduleIptvZapBannerTick" to "iptvZapBannerController",
+        "showIptvZapBanner" to "iptvZapBannerController",
+        "styledZapHint" to "iptvZapBannerController.styled",
+        "styledZapText" to "iptvZapBannerController.styled",
+        "zapHint" to "iptvZapBannerController",
+        "zapText" to "iptvZapBannerController",
         "activeSkipSegment" to "skipSegmentController",
         "armSleepAtEndOfItem" to "sleepTimerController",
         "canRecordCurrentIptv" to "iptvRecordingActionsController",
@@ -287,7 +334,9 @@ internal object TvPlayerOriginalAccess {
     private fun memberOwner(owner: Any, name: String): Any {
         if (owner !is AndroidTvTorrentPlayerActivity) return owner
         val controller = controllerOwners[name.removeSuffix("\$delegate")] ?: return owner
-        return owner.javaClass.getDeclaredField(controller).apply { isAccessible = true }.get(owner)!!
+        return controller.split('.').fold(owner as Any) { current, field ->
+            current.javaClass.getDeclaredField(field).apply { isAccessible = true }.get(current)!!
+        }
     }
 
     fun type(name: String): Class<*> = Class.forName(
