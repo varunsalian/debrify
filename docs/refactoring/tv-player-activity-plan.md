@@ -1788,3 +1788,4 @@ ready, back-key behaviour inside the guide list and search box.
   destinations frozen at `a4ed4f368` + 8-site audit; five-argument trio
   forwarder with `hideGuideOnReady` and a successful-switch characterization;
   guide-data callback contract corrected and characterized as-is).
+- 2026-10-08 — phase 7 design round 2 (Codex): **No P1s**, no new findings. Phase 7 design approved.
