@@ -1,7 +1,7 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 18106 lib/screens/video_player_screen.dart
-14637 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
+13937 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart
@@ -14,7 +14,6 @@
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2800 lib/screens/downloads_screen.dart
-2608 lib/screens/settings/stremio_addons_page.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart
 2399 lib/services/mdblist/mdblist_service.dart
 2321 lib/services/webdav_sync/webdav_sync_runtime.dart
@@ -27,6 +26,7 @@
 2153 lib/services/android_tv_player_bridge.dart
 2038 lib/services/debrify_tv_database.dart
 1991 lib/screens/trakt_calendar_screen.dart
+1990 lib/screens/settings/stremio_addons_page.dart
 1967 lib/services/pikpak_api_service.dart
 1939 lib/services/profiles/profile_restore_coordinator.dart
 1937 lib/services/remote_control/remote_control_state.dart
@@ -35,7 +35,6 @@
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart
-1812 lib/screens/settings/engine_import_page.dart
 1804 lib/services/xtream_codes_service.dart
 1799 lib/services/simkl/simkl_service.dart
 1778 lib/services/webdav_sync/webdav_sync_hot_merge.dart
@@ -56,7 +55,7 @@
 1449 lib/screens/settings/profile_backup_flows.dart
 1449 lib/screens/settings/widgets/dynamic_settings_builder.dart
 1423 tvos/Runner/AppDelegate.swift
-1394 lib/services/webdav_sync/webdav_sync_engine_state.dart
+1391 lib/services/webdav_sync/webdav_sync_engine_state.dart
 1376 lib/widgets/iptv/iptv_epg_panel.dart
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
@@ -79,11 +78,12 @@
 1158 lib/services/webdav_protocol_client.dart
 1152 android/app/src/main/kotlin/com/debrify/app/download/MediaStoreDownloadService.kt
 1142 android/app/src/main/kotlin/com/debrify/app/recording/LiveRecordingService.kt
-1125 lib/widgets/pikpak_folder_picker_dialog.dart
 1123 lib/services/debrid_service.dart
 1114 lib/services/profiles/connection_resource_service.dart
 1110 lib/widgets/detail/detail_layout_console.dart
+1110 lib/widgets/pikpak_folder_picker_dialog.dart
 1108 lib/screens/video_player/widgets/iptv_zap_banner.dart
+1098 lib/screens/settings/engine_import_page.dart
 1073 lib/screens/settings/home_page_settings_page.dart
 1071 lib/screens/settings/pikpak_settings_page.dart
 1059 lib/services/webdav_sync/webdav_sync_transport.dart
@@ -129,10 +129,10 @@
 873 lib/screens/settings/premiumize_settings_page.dart
 871 lib/screens/video_player/widgets/tv_controls.dart
 846 lib/services/profiles/local_backup/local_backup_zip.dart
-838 lib/screens/settings/theme_tokens_page.dart
 836 lib/services/profiles/profile_bootstrap.dart
 836 lib/services/profiles/profile_database_snapshot.dart
 836 lib/widgets/file_selection_dialog.dart
+833 lib/screens/settings/theme_tokens_page.dart
 830 lib/services/media_server_service.dart
 829 lib/screens/settings/widgets/manual_order_list.dart
 829 lib/services/main_page_bridge.dart
@@ -140,8 +140,3 @@
 823 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart
-397 lib/screens/debrid_downloads_screen.dart
-365 lib/screens/settings/external_player_settings_page.dart
-269 lib/screens/pikpak/pikpak_files_screen.dart
-267 lib/screens/settings/iptv_settings_page.dart
-202 lib/screens/alldebrid/alldebrid_files_screen.dart

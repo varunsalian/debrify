@@ -2006,3 +2006,16 @@ link, badge text, PikPak cold-storage source switch, switching during shuffle.
   p8/step0b/ and junit/p8-step0b/; mutation table appended to deps. Original
   pack parser ignores MIME metadata: preserved and recorded as a follow-up.
   Detached original removed after proofs. Production moves are next.
+- 2026-10-08 — phase 8 Step 1: materialized the approved manifest exactly.
+  Activity 14,637 → 13,937 lines; source switch controller 447/applier 450.
+  Applier is eager/fieldless; controller sits at its original first owned slot.
+  All 51 Host forwarders computed and explicitly qualified, retained volatile
+  headers and live retry-id read preserved. Whole IPTV property receives only
+  the four pinned re-points; nested ShufflePlaybackAttempt changes visibility
+  only. Shared reflection helper retargets 15 members, no assertions changed;
+  three Dart anchors retargeted with the same assertions (19 tests pass).
+  Source-switch, IPTV-start and watchdog JVM tests pass. Checker zero differences
+  over 2,335 declarations, all seven historical manifests and 34 frozen earlier
+  files pass; compiled overload 1/1, initializer proof and teardown order pass.
+  Size baseline updated with --update (also ratchets existing upstream shrinkage).
+  Protected inputs/manifests unchanged. Full gate next on the clean move commit.
