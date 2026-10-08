@@ -2770,7 +2770,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "TvZapBannerTimingCharacterizationTest.defaultDockedArgumentReadsControlsAtEveryInvocation"
+      "test": "TvZapBannerTimingCharacterizationTest.classicDockModeAndLayoutListenerTrackNewDockHeightOnlyOnce"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun hideTitleImmediately()",
@@ -3158,7 +3158,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "TvZapBannerTimingCharacterizationTest.defaultDockedArgumentReadsControlsAtEveryInvocation"
+      "test": "TvZapBannerEpgCharacterizationTest.classicPaintPinsNowNextTimesProgressAndBoldWhiteRestoration"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun updateIptvGuideEpgHeader()",
@@ -3247,7 +3247,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "TvZapBannerIdentityCharacterizationTest.windowInstallAndMergeRefreshVisiblePosition"
+      "test": "TvZapBannerIdentityCharacterizationTest.windowInstallAndMergeRefreshVisiblePositionAndRetainKnownEpg"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun mergeIptvZapPage(MutableList<IptvChannelEntry>,Int,Int,String?,List<String>)",
@@ -3261,7 +3261,7 @@
         }
       ],
       "reason": "Retarget original calls/state to their single controller owner in place.",
-      "test": "TvZapBannerIdentityCharacterizationTest.windowInstallAndMergeRefreshVisiblePosition"
+      "test": "TvZapBannerIdentityCharacterizationTest.windowInstallAndMergeRefreshVisiblePositionAndRetainKnownEpg"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun boundedHiddenIptvZapWindow(MutableList<IptvChannelEntry>)",

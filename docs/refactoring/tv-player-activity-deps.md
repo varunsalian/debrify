@@ -7702,3 +7702,109 @@ Step-T size follow-up: the exact destination import lists were narrowed
 729 lines. Final phase-6 negatives/positive: 21/21 pass; the historical
 97 tests remain passing from the dispatcher run. Recompiled from the
 restored original and final fixture: 42/42 overload descriptors identical.
+
+## Phase 6 step 0 — original zap-banner characterization
+
+Original base `e71ddac3a`; no production moves. **43 new named tests** in
+four behavior test files, with `TvPhase6OriginalTest` setup/cleanup. The
+original control passes 43/43; two layout cases were strengthened and
+passed again on the original. Tests bind real attached trees, use paused
+main-loop dispatch and local resource Glide images, and retain production
+callbacks. Four separate activity instances characterize CLASSIC, GLASS,
+EDITION and CONSOLE; replacing preferences and the launch snapshot after
+first access retains the session style/tree. Drawable properties, hierarchy,
+typography, width clamps, floating/docked geometry/animations, timing,
+now/next/progress, LIVE/REC, favourites gating, logo placeholders/callbacks
+and activity-owned Glide requests are asserted directly.
+
+The 1s tick, 4.5s floating hide, repeated-show deadline preservation,
+explicit-hide pending callback, token-scoped cancellation, omitted-argument
+reads, same-channel identity suppression and window install/merge repaint
+are pinned. Both banner-only subtitle-clearance updates and styled dock
+redispatch are directly observed. Original layout listeners remain attached
+after hide (existing Follow-up); no lifecycle or bug fix. Robolectric's
+font metadata pins Edition's requested italic style; its native `isItalic`
+getter does not reflect that metadata in this environment.
+
+**45/45 original-code mutations fail named assertions** (`AssertionError`
+or `ComparisonFailure`), covering every new test plus two layout-callback
+proofs. Compile failures, crashes and zero-test runs are not accepted. Exact
+before/after strings and selectors: `p6/mutations.json`; runnable harness:
+`p6/run_mutations.py`; raw Gradle logs/patches/XML and assertion stacks:
+`p6/mutations/h*/`, `p6/mutations/results.json`. Final tests have identical
+bytes in the original and phase worktrees (`characterization-hashes.json`).
+
+| Proof | Named test (`com.debrify.app.tv`) | Original mutation | Failing assertion |
+|---|---|---|---|
+| h01 | `TvZapBannerTreeCharacterizationTest::classicTreePinsHierarchyTypographyScrimAndCachedSessionStyle` | `zapText(31f, 255, bold = true)` → `zapText(30f, 255, bold = true)` | channel name text size: 31sp; `java.lang.AssertionError: expected:<31.0> but was:<30.0>` |
+| h02 | `TvZapBannerTreeCharacterizationTest::glassTreePinsIslandSurfaceLogoHierarchyAndCachedSessionStyle` | `background = t.panelDrawable(dp(22).toFloat(), dp(1))` → `background = t.panelDrawable(dp(21).toFloat(), dp(1))` | glass card corner radius: dp(22); `java.lang.AssertionError: expected:<22.0> but was:<21.0>` |
+| h03 | `TvZapBannerTreeCharacterizationTest::editionTreePinsHeadlineBylineRuleAndCachedSessionStyle` | `now = styledZapText(t, 26f, t.fg, font = t.headlineFont)` → `now = styledZapText(t, 25f, t.fg, font = t.headlineFont)` | edition headline size: 26sp; `java.lang.AssertionError: expected:<26.0> but was:<25.0>` |
+| h04 | `TvZapBannerTreeCharacterizationTest::consoleTreePinsInstrumentMeterRuleAndCachedSessionStyle` | `name = styledZapText(t, 19f, t.fg, font = t.nameFont, bold = true)` → `name = styledZapText(t, 18f, t.fg, font = t.nameFont, bold = true)` | console name size: 19sp; `java.lang.AssertionError: expected:<19.0> but was:<18.0>` |
+| h05 | `TvZapBannerTreeCharacterizationTest::glassWidthClampsAtSmallAvailableWidthAndLargeScreenCap` | `).coerceAtLeast(dp(220))` → `).coerceAtLeast(dp(219))` | small card width: dp(220); `java.lang.AssertionError: expected:<220> but was:<219>` |
+| h06 | `TvZapBannerTreeCharacterizationTest::glassWidthUsesScreenMinusFiftySixBeforeCap` | `resources.displayMetrics.widthPixels - dp(56)` → `resources.displayMetrics.widthPixels - dp(55)` | available width = screen - dp(56); `java.lang.AssertionError: expected:<444> but was:<445>` |
+| h07 | `TvZapBannerTreeCharacterizationTest::existingTreeReturnedBeforeAnyTokenAccess` | `iptvZapBanner?.let { return it }` → `iptvZapBanner?.let { guideTokens; return it }` | guideTokens lazy remains uninitialized; `java.lang.AssertionError: returning an existing tree does not initialize tokens` |
+| h08 | `TvZapBannerTimingCharacterizationTest::floatingEntranceAndAutoHideHaveExactDurationsAndBoundary` | `android.os.SystemClock.uptimeMillis() + 4500` → `android.os.SystemClock.uptimeMillis() + 4501` | entry cleared exactly at 4500ms; `java.lang.AssertionError: auto-hide fires at exactly 4500ms expected null, but was:<IptvChannelEntry(index=0, channelNumber=7, name=Cinema, url=test://Cinema, logoUrl=null, group= Movies , isLive=true, isCurrent=true, resumePositionMs=0, httpHeaders={}, epgNowTitle=Programme, epgNowStartMs=880000, epgNowStopMs=1480000, epgNowHasArchive=false, epgCatchupMetadataLoaded=true, epgNextTitle=Next programme, epgNextStartMs=1480000, epgLoaded=true, epgLoading=false, contentType=live, duration=-1, tvArchive=null, tvArchiveDuration=null, sourceId=null, sourceName=null, isFavorite=false, seriesId=null, seriesName=null, season=null, episode=null, hasNextEpisode=null)>` |
+| h09 | `TvZapBannerTimingCharacterizationTest::dockedEntranceRisesThirtyAndNeverAutoHides` | `banner.translationY = 30f` → `banner.translationY = 25f` | initial dock entrance translation = 30; `java.lang.AssertionError: expected:<30.0> but was:<25.0>` |
+| h10 | `TvZapBannerTimingCharacterizationTest::defaultDockedArgumentReadsControlsAtEveryInvocation` | `docked: Boolean = controlsMenuVisible` → `docked: Boolean = false` | first omitted argument sees current true controls flag; `java.lang.AssertionError: expected:<true> but was:<false>` |
+| h11 | `TvZapBannerTimingCharacterizationTest::guideVisibilitySuppressesConstructionAndCallbacks` | `if (iptvGuideVisible) return` → `if (false) return` | guide visible: banner stays unbuilt; `java.lang.AssertionError: expected null, but was:<android.widget.FrameLayout{5546151d V.E...... ......I. 0,0-0,0}>` |
+| h12 | `TvZapBannerTimingCharacterizationTest::repeatedShowKeepsEntranceAndTickDeadlineButRearmsHide` | `if (!alreadyUp) scheduleIptvZapBannerTick()` → `scheduleIptvZapBannerTick()` | original first 1000ms tick is not pushed back; `org.junit.ComparisonFailure: expected:<[at first deadlin]e> but was:<[tick titl]e>` |
+| h13 | `TvZapBannerTimingCharacterizationTest::visibleTicksRepaintAndRepostUntilExplicitHide` | `android.os.SystemClock.uptimeMillis() + 1000` → `android.os.SystemClock.uptimeMillis() + 1001` | title repaints exactly at 1000ms; `org.junit.ComparisonFailure: expected:<[new titl]e> but was:<[Programm]e>` |
+| h14 | `TvZapBannerTimingCharacterizationTest::invisibleBannerStopsTickChainWithoutRepainting` | `iptvZapBanner?.visibility == View.VISIBLE` → `iptvZapBanner?.visibility != View.GONE` | INVISIBLE banner does not repaint; `org.junit.ComparisonFailure: expected:<[Programme]> but was:<[must not paint]>` |
+| h15 | `TvZapBannerTimingCharacterizationTest::explicitHideLeavesHideCallbackPostedAndCancelsOnlyItsTickToken` | `removeCallbacksAndMessages(iptvZapBannerTickToken)` → `removeCallbacksAndMessages(iptvZapBannerHideToken)` | tick token is cancelled; hide token remains posted; `java.lang.AssertionError` |
+| h16 | `TvZapBannerTimingCharacterizationTest::classicDockModeAndLayoutListenerTrackNewDockHeightOnlyOnce` | `val margin = if (docked) dp(16) else dp(58)` → `val margin = if (docked) dp(17) else dp(58)` | docked body bottom margin = dp(16); `java.lang.AssertionError: expected:<16> but was:<17>` |
+| h17 | `TvZapBannerTimingCharacterizationTest::glassDockModeHandsSurfaceAndGeometryToDockThenRestoresIsland` | `iptvZapStyledScrim?.visibility = if (docked) View.GONE else View.VISIBLE` → `iptvZapStyledScrim?.visibility = if (docked) View.INVISIBLE else View.VISIBLE` | docked scrim uses GONE; `java.lang.AssertionError: expected:<8> but was:<4>` |
+| h18 | `TvZapBannerTimingCharacterizationTest::editionDockModeUsesInvisibleRuleAndGoneScrimThenRestores` | `iptvZapStyledRule?.visibility = if (docked) View.INVISIBLE else View.VISIBLE` → `iptvZapStyledRule?.visibility = if (docked) View.GONE else View.VISIBLE` | edition docked hairline uses INVISIBLE; `java.lang.AssertionError: expected:<4> but was:<8>` |
+| h19 | `TvZapBannerTimingCharacterizationTest::consoleDockModeKeepsAmberRuleWhileHidingScrimAndRail` | `val margin = if (docked) dp(16) else dp(58)` → `val margin = if (docked) dp(17) else dp(58)` | console docked body margin = dp(16); `java.lang.AssertionError: expected:<16> but was:<17>` |
+| h20 | `TvZapBannerEpgCharacterizationTest::classicPaintPinsNowNextTimesProgressAndBoldWhiteRestoration` | `nowView.setTextColor(Color.WHITE)` → `nowView.setTextColor(Color.GRAY)` | classic loaded programme text is white; `java.lang.AssertionError: expected:<-1> but was:<-7829368>` |
+| h21 | `TvZapBannerEpgCharacterizationTest::glassPaintChangesViewsWithItsOwnColorsAndMissingDataStates` | `if (guideStyle == GuideStyle.CONSOLE) t.fg else t.fgMid` → `if (guideStyle == GuideStyle.CONSOLE) t.fg else t.fgDim` | glass programme uses fgMid; `java.lang.AssertionError: expected:<-856492550> but was:<-1930234374>` |
+| h22 | `TvZapBannerEpgCharacterizationTest::editionPaintPromotesChannelAndNamesMissingGuideInBylineThenRestores` | `if (entry.epgLoading) "Loading guide…" else "No guide data"` → `if (entry.epgLoading) "Loading guide..." else "No guide data"` | edition loading byline text contains ellipsis character; `org.junit.ComparisonFailure: expected:<Loading guide[…]> but was:<Loading guide[...]>` |
+| h23 | `TvZapBannerEpgCharacterizationTest::consolePaintUsesForegroundAndEndTimeAndHidesInvalidRuntime` | `if (nowTitle != null && runtime > 0)` → `if (nowTitle != null && runtime >= 0)` | zero runtime hides times and end; `java.lang.AssertionError: expected:<8> but was:<0>` |
+| h24 | `TvZapBannerEpgCharacterizationTest::remainingTailRequiresStrictlyMoreThanOneMinuteAndProgressClamps` | `if (remaining > 60_000L)` → `if (remaining >= 60_000L)` | exactly one minute has no remaining tail; `java.lang.AssertionError: remaining=60000 expected:<false> but was:<true>` |
+| h25 | `TvZapBannerEpgCharacterizationTest::styledRemainingTailHasTheSameStrictMinuteBoundary` | `if (remaining > 60_000L)` → `if (remaining >= 60_000L)` | styled exact minute has no tail; `java.lang.AssertionError` |
+| h26 | `TvZapBannerEpgCharacterizationTest::nextNeedsBothTitlesAndOptionalPositiveStartTime` | `if (entry.epgNextStartMs > 0)` → `if (entry.epgNextStartMs >= 0)` | zero start omits formatted time; `org.junit.ComparisonFailure: expected:<Next  []Next programme> but was:<Next  [00:00  ·  ]Next programme>` |
+| h27 | `TvZapBannerEpgCharacterizationTest::styledNextNeedsBothTitlesAndOptionalPositiveStartTime` | `if (entry.epgNextStartMs > 0)` → `if (entry.epgNextStartMs >= 0)` | styled zero start omits time; `org.junit.ComparisonFailure: expected:<Next  []Next programme> but was:<Next  [00:00  ·  ]Next programme>` |
+| h28 | `TvZapBannerIdentityCharacterizationTest::classicIdentityUsesRawNameNumberFallbackAndPlaceholder` | `(entry.channelNumber ?: (entry.index + 1)).toString()` → `(entry.channelNumber ?: entry.index).toString()` | index nine falls back to displayed number ten; `org.junit.ComparisonFailure: expected:<[10]> but was:<[9]>` |
+| h29 | `TvZapBannerIdentityCharacterizationTest::styledNumbersUseGlassPlainEditionChAndConsoleThreeDigits` | `displayNumber.padStart(3, '0')` → `displayNumber.padStart(2, '0')` | console channel seven is 007; `org.junit.ComparisonFailure: expected:<0[0]7> but was:<0[]7>` |
+| h30 | `TvZapBannerIdentityCharacterizationTest::editionNumberUsesChPrefixAndRawName` | `GuideStyle.EDITION -> "CH $displayNumber"` → `GuideStyle.EDITION -> "C $displayNumber"` | edition fallback number is CH 10; `org.junit.ComparisonFailure: expected:<C[H] 10> but was:<C[] 10>` |
+| h31 | `TvZapBannerIdentityCharacterizationTest::glassIdentityKeepsPlainNumberAndPlaceholder` | `entry.name.firstOrNull()?.uppercase() ?: "?"` → `entry.name.firstOrNull()?.lowercase() ?: "?"` | placeholder for cinema is uppercase C; `org.junit.ComparisonFailure: expected:<[C]> but was:<[c]>` |
+| h32 | `TvZapBannerIdentityCharacterizationTest::positionUsesPagedTotalLocalizedNumbersAndTrimmedGroup` | `if (total > 0)` → `if (total > 2)` | fallback list total two is still displayed; `org.junit.ComparisonFailure: expected:<[·  1 of 2]> but was:<[]>` |
+| h33 | `TvZapBannerIdentityCharacterizationTest::hintVisibilityRequiresZapAndRejectsFavoriteSourceForJumpOnly` | `activeSource?.isFavorites != true` → `activeSource?.isFavorites == true` | missing favorite source permits jump when zapping is possible; `java.lang.AssertionError: expected:<0> but was:<8>` |
+| h34 | `TvZapBannerIdentityCharacterizationTest::sameChannelRepaintPreservesLogoRequestButUpdatesPosition` | `if (sameChannel) {` → `if (false) {` | same URL/name retains identical Glide request; `java.lang.AssertionError: unchanged URL/name do not refetch logo expected same:<com.bumptech.glide.request.SingleRequest@4651401c[model=android.resource://com.debrify.app/2131231341, transcodeClass=class android.graphics.drawable.Drawable]> was not:<com.bumptech.glide.request.SingleRequest@75e99360[model=android.resource://com.debrify.app/1, transcodeClass=class android.graphics.drawable.Drawable]>` |
+| h35 | `TvZapBannerIdentityCharacterizationTest::changedNameRepaintsIdentityEvenWhenUrlIsUnchanged` | `previous.url == entry.url && previous.name == entry.name` → `previous.url == entry.url` | name change repaints name to News; `org.junit.ComparisonFailure: expected:<[News]> but was:<[Cinema]>` |
+| h36 | `TvZapBannerIdentityCharacterizationTest::changedUrlRepaintsIdentityEvenWhenNameIsUnchanged` | `previous.url == entry.url && previous.name == entry.name` → `previous.name == entry.name` | URL change clears old request; `java.lang.AssertionError` |
+| h37 | `TvZapBannerIdentityCharacterizationTest::classicLogoUsesActivityGlideLifecycleAndClearsOnDestroy` | `Glide.with(this) ` → `Glide.with(applicationContext) ` | logo tracked by activity request manager; `java.lang.AssertionError: logo belongs to activity manager` |
+| h38 | `TvZapBannerIdentityCharacterizationTest::glassLogoUsesActivityGlideLifecycleAndClearsOnDestroy` | `Glide.with(this) ` → `Glide.with(applicationContext) ` | glass logo tracked by activity request manager; `java.lang.AssertionError: logo belongs to activity manager` |
+| h39 | `TvZapBannerIdentityCharacterizationTest::classicLogoListenerPinsFailurePlaceholderAndReadyRetirement` | `letter.visibility = View.GONE` → `letter.visibility = View.VISIBLE` | ready callback hides placeholder with GONE; `java.lang.AssertionError: expected:<8> but was:<0>` |
+| h40 | `TvZapBannerIdentityCharacterizationTest::glassLogoListenerPinsFailurePlaceholderAndReadyRetirement` | `letter.visibility = View.GONE` → `letter.visibility = View.VISIBLE` | glass ready callback hides placeholder with GONE; `java.lang.AssertionError: expected:<8> but was:<0>` |
+| h41 | `TvZapBannerIdentityCharacterizationTest::windowInstallAndMergeRefreshVisiblePositionAndRetainKnownEpg` | `paintIptvZapBannerPosition(entry)` → `Unit` | visible window install updates 21 of 200 meta; `org.junit.ComparisonFailure: expected:<·  Movies  ·  [21 of 200]> but was:<·  Movies  ·  [1 of 2]>` |
+| h42 | `TvZapBannerIdentityCharacterizationTest::recBadgeReadsCurrentRegistryEveryTickAndHidesWhenTaskStops` | `if (isRecordingCurrentIptvChannel()) View.VISIBLE else View.GONE` → `View.GONE` | registry task makes REC VISIBLE on next tick; `java.lang.AssertionError: expected:<0> but was:<8>` |
+| h43 | `TvZapBannerIdentityCharacterizationTest::teeActiveRecordsEvenWithoutEngineTaskAndEngineDisabledIgnoresRegistry` | `iptvRecordingController.isActive` → `false` | tee active shows REC even when engine disabled; `java.lang.AssertionError: expected:<0> but was:<8>` |
+| h44 | `TvZapBannerTimingCharacterizationTest::classicDockModeAndLayoutListenerTrackNewDockHeightOnlyOnce` | `if (iptvZapBannerDocked && controlsMenuVisible)` → `if (false)` | banner-only layout refreshes subtitle clearance; `java.lang.AssertionError: banner-only layout refreshes subtitle clearance expected:<-464.0> but was:<-414.0>` |
+| h45 | `TvZapBannerTimingCharacterizationTest::glassDockModeHandsSurfaceAndGeometryToDockThenRestoresIsland` | `if (iptvZapBannerDocked) applyIptvZapBannerMode(true)` → `if (false) applyIptvZapBannerMode(true)` | styled dock listener dispatches through classic mode entry; `java.lang.AssertionError: styled dock listener dispatches through classic mode entry expected:<160> but was:<100>` |
+
+Clean original `baseline-e71ddac3a`: **589 identities / 588 pass / one
+existing failure**, dirty count zero, complete XML, stable fingerprint, JBR
+21.0.10. Final `p6-step0`: **632 identities / 631 pass / the identical
+failure**; all 589 prior statuses are unchanged, with **43 passing additions
+only**, no missing/skip/error additions, stable tested-tree fingerprint.
+Post-test run was at the Step-T commit with five uncommitted new test files;
+all final test bytes are recorded. The earlier provisional post-test archive
+is retained as `p6-step0-pre-layout-strengthening`; it is superseded by the
+final baseline, not used to accept regressions. The unchanged failure is
+`TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+JVM archives: `junit/baseline-e71ddac3a/` and `junit/p6-step0/`.
+
+Original `:app:lintDebug` issue set is archived under `p6/lint-original/`
+with XML/HTML/TXT, `issues.json` and the raw `lint-original.log`: **1,352
+issues (253 errors, 1,099 warnings; 175 UnsafeOptInUsageError)**. The command
+exits one for existing errors; no lint changes are made. Step-0 evidence:
+`characterization-control.log`, `layout-controls.log`, `mutation-run.log`,
+`layout-mutation-run.log`, `jvm-comparison.log`, `jvm-additions-only.json`.
+Fixture-development failures are retained under `p6/controls/rejected-*`;
+only passing original controls and assertion-killed mutations are accepted.
+Protected inputs, production sources and all earlier destinations are
+unchanged. The temporary original worktree is removed after archival.
+
+Manifest wiring-test metadata is bound to the final recorded test names
+(including the full window-install/merge name); declarations, patches,
+substitutions, structure and initializer proofs are unchanged.

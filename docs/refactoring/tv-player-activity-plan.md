@@ -1632,3 +1632,24 @@ favourites-gated jump hint, floating vs docked banner.
   the repeated **42/42** overload audit. The transient prefix/newline failure
   was rejected, not accepted as parity. Evidence `p6/finalize-imports.log`,
   `reviewed-destination-imports.json`, `phase6-final-self-tests.log`.
+
+- 2026-10-08 — **Phase 6 step 0 complete; STOP before production moves.**
+  Original `e71ddac3a` passes all **43** new characterizations, spanning
+  four independent style instances, cached style/tree, hierarchy/drawables/
+  typography, dock geometry and layout callbacks, entrance/hide/tick
+  timings, now/next/progress, LIVE/REC/favourites, same-channel repaint,
+  window install/merge, default arguments and both Glide lifecycle paths.
+  **45/45** original mutations fail named assertions (every new test plus
+  two explicit layout-callback proofs); no compile/crash/zero-test proof.
+  Final `p6-step0` has **632 identities / 631 pass / the existing focus
+  failure**: all 589 clean `baseline-e71ddac3a` statuses identical, 43
+  passing additions only, complete XML and stable fingerprints. Original
+  lint archived: 1,352 issues, 253 errors/1,099 warnings (175 opt-in errors);
+  no fix. Mutation table in deps; raw evidence `p6/` and `junit/`.
+  Provisional baseline retained separately after strengthening two layout
+  cases; final baseline rerun and compared, no regressions accepted.
+  Manifest named-test metadata matches recorded cases; move/patch/proof
+  configuration unchanged. Production, previous manifests/destinations,
+  lockfile and ProGuard unchanged. Temporary original worktree removed.
+  No production moves, push, branch switch, device interaction or self
+  independent review. Claude's independent sample/review and any 0b follow.
