@@ -2328,3 +2328,16 @@ episode fetch from the player, status pill messages.
   (auditor extension for 18 `runOnUiThread` + 10 lifecycle getters; PikPak
   virtual-clock instrumentation with 10/22/36/54/80/108 s + 109.5 s pins;
   paired inline/queued reply timing cases). Phase 10 design approved.
+
+- 2026-10-08 — **Phase 10 step T complete** on original `8a4d40d1c`:
+  re-measured 29 subtrees, 176 moved substitutions, 27 caller edits in 13
+  declarations and 17 computed Host re-points (20 edits) in three whole-property
+  patched rows. Complete three-sibling extraction fixture passes and compiles;
+  32 original/fixture bytecode receiver pins pass (TextView constructor, two
+  Toasts, findViewById, eighteen runOnUiThread calls, ten lifecycle getters).
+  Four initializer proofs, four Runnable self receivers, five slot-anchored
+  additions including activity-owned readiness getters; all 37 earlier files
+  frozen at the merge with an empty whitelist. Original self-comparison: 2,309
+  declarations, zero differences. All 219 checker/auditor self-tests pass,
+  including historical phase 1–9 suites and phase-10 negatives. Evidence p10/;
+  no production move, branch change, protected-input change or device action.

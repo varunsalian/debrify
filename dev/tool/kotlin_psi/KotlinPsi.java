@@ -244,7 +244,7 @@ public final class KotlinPsi {
                 // are excluded; bytecode pins the actual inherited dispatch.
                 for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
                     String callee = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
-                    if (!callee.equals("finish") && !callee.equals("findViewById")) continue;
+                    if (!callee.equals("finish") && !callee.equals("findViewById") && !callee.equals("runOnUiThread")) continue;
                     if (call.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)call.getParent()).getSelectorExpression() == call) continue;
                     PsiElement scope = call.getParent();
@@ -253,7 +253,24 @@ public final class KotlinPsi {
                     inheritedSites.add(map("start", offset(call.getTextRange().getStartOffset()),
                         "call_start", offset(call.getTextRange().getStartOffset()),
                         "call_end", offset(call.getTextRange().getEndOffset()), "callee", callee,
-                        "receiver", "implicit-inherited", "lexical_class", ((KtClass)scope).getName()));
+                        "receiver", "implicit-inherited", "introduced_phase", callee.equals("runOnUiThread") ? 10 : 9,
+                        "lexical_class", ((KtClass)scope).getName()));
+                }
+                // Java lifecycle Boolean properties compile to isFinishing()/isDestroyed().
+                // Record each implicit read separately, including reads in deferred lambdas.
+                for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
+                    String name = ref.getReferencedName();
+                    if (!name.equals("isFinishing") && !name.equals("isDestroyed")) continue;
+                    if (ref.getParent() instanceof KtQualifiedExpression &&
+                        ((KtQualifiedExpression)ref.getParent()).getSelectorExpression() == ref) continue;
+                    PsiElement scope = ref.getParent();
+                    while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
+                    if (!(scope instanceof KtClass)) continue;
+                    inheritedSites.add(map("start", offset(ref.getTextRange().getStartOffset()),
+                        "call_start", offset(ref.getTextRange().getStartOffset()),
+                        "call_end", offset(ref.getTextRange().getEndOffset()), "callee", name,
+                        "receiver", "implicit-inherited", "introduced_phase", 10,
+                        "property_read", true, "lexical_class", ((KtClass)scope).getName()));
                 }
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,

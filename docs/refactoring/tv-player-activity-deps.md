@@ -10787,3 +10787,31 @@ The phase-6 re-plan's order shifts by one, because the gate took phase 9 alone a
   indicator cleanup does the work.
 - Dart row 1 is a whole-file `contains`; consider a `_between` of `applyMoreTorrentSources` in a separate
   test-only change.
+
+## Phase 10 step T (re-measured at `8a4d40d1c`)
+
+The superseded inventory's recommendation R is unchanged. The original activity
+is 13,320 lines. Slots are `statusPill` line 1361, `isPikPakRetrying` line 1390
+and `episodeFetchInFlight` line 12131. The exhaustive PSI selectors, member spans,
+patch counts and all receiver contexts are archived in p10/remeasured-inventory.json,
+p10/original-psi.json and the checked-in phase-10 manifest. Twenty-nine subtrees
+(25 fields/functions plus four companion constants) move into the three sibling
+controllers; 176 declared substitutions, four inert initializer proofs, four
+preserved Runnable self sites. The three earlier controller properties remain
+whole-property patched rows: subtitle 3, switcher 12 and gate 5 token edits,
+representing 17 forwarders. Twenty-seven other edits remain in thirteen
+original declarations, including three in-place lifecycle edits. Readiness getters
+remain activity-owned; all Host reads are computed and explicitly qualified.
+
+The complete production extraction fixture passes token partitioning and a real
+`compileDebugKotlin` on an evidence-only detached original; all three fixture
+files are removed and original activity bytes restored afterwards. All 32 compiled
+sites carry owner/descriptor/opcode pins; original Activity dispatch becomes
+injected AppCompatActivity dispatch, while TextView/Toast argument overloads stay
+identical. The PSI collector now includes UI dispatch and lifecycle reads; their
+introduction is phase-scoped so historical phase 9 coverage stays intact.
+All 219 checker/auditor self-tests pass, including every historical suite.
+Thirty-seven earlier destinations remain byte-identical at `8a4d40d1c`, empty
+whitelist. Original all-retained self-comparison classifies 2,309 declarations
+with zero differences. Raw fixture, audit, compilation and negative logs: p10/.
+No production files or old manifests changed.
