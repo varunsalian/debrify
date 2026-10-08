@@ -6709,6 +6709,8 @@ phase 5; Claude reviews separately.
 
 ## Phase 6 inventory (at `1a33c42cb`; re-measure on `e71ddac3a`)
 
+> Section B (Stremio TV guide) is superseded where it differs by the plan's Phase 7 section: 16 initializer proofs (not 2), the trio forwarder takes five arguments incl. `hideGuideOnReady`, and only Next/switch callbacks check the switch token (guide-data replies do not).
+
 > Superseded where they differ (phase 6 design rounds 1–2): **28** inert initializer proofs (no contiguous-block exemption; renderer fields map to the classic controller's slot), and an explicit hide cancels the tick token but leaves the pending hide callback posted (pinned as-is). Paging/layout characterization checklists below remain valid.
 
 

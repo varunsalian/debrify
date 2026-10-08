@@ -1034,8 +1034,20 @@ sites; 11 visibility changes). Overload audit: `LinearLayoutManager(this)`,
 `Glide.with(this)`, 2 `Toast` + 4 `this@…` Toasts inside
 `MethodChannel.Result`. `playerView.findViewById` stays host-qualified (not
 the inherited `findViewById`). Default argument `finishOnFailure = false`
-stays evaluated at call time. Two earlier-running initializers (`null`
-listener/runnable) get inert proofs. One reflective retarget:
+stays evaluated at call time. **Initializer timing:** 17 owned properties
+(15 in the contiguous block, plus the guide-wait listener/runnable) move into
+the controller, constructed at the first property's slot, so **16**
+initializers run earlier and each gets an exact inert proof (no
+contiguous-block exemption). The Host forwarder to the retained trio is the
+real five-argument `playStremioTvPlaybackMap(channel, map, url, title,
+hideGuideOnReady)` (Next passes `false`, switching passes `true`).
+
+**Step T.** Per-phase dispatcher: the phase-6 suite keeps running with the
+historical phase-6 manifest; a complete phase-7 extraction fixture and
+negatives (incl. omitting a contiguous-field proof, a forwarder dropping or
+hard-coding `hideGuideOnReady`) run separately; compiled audit of all eight
+receiver sites; the 33 earlier destination files are frozen against
+`a4ed4f368`. One reflective retarget:
 `StremioTvStartupWatchdogTest` calls `initStremioTvGuide` by name — it
 becomes a **public** member of the internal controller and the test's local
 `call` helper routes it to the controller (assertions byte-identical).
@@ -1052,9 +1064,18 @@ Guide init from JSON (channel parsing, current flag, inline now/next,
 (`post` + 150 ms); search filter; header binding (poster vs letter, Glide
 lifecycle owner); lazy guide-data for the visible range and row merge;
 `requestStremioTvNext` (no current channel → toast and optional finish, null
-bridge, success → trio, empty URL, error, notImplemented, stale token,
-1.5 s overlay hide); `switchToStremioTvChannel` (flags, stale token,
-rollback of `isCurrent`/`isSwitchingChannel` marks on failure); guide-ready
+bridge, success → trio with no guide wait, empty URL, error, notImplemented,
+stale token, 1.5 s overlay hide); `switchToStremioTvChannel` (flags, stale
+token, rollback of `isCurrent`/`isSwitchingChannel` marks on failure, and a
+**successful switch through the real retained trio** with a recording player:
+media-start order, channel/adapter updates, guide-wait registration and
+READY-triggered hiding — contrasted with Next's no-wait path); guide-data
+replies, which do **not** check the switch token (only Next/switch callbacks
+do): a reply after token advancement, partial replies (only valid returned
+entries clear loading; omitted ones stay loading), malformed replies, a null
+bridge (guide-data loading stays set; a switch stays in progress with its new
+current/switching marks), error/notImplemented/send-exception cleanup — all
+pinned as-is; guide-ready
 wait (`READY` hides, `IDLE` clears switching marks, 10 s fallback,
 `cancelGuideWait` removes the listener from the current player). Fake
 Flutter channel with async main-looper replies (phase-2 messenger).
@@ -1762,3 +1783,8 @@ ready, back-key behaviour inside the guide list and search box.
   `FragmentActivity`) + historical 37 Toast sites reproduce. Activity
   16,487 → 15,167. Decoder verification remains pending-environment.
   Phase 6 complete; merged.
+- 2026-10-08 — phase 7 design round 1 (Codex): P1 folded (16 inert
+  initializer proofs, not 2); P2s folded (phase-7 fixture dispatch + earlier
+  destinations frozen at `a4ed4f368` + 8-site audit; five-argument trio
+  forwarder with `hideGuideOnReady` and a successful-switch characterization;
+  guide-data callback contract corrected and characterized as-is).
