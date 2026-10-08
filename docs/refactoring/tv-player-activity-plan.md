@@ -2371,3 +2371,13 @@ episode fetch from the player, status pill messages.
   Kotlin calls, with equal assertions and no visibility expansion.
   Protected inputs and production bytes unchanged; original worktree removed.
   **STOPPED before phase-10 production moves.**
+
+- 2026-10-08 — **Phase 10 step 0b complete on original `8a4d40d1c`.**
+  Fifteen real-renderer/overlay cases close the loading refresh gap and sweep
+  every moved fetch UI refresh; all twenty targeted original mutations fail
+  on named assertions. Exact Claude l13 rerun is killed against all 94 phase-10
+  cases; original control passes all 94. Invalid l10 remains excluded.
+  `p10-step0b`: 904 = 903 pass + unchanged known focus failure; comparison
+  against `p10-step0` permits exactly 15 passing additions. Matching 1024 MiB
+  worker, unchanged production/protected inputs. Evidence `p10/step0b/`;
+  mutation table appended to deps. No production move or device action.
