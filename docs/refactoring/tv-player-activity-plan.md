@@ -3771,3 +3771,25 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   attempt duplicated existing diagnostics, with no source changes. Full
   checker fixtures continue; affected/full Flutter comparison follows on
   this clean `gate` checkpoint. Evidence `p16/gate/`, `junit/p16-gate/`.
+
+- 2026-10-10 — **Phase 16 final gate complete; STOP after Phase 16.**
+  All 463 checker/auditor self-tests and historical p1..p15 merge checks pass,
+  1,727 declarations/zero differences, 54 frozen destinations, 38 initializer
+  proofs, seven compiled receiver sites plus all 23 phase-15 binding pins,
+  volatile identity writer/reader and teardown order verified. All 399
+  Phase-16 cases pass; clean `p16-gate` exactly preserves 2,342 `p16-step0c`
+  statuses (same one JVM failure). On clean gate commit 3ab9553da,
+  affected Dart tests preserve all 45 statuses and full Flutter preserves
+  all 12,855 phase-15 identities/statuses (12,794 success, 13 failure,
+  28 error, 20 skipped), stable tree/same SDK. Release + R8/DEX 8 classes/
+  289 members pass; five Kotlin warnings and 1,758 analyzer diagnostics
+  unchanged. Lint has no additions / 175 opt-in findings unchanged; the
+  single Activity-only back-navigation diagnostic removal is explained by
+  the installed detector's subclass predicate, with unchanged key behavior.
+  Decoder remains pending-environment with exact phase-15 failure and all
+  phase-1 binary/gap hashes. No new behavior regression observed. All 80
+  routes use unchanged assertions; Dart, lockfile, ProGuard, earlier files
+  and manifests unchanged. Evidence `p16/gate/summary.json` and raw
+  archives, `p16/step0c/`, `p16/step1/`, `junit/p16-step0c/`, `junit/p16-gate/`.
+  No push, device or emulator interaction; no independent self-review.
+  Phase 17 not started.

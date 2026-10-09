@@ -17920,3 +17920,41 @@ Full historical/Phase-16 checker fixture suite continues independently with
 pinned tool/manifest hashes. This `gate` checkpoint provides a clean tree
 for the affected Dart and full Flutter suite comparison with the phase-15
 gate. Their final outcomes will be appended after completion.
+
+### Phase 16 final gate — complete; stop after this phase
+
+All **463 checker/auditor self-tests** pass, including every historical
+suite with its own manifest and the complete Phase-16 fixture / negatives.
+Tool and manifest fingerprints are unchanged throughout and at final gate.
+The current checker classifies all 1,727 declarations with zero differences;
+historical `--at` checks pass for p1..p15 at their merge SHAs. All 54 earlier
+destinations remain byte-identical to `df439aed1`. The compiled audit,
+23 phase-15 bindings (12 casts/11 absent/three array stores), volatile
+identity writers/reader, 38 initializer proofs and teardown order pass.
+All 80 reflection routes resolve; only the immutable owner map changed,
+with every pre-move Kotlin assertion and every Dart file preserved.
+
+Clean gate commit `3ab9553da`: affected source tests exactly preserve
+all 45 statuses (44 success / same one failure). Full Flutter run via
+`suite_evidence.py` exactly preserves all **12,855** phase-15 identities
+and statuses: **12,794 success, 13 failure, 28 error, 20 skipped** across
+1,232 suites. Stable clean input, same SDK/flags; no new or missing result.
+No known-failure allowlist or `--record` update is used. Raw JSONL, environment
+metadata and strict comparisons are archived under `p16/gate/`.
+
+Clean JVM at Step-1 commit `8f3c3d35f` exactly preserves all 2,342
+`p16-step0c` statuses; all 399 Phase-16 characterizations pass. Release,
+R8/DEX (8 classes, 289 members), five compiler warnings and 1,758 analyzer
+diagnostics are verified as recorded above. Lint has no additions, all
+175 opt-in identities retained, with the one explained Activity-only
+non-opt-in diagnostic disappearance (not a behavior fix). Decoder remains
+**pending-environment** with identical phase-15 failure and phase-1 binary
+provenance. Existing JVM/Flutter/lint/analyzer failures are retained and not
+reported as passing raw runs. The initial analyzer duplicate-output attempt
+and initial strict lint comparison are retained with their resolutions.
+
+Evidence `p16/gate/summary.json`, `p16/step0c/`, `p16/step1/`,
+`junit/p16-step0c/`, `junit/p16-gate/`. All commits carry the requested
+trailers. Lockfile, ProGuard and earlier source/manifests unchanged; original
+mutation worktree removed. No push, device, emulator or self independent
+review. **STOP after Phase 16; Phase 17 not started.**
