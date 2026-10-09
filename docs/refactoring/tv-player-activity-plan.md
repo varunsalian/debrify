@@ -2836,3 +2836,18 @@ now/next header with logo and letter fallback.
   Production, prior tests/helpers, lockfile and ProGuard are unchanged; no
   push, branch switch or device interaction. Claude's independent sample,
   moves, helper retargets and production gates remain for their next steps.
+
+
+- 2026-10-09 — **Phase 12 Step 0b complete before moves.** Ten additional
+  original-surface tests close URL-prefix, deferred-current and numeric-input
+  boundary gaps. All ten named original mutation proofs fail assertions; exact
+  Claude o03/o06/o12 reruns against all **163** phase-12 tests are assertion-killed,
+  with a passing 163-test control and matched 1 GiB heap. Related guard sweep
+  and mutation rows appended to the dependency report. Preliminary nullable
+  test-error crashes are rejected, archived and replaced by null-safe assertions.
+  Quiet `p12-step0b`: **1,300** identities, 1,299 passes and the unchanged focus
+  failure; every prior 1,290 status is retained with **ten passing additions
+  only**, no missing/skipped/changed identities and a stable tree fingerprint.
+  Evidence `p12/step0b/`, `junit/p12-step0b/`. Detached original removed;
+  production, manifest, old tests/helpers, lockfile and ProGuard unchanged.
+  Approved Step 1 and gate follow.

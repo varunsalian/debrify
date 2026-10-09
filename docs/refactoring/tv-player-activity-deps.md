@@ -13217,3 +13217,40 @@ Each row names its single-test original mutation and the actual failing assertio
 | `named-153` TvIptvOverlayCallbackCharacterizationTest.episodeSelectionHidesAndDisablesPagingBeforeOutgoingCheckpoint | `iptvGuideController.hideIptvGuide()` → `Unit` | assertEquals("adapter hide and paging reset precede navigator checkpoint",false to false,atReads.first()) — java.lang.AssertionError: adapter hide and paging reset precede navigator checkpoint expected:<(false, false)> but was:<(true, fals… |
 
 Evidence: `p12/step0/original-final-glide-control/`, `named-proofs/`, `sweep/`, `sweep-final-gaps/`, `sweep-final-fixes/`, `sweep-extra/`, `sweep-glide/`, `coverage-matrix.json`, `reflective-owner-rescan.json`, `final-checker-self-tests.log`; `p12/overload-audit.json`; `junit/baseline-b870a16b1/` and `junit/p12-step0/`. The detached original worktree is removed after archiving. Production source, prior tests/helpers, `pubspec.lock` and ProGuard remain unchanged. Claude’s independent sample and production moves remain pending.
+
+
+## Phase 12 step 0b — URL, deferred-current and input boundaries
+
+Ten additional original-surface cases pass on `b870a16b1`; every case has a
+named assertion mutation proof. Claude's exact o03/o06/o12 replacements were
+re-run separately against **all 163 phase-12 tests**, with a 163/163 passing
+control and matched 1 GiB worker heap: all three are assertion-killed. Complete
+logs, XML, definitions, fixture hashes and accepted proof records are under
+`p12/step0b/`. The initial two zero-input probes failed in the test's unsafe
+nullable error conversion; those crash-only variants are rejected and archived
+under `preliminary-null-error-proofs/`. The final null-safe assertions fail as
+assertions, with no production change.
+
+| Sweep class / original location | Characterization and mutation evidence |
+| --- | --- |
+| Every URL-scheme gate: `ensureIptvChannelEpg`, line 9195 (the only one in the 18 selected functions) | Reject rtmp/udp/stremio/ftp/file, uppercase HTTP, empty and leading-space URLs without state/transport changes; retain http/https and legacy `httpish`/`http` prefix behavior. `boundary-01/02`, exact o03. |
+| Every deferred `isCurrent` gate: archive retry line 9222 | Stale EPG prevents the freshness guard from masking a removed current check. Inline and queued replies; no-longer-current at 60 s; current again at the deadline; finishing with stale data. Metadata clearing and 59,999/60,000 deadlines asserted. `boundary-03..06`, exact o06. |
+| Live-current bridge callback line 9249 and captured reads at 9193/9198 | Existing paired cheap/enriched inline/queued current-identity transitions retain their named/sweep proofs from Step 0; captured request metadata differs from current evaluation. No other deferred current gates found in the selected functions. |
+| Current-row removal line 9140 | Existing `removeRowKeepsPlayingAndUsesObjectIdentity` and installed list-removal callbacks remain covered and mutation-proved in Step 0; this is an immediate current guard. |
+| Every numeric input-validation gate: jump line 9545 | Zero via button and IME GO, empty/whitespace, negative one, Int.MIN, above/below Int range, decimal and text input; exact error, dialog retained and no request. One, signed/trimmed one and Int.MAX accepted unchanged. `boundary-07..10`, exact o12. |
+| Other moved numeric conditions (non-input validation) | Existing statement matrix/proofs retain scroll thresholds (8488/8489), EPG freshness/sentinel (9191/9192), next-start retry deadline (9246), airing start/stop and fallback scroll index (9423/9424). No new numeric input-validation location found. |
+
+| New test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvIptvChromeBoundaryCharacterizationTest.nonHttpSchemesLeaveEpgStateAndTransportUntouched` | `if (!entry.url.startsWith("http")) return` → `if (entry.url.startsWith("stremio")) return` | java.lang.AssertionError: java.lang.AssertionError: No EPG request for rtmp://host/live |
+| `TvIptvChromeBoundaryCharacterizationTest.httpPrefixIncludesHttpsAndLegacyHttpishUrls` | `if (!entry.url.startsWith("http")) return` → `if (!entry.url.startsWith("https")) return` | java.lang.AssertionError: java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvIptvChromeBoundaryCharacterizationTest.inlineArchiveRetrySkipsExpiredChannelNoLongerCurrent` | `if (entry.isCurrent && !isFinishing && !isDestroyed)` → `if (!isFinishing && !isDestroyed)` | java.lang.AssertionError: java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvIptvChromeBoundaryCharacterizationTest.queuedArchiveRetrySkipsExpiredChannelNoLongerCurrent` | `if (entry.isCurrent && !isFinishing && !isDestroyed)` → `if (!isFinishing && !isDestroyed)` | java.lang.AssertionError: java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvIptvChromeBoundaryCharacterizationTest.retryReadsCurrentAgainAtDeadlineAfterChannelReturns` | `if (entry.isCurrent && !isFinishing && !isDestroyed)` → `if (!entry.isCurrent && !isFinishing && !isDestroyed)` | java.lang.AssertionError: java.lang.AssertionError: expected:<2> but was:<1> |
+| `TvIptvChromeBoundaryCharacterizationTest.retrySkipsExpiredCurrentChannelWhileFinishing` | `if (entry.isCurrent && !isFinishing && !isDestroyed)` → `if (entry.isCurrent && !isDestroyed)` | java.lang.AssertionError: java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvIptvChromeBoundaryCharacterizationTest.zeroJumpButtonShowsErrorWithoutDismissingOrRequesting` | `number == null \|\| number <= 0` → `number == null \|\| number < 0` | java.lang.AssertionError: java.lang.AssertionError: expected:<Enter a valid channel number> but was:<null> |
+| `TvIptvChromeBoundaryCharacterizationTest.zeroJumpEditorGoShowsErrorWithoutDismissingOrRequesting` | `number == null \|\| number <= 0` → `number == null \|\| number < 0` | java.lang.AssertionError: java.lang.AssertionError: expected:<Enter a valid channel number> but was:<null> |
+| `TvIptvChromeBoundaryCharacterizationTest.invalidJumpNumbersIncludeNegativeAndIntegerOverflowBoundaries` | `input.error = "Enter a valid channel number"` → `input.error = "Invalid"` | org.junit.ComparisonFailure: org.junit.ComparisonFailure: Invalid channel number:  expected:<[Enter a valid channel number]> but was:<[Invalid]> |
+| `TvIptvChromeBoundaryCharacterizationTest.positiveJumpNumbersIncludeOneAndIntegerMaximum` | `number == null \|\| number <= 0` → `number == null \|\| number <= 1` | java.lang.AssertionError: java.lang.AssertionError |
+
+Exact survivor rerun: `o03` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.nonHttpSchemesLeaveEpgStateAndTransportUntouched`, `o06` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.queuedArchiveRetrySkipsExpiredChannelNoLongerCurrent`, `o12` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.zeroJumpEditorGoShowsErrorWithoutDismissingOrRequesting`.
