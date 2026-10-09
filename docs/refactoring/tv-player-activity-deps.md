@@ -17848,7 +17848,7 @@ Materialized `tvplayer_p16.json` exactly at original `df439aed1`: all 1,727
 declarations classified, zero checker differences. New owner
 `TvControlsOverlayController` eagerly constructs `identity` and `seek` at
 the pinned slots. Files 416/329/542 lines, Activity 6,986 → 5,891.
-Twenty-three shared nullable views move (2/8/13); `ottSkinInstalled` and
+Twenty-three shared dock fields (20 nullable views, the chips array and two scrub flags) move (2/8/13); `ottSkinInstalled` and
 the 18 lateinit title/Next/legacy views stay Activity-owned. Computed
 explicitly qualified Host forwarders, two readiness getters, 46 re-points
 (68 edits in 10 patched Activity properties), 48 in-place edits and the

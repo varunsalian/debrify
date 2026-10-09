@@ -3793,3 +3793,13 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   archives, `p16/step0c/`, `p16/step1/`, `junit/p16-step0c/`, `junit/p16-gate/`.
   No push, device or emulator interaction; no independent self-review.
   Phase 17 not started.
+- 2026-10-10 — phase 16 post-implementation reviews of `df439aed1..55f8b4135`.
+  Claude's independent samples 11/16 then 14/17 after the 0b sweep; 0c
+  closed u06/u12 by assertion, u14 (`coerceAtLeast(0)`) equivalent because
+  `formatTime` already maps nonpositive values to `"00:00"`. Independent
+  Codex review (fresh session): **No P1s, no P2**; one P3 (deps wording
+  "nullable views" → "shared dock fields") fixed. Verified 27 dispatcher
+  patches keep order and every `super` fallthrough, the cinema key listener
+  is byte-identical after reversals, and the back-navigation lint removal is
+  detector scope only. Activity 6,986 → 5,891. Decoder verification remains
+  pending-environment. Phase 16 complete; merged.
