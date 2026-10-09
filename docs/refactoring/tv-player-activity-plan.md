@@ -1613,6 +1613,13 @@ lists, the playlist in each controls skin, opening/closing during playback.
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
+  newer navigation state unconditionally; rebuilding accumulates global focus
+  listeners; already queued View focus work survives hide/rebuild/destroy.
+  Characterization and original mutation proofs pin these behaviors. Any
+  cancellation or listener-lifetime correction belongs to a separate behavior
+  change after this structural series.
+
 - Phase 12 scoped test-helper size exception (**resolved in Phase 13 Step T**):
   `android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt`
   grows 774 → 813 physical lines solely from the 39 required owner routes.
@@ -3027,3 +3034,40 @@ lists, the playlist in each controls skin, opening/closing during playback.
   `p13/helper-split.json`, `p13/checker-self-tests.log`,
   `p13/phase13-final-self-tests.log`, `p13/overload-audit.json`.
   Step 0 follows on the original; no production move or owner-route addition.
+
+- 2026-10-09 — **Phase 13 Step 0 complete; production unchanged.** Added 120
+  characterization identities from real activity bootstrap, with seven separate
+  controls-skin variants and installed adapter/key/focus/click callbacks. Pins
+  layout/bindings, every tab style and visible string, guide artwork lifecycle,
+  season/group filtering and refresh, default dispatch, focus boundaries,
+  off-screen scroll requests, 50/100 ms ordering, recovery replacement/cancellation
+  and delivery-time reads, the three original asynchronous quirks above, and
+  seven compiled teardown statements plus live cleanup before the finished reply.
+  The deterministic paused-looper fixture uses ViewRoot's own traversal entry
+  point; rejected frame/setup experiments remain separate from accepted evidence.
+  All 120 new tests have named assertion-failing mutation proofs on `315448a3c`.
+  The systematic matrix covers all 31 moved functions and 723 PSI nodes
+  (135 writes, 100 if, 14 when, 70 returns, five loops and 399 calls). All
+  state/branch/effect obligations have a direct assertion proof or an explained
+  equivalent deletion; nested reads link to their observed outputs. Additional
+  sweep batches contain 462 runs / 412 assertion kills, with six explained
+  equivalent deletions; compiler errors/crashes are never kills. All 25 final
+  full-set reruns kill the earlier real survivors. Clean final controls pass
+  131 selected tests; the 14 filtered clean-control cohorts pass as well.
+  Matched 1 GiB JVM evidence: clean `baseline-315448a3c` has 1,300 identities
+  (1,299 pass, unchanged SourceBrowser focus failure); `p13-step0` has 1,420
+  (1,419 pass, same failure). Comparison proves 120 passing additions, zero
+  missing identities and zero existing status changes, with stable fingerprints.
+  Original lint archived: 1,352 issues (253 errors / 1,099 warnings, 175
+  UnsafeOptInUsage); exit 1 is pre-existing, not a lint pass. Owner rescan finds
+  59 reflected moved names, including dynamic bindings and both getter aliases;
+  guideGridSpan is unreferenced. Public reflected functions/getters are already
+  pinned in the manifest; no owner route is added before extraction. The
+  teardown bytecode helper's receiver interpretation must retarget in Step 1
+  while keeping its seven-event assertion unchanged.
+  Evidence: `p13/step0/`, `p13/lint-original/`,
+  `junit/baseline-315448a3c/`, `junit/p13-step0/`; mutation table and per-function
+  matrix appended to the deps report. Original detached worktree removed.
+  Helper-size exception remains resolved; lockfile, ProGuard and all production
+  sources unchanged. No push, branch switch, device/emulator or bug fix.
+  **Stopped before production moves; Claude's independent sample follows.**
