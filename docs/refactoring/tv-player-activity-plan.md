@@ -3534,3 +3534,41 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   No production bug fix, new size exception, lockfile/ProGuard edit, push,
   branch switch or device interaction. Integration gate follows on this
   committed tree; no self independent review.
+
+
+- 2026-10-09 — **Phase 15 gate complete on 699668ae8; decoder
+  pending-environment. STOPPED after Phase 15.** Step 0b f3aea36e0 pins
+  observable s01 with two original-surface tests and two assertion-killed
+  variants; s02 is equivalent under the proven 0..3 production invariant
+  and passes all 337 mutant cases. Step 1 699668ae8 extracts the 554-line
+  dock owner, eager 294-line live styler via controlsDock and sibling
+  438-line playback-display owner; DockSkinSpec is top-level. Activity
+  7,982 → 6,986. Dock runtime and borrowed infrastructure stay; size
+  baseline lowered without a new exception. Current checker: all 1,730
+  original declarations classified, zero differences. All 419 self-tests
+  and historical p1–p14 merge checks pass. Fifty-one earlier destinations
+  remain byte-identical to ce3ddfb06; 31 initializer proofs, slot/eager
+  construction and full lifecycle/teardown order pass. Production compiled
+  audit pins 17 receiver/getter sites, 23 view bindings (12 cast/11 no-cast)
+  and resize constant inlining. Fifty-four owner routes and the Android TV
+  nightModeIndex helper retarget retain every assertion; Dart unchanged.
+  Clean p15-gate exactly matches all 1,943 p15-step0b identities/statuses
+  (1,942 pass, same known focus failure), stable clean tree, complete XML,
+  matched evidence-only 1 GiB workers/JBR. Five Kotlin warnings and 1,758
+  analyzer diagnostics are unchanged. Lint exactly retains all 1,352 issue
+  identities (253 errors/1,099 warnings, 175 opt-in errors), after normalizing
+  one absolute wrapper path from the original archive to the same checkout-
+  relative location; raw initial comparison and identical wrapper bytes are
+  archived, with no suppressions or diagnostic changes. Release APK builds.
+  R8/DEX checks all 13 generated classes and 389 members, including both
+  Hosts/activity implementations, DockSkinSpec, anonymous classes and new
+  file facades; three mapping negative controls pass. Decoder failure
+  output, all three native hashes and missing-feature manifest match prior
+  phases/phase 1: pending-environment. Affected Dart source tests match all
+  45 prior statuses. Full Flutter suite via suite_evidence.py on clean gate
+  commit 699668ae8 exactly matches all 12,855 phase-14 identities/statuses
+  (12,794 success, 13 failure, 28 error, 20 skipped), same SDK/flags, stable
+  tree. Evidence p15/step0b/, step1/, gate/ and junit/p15-step0b/, p15-gate/.
+  Lockfile, ProGuard and earlier manifests/destinations unchanged. No push,
+  branch switch, self independent review, device/emulator or bug fix.
+  Phase 16 not started.
