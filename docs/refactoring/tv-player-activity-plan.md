@@ -2910,3 +2910,12 @@ now/next header with logo and letter fallback.
   `p12/step1/`, `p12/gate/`, `junit/p12-step0b/`, `junit/p12-gate/`. Detached
   original removed; lockfile, ProGuard and earlier manifests unchanged.
   No push, branch switch, self independent review, device/emulator or bug fix.
+- 2026-10-09 — phase 12 post-implementation reviews of `114731e76..25c66936c`.
+  Claude's independent sample 12/15 valid kills (80 %; o08 pattern absent;
+  two earlier invalid attempts caused by a test-list word-splitting bug in
+  Claude's shell, discarded); survivors o03/o06/o12 closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; the
+  813-line `TvPlayerOriginalAccess.kt` helper exception accepted (39 routing
+  rows, ratcheted, split before the next route is added — first item of
+  phase 13). Activity 11,458 → 10,297. Decoder verification remains
+  pending-environment. Phase 12 complete; merged.
