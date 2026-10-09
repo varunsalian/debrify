@@ -209,23 +209,119 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Controls
     private var controlsOverlay: View? = null
     private var pauseButton: AppCompatButton? = null
-    private var iptvPrevButton: AppCompatButton? = null
-    private var iptvNextButton: AppCompatButton? = null
-    private var iptvGuideButton: AppCompatButton? = null
-    private var iptvJumpButton: AppCompatButton? = null
-    private var iptvStartOverButton: AppCompatButton? = null
-    private var iptvStartOverSeekButton: AppCompatButton? = null
-    private var iptvRecordButton: AppCompatButton? = null
+    private val controlsDockController: TvControlsDockController = TvControlsDockController(
+        this,
+        object : TvControlsDockController.Host {
+            override fun cancelScheduledHideControlsMenu(): Unit { return this@AndroidTvTorrentPlayerActivity.cancelScheduledHideControlsMenu() }
+            override var cinemaProgressBackground: View?
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaProgressBackground
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaProgressBackground = value }
+            override var cinemaProgressBuffered: View?
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaProgressBuffered
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaProgressBuffered = value }
+            override var cinemaProgressContainer: View?
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaProgressContainer
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaProgressContainer = value }
+            override var cinemaProgressThumb: View?
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaProgressThumb
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaProgressThumb = value }
+            override var cinemaSeekMode: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaSeekMode
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaSeekMode = value }
+            override var cinemaSeekWasPlaying: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaSeekWasPlaying
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaSeekWasPlaying = value }
+            override var cinemaSpeedIndicator: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.cinemaSpeedIndicator
+                set(value) { this@AndroidTvTorrentPlayerActivity.cinemaSpeedIndicator = value }
+            override val controlsMenuVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.controlsMenuVisible
+            override var controlsOverlay: View?
+                get() = this@AndroidTvTorrentPlayerActivity.controlsOverlay
+                set(value) { this@AndroidTvTorrentPlayerActivity.controlsOverlay = value }
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override var debrifyProgressLine: View?
+                get() = this@AndroidTvTorrentPlayerActivity.debrifyProgressLine
+                set(value) { this@AndroidTvTorrentPlayerActivity.debrifyProgressLine = value }
+            override var debrifyTimeCurrent: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.debrifyTimeCurrent
+                set(value) { this@AndroidTvTorrentPlayerActivity.debrifyTimeCurrent = value }
+            override var debrifyTimeDisplay: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.debrifyTimeDisplay
+                set(value) { this@AndroidTvTorrentPlayerActivity.debrifyTimeDisplay = value }
+            override var debrifyTimeTotal: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.debrifyTimeTotal
+                set(value) { this@AndroidTvTorrentPlayerActivity.debrifyTimeTotal = value }
+            override val displayController: TvPlaybackDisplayController get() = this@AndroidTvTorrentPlayerActivity.displayController
+            override val dockSkinSpec: DockSkinSpec? get() = this@AndroidTvTorrentPlayerActivity.dockSkinSpec
+            override fun dp(value: Int): Int { return this@AndroidTvTorrentPlayerActivity.dp(value) }
+            override val guideStyle: GuideStyle get() = this@AndroidTvTorrentPlayerActivity.guideStyle
+            override val guideTokens: GuideTokens? get() = this@AndroidTvTorrentPlayerActivity.guideTokens
+            override fun guideTypeface(file: String?): Typeface? { return this@AndroidTvTorrentPlayerActivity.guideTypeface(file) }
+            override fun hideControlsMenu(): Unit { return this@AndroidTvTorrentPlayerActivity.hideControlsMenu() }
+            override val iptvChannels: List<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val iptvGuideChromeController: TvIptvGuideChromeController get() = this@AndroidTvTorrentPlayerActivity.iptvGuideChromeController
+            override val iptvGuideController: TvIptvGuideController get() = this@AndroidTvTorrentPlayerActivity.iptvGuideController
+            override val iptvRecordingActionsController: TvIptvRecordingActionsController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingActionsController
+            override val iptvStartOverActive: Boolean get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverActive
+            override val iptvStartOverController: TvIptvStartOverController get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverController
+            override val iptvStartOverTimelineVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override var ottIdentityBadge: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottIdentityBadge
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottIdentityBadge = value }
+            override var ottIdentityDivider: View?
+                get() = this@AndroidTvTorrentPlayerActivity.ottIdentityDivider
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottIdentityDivider = value }
+            override var ottIdentityOverline: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottIdentityOverline
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottIdentityOverline = value }
+            override var ottIdentitySubtitle: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottIdentitySubtitle
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottIdentitySubtitle = value }
+            override var ottIdentityTitle: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottIdentityTitle
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottIdentityTitle = value }
+            override var ottMetaLine: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottMetaLine
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottMetaLine = value }
+            override val ottQualityChips: Array<TextView?> get() = this@AndroidTvTorrentPlayerActivity.ottQualityChips
+            override var ottRatingChip: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottRatingChip
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottRatingChip = value }
+            override var ottScrubPreviewChip: View?
+                get() = this@AndroidTvTorrentPlayerActivity.ottScrubPreviewChip
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottScrubPreviewChip = value }
+            override var ottScrubPreviewText: TextView?
+                get() = this@AndroidTvTorrentPlayerActivity.ottScrubPreviewText
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottScrubPreviewText = value }
+            override var ottSkinInstalled: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
+                set(value) { this@AndroidTvTorrentPlayerActivity.ottSkinInstalled = value }
+            override var pauseButton: AppCompatButton?
+                get() = this@AndroidTvTorrentPlayerActivity.pauseButton
+                set(value) { this@AndroidTvTorrentPlayerActivity.pauseButton = value }
+            override fun playNext(): Unit { return this@AndroidTvTorrentPlayerActivity.playNext() }
+            override fun playPrevious(): Unit { return this@AndroidTvTorrentPlayerActivity.playPrevious() }
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
+            override val playlistController: TvPlaylistOverlayController get() = this@AndroidTvTorrentPlayerActivity.playlistController
+            override fun scheduleHideControlsMenu(): Unit { return this@AndroidTvTorrentPlayerActivity.scheduleHideControlsMenu() }
+            override fun seekBy(offsetMs: Long): Unit { return this@AndroidTvTorrentPlayerActivity.seekBy(offsetMs) }
+            override fun setupCinemaProgressBar(): Unit { return this@AndroidTvTorrentPlayerActivity.setupCinemaProgressBar() }
+            override fun showRandomPlaybackDialog(): Unit { return this@AndroidTvTorrentPlayerActivity.showRandomPlaybackDialog() }
+            override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
+            override fun startSeekbarProgressUpdates(): Unit { return this@AndroidTvTorrentPlayerActivity.startSeekbarProgressUpdates() }
+            override val subtitleController: TvSubtitleController get() = this@AndroidTvTorrentPlayerActivity.subtitleController
+            override val subtitleControlsLift: SubtitleControlsLiftController get() = this@AndroidTvTorrentPlayerActivity.subtitleControlsLift
+            override fun togglePlayPause(): Unit { return this@AndroidTvTorrentPlayerActivity.togglePlayPause() }
+            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
+            override fun updateCatalogEpisodeControls(): Unit { return this@AndroidTvTorrentPlayerActivity.updateCatalogEpisodeControls() }
+        },
+    )
     // Tees the live progressive stream to a MediaStore file while playing.
     private val iptvRecordingController by lazy { IptvRecordingController(this) }
     private var iptvUpPressActive = false
     private var iptvUpLongPressHandled = false
-    private var originalControlDockOrder: List<View> = emptyList()
-    private var audioButton: AppCompatButton? = null
-    private var subtitleButton: AppCompatButton? = null
-    private var aspectButton: AppCompatButton? = null
-    private var speedButton: AppCompatButton? = null
-    private var nightModeButton: AppCompatButton? = null
 
     // Time Display in Controls (Cinema Mode - split displays)
     private var debrifyTimeDisplay: TextView? = null  // Legacy combined display (hidden)
@@ -245,8 +341,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // the controller-layout swap succeeded, so a failed inflate degrades to
     // the classic skin instead of a half-styled one.
     private var ottSkinInstalled = false
-    private var ottCaptionLabel: TextView? = null
-    private var ottCaptionOwner: View? = null
     private var ottIdentityTitle: TextView? = null
     private var ottIdentitySubtitle: TextView? = null
 
@@ -266,11 +360,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var dockTagsCache: List<DockFormatTags.Tag> = emptyList()
     private var ottScrubPreviewChip: View? = null
     private var ottScrubPreviewText: TextView? = null
-    private var ottProgressTrackContainer: View? = null
-
-    /** In-dock Sources button; replaces the top-right stremio_source_badge
-     *  under the OTT skin (the badge stays permanently hidden there). */
-    private var ottSourcesButton: AppCompatButton? = null
 
     /** TVMaze's official show title, pushed with the metadata updates. */
     @Volatile
@@ -286,57 +375,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val nativeAudioRouting = NativeAudioRouting()
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
-    private var displayMatchMode = TvContentDisplayMatchMode.SYSTEM
-    private var displayModeController: TvDisplayModeController? = null
-
-    private val decoderAnalyticsListener = object : AnalyticsListener {
-        private var inputFormat: Format? = null
-
-        override fun onAudioTrackInitialized(
-            eventTime: AnalyticsListener.EventTime,
-            audioTrackConfig: AudioSink.AudioTrackConfig,
-        ) {
-            // Format/route changes can replace AudioTrack without changing its
-            // session ID or media item. Reattach effects to the actual output.
-            if (nightModeIndex > 0) initializeLoudnessEnhancer()
-            syncAudioEffectSession()
-        }
-
-        override fun onVideoInputFormatChanged(
-            eventTime: AnalyticsListener.EventTime,
-            format: Format,
-            decoderReuseEvaluation: DecoderReuseEvaluation?,
-        ) {
-            inputFormat = format
-            displayModeController?.onVideoFormat(format)
-        }
-
-        override fun onVideoDecoderInitialized(
-            eventTime: AnalyticsListener.EventTime,
-            decoderName: String,
-            initializedTimestampMs: Long,
-            initializationDurationMs: Long,
-        ) {
-            val format = player?.videoFormat ?: inputFormat
-            val generation = eventTime.mediaPeriodId?.windowSequenceNumber ?: -1L
-            val message =
-                "generation=$generation phase=stable " +
-                    "status=${androidDecoderStatus(decoderName)} " +
-                    "platform=android_tv backend=media3 " +
-                    "codec=${format?.sampleMimeType ?: "unknown"} " +
-                    "decoder=$decoderName output=surface_view " +
-                    "resolution=${format?.width ?: 0}x${format?.height ?: 0}"
-            DiagnosticFileLog.record(
-                source = "android_tv_player",
-                event = "decoder_initialized",
-                message = message,
-            )
-            Log.i(
-                DECODER_LOG_TAG,
-                message,
-            )
-        }
-    }
+    private val displayController: TvPlaybackDisplayController = TvPlaybackDisplayController(
+        this,
+        object : TvPlaybackDisplayController.Host {
+            override val controlsDockController: TvControlsDockController get() = this@AndroidTvTorrentPlayerActivity.controlsDockController
+            override val controlsSkin: TvControlsSkin get() = this@AndroidTvTorrentPlayerActivity.controlsSkin
+            override val iptvGuideController: TvIptvGuideController get() = this@AndroidTvTorrentPlayerActivity.iptvGuideController
+            override val nativeAudioRouting: NativeAudioRouting get() = this@AndroidTvTorrentPlayerActivity.nativeAudioRouting
+            override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playerPreferences: com.debrify.app.profiles.NativePlayerPreferences get() = this@AndroidTvTorrentPlayerActivity.playerPreferences
+            override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
+            override var skipSegmentProviderId: String
+                get() = this@AndroidTvTorrentPlayerActivity.skipSegmentProviderId
+                set(value) { this@AndroidTvTorrentPlayerActivity.skipSegmentProviderId = value }
+            override var skipSegmentsEnabled: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.skipSegmentsEnabled
+                set(value) { this@AndroidTvTorrentPlayerActivity.skipSegmentsEnabled = value }
+            override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
+        },
+    )
     private var offsetRenderersFactory: OffsetRenderersFactory? = null
 
     // Phase 0 of the IPTV resilience plan: per-tune logcat diagnostics.
@@ -431,7 +489,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvStartOverLoading = false
             iptvStartOverTimelineVisible = false
             iptvStartOverController.iptvCatchupToken++
-            updateIptvControlPresentation(entry)
+            controlsDockController.styler.updateIptvControlPresentation(entry)
         }
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
         // Video-stall attempt 1 was a plain re-tune (transient wedges heal
@@ -780,14 +838,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var seekbarVisible = false
     private var seekbarPosition: Long = 0
     private var videoDuration: Long = 0
-    private var resizeModeIndex = 1  // Fill by default
-    private var playbackSpeedIndex = 2  // 1.0x
-    private var nightModeIndex = 0  // Off by default
-    private var loudnessEnhancer: LoudnessEnhancer? = null
-
-    /** Opt-in (Settings → Player Settings): announce our audio session so system
-     *  effect apps (Wavelet, OEM equalizers) can attach. Off by default. */
-    private var systemAudioEffectsEnabled = false
     private var skipSegmentsEnabled = true
     private var skipSegmentProviderId = TvSkipSegmentClients.AUTO
     private var continuousShuffleEnabled = false
@@ -824,11 +874,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var iptvStartOverActive: Boolean
                 get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverActive
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverActive = value }
-            override val iptvStartOverButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverButton
+            override val iptvStartOverButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.iptvStartOverButton
             override var iptvStartOverLoading: Boolean
                 get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverLoading
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverLoading = value }
-            override val iptvStartOverSeekButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverSeekButton
+            override val iptvStartOverSeekButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.iptvStartOverSeekButton
             override var iptvStartOverTimelineVisible: Boolean
                 get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible = value }
@@ -838,7 +888,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun showControlsAndFocusProgressBar(): Unit = this@AndroidTvTorrentPlayerActivity.showControlsAndFocusProgressBar()
             override fun switchToIptvChannel(entry: IptvChannelEntry, adoptVisibleBrowseList: Boolean, checkpointOutgoing: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.iptvGuideController.navigator.switchToIptvChannel(entry, adoptVisibleBrowseList, checkpointOutgoing)
             override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
-            override fun updateIptvControlPresentation(entry: IptvChannelEntry?): Unit = this@AndroidTvTorrentPlayerActivity.updateIptvControlPresentation(entry)
+            override fun updateIptvControlPresentation(entry: IptvChannelEntry?): Unit = this@AndroidTvTorrentPlayerActivity.controlsDockController.styler.updateIptvControlPresentation(entry)
             override fun updateIptvEpisodeControls(): Unit = this@AndroidTvTorrentPlayerActivity.iptvGuideController.navigator.updateIptvEpisodeControls()
         },
     )
@@ -855,8 +905,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var iptvChannels: MutableList<IptvChannelEntry>
                 get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvChannels = value }
-            override val iptvNextButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvNextButton
-            override val iptvPrevButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvPrevButton
+            override val iptvNextButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.iptvNextButton
+            override val iptvPrevButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.iptvPrevButton
             override var iptvSourceId: String?
                 get() = this@AndroidTvTorrentPlayerActivity.iptvSourceId
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvSourceId = value }
@@ -878,7 +928,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val sourceSwitchController: TvSourceSwitchController get() = this@AndroidTvTorrentPlayerActivity.sourceSwitchController
             override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
             override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
-            override fun updateIptvControlPresentation(entry: IptvChannelEntry?): Unit = this@AndroidTvTorrentPlayerActivity.updateIptvControlPresentation(entry)
+            override fun updateIptvControlPresentation(entry: IptvChannelEntry?): Unit = this@AndroidTvTorrentPlayerActivity.controlsDockController.styler.updateIptvControlPresentation(entry)
             override fun updateIptvGuideCurrentName(): Unit = this@AndroidTvTorrentPlayerActivity.iptvGuideChromeController.updateIptvGuideCurrentName()
         },
     )
@@ -1125,8 +1175,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val manualSourceSwitchSnapshot: ManualSourceSwitchSnapshot? get() = this@AndroidTvTorrentPlayerActivity.startupGateController.manualSourceSwitchSnapshot
             override val maxStableDurationMs: Long get() = this@AndroidTvTorrentPlayerActivity.maxStableDurationMs
             override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
-            override val playbackSpeedIndex: Int get() = this@AndroidTvTorrentPlayerActivity.playbackSpeedIndex
-            override val playbackSpeeds: Array<Float> get() = this@AndroidTvTorrentPlayerActivity.playbackSpeeds
+            override val playbackSpeedIndex: Int get() = this@AndroidTvTorrentPlayerActivity.displayController.playbackSpeedIndex
+            override val playbackSpeeds: Array<Float> get() = this@AndroidTvTorrentPlayerActivity.displayController.playbackSpeeds
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val playlistAdapter: PlaylistOverlayAdapter? get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistAdapter
             override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistVisible
@@ -1137,8 +1187,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val recoverySeriesTitle: String? get() = this@AndroidTvTorrentPlayerActivity.recoverySeriesTitle
             override val recoveryStartedAtMs: Long get() = this@AndroidTvTorrentPlayerActivity.recoveryStartedAtMs
             override val recoveryTitle: String? get() = this@AndroidTvTorrentPlayerActivity.recoveryTitle
-            override val resizeModeIndex: Int get() = this@AndroidTvTorrentPlayerActivity.resizeModeIndex
-            override val resizeModeLabels: Array<String> get() = this@AndroidTvTorrentPlayerActivity.resizeModeLabels
+            override val resizeModeIndex: Int get() = this@AndroidTvTorrentPlayerActivity.displayController.resizeModeIndex
+            override val resizeModeLabels: Array<String> get() = this@AndroidTvTorrentPlayerActivity.displayController.resizeModeLabels
             override val sourcePersistenceSessionId: Int get() = this@AndroidTvTorrentPlayerActivity.sourcePersistenceSessionId
             override val startupFailoverCursor: StartupFailoverCursor? get() = this@AndroidTvTorrentPlayerActivity.startupGateController.startupFailoverCursor
             override val startupSourcesExhausted: Boolean get() = this@AndroidTvTorrentPlayerActivity.startupGateController.startupSourcesExhausted
@@ -1346,21 +1396,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         },
     )
 
-    private val resizeModes = arrayOf(
-        AspectRatioFrameLayout.RESIZE_MODE_FIT,
-        AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-        AspectRatioFrameLayout.RESIZE_MODE_FIT
-    )
-
-    private val resizeModeLabels = arrayOf("Fit", "Fill", "Zoom", "Cinema Zoom")
-
-    private val playbackSpeeds = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-    private val playbackSpeedLabels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
-
-    private val nightModeGains = arrayOf(0, 500, 1000, 1500, 2000, 2500, 3000, 5000)  // millibels
-    private val nightModeLabels = arrayOf("Off", "Low", "Medium", "High", "Higher", "Extreme", "Max", "Sleeping Baby")
-
     // Handlers
     private val progressHandler = Handler(Looper.getMainLooper())
     private val controlsHandler = Handler(Looper.getMainLooper())
@@ -1516,7 +1551,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (nativeAudioRouting.reprepareIfPending(player, playbackSpeeds[playbackSpeedIndex])) return
+            if (nativeAudioRouting.reprepareIfPending(player, displayController.playbackSpeeds[displayController.playbackSpeedIndex])) return
             when (playbackState) {
                 Player.STATE_READY -> {
                     if (pendingShufflePlayback?.mediaStarted == true) pendingShufflePlayback = null
@@ -1635,15 +1670,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                     }
                     // Initialize night mode if needed
-                    if (loudnessEnhancer == null && nightModeIndex > 0) {
-                        initializeLoudnessEnhancer()
+                    if (displayController.loudnessEnhancer == null && displayController.nightModeIndex > 0) {
+                        displayController.initializeLoudnessEnhancer()
                     }
                     // Announce the audio session to system effect apps. Mirrors
                     // the night-mode handling above: the session id only exists
                     // once the audio renderer is live, and onAudioSessionIdChanged
                     // doesn't re-fire when a seamless transition reuses the
                     // same AudioTrack.
-                    syncAudioEffectSession()
+                    displayController.syncAudioEffectSession()
                 }
                 Player.STATE_BUFFERING -> {
                     iptvTuneDiagnostics.onBufferingStart(player?.currentPosition ?: 0L)
@@ -1883,7 +1918,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     if (iptvLiveRecoveryEligible()) {
                         iptvStartOverActive = false
                         iptvStartOverTimelineVisible = false
-                        updateIptvControlPresentation(entry)
+                        controlsDockController.styler.updateIptvControlPresentation(entry)
                         iptvChannelStartController.beginIptvPlayback(entry)
                     }
                     return
@@ -1998,16 +2033,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // and won't re-fire STATE_READY — releasing there would kill night
             // mode with nothing to rebuild it.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
-            releaseLoudnessEnhancer()
+            displayController.releaseLoudnessEnhancer()
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             // Let system effect apps follow the new session (no-op if unchanged).
-            syncAudioEffectSession(audioSessionId)
+            displayController.syncAudioEffectSession(audioSessionId)
             // Reinitialize night mode effect when audio session changes
-            if (nightModeIndex > 0 && audioSessionId != 0) {
-                releaseLoudnessEnhancer()
-                initializeLoudnessEnhancer()
+            if (displayController.nightModeIndex > 0 && audioSessionId != 0) {
+                displayController.releaseLoudnessEnhancer()
+                displayController.initializeLoudnessEnhancer()
             }
         }
     }
@@ -2044,7 +2079,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         RecordingRegistry.addListener(iptvRecordingActionsController.recordingRegistryListener)
 
         // Load default player settings from Flutter's SharedPreferences
-        loadPlayerDefaults()
+        displayController.loadPlayerDefaults()
 
         // Parse payload from temp file (avoids Android's ~1MB Intent size limit)
         val payloadPath = intent.getStringExtra("payloadPath")
@@ -2146,7 +2181,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupLog("event=player_setup_complete")
         setupSeekbar()
         playlistController.setupPlaylist()
-        setupControls()
+        controlsDockController.setupControls()
         sourceSwitchController.setupStremioSources()
 
         // Check for Stremio TV guide data in payload
@@ -2796,7 +2831,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             mainPost = { action -> runOnUiThread(action) },
             positionMs = { player?.currentPosition ?: 0L },
         ).also { speechTap = it }
-        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex])
+        nativeAudioRouting.update(displayController.nightModeIndex > 0, displayController.systemAudioEffectsEnabled, displayController.playbackSpeeds[displayController.playbackSpeedIndex])
         val baseRenderersFactory = NativeAudioRenderersFactory(
             this, nativeAudioRouting, arrayOf(tap.processor),
         )
@@ -2954,7 +2989,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // playback was the only network consumer without one).
             .setWakeMode(C.WAKE_MODE_NETWORK)
 
-        when (displayMatchMode) {
+        when (displayController.displayMatchMode) {
             TvContentDisplayMatchMode.OFF -> playerBuilder.setVideoChangeFrameRateStrategy(
                 C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,
             )
@@ -3038,10 +3073,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         player = playerBuilder.build()
-        player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+        player?.setPlaybackSpeed(displayController.playbackSpeeds[displayController.playbackSpeedIndex])
 
         player?.addListener(playbackListener)
-        player?.addAnalyticsListener(decoderAnalyticsListener)
+        player?.addAnalyticsListener(displayController.decoderAnalyticsListener)
         player?.addAnalyticsListener(iptvDiagAnalyticsListener)
         playerView.player = player
 
@@ -3071,7 +3106,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleController.applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
-        applyResizeMode()
+        displayController.applyResizeMode()
         playerView.requestFocus()
 
         if (isIptvMode) {
@@ -3121,424 +3156,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return@setOnKeyListener true
             }
             false
-        }
-    }
-
-    /** Swaps the legacy Cinema controller layout for the selected dock skin.
-     *
-     * Media3 inflates `controller_layout_id` INTO its PlayerControlView with
-     * attachToRoot, so the legacy root is an ordinary child we can replace at
-     * the same index. Every dock layout shares every id the activity binds,
-     * and the activity (not Media3) drives `debrify_controls_root` visibility,
-     * so all downstream code works against whichever root is installed. Must
-     * run before ANY controller-id findViewById — setupControls calls it first.
-     */
-    private fun installOttControlsSkin() {
-        val spec = dockSkinSpec ?: return
-        val legacy = playerView.findViewById<View>(R.id.debrify_controls_root) ?: return
-        val parent = legacy.parent as? ViewGroup ?: return
-        val index = parent.indexOfChild(legacy)
-        val ott = try {
-            LayoutInflater.from(this).inflate(spec.layoutRes, parent, false)
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "Dock skin inflate failed; keeping classic", e)
-            return
-        }
-        parent.removeViewAt(index)
-        parent.addView(ott, index)
-        ottSkinInstalled = true
-
-        // The Flutter OTT scrim has FOUR stops; XML gradients cap at three, so
-        // that one skin's placeholder background is replaced with the exact
-        // ramp here. Every other skin's XML background is already final.
-        if (spec.applyShaderScrim) {
-            ott.findViewById<View>(R.id.ott_content)?.background = PaintDrawable().apply {
-                shape = RectShape()
-                shaderFactory = object : ShapeDrawable.ShaderFactory() {
-                    override fun resize(width: Int, height: Int): Shader = LinearGradient(
-                        0f, 0f, 0f, height.toFloat(),
-                        intArrayOf(0x00000000, 0x66000000, 0xD9000000.toInt(), 0xF2000000.toInt()),
-                        floatArrayOf(0f, 0.28f, 0.62f, 1f),
-                        Shader.TileMode.CLAMP,
-                    )
-                }
-            }
-        }
-
-        ottCaptionLabel = ott.findViewById(R.id.ott_caption_label)
-        ottIdentityTitle = ott.findViewById(R.id.ott_identity_title)
-        ottIdentitySubtitle = ott.findViewById(R.id.ott_identity_subtitle)
-        ottIdentityOverline = ott.findViewById(R.id.ott_identity_overline)
-        ottIdentityBadge = ott.findViewById(R.id.ott_identity_badge)
-        ottIdentityDivider = ott.findViewById(R.id.ott_identity_divider)
-        ottQualityChips[0] = ott.findViewById(R.id.ott_quality_1)
-        ottQualityChips[1] = ott.findViewById(R.id.ott_quality_2)
-        ottQualityChips[2] = ott.findViewById(R.id.ott_quality_3)
-        ottRatingChip = ott.findViewById(R.id.ott_rating_chip)
-        ottMetaLine = ott.findViewById(R.id.ott_meta_line)
-        ottScrubPreviewChip = ott.findViewById(R.id.ott_scrub_preview_chip)
-        ottScrubPreviewText = ott.findViewById(R.id.ott_scrub_preview_text)
-        ottProgressTrackContainer = ott.findViewById(R.id.cinema_progress_track_container)
-
-        // Idle bar height per spec; enter/exit cinema seek toggles it.
-        setOttTrackHeight(focused = false)
-
-        ott.findViewById<View>(R.id.ott_seek_back_button)?.setOnClickListener {
-            seekBy(-10_000L)
-            scheduleHideControlsMenu()
-        }
-        ott.findViewById<View>(R.id.ott_seek_forward_button)?.setOnClickListener {
-            seekBy(10_000L)
-            scheduleHideControlsMenu()
-        }
-
-        ottSourcesButton = ott.findViewById(R.id.ott_sources_button)
-        // Same behaviour as the top-right badge this button replaces.
-        ottSourcesButton?.setOnClickListener {
-            hideControlsMenu()
-            unifiedMenu?.hide()
-            sourceBrowser?.show()
-        }
-    }
-
-    private fun setOttTrackHeight(focused: Boolean) {
-        val track = ottProgressTrackContainer ?: return
-        val spec = dockSkinSpec ?: return
-        val heightPx = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            if (focused) spec.trackFocusDp else spec.trackIdleDp,
-            resources.displayMetrics,
-        ).toInt()
-        val params = track.layoutParams
-        if (params.height != heightPx) {
-            params.height = heightPx
-            track.layoutParams = params
-        }
-    }
-
-    /** The shared caption under the OTT transport row: the focused button's
-     *  (transparent) text. Cleared only by its owner so the fade-out of an
-     *  outgoing button never eats the incoming button's label. */
-    private fun updateOttCaption(view: View) {
-        val label = ottCaptionLabel ?: return
-        val text = (view as? TextView)?.text?.takeIf { it.isNotEmpty() }
-            ?: view.contentDescription
-            ?: return
-        ottCaptionOwner = view
-        label.text = text
-        label.animate().cancel()
-        label.animate().alpha(1f).setDuration(120).start()
-    }
-
-    private fun clearOttCaption(view: View) {
-        if (ottCaptionOwner !== view) return
-        ottCaptionOwner = null
-        ottCaptionLabel?.animate()?.cancel()
-        ottCaptionLabel?.animate()?.alpha(0f)?.setDuration(120)?.start()
-    }
-
-    /** Re-push the caption after a runtime label write (Play->Pause, "1.5x")
-     *  so a focused button's caption can't go stale. */
-    private fun refreshOttCaptionFor(view: View?) {
-        if (!ottSkinInstalled || view == null || !view.isFocused) return
-        updateOttCaption(view)
-    }
-
-    private fun setupControls() {
-        if (!isIptvMode && dockSkinSpec != null && !ottSkinInstalled) {
-            installOttControlsSkin()
-        }
-        controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
-        // Media3 owns the parent controller surface and can hide it on its own
-        // timeout before our dock timer runs (for example while a dock button
-        // retains focus). Reconcile that independent hide through the same
-        // path as Back so the subtitle lift and the rest of our chrome state
-        // cannot remain stranded on screen.
-        playerView.setControllerVisibilityListener(
-            PlayerView.ControllerVisibilityListener { visibility ->
-                if (visibility != View.VISIBLE && controlsMenuVisible) {
-                    hideControlsMenu()
-                    // This callback fires from inside Media3's hide-animation end
-                    // dispatch, where the restore animation kicked off by
-                    // hideControlsMenu never lands — the subtitle view stays
-                    // translated off-screen until the next lift call. Snap it
-                    // back directly; a no-op when the animated restore worked.
-                    subtitleControlsLift.restore(animate = false)
-                }
-            }
-        )
-        pauseButton = playerView.findViewById(R.id.debrify_pause_button)
-        nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button)
-        audioButton = playerView.findViewById(R.id.debrify_audio_button)
-        subtitleButton = playerView.findViewById(R.id.debrify_subtitle_button)
-        aspectButton = playerView.findViewById(R.id.debrify_aspect_button)
-        speedButton = playerView.findViewById(R.id.debrify_speed_button)
-        val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
-        val nextButton: AppCompatButton? = playerView.findViewById(R.id.debrify_next_button)
-        val prevButton: AppCompatButton? = playerView.findViewById(R.id.debrify_prev_button)
-        val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
-        iptvNextButton = nextButton
-        iptvPrevButton = prevButton
-        iptvGuideButton = playlistButton
-        iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
-        iptvStartOverButton = playerView.findViewById(R.id.iptv_start_over_button)
-        iptvStartOverSeekButton =
-            playerView.findViewById(R.id.iptv_start_over_seek_button)
-        iptvRecordButton = playerView.findViewById(R.id.iptv_record_button)
-        playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
-            if (originalControlDockOrder.isEmpty()) {
-                originalControlDockOrder =
-                    List(dock.childCount) { index -> dock.getChildAt(index) }
-            }
-        }
-
-        // Time display views (Cinema Mode)
-        debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)  // Legacy (hidden)
-        debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current)  // Current time
-        debrifyTimeTotal = playerView.findViewById(R.id.debrify_time_total)      // Total time
-        debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line)
-        cinemaProgressBuffered = playerView.findViewById(R.id.cinema_progress_buffered)
-
-        // Cinema Mode Interactive Progress Bar
-        cinemaProgressContainer = playerView.findViewById(R.id.cinema_progress_container)
-        cinemaProgressBackground = playerView.findViewById(R.id.cinema_progress_background)
-        cinemaProgressThumb = playerView.findViewById(R.id.cinema_progress_thumb)
-        cinemaSpeedIndicator = playerView.findViewById(R.id.cinema_speed_indicator)
-        setupCinemaProgressBar()
-
-        controlsOverlay?.visibility = View.GONE
-        controlsOverlay?.alpha = 0f
-
-        // Start updating time display
-        startSeekbarProgressUpdates()
-
-        // Apple TV-style focus animation with scale effect
-        val classicAppleTvAnimation = { view: View? ->
-            view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-                if (hasFocus) {
-                    // Scale up with premium smooth animation when focused
-                    v.animate()
-                        .scaleX(1.12f)
-                        .scaleY(1.12f)
-                        .translationZ(8f)
-                        .setDuration(200)
-                        .setInterpolator(android.view.animation.DecelerateInterpolator())
-                        .start()
-                    // Extend timer when focused
-                    if (controlsMenuVisible) {
-                        scheduleHideControlsMenu()
-                    }
-                } else {
-                    // Scale back to normal smoothly
-                    v.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .translationZ(2f)
-                        .setDuration(200)
-                        .setInterpolator(android.view.animation.AccelerateInterpolator())
-                        .start()
-                }
-            }
-        }
-
-        // Dock focus: the fills/rings/underlines/icon tints live in each
-        // skin's StateListDrawable + ColorStateList; code adds only the
-        // spec's scale/lift gesture (@ 120ms) and the shared caption.
-        val dockFocusSpec = dockSkinSpec
-        val dockFocusLiftPx = if (dockFocusSpec != null) {
-            TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                dockFocusSpec.focusLiftDp,
-                resources.displayMetrics,
-            )
-        } else 0f
-        val ottFocusTreatment = { view: View? ->
-            view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-                val scale = dockFocusSpec?.focusScale ?: 1.08f
-                if (hasFocus) {
-                    v.animate()
-                        .scaleX(scale)
-                        .scaleY(scale)
-                        .translationY(-dockFocusLiftPx)
-                        .setDuration(120)
-                        .setInterpolator(android.view.animation.DecelerateInterpolator())
-                        .start()
-                    updateOttCaption(v)
-                    if (controlsMenuVisible) {
-                        scheduleHideControlsMenu()
-                    }
-                } else {
-                    v.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .translationY(0f)
-                        .setDuration(120)
-                        .setInterpolator(android.view.animation.AccelerateInterpolator())
-                        .start()
-                    clearOttCaption(v)
-                }
-            }
-        }
-        val applyAppleTvAnimation =
-            if (ottSkinInstalled) ottFocusTreatment else classicAppleTvAnimation
-
-        // Apply Apple TV animations to all control buttons
-        applyAppleTvAnimation(pauseButton)
-        applyAppleTvAnimation(nightModeButton)
-        applyAppleTvAnimation(audioButton)
-        applyAppleTvAnimation(subtitleButton)
-        applyAppleTvAnimation(aspectButton)
-        applyAppleTvAnimation(speedButton)
-        applyAppleTvAnimation(playlistButton)
-        applyAppleTvAnimation(nextButton)
-        applyAppleTvAnimation(prevButton)
-        applyAppleTvAnimation(randomButton)
-        applyAppleTvAnimation(iptvJumpButton)
-        applyAppleTvAnimation(iptvStartOverButton)
-        applyAppleTvAnimation(iptvStartOverSeekButton)
-
-        val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
-            if (hasFocus && controlsMenuVisible) {
-                scheduleHideControlsMenu()
-            }
-        }
-
-        pauseButton?.setOnClickListener {
-            togglePlayPause()
-            if (player?.isPlaying == true) {
-                scheduleHideControlsMenu()
-            } else {
-                cancelScheduledHideControlsMenu()
-            }
-        }
-        pauseButton?.onFocusChangeListener = extendTimerOnFocus
-
-        nightModeButton?.setOnClickListener {
-            if (USE_UNIFIED_MENU && unifiedMenu != null) {
-                hideControlsMenu(); unifiedMenu?.show("audio", "night")
-            } else {
-                showNightModeDialog()
-            }
-        }
-        nightModeButton?.onFocusChangeListener = extendTimerOnFocus
-        updateNightModeButtonLabel()
-
-        iptvJumpButton?.setOnClickListener {
-            hideControlsMenu()
-            iptvGuideChromeController.overlay.showIptvChannelJumpDialog()
-        }
-        iptvJumpButton?.onFocusChangeListener = extendTimerOnFocus
-
-        iptvStartOverButton?.setOnClickListener {
-            hideControlsMenu()
-            iptvStartOverController.toggleIptvStartOver()
-        }
-        iptvStartOverButton?.onFocusChangeListener = extendTimerOnFocus
-
-        iptvStartOverSeekButton?.setOnClickListener {
-            iptvStartOverController.showIptvStartOverTimeline()
-        }
-        iptvStartOverSeekButton?.onFocusChangeListener = extendTimerOnFocus
-
-        audioButton?.setOnClickListener {
-            if (USE_UNIFIED_MENU && unifiedMenu != null) {
-                hideControlsMenu(); unifiedMenu?.show("audio")
-            } else {
-                showAudioTrackDialog()
-                scheduleHideControlsMenu()
-            }
-        }
-        audioButton?.onFocusChangeListener = extendTimerOnFocus
-
-        subtitleButton?.setOnClickListener {
-            hideControlsMenu()
-            if (USE_UNIFIED_MENU && unifiedMenu != null) {
-                unifiedMenu?.show("subs")
-            } else {
-                subtitleController.showSubtitleSettingsPanel()
-            }
-        }
-        subtitleButton?.onFocusChangeListener = extendTimerOnFocus
-
-        // Aspect is a 3-value cycle — apply it right from the controls bar
-        // (with its toast feedback) instead of routing through the menu.
-        aspectButton?.setOnClickListener {
-            cycleAspectRatio()
-            scheduleHideControlsMenu()
-        }
-        aspectButton?.onFocusChangeListener = extendTimerOnFocus
-        updateAspectButtonLabel()
-
-        speedButton?.setOnClickListener {
-            if (USE_UNIFIED_MENU && unifiedMenu != null) {
-                hideControlsMenu(); unifiedMenu?.show("playback", "speed")
-            } else {
-                cyclePlaybackSpeed()
-                scheduleHideControlsMenu()
-            }
-        }
-        speedButton?.onFocusChangeListener = extendTimerOnFocus
-
-        playlistButton?.setOnClickListener {
-            hideControlsMenu()
-            playlistController.showPlaylist()
-        }
-        playlistButton?.onFocusChangeListener = extendTimerOnFocus
-
-        nextButton?.setOnClickListener {
-            hideControlsMenu()
-            // In an IPTV episode list, walk the season; otherwise the playlist.
-            val iptvNext = iptvGuideController.navigator.nextIptvEpisode()
-            if (iptvNext != null) iptvGuideController.navigator.switchToIptvChannel(iptvNext) else playNext()
-        }
-        nextButton?.onFocusChangeListener = extendTimerOnFocus
-
-        // Previous episode: IPTV walks its episode list; catalog series use the
-        // current playlist first, then fetch across its boundary from the full
-        // guide without leaving the native player.
-        prevButton?.setOnClickListener {
-            hideControlsMenu()
-            if (isIptvMode) {
-                iptvGuideController.navigator.prevIptvEpisode()?.let { iptvGuideController.navigator.switchToIptvChannel(it) }
-            } else {
-                playPrevious()
-            }
-        }
-        prevButton?.onFocusChangeListener = extendTimerOnFocus
-        updateCatalogEpisodeControls()
-
-        randomButton?.setOnClickListener {
-            hideControlsMenu()
-            if (USE_UNIFIED_MENU && unifiedMenu != null) {
-                unifiedMenu?.show("playback", "shuffle")
-            } else {
-                showRandomPlaybackDialog()
-            }
-        }
-        randomButton?.onFocusChangeListener = extendTimerOnFocus
-
-        if (ottSkinInstalled) {
-            // Every assignment above just overwrote the focus animation with
-            // extendTimerOnFocus (a view holds ONE focus listener; last set
-            // wins — which is also why the classic scale never fires today).
-            // The OTT treatment includes the timer-extend behaviour, so
-            // re-applying it LAST gives the dock its scale + caption.
-            applyAppleTvAnimation(pauseButton)
-            applyAppleTvAnimation(nightModeButton)
-            applyAppleTvAnimation(audioButton)
-            applyAppleTvAnimation(subtitleButton)
-            applyAppleTvAnimation(aspectButton)
-            applyAppleTvAnimation(speedButton)
-            applyAppleTvAnimation(playlistButton)
-            applyAppleTvAnimation(nextButton)
-            applyAppleTvAnimation(prevButton)
-            applyAppleTvAnimation(randomButton)
-            applyAppleTvAnimation(iptvJumpButton)
-            applyAppleTvAnimation(iptvStartOverButton)
-            applyAppleTvAnimation(iptvRecordButton)
-            applyAppleTvAnimation(ottSourcesButton)
-            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_back_button))
-            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_forward_button))
         }
     }
 
@@ -3980,7 +3597,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         (hasAdjacentEpisodeResolver &&
                             ((currentItem?.season ?: 0) > 1 ||
                                 (currentItem?.episode ?: 0) > 1)))))
-        iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
+        controlsDockController.iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
     }
 
     private fun playRandom() {
@@ -5262,17 +4879,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             spec?.playIconRes ?: R.drawable.ic_play
         }
         button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
-        refreshOttCaptionFor(button)
-    }
-
-    private fun updateAspectButtonLabel() {
-        aspectButton?.text = resizeModeLabels[resizeModeIndex]
-        refreshOttCaptionFor(aspectButton)
-    }
-
-    private fun updateNightModeButtonLabel() {
-        nightModeButton?.text = nightModeLabels[nightModeIndex]
-        refreshOttCaptionFor(nightModeButton)
+        controlsDockController.refreshOttCaptionFor(button)
     }
 
     // Premium Seekbar Progress Updates
@@ -5477,7 +5084,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // OTT keeps the dock's own palette (white70 times) and swells the
             // bar 3->6dp instead of recoloring; the preview chip appears with
             // the first step via updateCinemaProgressUI.
-            setOttTrackHeight(focused = true)
+            controlsDockController.setOttTrackHeight(focused = true)
         } else {
             // Highlight current time with Netflix red
             debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
@@ -5516,7 +5123,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         if (ottSkinInstalled) {
-            setOttTrackHeight(focused = false)
+            controlsDockController.setOttTrackHeight(focused = false)
             ottScrubPreviewChip?.visibility = View.GONE
         } else {
             // Fade current time color back to white
@@ -5862,8 +5469,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         bindViews()
         setupPlayer()
         setupSeekbar()
-        setupControls()
-        setupIptvControls()
+        controlsDockController.setupControls()
+        controlsDockController.styler.setupIptvControls()
 
         // A remembered per-series audio language overrides setupPlayer's global
         // default. It's a TrackSelector parameter, so it re-applies to every
@@ -5926,141 +5533,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvGuideController.pager.bootstrapInitialIptvZapPaging(initial)
         }
     }
-
-    private fun setupIptvControls() {
-        playerView.findViewById<View>(R.id.debrify_random_button)?.visibility = View.GONE
-        val entry = iptvChannels.getOrNull(currentIptvIndex)
-        if (entry?.isLive == false) {
-            // IPTV VOD uses the same cinema/Netflix-style dock installed by
-            // setupControls(). Do not replace its panel/button backgrounds or
-            // handlers with the live-TV presentation.
-            iptvGuideButton?.visibility = View.GONE
-            iptvPrevButton?.visibility = View.GONE
-            iptvNextButton?.visibility = View.GONE
-            updateIptvControlPresentation(entry)
-            return
-        }
-
-        applyLiveIptvControlStyle()
-
-        iptvRecordButton?.setOnClickListener {
-            hideControlsMenu()
-            iptvRecordingActionsController.toggleIptvRecording()
-        }
-
-        iptvPrevButton?.apply {
-            text = "CH -"
-            setOnClickListener {
-                hideControlsMenu()
-                iptvGuideController.navigator.zapIptvChannel(-1)
-            }
-        }
-        iptvNextButton?.apply {
-            text = "CH +"
-            setOnClickListener {
-                hideControlsMenu()
-                iptvGuideController.navigator.zapIptvChannel(1)
-            }
-        }
-        updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
-    }
-
-    /** The live dock buttons that restyle for live IPTV — the same set the
-     *  original setup loop touched, so classic stays verbatim. */
-    private fun liveIptvDockButtons(): List<AppCompatButton> = listOfNotNull(
-        audioButton,
-        subtitleButton,
-        aspectButton,
-        pauseButton,
-        speedButton,
-        nightModeButton,
-        iptvPrevButton,
-        iptvNextButton,
-        iptvJumpButton,
-        iptvStartOverButton,
-        iptvStartOverSeekButton,
-        iptvRecordButton,
-        playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
-    )
-
-    /** Cinema compound-drawable tints + typefaces captured before the first
-     *  styled live swap, so a styled live→VOD transition can put them back —
-     *  [restoreCinemaIptvControlStyle] only restores backgrounds/text. */
-    private val cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()
-    private val cinemaButtonTypefaces = HashMap<View, Typeface?>()
-
-    /**
-     * The live-IPTV dock skin. Extracted from `setupIptvControls` so the
-     * VOD→live transition can re-apply it (`restoreCinemaIptvControlStyle`
-     * overwrites every drawable on the way to VOD, and the return trip only
-     * reordered children). Classic keeps its original swap verbatim AND its
-     * original call graph — only styled launches call this from
-     * `updateIptvControlPresentation`.
-     */
-    private fun applyLiveIptvControlStyle() {
-        val t = guideTokens
-        if (t == null) {
-            playerView.findViewById<View>(R.id.debrify_controls_buttons)
-                ?.setBackgroundResource(R.drawable.iptv_premium_panel_bg)
-
-            val buttons = liveIptvDockButtons()
-            buttons.forEach {
-                it.setBackgroundResource(R.drawable.iptv_premium_button_bg)
-                it.setTextColor(
-                    ContextCompat.getColorStateList(this, R.color.iptv_premium_button_text)
-                )
-            }
-            return
-        }
-
-        val radius = when (guideStyle) {
-            GuideStyle.GLASS -> dp(22).toFloat()
-            GuideStyle.EDITION -> dp(8).toFloat()
-            else -> dp(4).toFloat()
-        }
-        playerView.findViewById<View>(R.id.debrify_controls_buttons)?.background =
-            t.panelDrawable(radius, dp(1))
-        val buttonRadius = when (guideStyle) {
-            GuideStyle.GLASS -> dp(16).toFloat()
-            GuideStyle.EDITION -> dp(6).toFloat()
-            else -> dp(3).toFloat()
-        }
-        liveIptvDockButtons().forEach { button ->
-            if (!cinemaIconTints.containsKey(button)) {
-                // TextViewCompat throughout: the direct getter/setter is
-                // API 23 and this app ships to minSdk 21.
-                cinemaIconTints[button] =
-                    TextViewCompat.getCompoundDrawableTintList(button)
-                cinemaButtonTypefaces[button] = button.typeface
-            }
-            button.background = t.buttonBackground(buttonRadius)
-            val colors = t.buttonTextColors()
-            button.setTextColor(colors)
-            TextViewCompat.setCompoundDrawableTintList(button, colors)
-            if (guideStyle == GuideStyle.CONSOLE) {
-                button.typeface = guideTypeface(t.monoFont) ?: button.typeface
-            }
-        }
-    }
-
-    /** Styled-only tail after [restoreCinemaIptvControlStyle]: put back the
-     *  cinema icon tints AND typefaces the styled live skin replaced.
-     *  Classic never runs this (its restore function is untouched and
-     *  sufficient). */
-    private fun restoreCinemaDockIconTints() {
-        if (cinemaIconTints.isEmpty()) return
-        liveIptvDockButtons().forEach { button ->
-            if (cinemaIconTints.containsKey(button)) {
-                TextViewCompat.setCompoundDrawableTintList(
-                    button,
-                    cinemaIconTints[button],
-                )
-            }
-            if (cinemaButtonTypefaces.containsKey(button)) {
-                button.typeface = cinemaButtonTypefaces[button]
-            }
-        }
-    }
     private val iptvRecordingActionsController = TvIptvRecordingActionsController(
         this,
         object : TvIptvRecordingActionsController.Host {
@@ -6072,145 +5544,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val iptvSourceId: String? get() = this@AndroidTvTorrentPlayerActivity.iptvSourceId
             override val currentIptvHttpHeaders: Map<String, String> get() = this@AndroidTvTorrentPlayerActivity.currentIptvHttpHeaders
             override val iptvRecordingController: IptvRecordingController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingController
-            override val iptvRecordButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.iptvRecordButton
+            override val iptvRecordButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.iptvRecordButton
             override val legacyStoragePermissionRequestCode: Int get() = this@AndroidTvTorrentPlayerActivity.legacyStoragePermissionRequestCode
         },
     )
-
-    private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
-        val live = entry?.isLive != false
-        val vodVisibility = if (live) View.GONE else View.VISIBLE
-        val archiveTimelineVisibility = if (
-            !live || (iptvStartOverActive && iptvStartOverTimelineVisible)
-        ) View.VISIBLE else View.GONE
-        if (live) {
-            arrangeLiveIptvControlDock()
-            // Styled only: a VOD trip restored every cinema drawable, and
-            // reordering alone doesn't bring the live skin back. Classic
-            // keeps its original call graph (and its original quirk).
-            if (guideTokens != null) applyLiveIptvControlStyle()
-        } else {
-            restoreCinemaIptvControlStyle()
-            if (guideTokens != null) restoreCinemaDockIconTints()
-        }
-        cinemaProgressContainer?.visibility = archiveTimelineVisibility
-        debrifyTimeCurrent?.visibility = archiveTimelineVisibility
-        debrifyTimeTotal?.visibility = archiveTimelineVisibility
-        speedButton?.visibility = vodVisibility
-        nightModeButton?.visibility = View.VISIBLE
-        iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
-        iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
-        iptvStartOverController.updateIptvStartOverButton(entry)
-        iptvStartOverController.updateIptvStartOverSeekButton()
-        // Visibility follows the ACTIVE recorder: the engine records pre-Q
-        // once storage is granted (and shows the button so it CAN be
-        // granted); the tee remains Q+-only.
-        val recorderAvailable = if (iptvRecordingActionsController.recordingEngineEnabled) {
-            LiveRecordingService.isSupported(this) ||
-                LiveRecordingService.needsLegacyPermission(this)
-        } else {
-            IptvRecordingController.isSupported
-        }
-        iptvRecordButton?.visibility =
-            if (live && recorderAvailable) View.VISIBLE else View.GONE
-        iptvRecordingActionsController.updateRecordButtonState()
-        if (!live && iptvGuideController.iptvGuideVisible) iptvGuideController.hideIptvGuide()
-        if (live) {
-            cinemaSeekMode = false
-            cinemaSeekWasPlaying = false
-            cinemaProgressThumb?.visibility = View.INVISIBLE
-            cinemaSpeedIndicator?.visibility = View.GONE
-            if (currentFocus == cinemaProgressContainer) {
-                pauseButton?.requestFocus()
-            }
-        }
-    }
-
-    /** Live IPTV uses a balanced dock:
-     *  Audio · Subs · Aspect | CH- · Play/Pause · Start Over · Seek · CH+ |
-     *  Guide · Jump · Record · Night.
-     *  Record is present only for progressive streams (disabled for HLS). The
-     *  XML order remains the standard cinema/VOD order; only the live
-     *  presentation is rearranged, so movies and episodes keep their old UX. */
-    private fun arrangeLiveIptvControlDock() {
-        val dock =
-            playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)
-                ?: return
-        val desired = listOfNotNull(
-            audioButton,
-            subtitleButton,
-            aspectButton,
-            playerView.findViewById<View>(R.id.debrify_controls_left_divider),
-            iptvPrevButton,
-            pauseButton,
-            iptvStartOverButton,
-            iptvStartOverSeekButton,
-            iptvNextButton,
-            playerView.findViewById<View>(R.id.debrify_controls_right_divider),
-            iptvGuideButton,
-            iptvJumpButton,
-            iptvRecordButton,
-            nightModeButton,
-        )
-        replaceControlDockOrder(dock, desired)
-    }
-
-    private fun restoreOriginalControlDockOrder() {
-        val dock =
-            playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)
-                ?: return
-        if (originalControlDockOrder.isNotEmpty()) {
-            replaceControlDockOrder(dock, originalControlDockOrder)
-        }
-    }
-
-    private fun replaceControlDockOrder(dock: LinearLayout, leading: List<View>) {
-        // Keep hidden/format-specific controls attached after the requested
-        // order. GONE children consume no space, but retaining them lets the
-        // same dock switch back to VOD without reinflating the controller.
-        val order = leading + originalControlDockOrder.filterNot { it in leading }
-        val alreadyApplied =
-            dock.childCount == order.size &&
-                order.indices.all { index -> dock.getChildAt(index) === order[index] }
-        if (alreadyApplied) return
-        dock.removeAllViews()
-        order.forEach { dock.addView(it) }
-    }
-
-    private fun restoreCinemaIptvControlStyle() {
-        restoreOriginalControlDockOrder()
-        playerView.findViewById<View>(R.id.debrify_controls_buttons)
-            ?.setBackgroundResource(R.drawable.cinema_dock_bg)
-        val standardButtons = listOfNotNull(
-            audioButton,
-            subtitleButton,
-            aspectButton,
-            speedButton,
-            nightModeButton,
-            iptvPrevButton,
-            iptvNextButton,
-            iptvGuideButton,
-            iptvJumpButton,
-            iptvStartOverButton,
-            iptvStartOverSeekButton,
-            iptvRecordButton,
-        )
-        standardButtons.forEach {
-            it.setBackgroundResource(R.drawable.cinema_button_bg)
-            it.setTextColor(
-                ContextCompat.getColorStateList(this, R.color.cinema_control_button_text)
-            )
-        }
-        pauseButton?.apply {
-            setBackgroundResource(R.drawable.cinema_play_button_bg)
-            setTextColor(
-                ContextCompat.getColorStateList(
-                    this@AndroidTvTorrentPlayerActivity,
-                    R.color.cinema_play_button_text,
-                ),
-            )
-        }
-    }
     private val iptvZapBannerController: TvIptvZapBannerController = TvIptvZapBannerController(
         this,
         object : TvIptvZapBannerController.Host {
@@ -6263,24 +5600,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ),
         )
     }
-
-    /** Everything that differs between dock skins WITHOUT deserving its own
-     *  code branch: which layout inflates, bar geometry, the focus gesture,
-     *  which icon family play/pause swaps within. Behavior that can't be a
-     *  number (identity arrangement, the PULSE spannable) branches on
-     *  [controlsSkin] directly. */
-    private data class DockSkinSpec(
-        val layoutRes: Int,
-        val trackIdleDp: Float,
-        val trackFocusDp: Float,
-        val focusScale: Float,
-        val focusLiftDp: Float,
-        // Only the OTT scrim needs 4 stops (its Flutter source of truth);
-        // every other skin's XML background is final as inflated.
-        val applyShaderScrim: Boolean,
-        val playIconRes: Int,
-        val pauseIconRes: Int,
-    )
 
     /** null exactly when [controlsSkin] is CLASSIC — the "is a dock skin
      *  selected" test, evaluated before the IPTV launch gate. */
@@ -6547,45 +5866,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return true
     }
 
-    // Track selection
-    // ═══════════════════════════════════════════════════════════════════════════
-    // UNIFIED MENU · backing (reuses existing apply logic; nothing is duplicated
-    // that would drift from the individual dialogs).
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /** Same list [showAudioTrackDialog] builds: "Off" + one entry per audio track. */
-    private fun umAudioTracks(): List<Pair<String, TrackSelectionOverride?>> {
-        val out = mutableListOf<Pair<String, TrackSelectionOverride?>>()
-        out.add("Off" to null)
-        val tracks = player?.currentTracks ?: return out
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_AUDIO) {
-                for (i in 0 until group.length) {
-                    out.add(
-                        buildAudioTrackLabel(group.getTrackFormat(i)) to
-                            TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
-                    )
-                }
-            }
-        }
-        return out
-    }
-
-    /** Index into [umAudioTracks] of the currently selected track (0 = Off). */
-    private fun umAudioSelectedIndex(): Int {
-        val tracks = player?.currentTracks ?: return 0
-        var pos = 1
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_AUDIO) {
-                for (i in 0 until group.length) {
-                    if (group.isTrackSelected(i)) return pos
-                    pos++
-                }
-            }
-        }
-        return 0
-    }
-
     // Passed to the controller so named shortcuts match the visible rows.
     private val unifiedSectionIds = listOf("audio", "subs", "display", "playback")
 
@@ -6607,10 +5887,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun buildModel(sectionIndex: Int, col2Index: Int): UnifiedMenuController.Model {
             val col1 = umSectionRows()
             return when (unifiedSectionIds.getOrNull(sectionIndex)) {
-                "audio" -> umAudioModel(col1, col2Index)
+                "audio" -> displayController.umAudioModel(col1, col2Index)
                 "subs" -> subtitleSourcesController.umSubsModel(col1, col2Index)
                 "sources" -> umSourcesModel(col1, col2Index)
-                "display" -> umDisplayModel(col1, col2Index)
+                "display" -> displayController.umDisplayModel(col1, col2Index)
                 "playback" -> umPlaybackModel(col1, col2Index)
                 else -> UnifiedMenuController.Model(col1, "", emptyList(), "", emptyList())
             }
@@ -6667,40 +5947,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onHidden() { /* clean frame; BACK returns to the video */ }
-    }
-
-    // ── Audio ─────────────────────────────────────────────────────────────────
-    private fun umAudioModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
-        val col2 = listOf(
-            mrow("Audio track", tag = "audio"),
-            mrow("Night mode", value = nightModeLabels.getOrNull(nightModeIndex), tag = "night")
-        )
-        val tag = col2.getOrNull(col2Index)?.tag
-        val (title, col3) = if (tag == "night") {
-            "Night mode · loudness" to nightModeLabels.mapIndexed { i, l ->
-                mrow(l, selected = i == nightModeIndex, onOk = { applyNightMode(i) })
-            }
-        } else if (umAudioTracks().size <= 1) {   // only the synthetic "Off" entry → no real tracks
-            "Audio tracks" to listOf(mrow("No audio tracks available", enabled = false))
-        } else {
-            val sel = umAudioSelectedIndex()
-            "Audio tracks" to umAudioTracks().mapIndexed { i, pair ->
-                mrow(pair.first, selected = i == sel, onOk = {
-                    val ts = trackSelector
-                    if (ts != null) {
-                        val override = umAudioTracks().getOrNull(i)?.second
-                        val p = ts.parameters.buildUpon()
-                        if (override != null) {
-                            p.setOverrideForType(override); p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                        } else p.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-                        ts.parameters = p.build()
-                        // Series: remember this language for later episodes + sessions.
-                        iptvGuideController.navigator.onIptvSeriesAudioPicked(languageOfOverride(override))
-                    }
-                })
-            }
-        }
-        return UnifiedMenuController.Model(col1, "AUDIO", col2, title, col3)
     }
 
     // ── Sources ─────────────────────────────────────────────────────────────
@@ -6781,25 +6027,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return UnifiedMenuController.Model(col1, "SOURCES", col2, "Switch source", col3)
     }
 
-    // ── Display ───────────────────────────────────────────────────────────────
-    private fun umDisplayModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
-        val col2 = listOf(
-            mrow("Aspect ratio", value = resizeModeLabels.getOrNull(resizeModeIndex), tag = "aspect")
-        )
-        val col3 = resizeModeLabels.mapIndexed { i, l ->
-            mrow(l, selected = i == resizeModeIndex, onOk = {
-                resizeModeIndex = i.coerceIn(0, resizeModes.lastIndex)
-                applyResizeMode()
-                updateAspectButtonLabel()
-            })
-        }
-        return UnifiedMenuController.Model(col1, "DISPLAY", col2, "Aspect ratio", col3)
-    }
-
     // ── Playback ────────────────────────────────────────────────────────────
     private fun umPlaybackModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
         val col2 = listOf(
-            mrow("Playback speed", value = playbackSpeedLabels.getOrNull(playbackSpeedIndex), tag = "speed"),
+            mrow("Playback speed", value = displayController.playbackSpeedLabels.getOrNull(displayController.playbackSpeedIndex), tag = "speed"),
             mrow("Sleep timer", value = sleepTimerController.sleepTimerValueLabel(), tag = "sleep"),
             mrow("Shuffle & autoplay", tag = "shuffle")
         )
@@ -6844,233 +6075,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     })
             )
         } else {
-            "Playback speed" to playbackSpeedLabels.mapIndexed { i, l ->
-                mrow(l, selected = i == playbackSpeedIndex, onOk = {
-                    applyPlaybackSpeed(i)
+            "Playback speed" to displayController.playbackSpeedLabels.mapIndexed { i, l ->
+                mrow(l, selected = i == displayController.playbackSpeedIndex, onOk = {
+                    displayController.applyPlaybackSpeed(i)
                 })
             }
         }
         return UnifiedMenuController.Model(col1, "PLAYBACK", col2, title, col3)
-    }
-
-    private fun showAudioTrackDialog() {
-        val ts = trackSelector ?: return
-        val tracks = player?.currentTracks ?: return
-
-        val audioTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
-        audioTracks.add(Pair("Off", null))
-
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_AUDIO) {
-                for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    val label = buildAudioTrackLabel(format)
-                    val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
-                    audioTracks.add(Pair(label, override))
-                }
-            }
-        }
-
-        if (audioTracks.size <= 1) {
-            Toast.makeText(this, "No audio tracks available", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val labels = audioTracks.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Select Audio Track")
-            .setItems(labels) { _, which ->
-                val override = audioTracks[which].second
-                val params = ts.parameters.buildUpon()
-                if (override != null) {
-                    params.setOverrideForType(override)
-                    params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                } else {
-                    params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-                }
-                ts.parameters = params.build()
-                // Series: remember this language for later episodes + sessions.
-                iptvGuideController.navigator.onIptvSeriesAudioPicked(languageOfOverride(override))
-            }
-            .show()
-    }
-
-    // Aspect ratio
-    private fun cycleAspectRatio() {
-        resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-        applyResizeMode()
-        updateAspectButtonLabel()
-        Toast.makeText(this, "Aspect: ${resizeModeLabels[resizeModeIndex]}", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun applyResizeMode() {
-        playerView.resizeMode = resizeModes[resizeModeIndex]
-        val content = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
-            ?: playerView.videoSurfaceView
-        val scale = if (resizeModeIndex == 3) 4f / 3f else 1f
-        content?.scaleX = scale
-        content?.scaleY = scale
-    }
-
-    // Playback speed
-    private fun cyclePlaybackSpeed() {
-        applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.size)
-        Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun applyPlaybackSpeed(index: Int) {
-        playbackSpeedIndex = index.coerceIn(0, playbackSpeeds.lastIndex)
-        val speed = playbackSpeeds[playbackSpeedIndex]
-        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
-        if (routeChanged) {
-            releaseLoudnessEnhancer()
-        }
-        nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged)
-        // Dock skins carry the speed on the button itself — visibly on
-        // BROADCAST's labeled pill, and as the shared focus caption on the
-        // rest (which would otherwise go stale). Classic keeps its Toast-only
-        // presentation untouched.
-        if (ottSkinInstalled) {
-            speedButton?.text = playbackSpeedLabels[playbackSpeedIndex]
-            refreshOttCaptionFor(speedButton)
-        }
-    }
-
-    /**
-     * Announce ExoPlayer's current audio session to system audio-effect apps
-     * (Wavelet, OEM equalizers) so they can attach, the same way they do for
-     * other video apps. Idempotent — AudioEffectSession ignores a re-announce
-     * of the session already open and closes the previous one otherwise.
-     */
-    private fun syncAudioEffectSession(sessionId: Int? = null) {
-        if (!systemAudioEffectsEnabled) return
-        // Prefer the id the callback handed us over re-reading the player,
-        // which may not have published the new one yet.
-        val audioSessionId = sessionId ?: player?.audioSessionId ?: return
-        if (audioSessionId == 0) return  // Renderer not live yet
-        com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId)
-    }
-
-    // Night mode (dynamic range compression)
-    private fun initializeLoudnessEnhancer() {
-        try {
-            val audioSessionId = player?.audioSessionId ?: return
-            if (audioSessionId == 0) return  // Invalid session
-
-            releaseLoudnessEnhancer()  // Clean up any existing instance
-
-            loudnessEnhancer = LoudnessEnhancer(audioSessionId)
-            loudnessEnhancer?.enabled = nightModeIndex > 0
-            if (nightModeIndex > 0) {
-                loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex])
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "Failed to initialize LoudnessEnhancer", e)
-            loudnessEnhancer = null
-        }
-    }
-
-    private fun releaseLoudnessEnhancer() {
-        try {
-            loudnessEnhancer?.release()
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "Error releasing LoudnessEnhancer", e)
-        }
-        loudnessEnhancer = null
-    }
-
-    /**
-     * Load default player settings from Flutter's SharedPreferences.
-     * Keys are prefixed with "flutter." as per flutter shared_preferences package.
-     */
-    private fun loadPlayerDefaults() {
-        try {
-            // Load aspect index for TV (separate from mobile)
-            // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
-            resizeModeIndex = playerPreferences
-                .getLong("player_default_aspect_index_tv", 0L).toInt()
-                .coerceIn(0, resizeModes.lastIndex)
-
-            // Load night mode index (default: 0 = Off)
-            nightModeIndex = playerPreferences
-                .getLong("player_night_mode_index", 0L).toInt()
-                .coerceIn(0, nightModeGains.lastIndex)
-
-            // Announce our audio session to system effect apps (default: off)
-            systemAudioEffectsEnabled = playerPreferences
-                .getBoolean("player_system_audio_effects", false)
-
-            displayMatchMode = TvContentDisplayMatchMode.fromStorage(
-                playerPreferences.getString(
-                    "content_display_match_mode",
-                    TvContentDisplayMatchMode.SYSTEM.storageKey,
-                ),
-            )
-            displayModeController?.clear()
-            displayModeController = TvDisplayModeController(this, displayMatchMode)
-
-            // Manual community intro/outro buttons. These are the same keys the
-            // Flutter Playback settings page writes; enabled never means auto-seek.
-            skipSegmentsEnabled = playerPreferences
-                .getBoolean("skip_segments_enabled", true)
-            val storedSkipSegmentProvider = playerPreferences.getString(
-                "skip_segment_provider",
-                TvSkipSegmentClients.AUTO,
-            ) ?: TvSkipSegmentClients.AUTO
-            skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
-                storedSkipSegmentProvider
-            } else {
-                TvSkipSegmentClients.AUTO
-            }
-
-            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, displayMatch=${displayMatchMode.storageKey}, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
-            android.util.Log.d("AndroidTvPlayer", "Player settings handoff: style=$controlsSkin subtitles=${playerPreferences.getString("player_default_subtitle_language", "auto")} nightMode=$nightModeIndex")
-        } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
-            // Keep default values
-        }
-    }
-
-    private fun showNightModeDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Night Mode")
-            .setSingleChoiceItems(nightModeLabels, nightModeIndex) { dialog, which ->
-                applyNightMode(which)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun applyNightMode(index: Int) {
-        nightModeIndex = index
-
-        val speed = playbackSpeeds[playbackSpeedIndex]
-        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
-        if (routeChanged) {
-            // A recreated AudioTrack may retain its session ID; READY must
-            // attach a fresh effect even without onAudioSessionIdChanged.
-            releaseLoudnessEnhancer()
-        }
-        val restartingAudio = routeChanged && nativeAudioRouting.reprepare(player, speed)
-
-        if (nightModeIndex == 0) {
-            // Turn off
-            loudnessEnhancer?.enabled = false
-        } else if (!restartingAudio) {
-            // Turn on or adjust
-            if (loudnessEnhancer == null) {
-                initializeLoudnessEnhancer()
-            }
-            // Check if initialization succeeded before using
-            loudnessEnhancer?.let {
-                it.enabled = true
-                it.setTargetGain(nightModeGains[nightModeIndex])
-            }
-        }
-
-        updateNightModeButtonLabel()
-        Toast.makeText(this, "Night Mode: ${nightModeLabels[nightModeIndex]}", Toast.LENGTH_SHORT).show()
     }
 
     // Progress reporting
@@ -7227,7 +6238,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 get() = this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration
                 set(value) { this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration = value }
             override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
-            override val ottSourcesButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.ottSourcesButton
+            override val ottSourcesButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.ottSourcesButton
             override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
             override var percentSeekApplied: Boolean
                 get() = this@AndroidTvTorrentPlayerActivity.percentSeekApplied
@@ -7628,8 +6639,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         iptvStartOverController.cancelPendingIptvCatchupRequest()
-        displayModeController?.clear()
-        displayModeController = null
+        displayController.displayModeController?.clear()
+        displayController.displayModeController = null
         mediaPreparationScope.cancel()
         mediaPreparationGeneration++
         sourceBrowser?.destroy()
@@ -7737,7 +6748,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seekbarHandler.removeCallbacksAndMessages(null)
 
         // Release night mode audio effect
-        releaseLoudnessEnhancer()
+        displayController.releaseLoudnessEnhancer()
 
         // Tell system effect apps to detach — an unmatched OPEN leaves them
         // processing dead audio and degrades other apps' equalizers.
@@ -7880,7 +6891,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioTvGuideController.updateStremioTvGuideHeader()
         sourceSwitchController.updateStremioQualityBadge()
         if (ottSkinInstalled) {
-            ottSourcesButton?.visibility =
+            controlsDockController.ottSourcesButton?.visibility =
                 if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
         } else if (stremioSources.isNotEmpty()) {
             stremioSourceBadge?.visibility = View.VISIBLE
@@ -7961,18 +6972,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     companion object {
         const val PAYLOAD_KEY = "payload"
-        private const val DECODER_LOG_TAG = "DEBRIFY_PLAYER_DECODER"
         // Resume hold (see resumeHoldTargetMs): landing tolerance (seeks
         // resolve to keyframes) and how long an unlanded target keeps
         // substituting before real playback wins.
         private const val RESUME_HOLD_TOLERANCE_MS = 10_000L
         private const val RESUME_HOLD_SETTLE_MS = 30_000L
-        /**
-         * When true, the dock buttons (Audio, Subs, Fill, Speed, Night, Shuffle) open the
-         * unified Miller-columns menu instead of the individual dialogs/panels. Additive —
-         * flip to false to restore the exact prior behaviour.
-         */
-        private const val USE_UNIFIED_MENU = true
         private const val PROGRESS_INTERVAL_MS = 5_000L
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 4000L
         private const val SEEK_STEP_MS = 10_000L

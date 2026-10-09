@@ -16281,3 +16281,23 @@ s01 is observable through real TextView writes: the extra label update occurs be
 Both non-equivalent variants fail named assertions, without compile errors or crash credit. The exact s01 survivor is killed; s02 is recorded equivalent, not credited as killed. Original control: 337/337 pass. Raw evidence p15/step0/control-step0b[-all]/ and p15/step0b/mutations/, s02-full/, survivor-classification.json. The detached original worktree is removed after proof completion.
 
 Clean p15-step0b: 1,943 identities, 1,942 passing and the same known SourceBrowser focus failure. Comparison to p15-step0 permits exactly two passing additions; every prior identity/status is equal, no missing/new skips, complete non-aborted XML and stable inputs, same JBR and evidence-only 1 GiB worker heap. Evidence junit/p15-step0b/ and p15/step0b/jvm-strict-comparison.json. No production moves yet.
+
+
+### Phase 15 Step 1 — production extraction and reflection retargets
+
+Materialized the approved manifest exactly: TvControlsDockController (554 physical lines) eagerly constructs TvLiveDockStyler (294) through the injected controlsDock reference; sibling TvPlaybackDisplayController is 438. DockSkinSpec is top-level in the dock file. Activity 7,982 → 6,986, with dock runtime, shared views, session-fixed skin lazies, native routing/player/preferences/selector retained. Two controller properties stay at their original slots. Five whole-property Host re-points and the three onDestroy statement patches stay in place; no stop/pause/finish order change. The activity size baseline was lowered with --update; no exception was added.
+
+The checker classifies all 1,730 original declarations with zero differences, including all patched/retained bodies and ordered partitions; all 51 earlier destinations are byte-identical to ce3ddfb06. Thirty-one initializer proofs, eager child construction and all lifecycle bodies match after only declared substitutions. Compiled production audit passes 17 receiver/getter sites, all 23 shared-view binds with exactly 12 CHECKCAST / 11 no-cast pins (including three typed TextView[] stores), and resize constant inlining. Five complete Kotlin warning identities are unchanged.
+
+Reflection rescan routes 54 moved names through TvPlayerControllerOwners, preserving all method argument selectors, default dispatch and assertions. These original Activity anchors now resolve through the following owner paths:
+
+| Original reflected names | New owner path in Activity |
+| --- | --- |
+| iptvPrevButton, iptvNextButton, iptvGuideButton, iptvJumpButton, iptvStartOverButton, iptvStartOverSeekButton, iptvRecordButton, originalControlDockOrder, audioButton, subtitleButton, aspectButton, speedButton, nightModeButton, ottCaptionLabel, ottCaptionOwner, ottProgressTrackContainer, ottSourcesButton, installOttControlsSkin, setOttTrackHeight, updateOttCaption, clearOttCaption, refreshOttCaptionFor, setupControls | controlsDockController |
+| setupIptvControls, cinemaIconTints, cinemaButtonTypefaces, applyLiveIptvControlStyle, restoreCinemaDockIconTints, updateIptvControlPresentation, arrangeLiveIptvControlDock, restoreOriginalControlDockOrder | controlsDockController.styler |
+| displayMatchMode, displayModeController, decoderAnalyticsListener, resizeModeIndex, playbackSpeedIndex, nightModeIndex, loudnessEnhancer, systemAudioEffectsEnabled, updateAspectButtonLabel, umAudioTracks, umAudioSelectedIndex, umAudioModel, umDisplayModel, showAudioTrackDialog, cycleAspectRatio, applyResizeMode, cyclePlaybackSpeed, applyPlaybackSpeed, syncAudioEffectSession, initializeLoudnessEnhancer, releaseLoudnessEnhancer, loadPlayerDefaults, applyNightMode | displayController |
+
+
+NativePlayerSettingsConsumptionTest.field: Android TV nightModeIndex → displayController.nightModeIndex; Torbox and every other field remain on their original owner. Its assertions are byte-identical. Exact reversible helper patches and hashes for every Kotlin test and Dart test are archived in p15/step1/retargets.json and tests-before.json; gate/test-retargets.json verifies those patches are the only test edits. No Dart anchor needs retargeting. Split reflection helpers remain 325/650 lines.
+
+Post-move focused run: all 337 phase-15 cases plus four NativePlayerSettingsConsumptionTest cases pass (341/341). Raw XML/logs and materialization details are in p15/step1/; compiled audit, initializer/teardown/protected-input evidence in p15/gate/. Full clean JVM, historical/self-test, lint, release/R8/decoder and Flutter integration gates follow on the committed tree.

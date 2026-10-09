@@ -49,8 +49,12 @@ class NativePlayerSettingsConsumptionTest {
             .putExtra("payload", """{"contentType":"movie","items":[{"id":"probe","index":0,"title":"Settings test","url":"file:///nonexistent-settings-fixture.mp4"}]}""")
     }
 
-    private fun field(activity: Activity, name: String): Any? = activity.javaClass.getDeclaredField(name)
-        .apply { isAccessible = true }.get(activity)
+    private fun field(activity: Activity, name: String): Any? {
+        val owner = if (activity is AndroidTvTorrentPlayerActivity && name == "nightModeIndex") {
+            activity.javaClass.getDeclaredField("displayController").apply { isAccessible = true }.get(activity)!!
+        } else activity
+        return owner.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(owner)
+    }
 
     private fun assertDefaults(activity: Activity, custom: Boolean) {
         assertFalse(activity.isFinishing)

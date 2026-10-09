@@ -3513,3 +3513,24 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   Original detached worktree removed; all 68 protected paths unchanged.
   No old assertion edit, production bug fix, lockfile/ProGuard edit or device
   interaction. Step 1 and the integration gate follow as authorized.
+
+
+- 2026-10-09 — **Phase 15 Step 1 moves complete.** Extracted the approved
+  dock owner (554 lines), eagerly constructed live styler (294, reference
+  controlsDock) and sibling playback-display owner (438); DockSkinSpec is
+  top-level. Activity 7,982 → 6,986, size baseline lowered with --update.
+  Shared views, skin lazies and borrowed routing/player/preferences/selector
+  remain activity-owned; dock runtime stays for phase 16. Computed Hosts,
+  both original slots, five Host-property re-points and three in-place
+  onDestroy patches preserve initializer and lifecycle order.
+  Checker: 1,730 original declarations, zero differences; 51 earlier files
+  frozen at ce3ddfb06, 31 initializer proofs. Compiled production audit:
+  17 receiver/getter pins, 23 findViewById assignments (12 cast/11 no-cast),
+  resize constants inlined. All five Kotlin warning identities unchanged.
+  Owner map routes 54 moved names; NativePlayerSettings helper retargets
+  Android TV nightModeIndex only. All assertions and Dart files unchanged,
+  helpers 325/650 lines. Focused JVM run passes 341/341 (337 phase-15 plus
+  four native settings cases). Evidence p15/step1/ and p15/gate/.
+  No production bug fix, new size exception, lockfile/ProGuard edit, push,
+  branch switch or device interaction. Integration gate follows on this
+  committed tree; no self independent review.
