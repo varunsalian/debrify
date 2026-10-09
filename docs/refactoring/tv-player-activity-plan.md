@@ -3742,3 +3742,15 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   Activity members will be routed. Mutation table/matrix extension appended
   to deps; evidence `p16/step0c/` and `junit/p16-step0c/`. No production
   changes; Step 1 is now authorized by the second independent sample.
+
+- 2026-10-10 — **Phase 16 Step 1 complete.** Manifest-exact controls owner
+  plus eager identity/seek collaborators; 1,727 declarations, zero source
+  differences. View decision preserved (23 nullable views move;
+  `ottSkinInstalled` and 18 lateinit views retained), 46 Host re-points/68
+  edits, two readiness getters and two in-place teardown patches. Files
+  416/329/542 lines, Activity 6,986 → 5,891; size ratchet updated. All 80
+  Activity member routes (46 added) with unchanged assertion/Dart bytes.
+  All 399 Phase-16 cases pass, compiled audit of seven receiver sites and
+  all 23 phase-15 binding pins passes, volatile field/writers/reader verified.
+  Thirty-eight initializer proofs, teardown order and 54 frozen destinations
+  pass. Evidence `p16/step1/`, `p16/gate/`; full gate follows.

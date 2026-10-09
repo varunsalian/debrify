@@ -17841,3 +17841,38 @@ rescan: 78 referenced moved names, 766 literal sites; Step 1 will route all
 80 moved Activity members. Lockfile, ProGuard, original production and all
 54 earlier destinations unchanged. Evidence `p16/step0c/`,
 `junit/p16-step0c/`.
+
+### Phase 16 step 1 — controls overlay, dock identity and seek/scrub
+
+Materialized `tvplayer_p16.json` exactly at original `df439aed1`: all 1,727
+declarations classified, zero checker differences. New owner
+`TvControlsOverlayController` eagerly constructs `identity` and `seek` at
+the pinned slots. Files 416/329/542 lines, Activity 6,986 → 5,891.
+Twenty-three shared nullable views move (2/8/13); `ottSkinInstalled` and
+the 18 lateinit title/Next/legacy views stay Activity-owned. Computed
+explicitly qualified Host forwarders, two readiness getters, 46 re-points
+(68 edits in 10 patched Activity properties), 48 in-place edits and the
+two `onDestroy` patches match the manifest with unchanged statement order.
+All 38 initializer proofs and 54 earlier destination byte comparisons pass.
+
+Reflection retargets: original Activity name → following owner path in
+`TvPlayerControllerOwners.kt` (34 existing routes plus 46 new = all 80
+Activity members). `CONTROLS_AUTO_HIDE_DELAY_MS` is a file-private constant,
+not a reflected Activity member. Original-access dispatch falls back to the
+Activity on the original; extraction uses public reflected members.
+Assertions and every Dart file remain byte-identical to step 0c; no Dart
+anchor change is needed.
+
+- `controlsOverlayController`: `controlsOverlay`, `pauseButton`, `controlsMenuVisible`, `controlsHandler`, `hideControlsRunnable`, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`, `togglePlayPause`, `showControlsMenu`, `hideControlsMenu`, `updateSubtitleControlsLift`, `hideTitleImmediately`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`, `updatePauseButtonLabel`, `setResolvingState`, `setNextOverlayBackdrop`, `showNextOverlay`, `fadeInNextOverlay`, `hideNextOverlay`, `isCleanPlaybackState`.
+- `controlsOverlayController.identity`: `ottIdentityTitle`, `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`, `ottIdentityDivider`, `ottQualityChips`, `ottRatingChip`, `ottMetaLine`, `dockTagsCacheKey`, `dockTagsCache`, `ottShowName`, `guideTitleFor`, `updateTitle`, `updateOttIdentity`, `updateOttExtras`, `dockTagsFor`.
+- `controlsOverlayController.seek`: `seekbarBackgroundWidth`, `currentSeekSpeed`, `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressContainer`, `cinemaProgressBackground`, `cinemaProgressThumb`, `cinemaSpeedIndicator`, `ottScrubPreviewChip`, `ottScrubPreviewText`, `cinemaProgressTrackWidth`, `cinemaSeekMode`, `cinemaSeekWasPlaying`, `cinemaProgressAnimator`, `cinemaLastAnimatedProgress`, `seekbarVisible`, `seekbarPosition`, `videoDuration`, `seekbarHandler`, `seekbarProgressRunnable`, `setupSeekbar`, `startSeekbarProgressUpdates`, `stopSeekbarProgressUpdates`, `updateSeekbarProgress`, `showControlsAndFocusProgressBar`, `setupCinemaProgressBar`, `enterCinemaSeekMode`, `exitCinemaSeekMode`, `confirmCinemaSeek`, `updateCinemaSeekSpeed`, `updateCinemaProgressUI`, `showSeekbar`, `hideSeekbar`, `confirmSeekPosition`, `seekBackward`, `seekForward`, `updateSeekSpeed`, `updateSeekbarUI`, `updateSeekbarPosition`, `seekBy`.
+
+All 399 Phase-16 cases pass after extraction. Compiled audit passes seven
+receiver sites including both Glide calls, plus all 23 frozen phase-15
+view-binding pins (12 casts, 11 absent, three array stores), unchanged field
+descriptors and volatile identity field / two writers / playlist Host reader.
+Size baseline ratcheted with `--update`; every new file is below 800.
+Only manifest-defined production edits, owner-map additions and the size
+ratchet applied. Full phase gate follows. Evidence `p16/step1/`,
+`p16/gate/overload-audit.json`, `audit-contract.json`, `teardown-order.json`,
+`initializer-timing.json`, `earlier-destinations.json`, `test-retargets.json`.
