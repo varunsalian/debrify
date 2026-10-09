@@ -105,37 +105,39 @@ def receiver_lambda_inventory(manifest, original, unit, nodes, moved):
 
 
 def receiver_lambda_transformations(manifest, original, unit, nodes, moved):
-    """Allow only the reviewed EditText activity argument, never inner this."""
+    """Allow reviewed constructor Activity arguments, never receiver-lambda this."""
     if manifest['phase'] < 12:
         return {}
     expected, offsets = [], []
     for site in unit['all_this_sites']:
-        if site.get('lambda_receiver') != 'EditText(this)':
+        constructors = ('EditText', 'ListView') if manifest['phase'] >= 14 else ('EditText',)
+        callee = next((c for c in constructors if site.get('lambda_receiver') == c + '(this)'), None)
+        if callee is None:
             continue
         row = next((r for name, r in moved.items()
                     if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
         if not row:
             continue
         start, end = site['lambda_receiver_start'], site['lambda_receiver_end']
-        constructor = [s for s in unit['all_this_sites'] if s.get('callee') == 'EditText'
+        constructor = [s for s in unit['all_this_sites'] if s.get('callee') == callee
                        and s.get('receiver') == 'activity' and s.get('call_start') == start
                        and s.get('call_end') == end and 'lambda_receiver' not in s]
-        if len(constructor) != 1 or original[start:end] != 'EditText(this)':
+        if len(constructor) != 1 or original[start:end] != callee + '(this)':
             raise ValueError('constructor-receiver transformation requires the original Activity argument')
         expected.append(dict(original=row['original'], line=original.count('\n', 0, site['start']) + 1,
             constructor_line=original.count('\n', 0, constructor[0]['start']) + 1,
             context=original.splitlines()[original.count('\n', 0, start)].strip(),
-            before='EditText(this)', after='EditText(activity)', callee='EditText'))
+            before=callee + '(this)', after=callee + '(activity)', callee=callee))
         offsets.append((row['original'], site['start']))
     actual = manifest.get('receiver_lambda_transformations', [])
     keys = tuple(expected[0]) if expected else ()
     if ([{key: row.get(key) for key in keys} for row in actual] != expected or
             any(set(row) != {*keys, 'reason'} or not row.get('reason') for row in actual)):
         raise ValueError('constructor-receiver transformation coverage differs from original PSI')
-    pin = dict(owner='android/widget/EditText', descriptor='(Landroid/content/Context;)V', opcode='invokespecial')
     for row in actual:
+        pin = dict(owner='android/widget/' + row['callee'], descriptor='(Landroid/content/Context;)V', opcode='invokespecial')
         audits = [s for s in manifest['overload_audit'] if s['original'] == row['original']
-                  and s['line'] == row['constructor_line'] and s['callee'] == 'EditText']
+                  and s['line'] == row['constructor_line'] and s['callee'] == row['callee']]
         if len(audits) != 1 or any(audits[0].get(key) != pin for key in ('expected_before', 'expected_after')):
             raise ValueError('constructor-receiver transformation requires pinned constructor audit')
     return dict(zip(offsets, actual))
@@ -199,6 +201,21 @@ def check_special_bindings(manifest, original, current, units, nodes, moved):
         keys = ('text', 'object_types', 'object_method', 'callee')
         if [[s.get(key) for key in keys] for s in listeners] != [[s.get(key) for key in keys] for s in after if s.get('receiver') == 'object']:
             raise ValueError('typed listener expression substituted or binding changed: ' + name)
+        if manifest['phase'] >= 14:
+            keys = ('text', 'lambda_callee', 'lambda_receiver')
+            expected = [[s[key] for key in keys] for s in before if 'lambda_receiver' in s]
+            transforms = [r for r in manifest['receiver_lambda_transformations'] if r['original'] == name]
+            for receiver in expected:
+                for transform in transforms:
+                    if receiver[-1] == transform['before']:
+                        receiver[-1] = transform['after']
+            if expected != [[s[key] for key in keys] for s in after if 'lambda_receiver' in s]:
+                raise ValueError('receiver-lambda expression substituted or binding changed: ' + name)
+            keys = ('text', 'binding', 'callee')
+            before_bindings = within(units['original']['preserved_receiver_sites'], old)
+            after_bindings = within(units[row['destination']]['preserved_receiver_sites'], new)
+            if [[s.get(key) for key in keys] for s in before_bindings] != [[s.get(key) for key in keys] for s in after_bindings]:
+                raise ValueError('preserved receiver expression substituted or binding changed: ' + name)
         old_refs = [r for r in manifest.get('function_references', []) if r['original'] == name]
         new_refs = within(units[row['destination']]['callable_references'], new)
         if [(r['callee'], r['after_receiver']) for r in old_refs] != [(r['callee'], r['receiver']) for r in new_refs]:
@@ -216,6 +233,8 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
     if manifest['phase'] >= 13:
         listener_inventory(manifest, original, unit, nodes, moved)
         reference_inventory(manifest, original, unit, nodes, moved)
+    if manifest['phase'] >= 14:
+        preserved_receiver_inventory(manifest, original, unit, nodes, moved)
     if manifest['phase'] >= 11:
         receiver_lambda_inventory(manifest, original, unit, nodes, moved)
     if manifest['phase'] >= 12:
@@ -263,6 +282,11 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
             use['line'] == site['line'] for use in a['uses']) for a in expected_alias)
         if is_alias != bool(site.get('alias')):
             raise ValueError('wrong receiver classification: alias-use marker differs')
+        if manifest['phase'] >= 14:
+            psi = next(s for s in calls if identity(row_at(s['start']), s)[:2] ==
+                       (site['original'], site['line']) and s['callee'] == site['callee'])
+            if psi.get('call_kind') != site.get('call_kind'):
+                raise ValueError('super-constructor audit call kind differs from original PSI')
     if manifest['phase'] >= 9:
         inherited = [s for s in unit['implicit_inherited_sites']
                      if s.get('introduced_phase', 9) <= manifest['phase'] and row_at(s['start'])]
@@ -281,6 +305,29 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
     elif any(s.get('receiver') == 'implicit-inherited' for s in manifest['overload_audit']):
         raise ValueError('implicit inherited receivers require phase 9 audit')
     return calls
+
+
+def preserved_receiver_inventory(manifest, original, unit, nodes, moved):
+    """Pin adapter/View receivers and the constructor's resources argument."""
+    expected = []
+    for site in unit['preserved_receiver_sites']:
+        row = next((r for name, r in moved.items() if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
+        if row:
+            line = original.count('\n', 0, site['start']) + 1
+            expected.append(dict(original=row['original'], line=line,
+                context=original.splitlines()[line - 1].strip(), text=site['text'],
+                binding=site['binding'], callee=site.get('callee')))
+    actual = manifest.get('preserved_receivers', [])
+    keys = tuple(expected[0]) if expected else ()
+    if ([{key: row.get(key) for key in keys} for row in actual] != expected or
+            any(not row.get('reason') for row in actual)):
+        raise ValueError('preserved receiver coverage/binding differs from original PSI')
+    for row in actual:
+        if row['callee']:
+            if any(set(row.get(key, {})) != {'owner', 'descriptor', 'opcode'}
+                   or row[key]['opcode'] != 'invokevirtual' for key in ('expected_before', 'expected_after')):
+                raise ValueError('preserved receiver requires pinned virtual owner/descriptor/opcode')
+    return expected
 
 
 def audit(manifest, original, current, before, after):
@@ -360,6 +407,23 @@ def audit(manifest, original, current, before, after):
                 signatures = { (call['call'], call['opcode']) for call in candidates }
                 if signatures != {(pin['owner'] + '.' + pin['callee'] + ':' + pin['descriptor'], pin['opcode'])}:
                     raise ValueError('compiled function-reference dispatch changed: ' + reference['original'])
+    if manifest['phase'] >= 14:
+        for site in manifest['preserved_receivers']:
+            row = moved[site['original']]
+            old_node = nodes['original'][row['original']]
+            new_node = nodes[row['destination']][row['target']]
+            delta = current[row['destination']].count('\n', 0, new_node['start']) - original.count('\n', 0, old_node['start'])
+            old_owner = 'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
+            new_owner = 'com.debrify.app.tv.' + row['target'].split('/')[0].removeprefix('class ')
+            for calls, owner, line, key in ((before, old_owner, site['line'], 'expected_before'),
+                                            (after, new_owner, site['line'] + delta, 'expected_after')):
+                scope = [c for c in calls if c['owner'] == owner or c['owner'].startswith(owner + '$')]
+                if site['callee']:
+                    pin, _ = resolve_inherited(scope, site, line, line)
+                    if pin != site[key]:
+                        raise ValueError('preserved receiver compiled dispatch changed: ' + site['context'])
+                elif any(c['line'] == line and c['call'].split(':')[0].endswith('.getResources') for c in scope):
+                    raise ValueError('named resources argument became a getter')
     return results
 
 
@@ -377,7 +441,7 @@ def main():
         current = {path: (args.tree / path).read_text() for path in manifest['destinations']}
         results = audit(manifest, original, current, bytecode(args.original_classes), bytecode(args.moved_classes))
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(dict(sites=len(results), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results), indent=2) + '\n')
+        args.output.write_text(json.dumps(dict(sites=len(results), preserved_receivers=len(manifest.get('preserved_receivers', [])), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results), indent=2) + '\n')
         print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations' +
               (f'; {len(manifest.get("function_references", []))} compiled function references; '
                f'{len(manifest.get("listener_receivers", []))} typed listener receivers' if manifest['phase'] >= 13 else ''))

@@ -3253,3 +3253,14 @@ correction, subtitle menu rows.
   contracts incl. worker-thread catalog reply; ListView constructor-receiver
   transformation + KtSuperTypeCallEntry audit); P3 `emptyList()` wording.
   Phase 14 design approved.
+
+- 2026-10-09 — phase 14 Step T complete: re-measured `82b16832c`; 43-member
+  production-config fixture, 134 substitutions, 20 initializer proofs and 49
+  frozen earlier destinations. Corrected Host counts to 13 tokens / 11
+  forwarders in four whole-property patched rows (deps Step T explains).
+  Original self-comparison: 1,850 declarations, zero differences. All 378
+  checker self-tests pass, including every historical suite; compiled complete
+  fixture passes 25 receiver calls plus six preserved bindings. Typed stdlib
+  emptyList validation, ListView inner receiver and ArrayAdapter super-call
+  metadata/pins are covered by positives and stated-reason negatives. Evidence
+  `p14/`; production unchanged. Step 0 next; no production moves.

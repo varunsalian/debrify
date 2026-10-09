@@ -133,6 +133,8 @@ public final class KotlinPsi {
                 KtPropertyAccessor getter = property.getGetter();
                 node.put("has_initializer", property.getInitializer() != null);
                 node.put("has_delegate", property.hasDelegate());
+                node.put("declared_type", property.getTypeReference() == null ? null : property.getTypeReference().getText());
+                node.put("initializer_text", property.getInitializer() == null ? null : property.getInitializer().getText());
                 node.put("getter_only", getter != null && property.getSetter() == null && !property.isVar());
                 boolean pure = getter != null;
                 if (getter != null) {
@@ -204,11 +206,12 @@ public final class KotlinPsi {
                 List<Object> thisSites = new ArrayList<>(), allThis = new ArrayList<>(), aliases = new ArrayList<>();
                 for (KtThisExpression expression : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtThisExpression.class)) {
                     PsiElement parent = expression.getParent();
+                    KtSuperTypeCallEntry superCall = org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.getParentOfType(expression, KtSuperTypeCallEntry.class);
                     String receiver = "activity";
                     if (expression.getLabelName() == null) {
                         PsiElement scope = parent;
                         while (scope != null) {
-                            if (scope instanceof KtObjectDeclaration) {
+                            if (scope instanceof KtObjectDeclaration && superCall == null) {
                                 receiver = ((KtObjectDeclaration)scope).getSuperTypeListEntries().stream()
                                     .anyMatch(entry -> entry.getText().equals("Runnable")) ? "Runnable" : "object";
                                 break;
@@ -221,6 +224,7 @@ public final class KotlinPsi {
                     // a lambda/property in which an unrelated this appears.
                     PsiElement callParent = parent;
                     while (callParent != null && !(callParent instanceof KtCallExpression) &&
+                           !(callParent instanceof KtSuperTypeCallEntry) &&
                            !(callParent instanceof KtProperty) && !(callParent instanceof KtNamedFunction)) callParent = callParent.getParent();
                     Map<String, Object> site = map("start", offset(expression.getTextRange().getStartOffset()),
                         "end", offset(expression.getTextRange().getEndOffset()), "text", expression.getText(), "receiver", receiver);
@@ -263,6 +267,13 @@ public final class KotlinPsi {
                         site.put("call_start", offset(call.getTextRange().getStartOffset()));
                         site.put("call_end", offset(call.getTextRange().getEndOffset()));
                         site.put("callee", call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText());
+                    } else if (callParent instanceof KtSuperTypeCallEntry) {
+                        KtSuperTypeCallEntry call = (KtSuperTypeCallEntry)callParent;
+                        site.put("call_start", offset(call.getTextRange().getStartOffset()));
+                        site.put("call_end", offset(call.getTextRange().getEndOffset()));
+                        String callee = call.getTypeReference().getText().split("<", 2)[0];
+                        site.put("callee", callee);
+                        site.put("call_kind", "KtSuperTypeCallEntry");
                     }
                     allThis.add(site);
                     // Historical call-site output remains byte-for-byte compatible.
@@ -321,6 +332,8 @@ public final class KotlinPsi {
                         !name.equals("resources") && !name.equals("currentFocus") && !name.equals("layoutInflater")) continue;
                     if (ref.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)ref.getParent()).getSelectorExpression() == ref) continue;
+                    // A constructor's named argument is not an inherited getter.
+                    if (ref.getParent() instanceof KtValueArgumentName) continue;
                     PsiElement scope = ref.getParent();
                     while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
                     if (!(scope instanceof KtClass)) continue;
@@ -332,6 +345,21 @@ public final class KotlinPsi {
                         "property_read", true, "property_name", name, "lexical_class", ((KtClass)scope).getName()));
                 }
                 List<Object> references = new ArrayList<>();
+                List<Object> preserved = new ArrayList<>();
+                for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
+                    String name = ref.getReferencedName();
+                    if (name.equals("resources") && ref.getParent() instanceof KtValueArgumentName) {
+                        preserved.add(map("start", offset(ref.getTextRange().getStartOffset()), "text", name, "binding", "named-argument"));
+                    } else if (name.equals("context") && !(ref.getParent() instanceof KtQualifiedExpression)) {
+                        preserved.add(map("start", offset(ref.getTextRange().getStartOffset()), "text", name, "binding", "receiver-getter", "callee", "getContext"));
+                    }
+                }
+                for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
+                    String name = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
+                    if (name.equals("getItem") && !(call.getParent() instanceof KtQualifiedExpression))
+                        preserved.add(map("start", offset(call.getTextRange().getStartOffset()), "text", name, "binding", "receiver-call", "callee", "getItem"));
+                }
+                preserved.sort(Comparator.comparingInt(item -> (Integer)((Map<?, ?>)item).get("start")));
                 for (KtCallableReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallableReferenceExpression.class)) {
                     references.add(map("start", offset(ref.getTextRange().getStartOffset()), "end", offset(ref.getTextRange().getEndOffset()),
                         "callee", ref.getCallableReference().getText(), "receiver", ref.getReceiverExpression() == null ? "" : ref.getReceiverExpression().getText()));
@@ -339,6 +367,7 @@ public final class KotlinPsi {
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,
                     "implicit_inherited_sites", inheritedSites, "callable_references", references,
+                    "preserved_receiver_sites", preserved,
                     "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));

@@ -14841,3 +14841,14 @@ sweep in step 0, before Claude's first independent sample. Then:
    with playback start (phase 18) if wanted.
 6. **Existing follow-up.** `showSubtitleTrackDialog` and `hideSubtitleSettingsPanel` (phase-4 file) still
    have no callers. Unchanged.
+
+
+## Phase 14 Step T — re-measured at `82b16832c`
+
+The complete production-config extraction fixture classifies all **1,850** original declarations, moves **43** members (21 properties, 22 functions), applies **134** counted substitutions and pins **20** initializer proofs. The fixture compiles without a production move: the owner is 710 lines and the fieldless dialogs collaborator is 495. The 49 earlier destination files remain frozen at the phase-13 merge, with no whitelist changes.
+
+**Inventory count correction:** the four whole-property patched Host rows contain **13 tokens in 11 forwarders**, rather than the earlier 14/12 estimate. The measured counts are `subtitleController` 10 tokens / 8 forwarders, and one each in `iptvStartOverController`, `iptvGuideController` and `pikPakRetryController`. The 24 other activity edits remain in nine declarations; `onDestroy` stays in place. Exact original member lines, substitution counts and spans are archived in `p14/remeasured-inventory.json` and the phase-14 manifest.
+
+The PSI/auditor now distinguishes the ArrayAdapter `KtSuperTypeCallEntry` Activity argument, the ListView Activity constructor argument, and the preserved inner `this.adapter`. It exhaustively pins the six non-substitutions (four context getters, adapter getItem and the named resources argument), including compiled owner/descriptor/opcode checks. The original/complete-fixture bytecode audit passes **25 receiver sites plus six preserved bindings**. Typed stdlib `emptyList()` validation rejects missing declared types, local/package shadows and non-stdlib imports/aliases, while historical initializer proofs retain their prior behavior.
+
+All **378 checker self-tests** pass, including the complete phase-14 extraction and its stated-reason negatives, the offline compiled constructor fixture, historical phase-13 `--at 82b16832c`, and all earlier phase suites with their own manifests. Original all-retained self-comparison reports **1,850 classified declarations, zero differences**. Raw tooling/compile/runtime logs and fixture trees live under `p14/`. Activity production bytes, earlier destinations, Proguard and pubspec.lock remain unchanged. Step 0 has not run yet.

@@ -248,10 +248,17 @@ def run(manifest_path=k.MANIFEST):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase12OverloadsTest))
     if manifest['phase'] >= 13:
         import test_kotlin_moves_phase13
-        test_kotlin_moves_phase13.MANIFEST = manifest
+        test_kotlin_moves_phase13.MANIFEST = (manifest if manifest['phase'] == 13 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p13.json').read_text()))
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase13.Phase13MovesTest))
         from test_kotlin_overloads_phase13 import Phase13OverloadsTest
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase13OverloadsTest))
+    if manifest['phase'] >= 14:
+        import test_kotlin_moves_phase14
+        test_kotlin_moves_phase14.MANIFEST = manifest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase14.Phase14MovesTest))
+        from test_kotlin_overloads_phase14 import Phase14OverloadsTest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase14OverloadsTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 
