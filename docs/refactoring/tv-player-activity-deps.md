@@ -13281,3 +13281,861 @@ and pre-next-route split milestone are in the plan; all three production
 destinations remain below 500 lines. Full evidence: `p12/gate/summary.json`,
 raw logs/results and `junit/p12-step0b/`, `junit/p12-gate/`. No push, branch
 switch, independent review, device/emulator interaction or production bug fix.
+
+---
+
+## Phase 13 inventory + remaining plan (at `b870a16b1`; re-measure on `315448a3c`)
+
+> Corrections (phase 13 design round 1): the selection is 29 properties + 31 functions (28 initializer proofs stand), 3 lateinit view getters; router estimates are ≈ 71 (`playbackListener`) and ≈ 47 (`dispatchKeyEvent`) dependencies, ≈ 110 combined — not 110 each.
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`b870a16b1` (phase-11 merge, **11,458 lines**, class header 136). This is a read-only survey of the main
+checkout: no build, no worktree, nothing under `../debrify-wt/`.
+
+Phase 12 (IPTV guide chrome, in progress elsewhere) is treated as a controller:
+- fields 993–998 and 1031–1047;
+- functions 8415–9181 and 9183–9569, i.e. `setupIptvOverlay` … `showIptvChannelJumpDialog`.
+
+**No member counted here references a phase-12 member, and no phase-12 member references the phase-13
+unit.** Measured: 0 references in either direction.
+
+After phase 12 the activity is ≈ 10,320 lines: −1,154, plus ≈ 18 for its property and Host.
+
+**Method.** The p11 tooling was copied to `scratchpad/p13/`:
+- `idx.py`: a brace/string/comment-aware member indexer. It found 596 depth-1 members.
+- `units.py` / `units2.py`: per-unit inbound/outbound/re-point scans. These are word-boundary scans with
+  templates included, `this@Activity.` hits counted, and other-receiver hits excluded.
+
+The phase-13 numbers were checked by hand against the source. Counts for later units are scans and
+approximate (±10 %). Every later unit must get its own full inventory before its phase.
+
+Terms are as in the phase-11 inventory:
+- **Patch**: a token edit in a retained activity declaration.
+- **Re-point**: an edited forwarder inside an existing controller property's Host object (a whole-property
+  `patched` row).
+- **Substitution**: a declared edit inside a moved body.
+
+---
+
+### 1. What is left after phase 12 (candidate units at `b870a16b1`)
+
+Line counts are member spans with attached comments. "Patches" counts references from retained activity
+code, including code that a later unit moves (those become substitutions then). "Host" is the number of
+distinct activity names that the unit's bodies reach (an upper bound for its Host). Test-gap severity is
+judged against existing JVM tests (`android/app/src/test/kotlin/com/debrify/app/tv/`).
+
+| unit | members / lines | patches (decls) | re-points | Host | reflective / Dart | lifecycle | test gap | risk |
+|---|---|---|---|---|---|---|---|---|
+| **PL**: playlist overlay + focus navigator + guide skin (incl. `getNext/PrevPlayableIndex`, `computeMovieGroups`) | 60 / **1,199** | **31 (15)** | 7 in 6 props | **11** | 10 sites / 4 routes; Dart 0 | `onDestroy` 7 in place | high: phase 1 covered only the adapters | **medium-low** |
+| **SUBF**: subtitle fetch/search/auto-select + `resetSubtitleState` + UM subtitle rows (`umSubsModel`, `umAddonTrackRows`, `umSearchRows`, `umPickSearchResult`) | 45 / 1,113 | 36 (11) | ≈ 14 in 6 (`subtitleController` 9) | 13 | **45 sites** (10 files; `currentStremioSubtitleIndex` 16); Dart 0 | `onDestroy` 2 | medium: addon fetch, catalog search and dialogs are uncharacterized | medium-high: async tokens, coroutines on the borrowed `subtitleScope`, Flutter catalog search, 2 large dialogs |
+| **CTRL-I**: OTT skin install + caption, `setupControls` (focus/click routing), B7 live dock styling, `dockSkinSpec`/`controlsSkin` (+ **DISP** below → ≈ 1,075) | 20 / 772 | 29 (21) | ≈ 2 | **80** (≈ 45 of them lateinit views) | 0 / 0 | — | high: click routing is uncharacterized | medium: wide Host unless the views move with it |
+| **DISP**: aspect/speed/night/audio effects, `loadPlayerDefaults`, `decoderAnalyticsListener`, label arrays (+ UM display/playback rows) | 24 / 303 | 40 (10) | ≈ 4 (1 prop) | 16 | 3 / `NativePlayerSettingsConsumptionTest` | `onDestroy` 1 | low-medium | medium: native `LoudnessEnhancer` lifetime, analytics callbacks on the playback thread |
+| **CTRL-II**: controls overlay show/hide/auto-hide, focus probes, play/pause, seekbar (incl. the dead `showSeekbar` path), cinema scrub, progress ticker runnables, title/OTT identity, loading overlay (`setResolvingState`), **Next overlay**, `isCleanPlaybackState` | 54 / 1,116 | 83 (16), of which 38 in CTRL-I | ≈ 13 in 8 | 87 (≈ 50 views) | **31 sites / 14 files** (`controlsMenuVisible` ×23) | — | medium-high | **high**: hub state read by about every feature; 2 `Glide.with`; `::nextBackdrop.isInitialized` |
+| **TUNE**: IPTV tune pipeline (`setIptvMediaItem`, decoder-failure/HLS retry, codec selector) + twin trial + live recovery + reconnect pill + diag listener | 49 / 732 | 49 (7): `playbackListener` 17, `setupPlayer` 9, `onStart` 5, `onStop` 4, `onDestroy` 5 | ≈ 5 in 3 | 21 | 4 sites; Dart 0 | `onStart`/`onStop`/`onDestroy` 14 | **total** (no JVM test touches twin/recovery/tune; only `IptvDeviceQuirksTest`) | **high**: `@Volatile` fields read on loader threads by `setupPlayer`'s factory; lazy `iptvLiveRecovery`; twin handler; network callback |
+| **START-A**: playback start (`playItem`/`resolveAndPlay`/`startPlayback`/`playMediaDirect`/merged source/`playPikPakVideoWithRetry`) + **shuffle + next/prev/random** + Stremio TV media trio | 37 / 912 | 28 (7) | ≈ 16 in 6 (switcher 11 tokens) | 54 | **≈ 44** (shuffle 40, incl. the `ShufflePlaybackAttempt` binary name) + 3 Dart anchors | `onCreate` | medium (watchdog/switcher/shuffle suites exercise it) | **high**: `mediaPreparationGeneration`, shuffle protocol, PikPak and gate interplay |
+| **START-B**: media pipeline factory (`setupPlayer` 398) + metadata receiver (`setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`, `requestMetadataFromFlutter`) | 6 / 697 | 6 (3) | ≈ 1 | 44 | 0 / Dart `requestMetadataFromFlutter` range + `NativeAudioRoutingTest` source anchor on `setupPlayer` | broadcast register/unregister | medium | **high**: Media3 configuration, player/trackSelector writes through Host setters, loader-thread policy supplier |
+| **UM** remainder: audio/display/playback/sources models, `umSectionRows`, `unifiedMenuCallbacks` | 10 / 312 | 2 (1) | 0 | **43** | 2 sites | — | medium (`UnifiedMenuControllerTest`, phase-4 subtitle rows) | low per row, but the Host is too wide: **split by owner**, not a phase |
+| **ROUTERS**: `playbackListener` 509, `dispatchKeyEvent` 363 | 2 / 872 | 2 | 0 | **110** | 7 sites (`playbackListener`) | — | partial (phase-11 key matrix, per-phase listener cases) | **highest**; a verbatim move needs about 110-member Hosts |
+
+Not in any unit, so retained: `bindViews` 191, `onCreate` 173, `parsePayload` 170, `onDestroy` 169,
+`initIptvMode` 116, `setupBackPressHandler` 43, `onStart`/`onStop`/`onResume`/`onPause` 101,
+`progressRunnable` 32, the resume hold (46), buffering indicator 21, `finish` 17, `sendFinished` 18,
+`guideStyle`/`guideTypeface` 28, and small helpers.
+
+---
+
+### 2. Ranked phase plan for everything left
+
+The ordering rule is unchanged: lowest risk per patch first. Each unit takes the units it is coupled to
+in the direction that creates **forwarders rather than temporary patches**. Every phase keeps all phase 3–12
+collaborator rules.
+
+| phase | unit | ≈ lines | why here |
+|---|---|---|---|
+| **13** | **PL**: `TvPlaylistOverlayController` + nested `TvPlaylistFocusNavigator` + nested `TvPlaylistGuideSkin` (§3) | 1,199 | Best ratio in the file: 0.026 patches/line, an 11-member Host, no async protocol, no Flutter token, no Dart retarget. It also removes 13 later CTRL-I and 7 later SHUF patches. |
+| 14 | **SUBF** + UM subtitle rows + `resetSubtitleState` | 1,113 | Absorbing the four UM subtitle builders cuts its UM patches from 47 to 14, and the `subtitleController` Host (9 forwarders) re-points once. `subtitleScope`, `externalSubtitleHandler` and `stremioSubtitleService` stay activity-owned and borrowed (phase-4 rule). Step-0 prerequisites are latch-controlled addon fetch, catalog-search fake channel replies, and a dialog harness. |
+| 15 | **CTRL-I + DISP** (+ optionally UM audio/display/playback rows ≈ 134) | 1,075–1,209 | It must precede CTRL-II: CTRL-I → CTRL-II is 38 refs, CTRL-II → CTRL-I is 9. Moving CTRL-I first costs about 10 Host forwarders; the reverse costs 38 temporary patches. **Decide whether the ≈ 45 control/OTT lateinit views move with it.** Moving them gives ≈ 45 `bindViews` patches and a Host of ≈ 35. Keeping them gives a Host of ≈ 80, against the narrow-Host objection. DISP fits here because `setupControls` calls cycle-aspect, speed and night (4) and the UM display rows read its labels. |
+| 16 | **CTRL-II** + title/OTT identity + loading overlay + **Next overlay** | 1,116 | Consumes the phase-15 forwarders. It needs 31 reflective sites routed through owner maps (`controlsMenuVisible` in 14 files) and a readiness getter for `nextBackdrop`. The 25 `dispatchKeyEvent` patches are permanent unless the routers move. |
+| 17 | **TUNE** | 732 | Independent of 13–16 (0 references). It is late because it has the worst test gap and the highest async/thread risk. Volatile fields keep one owner, and `setupPlayer`'s factory reads them through the owner. 14 in-place lifecycle patches. It re-points the phase-5 ladder's and the recording Host's forwarders (5). |
+| 18 | **START-A**: playback start + shuffle/nav + Stremio TV media trio | 912 | Owns `pendingShufflePlayback`/`mediaPreparationGeneration`. The `ShufflePlaybackAttempt` nested binary name moves, so ≈ 40 shuffle reflective sites need retargets. 3 Dart anchors (`playItem`…`resolveAndPlay`, `resolveAndPlay`/`startPlayback`). Re-points ≈ 16, including the 11-token switcher Host. It takes `playPikPakVideoWithRetry`, whose PK refs become direct `pikPakRetryController` calls. |
+| 19 | **START-B**: media pipeline factory + metadata receiver (+ UM sources rows → fetch owner) | 697 (+≈ 80) | Retargets the `NativeAudioRoutingTest` source anchor and the mdblist Dart `_between` range. The player and `trackSelector` stay activity-owned (Host setters). This is the highest Media3-configuration risk. |
+| 20 | **Routers decision** | 872 | Recommend a **documented exception**. A verbatim move needs about 110-member Hosts; a split by event or key group needs a reviewed rule change (non-verbatim). Re-evaluate after 19. |
+
+The UM remainder (`unifiedMenuCallbacks` + `umSectionRows`, ≈ 80) stays as composition code, with its row
+builders distributed in phases 14, 15 and 19.
+
+This is **8 more phases (13–20)**. Phase 20 may be a decision record only.
+
+---
+
+### 3. Phase 13 feasibility record: playlist overlay + focus navigator + guide skin
+
+### 3.1 Summary and recommendation
+
+**Selected:**
+- `TvPlaylistOverlayController` (owner, ≈ 575 lines);
+- nested `TvPlaylistFocusNavigator` (≈ 325), which owns the focus-engine state (variant B);
+- nested `TvPlaylistGuideSkin` (≈ 395), which owns the skin views and flags.
+
+Both nested classes are constructed eagerly inside the owner's initializer, following the phase-6/8/11
+precedent. There is one 11-member Host, shared, plus the injected `AppCompatActivity`. The activity
+property sits at the first owned slot, `seasonTabs` (182).
+
+| item | count |
+|---|---|
+| moved members / lines | **60 / 1,199** (24 properties, 36 functions) |
+| activity patches | **31 in 15 declarations**, of which 18 sit in later-moving code (ROUTERS 5, START 6, CTRL 2, SHUF 7) |
+| Host re-points | **7 forwarders in 6 properties** (whole-property `patched` rows) |
+| Host | 11 members; ≈ 115 `host.` substitutions |
+| initializer proofs | **28** (3 new narrow classifier forms; §3.3) |
+| receiver substitutions | 8 `this` → `activity` (2 `Glide.with`, 2 `TextView`, 2 `LinearLayoutManager`, 1 `GridLayoutManager`, 1 `ContextCompat`); 1 excluded object self-receiver |
+| inherited-receiver audit | 15 (14 `findViewById`, 1 `layoutInflater`) |
+| cross-file qualifications | **49** (variant B; compile-checked) |
+| visibility substitutions | ≈ 33 |
+| substitutions total | ≈ 220 |
+| reflective retargets | 10 literal sites through **4 owner-map routes**; 0 public-function pins |
+| Dart retargets | 0; one anchored `_between` range gets 4 patches, and its assertions are unaffected |
+| lifecycle | 7 in-place `onDestroy` patches; no `onStart`/`onStop`/`onPause`/`finish` edits |
+
+**Risk: medium-low.** It is deterministic view code, with no Flutter token protocol, no coroutine, and no
+player-thread state. The risks are:
+- DPAD focus timing: a handler post at 100 ms, `View.postDelayed` at 50/100 ms, a self-removing global-layout
+  listener, and focus-recovery attach/detach callbacks;
+- skin-specific axis remapping;
+- a session-fixed `controlsSkin` lazy.
+
+**Test gap: high.** No existing test drives the overlay wiring, the focus engine or the guide skin. Phase 1
+covered only `PlaylistAdapter`/`MoviePlaylistAdapter` binding.
+
+**Why it beats the alternatives:**
+- SUBF (1,113 lines / 36 patches) has a similar ratio, but it has 45 reflective sites and an async fetch
+  and search protocol.
+- TUNE has the worst test gap.
+- The controls units need Hosts of 80–87.
+
+### 3.2 Members (lines at `b870a16b1`, attached comments included)
+
+**Owner `TvPlaylistOverlayController.kt` (534 member lines).**
+- Fields (8):
+  - `seasonTabs` 182;
+  - `movieTabs` 183;
+  - `playlistVisible` 766;
+  - `playlistMode` 780;
+  - `playlistAdapter` 781;
+  - `seriesPlaylistAdapter` 782;
+  - `moviePlaylistAdapter` 783;
+  - `movieGroups` 784.
+- Functions (17):
+  - `setupPlaylist` 3510–3584;
+  - `rebuildPlaylistContent` 3586–3619;
+  - `setupSeriesPlaylist` 3621–3648;
+  - `setupCollectionPlaylist` 3650–3669;
+  - `setupSeasonTabs` 3671–3701;
+  - `createSeasonTab` 3703–3732;
+  - `selectSeasonTab` 3734–3748;
+  - `setupCollectionTabs` 3750–3777;
+  - `createMovieTab` 4079–4105;
+  - `selectMovieTab` 4107–4120;
+  - `showPlaylist` 7738–7782;
+  - `alignSeriesTabsForCurrentEpisode` 7784–7793;
+  - `alignMovieTabsForCurrentItem` 7795–7802;
+  - `getNextPlayableIndex` 7804–7840;
+  - `getPrevPlayableIndex` 7842–7873;
+  - `computeMovieGroups` 7875–7961;
+  - `hidePlaylist` 7963–7967.
+
+**Nested `TvPlaylistFocusNavigator.kt` (300 member lines; owns the focus state).**
+- Fields (4):
+  - `isNavigating` 1349–1350 (with its comment);
+  - `navigationTargetPosition` 1351;
+  - `focusRecoveryHandler` 1352;
+  - `focusRecoveryRunnable` 1353.
+- Functions (5):
+  - `setupPlaylistNavigation` 3779–3836;
+  - `findNextFocusablePosition` 3838–3876;
+  - `ensureFocusInPlaylist` 3878–3929;
+  - `transferFocusToPosition` 3931–3984;
+  - `movePlaylistFocus` 3986–4077.
+
+**Nested `TvPlaylistGuideSkin.kt` (365 member lines).**
+- Fields and getters (17):
+  - `guideSkinInstalled` 3133–3144 (with the skin banner);
+  - `guideGridSpan` 3145;
+  - `gdShowTitle` … `gdPopDesc` 3146–3158 (13 fields);
+  - getter-only `guideOverlayLayoutRes` 3160–3169 and `guideItemLayoutRes` 3171–3182.
+- Functions (9):
+  - `installGuideOverlaySkin` 3184–3194;
+  - `bindGuideSkinViews` 3196–3212;
+  - `applyGuideLayoutManager` 3214–3241;
+  - `applyGuideKeyOverride` 3243–3307;
+  - `applyGuideTabStyle` 3309–3362;
+  - `guideSkinBind` 3364–3424;
+  - `updateGuideDetail` 3426–3470;
+  - `loadGuideArt` 3472–3481;
+  - `seedGuideSkinChrome` 3483–3508.
+
+**Stays in the activity:**
+- **Views.** `playlistOverlay`/`playlistView`/`seasonTabsContainer` (153–155, `lateinit`) are bound by
+  `bindViews` and read by retained `setupBackPressHandler` (`playlistOverlay.visibility`) and `onDestroy`
+  (`if (::playlistView.isInitialized) playlistView.adapter = null`). Keeping them as computed Host getters
+  avoids 3 `bindViews` patches, a readiness getter and a cross-object `lateinit` write. Moved code never
+  checks `::x.isInitialized`.
+- **Other names.** `hasPlaylistResolver` (written by `parsePayload`, also read by shuffle), `controlsSkin`
+  (lazy, controls phase), `ottShowName` (CTRL-II), `dp`.
+
+**Split variants:**
+- **Variant A** (recommended against): one owner holding the four focus fields. Its navigator is fieldless,
+  as in phase 11. It needs 67 cross-qualifications, including 2 unbraced cross-file templates in the
+  navigator: 3902 `$navigationTargetPosition` and 4018 `navTarget=$navigationTargetPosition`.
+- **Variant B** (selected): the navigator owns the focus state. It needs 49 cross-qualifications (O→S 15,
+  O→N 17, N→O 5, N→S 1, S→O 2, S→N 9) and no template bracing. That focus state is not a shared token
+  (it is read only by the focus engine, the owner's attach listener and the skin key override), so the
+  phase-11 single-owner rule does not apply.
+
+Two nested destinations carry fields, so the phase-6 effective-slot mapping applies to both.
+`nested_construction` already supports several rows.
+
+### 3.3 Owned state and initializer proofs
+
+There is one slot: the owner's property replaces `seasonTabs` at 182, between `skipSegmentButton` (181)
+and the seekbar views (186). Both nested classes map to that slot. **Every moved property other than
+`seasonTabs` runs earlier, so there are 28 proofs:**
+
+| fields | form | kind |
+|---|---|---|
+| `movieTabs = mutableListOf<MovieTab>()` | typed empty factory | allocation |
+| `playlistVisible = false`, `isNavigating = false`, `guideSkinInstalled = false` | literal | constant |
+| `playlistAdapter`/`seriesPlaylistAdapter`/`moviePlaylistAdapter`/`movieGroups`/`focusRecoveryRunnable` `= null`; 13 × `gd* = null` | literal | constant |
+| `guideGridSpan = 5` | literal | constant |
+| `focusRecoveryHandler = Handler(Looper.getMainLooper())` | handler | handler-allocation |
+| **`playlistMode: PlaylistMode = PlaylistMode.NONE`** | **new: enum entry** | constant |
+| **`navigationTargetPosition = -1`** | **new: negative integer literal** | constant |
+| **`guideOverlayLayoutRes` / `guideItemLayoutRes`** (`get()` only, no backing field) | **new: accessor-only, no initializer** | none-run |
+
+**Step-T classifier additions** (narrow, each with negatives):
+- **Unary-minus integer literal.** The current regex accepts only `[0-9]…`.
+  - Accept `-` followed by the existing constant form only. Reject `-x` and `-f()`.
+- **Enum entry of a reviewed enum.** Accept `PlaylistMode.NONE` from an explicit allow-list (`PlaylistMode`
+  is `internal enum class PlaylistMode { NONE, SERIES, COLLECTION }` in `TvPlaybackPayload.kt`, with no
+  `init` or constructor). Its first access triggers only that enum's static initialization.
+  - Reject non-listed types.
+  - Reject `X.y()` calls and companion/property reads.
+- **Accessor-only property.** Prove from the PSI that there is no initializer and no delegate, and only a
+  getter. Nothing runs at construction, so classify as `none`.
+  - Reject `by lazy`.
+  - Reject a backing initializer plus a getter.
+
+No `lateinit` property moves.
+
+### 3.4 Every inbound reference (outside the unit)
+
+**Activity patches: 31 in 15 declarations.** Each is a single-token prefix: `playlistController.`,
+`playlistController.navigator.` or `playlistController.guideSkin.`.
+
+| declaration | lines | names |
+|---|---|---|
+| `playbackListener` | 1764 | `getNextPlayableIndex` |
+| `onCreate` | 2154 | `setupPlaylist()` (between `setupSeekbar()` and `setupControls()`; order kept) |
+| `handleMetadataUpdate` | 2335, 2336, 2444, 2445 | `rebuildPlaylistContent`, `seriesPlaylistAdapter` ×2, `moviePlaylistAdapter` (inside `runOnUiThread` blocks) |
+| `bindViews` | 2522, 2526 | `installGuideOverlaySkin()` → `.guideSkin.`, `bindGuideSkinViews()` → `.guideSkin.` (around the 3 retained view binds; order kept) |
+| `setupControls` | 4479 | `showPlaylist` (playlist button) |
+| `playMediaDirect` | 4866 | `playlistAdapter?.setActiveIndex` |
+| `playNext` / `playPrevious` / `updateCatalogEpisodeControls` | 5226 / 5272 / 5310 | `getNextPlayableIndex` / `getPrevPlayableIndex` ×2 |
+| `getShuffleEligibleIndices` | 5541, 5548, 5549, 5551 | `playlistMode` ×2, `movieGroups` ×2 |
+| `playPikPakVideoWithRetry` | 6499 | `playlistAdapter?.setActiveIndex` |
+| `dispatchKeyEvent` | 6775, 6777, 6917, 6921 | `playlistVisible`, `hidePlaylist` (Back), `playlistMode` (DPAD_UP gate), `showPlaylist` |
+| `isCleanPlaybackState` | 7998 | `playlistVisible` |
+| `setupBackPressHandler` | 11017 | `hidePlaylist` (the retained `playlistOverlay.visibility` check at 11016 is unchanged) |
+| `onDestroy` | 11253–11255, 11258, 11259, 11264, 11265 | 3 adapters `= null`, `focusRecoveryHandler.removeCallbacksAndMessages(null)` → `.navigator.`, `focusRecoveryRunnable = null` → `.navigator.`, `seasonTabs.clear()`, `movieTabs.clear()` |
+
+**`onDestroy` lifecycle.** The 7 statements stay **in place** as single-reference patches, in the same order:
+- after the subtitle-identity clear and the retained `::playlistView.isInitialized` adapter clear (11252);
+- around the retained `sourceSwitchController.cancelSourceSwitchWait()` and `stremioSources.clear()`;
+- before `seekbarOverlay` and `sendFinished()`.
+
+They are not folded into a controller call (phase-9 rule).
+
+**Re-points: 7 forwarders in 6 controller properties** (whole-property `patched` rows; earlier destination
+files stay byte-identical):
+
+| line | property | forwarder |
+|---|---|---|
+| 177 | `upNextController` | `getNextPlayableIndex(i)` |
+| 1082 | `startupGateController` | `rebuildPlaylistContent()` |
+| 1128, 1129 | `progressReporter` | `playlistAdapter`, `playlistVisible` |
+| 1193 | `stremioTvGuideController` | `playlistMode` |
+| 1305 | `skipSegmentController` | `playlistVisible` |
+| 10720 | `sourceSwitchController` | `rebuildPlaylistContent()` |
+
+Each target becomes `this@AndroidTvTorrentPlayerActivity.playlistController.x`, so cross-feature reads go
+through the owning controller.
+
+**Phase-12 interplay:**
+- Phase 12 patches `setupControls` (4426), `dispatchKeyEvent` (EPG lines 6886–6915) and `onDestroy`
+  (`iptvEpgToken++`) in other statements. Re-measure and merge the manifests on the phase-12 merge.
+- **Expected line shifts:** members before 993 do not move. Members after ≈ 1047 shift by about −23 for the
+  removed fields, then +≈ 18 for the phase-12 property. Members after 8415 shift by a further −1,154. So the
+  phase-13 function spans at 3133–4120 and 7738–7967 shift by ≈ −5, and `onDestroy` by ≈ −1,160.
+
+### 3.5 Outbound Host (one 11-member Host, all computed and explicitly qualified)
+
+| member | refs (O/N/S) | note |
+|---|---|---|
+| `playlistView: RecyclerView` | 53 | `lateinit` getter, read at use time; this preserves `UninitializedPropertyAccessException` timing |
+| `playlistOverlay: View` | 3 (O) | `lateinit` |
+| `seasonTabsContainer: LinearLayout` | 11 (O) | `lateinit` |
+| `fun dp(Int): Int` | 17 (S) | tab padding and margins; there is no `dp` member on `TextView`/`LayoutParams` receivers |
+| `controlsSkin: TvControlsSkin` | 13 (S) | **lazy, read-once from `playerPreferences`**. The computed getter keeps first-access timing (first read: `installGuideOverlaySkin` in `bindViews`) |
+| `payload: PlaybackPayload?` | 8 | |
+| `currentIndex: Int` | 4 | |
+| `hasPlaylistResolver: Boolean` | 2 (O) | |
+| `fun playItem(index: Int)` | 2 (O) | one call shape only (adapter clicks); no interface defaults (phase-8 rule) |
+| `ottShowName: String?` | 1 (S) | CTRL-II field; re-pointed when CTRL-II moves |
+| `sourceFetchController` | 1 (O) | cross-feature getter; `requestEpisodeFetch(season, episode)` from the series adapter's fetch callback |
+
+### 3.6 Receivers, inherited members, overload audit
+
+**`this` → `activity`: 8 sites.**
+- S: 3221 `LinearLayoutManager(this, VERTICAL, false)`;
+- S: 3224 `GridLayoutManager(this, guideGridSpan)`;
+- S: 3313 `ContextCompat.getColorStateList(this, res)`, inside a plain lambda, so the `this` is the activity;
+- S: **3476 and 3480 `Glide.with(this)`**, which must keep the `FragmentActivity` overload (the activity-
+  lifecycle request manager);
+- O: 3512 `LinearLayoutManager(this, HORIZONTAL, false)`;
+- O: 3704 `TextView(this)` and 4080 `TextView(this)`.
+
+All are argument or constructor sites for the compiled descriptor audit.
+
+**Excluded receiver: 1 site.** 3953 `removeOnGlobalLayoutListener(this)` inside `object :
+ViewTreeObserver.OnGlobalLayoutListener` (N) is the listener, so it is not substituted. A reviewed
+exclusion with a negative.
+
+**Implicit inherited: 15 sites.**
+- `findViewById` ×14 (S): 3190 `findViewById<ViewGroup?>`, plus 13 inferred-type binds 3199–3211 into
+  nullable fields;
+- `layoutInflater` ×1 (S): 3192, `Activity.getLayoutInflater()`.
+
+Each is pinned for owner, descriptor and opcode before and after (phase-9/10 auditor).
+
+**Other anonymous objects** with no `this`: `OnChildAttachStateChangeListener` (O, 3531) and
+`GridLayoutManager.SpanSizeLookup` (S, 3226). Inside the `SpanSizeLookup`, `playlistMode` (→
+`playlist.playlistMode`) and `playlistView` (→ `host.playlistView`) are cross references inside an object
+expression, compile-checked. Labels `return@setOnKeyListener` (3254, 3255, 3786) are unchanged.
+
+**Callable references.** `::guideSkinBind` ×2 in O (3636, 3656) becomes `guideSkin::guideSkinBind`: a bound
+reference with an explicit receiver. The receiver is the eager, final nested instance, so it is identical in
+behaviour. This needs a step-T substitution class with a negative (an unqualified `::guideSkinBind` must not
+compile in O).
+
+**Templates:**
+- 1 already-braced host template, 7758 `${playlistView.adapter?.itemCount}` → `${host.playlistView…}`;
+- no unbraced host template;
+- variant B has no cross-file template;
+- owner-local templates (`$playlistMode`, `$targetPosition`, …) are unchanged.
+
+**Default arguments.** `selectSeasonTab(…, scrollToTop = true)` and `selectMovieTab(…, scrollToTop = true,
+forceAdapterUpdate = false)` are literals and are not state-reading.
+
+**Shadowing.** The scan found no local or parameter named after a Host member. Step T re-verifies this
+with the PSI.
+
+### 3.7 Timers, handlers, teardown
+
+- `focusRecoveryHandler` is **owned** by N:
+  - attach/detach recovery `postDelayed(…, 100)`, set up in O's `setupPlaylist` listener (→ `navigator.`
+    qualified);
+  - cleared only in `onDestroy` (2 in-place patches).
+- View-queue posts are never cancelled, pinned as-is (follow-up):
+  - `playlistView.post` + `postDelayed(100)` in `showPlaylist`;
+  - `postDelayed(100)` in `movePlaylistFocus`;
+  - `postDelayed(50)` ×2 in `transferFocusToPosition`.
+- The `OnGlobalLayoutListener` is self-removing on its first layout. It is never removed if no layout occurs
+  (follow-up).
+- `OnGlobalFocusChangeListener` is added on **every** `setupPlaylistNavigation()` (per rebuild). This is an
+  existing follow-up.
+- `OnChildAttachStateChangeListener` is added once per `setupPlaylist()`, whose only caller is `onCreate`.
+- `loadGuideArt` Glide requests are bound to the activity lifecycle (the `FragmentActivity` overload is
+  preserved).
+- There is no borrowed `progressHandler`/`controlsHandler`, no coroutine, and no `MethodChannel` (the only
+  async edge is `sourceFetchController.requestEpisodeFetch`).
+- Teardown order is unchanged (§3.4).
+
+### 3.8 Reflective tests and Dart anchors
+
+**Kotlin reflection: 10 literal sites, 4 owner-map routes in `TvPlayerOriginalAccess`.**
+- `playlistVisible` (5): `TvProgressReporterCharacterizationTest` :53/:58, `TvSkipUiCharacterizationTest`
+  :74, `TvSkipPresentationCharacterizationTest` :87, `TvUpNextCharacterizationTest` :37 → `playlistController`.
+- `playlistMode` (1): `TvStremioTvGuideUiCharacterizationTest` :63 → `playlistController`.
+- `playlistAdapter` (1): `TvProgressReporterCharacterizationTest` :45 → `playlistController`.
+- `focusRecoveryHandler` (3): `@After` cleanup lists in `TvPhase5/7/8OriginalTest` →
+  `playlistController.navigator`.
+
+All are backing fields with unmangled JVM names, so no reflected function needs a public pin. Rescan after
+step 0 adds accesses.
+
+**Dart.** No anchor names a moved function.
+- `android_tv_mdblist_progress_source_test.dart` `_between('// Handle episode metadata updates', 'private fun
+  requestMetadataFromFlutter()')` spans `handleMetadataUpdate`, which gets 4 patches. Its asserted literals
+  (`hasWatchedUpdate`, `model.items.indexOfFirst`, …) are untouched. Record this; no retarget.
+- `profile_source_guard_test.dart` scans `lib/` plus listed native files only, so it is unaffected.
+
+### 3.9 Hazards (each a step-T fixture or negative)
+
+1. Two field-bearing nested destinations, both at the owner's effective slot. Negatives:
+   - an omitted proof for N's or S's first field;
+   - N or S reading the Host or the owner during construction.
+2. The 3 new classifier forms (§3.3), with negatives.
+3. The `Glide.with` `FragmentActivity` overload ×2, the `TextView`/`LinearLayoutManager`/`GridLayoutManager`
+   constructors and `ContextCompat`: compiled descriptor audit (8 sites).
+4. 15 implicit inherited sites, with owner/descriptor/opcode pins.
+5. The excluded listener `this` at 3953 (reviewed exclusion; negatives for omission and substitution).
+6. Bound callable reference re-receiver `guideSkin::guideSkinBind` ×2.
+7. `controlsSkin` lazy first-access timing through a computed getter. Negative: a snapshotting `val`
+   forwarder.
+8. The 4 `lateinit` view getters must be computed. Negative: an initialized forwarder that reads at
+   construction, and so throws at slot 182.
+9. The skin key listener is "last-set-wins" over the navigator's listener. Keep the call order inside
+   `setupPlaylistNavigation` (N calls `guideSkin.applyGuideKeyOverride()` last).
+10. The `bindViews` order `installGuideOverlaySkin` → 3 view binds → `bindGuideSkinViews` is kept (patched in
+    place).
+11. `onDestroy`: 7 in-place statements, order unchanged. Negative: a folded block.
+
+### 3.10 File split and counts
+
+| file | content | ≈ lines (members + header/imports) |
+|---|---|---|
+| `TvPlaylistOverlayController.kt` | owner: 8 fields, 17 functions, the Host interface, eager `navigator`/`guideSkin` construction | 534 + ≈ 45 ≈ **580** |
+| `TvPlaylistFocusNavigator.kt` | 4 focus fields + 5 functions | 300 + ≈ 25 ≈ **325** |
+| `TvPlaylistGuideSkin.kt` | 15 fields + 2 getters + 9 functions | 365 + ≈ 30 ≈ **395** |
+
+The activity shrinks by ≈ 1,199 member lines, minus a ≈ 18-line property and Host, giving ≈ −1,180. That
+takes it to ≈ 10,320 → **≈ 9,140** after phase 13.
+
+Substitutions:
+
+| kind | count |
+|---|---|
+| `host.` | ≈ 115 (`playlistView` 53, `dp` 17, `controlsSkin` 13, `seasonTabsContainer` 11, `payload` 8, `currentIndex` 4, `playlistOverlay` 3, `hasPlaylistResolver` 2, `playItem` 2, `ottShowName` 1, `sourceFetchController` 1) |
+| cross-file | 49 |
+| receivers | 8 |
+| inherited | 15 |
+| visibility | ≈ 33 |
+| **total** | **≈ 220** |
+
+### 3.11 Step T / step 0 needs
+
+**Step T:**
+- the 3 classifier forms;
+- the phase-13 extraction fixture: owner with two field-bearing nested destinations, 28 proofs,
+  `guideSkin::` reference substitutions, re-point rows for 6 properties, 7 in-place `onDestroy` patches;
+- negatives: §3.9 plus a missed `navigator.`/`guideSkin.`/`playlist.` qualification compiled against a
+  same-name Host member;
+- the per-phase dispatcher keeping all historical suites;
+- the compiled audit: 8 receiver sites + 15 inherited + 1 exclusion;
+- earlier destinations frozen at the phase-12 merge.
+
+**Step 0** (from zero; characterize the original through the real bootstrap, not only reflection):
+- **Bootstrap through `onCreate`/`bindViews`** with series, collection, single-item, and single-item-with-
+  guide-and-resolver payloads:
+  - the adapters chosen and `playlistMode`;
+  - season and collection tabs: labels, default selection by the current episode, `scrollToTop`
+    semantics;
+  - `computeMovieGroups`: payload groups (empty filtered) versus the size/year fallback, ordering and the
+    40 % threshold;
+  - `rebuildPlaylistContent` idempotence.
+- **Navigation maps.** `getNext/PrevPlayableIndex` for series maps, collection groups, the sequential
+  fallback and boundaries. Exercise them through `playNext`/`playPrevious`/Up Next/`ENDED` where practical.
+- **Show/hide.** Early exits (`NONE`, null adapter), tab alignment, active-position scroll, focus after
+  `post` + 100 ms, `gdPop` hidden on hide, Back via `dispatchKeyEvent` and the back-press handler, DPAD_UP
+  opening only when the VOD state is clean, `isCleanPlaybackState`.
+- **Focus engine** (attached, measured RecyclerView; paused looper; `ShadowChoreographer` frame delay saved
+  and restored; phase-1/7 lessons):
+  - `movePlaylistFocus` across headers, boundaries and rapid input (`navigationTargetPosition`);
+  - direct focus versus transfer, the global-layout transfer and its 50 ms retry;
+  - attach/detach recovery after 100 ms, guarded by `isNavigating`/`playlistVisible`;
+  - middle-out recovery in `ensureFocusInPlaylist`.
+- **Guide skin: 7 separate activity instances**, one per `controlsSkin` (CLASSIC never installs; the lazy is
+  read once per session, the phase-6 lesson):
+  - layout install and id contract, item layout per skin;
+  - layout manager per skin (vertical, PULSE 5-span grid with the series-header span lookup);
+  - axis-remapped key listener (last-set-wins), escape-to-tabs/rail edges;
+  - tab styling;
+  - row binders: BROADCAST status colour state list, PULSE ring, MARQUEE/TICKET strike-through;
+  - the detail surface;
+  - `seedGuideSkinChrome` counts;
+  - Glide owner and clear-on-null for `loadGuideArt`.
+- **Metadata update path.** `handleMetadataUpdate` rebuild + `setActiveIndex`, and adapter notifications.
+- **Episode fetch callback.** It routes to `sourceFetchController.requestEpisodeFetch` and hides first.
+- **`onDestroy`.** Cleanup order and handler clearing.
+- **Mutation proofs.** Apply the **phase-11 lesson proactively**: the unit has ≈ 101 `if`, 16 `when` and 70
+  `return` sites, so build the PSI per-function coverage matrix and run a statement-level sweep in step 0,
+  before Claude's first sample. Then run Claude's independent sample and close gaps in 0b. A second sample is
+  mandatory if the first is below ≈ 75 %.
+
+### 3.12 Follow-ups found while mapping (pin as-is; do not fix)
+
+- `setupPlaylistNavigation` adds an `OnGlobalFocusChangeListener` per rebuild (existing).
+- `playlistView.post`/`postDelayed` focus posts are never cancelled. The global-layout listener stays
+  registered if no layout ever runs.
+- `findNextFocusablePosition` returns any in-range index for collections (no focusability check).
+  `ensureFocusInPlaylist` assumes a `LinearLayoutManager`, so the PULSE `GridLayoutManager` passes the cast
+  (it is a subclass), which is fine. Pin the behaviour.
+- `createSeasonTab`/`createMovieTab` use raw pixel padding (28/14/10) while the skin styling uses `dp`.
+  This is existing; no change.
+- The `getNextPlayableIndex` series path returns `null` when the map lacks the index (no sequential
+  fallback). Pin it.
+
+---
+
+### 4. Honest end-state estimate (updated)
+
+Measured at `b870a16b1`:
+- 17 controller properties with Host objects take **514 lines** (≈ 30 each);
+- retained members outside every unit take ≈ 1,470 lines, including ≈ 171 fields (≈ 290 lines);
+- inter-member blank and comment lines ≈ 363;
+- imports 131.
+
+| item | lines (est.) |
+|---|---|
+| imports | ≈ 100–130 |
+| class header, companion (`PAYLOAD_KEY` + residual constants) | ≈ 30 |
+| shared single-owner state: `player`/`trackSelector`/`payload`/`currentIndex`/`playlistMode`-free core, Stremio sources + index + `stremioResolutionToken`, IPTV list/index/mode flags, handlers/scopes, `lateinit` views not taken by their owners, recovery/session ids, `playerPreferences` | ≈ 200–300 |
+| Host wiring: today 514; + phase 12 ≈ 20, phase 13 ≈ 20, SUBF ≈ 20, CTRL-I + DISP ≈ 60–100, CTRL-II ≈ 50–95, TUNE ≈ 30, START-A ≈ 60, START-B ≈ 50 | ≈ 825–910 |
+| lifecycle: `onCreate` 173, `onStart`/`onStop`/`onResume`/`onPause` ≈ 100, `onDestroy` 169, `finish` 17, `sendFinished` 18, permissions 11, back press 43, buffering indicator 21, `recordPlaybackLifecycle` 9 | ≈ 560 |
+| composition/bootstrap: `bindViews` 191, `parsePayload` 170, `initIptvMode` 116, `unifiedMenuCallbacks` + `umSectionRows` ≈ 80, small helpers (resume hold, `progressRunnable`, `guideStyle`/`guideTypeface`, `guideAdjacent`) ≈ 100–150 | ≈ 660–710 |
+| inter-member blank/comment lines | ≈ 250–300 |
+| **subtotal, routers extracted** (+ ≈ 230 for two ≈ 110-member Hosts) | **≈ 2,850–3,150** |
+| `playbackListener` + `dispatchKeyEvent` kept verbatim (no router Hosts) | +872 −230 |
+| **realistic end state (routers retained, the likely outcome)** | **≈ 3,450–3,750** |
+
+This is slightly higher than the phase-6 estimate (2,800–3,600). Two things raise it:
+- Host wiring has measured ≈ 30 lines per controller, not ≈ 25.
+- `initIptvMode` (116) and the UM composition (≈ 80) are now confirmed to stay.
+
+The controls phases decide ≈ 100 lines either way, depending on whether their ≈ 95 `lateinit` views move
+with them (each moved view adds a `bindViews` patch and removes a Host forwarder).
+
+**What must remain** (the documented end exception, unchanged in kind):
+- the Android entry point and manifest FQN;
+- lifecycle order (`onStop` 12 / `onDestroy` 43 steps) and in-place teardown statements;
+- the composition root (≈ 26 controller properties + Host objects);
+- the shared player and single-owner state;
+- payload intake (`parsePayload`) and view binding (`bindViews`);
+- the IPTV bootstrap (`initIptvMode`);
+- the UM composition;
+- very likely the two routers.
+
+**Exit path** (outside this series; a reviewed rule change):
+- the activity implements the Host interfaces in its class header (removes ≈ 800 lines of forwarder
+  objects); or
+- non-verbatim router splits by event or key group.
+
+Either could bring the activity to ≈ 1,500–2,000. **≤ 800 is not reachable under the current verbatim
+rules.**
+
+
+## Phase 13 Step T — original re-measurement at `315448a3c`
+
+The corrections header governs: **29 properties / 31 functions / 60 members**.
+The 10,297-line activity is unchanged. The complete production-config fixture
+contains a 586-line playlist owner, 327-line focus navigator and 398-line guide
+skin; both collaborators are eager at the `seasonTabs` slot (182), with 28
+initializer proofs, nine view/state Host getters and two braced Host methods.
+The three playlist views remain activity-owned. Earlier **46** destinations
+are frozen byte-for-byte to the original merge, with an empty whitelist.
+
+The source inventory is `p13/remeasured-inventory.json`; the manifest owns
+all 2,013 original declarations. Re-measurement preserves 31 patches in 15
+activity declarations, seven re-points in six whole-property Host rows, seven
+in-place teardown statements and 49 cross-qualifications. There are 234
+explicit moved substitutions, including visibility and bound function
+references. Reflected functions and the two getter-only properties use public
+members on internal destinations to avoid JVM name mangling; Step 0 rescans
+the actual reflection needs before any production move.
+
+| Moved function | Original start–end lines |
+| --- | --- |
+| `setupPlaylist` | 3505–3579 |
+| `rebuildPlaylistContent` | 3581–3614 |
+| `setupSeriesPlaylist` | 3616–3643 |
+| `setupCollectionPlaylist` | 3645–3664 |
+| `setupSeasonTabs` | 3666–3696 |
+| `createSeasonTab` | 3698–3727 |
+| `selectSeasonTab` | 3729–3743 |
+| `setupCollectionTabs` | 3745–3772 |
+| `createMovieTab` | 4074–4100 |
+| `selectMovieTab` | 4102–4115 |
+| `showPlaylist` | 7733–7777 |
+| `alignSeriesTabsForCurrentEpisode` | 7779–7788 |
+| `alignMovieTabsForCurrentItem` | 7790–7797 |
+| `getNextPlayableIndex` | 7799–7835 |
+| `getPrevPlayableIndex` | 7837–7868 |
+| `computeMovieGroups` | 7870–7956 |
+| `hidePlaylist` | 7958–7962 |
+| `setupPlaylistNavigation` | 3774–3831 |
+| `findNextFocusablePosition` | 3833–3871 |
+| `ensureFocusInPlaylist` | 3873–3924 |
+| `transferFocusToPosition` | 3926–3979 |
+| `movePlaylistFocus` | 3981–4072 |
+| `installGuideOverlaySkin` | 3179–3189 |
+| `bindGuideSkinViews` | 3191–3207 |
+| `applyGuideLayoutManager` | 3209–3236 |
+| `applyGuideKeyOverride` | 3238–3302 |
+| `applyGuideTabStyle` | 3304–3357 |
+| `guideSkinBind` | 3359–3419 |
+| `updateGuideDetail` | 3421–3465 |
+| `loadGuideArt` | 3467–3476 |
+| `seedGuideSkinChrome` | 3478–3503 |
+
+Step T first resolves the Phase-12 helper milestone: the owner-route map is
+a separate 494-line fixture, the reflection/access fixture is 325 lines, all
+487 route entries and all remaining access bytes are preserved, and the size
+ratchet entry is removed. Its 1,300 JVM identities/statuses match `p12-gate`.
+The final checker suites comprise 298 historical plus 39 Phase-13 tests.
+The complete extraction fixture compiles with 23 pinned receivers, one typed
+listener self exclusion and two compiled guide-skin function references.
+Raw logs, fixtures and hashes are under `p13/`; production remains original.
+
+## Phase 13 Step 0 — original characterization at `315448a3c`
+
+Production remains byte-identical to the phase-12 merge. **120 new tests** use real `onCreate`/`start`/`resume`/visible activity bootstrap, seven independently instantiated controls skins, real adapter/key/focus/click callbacks, typed reflection and paused-looper delivery. No production seam, owner-route addition, Dart change or behavior fix is introduced.
+
+The deterministic queue pumps ViewRoot’s own `doTraversal()` entry point and one-millisecond paused-clock steps; it does not edit message-queue barriers. Earlier discarded timing/setup attempts are archived separately. The final 131-test control (120 new plus 11 existing adapter/threshold tests) and every 14 filtered clean-control cohort pass. Full-set controls are used for the final reruns. Immutable fixture hashes, exact original offsets/patches, named failures and raw Gradle/JUnit logs live under `p13/step0/`. The workers and clean baseline use the same evidence-only 1 GiB heap; repository Gradle settings are unchanged.
+
+Coverage includes exact seven-skin layout/item getter pairs, replacement child counts, 13 nullable bindings, font/geometry/color states, detail/chrome strings and artwork lifecycle; series/movie filtering and real callback wiring; default scroll/force dispatch and refresh notifications; header skipping, pending targets, off-screen scroll requests, focused-child precedence, 50/100 ms delivery, retry ordering, cancellation/replacement and evaluation-time guards. The original unconditional older reset, queued View work after hide/rebuild/destroy and accumulating global focus listeners are deliberately pinned. Compiled teardown order and actual cleanup before the finished message cover all seven phase-13 statements.
+
+### Systematic statement coverage matrix
+
+The exact PSI inventory contains **723 nodes in all 31 moved functions**: 135 writes, 100 `if`, 14 `when`, 70 returns, 5 loops and 399 calls. The two getter-only properties contribute the inventory’s additional `if` and two `when` sites; their layout dispatch is covered by all seven skins. `p13/step0/coverage-matrix.json` retains each original line/span/text, output contract, assertion witness and mutation link. Nested read expressions are tied to their enclosing output; state/branch rows require a direct assertion proof or an explained equivalent deletion. Caller wiring and teardown are additionally characterized outside the 31-function inventory.
+
+| Moved function | Writes | if / when | Calls | Assertions and observable contract |
+| --- | ---: | ---: | ---: | --- |
+| `installGuideOverlaySkin` | 1 | 1 / 0 | 3 | Seven XML/layout getter pairs, one replacement child, retained-view identity and idempotence; absent overlay remains uninstalled. |
+| `bindGuideSkinViews` | 13 | 1 / 0 | 13 | All 13 bindings match real XML including null; disabled skin retains sentinel identities. |
+| `applyGuideLayoutManager` | 3 | 3 / 1 | 3 | Orientation, reverseLayout, five-column header/cell spans, collection mode and absent adapter; disabled skin retains manager. |
+| `applyGuideKeyOverride` | 0 | 9 / 2 | 12 | Installed callback action/visibility, cross-axis traps, vertical top edge and grid column/up/down boundaries, target and actual row movement. |
+| `applyGuideTabStyle` | 16 | 1 / 1 | 41 | Every font/size/color-state/padding/background/spacing/elevation/margin; restyle from 7sp; disabled skin retains geometry. |
+| `guideSkinBind` | 6 | 5 / 3 | 30 | Both real adapters invoke binder; active/watched, 94/95, FETCH/ON AIR/CLEARED/READY priority, colors, number fallbacks, strike and ring. |
+| `updateGuideDetail` | 10 | 3 / 1 | 34 | Seven skins: exact strings/separators, trim/null/blank and partial metadata, rating/minute boundaries, popover and lifecycle-owned artwork; disabled sentinel retained. |
+| `loadGuideArt` | 0 | 1 / 0 | 10 | Activity lifecycle request manager and CenterCrop; clear request/drawable on null/blank/null-word; real whitespace retained; null target accepted. |
+| `seedGuideSkinChrome` | 3 | 2 / 2 | 9 | Live title/index/payload, casing, episode/watched counts and initial detail; missing payload/singleton; disabled sentinels. |
+| `setupPlaylist` | 8 | 5 / 0 | 23 | Real onCreate: horizontal prefetch=4/cache=10, no animator, descendant focus mode and recovery listeners; replacement/cancellation, 100ms deadline, delivery-time reads and initial GONE. |
+| `rebuildPlaylistContent` | 7 | 2 / 1 | 9 | Real bootstrap/callback rebuilds clear both series and collection pre-states; nullable payload retains state; singleton resolver/series/guide conjunction; listener accumulation preserved. |
+| `setupSeriesPlaylist` | 5 | 4 / 0 | 10 | Owner fields, mode, guide/resolver callbacks, current-season selection and retained standalone groups; real loaded/absent clicks hide then play/fetch exact indices; binder/focus callbacks. |
+| `setupCollectionPlaylist` | 6 | 2 / 0 | 6 | Owner fields, mode, groups/current-group filtering; real click hides and plays payload index; both binder and focus callbacks. |
+| `setupSeasonTabs` | 2 | 3 / 0 | 11 | S1/S2 order, child count and GONE/VISIBLE; empty clears; current season chooses second, null/missing/out-of-range falls back first. |
+| `createSeasonTab` | 9 | 1 / 0 | 11 | Exact text/font/layout/focus; installed click reads live index, ignores removed tab; all seven styles. |
+| `selectSeasonTab` | 1 | 1 / 0 | 4 | Every selected boolean and filtered count, untouched payload/index; explicit/default scroll read each invocation. |
+| `setupCollectionTabs` | 3 | 2 / 0 | 12 | Clear season/movie rail; empty/single GONE versus multi VISIBLE; uppercase names/count/order; force first without scrolling. |
+| `createMovieTab` | 9 | 0 / 0 | 10 | Exact text/font/layout/focus; installed click uses original group index; all seven styles. |
+| `selectMovieTab` | 1 | 1 / 0 | 3 | Every selected boolean and adapter count; default force dispatch; scroll flag OR changed group, gated by nonempty items. |
+| `setupPlaylistNavigation` | 0 | 5 / 1 | 13 | Real key listener: action/visibility/directions/other key; global-listener accumulation, visible-only exact old/new positions and diagnostics. |
+| `findNextFocusablePosition` | 1 | 4 / 0 | 1 | Series header skipping in both directions, inclusive search and all bounds; collection valid positions; missing adapters NO_POSITION. |
+| `ensureFocusInPlaylist` | 0 | 8 / 0 | 12 | Hidden/navigating/existing-focus gates; missing/empty manager leaves focus outside; visible recent target, otherwise actual middle-out row. |
+| `transferFocusToPosition` | 9 | 2 / 0 | 15 | Target/flag and 100px scroll; installed typed listener self-removal, 50ms resets and older-reset quirk; rejected-focus retry rereads holder and resets in order; missing holder/manager. |
+| `movePlaylistFocus` | 16 | 8 / 0 | 19 | Rapid pending target and focused-child precedence over first-visible; missing adapter/manager/position, zero delta and boundaries; direct 100ms reset, rejected/missing direct focus delegates. |
+| `showPlaylist` | 2 | 3 / 1 | 20 | NONE/missing adapter guard, VISIBLE, chrome and season/group alignment; active-item scroll/post lookup and fallback; pending View work survives hide/rebuild/destroy. |
+| `alignSeriesTabsForCurrentEpisode` | 0 | 2 / 0 | 4 | Open realigns season, keeps index; null/invalid season/index/adapter and empty tabs retain selection; no scroll. |
+| `alignMovieTabsForCurrentItem` | 0 | 1 / 0 | 2 | Open realigns group, keeps index; missing group/adapter/ungrouped index retain selection; changed-group scroll retained. |
+| `getNextPlayableIndex` | 0 | 6 / 0 | 5 | Sparse Flutter next map including missing key, ordered group successor and all bounds/missing owners; unknown sequential last/null payload. |
+| `getPrevPlayableIndex` | 0 | 5 / 0 | 5 | Sparse Flutter previous map including missing key, ordered group predecessor/first boundary and missing owners; unknown sequential zero/null payload. |
+| `computeMovieGroups` | 1 | 9 / 1 | 49 | Empty and explicit JSON groups/order/default/missing indices/drop-empty; 40% size threshold, null/zero/negative sizes, recognized/excluded/embedded years, equal-year size tie, ascending extras. |
+| `hidePlaylist` | 3 | 0 / 0 | 0 | False flag, exact GONE overlay/TICKET popover; retains target/navigation and queued View work; actual Activity Back and row callbacks. |
+
+### Mutation evidence
+
+Every new test has its own named assertion-failing proof on the original (`named-proof-definitions.json`, `named-proofs/results.json`). Shared mutants are compiled once, but each listed JUnit identity must independently fail on its assertion. Additional statement, callback, diagnostic, branch, list-write and year-boundary mutations strengthen the net. A compiler error or crash is never credited as a kill; type-safe replacements preserve smart casts. Filtered survivors are rechecked against the entire phase-13 set, with stronger preconditions/output assertions where required.
+
+| Batch | Runs | Assertion kills | Evidence |
+| --- | ---: | ---: | --- |
+| sweep | 233 | 207 | `p13/step0/sweep/results.json` |
+| repairs | 24 | 22 | `p13/step0/repairs/results.json` |
+| calls | 93 | 78 | `p13/step0/calls/results.json` |
+| diagnostics | 38 | 32 | `p13/step0/diagnostics/results.json` |
+| branches | 14 | 14 | `p13/step0/branches/results.json` |
+| runnables | 2 | 2 | `p13/step0/runnables/results.json` |
+| full-scope | 25 | 25 | `p13/step0/full-scope/results.json` |
+| effects | 30 | 29 | `p13/step0/effects/results.json` |
+| years | 3 | 3 | `p13/step0/years/results.json` |
+
+The following six deletions are equivalent on the production inputs; compatibility code remains intact. Prefetch and NO_POSITION assignments also have assertion-failing value perturbations.
+
+| Node / deletion | Reason |
+| --- | --- |
+| `o379` / `write-o379` | Fresh unattached TextView: the immediately following setFocusableInTouchMode(true) sets both FOCUSABLE_IN_TOUCH_MODE and FOCUSABLE. There is no intervening observer or parent. Deleting the preceding isFocusable=true assignment leaves the observable flags unchanged. |
+| `o562` / `write-o562` | Fresh unattached TextView: the immediately following setFocusableInTouchMode(true) sets both FOCUSABLE_IN_TOUCH_MODE and FOCUSABLE. There is no intervening observer or parent. Deleting the preceding isFocusable=true assignment leaves the observable flags unchanged. |
+| `o266` / `write-o266` | The newly constructed LinearLayoutManager already defaults isItemPrefetchEnabled to true. Deletion is equivalent; replacing the value with false is killed by the bootstrap property assertion. |
+| `o524` / `write-o524` | At the NO_POSITION branch, a nonnegative navigationTargetPosition would itself have been selected as currentPosition. Production writes only -1 or nonnegative targets, so this branch already has target=-1. Deletion is equivalent on reachable states; assigning 0 is killed by the missing-position assertion. |
+| `o694` / `effect-o694` | On stable nonempty input, main is never empty: when maxSize<=0 the small-file predicate is false; otherwise at least one maximum-size item is >= the 40% threshold (including a threshold rounded to zero). The main.isEmpty rescue branch is unreachable through the real synchronous UI callers. Deleting main.addAll(extras) there is equivalent. The guard inversion is killed; compatibility code remains untouched. |
+| `o695` / `call-o695` | On stable nonempty input, main is never empty: when maxSize<=0 the small-file predicate is false; otherwise at least one maximum-size item is >= the 40% threshold (including a threshold rounded to zero). The main.isEmpty rescue branch is unreachable through the real synchronous UI callers. Deleting extras.clear() there is equivalent. The guard inversion is killed; compatibility code remains untouched. |
+
+Android SDK 28 `View` and RecyclerView constructor bytecode/provenance are archived beside the results. The unreachable Main/Extras rescue is retained, and its guard inversion fails an assertion. Discarded frame/cohort experiments are excluded from the accepted totals.
+
+### Per-test original mutation table
+
+The assertion location/message below refers to the immutable fixture version archived with that proof; later additions are covered by the statement/full-set reruns. The exact before/after strings and full failing stacks are in the JSON and raw group archives.
+
+| Test | Mutation on original | Failing assertion |
+| --- | --- | --- |
+| `TvPlaylistClassicSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-001`: `guideOverlayLayoutRes` — `TvControlsSkin.CLASSIC -> null` → `TvControlsSkin.CLASSIC -> R.layout.view_tv_guide_ott` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<false> but was:<true> |
+| `TvPlaylistClassicSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-002`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistClassicSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-003`: `updateGuideDetail` — `if (!guideSkinInstalled) return` → `if (!guideSkinInstalled) { gdDetailTitle = TextView(this); gdDetailMeta = TextView(this); return }` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:97)`; java.lang.AssertionError: expected null, but was:<> |
+| `TvPlaylistClassicSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-004`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:121)`; org.junit.ComparisonFailure: expected:<[alpha film]> but was:<[changed]> |
+| `TvPlaylistClassicSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-005`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistClassicSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-006`: `setupPlaylistNavigation` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:152)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistClassicSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-007`: `guideOverlayLayoutRes` — `TvControlsSkin.CLASSIC -> null` → `TvControlsSkin.CLASSIC -> R.layout.view_tv_guide_ott` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<false> but was:<true> |
+| `TvPlaylistClassicSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-008`: `updateGuideDetail` — `if (!guideSkinInstalled) return` → `if (!guideSkinInstalled) { gdDetailTitle = TextView(this); gdDetailMeta = TextView(this); return }` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:198)`; java.lang.AssertionError: expected null, but was:<> |
+| `TvPlaylistOttSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-009`: `guideOverlayLayoutRes` — `TvControlsSkin.OTT -> R.layout.view_tv_guide_ott` → `TvControlsSkin.OTT -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistOttSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-010`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistOttSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-011`: `updateGuideDetail` — `gdCaption?.text = desc ?: ""` → `gdCaption?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:92)`; org.junit.ComparisonFailure: expected:<[Description]> but was:<[changed]> |
+| `TvPlaylistOttSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-012`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:121)`; org.junit.ComparisonFailure: expected:<[alpha film]> but was:<[changed]> |
+| `TvPlaylistOttSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-013`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistOttSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-014`: `setupPlaylistNavigation` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:152)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistOttSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-015`: `installGuideOverlaySkin` — `if (guideSkinInstalled) return` → `if (true) return` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistOttSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-016`: `updateGuideDetail` — `gdCaption?.text = desc ?: ""` → `gdCaption?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:197)`; org.junit.ComparisonFailure: expected:<[]> but was:<[changed]> |
+| `TvPlaylistFrostSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-017`: `guideOverlayLayoutRes` — `TvControlsSkin.FROST -> R.layout.view_tv_guide_frost` → `TvControlsSkin.FROST -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistFrostSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-018`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistFrostSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-019`: `updateGuideDetail` — `else -> Unit` → `else -> { gdDetailTitle = TextView(this); gdDetailMeta = TextView(this) }` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:97)`; java.lang.AssertionError: expected null, but was:<> |
+| `TvPlaylistFrostSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-020`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:121)`; org.junit.ComparisonFailure: expected:<[alpha film]> but was:<[changed]> |
+| `TvPlaylistFrostSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-021`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistFrostSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-022`: `applyGuideKeyOverride` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:149)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistFrostSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-023`: `installGuideOverlaySkin` — `if (guideSkinInstalled) return` → `if (true) return` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistFrostSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-024`: `updateGuideDetail` — `else -> Unit` → `else -> { gdDetailTitle = TextView(this); gdDetailMeta = TextView(this) }` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:198)`; java.lang.AssertionError: expected null, but was:<> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-025`: `guideOverlayLayoutRes` — `TvControlsSkin.MARQUEE -> R.layout.view_tv_guide_marquee` → `TvControlsSkin.MARQUEE -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-026`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-027`: `updateGuideDetail` — `gdDetailNum?.text = item.episode?.let { "%02d".format(it) } ?: ""` → `gdDetailNum?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:93)`; org.junit.ComparisonFailure: expected:<[04]> but was:<[changed]> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-028`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:118)`; java.lang.AssertionError |
+| `TvPlaylistMarqueeSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-029`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistMarqueeSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-030`: `applyGuideKeyOverride` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:149)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-031`: `guideSkinBind` — `val watched = progress >= 95` → `val watched = progress > 95` | `com.debrify.app.tv.TvPlaylistSkinContracts.binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews(TvPlaylistSkinContracts.kt:176)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistMarqueeSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-032`: `updateGuideDetail` — `gdDetailNum?.text = item.episode?.let { "%02d".format(it) } ?: ""` → `gdDetailNum?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:193)`; org.junit.ComparisonFailure: expected:<[04]> but was:<[changed]> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-033`: `guideOverlayLayoutRes` — `TvControlsSkin.BROADCAST -> R.layout.view_tv_guide_broadcast` → `TvControlsSkin.BROADCAST -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-034`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-035`: `updateGuideDetail` — `gdMonLabel?.text = "PVW · " + (se ?: item.title.uppercase(Locale.US))` → `gdMonLabel?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:94)`; org.junit.ComparisonFailure: expected:<[PVW · S02E04]> but was:<[changed]> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-036`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:119)`; org.junit.ComparisonFailure: expected:<[CLEARED]> but was:<[READY]> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-037`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistBroadcastSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-038`: `applyGuideKeyOverride` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:149)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-039`: `guideSkinBind` — `val watched = progress >= 95` → `val watched = progress > 95` | `com.debrify.app.tv.TvPlaylistSkinContracts.binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews(TvPlaylistSkinContracts.kt:180)`; org.junit.ComparisonFailure: expected:<[CLEARED]> but was:<[READY]> |
+| `TvPlaylistBroadcastSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-040`: `updateGuideDetail` — `gdMonLabel?.text = "PVW · " + (se ?: item.title.uppercase(Locale.US))` → `gdMonLabel?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:195)`; org.junit.ComparisonFailure: expected:<[PVW · ALPHA FILM]> but was:<[changed]> |
+| `TvPlaylistPulseSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-041`: `guideOverlayLayoutRes` — `TvControlsSkin.PULSE -> R.layout.view_tv_guide_pulse` → `TvControlsSkin.PULSE -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistPulseSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-042`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistPulseSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-043`: `updateGuideDetail` — `gdDetailDesc?.text = lead + item.title + (desc?.let { " — $it" } ?: "")` → `gdDetailDesc?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:95)`; org.junit.ComparisonFailure: expected:<[E4 · alpha film — Description]> but was:<[changed]> |
+| `TvPlaylistPulseSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-044`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:120)`; java.lang.AssertionError: expected:<100> but was:<0> |
+| `TvPlaylistPulseSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-045`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistPulseSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-046`: `applyGuideKeyOverride` — `KeyEvent.KEYCODE_DPAD_RIGHT -> { movePlaylistFocus(1); true }` → `KeyEvent.KEYCODE_DPAD_RIGHT -> { movePlaylistFocus(-1); true }` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:151)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistPulseSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-047`: `guideSkinBind` — `val watched = progress >= 95` → `val watched = progress > 95` | `com.debrify.app.tv.TvPlaylistSkinContracts.binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews(TvPlaylistSkinContracts.kt:179)`; java.lang.AssertionError: expected:<100> but was:<95> |
+| `TvPlaylistPulseSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-048`: `updateGuideDetail` — `gdDetailDesc?.text = lead + item.title + (desc?.let { " — $it" } ?: "")` → `gdDetailDesc?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:196)`; org.junit.ComparisonFailure: expected:<[E4 · alpha film]> but was:<[changed]> |
+| `TvPlaylistTicketSkinCharacterizationTest::overlayLayoutManagerAndAllNullableSkinBindingsMatchRealXml` | `p13-049`: `guideOverlayLayoutRes` — `TvControlsSkin.TICKET -> R.layout.view_tv_guide_ticket` → `TvControlsSkin.TICKET -> null` | `com.debrify.app.tv.TvPlaylistSkinContracts.installed(TvPlaylistSkinContracts.kt:16)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistTicketSkinCharacterizationTest::seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue` | `p13-050`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistSkinContracts.seasonAndMovieTabsRetainEverySkinFontGeometryAndFocusValue$check(TvPlaylistSkinContracts.kt:66)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistTicketSkinCharacterizationTest::detailFormattingDescriptionFallbackAndPopoverArePinned` | `p13-051`: `updateGuideDetail` — `gdPopTitle?.text = (se?.let { "$it · " } ?: "") + item.title.uppercase(Locale.US)` → `gdPopTitle?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailFormattingDescriptionFallbackAndPopoverArePinned(TvPlaylistSkinContracts.kt:96)`; org.junit.ComparisonFailure: expected:<[S02E04 · ALPHA FILM]> but was:<[changed]> |
+| `TvPlaylistTicketSkinCharacterizationTest::seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder` | `p13-052`: `setupSeriesPlaylist` — `items,` → `items.map { it.copy(title = "changed", watched = false, traktProgressPercent = 0.0) },` | `com.debrify.app.tv.TvPlaylistSkinContracts.seriesAndMovieAdapterFunctionReferencesReachTheSameGuideBinder$check(TvPlaylistSkinContracts.kt:118)`; java.lang.AssertionError |
+| `TvPlaylistTicketSkinCharacterizationTest::showChromePinsCountsUppercaseAndHidePopover` | `p13-053`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistSkinContracts.showChromePinsCountsUppercaseAndHidePopover(TvPlaylistSkinContracts.kt:139)`; java.lang.AssertionError |
+| `TvPlaylistTicketSkinCharacterizationTest::installedKeyAxesConsumeAndEscapeAtTheOriginalEdges` | `p13-054`: `setupPlaylistNavigation` — `movePlaylistFocus(1)` → `movePlaylistFocus(-1)` | `com.debrify.app.tv.TvPlaylistSkinContracts.installedKeyAxesConsumeAndEscapeAtTheOriginalEdges(TvPlaylistSkinContracts.kt:152)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistTicketSkinCharacterizationTest::binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews` | `p13-055`: `guideSkinBind` — `val watched = progress >= 95` → `val watched = progress > 95` | `com.debrify.app.tv.TvPlaylistSkinContracts.binderThresholdsActiveStateAndNumberFallbacksUseTheRealSkinViews(TvPlaylistSkinContracts.kt:176)`; java.lang.AssertionError: expected:<true> but was:<false> |
+| `TvPlaylistTicketSkinCharacterizationTest::detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries` | `p13-056`: `updateGuideDetail` — `gdPopTitle?.text = (se?.let { "$it · " } ?: "") + item.title.uppercase(Locale.US)` → `gdPopTitle?.text = "changed"` | `com.debrify.app.tv.TvPlaylistSkinContracts.detailPartialEpisodeMinuteRatingAndBlankDescriptionBoundaries(TvPlaylistSkinContracts.kt:194)`; org.junit.ComparisonFailure: expected:<[ALPHA FILM]> but was:<[changed]> |
+| `TvPlaylistCallerCharacterizationTest::controlsButtonOpensPlaylistAndActivityBackClosesIt` | `p13-057`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistCallerCharacterizationTest.controlsButtonOpensPlaylistAndActivityBackClosesIt(TvPlaylistCallerCharacterizationTest.kt:23)`; java.lang.AssertionError |
+| `TvPlaylistCallerCharacterizationTest::realSeriesRowClickHidesOverlayAndPlaysItsPayloadIndex` | `p13-058`: `setupSeriesPlaylist` — `playItem(index)` → `playItem(0)` | `com.debrify.app.tv.TvPlaylistCallerCharacterizationTest.realSeriesRowClickHidesOverlayAndPlaysItsPayloadIndex(TvPlaylistCallerCharacterizationTest.kt:28)`; java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvPlaylistCallerCharacterizationTest::realMovieRowClickHidesOverlayAndPreservesGroupPayloadIndex` | `p13-059`: `setupCollectionPlaylist` — `playItem(index)` → `playItem(0)` | `com.debrify.app.tv.TvPlaylistCallerCharacterizationTest.realMovieRowClickHidesOverlayAndPreservesGroupPayloadIndex(TvPlaylistCallerCharacterizationTest.kt:35)`; java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvPlaylistCallerCharacterizationTest::realAbsentGuideRowClickHidesOverlayAndRequestsItsExactEpisode` | `p13-060`: `setupSeriesPlaylist` — `sourceFetchController.requestEpisodeFetch(season, episode)` → `sourceFetchController.requestEpisodeFetch(season, episode + 1)` | `com.debrify.app.tv.TvPlaylistCallerCharacterizationTest.realAbsentGuideRowClickHidesOverlayAndRequestsItsExactEpisode(TvPlaylistCallerCharacterizationTest.kt:46)`; java.lang.AssertionError: expected:<8> but was:<9> |
+| `TvPlaylistFocusCharacterizationTest::focusSearchSkipsHeadersInBothDirectionsAndPinsAllBounds` | `p13-061`: `findNextFocusablePosition` — `seriesAdapter.getItemViewType(position) == 1` → `seriesAdapter.getItemViewType(position) == 0` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.focusSearchSkipsHeadersInBothDirectionsAndPinsAllBounds(TvPlaylistFocusCharacterizationTest.kt:30)`; java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvPlaylistFocusCharacterizationTest::rapidNavigationUsesPendingTargetAndStopsAtEachEdge` | `p13-062`: `movePlaylistFocus` — `if (navigationTargetPosition >= 0)` → `if (false)` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.rapidNavigationUsesPendingTargetAndStopsAtEachEdge(TvPlaylistFocusCharacterizationTest.kt:37)`; java.lang.AssertionError: expected:<2> but was:<-1> |
+| `TvPlaylistFocusCharacterizationTest::missingAdapterAndManagerAndPositionClearMoveState` | `p13-063`: `movePlaylistFocus` — `navigationTargetPosition = -1` → `navigationTargetPosition = 8` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.missingAdapterAndManagerAndPositionClearMoveState(TvPlaylistFocusCharacterizationTest.kt:44)`; java.lang.AssertionError: expected:<-1> but was:<8> |
+| `TvPlaylistFocusCharacterizationTest::transferWithoutLinearManagerClearsFlagButRetainsOriginalTarget` | `p13-064`: `transferFocusToPosition` — `isNavigating = false` → `isNavigating = true` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.transferWithoutLinearManagerClearsFlagButRetainsOriginalTarget(TvPlaylistFocusCharacterizationTest.kt:50)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::transferGlobalLayoutSelfRemovalAndFiftyMillisecondReset` | `p13-065`: `transferFocusToPosition` — `}, 50)` → `}, 51)` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.transferGlobalLayoutSelfRemovalAndFiftyMillisecondReset(TvPlaylistFocusCharacterizationTest.kt:59)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::olderTransferResetUnconditionallyClearsNewerNavigation` | `p13-066`: `transferFocusToPosition` — `}, 50)` → `}, 51)` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.olderTransferResetUnconditionallyClearsNewerNavigation(TvPlaylistFocusCharacterizationTest.kt:67)`; java.lang.AssertionError: original older reset clears newer state |
+| `TvPlaylistFocusCharacterizationTest::missingTransferHolderResetsBeforeFocusRecovery` | `p13-067`: `transferFocusToPosition` — `Holder not found or not focusable, using fallback` → `changed fallback` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.missingTransferHolderResetsBeforeFocusRecovery(TvPlaylistFocusCharacterizationTest.kt:73)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::directVisibleMoveKeepsTargetUntilHundredMillisecondReset` | `p13-068`: `movePlaylistFocus` — `}, 100)` → `}, 99)` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.directVisibleMoveKeepsTargetUntilHundredMillisecondReset(TvPlaylistFocusCharacterizationTest.kt:78)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::ensureFocusGuardsVisibilityNavigationAndExistingFocus` | `p13-069`: `ensureFocusInPlaylist` — `if (!playlistVisible \|\| isNavigating) return` → `if (false) return` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.ensureFocusGuardsVisibilityNavigationAndExistingFocus(TvPlaylistFocusCharacterizationTest.kt:82)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::ensureFocusPrefersVisibleRecentTargetOtherwiseSearchesMiddleOut` | `p13-070`: `ensureFocusInPlaylist` — `holder.itemView.requestFocus()` → `Unit` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.ensureFocusPrefersVisibleRecentTargetOtherwiseSearchesMiddleOut(TvPlaylistFocusCharacterizationTest.kt:88)`; java.lang.AssertionError: expected:<1> but was:<-1> |
+| `TvPlaylistFocusCharacterizationTest::attachRecoveryReplacesAndCancelsOlderIdentityAtExactDeadline` | `p13-071`: `setupPlaylist` — `focusRecoveryRunnable?.let { focusRecoveryHandler.removeCallbacks(it) }` → `// retain prior callback` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.attachRecoveryReplacesAndCancelsOlderIdentityAtExactDeadline(TvPlaylistFocusCharacterizationTest.kt:97)`; java.lang.AssertionError: expected:<0> but was:<1> |
+| `TvPlaylistFocusCharacterizationTest::attachRecoveryRejectsNavigatingHiddenAndUnfocusableRows` | `p13-072`: `setupPlaylist` — `if (isNavigating) {` → `if (false) {` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.attachRecoveryRejectsNavigatingHiddenAndUnfocusableRows(TvPlaylistFocusCharacterizationTest.kt:101)`; java.lang.AssertionError: expected same:<com.debrify.app.tv.TvPlaylistFocusCharacterizationTest$$Lambda/0x0000000800c35868@46a04a43> was not:<com.debrify.app.tv |
+| `TvPlaylistFocusCharacterizationTest::queuedRecoveryReadsVisibilityAndNavigationAgainAtDelivery` | `p13-073`: `setupPlaylist` — `if (playlistVisible && !isNavigating &&` → `if (true && !isNavigating &&` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.queuedRecoveryReadsVisibilityAndNavigationAgainAtDelivery(TvPlaylistFocusCharacterizationTest.kt:112)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::focusedDetachSchedulesReplacementAndUnfocusedDetachDoesNothing` | `p13-074`: `setupPlaylist` — `onChildViewDetached: Recovering focus after delay` → `changed detach` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.focusedDetachSchedulesReplacementAndUnfocusedDetachDoesNothing(TvPlaylistFocusCharacterizationTest.kt:122)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::hideDoesNotCancelAlreadyPostedShowFocus` | `p13-075`: `showPlaylist` — `ViewHolder found=` → `Changed holder found=` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.hideDoesNotCancelAlreadyPostedShowFocus(TvPlaylistFocusCharacterizationTest.kt:128)`; java.lang.AssertionError: posted focus lookup still runs while hidden |
+| `TvPlaylistFocusCharacterizationTest::rebuildRetainsQueuedViewFocusWorkAndAddsGlobalFocusListener` | `p13-076`: `setupPlaylistNavigation` — `playlistView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->` → `if (false) playlistView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.rebuildRetainsQueuedViewFocusWorkAndAddsGlobalFocusListener(TvPlaylistFocusCharacterizationTest.kt:133)`; java.lang.AssertionError: expected:<1> but was:<0> |
+| `TvPlaylistFocusCharacterizationTest::destroyClearsOwnedRecoveryWhileQueuedViewLookupSurvives` | `p13-077`: `showPlaylist` — `ViewHolder found=` → `Changed holder found=` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.destroyClearsOwnedRecoveryWhileQueuedViewLookupSurvives(TvPlaylistFocusCharacterizationTest.kt:144)`; java.lang.AssertionError: already queued lookup still runs after destroy |
+| `TvPlaylistFocusCharacterizationTest::detachGatesAndReplacementCancelTheOldRunnable` | `p13-078`: `setupPlaylist` — `if (view.hasFocus() && playlistVisible && !isNavigating)` → `if (view.hasFocus())` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.detachGatesAndReplacementCancelTheOldRunnable(TvPlaylistFocusCharacterizationTest.kt:150)`; java.lang.AssertionError: expected same:<com.debrify.app.tv.TvPlaylistFocusCharacterizationTest$$Lambda/0x0000000800c2f9b0@412ba402> was not:<com.debrify.app.tv |
+| `TvPlaylistFocusCharacterizationTest::queuedRecoveryDoesNotStealExistingFocusForAttachOrDetach` | `p13-079`: `setupPlaylist` — `!playlistView.hasFocus() && playlistView.focusedChild == null` → `true` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.queuedRecoveryDoesNotStealExistingFocusForAttachOrDetach(TvPlaylistFocusCharacterizationTest.kt:165)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::moveReadsFocusedChildBeforeFirstVisibleAndZeroDeltaDoesNotNavigate` | `p13-080`: `movePlaylistFocus` — `targetPosition == currentPosition` → `false` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.moveReadsFocusedChildBeforeFirstVisibleAndZeroDeltaDoesNotNavigate(TvPlaylistFocusCharacterizationTest.kt:171)`; java.lang.AssertionError: expected:<-1> but was:<1> |
+| `TvPlaylistFocusCharacterizationTest::ensureFocusWithEmptyLayoutOrNonLinearManagerLeavesFocusOutside` | `p13-081`: `ensureFocusInPlaylist` — `if (firstVisible == RecyclerView.NO_POSITION) return` → `if (firstVisible == RecyclerView.NO_POSITION) { playlistView.requestFocus(); return }` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.ensureFocusWithEmptyLayoutOrNonLinearManagerLeavesFocusOutside(TvPlaylistFocusCharacterizationTest.kt:174)`; java.lang.AssertionError |
+| `TvPlaylistFocusCharacterizationTest::showFallbackFocusIsPostedAndClassicKeyLogsKeepDirectionAndVisibility` | `p13-082`: `showPlaylist` — `No active position, requesting focus on playlistView` → `Changed fallback focus` | `com.debrify.app.tv.TvPlaylistFocusCharacterizationTest.showFallbackFocusIsPostedAndClassicKeyLogsKeepDirectionAndVisibility(TvPlaylistFocusCharacterizationTest.kt:180)`; java.lang.AssertionError |
+| `TvPlaylistFocusRetryCharacterizationTest::rejectedTransferFocusRetriesOnceAtFiftyMillisecondsAndClearsState` | `p13-083`: `transferFocusToPosition` — `if (!focused)` → `if (false)` | `com.debrify.app.tv.TvPlaylistFocusRetryCharacterizationTest.rejectedTransferFocusRetriesOnceAtFiftyMillisecondsAndClearsState(TvPlaylistFocusRetryCharacterizationTest.kt:49)`; java.lang.AssertionError: expected:<2> but was:<1> |
+| `TvPlaylistFocusRetryCharacterizationTest::directFocusFailureUsesTransferAndItsRetryWithoutCancellingOlderReset` | `p13-084`: `movePlaylistFocus` — `if (!focused)` → `if (false)` | `com.debrify.app.tv.TvPlaylistFocusRetryCharacterizationTest.directFocusFailureUsesTransferAndItsRetryWithoutCancellingOlderReset(TvPlaylistFocusRetryCharacterizationTest.kt:54)`; java.lang.AssertionError: expected:<2> but was:<1> |
+| `TvPlaylistFocusRetryCharacterizationTest::retryRereadsHolderAndStillClearsStateWhenTheChildDisappears` | `p13-085`: `transferFocusToPosition` — `playlistView.findViewHolderForAdapterPosition(targetPosition)?.itemView?.requestFocus()` → `holder.itemView.requestFocus()` | `com.debrify.app.tv.TvPlaylistFocusRetryCharacterizationTest.retryRereadsHolderAndStillClearsStateWhenTheChildDisappears(TvPlaylistFocusRetryCharacterizationTest.kt:61)`; java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvPlaylistGlideCharacterizationTest::guideArtworkRequestKeepsActivityLifecycleAndCenterCrop` | `p13-086`: `loadGuideArt` — `.centerCrop()` → `.fitCenter()` | `com.debrify.app.tv.TvPlaylistGlideCharacterizationTest.guideArtworkRequestKeepsActivityLifecycleAndCenterCrop(TvPlaylistGlideCharacterizationTest.kt:27)`; java.lang.AssertionError: expected:<class com.bumptech.glide.load.resource.bitmap.CenterCrop> but was:<class com.bumptech.glide.load.resource.bitmap.FitCenter> |
+| `TvPlaylistGlideCharacterizationTest::nullBlankAndNullWordArtworkClearRequestAndDrawableWithoutTrimmingRealArt` | `p13-087`: `loadGuideArt` — `v.setImageDrawable(null)` → `Unit` | `com.debrify.app.tv.TvPlaylistGlideCharacterizationTest.nullBlankAndNullWordArtworkClearRequestAndDrawableWithoutTrimmingRealArt(TvPlaylistGlideCharacterizationTest.kt:34)`; java.lang.AssertionError: clear for null expected null, but was:<android.graphics.drawable.ColorDrawable@2b500a4c> |
+| `TvPlaylistGuideBinderCharacterizationTest::broadcastStatusPriorityAndEveryProgressBoundary` | `p13-088`: `guideSkinBind` — `progress in 6..94` → `progress in 5..94` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.broadcastStatusPriorityAndEveryProgressBoundary(TvPlaylistGuideBinderCharacterizationTest.kt:29)`; org.junit.ComparisonFailure: expected:<[READY]> but was:<[5% IN]> |
+| `TvPlaylistGuideBinderCharacterizationTest::broadcastNumberTransformsPinSeasonEpisodeIndexAndAbsentFallbacks` | `p13-089`: `guideSkinBind` — `"%d%02d"` → `"%d%03d"` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.broadcastNumberTransformsPinSeasonEpisodeIndexAndAbsentFallbacks(TvPlaylistGuideBinderCharacterizationTest.kt:41)`; org.junit.ComparisonFailure: expected:<20[]4> but was:<20[0]4> |
+| `TvPlaylistGuideBinderCharacterizationTest::bindFocusedCallbacksFromBothAdaptersUpdateRealDetailSurface` | `p13-090`: `setupSeriesPlaylist` — `onItemFocused = if (guideSkinInstalled) { item, _ -> updateGuideDetail(item) } else null,` → `onItemFocused = null,` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.bindFocusedCallbacksFromBothAdaptersUpdateRealDetailSurface(TvPlaylistGuideBinderCharacterizationTest.kt:53)`; org.junit.ComparisonFailure: expected:<[PVW · FOCUSED]> but was:<[]> |
+| `TvPlaylistGuideBinderCharacterizationTest::seedTitleFallbacksAndCountsUseLivePayloadAndCurrentIndex` | `p13-091`: `seedGuideSkinChrome` — `?: current?.title` → `?: "Changed"` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.seedTitleFallbacksAndCountsUseLivePayloadAndCurrentIndex(TvPlaylistGuideBinderCharacterizationTest.kt:64)`; org.junit.ComparisonFailure: expected:<[EPISODE ONE]> but was:<[CHANGED]> |
+| `TvPlaylistGuideBinderCharacterizationTest::disabledSkinGuardsPreserveSentinelBindingsManagerListenerAndStyle` | `p13-092`: `bindGuideSkinViews` — `if (!guideSkinInstalled) return` → `if (false) return` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.disabledSkinGuardsPreserveSentinelBindingsManagerListenerAndStyle(TvPlaylistGuideBinderCharacterizationTest.kt:77)`; java.lang.AssertionError: expected same:<android.widget.TextView{4144d508 V.ED..... ......ID 0,0-0,0}> was not:<androidx.appcompat.widget.AppCompatTextView{7f63 |
+| `TvPlaylistGuideBinderCharacterizationTest::missingOverlayDoesNotMarkTheSkinInstalledOrConstructAReplacement` | `p13-093`: `installGuideOverlaySkin` — `findViewById<ViewGroup?>(R.id.android_tv_playlist_overlay) ?: return` → `findViewById<ViewGroup?>(R.id.android_tv_playlist_overlay) ?: android.widget.FrameLayout(this)` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.missingOverlayDoesNotMarkTheSkinInstalledOrConstructAReplacement(TvPlaylistGuideBinderCharacterizationTest.kt:86)`; java.lang.AssertionError |
+| `TvPlaylistGuideBinderCharacterizationTest::broadcastDetailArtworkUsesItsBoundMonitorAndActivityGlideOwner` | `p13-094`: `updateGuideDetail` — `loadGuideArt(gdMonArt, item.artwork)` → `Unit` | `com.debrify.app.tv.TvPlaylistGuideBinderCharacterizationTest.broadcastDetailArtworkUsesItsBoundMonitorAndActivityGlideOwner(TvPlaylistGuideBinderCharacterizationTest.kt:94)`; java.lang.AssertionError |
+| `TvPlaylistLifecycleCharacterizationTest::destroyPreservesSevenStatementOrderAndClearsOwnedReferencesBeforeFinished` | `p13-095`: `onDestroy` — `playlistAdapter = null` → `// retain playlistAdapter` | `com.debrify.app.tv.TvPlaylistLifecycleCharacterizationTest.destroyPreservesSevenStatementOrderAndClearsOwnedReferencesBeforeFinished(TvPlaylistLifecycleCharacterizationTest.kt:15)`; java.lang.AssertionError: expected:<[playlistAdapter, seriesPlaylistAdapter, moviePlaylistAdapter, focusRecoveryHandler.remove, focusRecoveryRunnable, seasonTab |
+| `TvPlaylistScrollCharacterizationTest::seasonScrollFlagAndDefaultDispatchAreReadForEachSelection` | `p13-096`: `selectSeasonTab` — `if (scrollToTop)` → `if (false)` | `com.debrify.app.tv.TvPlaylistScrollCharacterizationTest.seasonScrollFlagAndDefaultDispatchAreReadForEachSelection(TvPlaylistScrollCharacterizationTest.kt:25)`; java.lang.AssertionError: expected:<[0]> but was:<[]> |
+| `TvPlaylistScrollCharacterizationTest::collectionScrollDependsOnFlagOrChangedGroupAndNonemptyItems` | `p13-097`: `selectMovieTab` — `(scrollToTop \|\| changed)` → `scrollToTop` | `com.debrify.app.tv.TvPlaylistScrollCharacterizationTest.collectionScrollDependsOnFlagOrChangedGroupAndNonemptyItems(TvPlaylistScrollCharacterizationTest.kt:33)`; java.lang.AssertionError: expected:<[0]> but was:<[]> |
+| `TvPlaylistStateCharacterizationTest::originalBootstrapInstallsSeriesAdaptersAndSeasonSelection` | `p13-098`: `setupPlaylist` — `initialPrefetchItemCount = 4` → `initialPrefetchItemCount = 3` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.originalBootstrapInstallsSeriesAdaptersAndSeasonSelection(TvPlaylistStateCharacterizationTest.kt:29)`; java.lang.AssertionError: expected:<4> but was:<3> |
+| `TvPlaylistStateCharacterizationTest::seasonTabClickFiltersThenOpenAlignsCurrentSeasonWithoutChangingCurrentIndex` | `p13-099`: `alignSeriesTabsForCurrentEpisode` — `selectSeasonTab(tabIndex, adapter, scrollToTop = false)` → `selectSeasonTab(1, adapter, scrollToTop = false)` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.seasonTabClickFiltersThenOpenAlignsCurrentSeasonWithoutChangingCurrentIndex(TvPlaylistStateCharacterizationTest.kt:43)`; java.lang.AssertionError: expected:<[true, false]> but was:<[false, true]> |
+| `TvPlaylistStateCharacterizationTest::rebuildClearsOldStateBeforeSingleStreamEarlyReturn` | `p13-100`: `rebuildPlaylistContent` — `movieGroups = null` → `// retain movieGroups` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.rebuildClearsOldStateBeforeSingleStreamEarlyReturn(TvPlaylistStateCharacterizationTest.kt:53)`; java.lang.AssertionError: expected null, but was:<MovieGroups(groups=[CollectionGroup(name=Stale, fileIndices=[0])])> |
+| `TvPlaylistStateCharacterizationTest::nullPayloadRebuildRetainsExistingAdapterAndTabs` | `p13-101`: `rebuildPlaylistContent` — `val model = payload ?: return` → `val model = payload ?: run { playlistView.adapter = null; return }` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.nullPayloadRebuildRetainsExistingAdapterAndTabs(TvPlaylistStateCharacterizationTest.kt:65)`; java.lang.AssertionError: expected same:<com.debrify.app.tv.PlaylistAdapter@76023e3e> was not:<null> |
+| `TvPlaylistStateCharacterizationTest::singleGuideEpisodeRequiresResolverAndSeriesContentTogether` | `p13-102`: `rebuildPlaylistContent` — `val guideCapable = hasPlaylistResolver &&` → `val guideCapable = true &&` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.singleGuideEpisodeRequiresResolverAndSeriesContentTogether(TvPlaylistStateCharacterizationTest.kt:73)`; java.lang.AssertionError: expected null, but was:<com.debrify.app.tv.PlaylistAdapter@11af94d> |
+| `TvPlaylistStateCharacterizationTest::movieTabsUseUppercaseNamesCountsAndGroupFiltering` | `p13-103`: `setupCollectionTabs` — `group.name.uppercase()` → `group.name.lowercase()` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.movieTabsUseUppercaseNamesCountsAndGroupFiltering(TvPlaylistStateCharacterizationTest.kt:80)`; java.lang.AssertionError: expected:<[MAIN (2), EXTRA (1)]> but was:<[main (2), extra (1)]> |
+| `TvPlaylistStateCharacterizationTest::movieSingleAndEmptyGroupsHideTabsAndForceFirstGroup` | `p13-104`: `setupCollectionTabs` — `adapter.showGroup(0, force = true)` → `adapter.showGroup(1, force = true)` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.movieSingleAndEmptyGroupsHideTabsAndForceFirstGroup(TvPlaylistStateCharacterizationTest.kt:89)`; java.lang.AssertionError: expected:<2> but was:<0> |
+| `TvPlaylistStateCharacterizationTest::payloadGroupsPreserveOrderDefaultNameAndDropEmptyGroups` | `p13-105`: `computeMovieGroups` — `group.optString("name", "Group")` → `group.optString("name", "Changed")` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.payloadGroupsPreserveOrderDefaultNameAndDropEmptyGroups(TvPlaylistStateCharacterizationTest.kt:97)`; java.lang.AssertionError: expected:<[CollectionGroup(name=Group, fileIndices=[2, 0]), CollectionGroup(name=tail, fileIndices=[1])]> but was:<[CollectionGroup(na |
+| `TvPlaylistStateCharacterizationTest::fallbackGroupsPinFortyPercentBoundaryYearAndSizeOrdering` | `p13-106`: `computeMovieGroups` — `(maxSize * 0.40)` → `(maxSize * 0.41)` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.fallbackGroupsPinFortyPercentBoundaryYearAndSizeOrdering(TvPlaylistStateCharacterizationTest.kt:103)`; java.lang.AssertionError: expected:<[CollectionGroup(name=Main, fileIndices=[0, 1, 2]), CollectionGroup(name=Extras, fileIndices=[4, 3])]> but was:<[CollectionG |
+| `TvPlaylistStateCharacterizationTest::seriesNavigationUsesSparseFlutterMapsExactly` | `p13-107`: `getNextPlayableIndex` — `return nextIndex` → `return 1` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.seriesNavigationUsesSparseFlutterMapsExactly(TvPlaylistStateCharacterizationTest.kt:110)`; java.lang.AssertionError: expected:<2> but was:<1> |
+| `TvPlaylistStateCharacterizationTest::collectionNavigationStaysInsideOrderedGroupAndPinsEnds` | `p13-108`: `getNextPlayableIndex` — `source[positionInGroup + 1]` → `source[positionInGroup]` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.collectionNavigationStaysInsideOrderedGroupAndPinsEnds(TvPlaylistStateCharacterizationTest.kt:114)`; java.lang.AssertionError: expected:<0> but was:<2> |
+| `TvPlaylistStateCharacterizationTest::sequentialNavigationPinsOriginalBoundsAndNullPayload` | `p13-109`: `getNextPlayableIndex` — `val next = fromIndex + 1` → `val next = fromIndex + 2` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.sequentialNavigationPinsOriginalBoundsAndNullPayload(TvPlaylistStateCharacterizationTest.kt:119)`; java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvPlaylistStateCharacterizationTest::showGuardAndHidePinVisibilityWithoutClearingPendingWork` | `p13-110`: `hidePlaylist` — `playlistVisible = false` → `playlistVisible = true` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.showGuardAndHidePinVisibilityWithoutClearingPendingWork(TvPlaylistStateCharacterizationTest.kt:127)`; java.lang.AssertionError |
+| `TvPlaylistStateCharacterizationTest::seasonTabLegacyGeometryAndTextRemainPinned` | `p13-111`: `createSeasonTab` — `tab.elevation = 4f` → `tab.elevation = 3f` | `com.debrify.app.tv.TvPlaylistStateCharacterizationTest.seasonTabLegacyGeometryAndTextRemainPinned(TvPlaylistStateCharacterizationTest.kt:133)`; java.lang.AssertionError: expected:<4.0> but was:<3.0> |
+| `TvPlaylistTabCharacterizationTest::seasonSelectionDefaultDispatcherAndExplicitNoScrollKeepPayloadUntouched` | `p13-112`: `selectSeasonTab` — `tab.isSelected = (i == index)` → `tab.isSelected = (i != index)` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.seasonSelectionDefaultDispatcherAndExplicitNoScrollKeepPayloadUntouched(TvPlaylistTabCharacterizationTest.kt:18)`; java.lang.AssertionError: expected:<[false, true]> but was:<[true, false]> |
+| `TvPlaylistTabCharacterizationTest::createSeasonTabCallbackUsesItsLiveIndexAndIgnoresRemovedTab` | `p13-113`: `createSeasonTab` — `selectSeasonTab(index, adapter)` → `selectSeasonTab(0, adapter)` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.createSeasonTabCallbackUsesItsLiveIndexAndIgnoresRemovedTab(TvPlaylistTabCharacterizationTest.kt:26)`; java.lang.AssertionError |
+| `TvPlaylistTabCharacterizationTest::emptySeasonListClearsTabsAndHidesRail` | `p13-114`: `setupSeasonTabs` — `seasonTabs.clear()` → `// retain seasonTabs` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.emptySeasonListClearsTabsAndHidesRail(TvPlaylistTabCharacterizationTest.kt:33)`; java.lang.AssertionError |
+| `TvPlaylistTabCharacterizationTest::seriesSetupAssignsOnlySeriesAdaptersAndRetainsStandaloneGroupState` | `p13-115`: `setupSeriesPlaylist` — `playlistMode = PlaylistMode.SERIES` → `playlistMode = PlaylistMode.NONE` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.seriesSetupAssignsOnlySeriesAdaptersAndRetainsStandaloneGroupState(TvPlaylistTabCharacterizationTest.kt:40)`; java.lang.AssertionError: expected:<SERIES> but was:<NONE> |
+| `TvPlaylistTabCharacterizationTest::collectionSetupAndEmptyTabsClearPriorSeasonRail` | `p13-116`: `setupCollectionPlaylist` — `playlistMode = PlaylistMode.COLLECTION` → `playlistMode = PlaylistMode.NONE` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.collectionSetupAndEmptyTabsClearPriorSeasonRail(TvPlaylistTabCharacterizationTest.kt:53)`; java.lang.AssertionError: expected:<COLLECTION> but was:<NONE> |
+| `TvPlaylistTabCharacterizationTest::movieTabCallbackAndDefaultDispatcherPinGroupAndForceFlag` | `p13-117`: `createMovieTab` — `selectMovieTab(groupIndex, adapter)` → `selectMovieTab(0, adapter)` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.movieTabCallbackAndDefaultDispatcherPinGroupAndForceFlag(TvPlaylistTabCharacterizationTest.kt:63)`; java.lang.AssertionError: expected:<1> but was:<2> |
+| `TvPlaylistTabCharacterizationTest::seriesAlignmentRejectsInvalidSeasonIndexAndMissingAdapter` | `p13-118`: `alignSeriesTabsForCurrentEpisode` — `val adapter = seriesPlaylistAdapter ?: return` → `val adapter = seriesPlaylistAdapter ?: return selectSeasonTab(0, adapter)` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.seriesAlignmentRejectsInvalidSeasonIndexAndMissingAdapter(TvPlaylistTabCharacterizationTest.kt:70)`; java.lang.AssertionError |
+| `TvPlaylistTabCharacterizationTest::movieAlignmentRejectsMissingGroupsAdapterAndUngroupedIndex` | `p13-119`: `alignMovieTabsForCurrentItem` — `val adapter = moviePlaylistAdapter ?: return` → `val adapter = moviePlaylistAdapter ?: return selectMovieTab(0, adapter)` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.movieAlignmentRejectsMissingGroupsAdapterAndUngroupedIndex(TvPlaylistTabCharacterizationTest.kt:79)`; java.lang.AssertionError |
+| `TvPlaylistTabCharacterizationTest::classicGuideGetterAndGuardedMethodsPreserveOriginalViewsAndStyle` | `p13-120`: `applyGuideTabStyle` — `if (!guideSkinInstalled) return` → `if (!guideSkinInstalled) { tab.background = null; return }` | `com.debrify.app.tv.TvPlaylistTabCharacterizationTest.classicGuideGetterAndGuardedMethodsPreserveOriginalViewsAndStyle(TvPlaylistTabCharacterizationTest.kt:87)`; java.lang.AssertionError: classic tab keeps its legacy background |
+
+### Baseline, lint and owner rescan
+
+Clean `baseline-315448a3c`: 1,300 identities, 1,299 passing and the previously observed `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached` failure. `p13-step0`: 1,420 identities, 1,419 passing and exactly the same failure; comparison has **120 passing additions, zero missing identities and zero changes to existing statuses**. SDK/JBR and 1 GiB workers match. Both archives have stable tree fingerprints and complete XML.
+
+Original `:app:lintDebug` is archived in `p13/lint-original/`: 1,352 issues (253 errors, 1,099 warnings, including 175 UnsafeOptInUsage); exit 1 is pre-existing. This is the issue-set baseline for the later extraction gate, not a lint pass.
+
+The post-test owner rescan is `p13/step0/reflective-owner-rescan.json`: 59 of the 60 moved names require routing, including all 31 functions, the 13 dynamically named view bindings and the two getter aliases; `guideGridSpan` has no reflected use. Keep the three playlist views activity-owned. The phase-13 manifest already exposes the reflected functions/getters publicly on internal classes. The ASM teardown helper must follow the new receiver/setter/getter instructions while retaining its seven-event assertion exactly. No routing or production move is made in Step 0.
+
+
+## Phase 13 independent sample and Step 1
+
+Claude's original-code sample (`p13/claude-mutations/`, matched 1 GiB workers, all 120 phase-13 tests): 12 assertion kills out of 12 non-equivalent mutations. No Step 0b is needed.
+
+| Mutation | Classification | Reason |
+|---|---|---|
+| q06: `seasons.indexOf(currentSeason).takeIf { it >= 0 } ?: 0` → `> 0` | Equivalent | At index 0 the original returns 0 directly and the mutant returns the same fallback 0. Negative indices and positive indices give the same result under both predicates. |
+
+Step 1 materializes the approved manifest without additional production edits: playlist overlay owner (586 lines), focus navigator owning the four focus fields (327), and guide skin (398). The three playlist views stay activity-owned and are read through computed, explicitly qualified Host getters. Nested collaborators are eager; the owner remains anchored at seasonTabs. All 28 initializer proofs, 23 compiled receiver sites, the typed OnGlobalLayoutListener exclusion and both bound guideSkinBind references pass. Seven onDestroy statements stay in place and retain their order. All 46 earlier destination files remain byte-identical to 315448a3c.
+
+| Test access | Original owner/anchor | Retarget | Assertions |
+|---|---|---|---|
+| TvPlayerControllerOwners.routes | Activity fields/functions; 59 names from the post-test rescan | playlistController / playlistController.navigator / playlistController.guideSkin; 59 name routes plus two getter aliases | Every test file unchanged except the two access helpers |
+| TvPlaylistBytecodeAccess.teardown | Activity field writes/reads | Recognize exact controller setter/getter receivers in the existing seven-event scan | Seven-event lifecycle assertion unchanged; runtime cleanup checks unchanged |
+| Dart source-text anchors | Scanned for moved playlist names | None needed | All Dart files unchanged |
+
+The activity shrinks from 10,297 to 9,079 lines; its size baseline is lowered with --update. The split access helpers remain 325/555 lines. All 120 phase-13 characterizations pass after extraction with matched 1 GiB workers. Forced debug compilation preserves the same five Kotlin warning identities. Evidence: p13/step1/ and p13/gate/. Full integration gate follows on the committed tree.
+
+
+### Phase 13 lint correspondence
+
+The strict comparison retains its raw failure/deltas in p13/gate/lint-comparison.json: 1,350 exact identities and two existing Overdraw warnings on view_tv_guide_marquee.xml and view_tv_guide_pulse.xml, both line 7 column 5. Only the inferred theme changes from @style/Theme_AppCompat_DayNight_NoActionBar to @android:style/Theme.Holo. Total/severity/rule/location counts are unchanged (1,352; 253 errors / 1,099 warnings; 175 opt-in errors).
+
+The cached lint-checks 31.11.1 OverdrawDetector associates layouts scanned inside Activity subclasses with their manifest theme; detached layout getter code loses that static association and the detector selects its Theme.Holo fallback. Its disassembly and jar hash are archived. The manifest and both layout files remain byte-identical to 315448a3c, the activity still has its AppCompat theme, and the controller receives the same activity with the same audited getLayoutInflater invocation. All seven skin characterizations pass. The evidence-only exact correspondence check pins both full before/after messages and locations and rejects three negative controls (unknown message, changed location, extra issue). No wildcard normalization, suppression or production change was made. This is a documented diagnostic-inference difference, not a claim that the raw lint messages are identical. See p13/gate/lint-correspondence.json and explain_lint.py.
+
+
+### Phase 13 final gate
+
+Gate tested commit 83a1a41dd; Step 1 031e3b83e. The current move checker has zero differences across 2,013 original declarations; all 337 self-tests and historical p1–p12 checks pass. All 46 earlier destinations, 28 initializer proofs, 23 compiled receiver sites, the typed listener exclusion, two bound guideSkinBind references and lifecycle/teardown order pass. All assertions remain unchanged; only the owner-map and bytecode-access helpers are retargeted. Activity 9,079; new files 586/327/398; split helpers 325/555; size baseline updated and gate passes.
+
+Clean p13-gate exactly matches all 1,420 p13-step0 identities/statuses (1,419 passes and the same known focus failure) with matched 1 GiB workers and stable clean input. Kotlin warnings: five unchanged; analyzer: 1,758 unchanged. Lint: 1,352 retained, with the two raw inferred-theme message differences documented above. Release APK builds; R8/DEX checks all 12 generated classes and 177 members plus three negative controls. Decoder verification remains pending-environment with identical phase-1 failure output/native hashes/missing-feature manifest. Affected Dart source tests match all 45 statuses; the full quiet Flutter gate matches all 12,855 phase-12 statuses (12,794 success, 13 failure, 28 error, 20 skipped) on clean gate commit 83a1a41dd, unchanged SDK/flags and stable tree. Evidence p13/gate/summary.json and its referenced raw archives; junit/p13-gate/. No behavior change, bug fix, ProGuard/lock edit or device interaction was introduced. Stopped after phase 13.

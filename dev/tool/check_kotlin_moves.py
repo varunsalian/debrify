@@ -215,6 +215,10 @@ def check(manifest, original, current):
         moved = {r['original']: r for r in rows if r['fate'] == 'moved'}
         try:
             receiver_inventory(manifest, original, base, inventory, moved)
+            if manifest['phase'] >= 13:
+                from check_kotlin_overloads import check_special_bindings
+                unit_nodes = {path: {n['id']: n for n in walk(unit['declarations'])} for path, unit in parsed.items()}
+                check_special_bindings(manifest, original, current, {'original': base, **parsed}, {'original': inventory, **unit_nodes}, moved)
             from check_kotlin_overloads import receiver_lambda_transformations
             transforms = receiver_lambda_transformations(manifest, original, base, inventory, moved)
             for name, row in moved.items():

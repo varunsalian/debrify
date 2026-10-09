@@ -1530,9 +1530,97 @@ pickers, favourites toggle, row removal from a custom list, channel-number
 jump dialog, EPG schedule pane (day navigation, replay/record actions),
 now/next header with logo and letter fallback.
 
+## Phase 13 — playlist overlay, focus navigation and guide skin
+
+Branch `refactor/tvplayer-p13` off the phase-12 merge `315448a3c` (activity 10,297 lines). **First item of step T:** split the 813-line `TvPlayerOriginalAccess.kt` test helper (exit milestone from phase 12) into cohesive helpers (e.g. owner-route map vs reflection primitives), each ≤ 800 lines, assertions untouched, and drop its size-baseline exception before any new route is added. Evidence under
+`refactor-evidence/tvplayer/p13/`. Inventory: "Phase 13 inventory" in the deps
+report (measured at `b870a16b1`; phase 12 has no references either way —
+re-measure on the phase-12 merge). All collaborator rules from phases 3–12
+apply, incl. the phase-11 sampling lesson; the systematic statement-level
+coverage sweep is part of step 0 from the start (101 `if`, 16 `when`, 70
+`return` sites).
+
+**Remaining plan (re-measured):** 13 playlist overlay + guide skin (1,199);
+14 subtitle fetch + subtitle menu rows (1,113; 45 reflective sites); 15
+controls I + display/speed/night mode (≈ 1,075); 16 controls II + title
+identity + Next overlay (1,116); 17 IPTV tune pipeline + twin trial + live
+recovery (732; no existing tests); 18 playback start + shuffle (912); 19
+media pipeline + metadata receiver (697); 20 the routers decision
+(`playbackListener` ≈ 71 and `dispatchKeyEvent` ≈ 47 activity-member
+dependencies at `b870a16b1`, ≈ 110 combined; later extractions shrink both —
+the phase-20 exception decision is based on the interfaces remaining after
+phase 19). **Revised end state:** ≈ 3,450–3,750 lines
+if the routers stay (≈ 2,850–3,150 if they move): lifecycle, ≈ 26 controller
+Hosts (~30 lines each), `bindViews`, `parsePayload`, `initIptvMode`, menu
+composition and shared single-owner state — recorded as the documented
+end-state exception when the series completes.
+
+**Selected (≈ 1,199 lines, 60 members):** `TvPlaylistOverlayController`
+(≈ 580) eagerly constructs `TvPlaylistFocusNavigator` (≈ 325; owns the 4
+focus fields, avoiding template-bracing edits) and `TvPlaylistGuideSkin`
+(≈ 395); 49 compile-checked cross-references; the three playlist views stay
+in the activity behind computed Host getters; one 11-member Host. 31 activity
+patches in 15 declarations; 7 forwarder re-points in 6 controller Hosts
+(`patched` activity-property rows); the 7 `onDestroy` statements patched in
+place, in order. 28 initializer proofs; the classifier gains three narrow
+forms: the negative literal `-1`, an enum entry (`PlaylistMode.NONE`), and
+getter-only properties (no backing initializer). ≈ 220 substitutions.
+
+**Audit.** 8 `this` → `activity` sites (2 `Glide.with` must keep the
+`FragmentActivity` overload), 15 implicit inherited calls, 1 excluded
+listener `this`, 2 `::guideSkinBind` function references (resolve to the same
+member after the move).
+
+**Retargets.** 10 reflective sites via 4 owner-map routes; no Dart anchors.
+
+### Step T
+
+Phase-13 extraction fixture (owner + navigator with fields + skin; computed
+view getters) + negatives; auditor extensions: PSI getter collection for
+`layoutInflater` → `getLayoutInflater()` and a narrowly typed
+`ViewTreeObserver.OnGlobalLayoutListener` `this` exclusion pinned to
+declaration/context/binding (omission, wrong-dispatch and
+listener-substitution negatives; other unreviewed object receivers still
+rejected); classifier forms + negatives (non-literal negative
+expression, enum entry with arguments, getter with side effects); compiled
+audit (8 + 15 sites, listener exclusion, function references); per-phase
+dispatcher keeping all historical suites; earlier destinations frozen at the
+phase-12 merge.
+
+### Step 0 — characterization of the original
+
+From zero: 7 separate activity instances (one per controls skin); playlist
+show/hide (animation, focus restore), season tabs and group filtering,
+movie-collection tabs, focus engine (DPAD up/down/left/right across tabs and
+rows, edge behaviour, recovery posts and their cancellation) incl. explicit
+paused-looper cases for recovery replacement/cancellation, an older reset
+callback overlapping newer navigation (it clears the current navigation state
+unconditionally — pinned as-is), pending View work across hide/rebuild/
+destroy, and global focus-listener accumulation across rebuilds (pinned
+as-is), guide skin
+binding per skin (`::guideSkinBind`), current-item highlight and scroll,
+adapter rebuild paths, `onDestroy` statements; plus the systematic
+statement-level coverage sweep with a coverage matrix. Mutation proofs on the
+original; Claude's independent sample (≥ 75 % kills, else sweep + second
+sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–12 additions. Device checklist (end of series):
+playlist overlay for a series (season tabs, episode rows, current episode
+highlighted) and a movie collection, DPAD navigation incl. edges and long
+lists, the playlist in each controls skin, opening/closing during playback.
+
 ## Follow-ups (found while mapping; not fixed here)
 
-- Phase 12 scoped test-helper size exception:
+- Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
+  newer navigation state unconditionally; rebuilding accumulates global focus
+  listeners; already queued View focus work survives hide/rebuild/destroy.
+  Characterization and original mutation proofs pin these behaviors. Any
+  cancellation or listener-lifetime correction belongs to a separate behavior
+  change after this structural series.
+
+- Phase 12 scoped test-helper size exception (**resolved in Phase 13 Step T**):
   `android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt`
   grows 774 → 813 physical lines solely from the 39 required owner routes.
   Retain its existing reflection/adapter fixture behavior and byte-identical
@@ -2919,3 +3007,158 @@ now/next header with logo and letter fallback.
   rows, ratcheted, split before the next route is added — first item of
   phase 13). Activity 11,458 → 10,297. Decoder verification remains
   pending-environment. Phase 12 complete; merged.
+- 2026-10-09 — phase 13 design round 1 (Codex): **No P1s**; P2s folded
+  (getter + typed listener-exclusion auditor extensions; explicit async focus
+  quirk cases); P3s: inventory totals corrected to 29 properties / 31
+  functions / 3 view getters, router estimates per router (≈ 71 / ≈ 47).
+  Phase 13 design approved.
+
+
+- 2026-10-09 — **Phase 13 Step T complete; production unchanged.** First split
+  the 813-line original-access test helper into the 325-line access fixture
+  and 494-line immutable owner table; all 487 route entries and all other
+  access code are byte-preserved, and the size exception is removed. Helper
+  JVM verification retains all 1,300 phase-12 identities/statuses (1,299 pass,
+  unchanged focus failure). Re-measured manifest at `315448a3c`: 60 members
+  (29 properties / 31 functions), 31 activity patches in 15 declarations,
+  seven Host re-points in six whole-property rows, 49 cross-qualifications,
+  28 initializer proofs and 46 frozen earlier destinations. Original
+  self-comparison classifies all 2,013 declarations with zero differences.
+  Complete extraction fixture passes and compiles only in the detached
+  original/evidence tree (586/327/398 lines). Audit pins all 23 receivers
+  (eight constructor/context plus 15 inherited, incl. layoutInflater), the
+  typed listener self binding and both bound guide-skin function references.
+  Narrow negative-integer, reviewed enum and getter-only classifier forms
+  reject their stated negatives. All 298 historical and 39 final phase-13
+  self-tests pass; historical suites retain their own manifests. Evidence
+  `p13/helper-split.json`, `p13/checker-self-tests.log`,
+  `p13/phase13-final-self-tests.log`, `p13/overload-audit.json`.
+  Step 0 follows on the original; no production move or owner-route addition.
+
+- 2026-10-09 — **Phase 13 Step 0 complete; production unchanged.** Added 120
+  characterization identities from real activity bootstrap, with seven separate
+  controls-skin variants and installed adapter/key/focus/click callbacks. Pins
+  layout/bindings, every tab style and visible string, guide artwork lifecycle,
+  season/group filtering and refresh, default dispatch, focus boundaries,
+  off-screen scroll requests, 50/100 ms ordering, recovery replacement/cancellation
+  and delivery-time reads, the three original asynchronous quirks above, and
+  seven compiled teardown statements plus live cleanup before the finished reply.
+  The deterministic paused-looper fixture uses ViewRoot's own traversal entry
+  point; rejected frame/setup experiments remain separate from accepted evidence.
+  All 120 new tests have named assertion-failing mutation proofs on `315448a3c`.
+  The systematic matrix covers all 31 moved functions and 723 PSI nodes
+  (135 writes, 100 if, 14 when, 70 returns, five loops and 399 calls). All
+  state/branch/effect obligations have a direct assertion proof or an explained
+  equivalent deletion; nested reads link to their observed outputs. Additional
+  sweep batches contain 462 runs / 412 assertion kills, with six explained
+  equivalent deletions; compiler errors/crashes are never kills. All 25 final
+  full-set reruns kill the earlier real survivors. Clean final controls pass
+  131 selected tests; the 14 filtered clean-control cohorts pass as well.
+  Matched 1 GiB JVM evidence: clean `baseline-315448a3c` has 1,300 identities
+  (1,299 pass, unchanged SourceBrowser focus failure); `p13-step0` has 1,420
+  (1,419 pass, same failure). Comparison proves 120 passing additions, zero
+  missing identities and zero existing status changes, with stable fingerprints.
+  Original lint archived: 1,352 issues (253 errors / 1,099 warnings, 175
+  UnsafeOptInUsage); exit 1 is pre-existing, not a lint pass. Owner rescan finds
+  59 reflected moved names, including dynamic bindings and both getter aliases;
+  guideGridSpan is unreferenced. Public reflected functions/getters are already
+  pinned in the manifest; no owner route is added before extraction. The
+  teardown bytecode helper's receiver interpretation must retarget in Step 1
+  while keeping its seven-event assertion unchanged.
+  Evidence: `p13/step0/`, `p13/lint-original/`,
+  `junit/baseline-315448a3c/`, `junit/p13-step0/`; mutation table and per-function
+  matrix appended to the deps report. Original detached worktree removed.
+  Helper-size exception remains resolved; lockfile, ProGuard and all production
+  sources unchanged. No push, branch switch, device/emulator or bug fix.
+  **Stopped before production moves; Claude's independent sample follows.**
+
+
+- 2026-10-09 — **Phase 13 Step 1 moves complete.** Claude's sample kills all
+  12 non-equivalent mutations against 120 phase-13 tests; q06 is equivalent
+  because index 0 falls back to the same 0, recorded in the deps report and
+  p13/claude-mutations/classification.json. No Step 0b required. Materialized
+  the approved overlay owner, focus navigator and guide skin (586/327/398
+  lines); activity 10,297 → 9,079, size baseline lowered with --update.
+  Three playlist views stay behind computed Host getters; eager child
+  construction, the original slot and seven in-place teardown statements
+  are preserved. Owner map adds 59 name routes plus two getter aliases;
+  bytecode-access helper recognizes the new setters/getters, keeping all
+  test assertions byte-identical. All 120 characterizations pass with matched
+  1 GiB workers. Checker classifies 2,013 originals with zero differences;
+  historical p1–p12 checks, 46 frozen earlier destinations, 28 initializer
+  proofs, full lifecycle order, 23 compiled receiver pins, the typed listener
+  exclusion and both bound references pass. Five Kotlin warning identities
+  unchanged. No Dart anchors needed; split helpers remain 325/555 lines.
+  Evidence p13/step1/, p13/gate/. Full integration gate follows on the
+  committed tree; no self independent review, bug fix or device interaction.
+
+
+- 2026-10-09 — **Phase 13 native gate recorded on 031e3b83e; Flutter gate
+  pending.** Clean p13-gate exactly matches all 1,420 p13-step0 identities
+  (1,419 pass, the same pre-existing SourceBrowser focus failure), matched
+  1 GiB heap, stable clean tree. Analyzer matches all 1,758 prior diagnostics.
+  Release APK succeeds; R8/DEX verifies all 12 generated moved-slice classes
+  and 177 members, including Host/anonymous classes and the activity Host
+  implementation, with three mapping negative controls. Decoder output,
+  three library hashes and missing-feature manifest match phase 1 exactly:
+  pending-environment. Lint retains 1,352 issues (253 errors / 1,099 warnings,
+  175 opt-in errors): 1,350 exact identities, plus two existing Overdraw
+  warnings whose inferred-theme message changes from AppCompat to Holo for
+  marquee/pulse. Cached lint 31.11.1 detector bytecode proves its Activity-only
+  layout association and Holo fallback; unchanged manifest/layout hashes and
+  the compiled inflater audit prove runtime ownership/theme are unchanged.
+  Raw strict comparison remains archived as different; the exact two-pair
+  correspondence check rejects message/location/additional-issue changes.
+  No suppressions, checker relaxation or production fixes. Historical p1–p12
+  checks pass; full historical checker self-tests are still running. Full
+  Flutter comparison follows on a clean commit containing gate. Evidence
+  p13/gate/ and junit/p13-gate/.
+
+
+- 2026-10-09 — **Phase 13 gate complete on 83a1a41dd; decoder
+  pending-environment. STOPPED after Phase 13.** Step 1 031e3b83e extracts
+  the playlist owner / focus navigator / guide skin (586/327/398 lines);
+  activity 10,297 → 9,079. All 120 characterizations pass with assertions
+  unchanged. Claude's sample kills all 12 non-equivalent mutations; q06 is
+  equivalent (index 0 returns the same fallback 0), recorded without Step 0b.
+  Current checker classifies 2,013 originals with zero differences; all 337
+  checker/auditor self-tests and p1–p12 historical merge checks pass. All 46
+  earlier destination files are byte-identical to 315448a3c. Compiled audit
+  preserves 23 receiver pins (8 context/constructors incl. two Glide
+  FragmentActivity calls, 15 inherited incl. getLayoutInflater), the typed
+  OnGlobalLayoutListener exclusion and both guideSkinBind references.
+  All 28 initializer proofs, eager nested construction, original property
+  slot, full lifecycle order and the seven-event runtime/bytecode teardown
+  assertion pass. Shared owner-map retargets and bytecode-access changes are
+  exact; every assertion and all Dart files remain unchanged. Size gate
+  passes with no new exception; split helpers remain 325/555 lines. Five
+  Kotlin warning identities and 1,758 analyzer diagnostics are unchanged.
+  Clean p13-gate exactly matches all 1,420 p13-step0 identities/statuses:
+  1,419 passes, the same pre-existing SourceBrowser focus failure, matched
+  1 GiB heap, no missing/new skips and a stable clean tree. Lint retains
+  1,352 issues (253 errors / 1,099 warnings; 175 opt-in errors): 1,350 exact
+  identities and two documented Overdraw inferred-theme correspondences.
+  Raw message differences remain archived; detector bytecode, unchanged
+  manifest/layout hashes, audited inflater ownership and three correspondence
+  negative controls explain the delta without suppressions or fixes.
+  Release APK succeeds; R8/DEX verifies 12 classes / 177 members, including
+  all new owners/Host/anonymous classes and the activity Host implementation,
+  with three mapping negative controls. Decoder failure output, all three
+  library hashes and missing-feature manifest exactly match phase 1:
+  pending-environment. Affected Dart source tests match all 45 prior statuses;
+  full quiet Flutter suite via suite_evidence.py on clean gate commit
+  83a1a41dd exactly matches all 12,855 phase-12 identities/statuses (12,794
+  success, 13 failure, 28 error, 20 skipped), same SDK/flags and stable tree.
+  Evidence p13/step1/, p13/gate/, junit/p13-gate/. Lockfile, ProGuard,
+  earlier manifests and destinations unchanged. No push, branch switch,
+  self independent review, device/emulator or bug fix. Phase 14 not started.
+- 2026-10-09 — phase 13 post-implementation reviews of `f7d1541bf..2f3a82759`.
+  Claude's independent sample 12/13 killed; q06 equivalent (index 0 falls back
+  to the same 0) — no 0b needed. Independent Codex review (fresh session):
+  **No P1s, no P2/P3**; the two lint "inferred theme" message changes are
+  static-analysis only (lint's Overdraw detector associates layouts with
+  Activity subclasses; moved inflation lost that association → Holo
+  fallback), while runtime inflation uses the same injected activity and the
+  unchanged AppCompat manifest theme. Test helper split (325/494), its size
+  exception removed. Activity 10,297 → 9,079. Decoder verification remains
+  pending-environment. Phase 13 complete; merged.

@@ -128,6 +128,29 @@ public final class KotlinPsi {
                     node.put("body_member_starts", members);
                 }
             }
+            if (d instanceof KtProperty) {
+                KtProperty property = (KtProperty)d;
+                KtPropertyAccessor getter = property.getGetter();
+                node.put("has_initializer", property.getInitializer() != null);
+                node.put("has_delegate", property.hasDelegate());
+                node.put("getter_only", getter != null && property.getSetter() == null && !property.isVar());
+                boolean pure = getter != null;
+                if (getter != null) {
+                    for (KtExpression expression : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(getter, KtExpression.class)) {
+                        if (expression instanceof KtCallExpression || expression instanceof KtThrowExpression ||
+                            expression instanceof KtLoopExpression || expression instanceof KtObjectLiteralExpression) pure = false;
+                        if (expression instanceof KtBinaryExpression) {
+                            String op = ((KtBinaryExpression)expression).getOperationReference().getText();
+                            if (op.equals("=") || op.endsWith("=") && !op.equals("==") && !op.equals("!=") && !op.equals("<=") && !op.equals(">=")) pure = false;
+                        }
+                        if (expression instanceof KtUnaryExpression) {
+                            String op = ((KtUnaryExpression)expression).getOperationReference().getText();
+                            if (op.equals("++") || op.equals("--")) pure = false;
+                        }
+                    }
+                }
+                node.put("getter_effect_free", pure);
+            }
             node.put("children", declarations(d, id));
             result.add(node);
         }
@@ -201,6 +224,16 @@ public final class KotlinPsi {
                            !(callParent instanceof KtProperty) && !(callParent instanceof KtNamedFunction)) callParent = callParent.getParent();
                     Map<String, Object> site = map("start", offset(expression.getTextRange().getStartOffset()),
                         "end", offset(expression.getTextRange().getEndOffset()), "text", expression.getText(), "receiver", receiver);
+                    if (receiver.equals("object")) {
+                        PsiElement scope = expression.getParent();
+                        while (scope != null && !(scope instanceof KtObjectDeclaration)) scope = scope.getParent();
+                        if (scope instanceof KtObjectDeclaration) {
+                            KtObjectDeclaration object = (KtObjectDeclaration)scope;
+                            site.put("object_types", object.getSuperTypeListEntries().stream().map(entry -> entry.getText()).toList());
+                            KtNamedFunction function = org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.getParentOfType(expression, KtNamedFunction.class);
+                            site.put("object_method", function == null ? "" : function.getName());
+                        }
+                    }
                     // Inventory receiver-lambda binding independently, preserving
                     // historical receiver output. A constructor argument in
                     // EditText(this).apply is outside the lambda and stays Activity.
@@ -285,22 +318,27 @@ public final class KotlinPsi {
                 for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
                     String name = ref.getReferencedName();
                     if (!name.equals("isFinishing") && !name.equals("isDestroyed") &&
-                        !name.equals("resources") && !name.equals("currentFocus")) continue;
+                        !name.equals("resources") && !name.equals("currentFocus") && !name.equals("layoutInflater")) continue;
                     if (ref.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)ref.getParent()).getSelectorExpression() == ref) continue;
                     PsiElement scope = ref.getParent();
                     while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
                     if (!(scope instanceof KtClass)) continue;
-                    String getter = name.equals("resources") ? "getResources" : name.equals("currentFocus") ? "getCurrentFocus" : name;
+                    String getter = name.equals("layoutInflater") ? "getLayoutInflater" : name.equals("resources") ? "getResources" : name.equals("currentFocus") ? "getCurrentFocus" : name;
                     inheritedSites.add(map("start", offset(ref.getTextRange().getStartOffset()),
                         "call_start", offset(ref.getTextRange().getStartOffset()),
                         "call_end", offset(ref.getTextRange().getEndOffset()), "callee", getter,
-                        "receiver", "implicit-inherited", "introduced_phase", getter.equals(name) ? 10 : 12,
+                        "receiver", "implicit-inherited", "introduced_phase", name.equals("layoutInflater") ? 13 : getter.equals(name) ? 10 : 12,
                         "property_read", true, "property_name", name, "lexical_class", ((KtClass)scope).getName()));
+                }
+                List<Object> references = new ArrayList<>();
+                for (KtCallableReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallableReferenceExpression.class)) {
+                    references.add(map("start", offset(ref.getTextRange().getStartOffset()), "end", offset(ref.getTextRange().getEndOffset()),
+                        "callee", ref.getCallableReference().getText(), "receiver", ref.getReceiverExpression() == null ? "" : ref.getReceiverExpression().getText()));
                 }
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,
-                    "implicit_inherited_sites", inheritedSites,
+                    "implicit_inherited_sites", inheritedSites, "callable_references", references,
                     "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));

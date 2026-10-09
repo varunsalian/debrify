@@ -174,13 +174,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun isCleanPlaybackState(): Boolean = this@AndroidTvTorrentPlayerActivity.isCleanPlaybackState()
             override fun canShuffleWholeShow(): Boolean = this@AndroidTvTorrentPlayerActivity.canShuffleWholeShow()
             override fun pickShuffleIndex(): Int? = this@AndroidTvTorrentPlayerActivity.pickShuffleIndex()
-            override fun getNextPlayableIndex(i: Int): Int? = this@AndroidTvTorrentPlayerActivity.getNextPlayableIndex(i)
+            override fun getNextPlayableIndex(i: Int): Int? = this@AndroidTvTorrentPlayerActivity.playlistController.getNextPlayableIndex(i)
             override fun playItem(index: Int) = this@AndroidTvTorrentPlayerActivity.playItem(index)
         },
     )
     private lateinit var skipSegmentButton: AppCompatButton
-    private val seasonTabs = mutableListOf<android.widget.TextView>()
-    private val movieTabs = mutableListOf<MovieTab>()
+    private val playlistController: TvPlaylistOverlayController = TvPlaylistOverlayController(
+        this,
+        object : TvPlaylistOverlayController.Host {
+            override val controlsSkin: TvControlsSkin get() = this@AndroidTvTorrentPlayerActivity.controlsSkin
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override fun dp(value: Int): Int { return this@AndroidTvTorrentPlayerActivity.dp(value) }
+            override val hasPlaylistResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasPlaylistResolver
+            override val ottShowName: String? get() = this@AndroidTvTorrentPlayerActivity.ottShowName
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override fun playItem(index: Int): Unit { return this@AndroidTvTorrentPlayerActivity.playItem(index) }
+            override val playlistOverlay: View get() = this@AndroidTvTorrentPlayerActivity.playlistOverlay
+            override val playlistView: RecyclerView get() = this@AndroidTvTorrentPlayerActivity.playlistView
+            override val seasonTabsContainer: LinearLayout get() = this@AndroidTvTorrentPlayerActivity.seasonTabsContainer
+            override val sourceFetchController: TvSourceFetchController get() = this@AndroidTvTorrentPlayerActivity.sourceFetchController
+        },
+    )
 
     // Seekbar
     private lateinit var seekbarOverlay: View
@@ -763,7 +777,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // player's _isAutoAdvancing behavior. Consumed at the top of playItem.
     private var isAutoAdvancing = false
     private var controlsMenuVisible = false
-    private var playlistVisible = false
     private var seekbarVisible = false
     private var seekbarPosition: Long = 0
     private var videoDuration: Long = 0
@@ -777,11 +790,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var systemAudioEffectsEnabled = false
     private var skipSegmentsEnabled = true
     private var skipSegmentProviderId = TvSkipSegmentClients.AUTO
-    private var playlistMode: PlaylistMode = PlaylistMode.NONE
-    private var playlistAdapter: PlaylistOverlayAdapter? = null
-    private var seriesPlaylistAdapter: PlaylistAdapter? = null
-    private var moviePlaylistAdapter: MoviePlaylistAdapter? = null
-    private var movieGroups: MovieGroups? = null
     private var continuousShuffleEnabled = false
     private val shuffleBag = mutableListOf<Int>()
     private val showShuffle = ShowShuffle()
@@ -1074,7 +1082,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun playItem(index: Int, suppressTrakt: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playItem(index, suppressTrakt)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
-            override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.rebuildPlaylistContent()
+            override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.playlistController.rebuildPlaylistContent()
             override fun reportValidatedSourceCommit(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.reportValidatedSourceCommit(sourceIndex)
             override fun requestMoreTorrentSources(mode: String): Unit = this@AndroidTvTorrentPlayerActivity.sourceFetchController.requestMoreTorrentSources(mode)
             override fun restartProgressUpdates(): Unit = this@AndroidTvTorrentPlayerActivity.restartProgressUpdates()
@@ -1120,8 +1128,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val playbackSpeedIndex: Int get() = this@AndroidTvTorrentPlayerActivity.playbackSpeedIndex
             override val playbackSpeeds: Array<Float> get() = this@AndroidTvTorrentPlayerActivity.playbackSpeeds
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
-            override val playlistAdapter: PlaylistOverlayAdapter? get() = this@AndroidTvTorrentPlayerActivity.playlistAdapter
-            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistVisible
+            override val playlistAdapter: PlaylistOverlayAdapter? get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistAdapter
+            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistVisible
             override fun recordPlaybackLifecycle(event: String, details: String): Unit = this@AndroidTvTorrentPlayerActivity.recordPlaybackLifecycle(event, details)
             override val recoveryDataGeneration: Int get() = this@AndroidTvTorrentPlayerActivity.recoveryDataGeneration
             override val recoveryImdbId: String? get() = this@AndroidTvTorrentPlayerActivity.recoveryImdbId
@@ -1185,7 +1193,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun playStremioTvPlaybackMap(channel: StremioTvGuideChannel, map: Map<*, *>, url: String, title: String, hideGuideOnReady: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playStremioTvPlaybackMap(channel, map, url, title, hideGuideOnReady)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
-            override val playlistMode: PlaylistMode get() = this@AndroidTvTorrentPlayerActivity.playlistMode
+            override val playlistMode: PlaylistMode get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistMode
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
         },
     )
@@ -1297,7 +1305,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
             override val controlsMenuVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.controlsMenuVisible
-            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistVisible
+            override val playlistVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistVisible
             override val seekbarVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.seekbarVisible
             override val upNextVisible: Boolean get() = this@AndroidTvTorrentPlayerActivity.upNextController.upNextVisible
             override val subtitlePanel: SubtitlePanelController? get() = this@AndroidTvTorrentPlayerActivity.subtitlePanel
@@ -1340,12 +1348,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val externalSubtitleHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.externalSubtitleHandler
         },
     )
-
-    // Focus navigation state - prevents focus recovery from interfering with active navigation
-    private var isNavigating = false
-    private var navigationTargetPosition = -1
-    private val focusRecoveryHandler = Handler(Looper.getMainLooper())
-    private var focusRecoveryRunnable: Runnable? = null
 
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -1756,7 +1758,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                     }
 
-                    val nextIndex = getNextPlayableIndex(currentIndex)
+                    val nextIndex = playlistController.getNextPlayableIndex(currentIndex)
                     if (nextIndex != null) {
                         showNextOverlay(model.items[nextIndex])
                         progressHandler.postDelayed({
@@ -2146,7 +2148,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupPlayer()
         startupLog("event=player_setup_complete")
         setupSeekbar()
-        setupPlaylist()
+        playlistController.setupPlaylist()
         setupControls()
         sourceSwitchController.setupStremioSources()
 
@@ -2327,8 +2329,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     android.util.Log.d("TVMazeUpdate", "Adopted ${parsed.size} guide episodes")
                     runOnUiThread {
                         if (model.contentType.lowercase(Locale.US) == "series") {
-                            rebuildPlaylistContent()
-                            seriesPlaylistAdapter?.setActiveIndex(currentIndex)
+                            playlistController.rebuildPlaylistContent()
+                            playlistController.seriesPlaylistAdapter?.setActiveIndex(currentIndex)
                             updateCatalogEpisodeControls()
                             model.items.getOrNull(currentIndex)?.let { updateTitle(it) }
                         }
@@ -2436,8 +2438,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // Refresh playlist adapter if visible
                 runOnUiThread {
                     // seriesPlaylistAdapter and moviePlaylistAdapter extend RecyclerView.Adapter
-                    val seriesAdapter = seriesPlaylistAdapter
-                    val movieAdapter = moviePlaylistAdapter
+                    val seriesAdapter = playlistController.seriesPlaylistAdapter
+                    val movieAdapter = playlistController.moviePlaylistAdapter
                     android.util.Log.d("TVMazeUpdate", "seriesAdapter=${seriesAdapter != null}, movieAdapter=${movieAdapter != null}")
                     seriesAdapter?.notifyDataSetChanged()
                     movieAdapter?.notifyDataSetChanged()
@@ -2514,11 +2516,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleControlsLift = SubtitleControlsLiftController(subtitleOverlay, dp(24))
         // Guide skin: swap the overlay children BEFORE the playlist binds so
         // they resolve inside the skin's layout (no-op on CLASSIC).
-        installGuideOverlaySkin()
+        playlistController.guideSkin.installGuideOverlaySkin()
         playlistOverlay = findViewById(R.id.android_tv_playlist_overlay)
         playlistView = findViewById(R.id.android_tv_playlist)
         seasonTabsContainer = findViewById(R.id.season_tabs_container)
-        bindGuideSkinViews()
+        playlistController.guideSkin.bindGuideSkinViews()
         nextOverlay = findViewById(R.id.android_tv_next_overlay)
         nextText = findViewById(R.id.android_tv_next_text)
         nextSubtext = findViewById(R.id.android_tv_next_subtext)
@@ -3125,995 +3127,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    // ── Guide skin ─────────────────────────────────────────────────────────
-    // The series/collection Episodes overlay, restyled per dock skin: the
-    // legacy overlay children are swapped for a per-skin layout that keeps
-    // the id contract (android_tv_playlist + season_tabs_container), and the
-    // adapters get a per-skin row layout + binder. CLASSIC never installs.
-    //   OTT       — "The Shelf": bottom row of landscape stills.
-    //   MARQUEE   — "The Playbill": serif index left, title page right.
-    //   FROST     — "The Panel": translucent side sheet, video keeps playing.
-    //   BROADCAST — "The Rundown": mono columns + PVW monitor, yellow bar focus.
-    //   PULSE     — "The Grid": progress-ring cells, season rail on the left.
-    //   TICKET    — "The Strip": slim bottom band, popover previews on focus.
-    private var guideSkinInstalled = false
-    private val guideGridSpan = 5
-    private var gdShowTitle: TextView? = null
-    private var gdCaption: TextView? = null
-    private var gdDetailNum: TextView? = null
-    private var gdDetailTitle: TextView? = null
-    private var gdDetailMeta: TextView? = null
-    private var gdDetailDesc: TextView? = null
-    private var gdDetailArt: android.widget.ImageView? = null
-    private var gdMonArt: android.widget.ImageView? = null
-    private var gdMonLabel: TextView? = null
-    private var gdPop: View? = null
-    private var gdPopArt: android.widget.ImageView? = null
-    private var gdPopTitle: TextView? = null
-    private var gdPopDesc: TextView? = null
-
-    private val guideOverlayLayoutRes: Int?
-        get() = when (controlsSkin) {
-            TvControlsSkin.CLASSIC -> null
-            TvControlsSkin.OTT -> R.layout.view_tv_guide_ott
-            TvControlsSkin.FROST -> R.layout.view_tv_guide_frost
-            TvControlsSkin.MARQUEE -> R.layout.view_tv_guide_marquee
-            TvControlsSkin.BROADCAST -> R.layout.view_tv_guide_broadcast
-            TvControlsSkin.PULSE -> R.layout.view_tv_guide_pulse
-            TvControlsSkin.TICKET -> R.layout.view_tv_guide_ticket
-        }
-
-    private val guideItemLayoutRes: Int
-        get() = if (!guideSkinInstalled) {
-            R.layout.item_android_tv_playlist_entry_horizontal
-        } else when (controlsSkin) {
-            TvControlsSkin.OTT -> R.layout.item_tv_guide_ott
-            TvControlsSkin.FROST -> R.layout.item_tv_guide_frost
-            TvControlsSkin.MARQUEE -> R.layout.item_tv_guide_marquee
-            TvControlsSkin.BROADCAST -> R.layout.item_tv_guide_broadcast
-            TvControlsSkin.PULSE -> R.layout.item_tv_guide_pulse
-            TvControlsSkin.TICKET -> R.layout.item_tv_guide_ticket
-            TvControlsSkin.CLASSIC -> R.layout.item_android_tv_playlist_entry_horizontal
-        }
-
-    /** Swap the legacy overlay children for the skin's guide layout. Runs in
-     *  bindViews BEFORE any playlist findViewById so every legacy binding
-     *  resolves inside the new layout. */
-    private fun installGuideOverlaySkin() {
-        if (guideSkinInstalled) return
-        val layoutRes = guideOverlayLayoutRes ?: return
-        val overlay = findViewById<ViewGroup?>(R.id.android_tv_playlist_overlay) ?: return
-        overlay.removeAllViews()
-        layoutInflater.inflate(layoutRes, overlay, true)
-        guideSkinInstalled = true
-    }
-
-    /** Null-safe binds for the skin-only views (each layout has a subset). */
-    private fun bindGuideSkinViews() {
-        if (!guideSkinInstalled) return
-        gdShowTitle = findViewById(R.id.gd_show_title)
-        gdCaption = findViewById(R.id.gd_caption)
-        gdDetailNum = findViewById(R.id.gd_detail_num)
-        gdDetailTitle = findViewById(R.id.gd_detail_title)
-        gdDetailMeta = findViewById(R.id.gd_detail_meta)
-        gdDetailDesc = findViewById(R.id.gd_detail_desc)
-        gdDetailArt = findViewById(R.id.gd_detail_art)
-        gdMonArt = findViewById(R.id.gd_mon_art)
-        gdMonLabel = findViewById(R.id.gd_mon_label)
-        gdPop = findViewById(R.id.gd_pop)
-        gdPopArt = findViewById(R.id.gd_pop_art)
-        gdPopTitle = findViewById(R.id.gd_pop_title)
-        gdPopDesc = findViewById(R.id.gd_pop_desc)
-    }
-
-    /** Vertical list for the reading skins, 5-up grid for PULSE; OTT/TICKET
-     *  keep the legacy horizontal manager. */
-    private fun applyGuideLayoutManager() {
-        if (!guideSkinInstalled) return
-        when (controlsSkin) {
-            TvControlsSkin.MARQUEE, TvControlsSkin.FROST, TvControlsSkin.BROADCAST -> {
-                playlistView.layoutManager =
-                    LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
-            }
-            TvControlsSkin.PULSE -> {
-                val glm = androidx.recyclerview.widget.GridLayoutManager(this, guideGridSpan)
-                glm.spanSizeLookup =
-                    object : androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup() {
-                        override fun getSpanSize(position: Int): Int {
-                            // Series season headers (view type 0) span the full
-                            // row. Collection adapters have a single view type
-                            // (also 0), so gate on the mode — every movie cell
-                            // is a normal 1-span cell.
-                            if (playlistMode != PlaylistMode.SERIES) return 1
-                            val adapter = playlistView.adapter ?: return 1
-                            return if (adapter.getItemViewType(position) == 0) guideGridSpan else 1
-                        }
-                    }
-                playlistView.layoutManager = glm
-            }
-            else -> Unit
-        }
-    }
-
-    /** The legacy key listener assumes a horizontal row (LEFT/RIGHT move,
-     *  UP/DOWN escape to tabs). Vertical and grid skins swap the axes —
-     *  deliberate last-set-wins over the listener set just above. */
-    private fun applyGuideKeyOverride() {
-        if (!guideSkinInstalled) return
-        val vertical = controlsSkin == TvControlsSkin.MARQUEE ||
-            controlsSkin == TvControlsSkin.FROST ||
-            controlsSkin == TvControlsSkin.BROADCAST
-        val grid = controlsSkin == TvControlsSkin.PULSE
-        if (!vertical && !grid) return // OTT/TICKET: the horizontal listener is right
-        playlistView.setOnKeyListener { _, keyCode, event ->
-            if (!playlistVisible) return@setOnKeyListener false
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            // Mirror movePlaylistFocus: during rapid input focus is in flight
-            // and focusedChild is null — the tracked target is the truth, or
-            // the edge decisions below (escape to tabs/rail) misfire.
-            val pos = if (navigationTargetPosition >= 0) {
-                navigationTargetPosition
-            } else {
-                playlistView.focusedChild
-                    ?.let { playlistView.getChildAdapterPosition(it) }
-                    ?: RecyclerView.NO_POSITION
-            }
-            if (vertical) {
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> { movePlaylistFocus(1); true }
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        val first = findNextFocusablePosition(0, 1)
-                        if (pos != RecyclerView.NO_POSITION && pos <= first) {
-                            false // top row: let focus escape to the season tabs
-                        } else {
-                            movePlaylistFocus(-1); true
-                        }
-                    }
-                    // Trap the cross axis so focus can't fall out of the overlay.
-                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> true
-                    else -> false
-                }
-            } else {
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> { movePlaylistFocus(1); true }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        // Column via the span lookup, not pos % span — a
-                        // full-span season header would shift every row.
-                        val col = (playlistView.layoutManager
-                            as? androidx.recyclerview.widget.GridLayoutManager)
-                            ?.spanSizeLookup
-                            ?.takeIf { pos != RecyclerView.NO_POSITION }
-                            ?.getSpanIndex(pos, guideGridSpan)
-                        if (col == 0) {
-                            false // first column: escape to the season rail
-                        } else {
-                            movePlaylistFocus(-1); true
-                        }
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> { movePlaylistFocus(guideGridSpan); true }
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (pos >= guideGridSpan) movePlaylistFocus(-guideGridSpan)
-                        true
-                    }
-                    else -> false
-                }
-            }
-        }
-    }
-
-    /** Restyle a season/collection tab into the skin's language (called after
-     *  the legacy styling; classic tabs untouched). */
-    private fun applyGuideTabStyle(tab: TextView) {
-        if (!guideSkinInstalled) return
-        val csl = { res: Int -> androidx.core.content.ContextCompat.getColorStateList(this, res) }
-        when (controlsSkin) {
-            TvControlsSkin.OTT -> {
-                tab.background = null
-                tab.setTextColor(csl(R.color.gd_tab_text_light))
-                tab.textSize = 13f
-            }
-            TvControlsSkin.MARQUEE -> {
-                tab.background = null
-                tab.setTextColor(csl(R.color.gd_tab_text_marquee))
-                tab.typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.BOLD)
-                tab.textSize = 11.5f
-                tab.letterSpacing = 0.14f
-            }
-            TvControlsSkin.FROST -> {
-                tab.setBackgroundResource(R.drawable.gd_tab_frost)
-                tab.setTextColor(csl(R.color.gd_tab_text_bcast))
-                tab.textSize = 11f
-                tab.setPadding(dp(11), dp(4), dp(11), dp(4))
-            }
-            TvControlsSkin.BROADCAST -> {
-                tab.setBackgroundResource(R.drawable.gd_tab_bcast)
-                tab.setTextColor(csl(R.color.gd_tab_text_bcast))
-                tab.typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
-                tab.textSize = 10.5f
-                tab.setPadding(dp(8), dp(3), dp(8), dp(3))
-            }
-            TvControlsSkin.PULSE -> {
-                tab.setBackgroundResource(R.drawable.gd_tab_pulse)
-                tab.setTextColor(csl(R.color.gd_tab_text_pulse))
-                tab.textSize = 11.5f
-                tab.setPadding(dp(10), dp(5), dp(10), dp(5))
-                (tab.layoutParams as? android.widget.LinearLayout.LayoutParams)?.let {
-                    it.marginEnd = 0
-                    it.bottomMargin = dp(6) // vertical rail
-                    it.width = android.widget.LinearLayout.LayoutParams.MATCH_PARENT
-                }
-                tab.gravity = android.view.Gravity.CENTER
-            }
-            TvControlsSkin.TICKET -> {
-                tab.setBackgroundResource(R.drawable.gd_tab_ticket)
-                tab.setTextColor(csl(R.color.gd_tab_text_ticket))
-                tab.typeface = android.graphics.Typeface.MONOSPACE
-                tab.textSize = 9f
-                tab.setPadding(dp(6), dp(1), dp(6), dp(1))
-            }
-            TvControlsSkin.CLASSIC -> Unit
-        }
-    }
-
-    /** Per-skin row styling appended after the shared bind. itemIndex is -1
-     *  for absent guide rows (fetch-on-click). */
-    private fun guideSkinBind(itemView: View, item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
-        val progress = item.displayProgressPercent()
-        val watched = progress >= 95
-        when (controlsSkin) {
-            TvControlsSkin.MARQUEE, TvControlsSkin.TICKET -> {
-                if (controlsSkin == TvControlsSkin.MARQUEE) {
-                    itemView.findViewById<TextView?>(R.id.gd_item_num)?.text =
-                        item.episode?.toString() ?: if (itemIndex >= 0) (itemIndex + 1).toString() else "·"
-                }
-                itemView.findViewById<TextView?>(R.id.android_tv_playlist_item_title)?.let { t ->
-                    t.paintFlags = if (watched && !isActive) {
-                        t.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
-                    } else {
-                        t.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
-                    }
-                }
-            }
-            TvControlsSkin.BROADCAST -> {
-                val season = item.season
-                val episode = item.episode
-                itemView.findViewById<TextView?>(R.id.gd_item_num)?.text = when {
-                    season != null && episode != null -> "%d%02d".format(season, episode)
-                    episode != null -> "%03d".format(episode)
-                    itemIndex >= 0 -> "%03d".format(itemIndex + 1)
-                    else -> "———"
-                }
-                itemView.findViewById<TextView?>(R.id.gd_item_status)?.let { status ->
-                    val (text, color) = when {
-                        itemIndex < 0 && !isActive && item.url.isEmpty() ->
-                            "FETCH" to 0xFFF5C518.toInt()
-                        isActive -> "● ON AIR" to 0xFFEF4444.toInt()
-                        watched -> "CLEARED" to 0x66FFFFFF.toInt()
-                        progress in 6..94 -> "$progress% IN" to 0x8CFFFFFF.toInt()
-                        else -> "READY" to 0x8CFFFFFF.toInt()
-                    }
-                    status.text = text
-                    // Stateful color: the yellow focus bar needs dark text —
-                    // a plain int here would defeat the row's focus flip.
-                    status.setTextColor(
-                        android.content.res.ColorStateList(
-                            arrayOf(
-                                intArrayOf(android.R.attr.state_focused),
-                                intArrayOf(),
-                            ),
-                            intArrayOf(0xDE000000.toInt(), color),
-                        )
-                    )
-                }
-            }
-            TvControlsSkin.PULSE -> {
-                itemView.findViewById<android.widget.ProgressBar?>(R.id.gd_ring)?.progress =
-                    if (watched) 100 else progress
-                itemView.findViewById<TextView?>(R.id.gd_ring_num)?.text =
-                    item.episode?.toString()
-                        ?: if (itemIndex >= 0) (itemIndex + 1).toString() else "?"
-            }
-            else -> Unit
-        }
-    }
-
-    /** The focused row feeds the skin's detail surface (Marquee title page,
-     *  OTT caption, Broadcast PVW monitor, Pulse caption line, Ticket popover). */
-    private fun updateGuideDetail(item: PlaybackItem) {
-        if (!guideSkinInstalled) return
-        val desc = item.description?.trim()
-            ?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
-        val mins = (item.durationMs / 60000).toInt().takeIf { it > 0 }
-        val se = if (item.season != null && item.episode != null) {
-            "S%02dE%02d".format(item.season, item.episode)
-        } else null
-        when (controlsSkin) {
-            TvControlsSkin.OTT -> gdCaption?.text = desc ?: ""
-            TvControlsSkin.MARQUEE -> {
-                gdDetailNum?.text = item.episode?.let { "%02d".format(it) } ?: ""
-                gdDetailTitle?.text = item.title
-                val parts = mutableListOf<String>()
-                if (item.season != null && item.episode != null) {
-                    parts.add("SEASON ${item.season} · EPISODE ${item.episode}")
-                }
-                item.rating?.takeIf { it > 0 }?.let { parts.add("★ %.1f".format(it)) }
-                mins?.let { parts.add("$it MIN") }
-                gdDetailMeta?.text = parts.joinToString("   ·   ")
-                gdDetailDesc?.text = desc ?: ""
-                loadGuideArt(gdDetailArt, item.artwork)
-            }
-            TvControlsSkin.BROADCAST -> {
-                gdMonLabel?.text = "PVW · " + (se ?: item.title.uppercase(Locale.US))
-                loadGuideArt(gdMonArt, item.artwork)
-            }
-            TvControlsSkin.PULSE -> {
-                val lead = item.episode?.let { "E$it · " } ?: ""
-                gdDetailDesc?.text = lead + item.title + (desc?.let { " — $it" } ?: "")
-            }
-            TvControlsSkin.TICKET -> {
-                gdPop?.visibility = View.VISIBLE
-                gdPopTitle?.text = (se?.let { "$it · " } ?: "") + item.title.uppercase(Locale.US)
-                val meta = mutableListOf<String>()
-                mins?.let { meta.add("${it}m") }
-                item.rating?.takeIf { it > 0 }?.let { meta.add("★ %.1f".format(it)) }
-                gdPopDesc?.text = desc ?: meta.joinToString(" · ")
-                loadGuideArt(gdPopArt, item.artwork)
-            }
-            else -> Unit
-        }
-    }
-
-    private fun loadGuideArt(target: android.widget.ImageView?, artwork: String?) {
-        val v = target ?: return
-        val art = artwork?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
-        if (art == null) {
-            com.bumptech.glide.Glide.with(this).clear(v)
-            v.setImageDrawable(null)
-            return
-        }
-        com.bumptech.glide.Glide.with(this).load(art).centerCrop().into(v)
-    }
-
-    /** Show-open chrome: show title, counts, and the current item seeding the
-     *  detail surface so the pane is never empty. */
-    private fun seedGuideSkinChrome() {
-        if (!guideSkinInstalled) return
-        val model = payload
-        val current = model?.items?.getOrNull(currentIndex)
-        val show = ottShowName?.takeIf { it.isNotBlank() }
-            ?: current?.title
-            ?: ""
-        gdShowTitle?.text = when (controlsSkin) {
-            TvControlsSkin.BROADCAST, TvControlsSkin.TICKET -> show.uppercase(Locale.US)
-            else -> show
-        }
-        val items = model?.items.orEmpty()
-        if (items.size > 1) {
-            val watchedCount = items.count { it.displayProgressPercent() >= 95 }
-            when (controlsSkin) {
-                TvControlsSkin.FROST, TvControlsSkin.PULSE ->
-                    gdCaption?.text = "${items.size} episodes · $watchedCount watched"
-                TvControlsSkin.BROADCAST ->
-                    gdCaption?.text = "${items.size} LISTED · OK ROLLS THE FOCUSED ITEM"
-                else -> Unit
-            }
-        }
-        current?.let { updateGuideDetail(it) }
-    }
-
-    private fun setupPlaylist() {
-        // Configure RecyclerView for optimal focus handling
-        playlistView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false).apply {
-            // Pre-fetch items for smoother scrolling
-            isItemPrefetchEnabled = true
-            initialPrefetchItemCount = 4
-        }
-        // Guide skin: vertical/grid managers replace the horizontal one (no-op
-        // on CLASSIC and the horizontal skins).
-        applyGuideLayoutManager()
-
-        // Disable item animator to prevent focus issues during view animations
-        playlistView.itemAnimator = null
-
-        // Keep more views in memory to reduce recycling-related focus issues
-        playlistView.setItemViewCacheSize(10)
-
-        // Ensure children can receive focus
-        playlistView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-
-        // Add focus recovery listener for view recycling (with delay to prevent interference with navigation)
-        playlistView.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
-            override fun onChildViewAttachedToWindow(view: View) {
-                // Don't interfere during active navigation
-                if (isNavigating) {
-                    android.util.Log.d("PlaylistNav", "onChildViewAttached: Skipping - navigation in progress")
-                    return
-                }
-
-                // Only consider recovery if playlist is visible and view is focusable
-                if (playlistVisible && view.isFocusable) {
-                    // Cancel any pending recovery
-                    focusRecoveryRunnable?.let { focusRecoveryHandler.removeCallbacks(it) }
-
-                    // Schedule focus check with delay to let transitions complete
-                    focusRecoveryRunnable = Runnable {
-                        // Double-check focus is actually lost after delay
-                        if (playlistVisible && !isNavigating &&
-                            !playlistView.hasFocus() &&
-                            playlistView.focusedChild == null) {
-                            android.util.Log.d("PlaylistNav", "onChildViewAttached: Recovering focus after delay")
-                            ensureFocusInPlaylist()
-                        }
-                    }
-                    // 100ms delay to let focus transitions complete
-                    focusRecoveryHandler.postDelayed(focusRecoveryRunnable!!, 100)
-                }
-            }
-
-            override fun onChildViewDetachedFromWindow(view: View) {
-                // Only recover if the detached view had focus AND we're not navigating
-                if (view.hasFocus() && playlistVisible && !isNavigating) {
-                    android.util.Log.d("PlaylistNav", "Focused view being detached, scheduling recovery")
-
-                    // Cancel any pending recovery
-                    focusRecoveryRunnable?.let { focusRecoveryHandler.removeCallbacks(it) }
-
-                    // Schedule recovery with delay
-                    focusRecoveryRunnable = Runnable {
-                        if (playlistVisible && !isNavigating &&
-                            !playlistView.hasFocus() &&
-                            playlistView.focusedChild == null) {
-                            android.util.Log.d("PlaylistNav", "onChildViewDetached: Recovering focus after delay")
-                            ensureFocusInPlaylist()
-                        }
-                    }
-                    focusRecoveryHandler.postDelayed(focusRecoveryRunnable!!, 100)
-                }
-            }
-        })
-
-        playlistOverlay.visibility = View.GONE
-
-        rebuildPlaylistContent()
-    }
-
-    /** Rebuilds playlist adapters, tabs, and mode from current payload items. Safe to call multiple times. */
-    private fun rebuildPlaylistContent() {
-        val model = payload ?: return
-        val items = model.items
-        movieTabs.clear()
-        seasonTabs.clear()
-        seasonTabsContainer.removeAllViews()
-        seriesPlaylistAdapter = null
-        moviePlaylistAdapter = null
-        playlistAdapter = null
-        movieGroups = null
-        playlistMode = PlaylistMode.NONE
-
-        if (items.size <= 1) {
-            // Single stream: with a full-show guide + a playlist resolver the
-            // series overlay still renders (absent rows fetch in-player),
-            // matching the Flutter player's synthetic guide.
-            val guideCapable = hasPlaylistResolver &&
-                model.contentType.lowercase(Locale.US) == "series" &&
-                model.guideEpisodes.isNotEmpty()
-            if (!guideCapable) {
-                playlistView.adapter = null
-                seasonTabsContainer.visibility = View.GONE
-                return
-            }
-        }
-
-        when (model.contentType.lowercase(Locale.US)) {
-            "series" -> setupSeriesPlaylist(items)
-            else -> setupCollectionPlaylist(items)
-        }
-
-        setupPlaylistNavigation()
-    }
-
-    private fun setupSeriesPlaylist(items: List<PlaybackItem>) {
-        // Full-guide mode only when absent rows can actually be fetched.
-        val guide = if (hasPlaylistResolver) {
-            payload?.guideEpisodes ?: emptyList()
-        } else {
-            emptyList()
-        }
-        val adapter = PlaylistAdapter(
-            items,
-            guide = guide,
-            onFetchEpisode = if (guide.isEmpty()) null else { season, episode ->
-                hidePlaylist()
-                sourceFetchController.requestEpisodeFetch(season, episode)
-            },
-            itemLayoutRes = guideItemLayoutRes,
-            skinBinder = if (guideSkinInstalled) ::guideSkinBind else null,
-            onItemFocused = if (guideSkinInstalled) { item, _ -> updateGuideDetail(item) } else null,
-        ) { index ->
-            hidePlaylist()
-            playItem(index)
-        }
-        playlistView.adapter = adapter
-        playlistAdapter = adapter
-        seriesPlaylistAdapter = adapter
-        moviePlaylistAdapter = null
-        playlistMode = PlaylistMode.SERIES
-        setupSeasonTabs(adapter)
-    }
-
-    private fun setupCollectionPlaylist(items: List<PlaybackItem>) {
-        val groups = computeMovieGroups(items)
-        val adapter = MoviePlaylistAdapter(
-            items,
-            groups,
-            itemLayoutRes = guideItemLayoutRes,
-            skinBinder = if (guideSkinInstalled) ::guideSkinBind else null,
-            onItemFocused = if (guideSkinInstalled) { item, _ -> updateGuideDetail(item) } else null,
-        ) { index ->
-            hidePlaylist()
-            playItem(index)
-        }
-        playlistView.adapter = adapter
-        playlistAdapter = adapter
-        moviePlaylistAdapter = adapter
-        seriesPlaylistAdapter = null
-        movieGroups = groups
-        playlistMode = PlaylistMode.COLLECTION
-        setupCollectionTabs(adapter, groups)
-    }
-
-    private fun setupSeasonTabs(adapter: PlaylistAdapter) {
-        seasonTabsContainer.removeAllViews()
-        seasonTabs.clear()
-
-        val seasons = adapter.availableSeasons
-        if (seasons.isEmpty()) {
-            seasonTabsContainer.visibility = View.GONE
-            return
-        }
-
-        seasonTabsContainer.visibility = View.VISIBLE
-
-        // Add season tabs
-        for (season in seasons) {
-            val tab = createSeasonTab("S$season", season, adapter)
-            seasonTabsContainer.addView(tab)
-            seasonTabs.add(tab)
-        }
-
-        // Default to the season of the currently playing episode
-        val currentSeason = payload?.items?.getOrNull(currentIndex)?.season
-        val defaultTabIndex = if (currentSeason != null) {
-            seasons.indexOf(currentSeason).takeIf { it >= 0 } ?: 0
-        } else {
-            0
-        }
-
-        if (seasonTabs.isNotEmpty()) {
-            selectSeasonTab(defaultTabIndex, adapter)
-        }
-    }
-
-    private fun createSeasonTab(label: String, season: Int?, adapter: PlaylistAdapter): TextView {
-        val tab = TextView(this)
-        tab.text = label
-        tab.textSize = 13f
-        tab.setTextColor(0xFFFFFFFF.toInt())
-        tab.setPadding(28, 14, 28, 14)
-        tab.setBackgroundResource(R.drawable.season_tab_selector)
-        tab.isFocusable = true
-        tab.isFocusableInTouchMode = true
-        tab.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
-        tab.letterSpacing = 0.04f
-        tab.elevation = 4f
-
-        val params = android.widget.LinearLayout.LayoutParams(
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        params.marginEnd = 10
-        tab.layoutParams = params
-
-        tab.setOnClickListener {
-            val index = seasonTabs.indexOf(tab)
-            if (index != -1) {
-                selectSeasonTab(index, adapter)
-            }
-        }
-
-        applyGuideTabStyle(tab)
-        return tab
-    }
-
-    private fun selectSeasonTab(index: Int, adapter: PlaylistAdapter, scrollToTop: Boolean = true) {
-        // Update tab selection states
-        seasonTabs.forEachIndexed { i, tab ->
-            tab.isSelected = (i == index)
-        }
-
-        // Filter adapter to the selected season
-        val season = adapter.availableSeasons.getOrNull(index)
-        adapter.filterBySeason(season)
-
-        // Scroll to top (unless explicitly disabled)
-        if (scrollToTop) {
-            playlistView.scrollToPosition(0)
-        }
-    }
-
-    private fun setupCollectionTabs(adapter: MoviePlaylistAdapter, groups: MovieGroups) {
-        seasonTabs.clear()
-        movieTabs.clear()
-        seasonTabsContainer.removeAllViews()
-
-        if (groups.groups.isEmpty()) {
-            seasonTabsContainer.visibility = View.GONE
-            return
-        }
-
-        if (groups.groups.size <= 1) {
-            seasonTabsContainer.visibility = View.GONE
-            // Ensure adapter still shows first group
-            adapter.showGroup(0, force = true)
-            return
-        }
-
-        seasonTabsContainer.visibility = View.VISIBLE
-
-        groups.groups.forEachIndexed { index, group ->
-            val label = "${group.name.uppercase()} (${group.fileIndices.size})"
-            val tab = createMovieTab(label, index, group.name, adapter)
-            seasonTabsContainer.addView(tab)
-            movieTabs.add(MovieTab(tab, index, group.name))
-        }
-
-        selectMovieTab(0, adapter, scrollToTop = false, forceAdapterUpdate = true)
-    }
-
-    private fun setupPlaylistNavigation() {
-        android.util.Log.d("PlaylistNav", "setupPlaylistNavigation: Setting up navigation")
-
-        // Trap LEFT/RIGHT focus inside RecyclerView, but allow UP/DOWN for season tabs
-        playlistView.setOnKeyListener { view, keyCode, event ->
-            if (!playlistVisible) {
-                android.util.Log.d("PlaylistNav", "Key event but playlist not visible: keyCode=$keyCode")
-                return@setOnKeyListener false
-            }
-
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        // Simple delegation - movePlaylistFocus handles all logic including boundaries
-                        android.util.Log.d("PlaylistNav", "DPAD_RIGHT pressed")
-                        movePlaylistFocus(1)
-                        true  // Always consume to prevent focus escape
-                    }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        // Simple delegation - movePlaylistFocus handles all logic including boundaries
-                        android.util.Log.d("PlaylistNav", "DPAD_LEFT pressed")
-                        movePlaylistFocus(-1)
-                        true  // Always consume to prevent focus escape
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        android.util.Log.d("PlaylistNav", "UP/DOWN pressed - allowing navigation to season tabs")
-                        false  // Allow UP/DOWN to navigate to season tabs
-                    }
-                    else -> false
-                }
-            } else {
-                false
-            }
-        }
-
-        // Add global focus change listener for debugging
-        playlistView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
-            if (playlistVisible) {
-                val oldPos = if (oldFocus != null && oldFocus.parent == playlistView) {
-                    playlistView.getChildAdapterPosition(oldFocus)
-                } else {
-                    -1
-                }
-                val newPos = if (newFocus != null && newFocus.parent == playlistView) {
-                    playlistView.getChildAdapterPosition(newFocus)
-                } else {
-                    -1
-                }
-                android.util.Log.d("PlaylistNav", "Focus changed: oldPos=$oldPos -> newPos=$newPos, newFocus=$newFocus")
-                // Note: Removed focus escape recovery - LEFT/RIGHT trapping prevents unintended escapes,
-                // and we want to allow intentional UP/DOWN navigation to season tabs
-            }
-        }
-
-        // Guide skin: vertical/grid skins re-map the DPAD axes (no-op on
-        // CLASSIC and the horizontal skins).
-        applyGuideKeyOverride()
-    }
-
-    /**
-     * Find the next focusable position starting from a given position, moving in the specified direction.
-     * Skips over non-focusable items like SeasonHeaders (for series playlists).
-     * Works for both series and collection/movie playlists.
-     *
-     * @param startPosition The position to start searching from (inclusive)
-     * @param direction 1 for forward, -1 for backward
-     * @return The next focusable position, or RecyclerView.NO_POSITION if none found
-     */
-    private fun findNextFocusablePosition(startPosition: Int, direction: Int): Int {
-        // Handle series playlist (has SeasonHeaders to skip)
-        val seriesAdapter = seriesPlaylistAdapter
-        if (seriesAdapter != null) {
-            val itemCount = seriesAdapter.itemCount
-            var position = startPosition
-            while (position in 0 until itemCount) {
-                // Check if this position is an Episode (focusable), not a Header
-                if (seriesAdapter.getItemViewType(position) == 1) { // VIEW_TYPE_EPISODE = 1
-                    return position
-                }
-                position += direction
-            }
-            return RecyclerView.NO_POSITION
-        }
-
-        // Handle collection/movie playlist (all items are focusable - no headers)
-        val movieAdapter = moviePlaylistAdapter
-        if (movieAdapter != null) {
-            val itemCount = movieAdapter.itemCount
-            // All items in movie playlist are focusable, just check bounds
-            if (startPosition in 0 until itemCount) {
-                return startPosition
-            }
-            return RecyclerView.NO_POSITION
-        }
-
-        // No playlist adapter available
-        return RecyclerView.NO_POSITION
-    }
-
-    /**
-     * Ensure focus remains within the playlist when it should be visible.
-     * Called when focus might be lost due to view recycling or other issues.
-     */
-    private fun ensureFocusInPlaylist() {
-        // Don't interfere during active navigation
-        if (!playlistVisible || isNavigating) return
-
-        // Check if any child of playlistView currently has focus
-        val hasFocus = playlistView.hasFocus() || playlistView.focusedChild != null
-        if (hasFocus) return
-
-        android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Focus lost, recovering...")
-
-        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: return
-        val firstVisible = layoutManager.findFirstVisibleItemPosition()
-        val lastVisible = layoutManager.findLastVisibleItemPosition()
-
-        if (firstVisible == RecyclerView.NO_POSITION) return
-
-        // If we have a recent navigation target in visible range, prefer that
-        if (navigationTargetPosition in firstVisible..lastVisible) {
-            val holder = playlistView.findViewHolderForAdapterPosition(navigationTargetPosition)
-            if (holder?.itemView != null && holder.itemView.isFocusable) {
-                android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Focusing recent target at $navigationTargetPosition")
-                holder.itemView.requestFocus()
-                return
-            }
-        }
-
-        // Find the middle item in the visible range (not the first)
-        // This prevents always jumping back to the beginning
-        val middlePosition = (firstVisible + lastVisible) / 2
-
-        // Search outward from the middle
-        for (offset in 0..(lastVisible - firstVisible)) {
-            val positions = listOf(middlePosition + offset, middlePosition - offset)
-            for (pos in positions) {
-                if (pos in firstVisible..lastVisible) {
-                    val nextFocusable = findNextFocusablePosition(pos, 1)
-                    if (nextFocusable in firstVisible..lastVisible) {
-                        val holder = playlistView.findViewHolderForAdapterPosition(nextFocusable)
-                        if (holder != null && holder.itemView.isFocusable) {
-                            android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Recovering focus to position $nextFocusable (middle-out)")
-                            holder.itemView.requestFocus()
-                            return
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Transfer focus to a specific position using ViewTreeObserver for reliable timing.
-     * This ensures layout is complete before attempting to focus.
-     */
-    private fun transferFocusToPosition(targetPosition: Int) {
-        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: run {
-            isNavigating = false
-            return
-        }
-
-        android.util.Log.d("PlaylistNav", "transferFocusToPosition: target=$targetPosition")
-
-        // Keep navigation flag active and track target
-        isNavigating = true
-        navigationTargetPosition = targetPosition
-
-        // Scroll to position with some offset for visual comfort
-        layoutManager.scrollToPositionWithOffset(targetPosition, 100)
-
-        // Use ViewTreeObserver for reliable timing instead of nested posts
-        playlistView.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-                val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-                if (holder?.itemView != null && holder.itemView.isFocusable) {
-                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Focusing target at $targetPosition")
-                    val focused = holder.itemView.requestFocus()
-                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Focus result=$focused for position $targetPosition")
-
-                    // Clear navigation flag after a short delay to let focus settle
-                    playlistView.postDelayed({
-                        isNavigating = false
-                        navigationTargetPosition = -1
-                    }, 50)
-
-                    if (!focused) {
-                        // Focus failed, try once more after a short delay
-                        playlistView.postDelayed({
-                            playlistView.findViewHolderForAdapterPosition(targetPosition)?.itemView?.requestFocus()
-                            isNavigating = false
-                            navigationTargetPosition = -1
-                        }, 50)
-                    }
-                } else {
-                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Holder not found or not focusable, using fallback")
-                    // Clear navigation state before fallback
-                    isNavigating = false
-                    navigationTargetPosition = -1
-                    ensureFocusInPlaylist()
-                }
-            }
-        })
-    }
-
-    private fun movePlaylistFocus(delta: Int) {
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: delta=$delta")
-
-        // Set navigation flag to prevent focus recovery from interfering
-        isNavigating = true
-
-        val adapter = playlistView.adapter ?: run {
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        }
-        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: run {
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        }
-
-        // Use navigationTargetPosition if we're in the middle of rapid navigation
-        // This prevents stutter like 3 → 4 → 4 → 5 when pressing keys quickly
-        val currentPosition = if (navigationTargetPosition >= 0) {
-            // We have an ongoing navigation, use target as current position
-            navigationTargetPosition
-        } else {
-            // Normal case: get from focused child
-            val focusedChild = playlistView.focusedChild
-            if (focusedChild != null) {
-                playlistView.getChildAdapterPosition(focusedChild)
-            } else {
-                layoutManager.findFirstVisibleItemPosition()
-            }
-        }
-
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: currentPosition=$currentPosition, navTarget=$navigationTargetPosition")
-        if (currentPosition == RecyclerView.NO_POSITION) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: NO_POSITION, aborting")
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        }
-
-        // Boundary checks - stop at start/end
-        val itemCount = adapter.itemCount
-        if (delta > 0 && currentPosition >= itemCount - 1) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Already at end, ignoring")
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        } else if (delta < 0 && currentPosition <= 0) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Already at start, ignoring")
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        }
-
-        // Find the next focusable position (skipping headers)
-        val searchStart = currentPosition + delta
-        val targetPosition = findNextFocusablePosition(searchStart, delta)
-
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: searchStart=$searchStart, targetPosition=$targetPosition")
-
-        if (targetPosition == RecyclerView.NO_POSITION || targetPosition == currentPosition) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: No valid target found or same position")
-            isNavigating = false
-            navigationTargetPosition = -1
-            return
-        }
-
-        // Track the target position for rapid navigation support
-        navigationTargetPosition = targetPosition
-
-        // Check if target is already visible and can be focused directly
-        val targetHolder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-        if (targetHolder != null && targetHolder.itemView.parent != null && targetHolder.itemView.isFocusable) {
-            // Item is visible and focusable, focus it directly
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target visible, focusing directly")
-            val focused = targetHolder.itemView.requestFocus()
-            // Clear navigation flag after short delay to let focus settle
-            // Keep navigationTargetPosition for rapid key presses, clear later
-            playlistView.postDelayed({
-                isNavigating = false
-                navigationTargetPosition = -1
-            }, 100)  // Increased to 100ms for better rapid press handling
-            if (!focused) {
-                // Direct focus failed, use transfer method
-                transferFocusToPosition(targetPosition)
-            }
-        } else {
-            // Item is not visible or not ready, use reliable transfer method
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target not visible, using transferFocusToPosition")
-            transferFocusToPosition(targetPosition)
-        }
-    }
-
-    private fun createMovieTab(label: String, groupIndex: Int, groupName: String, adapter: MoviePlaylistAdapter): TextView {
-        val tab = TextView(this)
-        tab.text = label
-        tab.textSize = 13f
-        tab.setTextColor(0xFFFFFFFF.toInt())
-        tab.setPadding(28, 14, 28, 14)
-        tab.setBackgroundResource(R.drawable.season_tab_selector)
-        tab.isFocusable = true
-        tab.isFocusableInTouchMode = true
-        tab.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
-        tab.letterSpacing = 0.04f
-        tab.elevation = 4f
-
-        val params = android.widget.LinearLayout.LayoutParams(
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        params.marginEnd = 10
-        tab.layoutParams = params
-
-        tab.setOnClickListener {
-            selectMovieTab(groupIndex, adapter)
-        }
-
-        applyGuideTabStyle(tab)
-        return tab
-    }
-
-    private fun selectMovieTab(
-        groupIndex: Int,
-        adapter: MoviePlaylistAdapter,
-        scrollToTop: Boolean = true,
-        forceAdapterUpdate: Boolean = false,
-    ) {
-        movieTabs.forEach { movieTab ->
-            movieTab.view.isSelected = movieTab.groupIndex == groupIndex
-        }
-        val changed = adapter.showGroup(groupIndex, force = forceAdapterUpdate)
-        if ((scrollToTop || changed) && adapter.itemCount > 0) {
-            playlistView.scrollToPosition(0)
-        }
-    }
-
     /** Swaps the legacy Cinema controller layout for the selected dock skin.
      *
      * Media3 inflates `controller_layout_id` INTO its PlayerControlView with
@@ -4471,7 +3484,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         playlistButton?.setOnClickListener {
             hideControlsMenu()
-            showPlaylist()
+            playlistController.showPlaylist()
         }
         playlistButton?.onFocusChangeListener = extendTimerOnFocus
 
@@ -4858,7 +3871,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         updateTitle(item)
-        playlistAdapter?.setActiveIndex(currentIndex)
+        playlistController.playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
 
         // Fetch Stremio subtitles for this item
@@ -5218,7 +4231,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        val nextIndex = getNextPlayableIndex(currentIndex)
+        val nextIndex = playlistController.getNextPlayableIndex(currentIndex)
         if (nextIndex != null) {
             isAutoAdvancing = true
             playItem(nextIndex)
@@ -5264,7 +4277,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * the adjacent episode and Flutter resolves it in place. */
     private fun playPrevious() {
         val model = payload ?: return
-        val prevIndex = getPrevPlayableIndex(currentIndex)
+        val prevIndex = playlistController.getPrevPlayableIndex(currentIndex)
         if (prevIndex != null) {
             // Match the Dart player's manual Previous semantics: selecting an
             // already-present episode starts it fresh. Guide-fetched Previous
@@ -5302,7 +4315,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val currentItem = model?.items?.getOrNull(currentIndex)
         val hasPrevious = model != null && model.contentType == "series" &&
             !isStremioTvMode &&
-            (getPrevPlayableIndex(currentIndex) != null ||
+            (playlistController.getPrevPlayableIndex(currentIndex) != null ||
                 (hasPlaylistResolver &&
                     (guideAdjacent(model, currentItem, -1) != null ||
                         (hasAdjacentEpisodeResolver &&
@@ -5533,17 +4546,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val model = payload ?: return emptyList()
         if (model.items.isEmpty()) return emptyList()
 
-        if (playlistMode == PlaylistMode.SERIES) {
+        if (playlistController.playlistMode == PlaylistMode.SERIES) {
             val episodeIndices = model.items.mapIndexedNotNull { index, item ->
                 if (item.season != null && item.episode != null) index else null
             }
             if (episodeIndices.isNotEmpty()) return episodeIndices
         }
 
-        if (playlistMode == PlaylistMode.COLLECTION) {
-            val preferredGroup = movieGroups?.groups?.firstOrNull {
+        if (playlistController.playlistMode == PlaylistMode.COLLECTION) {
+            val preferredGroup = playlistController.movieGroups?.groups?.firstOrNull {
                 it.name.equals("Main", ignoreCase = true)
-            } ?: movieGroups?.groups?.firstOrNull()
+            } ?: playlistController.movieGroups?.groups?.firstOrNull()
             val indices = preferredGroup?.fileIndices
                 ?.filter { it in model.items.indices }
                 ?: emptyList()
@@ -6491,7 +5504,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         updateTitle(item)
-        playlistAdapter?.setActiveIndex(currentIndex)
+        playlistController.playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
 
         // Fetch Stremio subtitles for this item (same as playMediaDirect)
@@ -6767,9 +5780,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         // Handle playlist
-        if (playlistVisible) {
+        if (playlistController.playlistVisible) {
             if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
-                hidePlaylist()
+                playlistController.hidePlaylist()
                 return true
             }
             return super.dispatchKeyEvent(event)
@@ -6909,11 +5922,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return true
             }
             // Otherwise show playlist (if available)
-            if (playlistMode == PlaylistMode.NONE) {
+            if (playlistController.playlistMode == PlaylistMode.NONE) {
                 return super.dispatchKeyEvent(event)
             }
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                showPlaylist()
+                playlistController.showPlaylist()
             }
             return true
         }
@@ -7730,237 +6743,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (::playerView.isInitialized) playerView.keepScreenOn = true
     }
 
-    // Playlist
-    private fun showPlaylist() {
-        android.util.Log.d("PlaylistNav", "showPlaylist: Starting - playlistMode=$playlistMode")
-
-        if (playlistMode == PlaylistMode.NONE || playlistAdapter == null) {
-            android.util.Log.d("PlaylistNav", "showPlaylist: Exiting early - no playlist adapter")
-            return
-        }
-
-        playlistVisible = true
-        playlistOverlay.visibility = View.VISIBLE
-        seedGuideSkinChrome()
-
-        when (playlistMode) {
-            PlaylistMode.SERIES -> alignSeriesTabsForCurrentEpisode()
-            PlaylistMode.COLLECTION -> alignMovieTabsForCurrentItem()
-            else -> Unit
-        }
-
-        val activePosition = playlistAdapter?.getActiveItemPosition() ?: -1
-        android.util.Log.d("PlaylistNav", "showPlaylist: activePosition=$activePosition, adapter.itemCount=${playlistView.adapter?.itemCount}")
-
-        if (activePosition != -1) {
-            playlistView.post {
-                android.util.Log.d("PlaylistNav", "showPlaylist: Scrolling to position $activePosition")
-                playlistView.scrollToPosition(activePosition)
-                playlistView.postDelayed({
-                    val viewHolder = playlistView.findViewHolderForAdapterPosition(activePosition)
-                    android.util.Log.d("PlaylistNav", "showPlaylist: ViewHolder found=${viewHolder != null} for position $activePosition")
-                    if (viewHolder != null) {
-                        android.util.Log.d("PlaylistNav", "showPlaylist: Requesting focus on viewHolder at position $activePosition")
-                        viewHolder.itemView.requestFocus()
-                    } else {
-                        android.util.Log.d("PlaylistNav", "showPlaylist: Requesting focus on playlistView itself")
-                        playlistView.requestFocus()
-                    }
-                }, 100)
-            }
-        } else {
-            playlistView.post {
-                android.util.Log.d("PlaylistNav", "showPlaylist: No active position, requesting focus on playlistView")
-                playlistView.requestFocus()
-            }
-        }
-    }
-
-    private fun alignSeriesTabsForCurrentEpisode() {
-        val adapter = seriesPlaylistAdapter ?: return
-        val currentSeason = payload?.items?.getOrNull(currentIndex)?.season ?: return
-        if (currentSeason <= 0 || seasonTabs.isEmpty()) return
-        val seasons = adapter.availableSeasons
-        val tabIndex = seasons.indexOf(currentSeason)
-        if (tabIndex >= 0 && tabIndex < seasonTabs.size) {
-            selectSeasonTab(tabIndex, adapter, scrollToTop = false)
-        }
-    }
-
-    private fun alignMovieTabsForCurrentItem() {
-        val adapter = moviePlaylistAdapter ?: return
-        val groups = movieGroups ?: return
-        val groupIndex = groups.getGroupIndex(currentIndex)
-        if (groupIndex >= 0) {
-            selectMovieTab(groupIndex, adapter, scrollToTop = false)
-        }
-    }
-
-    private fun getNextPlayableIndex(fromIndex: Int): Int? {
-        val model = payload ?: return null
-
-        // For series content, use pre-computed navigation map from Flutter
-        // This mirrors mobile video_player_screen.dart's navigation exactly
-        if (playlistMode == PlaylistMode.SERIES && model.nextEpisodeMap.isNotEmpty()) {
-            val nextIndex = model.nextEpisodeMap[fromIndex]
-            android.util.Log.d("AndroidTvPlayer", "getNextPlayableIndex - series mode, fromIndex: $fromIndex, nextIndex: $nextIndex")
-            return nextIndex
-        }
-
-        // For collections, continue using movie group logic
-        if (playlistMode == PlaylistMode.COLLECTION) {
-            val groups = movieGroups ?: return null
-            val currentGroup = groups.findGroupContaining(fromIndex) ?: return null
-            val source = currentGroup.fileIndices
-
-            if (source.isNullOrEmpty()) {
-                return null
-            }
-
-            val positionInGroup = source.indexOf(fromIndex)
-            if (positionInGroup == -1) {
-                return null
-            }
-
-            return if (positionInGroup + 1 < source.size) {
-                source[positionInGroup + 1]
-            } else {
-                null
-            }
-        }
-
-        // Fallback for single/unknown modes: simple sequential navigation
-        val next = fromIndex + 1
-        return if (next < model.items.size) next else null
-    }
-
-    private fun getPrevPlayableIndex(fromIndex: Int): Int? {
-        val model = payload ?: return null
-
-        // For series content, use pre-computed navigation map from Flutter
-        if (playlistMode == PlaylistMode.SERIES && model.prevEpisodeMap.isNotEmpty()) {
-            val prevIndex = model.prevEpisodeMap[fromIndex]
-            android.util.Log.d("AndroidTvPlayer", "getPrevPlayableIndex - series mode, fromIndex: $fromIndex, prevIndex: $prevIndex")
-            return prevIndex
-        }
-
-        // For collections, use movie group logic
-        if (playlistMode == PlaylistMode.COLLECTION) {
-            val groups = movieGroups ?: return null
-            val currentGroup = groups.findGroupContaining(fromIndex) ?: return null
-            val source = currentGroup.fileIndices
-
-            if (source.isNullOrEmpty()) {
-                return null
-            }
-
-            val positionInGroup = source.indexOf(fromIndex)
-            if (positionInGroup <= 0) {
-                return null
-            }
-
-            return source[positionInGroup - 1]
-        }
-
-        // Fallback for single/unknown modes: simple sequential navigation
-        val prev = fromIndex - 1
-        return if (prev >= 0) prev else null
-    }
-
-    private fun computeMovieGroups(items: List<PlaybackItem>): MovieGroups {
-        if (items.isEmpty()) {
-            return MovieGroups(emptyList())
-        }
-
-        // Check if payload contains collection groups
-        val payloadGroups = payload?.collectionGroups
-        if (!payloadGroups.isNullOrEmpty()) {
-            // Use groups from Flutter payload
-            val groups = payloadGroups.map { group ->
-                CollectionGroup(
-                    name = group.optString("name", "Group"),
-                    fileIndices = mutableListOf<Int>().apply {
-                        val indicesArray = group.optJSONArray("fileIndices")
-                        if (indicesArray != null) {
-                            for (i in 0 until indicesArray.length()) {
-                                add(indicesArray.getInt(i))
-                            }
-                        }
-                    }
-                )
-            }.filter { it.fileIndices.isNotEmpty() } // Only include non-empty groups
-
-            android.util.Log.d("AndroidTvPlayer", "Using ${groups.size} collection groups from payload")
-            return MovieGroups(groups)
-        }
-
-        // Fallback: compute Main/Extras groups based on file size (40% threshold)
-        // This maintains backward compatibility
-        var maxSize = -1L
-        items.forEach { item ->
-            val size = item.sizeBytes ?: -1L
-            if (size > maxSize) {
-                maxSize = size
-            }
-        }
-
-        val threshold = if (maxSize > 0) (maxSize * 0.40).toLong() else -1L
-        val main = mutableListOf<Int>()
-        val extras = mutableListOf<Int>()
-
-        items.forEachIndexed { index, item ->
-            val size = item.sizeBytes ?: -1L
-            val isSmall = threshold > 0 && size > 0 && size < threshold
-            if (isSmall) {
-                extras.add(index)
-            } else {
-                main.add(index)
-            }
-        }
-
-        if (main.isEmpty()) {
-            main.addAll(extras)
-            extras.clear()
-        }
-
-        val yearRegex = Regex("\\b(19|20)\\d{2}\\b")
-        fun yearOf(index: Int): Int? {
-            val match = yearRegex.find(items[index].title)
-            return match?.value?.toIntOrNull()
-        }
-        fun sizeOf(index: Int): Long = items[index].sizeBytes ?: -1L
-
-        main.sortWith { a, b ->
-            val yearA = yearOf(a)
-            val yearB = yearOf(b)
-            when {
-                yearA != null && yearB != null && yearA != yearB -> yearA - yearB
-                else -> sizeOf(b).compareTo(sizeOf(a))
-            }
-        }
-
-        extras.sortWith { a, b ->
-            sizeOf(a).compareTo(sizeOf(b))
-        }
-
-        val groups = mutableListOf<CollectionGroup>()
-        if (main.isNotEmpty()) {
-            groups.add(CollectionGroup("Main", main))
-        }
-        if (extras.isNotEmpty()) {
-            groups.add(CollectionGroup("Extras", extras))
-        }
-
-        android.util.Log.d("AndroidTvPlayer", "Computed ${groups.size} collection groups (fallback)")
-        return MovieGroups(groups)
-    }
-
-    private fun hidePlaylist() {
-        playlistVisible = false
-        playlistOverlay.visibility = View.GONE
-        gdPop?.visibility = View.GONE
-    }
-
     // Next overlay
     private fun showNextOverlay(nextItem: PlaybackItem) {
         nextText.text = nextItem.title
@@ -7990,7 +6772,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // True only during plain playback (no overlay/panel/controls on screen).
     private fun isCleanPlaybackState(): Boolean {
-        if (controlsMenuVisible || seekbarVisible || playlistVisible) return false
+        if (controlsMenuVisible || seekbarVisible || playlistController.playlistVisible) return false
         if (iptvGuideController.iptvGuideVisible || stremioTvGuideController.stremioTvGuideVisible) return false
         if (subtitlePanel?.isVisible == true) return false
         if (linePickerOverlay?.isVisible == true || syncOverlay?.isVisible == true) return false
@@ -9556,7 +8338,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun playItem(index: Int, suppressTrakt: Boolean, suppressResume: Boolean, shuffleAttempt: ShufflePlaybackAttempt?): Unit = this@AndroidTvTorrentPlayerActivity.playItem(index, suppressTrakt, suppressResume, shuffleAttempt)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
-            override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.rebuildPlaylistContent()
+            override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.playlistController.rebuildPlaylistContent()
             override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.requestMetadataFromFlutter()
             override var resumeHoldArmedAtMs: Long
                 get() = this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs
@@ -9853,7 +8635,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                 // If playlist is visible, hide it first
                 if (playlistOverlay.visibility == View.VISIBLE) {
-                    hidePlaylist()
+                    playlistController.hidePlaylist()
                     return
                 }
 
@@ -10089,19 +8871,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Clear adapters to release lambda references
         if (::playlistView.isInitialized) playlistView.adapter = null
-        playlistAdapter = null
-        seriesPlaylistAdapter = null
-        moviePlaylistAdapter = null
+        playlistController.playlistAdapter = null
+        playlistController.seriesPlaylistAdapter = null
+        playlistController.moviePlaylistAdapter = null
 
         // Clean up Stremio sources
-        focusRecoveryHandler.removeCallbacksAndMessages(null)
-        focusRecoveryRunnable = null
+        playlistController.navigator.focusRecoveryHandler.removeCallbacksAndMessages(null)
+        playlistController.navigator.focusRecoveryRunnable = null
         sourceSwitchController.cancelSourceSwitchWait()
         stremioSources.clear()
 
         // Clear tab references
-        seasonTabs.clear()
-        movieTabs.clear()
+        playlistController.seasonTabs.clear()
+        playlistController.movieTabs.clear()
 
         // Clear view listeners
         if (::seekbarOverlay.isInitialized) seekbarOverlay.setOnKeyListener(null)

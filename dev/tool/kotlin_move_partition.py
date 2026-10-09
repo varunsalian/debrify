@@ -138,6 +138,10 @@ def initializer_kind(expression):
     import re
     if re.fullmatch(r'(?:null|false|true|[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?)', expression):
         return 'constant'
+    if re.fullmatch(r'-[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?', expression):
+        return 'constant'
+    if expression == 'PlaylistMode.NONE':
+        return 'constant'
     if expression == 'Any()':
         return 'allocation'
     # Phase 11: only a quoted constant (no interpolation or escapes), and an
@@ -209,7 +213,10 @@ def check_initializer_timing(manifest, inventory, original, errors):
         if row.get('text') != text or row.get('line') != original.count('\n', 0, node['start']) + 1 or not row.get('proof'):
             errors.append('initializer timing requires original text/line and inert proof: ' + row['original'])
         expression = text.split(' = ', 1)[-1].split(' //', 1)[0].strip()
-        kind = initializer_kind(expression)
+        getter_only = (manifest['phase'] >= 13 and node.get('getter_only') and
+                       not node.get('has_initializer') and not node.get('has_delegate') and
+                       node.get('getter_effect_free'))
+        kind = 'none' if getter_only else initializer_kind(expression)
         if kind is None or row.get('kind') != kind:
             errors.append('initializer timing not proven inert: ' + row['original'])
 
