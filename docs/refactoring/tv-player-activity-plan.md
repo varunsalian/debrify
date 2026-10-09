@@ -3264,3 +3264,30 @@ correction, subtitle menu rows.
   emptyList validation, ListView inner receiver and ArrayAdapter super-call
   metadata/pins are covered by positives and stated-reason negatives. Evidence
   `p14/`; production unchanged. Step 0 next; no production moves.
+
+- 2026-10-09 — **Phase 14 Step 0 complete; STOPPED before production moves.**
+  All three prerequisite harnesses pass on original 82b16832c, including the
+  real IO/retry/Main ladder, endpoint-specific inline/queued/worker replies
+  and shown/measured dialog callbacks. All 172 new tests pass. Systematic
+  PSI sweep covers 724 nodes in every one of the 22 moved functions
+  (106 writes, 66 if, five when, 48 returns, six loops, 493 calls). Every
+  required state/branch/loop/direct-call node is resolved: 364 assertion
+  proofs and three documented Android setter equivalents. Raw sweep has
+  465 runs, 396 assertion kills; compile-invalid/crash-only/draft variants
+  receive no kill credit. Every new named test has an assertion witness.
+  Matrix and test→mutation→assertion table are appended to the deps report;
+  exact patches, immutable fixtures, logs/XML and equivalence bytecode are
+  archived under p14/step0/. Corrected late-metadata outcome is pinned:
+  cache write, zero addons, discovery true/loading false/no jobs after destroy.
+  Running-fetch cancellation publication and older catalog overwrite remain
+  unchanged. Clean baseline-82b16832c has 1,420 identities; p14-step0 has
+  1,592 (1,591 pass, same known SourceBrowser focus failure, no skips):
+  172 passing additions only, stable fingerprints, matched 1 GiB heap/JBR.
+  Original lint archives 1,352 issues (253 errors/1,099 warnings; 175 opt-in)
+  for the later comparison. Reflection rescan identifies 41 future routes;
+  borrowed scope/service/readiness stay Activity-owned. Step T is 1ce352474:
+  378 self-tests, zero original differences, 20 initializer proofs and
+  25 receiver pins plus six preserved bindings. Detached original removed;
+  file-size/diff checks pass. Production, old assertions, lockfile and
+  ProGuard unchanged; no moves, gate, push, branch switch, device or bug fix.
+  Claude's independent sample and Step 1 remain for the next checkpoint.
