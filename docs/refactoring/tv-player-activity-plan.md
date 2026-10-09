@@ -3473,3 +3473,27 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   Evidence p15/; 68 protected paths byte-identical to the merge. No
   production moves, lockfile/ProGuard edits, new size exception or bug fix.
   Step 0 is next; LoudnessEnhancer prerequisite must run first.
+
+- 2026-10-09 — phase 15 Step 0 complete. Loudness prerequisite 7/7 on
+  ce3ddfb06, including constructor/enable/gain/second-gain/release failure
+  semantics; no feature deferred. Added 335 named characterization cases,
+  with separate activities for all 7 skins × 4 guide styles, real installed
+  click/focus/Media3 callbacks, IPTV watch ACK routing, diagnostic-writer
+  barriers and exact live/VOD repaint, style and lifecycle behavior.
+  Statement sweep: 668 nodes across all 35 functions/callbacks, all 214
+  direct calls attempted; 386 required assertion proofs plus 20 reviewed
+  equivalents resolve all 406 required obligations. 493 archived original
+  attempts, 406 assertion kills; invalid/crash attempts get no credit.
+  All 335 named cases have original mutation witnesses. Full table/matrix,
+  fixture hashes, patches/logs/XML and owner rescan are in deps/p15/step0.
+  Clean baseline-ce3ddfb06 has 1,606 identities (1,605 pass, known focus
+  failure); p15-step0 has 1,941 (1,940 pass, same failure): exactly 335
+  passing additions, strict old-status equality and stable fingerprints,
+  matched evidence-only 1 GiB heap/JBR. Original lint archived: 1,352 issues
+  (253 errors/1,099 warnings, 175 opt-in errors), exit 1 unchanged baseline.
+  Final clean checker suite passes 419/419; earlier destinations and all
+  protected paths unchanged. Original detached worktree removed. No new
+  size exception, old-test assertion edit, production move, bug fix,
+  lockfile/ProGuard change, device interaction, branch switch or push.
+  Stopped before Step 1 for Claude’s independent sample; move/release/R8/
+  Flutter phase gates remain at their planned milestone.
