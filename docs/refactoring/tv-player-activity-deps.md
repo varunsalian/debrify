@@ -13281,3 +13281,553 @@ and pre-next-route split milestone are in the plan; all three production
 destinations remain below 500 lines. Full evidence: `p12/gate/summary.json`,
 raw logs/results and `junit/p12-step0b/`, `junit/p12-gate/`. No push, branch
 switch, independent review, device/emulator interaction or production bug fix.
+
+---
+
+## Phase 13 inventory + remaining plan (at `b870a16b1`; re-measure on `315448a3c`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`b870a16b1` (phase-11 merge, **11,458 lines**, class header 136). This is a read-only survey of the main
+checkout: no build, no worktree, nothing under `../debrify-wt/`.
+
+Phase 12 (IPTV guide chrome, in progress elsewhere) is treated as a controller:
+- fields 993–998 and 1031–1047;
+- functions 8415–9181 and 9183–9569, i.e. `setupIptvOverlay` … `showIptvChannelJumpDialog`.
+
+**No member counted here references a phase-12 member, and no phase-12 member references the phase-13
+unit.** Measured: 0 references in either direction.
+
+After phase 12 the activity is ≈ 10,320 lines: −1,154, plus ≈ 18 for its property and Host.
+
+**Method.** The p11 tooling was copied to `scratchpad/p13/`:
+- `idx.py`: a brace/string/comment-aware member indexer. It found 596 depth-1 members.
+- `units.py` / `units2.py`: per-unit inbound/outbound/re-point scans. These are word-boundary scans with
+  templates included, `this@Activity.` hits counted, and other-receiver hits excluded.
+
+The phase-13 numbers were checked by hand against the source. Counts for later units are scans and
+approximate (±10 %). Every later unit must get its own full inventory before its phase.
+
+Terms are as in the phase-11 inventory:
+- **Patch**: a token edit in a retained activity declaration.
+- **Re-point**: an edited forwarder inside an existing controller property's Host object (a whole-property
+  `patched` row).
+- **Substitution**: a declared edit inside a moved body.
+
+---
+
+### 1. What is left after phase 12 (candidate units at `b870a16b1`)
+
+Line counts are member spans with attached comments. "Patches" counts references from retained activity
+code, including code that a later unit moves (those become substitutions then). "Host" is the number of
+distinct activity names that the unit's bodies reach (an upper bound for its Host). Test-gap severity is
+judged against existing JVM tests (`android/app/src/test/kotlin/com/debrify/app/tv/`).
+
+| unit | members / lines | patches (decls) | re-points | Host | reflective / Dart | lifecycle | test gap | risk |
+|---|---|---|---|---|---|---|---|---|
+| **PL**: playlist overlay + focus navigator + guide skin (incl. `getNext/PrevPlayableIndex`, `computeMovieGroups`) | 60 / **1,199** | **31 (15)** | 7 in 6 props | **11** | 10 sites / 4 routes; Dart 0 | `onDestroy` 7 in place | high: phase 1 covered only the adapters | **medium-low** |
+| **SUBF**: subtitle fetch/search/auto-select + `resetSubtitleState` + UM subtitle rows (`umSubsModel`, `umAddonTrackRows`, `umSearchRows`, `umPickSearchResult`) | 45 / 1,113 | 36 (11) | ≈ 14 in 6 (`subtitleController` 9) | 13 | **45 sites** (10 files; `currentStremioSubtitleIndex` 16); Dart 0 | `onDestroy` 2 | medium: addon fetch, catalog search and dialogs are uncharacterized | medium-high: async tokens, coroutines on the borrowed `subtitleScope`, Flutter catalog search, 2 large dialogs |
+| **CTRL-I**: OTT skin install + caption, `setupControls` (focus/click routing), B7 live dock styling, `dockSkinSpec`/`controlsSkin` (+ **DISP** below → ≈ 1,075) | 20 / 772 | 29 (21) | ≈ 2 | **80** (≈ 45 of them lateinit views) | 0 / 0 | — | high: click routing is uncharacterized | medium: wide Host unless the views move with it |
+| **DISP**: aspect/speed/night/audio effects, `loadPlayerDefaults`, `decoderAnalyticsListener`, label arrays (+ UM display/playback rows) | 24 / 303 | 40 (10) | ≈ 4 (1 prop) | 16 | 3 / `NativePlayerSettingsConsumptionTest` | `onDestroy` 1 | low-medium | medium: native `LoudnessEnhancer` lifetime, analytics callbacks on the playback thread |
+| **CTRL-II**: controls overlay show/hide/auto-hide, focus probes, play/pause, seekbar (incl. the dead `showSeekbar` path), cinema scrub, progress ticker runnables, title/OTT identity, loading overlay (`setResolvingState`), **Next overlay**, `isCleanPlaybackState` | 54 / 1,116 | 83 (16), of which 38 in CTRL-I | ≈ 13 in 8 | 87 (≈ 50 views) | **31 sites / 14 files** (`controlsMenuVisible` ×23) | — | medium-high | **high**: hub state read by about every feature; 2 `Glide.with`; `::nextBackdrop.isInitialized` |
+| **TUNE**: IPTV tune pipeline (`setIptvMediaItem`, decoder-failure/HLS retry, codec selector) + twin trial + live recovery + reconnect pill + diag listener | 49 / 732 | 49 (7): `playbackListener` 17, `setupPlayer` 9, `onStart` 5, `onStop` 4, `onDestroy` 5 | ≈ 5 in 3 | 21 | 4 sites; Dart 0 | `onStart`/`onStop`/`onDestroy` 14 | **total** (no JVM test touches twin/recovery/tune; only `IptvDeviceQuirksTest`) | **high**: `@Volatile` fields read on loader threads by `setupPlayer`'s factory; lazy `iptvLiveRecovery`; twin handler; network callback |
+| **START-A**: playback start (`playItem`/`resolveAndPlay`/`startPlayback`/`playMediaDirect`/merged source/`playPikPakVideoWithRetry`) + **shuffle + next/prev/random** + Stremio TV media trio | 37 / 912 | 28 (7) | ≈ 16 in 6 (switcher 11 tokens) | 54 | **≈ 44** (shuffle 40, incl. the `ShufflePlaybackAttempt` binary name) + 3 Dart anchors | `onCreate` | medium (watchdog/switcher/shuffle suites exercise it) | **high**: `mediaPreparationGeneration`, shuffle protocol, PikPak and gate interplay |
+| **START-B**: media pipeline factory (`setupPlayer` 398) + metadata receiver (`setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`, `requestMetadataFromFlutter`) | 6 / 697 | 6 (3) | ≈ 1 | 44 | 0 / Dart `requestMetadataFromFlutter` range + `NativeAudioRoutingTest` source anchor on `setupPlayer` | broadcast register/unregister | medium | **high**: Media3 configuration, player/trackSelector writes through Host setters, loader-thread policy supplier |
+| **UM** remainder: audio/display/playback/sources models, `umSectionRows`, `unifiedMenuCallbacks` | 10 / 312 | 2 (1) | 0 | **43** | 2 sites | — | medium (`UnifiedMenuControllerTest`, phase-4 subtitle rows) | low per row, but the Host is too wide: **split by owner**, not a phase |
+| **ROUTERS**: `playbackListener` 509, `dispatchKeyEvent` 363 | 2 / 872 | 2 | 0 | **110** | 7 sites (`playbackListener`) | — | partial (phase-11 key matrix, per-phase listener cases) | **highest**; a verbatim move needs about 110-member Hosts |
+
+Not in any unit, so retained: `bindViews` 191, `onCreate` 173, `parsePayload` 170, `onDestroy` 169,
+`initIptvMode` 116, `setupBackPressHandler` 43, `onStart`/`onStop`/`onResume`/`onPause` 101,
+`progressRunnable` 32, the resume hold (46), buffering indicator 21, `finish` 17, `sendFinished` 18,
+`guideStyle`/`guideTypeface` 28, and small helpers.
+
+---
+
+### 2. Ranked phase plan for everything left
+
+The ordering rule is unchanged: lowest risk per patch first. Each unit takes the units it is coupled to
+in the direction that creates **forwarders rather than temporary patches**. Every phase keeps all phase 3–12
+collaborator rules.
+
+| phase | unit | ≈ lines | why here |
+|---|---|---|---|
+| **13** | **PL**: `TvPlaylistOverlayController` + nested `TvPlaylistFocusNavigator` + nested `TvPlaylistGuideSkin` (§3) | 1,199 | Best ratio in the file: 0.026 patches/line, an 11-member Host, no async protocol, no Flutter token, no Dart retarget. It also removes 13 later CTRL-I and 7 later SHUF patches. |
+| 14 | **SUBF** + UM subtitle rows + `resetSubtitleState` | 1,113 | Absorbing the four UM subtitle builders cuts its UM patches from 47 to 14, and the `subtitleController` Host (9 forwarders) re-points once. `subtitleScope`, `externalSubtitleHandler` and `stremioSubtitleService` stay activity-owned and borrowed (phase-4 rule). Step-0 prerequisites are latch-controlled addon fetch, catalog-search fake channel replies, and a dialog harness. |
+| 15 | **CTRL-I + DISP** (+ optionally UM audio/display/playback rows ≈ 134) | 1,075–1,209 | It must precede CTRL-II: CTRL-I → CTRL-II is 38 refs, CTRL-II → CTRL-I is 9. Moving CTRL-I first costs about 10 Host forwarders; the reverse costs 38 temporary patches. **Decide whether the ≈ 45 control/OTT lateinit views move with it.** Moving them gives ≈ 45 `bindViews` patches and a Host of ≈ 35. Keeping them gives a Host of ≈ 80, against the narrow-Host objection. DISP fits here because `setupControls` calls cycle-aspect, speed and night (4) and the UM display rows read its labels. |
+| 16 | **CTRL-II** + title/OTT identity + loading overlay + **Next overlay** | 1,116 | Consumes the phase-15 forwarders. It needs 31 reflective sites routed through owner maps (`controlsMenuVisible` in 14 files) and a readiness getter for `nextBackdrop`. The 25 `dispatchKeyEvent` patches are permanent unless the routers move. |
+| 17 | **TUNE** | 732 | Independent of 13–16 (0 references). It is late because it has the worst test gap and the highest async/thread risk. Volatile fields keep one owner, and `setupPlayer`'s factory reads them through the owner. 14 in-place lifecycle patches. It re-points the phase-5 ladder's and the recording Host's forwarders (5). |
+| 18 | **START-A**: playback start + shuffle/nav + Stremio TV media trio | 912 | Owns `pendingShufflePlayback`/`mediaPreparationGeneration`. The `ShufflePlaybackAttempt` nested binary name moves, so ≈ 40 shuffle reflective sites need retargets. 3 Dart anchors (`playItem`…`resolveAndPlay`, `resolveAndPlay`/`startPlayback`). Re-points ≈ 16, including the 11-token switcher Host. It takes `playPikPakVideoWithRetry`, whose PK refs become direct `pikPakRetryController` calls. |
+| 19 | **START-B**: media pipeline factory + metadata receiver (+ UM sources rows → fetch owner) | 697 (+≈ 80) | Retargets the `NativeAudioRoutingTest` source anchor and the mdblist Dart `_between` range. The player and `trackSelector` stay activity-owned (Host setters). This is the highest Media3-configuration risk. |
+| 20 | **Routers decision** | 872 | Recommend a **documented exception**. A verbatim move needs about 110-member Hosts; a split by event or key group needs a reviewed rule change (non-verbatim). Re-evaluate after 19. |
+
+The UM remainder (`unifiedMenuCallbacks` + `umSectionRows`, ≈ 80) stays as composition code, with its row
+builders distributed in phases 14, 15 and 19.
+
+This is **8 more phases (13–20)**. Phase 20 may be a decision record only.
+
+---
+
+### 3. Phase 13 feasibility record: playlist overlay + focus navigator + guide skin
+
+### 3.1 Summary and recommendation
+
+**Selected:**
+- `TvPlaylistOverlayController` (owner, ≈ 575 lines);
+- nested `TvPlaylistFocusNavigator` (≈ 325), which owns the focus-engine state (variant B);
+- nested `TvPlaylistGuideSkin` (≈ 395), which owns the skin views and flags.
+
+Both nested classes are constructed eagerly inside the owner's initializer, following the phase-6/8/11
+precedent. There is one 11-member Host, shared, plus the injected `AppCompatActivity`. The activity
+property sits at the first owned slot, `seasonTabs` (182).
+
+| item | count |
+|---|---|
+| moved members / lines | **60 / 1,199** (24 properties, 36 functions) |
+| activity patches | **31 in 15 declarations**, of which 18 sit in later-moving code (ROUTERS 5, START 6, CTRL 2, SHUF 7) |
+| Host re-points | **7 forwarders in 6 properties** (whole-property `patched` rows) |
+| Host | 11 members; ≈ 115 `host.` substitutions |
+| initializer proofs | **28** (3 new narrow classifier forms; §3.3) |
+| receiver substitutions | 8 `this` → `activity` (2 `Glide.with`, 2 `TextView`, 2 `LinearLayoutManager`, 1 `GridLayoutManager`, 1 `ContextCompat`); 1 excluded object self-receiver |
+| inherited-receiver audit | 15 (14 `findViewById`, 1 `layoutInflater`) |
+| cross-file qualifications | **49** (variant B; compile-checked) |
+| visibility substitutions | ≈ 33 |
+| substitutions total | ≈ 220 |
+| reflective retargets | 10 literal sites through **4 owner-map routes**; 0 public-function pins |
+| Dart retargets | 0; one anchored `_between` range gets 4 patches, and its assertions are unaffected |
+| lifecycle | 7 in-place `onDestroy` patches; no `onStart`/`onStop`/`onPause`/`finish` edits |
+
+**Risk: medium-low.** It is deterministic view code, with no Flutter token protocol, no coroutine, and no
+player-thread state. The risks are:
+- DPAD focus timing: a handler post at 100 ms, `View.postDelayed` at 50/100 ms, a self-removing global-layout
+  listener, and focus-recovery attach/detach callbacks;
+- skin-specific axis remapping;
+- a session-fixed `controlsSkin` lazy.
+
+**Test gap: high.** No existing test drives the overlay wiring, the focus engine or the guide skin. Phase 1
+covered only `PlaylistAdapter`/`MoviePlaylistAdapter` binding.
+
+**Why it beats the alternatives:**
+- SUBF (1,113 lines / 36 patches) has a similar ratio, but it has 45 reflective sites and an async fetch
+  and search protocol.
+- TUNE has the worst test gap.
+- The controls units need Hosts of 80–87.
+
+### 3.2 Members (lines at `b870a16b1`, attached comments included)
+
+**Owner `TvPlaylistOverlayController.kt` (534 member lines).**
+- Fields (8):
+  - `seasonTabs` 182;
+  - `movieTabs` 183;
+  - `playlistVisible` 766;
+  - `playlistMode` 780;
+  - `playlistAdapter` 781;
+  - `seriesPlaylistAdapter` 782;
+  - `moviePlaylistAdapter` 783;
+  - `movieGroups` 784.
+- Functions (17):
+  - `setupPlaylist` 3510–3584;
+  - `rebuildPlaylistContent` 3586–3619;
+  - `setupSeriesPlaylist` 3621–3648;
+  - `setupCollectionPlaylist` 3650–3669;
+  - `setupSeasonTabs` 3671–3701;
+  - `createSeasonTab` 3703–3732;
+  - `selectSeasonTab` 3734–3748;
+  - `setupCollectionTabs` 3750–3777;
+  - `createMovieTab` 4079–4105;
+  - `selectMovieTab` 4107–4120;
+  - `showPlaylist` 7738–7782;
+  - `alignSeriesTabsForCurrentEpisode` 7784–7793;
+  - `alignMovieTabsForCurrentItem` 7795–7802;
+  - `getNextPlayableIndex` 7804–7840;
+  - `getPrevPlayableIndex` 7842–7873;
+  - `computeMovieGroups` 7875–7961;
+  - `hidePlaylist` 7963–7967.
+
+**Nested `TvPlaylistFocusNavigator.kt` (300 member lines; owns the focus state).**
+- Fields (4):
+  - `isNavigating` 1349–1350 (with its comment);
+  - `navigationTargetPosition` 1351;
+  - `focusRecoveryHandler` 1352;
+  - `focusRecoveryRunnable` 1353.
+- Functions (5):
+  - `setupPlaylistNavigation` 3779–3836;
+  - `findNextFocusablePosition` 3838–3876;
+  - `ensureFocusInPlaylist` 3878–3929;
+  - `transferFocusToPosition` 3931–3984;
+  - `movePlaylistFocus` 3986–4077.
+
+**Nested `TvPlaylistGuideSkin.kt` (365 member lines).**
+- Fields and getters (17):
+  - `guideSkinInstalled` 3133–3144 (with the skin banner);
+  - `guideGridSpan` 3145;
+  - `gdShowTitle` … `gdPopDesc` 3146–3158 (13 fields);
+  - getter-only `guideOverlayLayoutRes` 3160–3169 and `guideItemLayoutRes` 3171–3182.
+- Functions (9):
+  - `installGuideOverlaySkin` 3184–3194;
+  - `bindGuideSkinViews` 3196–3212;
+  - `applyGuideLayoutManager` 3214–3241;
+  - `applyGuideKeyOverride` 3243–3307;
+  - `applyGuideTabStyle` 3309–3362;
+  - `guideSkinBind` 3364–3424;
+  - `updateGuideDetail` 3426–3470;
+  - `loadGuideArt` 3472–3481;
+  - `seedGuideSkinChrome` 3483–3508.
+
+**Stays in the activity:**
+- **Views.** `playlistOverlay`/`playlistView`/`seasonTabsContainer` (153–155, `lateinit`) are bound by
+  `bindViews` and read by retained `setupBackPressHandler` (`playlistOverlay.visibility`) and `onDestroy`
+  (`if (::playlistView.isInitialized) playlistView.adapter = null`). Keeping them as computed Host getters
+  avoids 3 `bindViews` patches, a readiness getter and a cross-object `lateinit` write. Moved code never
+  checks `::x.isInitialized`.
+- **Other names.** `hasPlaylistResolver` (written by `parsePayload`, also read by shuffle), `controlsSkin`
+  (lazy, controls phase), `ottShowName` (CTRL-II), `dp`.
+
+**Split variants:**
+- **Variant A** (recommended against): one owner holding the four focus fields. Its navigator is fieldless,
+  as in phase 11. It needs 67 cross-qualifications, including 2 unbraced cross-file templates in the
+  navigator: 3902 `$navigationTargetPosition` and 4018 `navTarget=$navigationTargetPosition`.
+- **Variant B** (selected): the navigator owns the focus state. It needs 49 cross-qualifications (O→S 15,
+  O→N 17, N→O 5, N→S 1, S→O 2, S→N 9) and no template bracing. That focus state is not a shared token
+  (it is read only by the focus engine, the owner's attach listener and the skin key override), so the
+  phase-11 single-owner rule does not apply.
+
+Two nested destinations carry fields, so the phase-6 effective-slot mapping applies to both.
+`nested_construction` already supports several rows.
+
+### 3.3 Owned state and initializer proofs
+
+There is one slot: the owner's property replaces `seasonTabs` at 182, between `skipSegmentButton` (181)
+and the seekbar views (186). Both nested classes map to that slot. **Every moved property other than
+`seasonTabs` runs earlier, so there are 28 proofs:**
+
+| fields | form | kind |
+|---|---|---|
+| `movieTabs = mutableListOf<MovieTab>()` | typed empty factory | allocation |
+| `playlistVisible = false`, `isNavigating = false`, `guideSkinInstalled = false` | literal | constant |
+| `playlistAdapter`/`seriesPlaylistAdapter`/`moviePlaylistAdapter`/`movieGroups`/`focusRecoveryRunnable` `= null`; 13 × `gd* = null` | literal | constant |
+| `guideGridSpan = 5` | literal | constant |
+| `focusRecoveryHandler = Handler(Looper.getMainLooper())` | handler | handler-allocation |
+| **`playlistMode: PlaylistMode = PlaylistMode.NONE`** | **new: enum entry** | constant |
+| **`navigationTargetPosition = -1`** | **new: negative integer literal** | constant |
+| **`guideOverlayLayoutRes` / `guideItemLayoutRes`** (`get()` only, no backing field) | **new: accessor-only, no initializer** | none-run |
+
+**Step-T classifier additions** (narrow, each with negatives):
+- **Unary-minus integer literal.** The current regex accepts only `[0-9]…`.
+  - Accept `-` followed by the existing constant form only. Reject `-x` and `-f()`.
+- **Enum entry of a reviewed enum.** Accept `PlaylistMode.NONE` from an explicit allow-list (`PlaylistMode`
+  is `internal enum class PlaylistMode { NONE, SERIES, COLLECTION }` in `TvPlaybackPayload.kt`, with no
+  `init` or constructor). Its first access triggers only that enum's static initialization.
+  - Reject non-listed types.
+  - Reject `X.y()` calls and companion/property reads.
+- **Accessor-only property.** Prove from the PSI that there is no initializer and no delegate, and only a
+  getter. Nothing runs at construction, so classify as `none`.
+  - Reject `by lazy`.
+  - Reject a backing initializer plus a getter.
+
+No `lateinit` property moves.
+
+### 3.4 Every inbound reference (outside the unit)
+
+**Activity patches: 31 in 15 declarations.** Each is a single-token prefix: `playlistController.`,
+`playlistController.navigator.` or `playlistController.guideSkin.`.
+
+| declaration | lines | names |
+|---|---|---|
+| `playbackListener` | 1764 | `getNextPlayableIndex` |
+| `onCreate` | 2154 | `setupPlaylist()` (between `setupSeekbar()` and `setupControls()`; order kept) |
+| `handleMetadataUpdate` | 2335, 2336, 2444, 2445 | `rebuildPlaylistContent`, `seriesPlaylistAdapter` ×2, `moviePlaylistAdapter` (inside `runOnUiThread` blocks) |
+| `bindViews` | 2522, 2526 | `installGuideOverlaySkin()` → `.guideSkin.`, `bindGuideSkinViews()` → `.guideSkin.` (around the 3 retained view binds; order kept) |
+| `setupControls` | 4479 | `showPlaylist` (playlist button) |
+| `playMediaDirect` | 4866 | `playlistAdapter?.setActiveIndex` |
+| `playNext` / `playPrevious` / `updateCatalogEpisodeControls` | 5226 / 5272 / 5310 | `getNextPlayableIndex` / `getPrevPlayableIndex` ×2 |
+| `getShuffleEligibleIndices` | 5541, 5548, 5549, 5551 | `playlistMode` ×2, `movieGroups` ×2 |
+| `playPikPakVideoWithRetry` | 6499 | `playlistAdapter?.setActiveIndex` |
+| `dispatchKeyEvent` | 6775, 6777, 6917, 6921 | `playlistVisible`, `hidePlaylist` (Back), `playlistMode` (DPAD_UP gate), `showPlaylist` |
+| `isCleanPlaybackState` | 7998 | `playlistVisible` |
+| `setupBackPressHandler` | 11017 | `hidePlaylist` (the retained `playlistOverlay.visibility` check at 11016 is unchanged) |
+| `onDestroy` | 11253–11255, 11258, 11259, 11264, 11265 | 3 adapters `= null`, `focusRecoveryHandler.removeCallbacksAndMessages(null)` → `.navigator.`, `focusRecoveryRunnable = null` → `.navigator.`, `seasonTabs.clear()`, `movieTabs.clear()` |
+
+**`onDestroy` lifecycle.** The 7 statements stay **in place** as single-reference patches, in the same order:
+- after the subtitle-identity clear and the retained `::playlistView.isInitialized` adapter clear (11252);
+- around the retained `sourceSwitchController.cancelSourceSwitchWait()` and `stremioSources.clear()`;
+- before `seekbarOverlay` and `sendFinished()`.
+
+They are not folded into a controller call (phase-9 rule).
+
+**Re-points: 7 forwarders in 6 controller properties** (whole-property `patched` rows; earlier destination
+files stay byte-identical):
+
+| line | property | forwarder |
+|---|---|---|
+| 177 | `upNextController` | `getNextPlayableIndex(i)` |
+| 1082 | `startupGateController` | `rebuildPlaylistContent()` |
+| 1128, 1129 | `progressReporter` | `playlistAdapter`, `playlistVisible` |
+| 1193 | `stremioTvGuideController` | `playlistMode` |
+| 1305 | `skipSegmentController` | `playlistVisible` |
+| 10720 | `sourceSwitchController` | `rebuildPlaylistContent()` |
+
+Each target becomes `this@AndroidTvTorrentPlayerActivity.playlistController.x`, so cross-feature reads go
+through the owning controller.
+
+**Phase-12 interplay:**
+- Phase 12 patches `setupControls` (4426), `dispatchKeyEvent` (EPG lines 6886–6915) and `onDestroy`
+  (`iptvEpgToken++`) in other statements. Re-measure and merge the manifests on the phase-12 merge.
+- **Expected line shifts:** members before 993 do not move. Members after ≈ 1047 shift by about −23 for the
+  removed fields, then +≈ 18 for the phase-12 property. Members after 8415 shift by a further −1,154. So the
+  phase-13 function spans at 3133–4120 and 7738–7967 shift by ≈ −5, and `onDestroy` by ≈ −1,160.
+
+### 3.5 Outbound Host (one 11-member Host, all computed and explicitly qualified)
+
+| member | refs (O/N/S) | note |
+|---|---|---|
+| `playlistView: RecyclerView` | 53 | `lateinit` getter, read at use time; this preserves `UninitializedPropertyAccessException` timing |
+| `playlistOverlay: View` | 3 (O) | `lateinit` |
+| `seasonTabsContainer: LinearLayout` | 11 (O) | `lateinit` |
+| `fun dp(Int): Int` | 17 (S) | tab padding and margins; there is no `dp` member on `TextView`/`LayoutParams` receivers |
+| `controlsSkin: TvControlsSkin` | 13 (S) | **lazy, read-once from `playerPreferences`**. The computed getter keeps first-access timing (first read: `installGuideOverlaySkin` in `bindViews`) |
+| `payload: PlaybackPayload?` | 8 | |
+| `currentIndex: Int` | 4 | |
+| `hasPlaylistResolver: Boolean` | 2 (O) | |
+| `fun playItem(index: Int)` | 2 (O) | one call shape only (adapter clicks); no interface defaults (phase-8 rule) |
+| `ottShowName: String?` | 1 (S) | CTRL-II field; re-pointed when CTRL-II moves |
+| `sourceFetchController` | 1 (O) | cross-feature getter; `requestEpisodeFetch(season, episode)` from the series adapter's fetch callback |
+
+### 3.6 Receivers, inherited members, overload audit
+
+**`this` → `activity`: 8 sites.**
+- S: 3221 `LinearLayoutManager(this, VERTICAL, false)`;
+- S: 3224 `GridLayoutManager(this, guideGridSpan)`;
+- S: 3313 `ContextCompat.getColorStateList(this, res)`, inside a plain lambda, so the `this` is the activity;
+- S: **3476 and 3480 `Glide.with(this)`**, which must keep the `FragmentActivity` overload (the activity-
+  lifecycle request manager);
+- O: 3512 `LinearLayoutManager(this, HORIZONTAL, false)`;
+- O: 3704 `TextView(this)` and 4080 `TextView(this)`.
+
+All are argument or constructor sites for the compiled descriptor audit.
+
+**Excluded receiver: 1 site.** 3953 `removeOnGlobalLayoutListener(this)` inside `object :
+ViewTreeObserver.OnGlobalLayoutListener` (N) is the listener, so it is not substituted. A reviewed
+exclusion with a negative.
+
+**Implicit inherited: 15 sites.**
+- `findViewById` ×14 (S): 3190 `findViewById<ViewGroup?>`, plus 13 inferred-type binds 3199–3211 into
+  nullable fields;
+- `layoutInflater` ×1 (S): 3192, `Activity.getLayoutInflater()`.
+
+Each is pinned for owner, descriptor and opcode before and after (phase-9/10 auditor).
+
+**Other anonymous objects** with no `this`: `OnChildAttachStateChangeListener` (O, 3531) and
+`GridLayoutManager.SpanSizeLookup` (S, 3226). Inside the `SpanSizeLookup`, `playlistMode` (→
+`playlist.playlistMode`) and `playlistView` (→ `host.playlistView`) are cross references inside an object
+expression, compile-checked. Labels `return@setOnKeyListener` (3254, 3255, 3786) are unchanged.
+
+**Callable references.** `::guideSkinBind` ×2 in O (3636, 3656) becomes `guideSkin::guideSkinBind`: a bound
+reference with an explicit receiver. The receiver is the eager, final nested instance, so it is identical in
+behaviour. This needs a step-T substitution class with a negative (an unqualified `::guideSkinBind` must not
+compile in O).
+
+**Templates:**
+- 1 already-braced host template, 7758 `${playlistView.adapter?.itemCount}` → `${host.playlistView…}`;
+- no unbraced host template;
+- variant B has no cross-file template;
+- owner-local templates (`$playlistMode`, `$targetPosition`, …) are unchanged.
+
+**Default arguments.** `selectSeasonTab(…, scrollToTop = true)` and `selectMovieTab(…, scrollToTop = true,
+forceAdapterUpdate = false)` are literals and are not state-reading.
+
+**Shadowing.** The scan found no local or parameter named after a Host member. Step T re-verifies this
+with the PSI.
+
+### 3.7 Timers, handlers, teardown
+
+- `focusRecoveryHandler` is **owned** by N:
+  - attach/detach recovery `postDelayed(…, 100)`, set up in O's `setupPlaylist` listener (→ `navigator.`
+    qualified);
+  - cleared only in `onDestroy` (2 in-place patches).
+- View-queue posts are never cancelled, pinned as-is (follow-up):
+  - `playlistView.post` + `postDelayed(100)` in `showPlaylist`;
+  - `postDelayed(100)` in `movePlaylistFocus`;
+  - `postDelayed(50)` ×2 in `transferFocusToPosition`.
+- The `OnGlobalLayoutListener` is self-removing on its first layout. It is never removed if no layout occurs
+  (follow-up).
+- `OnGlobalFocusChangeListener` is added on **every** `setupPlaylistNavigation()` (per rebuild). This is an
+  existing follow-up.
+- `OnChildAttachStateChangeListener` is added once per `setupPlaylist()`, whose only caller is `onCreate`.
+- `loadGuideArt` Glide requests are bound to the activity lifecycle (the `FragmentActivity` overload is
+  preserved).
+- There is no borrowed `progressHandler`/`controlsHandler`, no coroutine, and no `MethodChannel` (the only
+  async edge is `sourceFetchController.requestEpisodeFetch`).
+- Teardown order is unchanged (§3.4).
+
+### 3.8 Reflective tests and Dart anchors
+
+**Kotlin reflection: 10 literal sites, 4 owner-map routes in `TvPlayerOriginalAccess`.**
+- `playlistVisible` (5): `TvProgressReporterCharacterizationTest` :53/:58, `TvSkipUiCharacterizationTest`
+  :74, `TvSkipPresentationCharacterizationTest` :87, `TvUpNextCharacterizationTest` :37 → `playlistController`.
+- `playlistMode` (1): `TvStremioTvGuideUiCharacterizationTest` :63 → `playlistController`.
+- `playlistAdapter` (1): `TvProgressReporterCharacterizationTest` :45 → `playlistController`.
+- `focusRecoveryHandler` (3): `@After` cleanup lists in `TvPhase5/7/8OriginalTest` →
+  `playlistController.navigator`.
+
+All are backing fields with unmangled JVM names, so no reflected function needs a public pin. Rescan after
+step 0 adds accesses.
+
+**Dart.** No anchor names a moved function.
+- `android_tv_mdblist_progress_source_test.dart` `_between('// Handle episode metadata updates', 'private fun
+  requestMetadataFromFlutter()')` spans `handleMetadataUpdate`, which gets 4 patches. Its asserted literals
+  (`hasWatchedUpdate`, `model.items.indexOfFirst`, …) are untouched. Record this; no retarget.
+- `profile_source_guard_test.dart` scans `lib/` plus listed native files only, so it is unaffected.
+
+### 3.9 Hazards (each a step-T fixture or negative)
+
+1. Two field-bearing nested destinations, both at the owner's effective slot. Negatives:
+   - an omitted proof for N's or S's first field;
+   - N or S reading the Host or the owner during construction.
+2. The 3 new classifier forms (§3.3), with negatives.
+3. The `Glide.with` `FragmentActivity` overload ×2, the `TextView`/`LinearLayoutManager`/`GridLayoutManager`
+   constructors and `ContextCompat`: compiled descriptor audit (8 sites).
+4. 15 implicit inherited sites, with owner/descriptor/opcode pins.
+5. The excluded listener `this` at 3953 (reviewed exclusion; negatives for omission and substitution).
+6. Bound callable reference re-receiver `guideSkin::guideSkinBind` ×2.
+7. `controlsSkin` lazy first-access timing through a computed getter. Negative: a snapshotting `val`
+   forwarder.
+8. The 4 `lateinit` view getters must be computed. Negative: an initialized forwarder that reads at
+   construction, and so throws at slot 182.
+9. The skin key listener is "last-set-wins" over the navigator's listener. Keep the call order inside
+   `setupPlaylistNavigation` (N calls `guideSkin.applyGuideKeyOverride()` last).
+10. The `bindViews` order `installGuideOverlaySkin` → 3 view binds → `bindGuideSkinViews` is kept (patched in
+    place).
+11. `onDestroy`: 7 in-place statements, order unchanged. Negative: a folded block.
+
+### 3.10 File split and counts
+
+| file | content | ≈ lines (members + header/imports) |
+|---|---|---|
+| `TvPlaylistOverlayController.kt` | owner: 8 fields, 17 functions, the Host interface, eager `navigator`/`guideSkin` construction | 534 + ≈ 45 ≈ **580** |
+| `TvPlaylistFocusNavigator.kt` | 4 focus fields + 5 functions | 300 + ≈ 25 ≈ **325** |
+| `TvPlaylistGuideSkin.kt` | 15 fields + 2 getters + 9 functions | 365 + ≈ 30 ≈ **395** |
+
+The activity shrinks by ≈ 1,199 member lines, minus a ≈ 18-line property and Host, giving ≈ −1,180. That
+takes it to ≈ 10,320 → **≈ 9,140** after phase 13.
+
+Substitutions:
+
+| kind | count |
+|---|---|
+| `host.` | ≈ 115 (`playlistView` 53, `dp` 17, `controlsSkin` 13, `seasonTabsContainer` 11, `payload` 8, `currentIndex` 4, `playlistOverlay` 3, `hasPlaylistResolver` 2, `playItem` 2, `ottShowName` 1, `sourceFetchController` 1) |
+| cross-file | 49 |
+| receivers | 8 |
+| inherited | 15 |
+| visibility | ≈ 33 |
+| **total** | **≈ 220** |
+
+### 3.11 Step T / step 0 needs
+
+**Step T:**
+- the 3 classifier forms;
+- the phase-13 extraction fixture: owner with two field-bearing nested destinations, 28 proofs,
+  `guideSkin::` reference substitutions, re-point rows for 6 properties, 7 in-place `onDestroy` patches;
+- negatives: §3.9 plus a missed `navigator.`/`guideSkin.`/`playlist.` qualification compiled against a
+  same-name Host member;
+- the per-phase dispatcher keeping all historical suites;
+- the compiled audit: 8 receiver sites + 15 inherited + 1 exclusion;
+- earlier destinations frozen at the phase-12 merge.
+
+**Step 0** (from zero; characterize the original through the real bootstrap, not only reflection):
+- **Bootstrap through `onCreate`/`bindViews`** with series, collection, single-item, and single-item-with-
+  guide-and-resolver payloads:
+  - the adapters chosen and `playlistMode`;
+  - season and collection tabs: labels, default selection by the current episode, `scrollToTop`
+    semantics;
+  - `computeMovieGroups`: payload groups (empty filtered) versus the size/year fallback, ordering and the
+    40 % threshold;
+  - `rebuildPlaylistContent` idempotence.
+- **Navigation maps.** `getNext/PrevPlayableIndex` for series maps, collection groups, the sequential
+  fallback and boundaries. Exercise them through `playNext`/`playPrevious`/Up Next/`ENDED` where practical.
+- **Show/hide.** Early exits (`NONE`, null adapter), tab alignment, active-position scroll, focus after
+  `post` + 100 ms, `gdPop` hidden on hide, Back via `dispatchKeyEvent` and the back-press handler, DPAD_UP
+  opening only when the VOD state is clean, `isCleanPlaybackState`.
+- **Focus engine** (attached, measured RecyclerView; paused looper; `ShadowChoreographer` frame delay saved
+  and restored; phase-1/7 lessons):
+  - `movePlaylistFocus` across headers, boundaries and rapid input (`navigationTargetPosition`);
+  - direct focus versus transfer, the global-layout transfer and its 50 ms retry;
+  - attach/detach recovery after 100 ms, guarded by `isNavigating`/`playlistVisible`;
+  - middle-out recovery in `ensureFocusInPlaylist`.
+- **Guide skin: 7 separate activity instances**, one per `controlsSkin` (CLASSIC never installs; the lazy is
+  read once per session, the phase-6 lesson):
+  - layout install and id contract, item layout per skin;
+  - layout manager per skin (vertical, PULSE 5-span grid with the series-header span lookup);
+  - axis-remapped key listener (last-set-wins), escape-to-tabs/rail edges;
+  - tab styling;
+  - row binders: BROADCAST status colour state list, PULSE ring, MARQUEE/TICKET strike-through;
+  - the detail surface;
+  - `seedGuideSkinChrome` counts;
+  - Glide owner and clear-on-null for `loadGuideArt`.
+- **Metadata update path.** `handleMetadataUpdate` rebuild + `setActiveIndex`, and adapter notifications.
+- **Episode fetch callback.** It routes to `sourceFetchController.requestEpisodeFetch` and hides first.
+- **`onDestroy`.** Cleanup order and handler clearing.
+- **Mutation proofs.** Apply the **phase-11 lesson proactively**: the unit has ≈ 101 `if`, 16 `when` and 70
+  `return` sites, so build the PSI per-function coverage matrix and run a statement-level sweep in step 0,
+  before Claude's first sample. Then run Claude's independent sample and close gaps in 0b. A second sample is
+  mandatory if the first is below ≈ 75 %.
+
+### 3.12 Follow-ups found while mapping (pin as-is; do not fix)
+
+- `setupPlaylistNavigation` adds an `OnGlobalFocusChangeListener` per rebuild (existing).
+- `playlistView.post`/`postDelayed` focus posts are never cancelled. The global-layout listener stays
+  registered if no layout ever runs.
+- `findNextFocusablePosition` returns any in-range index for collections (no focusability check).
+  `ensureFocusInPlaylist` assumes a `LinearLayoutManager`, so the PULSE `GridLayoutManager` passes the cast
+  (it is a subclass), which is fine. Pin the behaviour.
+- `createSeasonTab`/`createMovieTab` use raw pixel padding (28/14/10) while the skin styling uses `dp`.
+  This is existing; no change.
+- The `getNextPlayableIndex` series path returns `null` when the map lacks the index (no sequential
+  fallback). Pin it.
+
+---
+
+### 4. Honest end-state estimate (updated)
+
+Measured at `b870a16b1`:
+- 17 controller properties with Host objects take **514 lines** (≈ 30 each);
+- retained members outside every unit take ≈ 1,470 lines, including ≈ 171 fields (≈ 290 lines);
+- inter-member blank and comment lines ≈ 363;
+- imports 131.
+
+| item | lines (est.) |
+|---|---|
+| imports | ≈ 100–130 |
+| class header, companion (`PAYLOAD_KEY` + residual constants) | ≈ 30 |
+| shared single-owner state: `player`/`trackSelector`/`payload`/`currentIndex`/`playlistMode`-free core, Stremio sources + index + `stremioResolutionToken`, IPTV list/index/mode flags, handlers/scopes, `lateinit` views not taken by their owners, recovery/session ids, `playerPreferences` | ≈ 200–300 |
+| Host wiring: today 514; + phase 12 ≈ 20, phase 13 ≈ 20, SUBF ≈ 20, CTRL-I + DISP ≈ 60–100, CTRL-II ≈ 50–95, TUNE ≈ 30, START-A ≈ 60, START-B ≈ 50 | ≈ 825–910 |
+| lifecycle: `onCreate` 173, `onStart`/`onStop`/`onResume`/`onPause` ≈ 100, `onDestroy` 169, `finish` 17, `sendFinished` 18, permissions 11, back press 43, buffering indicator 21, `recordPlaybackLifecycle` 9 | ≈ 560 |
+| composition/bootstrap: `bindViews` 191, `parsePayload` 170, `initIptvMode` 116, `unifiedMenuCallbacks` + `umSectionRows` ≈ 80, small helpers (resume hold, `progressRunnable`, `guideStyle`/`guideTypeface`, `guideAdjacent`) ≈ 100–150 | ≈ 660–710 |
+| inter-member blank/comment lines | ≈ 250–300 |
+| **subtotal, routers extracted** (+ ≈ 230 for two ≈ 110-member Hosts) | **≈ 2,850–3,150** |
+| `playbackListener` + `dispatchKeyEvent` kept verbatim (no router Hosts) | +872 −230 |
+| **realistic end state (routers retained, the likely outcome)** | **≈ 3,450–3,750** |
+
+This is slightly higher than the phase-6 estimate (2,800–3,600). Two things raise it:
+- Host wiring has measured ≈ 30 lines per controller, not ≈ 25.
+- `initIptvMode` (116) and the UM composition (≈ 80) are now confirmed to stay.
+
+The controls phases decide ≈ 100 lines either way, depending on whether their ≈ 95 `lateinit` views move
+with them (each moved view adds a `bindViews` patch and removes a Host forwarder).
+
+**What must remain** (the documented end exception, unchanged in kind):
+- the Android entry point and manifest FQN;
+- lifecycle order (`onStop` 12 / `onDestroy` 43 steps) and in-place teardown statements;
+- the composition root (≈ 26 controller properties + Host objects);
+- the shared player and single-owner state;
+- payload intake (`parsePayload`) and view binding (`bindViews`);
+- the IPTV bootstrap (`initIptvMode`);
+- the UM composition;
+- very likely the two routers.
+
+**Exit path** (outside this series; a reviewed rule change):
+- the activity implements the Host interfaces in its class header (removes ≈ 800 lines of forwarder
+  objects); or
+- non-verbatim router splits by event or key group.
+
+Either could bring the activity to ≈ 1,500–2,000. **≤ 800 is not reachable under the current verbatim
+rules.**

@@ -1530,6 +1530,75 @@ pickers, favourites toggle, row removal from a custom list, channel-number
 jump dialog, EPG schedule pane (day navigation, replay/record actions),
 now/next header with logo and letter fallback.
 
+## Phase 13 — playlist overlay, focus navigation and guide skin
+
+Branch `refactor/tvplayer-p13` off the phase-12 merge `315448a3c` (activity 10,297 lines). **First item of step T:** split the 813-line `TvPlayerOriginalAccess.kt` test helper (exit milestone from phase 12) into cohesive helpers (e.g. owner-route map vs reflection primitives), each ≤ 800 lines, assertions untouched, and drop its size-baseline exception before any new route is added. Evidence under
+`refactor-evidence/tvplayer/p13/`. Inventory: "Phase 13 inventory" in the deps
+report (measured at `b870a16b1`; phase 12 has no references either way —
+re-measure on the phase-12 merge). All collaborator rules from phases 3–12
+apply, incl. the phase-11 sampling lesson; the systematic statement-level
+coverage sweep is part of step 0 from the start (101 `if`, 16 `when`, 70
+`return` sites).
+
+**Remaining plan (re-measured):** 13 playlist overlay + guide skin (1,199);
+14 subtitle fetch + subtitle menu rows (1,113; 45 reflective sites); 15
+controls I + display/speed/night mode (≈ 1,075); 16 controls II + title
+identity + Next overlay (1,116); 17 IPTV tune pipeline + twin trial + live
+recovery (732; no existing tests); 18 playback start + shuffle (912); 19
+media pipeline + metadata receiver (697); 20 the routers decision
+(`playbackListener`, `dispatchKeyEvent` — each would need a ≈ 110-member Host;
+likely a documented exception). **Revised end state:** ≈ 3,450–3,750 lines
+if the routers stay (≈ 2,850–3,150 if they move): lifecycle, ≈ 26 controller
+Hosts (~30 lines each), `bindViews`, `parsePayload`, `initIptvMode`, menu
+composition and shared single-owner state — recorded as the documented
+end-state exception when the series completes.
+
+**Selected (≈ 1,199 lines, 60 members):** `TvPlaylistOverlayController`
+(≈ 580) eagerly constructs `TvPlaylistFocusNavigator` (≈ 325; owns the 4
+focus fields, avoiding template-bracing edits) and `TvPlaylistGuideSkin`
+(≈ 395); 49 compile-checked cross-references; the three playlist views stay
+in the activity behind computed Host getters; one 11-member Host. 31 activity
+patches in 15 declarations; 7 forwarder re-points in 6 controller Hosts
+(`patched` activity-property rows); the 7 `onDestroy` statements patched in
+place, in order. 28 initializer proofs; the classifier gains three narrow
+forms: the negative literal `-1`, an enum entry (`PlaylistMode.NONE`), and
+getter-only properties (no backing initializer). ≈ 220 substitutions.
+
+**Audit.** 8 `this` → `activity` sites (2 `Glide.with` must keep the
+`FragmentActivity` overload), 15 implicit inherited calls, 1 excluded
+listener `this`, 2 `::guideSkinBind` function references (resolve to the same
+member after the move).
+
+**Retargets.** 10 reflective sites via 4 owner-map routes; no Dart anchors.
+
+### Step T
+
+Phase-13 extraction fixture (owner + navigator with fields + skin; computed
+view getters) + negatives; classifier forms + negatives (non-literal negative
+expression, enum entry with arguments, getter with side effects); compiled
+audit (8 + 15 sites, listener exclusion, function references); per-phase
+dispatcher keeping all historical suites; earlier destinations frozen at the
+phase-12 merge.
+
+### Step 0 — characterization of the original
+
+From zero: 7 separate activity instances (one per controls skin); playlist
+show/hide (animation, focus restore), season tabs and group filtering,
+movie-collection tabs, focus engine (DPAD up/down/left/right across tabs and
+rows, edge behaviour, recovery posts and their cancellation), guide skin
+binding per skin (`::guideSkinBind`), current-item highlight and scroll,
+adapter rebuild paths, `onDestroy` statements; plus the systematic
+statement-level coverage sweep with a coverage matrix. Mutation proofs on the
+original; Claude's independent sample (≥ 75 % kills, else sweep + second
+sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–12 additions. Device checklist (end of series):
+playlist overlay for a series (season tabs, episode rows, current episode
+highlighted) and a movie collection, DPAD navigation incl. edges and long
+lists, the playlist in each controls skin, opening/closing during playback.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 12 scoped test-helper size exception:
