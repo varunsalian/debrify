@@ -1740,8 +1740,8 @@ would need ≈ 44).
   are inlined), and the reviewed anonymous `object : AnalyticsListener`.
 - Audit: 14 receiver/constructor sites, 3 inherited getters, and all 23
   `findViewById` assignment sites inventoried with **cast presence/absence
-  and target type pinned** (15 sites cast, 8 targets already typed `View`
-  with no cast), comparing the original field descriptors against the new
+  and target type pinned** (re-measured bytecode: 12 sites cast; 8 `View`
+  targets and 3 typed-array stores have no cast), comparing the original field descriptors against the new
   Host setter or array-getter descriptors; exact source types and
   nullability preserved; widening and omitted-site negatives.
 - Reflection: 41 sites across 10 names via 9 owner-map routes plus the
@@ -3460,3 +3460,16 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   presence/absence pins for the 23 findViewById sites; LoudnessEnhancer
   failure injection pinned as-is); P3 patch count 41.
 - 2026-10-09 — phase 15 design round 2 (Codex): **No P1s**, no further collisions or findings. Phase 15 design approved.
+- 2026-10-09 — phase 15 Step T complete. Manifest re-measured at ce3ddfb06:
+  1,730 original declarations classified, 68 moved subtrees, zero original
+  self-comparison differences; two slots and 31 initializer proofs. Complete
+  production-config fixture passes and compiles (dock 554, styler 294,
+  display 438 lines). Audit passes 17 receiver/getter pins, 23 shared-view
+  binds and resize-array constant inlining. Measured cast correction:
+  12 CHECKCAST / 11 no-cast, including three typed TextView[] stores.
+  All 419 checker cases verified through the full run and 42 corrected
+  rechecks; historical phase-6 exception behavior restored and retained.
+  Phase-14 historical comparison and all 51 frozen destinations pass.
+  Evidence p15/; 68 protected paths byte-identical to the merge. No
+  production moves, lockfile/ProGuard edits, new size exception or bug fix.
+  Step 0 is next; LoudnessEnhancer prerequisite must run first.

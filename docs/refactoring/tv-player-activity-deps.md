@@ -15221,7 +15221,7 @@ Clean p14-gate exactly matches all 1,606 p14-step0b identities/statuses (1,605 p
 
 ## Phase 15 inventory (at `82b16832c`; re-measure on `ce3ddfb06`)
 
-> Superseded where they differ (phase 15 design round 1): the styler→dock reference is named `controlsDock` (not `dock`); `findViewById` audit pins cast presence/absence per site (15 cast / 8 not); LoudnessEnhancer failure injection is part of the step-0 prerequisite; totals are 41 patches (12 in `playbackListener`).
+> Superseded where they differ (phase 15 design round 1 and Step T bytecode re-measurement): the styler→dock reference is named `controlsDock` (not `dock`); `findViewById` audit pins cast presence/absence per site (12 cast / 11 not; the three typed-array stores have no CHECKCAST); LoudnessEnhancer failure injection is part of the step-0 prerequisite; totals are 41 patches (12 in `playbackListener`).
 
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
@@ -15786,3 +15786,88 @@ others); 24 permanent `dispatchKeyEvent` patches; readiness getters for `::nextB
   (`USE_UNIFIED_MENU` is a constant `true`).
 - `cinemaIconTints`/`cinemaButtonTypefaces` capture once per button and are never cleared (hold View
   references for the activity lifetime).
+
+## Phase 15 Step T — re-measured at `ce3ddfb06`
+
+The original activity has 7,982 physical lines and 1,730 PSI declarations. The manifest classifies every declaration, including the 68 moved subtrees (66 selected members and two companion constants). Original self-comparison has zero differences. Production code is unchanged in this step.
+
+**Measured bytecode correction to the inventory/design:** all 23 shared-view assignments remain covered, but Kotlin 2.2.20 emits 12 CHECKCAST sites and 11 no-cast sites. The three `ottQualityChips` assignments load a typed `TextView[]` and use `aastore` without CHECKCAST; the other eight no-cast targets are `View`. The audit pins these observed instructions and the original field/new Host setter or array-getter descriptors, plus exact source type/nullability.
+
+The two construction slots are `iptvPrevButton` (212) and `displayMatchMode` (289). The eagerly constructed styler is pinned in its owner, with 31 later-field initializer proofs including its first map. There are 337 moved token re-points in 306 counted whole-line substitutions, 41 activity edits in 13 declarations and 12 Host re-points in five whole-property rows. All 51 earlier destinations are frozen at the merge with an empty whitelist.
+
+| Destination | Original member | Lines at `ce3ddfb06` |
+| --- | --- | --- |
+| `TvControlsDockController` | `iptvPrevButton` | 212–212 |
+| `TvControlsDockController` | `iptvNextButton` | 213–213 |
+| `TvControlsDockController` | `iptvGuideButton` | 214–214 |
+| `TvControlsDockController` | `iptvJumpButton` | 215–215 |
+| `TvControlsDockController` | `iptvStartOverButton` | 216–216 |
+| `TvControlsDockController` | `iptvStartOverSeekButton` | 217–217 |
+| `TvControlsDockController` | `iptvRecordButton` | 218–218 |
+| `TvControlsDockController` | `originalControlDockOrder` | 223–223 |
+| `TvControlsDockController` | `audioButton` | 224–224 |
+| `TvControlsDockController` | `subtitleButton` | 225–225 |
+| `TvControlsDockController` | `aspectButton` | 226–226 |
+| `TvControlsDockController` | `speedButton` | 227–227 |
+| `TvControlsDockController` | `nightModeButton` | 228–228 |
+| `TvControlsDockController` | `ottCaptionLabel` | 248–248 |
+| `TvControlsDockController` | `ottCaptionOwner` | 249–249 |
+| `TvControlsDockController` | `ottProgressTrackContainer` | 269–269 |
+| `TvControlsDockController` | `ottSourcesButton` | 271–273 |
+| `TvPlaybackDisplayController` | `displayMatchMode` | 289–289 |
+| `TvPlaybackDisplayController` | `displayModeController` | 290–290 |
+| `TvPlaybackDisplayController` | `decoderAnalyticsListener` | 292–339 |
+| `TvPlaybackDisplayController` | `resizeModeIndex` | 783–783 |
+| `TvPlaybackDisplayController` | `playbackSpeedIndex` | 784–784 |
+| `TvPlaybackDisplayController` | `nightModeIndex` | 785–785 |
+| `TvPlaybackDisplayController` | `loudnessEnhancer` | 786–786 |
+| `TvPlaybackDisplayController` | `systemAudioEffectsEnabled` | 788–790 |
+| `TvPlaybackDisplayController` | `resizeModes` | 1349–1354 |
+| `TvPlaybackDisplayController` | `resizeModeLabels` | 1356–1356 |
+| `TvPlaybackDisplayController` | `playbackSpeeds` | 1358–1358 |
+| `TvPlaybackDisplayController` | `playbackSpeedLabels` | 1359–1359 |
+| `TvPlaybackDisplayController` | `nightModeGains` | 1361–1361 |
+| `TvPlaybackDisplayController` | `nightModeLabels` | 1362–1362 |
+| `TvControlsDockController` | `installOttControlsSkin` | 3127–3202 |
+| `TvControlsDockController` | `setOttTrackHeight` | 3204–3217 |
+| `TvControlsDockController` | `updateOttCaption` | 3219–3231 |
+| `TvControlsDockController` | `clearOttCaption` | 3233–3238 |
+| `TvControlsDockController` | `refreshOttCaptionFor` | 3240–3245 |
+| `TvControlsDockController` | `setupControls` | 3247–3543 |
+| `TvPlaybackDisplayController` | `updateAspectButtonLabel` | 5268–5271 |
+| `TvPlaybackDisplayController` | `updateNightModeButtonLabel` | 5273–5276 |
+| `TvLiveDockStyler` | `setupIptvControls` | 5930–5966 |
+| `TvLiveDockStyler` | `liveIptvDockButtons` | 5968–5984 |
+| `TvLiveDockStyler` | `cinemaIconTints` | 5986–5989 |
+| `TvLiveDockStyler` | `cinemaButtonTypefaces` | 5990–5990 |
+| `TvLiveDockStyler` | `applyLiveIptvControlStyle` | 5992–6044 |
+| `TvLiveDockStyler` | `restoreCinemaDockIconTints` | 6046–6063 |
+| `TvLiveDockStyler` | `updateIptvControlPresentation` | 6080–6127 |
+| `TvLiveDockStyler` | `arrangeLiveIptvControlDock` | 6129–6156 |
+| `TvLiveDockStyler` | `restoreOriginalControlDockOrder` | 6158–6165 |
+| `TvLiveDockStyler` | `replaceControlDockOrder` | 6167–6178 |
+| `TvLiveDockStyler` | `restoreCinemaIptvControlStyle` | 6180–6213 |
+| `TvControlsDockController` | `DockSkinSpec` | 6267–6283 |
+| `TvPlaybackDisplayController` | `umAudioTracks` | 6556–6572 |
+| `TvPlaybackDisplayController` | `umAudioSelectedIndex` | 6574–6587 |
+| `TvPlaybackDisplayController` | `umAudioModel` | 6672–6704 |
+| `TvPlaybackDisplayController` | `umDisplayModel` | 6784–6797 |
+| `TvPlaybackDisplayController` | `showAudioTrackDialog` | 6856–6896 |
+| `TvPlaybackDisplayController` | `cycleAspectRatio` | 6898–6904 |
+| `TvPlaybackDisplayController` | `applyResizeMode` | 6906–6913 |
+| `TvPlaybackDisplayController` | `cyclePlaybackSpeed` | 6915–6919 |
+| `TvPlaybackDisplayController` | `applyPlaybackSpeed` | 6921–6937 |
+| `TvPlaybackDisplayController` | `syncAudioEffectSession` | 6939–6952 |
+| `TvPlaybackDisplayController` | `initializeLoudnessEnhancer` | 6954–6971 |
+| `TvPlaybackDisplayController` | `releaseLoudnessEnhancer` | 6973–6980 |
+| `TvPlaybackDisplayController` | `loadPlayerDefaults` | 6982–7032 |
+| `TvPlaybackDisplayController` | `showNightModeDialog` | 7034–7043 |
+| `TvPlaybackDisplayController` | `applyNightMode` | 7045–7074 |
+| `TvPlaybackDisplayController` | `DECODER_LOG_TAG` | 7964–7964 |
+| `TvControlsDockController` | `USE_UNIFIED_MENU` | 7970–7975 |
+
+The complete production-config fixture compiles on the original detached tree: dock owner 554 lines, nested styler 294 and display controller 438. The compiled audit passes 17 receiver/getter pins, all 23 field/Host assignment pins, and the resize-mode constant-inlining proof. Raw source, PSI, JVM instructions and reports: `p15/fixtures/phase15/`, `p15/compiled-original/`, `p15/compiled-fixture/`, `p15/overload-audit.json`, and `p15/remeasured-inventory.json`.
+
+The phase-15 checker suite includes allocation/binding negatives, missing-proof checks for every initializer and view assignment, computed Host forwarders, eager nested construction, owner-slot relocation, `controlsDock` qualification and `dock` shadowing, nullability/type widening, cast presence/absence, non-inlined constants, extra activity-property edits, unchanged teardown ordering and all earlier destinations. Historical suites are dispatched with their own manifests.
+
+All 419 checker cases are verified: the full run passed 418 and exposed one historical phase-6 exception-reporting incompatibility; restoring the pre-phase-15 exception behavior and rerunning that case plus all 41 phase-15 cases passed 42/42. The corrected earlier-destination test also consumes the comparator result directly. Raw initial and corrected runs are retained; compiled negatives fail on their stated audit reason, rather than compilation. Protected hashes confirm the activity, all 51 earlier destinations, all 14 earlier manifests, ProGuard and lockfile remain byte-identical to the merge.

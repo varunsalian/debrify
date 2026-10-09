@@ -344,6 +344,23 @@ public final class KotlinPsi {
                         "receiver", "implicit-inherited", "introduced_phase", name.equals("layoutInflater") ? 13 : getter.equals(name) ? 10 : 12,
                         "property_read", true, "property_name", name, "lexical_class", ((KtClass)scope).getName()));
                 }
+                List<Object> findAssignments = new ArrayList<>();
+                for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
+                    if (call.getCalleeExpression() == null || !call.getCalleeExpression().getText().equals("findViewById")) continue;
+                    PsiElement rhs = call;
+                    while (rhs.getParent() instanceof KtQualifiedExpression || rhs.getParent() instanceof KtParenthesizedExpression) rhs = rhs.getParent();
+                    if (!(rhs.getParent() instanceof KtBinaryExpression)) continue;
+                    KtBinaryExpression assignment = (KtBinaryExpression)rhs.getParent();
+                    if (!assignment.getOperationReference().getText().equals("=") || assignment.getRight() != rhs) continue;
+                    KtExpression left = assignment.getLeft();
+                    if (left == null) continue;
+                    findAssignments.add(map("start", offset(call.getTextRange().getStartOffset()),
+                        "call_start", offset(call.getTextRange().getStartOffset()),
+                        "call_end", offset(call.getTextRange().getEndOffset()),
+                        "assignment_start", offset(assignment.getTextRange().getStartOffset()),
+                        "assignment_end", offset(assignment.getTextRange().getEndOffset()),
+                        "target", left.getText(), "callee", "findViewById"));
+                }
                 List<Object> references = new ArrayList<>();
                 List<Object> preserved = new ArrayList<>();
                 for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
@@ -367,7 +384,7 @@ public final class KotlinPsi {
                 files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,
                     "implicit_inherited_sites", inheritedSites, "callable_references", references,
-                    "preserved_receiver_sites", preserved,
+                    "preserved_receiver_sites", preserved, "find_view_assignments", findAssignments,
                     "prefix_end", offset(prefix), "length", source.codePointCount(0, source.length())));
             }
             System.out.println(json(files));
