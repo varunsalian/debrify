@@ -3754,3 +3754,20 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   all 23 phase-15 binding pins passes, volatile field/writers/reader verified.
   Thirty-eight initializer proofs, teardown order and 54 frozen destinations
   pass. Evidence `p16/step1/`, `p16/gate/`; full gate follows.
+
+- 2026-10-10 — **Phase 16 gate native checkpoint** at `8f3c3d35f`. Clean JVM
+  exactly matches all 2,342 `p16-step0c` identities/statuses (same one focus
+  failure); five Kotlin warnings unchanged. Current/historical p1..p15
+  checkers, original self-comparison, 54 frozen destinations, 38 initializer
+  proofs, compiled receiver/binding audit and teardown pass. Lint has no
+  additions and retains all 175 opt-in findings; one Activity-only
+  `GestureBackNavigation` finding disappears after its unchanged handler
+  moves to the seek controller, confirmed by the installed detector's
+  bytecode. All other 1,351 identities remain. Release APK succeeds; all
+  eight generated classes/289 members retain R8/DEX identities (three
+  negative controls). Decoder remains pending-environment with exact
+  phase-15 output and phase-1 library/gap hashes. Stable analyzer rerun
+  exactly matches 1,758 diagnostics; retained initial overlapping-build
+  attempt duplicated existing diagnostics, with no source changes. Full
+  checker fixtures continue; affected/full Flutter comparison follows on
+  this clean `gate` checkpoint. Evidence `p16/gate/`, `junit/p16-gate/`.

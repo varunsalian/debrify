@@ -17876,3 +17876,47 @@ Only manifest-defined production edits, owner-map additions and the size
 ratchet applied. Full phase gate follows. Evidence `p16/step1/`,
 `p16/gate/overload-audit.json`, `audit-contract.json`, `teardown-order.json`,
 `initializer-timing.json`, `earlier-destinations.json`, `test-retargets.json`.
+
+### Phase 16 gate checkpoint — native parity before full Flutter
+
+Clean native gate at Step-1 commit `8f3c3d35f`: all 2,342 JVM identities/statuses
+exactly match `p16-step0c` (2,341 pass, unchanged source-browser focus failure),
+complete XML, same JBR/1 GiB heap and stable clean input. All 399 Phase-16
+cases pass. Five production Kotlin warnings are unchanged; current source
+checker, original self-comparison, historical p1..p15 merge checks and 54
+earlier destination files pass. Extended compiled audit, 38 initializer
+proofs, teardown and byte-identical assertions/Dart files pass.
+
+Lint comparison: no new issues; all 175 opt-in identities are unchanged.
+Total 1,352 → 1,351 (253 → 252 errors, 1,099 warnings unchanged). The sole
+removed finding is `GestureBackNavigation` in `setupCinemaProgressBar`'s
+Back/Escape case, now in `TvSeekScrubController`. AGP 8.11.1's actual
+`GestureBackNavDetector.visitReference` bytecode (pc 151–205) reports only
+when its containing method belongs to Activity, Dialog or
+DialogInterface.OnKeyListener; the new owner belongs to none. The listener
+branch is manifest-identical after declared substitutions, and all per-skin
+Back assertions pass. This diagnostic disappearance is an extraction-context
+effect; predictive-back handling is not fixed or suppressed. Original raw
+strict failure and the exact one-removal comparison remain under
+`gate/initial-strict-lint-comparison.*` and
+`gate/lint-structural-comparison.json`; detector bytecode/hash is archived.
+Every other normalized issue identity is retained.
+
+`flutter build apk --release --no-pub` succeeds without installation. R8
+and independent DEX checks retain all 8 generated classes / 289 members,
+including owner, presenters, Host, Activity Host object, Runnable, enum
+helper and `TvControlsOverlayControllerKt`; three negative controls pass.
+Decoder script reproduces the phase-15 exit/output and all three library
+hashes / missing-feature sets match phase 1: **pending-environment**.
+
+Settled `flutter analyze --no-pub` exactly matches all 1,758 phase-15
+diagnostics (917 errors, 113 warnings, 728 info). Initial analysis overlapped
+native asset rebuilding and duplicated 23 existing diagnostics at identical
+file/line positions; that failed comparison is retained under
+`initial-overlapping-build-*`, then a stable rerun exactly matches the
+original multiset. No input or analyzer rule changed.
+
+Full historical/Phase-16 checker fixture suite continues independently with
+pinned tool/manifest hashes. This `gate` checkpoint provides a clean tree
+for the affected Dart and full Flutter suite comparison with the phase-15
+gate. Their final outcomes will be appended after completion.
