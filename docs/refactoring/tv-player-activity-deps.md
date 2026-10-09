@@ -17958,3 +17958,634 @@ Evidence `p16/gate/summary.json`, `p16/step0c/`, `p16/step1/`,
 trailers. Lockfile, ProGuard and earlier source/manifests unchanged; original
 mutation worktree removed. No push, device, emulator or self independent
 review. **STOP after Phase 16; Phase 17 not started.**
+
+## Phase 17 inventory: IPTV tune pipeline + HLS→TS twin trial + strict-TS + live recovery (at `ce3ddfb06`; phases 15 and 16 treated as merged controllers; re-measure on the phase-16 merge)
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `ce3ddfb06`
+(phase-14 merge, **7,982 lines**, class header 136, 460 depth-1 members including Host objects). This is a
+read-only survey of the main checkout. Nothing was built, and nothing under `../debrify-wt/` was touched.
+Inputs:
+- the plan (rules for phases 3–16, including every checker/auditor extension and the phase-11 sampling lesson);
+- the deps report's chunk A §C3 survey and chunk D §C11;
+- the "Phase 13 inventory + remaining plan" TUNE row;
+- the phase-15 and phase-16 inventories (`scratchpad/tvp-p15-inventory.md`, `tvp-p16-inventory.md`).
+
+**Phases 15 and 16 are treated as existing controllers.**
+- Phase 15 patches `performIptvLiveRetune` 434 (`updateIptvControlPresentation(entry)` →
+  `controlsDockController.styler.`). It also patches `playbackListener`, `setupPlayer`, `initIptvMode` and
+  `onDestroy`, at different statements from this unit.
+- Phase 16 moves `togglePlayPause` into `TvControlsOverlayController`. That controller's Host carries two
+  forwarders into this unit: `iptvLiveRecovery` (lazy) and `restoreParkedIptvTwinIfNeeded()`.
+- Line numbers below are at `ce3ddfb06`. Field spans shift by about −20 to −70 once phase 15/16 remove
+  fields before 341. Function spans after about 2,700 shift by about −430 to −1,600. Build every patched row
+  on the phase-16 versions of `playbackListener`, `setupPlayer`, `onStart`/`onStop`/`onDestroy` and the
+  re-pointed Host properties.
+
+**Tooling.** The p16 scripts were copied to `scratchpad/p17/` and re-indexed on the current file:
+- `idx.py` (a brace/string/comment-aware member indexer);
+- `refs.py`/`unit.py` (inbound word-boundary scans, with templates and `this@Activity.` counted);
+- `outb.py` (outbound per member) and `spans.py` (spans including leading trivia, using the partition rule).
+
+Collision scans used comment/string-blanked text. Media3 opt-in facts come from `javap` on the 1.8.0 AARs
+in the Gradle cache. Every count was checked by hand.
+
+Terms are as in phases 11–16:
+- **patch**: a token edit in a retained activity declaration;
+- **re-point**: an edited forwarder in an existing controller property's Host (that property becomes a
+  whole-property `patched` row);
+- **substitution**: a declared edit inside a moved body.
+
+---
+
+### 1. Summary and recommendation
+
+**Phase 17 = one owner with one eagerly constructed, field-bearing nested collaborator, one shared Host and
+one activity property.** It follows the phase-13/16 precedent.
+
+- **`TvIptvTuneController.kt`** (owner; 14 members / 342 lines → **≈ 400**). It holds:
+  - the tune pipeline: `setIptvMediaItem`, `retryIptvAsHlsIfUnrecognized`, the stream identity
+    `currentIptvStreamUrl`, the session sets `iptvHlsForcedUrls`/`iptvStrictTsUrls`, and the lazy
+    `iptvStartsWithStrictTs`;
+  - live-recovery wiring: the lazy `iptvLiveRecovery` with its `IptvLiveRecovery.Callbacks` object,
+    `iptvLiveRecoveryEligible`, `performIptvLiveRetune` and `iptvLiveRetuneInFlight`;
+  - the reconnect pill: `iptvReconnectPill`, `showIptvReconnectPill`, `hideIptvReconnectPill` and `dpToPx`.
+
+  The activity property is **`iptvTuneController`**, at the `iptvLiveRetuneInFlight` slot (354, including
+  the "IPTV live recovery" banner 345–351). `@OptIn(UnstableApi::class)` is **required** at class level.
+  `javap` shows that `PlayerView.setKeepContentOnPlayerReset` and the class `UnrecognizedInputFormatException`
+  both carry `@UnstableApi`; `MimeTypes.APPLICATION_M3U8` does not.
+- **`TvIptvTwinTrial.kt`** (nested `val trial`; 27 members / 272 lines → **≈ 285**). It holds all 15 twin
+  fields and 12 functions:
+  - `beginIptvTwinTrial`, `judgeIptvTwinTrial`, `acceptIptvTwinTrial`, `failIptvTwinTrial`;
+  - `onIptvTwinTrialTimeout`, `scheduleIptvTwinTrialTimeout`, `rearmIptvTwinTrialDeadline`;
+  - `parkIptvTwinTrialRestore`, `restoreParkedIptvTwinIfNeeded`, `clearParkedIptvTwinRestore`;
+  - `clearIptvTwinTrial`, `restoreAcceptedIptvTwinAfterAuth`.
+
+  It owns `iptvTwinTrialHandler`. Its constructor is `(activity, host, tune)`; it needs `activity` for
+  `isFinishing`/`isDestroyed` in `failIptvTwinTrial`. No `@OptIn` is needed: it uses only stable
+  `PlaybackException`, `Handler` and `SystemClock`.
+
+| item | phase 17 (recommended configuration R) |
+|---|---|
+| moved members / lines | **41 / 614** (owner 14 / 342, twin 27 / 272), including leading trivia under the partition rule |
+| owned state | owner 7 fields (`iptvLiveRetuneInFlight`, `iptvReconnectPill`, `iptvLiveRecovery` lazy, `iptvHlsForcedUrls`, `iptvStrictTsUrls`, `iptvStartsWithStrictTs` lazy, `currentIptvStreamUrl`); twin 15 fields (incl. 4 instance `val` deadlines) |
+| activity patches | **28 in 6 declarations** (§4.1): `playbackListener` 14, `progressRunnable` 3, `setupPlayer` 3, `onStart` 2, `onStop` 4, `onDestroy` 2. All are permanent (routers/lifecycle) except the 3 in `setupPlayer`, which become substitutions in phase 19 |
+| Host re-points | **8 forwarders / 9 token edits in 4 whole-property rows** (§4.2): Start Over 1, channel start 3 (4 edits), recording actions 2, phase-16 controls overlay 2 |
+| added activity declarations | 1 property + Host object (20 members); **no** readiness getter (no `lateinit`/`::isInitialized` in the unit) |
+| borrowed (stay activity-owned) | `iptvTuneDiagnostics`, **`@Volatile currentIptvHttpHeaders`**, **`@Volatile iptvStrictTsActive`**, `iptvRecordingController` (lazy), `subtitleTrackReadiness`, `sleepStopLatched`, the Start Over flags (§1.2, §5) |
+| initializer proofs | **21** (slot 354; owner 6 later fields + twin 15); **2 new narrow classifier forms** (typed no-arg `HashSet`/`HashMap`; a `by lazy { … }` delegate) (§3) |
+| cross-qualifications | **28**, all compile-checked: twin→owner `tune.` 17, owner→twin `trial.` 11 |
+| Host substitutions | **61** (owner 49, twin 12) |
+| receivers `this`→`activity` | **2**: `TextView(this)` constructor-receiver and `Toast.makeText(this, …)`. **2 excluded** inner `this` (the TextView) inside `.apply {}` |
+| inherited pins | **6**: `isFinishing` ×2, `isDestroyed` ×2, `resources`, and **`addContentView` (new kind, implicit outer receiver inside a TextView receiver lambda)** |
+| visibility substitutions | **23** (owner 8, twin 15); public members of `internal` classes, never `internal fun` |
+| substitutions total | **≈ 120**, with no braced templates (every interpolated name is a local/parameter) |
+| reflective retargets | **19 literal sites / 3 names → 3 owner-map routes** (`currentIptvStreamUrl` 16, `iptvHlsForcedUrls` 2, `iptvTwinPreferredUrls` 1 → `.trial`) |
+| Dart retargets | **0** (no anchored `_between` range covers a patched statement; no Dart literal names a moved member) |
+| lifecycle | **8 in-place patches**: `onStart` 2, `onStop` 4, `onDestroy` 2; statement order unchanged |
+
+**Activity:** ≈ −614 + ≈ 34 (property + 20-member Host) ≈ **−580**. That gives ≈ 5,940 after phase 16 →
+**≈ 5,360**.
+
+**Risk: high.** Patch and Host counts are moderate; the risk comes from what is untested:
+- an asynchronous verdict state machine: twin deadlines of 40 s, then min(30 s, 90 s − elapsed) re-armed per
+  READY, sampled every 5 s with a 15 s streak;
+- parking across pause and `onStop`;
+- an error-branch priority chain in `onPlayerError`;
+- two lazies whose first access (`onStop`/`onDestroy` for VOD) must not move;
+- loader-thread reads of two `@Volatile` fields.
+
+**Coverage today:**
+- `IptvDeviceQuirksTest` covers the quirk predicate only.
+- `TvIptvLoadPolicyCharacterizationTest` covers `classifyIptvError` and the policy.
+- Phase-5/8/11 harnesses observe `setIptvMediaItem` only incidentally, as `media:` / `prepare` events on the
+  player-probe `Proxy`.
+- **No test** touches the twin trial, recovery wiring, strict-TS enrolment, the HLS retry, the pill, the
+  lifecycle parking order, or the loader-thread suppliers.
+
+**Scope recommendation: whole unit (configuration R), not a smaller first slice.**
+- At 614 lines it is about half of phases 13, 14 and 16.
+- Splitting it is expensive because owner and twin are mutually coupled (17 + 11 references). Twin-first
+  needs temporary Host forwarders into the owner (`setIptvMediaItem`, `currentIptvStreamUrl`,
+  `iptvLiveRetuneInFlight` var) plus 6 temporary activity patches inside `setIptvMediaItem`/
+  `performIptvLiveRetune`. Owner-first turns 11 `trial.` references into temporary Host members and 17
+  twin references into temporary patches. Either way that is about 30 throwaway edits and a second step 0
+  on the same surfaces.
+- Configuration R already shrinks the risk where it matters: the loader-thread code in `setupPlayer` is
+  **not edited** (§1.2). The test gap is closed by a heavy, staged step 0 with explicit stop rules (§11), not
+  by splitting the move.
+
+### 1.1 Why owner + nested twin, and the qualifier names
+
+| group | members / lines | → owner | → twin | → Host |
+|---|---|---|---|---|
+| owner (tune + recovery wiring + pill) | 14 / 342 | — | 11 | 49 |
+| twin trial | 27 / 272 | 17 (`iptvLiveRetuneInFlight` 6, `setIptvMediaItem` 4, `currentIptvStreamUrl` 7) | — | 12 |
+
+- One file would be ≈ 690 lines: in the 501–800 review band, with two responsibilities (tune/recovery vs the
+  reversible twin verdict). Two files keep each ≤ 400.
+- **Nested, not sibling.** The shared identity (`currentIptvStreamUrl`), the re-tune flag and
+  `setIptvMediaItem` keep one owner. Every cross-reference is compile-checked: a missed `tune.`/`trial.`
+  does not compile, because the Host must not declare those names.
+- **Qualifier names.** On blanked code across all moved spans plus every patched declaration:
+  - `tune`, `trial`, `iptvTuneController`, `host` and `activity` have **0** collisions;
+  - **`twin` collides with 22 locals/parameters** (`val twin = …`, `beginIptvTwinTrial(entry, original,
+    twin)`), so it must never be a qualifier;
+  - `pill` is a local (`val pill`) in `showIptvReconnectPill`.
+
+  Hence `tune.` (twin→owner) and `trial.` (owner→twin, and the activity's `iptvTuneController.trial.`).
+
+### 1.2 Ownership decisions (what deliberately stays, with deltas)
+
+| name (line) | decision | reason | delta if moved instead |
+|---|---|---|---|
+| `@Volatile currentIptvHttpHeaders` (885–891) | **stay, borrowed** (Host `var`) | Read per request on loader threads by `setupPlayer`'s IPTV `ResolvingDataSource.Resolver` (2873), and on main by the recording Host (6073). Keeping it leaves the loader-thread code untouched (phase-8 `activeVodHeaders` precedent: the moved writer goes through a Host setter that writes the same volatile field). See §6.1 | +1 `setupPlayer` patch, +1 re-point (recording), +1 reflective route (`TvRecordingCharacterizationTest`), +1 proof (needs a new untyped `emptyMap()` form) |
+| `@Volatile iptvStrictTsActive` (906–909) | **stay, borrowed** (Host `var`) | Read on loader threads by the `ExtractorsFactory` object (2929, 2936). Same reasoning | +2 `setupPlayer` patches, +1 proof |
+| `iptvTuneDiagnostics` (341–344) | **stay, borrowed** (Host `val`) | 8 of its 18 references are player-event observers in retained routers/lifecycle (progress 1462; listener 1524, 1649, 1664, 1867; the diagnostic listener 723, 737; `onDestroy` 7647). The unit only annotates (`onTuneStart`/`note`/`onRecovery`, 9 sites) | +8 patches, −9 Host substitutions, slot moves to 344 (no proof change) |
+| `iptvDiagAnalyticsListener` (715–739) | **stay** (moves with `setupPlayer`, phase 19) | Mixed: 4 of 6 statements are VOD startup-gate commits (`mediaServerPlaybackLog`, manual/startup `commit…`, `restartProgressUpdates`); registered only in `setupPlayer` 3045 | +25 lines, +1 patch, +1 Host (`startupGateController`), and a **new** anonymous-`AnalyticsListener` classifier form (phase 15's form allows only `inputFormat`) |
+| `iptvMediaCodecSelector` (2684–2715) + `iptvDecoderMode` (1153–1156) | **stay** (phase 19) | Media-pipeline config, called only by `setupPlayer` 2805. Its lambda runs on the **playback thread** (`MediaCodecSelector.getDecoderInfos`) and reads non-volatile `isIptvMode`/`iptvDecoderMode`, which would become a Host read on a non-main thread | +36 lines, +3 patches (2805, 5819, 7387), +2 Host, a new playback-thread Host-read hazard |
+| `reportDecoderFailure` (6465–6506) | **stay** (routers/phase 20) | Not IPTV-specific: the VOD "no MPEG-2 decoder" toast. Called only by `playbackListener` (1945, 1955). Its leading trivia includes the **misplaced KDoc of `retryIptvAsHlsIfUnrecognized`** (6466–6474), which stays with it under the partition rule | +42 lines, +2 patches |
+| `iptvNetworkCallback` (363) | **stay** | 0 in-unit references; registered in `setupPlayer` 3102, unregistered in `onDestroy` 7666/7672 | +3 patches |
+| `iptvStoppedAtRealtime` (355–359), `IPTV_LIVE_REJOIN_AFTER_MS` (360–361) | **stay** | 0 in-unit references; lifecycle-only bookkeeping (`onStart` 7456, 7469, 7470; `onStop` 7514) | +4 patches |
+| Start Over flags `iptvStartOverActive/Loading/TimelineVisible` | stay (phase-5 decision) | Written by recovery, the error path and channel switch | — |
+
+The **maximal variant** (everything in the phase-13 TUNE row) is ≈ 50 members / ≈ 740 lines with about 50
+patches. That matches the phase-13 estimate (49 / 732, 49 patches). R removes 22 patches, 2 classifier
+forms and every loader/playback-thread code edit.
+
+---
+
+### 2. Members (lines at `ce3ddfb06`, spans include leading trivia)
+
+**Owner — `TvIptvTuneController` (14, in original order):**
+
+| span | decl | member |
+|---|---|---|
+| 345–354 | 354 | `private var iptvLiveRetuneInFlight = false` (incl. the 345–351 "IPTV live recovery" banner) |
+| 364–367 | 367 | `private var iptvReconnectPill: TextView? = null` |
+| 368–404 | 369 | `private val iptvLiveRecovery: IptvLiveRecovery by lazy { IptvLiveRecovery(Handler(Looper.getMainLooper()), object : IptvLiveRecovery.Callbacks { … }) }` |
+| 405–418 | 410 | `iptvLiveRecoveryEligible()` |
+| 419–487 | 424 | `performIptvLiveRetune(source, attempt)` |
+| 682–707 | 683 | `showIptvReconnectPill(text)` |
+| 708–711 | 709 | `hideIptvReconnectPill()` |
+| 712–714 | 713 | `dpToPx(dp)` |
+| 892–896 | 896 | `private val iptvHlsForcedUrls = HashSet<String>()` |
+| 897–905 | 905 | `private val iptvStrictTsUrls = HashSet<String>()` |
+| 910–920 | 914 | `private val iptvStartsWithStrictTs by lazy { IptvDeviceQuirks.startsIptvWithStrictTs(…Build…) }` |
+| 999–1000 | 1000 | `private var currentIptvStreamUrl: String? = null` |
+| 6359–6464 | 6361 | `setIptvMediaItem(entry, streamUrl)` |
+| 6507–6548 | 6508 | `retryIptvAsHlsIfUnrecognized(error)` |
+
+**Twin — `TvIptvTwinTrial` (27):**
+- **Fields** 921–998, with the 922–933 "Xtream HLS→TS twin trial" banner attached to the first field:
+  `iptvTwinTrialOriginalUrl`, `iptvTwinTrialUrl`, `iptvTwinFailedUrls` (`HashSet<String>()`),
+  `iptvTwinPreferredUrls` (`HashMap<String, String>()`), `iptvTwinTrialTimeout`, `iptvTwinTrialHandler`
+  (`Handler(Looper.getMainLooper())`), `iptvTwinTrialRestoreOriginal`, `iptvTwinTrialRestoreTwin`,
+  `iptvTwinTrialLastFrames = -1`, `iptvTwinTrialAdvanceSince = 0L`, `iptvTwinTrialStartedRealtime = 0L`,
+  `IPTV_TWIN_TRIAL_STABLE_MS = 15_000L`, `…_TIMEOUT_MS = 40_000L`, `…_POST_READY_MS = 30_000L`,
+  `…_MAX_MS = 90_000L` (instance `val`s, not companion; they move as-is).
+- **Functions** 488–681:
+
+| span | member | span | member |
+|---|---|---|---|
+| 488–508 | `beginIptvTwinTrial` | 595–613 | `rearmIptvTwinTrialDeadline` |
+| 509–535 | `judgeIptvTwinTrial` | 614–626 | `parkIptvTwinTrialRestore` |
+| 536–551 | `acceptIptvTwinTrial` | 627–639 | `restoreParkedIptvTwinIfNeeded` |
+| 552–575 | `failIptvTwinTrial` | 640–644 | `clearParkedIptvTwinRestore` |
+| 576–587 | `onIptvTwinTrialTimeout` | 645–658 | `clearIptvTwinTrial` |
+| 588–594 | `scheduleIptvTwinTrialTimeout` | 659–681 | `restoreAcceptedIptvTwinAfterAuth` |
+
+**Retained between moved spans** (relative order unchanged; the checker compares them as retained):
+- `iptvTuneDiagnostics` 341–344;
+- `iptvStoppedAtRealtime`, `IPTV_LIVE_REJOIN_AFTER_MS`, `iptvNetworkCallback` 355–363;
+- `iptvDiagAnalyticsListener` 715–739;
+- `currentIptvHttpHeaders` 885–891 and `iptvStrictTsActive` 906–909, both `@Volatile`.
+
+**Already extracted (phase 2), not moved again:**
+- `classifyIptvError` and `IptvLiveLoadErrorPolicy` live in `IptvLoadErrorPolicy.kt`;
+- `xtreamTsTwin`/`isSegmentedStreamUrl` live in `IptvRecordingUrlRules.kt`.
+
+These are top-level `internal` functions in the same package, so `restoreAcceptedIptvTwinAfterAuth` 664
+(`classifyIptvError`) and `performIptvLiveRetune` 465 (`xtreamTsTwin`) resolve identically from the new
+files, with no import and no substitution. The retained `playbackListener` 1943 call to `classifyIptvError`
+is unchanged. `IptvLiveRecovery.kt` (558), `IptvTuneDiagnostics.kt` (213) and `IptvDeviceQuirks.kt` (33)
+are unchanged.
+
+---
+
+### 3. Owned state and initializer proofs
+
+The controller property sits at slot **354** (first removed field). The owner is constructed there, and it
+constructs `trial` eagerly. The `val trial = TvIptvTwinTrial(activity, host, this)` initializer is pinned at
+the twin's original position: after `iptvStartsWithStrictTs`, before `currentIptvStreamUrl`. Under the
+phase-6 effective-slot rule, every later owner field and every twin field runs at 354 and needs an exact
+inert proof.
+
+| field(s) | initializer | kind | classifier |
+|---|---|---|---|
+| `iptvLiveRetuneInFlight` | `false` | at slot | — |
+| `iptvReconnectPill` | `null` | constant | supported |
+| `iptvLiveRecovery` | `by lazy { IptvLiveRecovery(…) }` | delegate allocation (lambda not run) | **new: lazy delegate** |
+| `iptvHlsForcedUrls`, `iptvStrictTsUrls` | `HashSet<String>()` | allocation | **new: typed no-arg `HashSet`** |
+| `iptvStartsWithStrictTs` | `by lazy { IptvDeviceQuirks… }` | delegate allocation | **new: lazy delegate** |
+| `currentIptvStreamUrl` | `null` | constant | supported |
+| twin `…OriginalUrl`, `…TrialUrl`, `…Timeout`, `…RestoreOriginal`, `…RestoreTwin` | `null` ×5 | constant | supported |
+| `iptvTwinFailedUrls` | `HashSet<String>()` | allocation | new (as above) |
+| `iptvTwinPreferredUrls` | `HashMap<String, String>()` | allocation | **new: typed no-arg `HashMap`** |
+| `iptvTwinTrialHandler` | `Handler(Looper.getMainLooper())` | handler-allocation | supported (phase 10) |
+| `iptvTwinTrialLastFrames` | `-1` | constant | supported (phase 13) |
+| `…AdvanceSince`, `…StartedRealtime` | `0L` ×2 | constant | supported |
+| 4 deadlines | `15_000L`, `40_000L`, `30_000L`, `90_000L` | constant | supported (phase 5) |
+
+**Proofs: 6 (owner) + 15 (twin) = 21.**
+
+**New classifier forms (step T, narrow, with negatives):**
+1. **Typed no-arg `HashSet<…>()` / `HashMap<…, …>()`.** Accept only explicit type arguments and empty
+   arguments, with `HashSet`/`HashMap` bound to the `kotlin.collections` typealiases (no same-package or
+   imported shadow; same check as phase 14's `emptyList`). Reject `HashSet()` (inferred), `HashSet<String>(16)`,
+   `HashSet(other)`, `hashSetOf(x)` and a shadowed binding.
+2. **`by lazy { … }` delegate.** Accept exactly the stdlib `lazy` with **one trailing lambda and no mode
+   argument** (default `SYNCHRONIZED` is preserved verbatim). The proof is that construction allocates the
+   `Lazy` and lambda only; the body runs at first access, which is unchanged.
+   - Reject `lazy(LazyThreadSafetyMode.…)`, `lazy(initializer = f())`, any other delegate
+     (`Delegates.observable`, a custom `by`), and a shadowed `lazy`.
+   - Plus a bytecode check that `<init>` contains no `INVOKESPECIAL IptvLiveRecovery.<init>` and no
+     `IptvDeviceQuirks` call.
+
+**Lazy first-access timing to preserve** (all through computed getters or in-place patches):
+- `iptvLiveRecovery`:
+  - **IPTV sessions:** first touched in `setupPlayer` 3106 (`setOffline(cm.activeNetwork == null)`, only
+    when SDK ≥ N and registration succeeded), otherwise by the first `setIptvMediaItem`;
+  - **VOD sessions:** first touched by `onStop` 7512 or `onDestroy` 7665 `cancel()`, which constructs the
+    machine and its Handler just to cancel it (pin as-is);
+  - via the phase-16 Host: only inside the `deadLive` short-circuit of `togglePlayPause`.
+- `iptvStartsWithStrictTs`: the first `setIptvMediaItem` (Build fields read then).
+- `iptvRecordingController` (activity lazy, borrowed): the first `isActive` read in `setIptvMediaItem`/
+  `performIptvLiveRetune`/`retryIptvAsHlsIfUnrecognized`, through a computed Host getter.
+
+**No construction-time reads.** No moved initializer reads Host or `trial`. Controllers constructed earlier
+also forward into `iptvTuneController` through computed Hosts: phase-16 `controlsOverlayController` at its
+pre-354 slot, and the Start Over controller (806), channel start (1021) and recording actions (6064). None of
+those Host members is read at construction (pin it with a negative).
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 28 in 6 declarations
+
+Prefixes are `iptvTuneController.` (owner) and `iptvTuneController.trial.` (twin).
+
+| declaration (decl) | lines | names (in statement order) | later owner |
+|---|---|---|---|
+| `progressRunnable` (1457) | 1467, 1475, 1483 (**3**) | `iptvLiveRecovery.onProgress(…)`, `iptvLiveRecovery.onVideoFrames(…)` (owner); `judgeIptvTwinTrial(frames)` → `.trial.`. The 1462 `iptvTuneDiagnostics.onProgress` is unchanged (borrowed) | retained ticker (perm.) |
+| `playbackListener` (1505) | READY 1526, 1527; ENDED 1696; error 1878 ×2, 1883, 1900, 1901 ×2, 1903, 1910, 1917, 1923, 1943 (**14**) | `iptvLiveRecovery.onReady()`; `rearmIptvTwinTrialDeadline()` → `.trial.`; `iptvLiveRecovery.onEnded()`; `iptvLiveRecoveryEligible()` ×2 + `retryIptvAsHlsIfUnrecognized(error)` (Start Over branch, short-circuit kept); `iptvTwinTrialUrl` ×2 → `.trial.`, `currentIptvStreamUrl` (1901, 1923); `failIptvTwinTrial("error:…")` → `.trial.` (template content unchanged: `${error.errorCodeName}` is a parameter); `restoreAcceptedIptvTwinAfterAuth(error)` → `.trial.`; `retryIptvAsHlsIfUnrecognized(error)`; `iptvLiveRecovery.onFatalError(classifyIptvError(error))`. **Branch order is pinned**: Start Over → twin owns error → accepted-twin AUTH revoke → HLS retry → behind-live-window → Stremio ladder → generic recovery + decoder toast. 1524/1649/1664/1867 diagnostics and 1945/1955 `reportDecoderFailure` are unchanged | ROUTERS (perm.) |
+| `setupPlayer` (2717) | 3093, 3097, 3106 (**3**) | `runOnUiThread { iptvLiveRecovery.setOffline(false/true) }` (the read now happens inside the posted Runnable, on main, as before); `iptvLiveRecovery.setOffline(cm.activeNetwork == null)`. **Loader-thread reads 2848/2873/2929/2936 are not patched** (§6.1) | START-B (19) → substitutions |
+| `onStart` (7443) | 7465, 7473 (**2**) | `restoreParkedIptvTwinIfNeeded()` → `.trial.`; `iptvLiveRecovery.userRetry("lifecycle-rejoin")` | lifecycle (perm.) |
+| `onStop` (7482) | 7511 ×2, 7512, 7513 (**4**) | `if (!…trial.parkIptvTwinTrialRestore()) …trial.clearIptvTwinTrial()`; `…iptvLiveRecovery.cancel()`; `…hideIptvReconnectPill()`. 7514 `iptvStoppedAtRealtime` is unchanged | lifecycle (perm.) |
+| `onDestroy` (7629) | 7664, 7665 (**2**) | `…trial.clearIptvTwinTrial()` then `…iptvLiveRecovery.cancel()`. 7647 diagnostics and 7666–7673 network unregister are unchanged | lifecycle (perm.) |
+
+Permanent: 25. Consumed by phase 19: 3. **No patch in `togglePlayPause`**: phase 16 moves it, so its two uses
+are re-points (§4.2b). If phase 16 is **not** merged first, they become 2 patches in `togglePlayPause`
+(5047, 5057/5060) instead.
+
+### 4.2 Host re-points: 8 forwarders, 9 token edits, 4 whole-property `patched` rows
+
+Earlier destination files stay byte-identical. Each target becomes
+`this@AndroidTvTorrentPlayerActivity.iptvTuneController[.trial].x`.
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 837 | `iptvStartOverController` (phase 5) | `setIptvMediaItem(entry, streamUrl)` → owner |
+| 1025–1027, 1036, 1040 | `iptvChannelStartController` (phase 5) | `var currentIptvStreamUrl` get + set (2 edits) → owner; `iptvTwinPreferredUrls` → `.trial.`; `setIptvMediaItem` → owner |
+| 6067, 6068 | `iptvRecordingActionsController` (phase 3) | `currentIptvStreamUrl`, `iptvHlsForcedUrls` → owner. **6073 `currentIptvHttpHeaders` is unchanged** (borrowed) |
+| phase-16 Host | `controlsOverlayController` (phase 16) | `iptvLiveRecovery` (lazy; computed, first access kept) → owner; `restoreParkedIptvTwinIfNeeded()` → `.trial.` |
+
+**Merge interplay:**
+- `iptvStartOverController` was re-pointed in phases 14/15/16, and `iptvChannelStartController` in phase 8.
+  Build these rows on the latest versions.
+- The channel-start Host's `currentIptvStreamUrl` setter is the second writer of the identity:
+  `host.currentIptvStreamUrl = null` in `TvIptvChannelStartController.kt:316`.
+
+---
+
+### 5. Outbound Host (one shared 20-member `TvIptvTuneController.Host`; computed and explicitly qualified)
+
+Columns are owner/twin reference counts.
+
+| kind | members |
+|---|---|
+| state `val` (8) | `isIptvMode` 2/–, `iptvChannels` 3/3, `currentIptvIndex` 3/3, `player: ExoPlayer?` 2/1, `playerView: PlayerView` 3/– (lateinit, computed), `subtitleTrackReadiness` 2/–, `sleepStopLatched` 1/1 (read only), `iptvTuneDiagnostics` 5/4 (borrowed) |
+| state `var` (5) | `iptvStartOverActive` 3/– (r+w), `iptvStartOverLoading` 2/– (r+w), `iptvStartOverTimelineVisible` 1/– (w), **`currentIptvHttpHeaders` 1/– (w, volatile)**, **`iptvStrictTsActive` 2/– (r 451 + w 6400, volatile)** |
+| cross-feature / lazy getters (6) | `iptvStartOverController` 1 (`iptvCatchupToken++`), `iptvRecordingActionsController` 7, `iptvChannelStartController` 4, `sleepTimerController` 1, **`controlsDockController`** 1 (the phase-15 temporary patch at 434 becomes `host.controlsDockController.styler.updateIptvControlPresentation(entry)`), `iptvRecordingController` 4 (activity lazy, computed) |
+| function (1) | `restartProgressUpdates()` 1 |
+
+**Must not be Host members** (negatives): `setIptvMediaItem`, `currentIptvStreamUrl`,
+`iptvLiveRetuneInFlight`, `iptvLiveRecovery`, `iptvHlsForcedUrls`, `hideIptvReconnectPill`,
+`clearIptvTwinTrial`, `iptvTwinTrialUrl`, `iptvTwinPreferredUrls`, `restoreParkedIptvTwinIfNeeded`. A
+same-name Host member would let a missed `tune.`/`trial.` compile. Several *other* controllers' Hosts
+already declare `setIptvMediaItem`/`currentIptvStreamUrl`; those are different interfaces and are irrelevant.
+
+---
+
+### 6. Threading
+
+### 6.1 Loader-, playback- and binder-thread reads that touch this unit
+
+| field / code | writer (thread) | reader (thread) | phase-17 treatment |
+|---|---|---|---|
+| `@Volatile currentIptvHttpHeaders` (activity) | `setIptvMediaItem` 6377 (main) → **Host setter** | IPTV `ResolvingDataSource.Resolver.resolveDataSpec` 2873 (**loader thread**, per request); recording Host 6073 (main, copied into the schedule payload) | **Field stays.** It keeps `@Volatile` on the same activity field. Loader code is untouched. The moved write goes through `override var … set(v) { this@Activity.currentIptvHttpHeaders = v }`, which compiles to the activity's synthetic accessor that `PUTFIELD`s the volatile field. The write still happens **before** `currentIptvStreamUrl`, `setMediaItem` and `prepare` (statement order verbatim) |
+| `@Volatile iptvStrictTsActive` (activity) | `setIptvMediaItem` 6400 (main) → Host setter | `ExtractorsFactory.createExtractors(…)` 2929/2936 (**loader thread**, per extractor creation); `performIptvLiveRetune` 451 (main, Host getter) | Same: field stays, Host setter/getter, written before `prepare()` |
+| `@Volatile activeVodHeaders` | `playItem`/`startPlayback`/switcher Host | VOD resolver 2848 (loader) | **not in this unit**; unchanged. `TvSourceSwitchApplyCharacterizationTest` keeps asserting `Modifier.isVolatile` on the activity field |
+| `iptvChannels`/`currentIptvIndex` (non-volatile) | main | `IptvLiveLoadErrorPolicy` supplier 2941 (loader) | unchanged; the existing follow-up stays |
+| `isIptvMode`/`iptvDecoderMode` (non-volatile) | main | `iptvMediaCodecSelector` lambda (**playback thread**) | unchanged; not moved (§1.2) |
+| `iptvLiveRecovery.setOffline` | — | `ConnectivityManager.NetworkCallback.onAvailable/onLost` (**ConnectivityThread**) → `runOnUiThread { … }` → main | Patched inside the posted Runnable. The `iptvTuneController` read happens on main when it runs, as before. `iptvTuneController` is a final activity field set at construction |
+| `iptvTuneDiagnostics` | main (listener, progress, tune) and `AnalyticsListener` callbacks (application looper = main) | main | borrowed; unchanged |
+| everything in the twin and owner (`iptvStrictTsUrls`, `iptvHlsForcedUrls`, twin sets/maps, `currentIptvStreamUrl`) | main | main only (`iptvTwinTrialUrl`'s KDoc: "Read on main only") | moved; no volatile needed. Step 0 asserts the main-thread identity of every write |
+
+### 6.2 Evaluation: would moving the two `@Volatile` fields into the controller preserve semantics?
+
+**Yes, under four conditions.** It is not recommended for phase 17 anyway.
+
+**Conditions:**
+1. The `@Volatile` annotation moves on the **same declaration**: a verbatim token, plus `ACC_VOLATILE` on
+   `TvIptvTuneController.currentIptvHttpHeaders`/`iptvStrictTsActive`, plus `Modifier.isVolatile` asserted on
+   the controller field.
+2. There is **exactly one field**: no activity mirror, and no Host `var` with a backing field.
+3. The loader-thread suppliers read through the owner **on every invocation**. The `setupPlayer` patches
+   become `val headers = iptvTuneController.currentIptvHttpHeaders` inside `resolveDataSpec` and
+   `if (iptvTuneController.iptvStrictTsActive)` inside both `createExtractors`. These compile to:
+   1. a `GETFIELD` of the activity's final `iptvTuneController` (through `access$get…$p`);
+   2. an `INVOKEVIRTUAL` getter;
+   3. a volatile `GETFIELD`.
+
+   That is one extra final-field read; the volatile read happens on the same field per call, and the JIT may
+   inline the getter but cannot elide the volatile access. A negative must reject a build-time snapshot
+   (`val tuneHeaders = iptvTuneController.currentIptvHttpHeaders` hoisted outside the resolver) and any read
+   through a Host forwarder.
+4. The controller reference is final and set during activity construction. Players are built later, in
+   `setupPlayer` from `onCreate`/`initIptvMode`, so the loader thread sees a fully constructed controller:
+   final-field semantics plus the thread-start happens-before.
+
+**Why not now:**
+- It adds 3 permanent-until-phase-19 edits to the loader-thread lambdas, 1 recording re-point, 1 reflective
+  route and a new `emptyMap()` form.
+- The phase-19 move of `setupPlayer` rewrites these same lambdas again anyway (into a pipeline controller
+  that will then read through *its* Host or owner).
+- Decide co-location once, in phase 19, when the factory and its suppliers move together.
+
+R keeps the phase-8 precedent: one activity owner, the moved writer goes through a Host setter, with a
+checker negative for a non-volatile write path.
+
+---
+
+### 7. Receivers, inherited members, overload audit
+
+| site | original | after | audit |
+|---|---|---|---|
+| `showIptvReconnectPill` 684 | `TextView(this).apply { … }` | `TextView(activity).apply { … }` | **constructor-receiver transformation** (the phase-12 `EditText`/phase-14 `ListView` mechanism): `TextView.<init>(Landroid/content/Context;)V` pinned |
+| 702 | `addContentView(this, params)` inside the apply | `activity.addContentView(this, params)` | **new implicit inherited kind:** TextView has no `addContentView`, so the call binds to the outer activity. The pin is before = `invokevirtual AndroidTvTorrentPlayerActivity.addContentView(View, ViewGroup.LayoutParams)` (resolves to **`AppCompatActivity`'s override**, which routes through the AppCompat delegate) and after = `invokevirtual AppCompatActivity.addContentView` (must not become `Activity.addContentView`). The **argument `this` is the TextView: excluded** |
+| 703 | `iptvReconnectPill = this` | unchanged | **excluded** receiver (TextView); the unqualified field resolves to the owner's moved field |
+| `retryIptvAsHlsIfUnrecognized` 6532 | `Toast.makeText(this, "Recording stopped — this channel is HLS", LENGTH_LONG)` | `Toast.makeText(activity, …)` | `makeText(Context, CharSequence, int)` |
+| `iptvLiveRecoveryEligible` 411 | `isFinishing`, `isDestroyed` | `activity.isFinishing`, `activity.isDestroyed` | getter pins (`isFinishing()Z`, `isDestroyed()Z`, invokevirtual) |
+| `failIptvTwinTrial` 565 (twin) | `isFinishing`, `isDestroyed` | `activity.…` | getter pins (twin receives `activity`) |
+| `dpToPx` 714 | `resources.displayMetrics` | `activity.resources.displayMetrics` | `getResources()` pin. **Parameter `dp` shadows the activity's `dp(Int)`**: it is a parameter read and must never be host-substituted |
+
+Totals: 2 context/constructor + 6 inherited pins, 2 excluded `this`. There is no `Glide.with`, no
+`runOnUiThread` in moved code, no `this@AndroidTvTorrentPlayerActivity`, and no Runnable self-reference
+(`Runnable { onIptvTwinTrialTimeout() }` is a SAM lambda without `this`). The
+`object : IptvLiveRecovery.Callbacks` has no `this` and no name collision with the five interface methods.
+
+---
+
+### 8. Timers, handlers and teardown
+
+| resource | owner after move | schedule / cancel | teardown position (unchanged) |
+|---|---|---|---|
+| `iptvTwinTrialHandler` (main) | twin (owned) | `scheduleIptvTwinTrialTimeout` posts the stored `Runnable`: 40 s from trial start; on each READY `min(30 s, start + 90 s − now)`; floor 0. `clearIptvTwinTrial` removes only that Runnable (no `removeCallbacksAndMessages`). The Runnable is replaced on reschedule | `onStop` 7511 (park-or-clear) and `onDestroy` 7664, **before** `iptvLiveRecovery.cancel()` |
+| `IptvLiveRecovery`'s own `Handler(main)` (inside the lazy) | `IptvLiveRecovery` (unchanged file) | retry ladder, tune and stall watchdogs, debounce (internal) | `cancel()` in `onStop` 7512 / `onDestroy` 7665 |
+| 5 s `progressRunnable` on `progressHandler` | activity (retained) | feeds `onProgress`/`onVideoFrames`/`judgeIptvTwinTrial` | `progressHandler.removeCallbacksAndMessages(null)` 7735 |
+| `ConnectivityManager.NetworkCallback` | activity (retained) | registered in `setupPlayer` | unregistered in `onDestroy` 7666–7673, after recovery cancel |
+| reconnect pill `TextView` | owner (lazy view in the decor content `FrameLayout`) | show/hide only | hidden in `onStop` 7513; **never removed or hidden in `onDestroy`** (pin as-is) |
+
+**`onStop` order** (pinned): `cancelPendingIptvCatchupRequest` → lifecycle record → activity-state →
+final progress snapshot → `super.onStop()` → finalize recording → **park-or-clear twin → recovery `cancel` →
+hide pill** → `iptvStoppedAtRealtime = now` → `player?.pause()` → subtitle ticker removal.
+
+**`onStart`** (inside `!sleepStopLatched`): **parked-twin restore** (live only) > live rejoin when away
+> 30 s and not Start Over (`playWhenReady = true` then `userRetry("lifecycle-rejoin")`) > `player?.play()`.
+
+**`onDestroy`:** … gate cleanup → `startupGateView` hidden → **`clearIptvTwinTrial` → `iptvLiveRecovery.cancel`**
+→ network unregister → recording listener removal → … .
+
+---
+
+### 9. Reflective tests and Dart anchors
+
+- **Kotlin reflection** (quoted names under `android/app/src/test`), routed through `TvPlayerControllerOwners`:
+
+| name | sites | route |
+|---|---|---|
+| `currentIptvStreamUrl` | **16** in 8 files: `TvRecordingCharacterizationTest` 3 (incl. `set(other, …)`), `TvRecordingMessagesCharacterizationTest` 4, `TvIptvChannelStartCharacterizationTest` 2, `TvIptvChannelStartRecordingCharacterizationTest` 2, `TvZapBannerIdentityCharacterizationTest` 2, `TvPhase3LifecycleCharacterizationTest` 1, `TvScheduleCharacterizationTest` 1, `TvRecordingBoundaryMessagesCharacterizationTest` 1 | `iptvTuneController` |
+| `iptvHlsForcedUrls` | 2: `TvRecordingCharacterizationTest`, `TvRecordingBoundaryMessagesCharacterizationTest` | `iptvTuneController` |
+| `iptvTwinPreferredUrls` | 1: `TvIptvChannelStartCharacterizationTest` 53 (`field(…) as MutableMap`) | `iptvTuneController.trial` |
+
+  - **Unchanged:** `currentIptvHttpHeaders` (`TvRecordingCharacterizationTest` 28 stays on the activity);
+    the `activeVodHeaders` `isVolatile` assertion; `IptvLiveLoadErrorPolicy`/`classifyIptvError` tests.
+  - `memberOwner` already strips `$delegate`, so step-0 tests that reflect `iptvLiveRecovery$delegate`/
+    `iptvStartsWithStrictTs$delegate` route once added.
+  - Step 0 will add many more reflected names (all twin fields, `iptvStrictTsUrls`,
+    `iptvLiveRetuneInFlight`, `iptvReconnectPill`, …). Rescan after step 0; the owner table grows by about
+    30 routes. `TvPlayerControllerOwners.kt` is ≈ 555 lines after phase 14, so check its ≤ 800 headroom,
+    including the phase-15/16 additions.
+- **Dart:** **0**. The three anchored files (`android_tv_auto_advance_resume_test`,
+  `manual_source_validation_contract_test`, `android_tv_mdblist_progress_source_test`) take `_between` ranges
+  over `playItem`…`resolveAndPlay`, `resolveAndPlay`…`startPlayback` and the metadata-update range. None
+  covers a patched statement, and no literal names a moved member. `profile_source_guard_test` does not scan
+  the `tv/` Kotlin directory.
+
+---
+
+### 10. Hazards (each needs a step-T fixture or negative)
+
+1. **Volatile path (R).** The two activity fields keep `ACC_VOLATILE`. The Host `var`s are computed (no
+   backing field), and the setters write the activity field through its accessor. Negatives:
+   - a Host `var` with a backing field (snapshot);
+   - a write to a controller-local copy;
+   - dropping `@Volatile`;
+   - any edit to the 2873/2929/2936 lambdas;
+   - moving the header/strict write after `prepare()`.
+2. **Lazy delegates move.** Same `lazy {}` expression and default mode; first access unchanged
+   (VOD `onStop`/`onDestroy`, IPTV `setupPlayer`/first tune, phase-16 `deadLive` short-circuit). Negatives:
+   - eager `val iptvLiveRecovery = IptvLiveRecovery(…)`;
+   - a snapshotting phase-16 forwarder;
+   - `lazy(NONE)`.
+3. **Field-bearing nested twin.** Eager construction at the pinned position, effective slot 354, and 15 twin
+   proofs. Negatives: lazy `trial`; a twin field left in the owner (split ownership); the twin reading Host for
+   owner state (`currentIptvStreamUrl`, `setIptvMediaItem`, `iptvLiveRetuneInFlight`); a missed `tune.`/`trial.`
+   compiled against a same-name Host member.
+4. **The `twin` local/parameter (22 sites)** shadows nothing today. It must never be rewritten, and must never
+   be used as a qualifier.
+5. **Re-tune flag bracketing.** `tune.iptvLiveRetuneInFlight = true; try { tune.setIptvMediaItem(…) } finally
+   { … = false }` appears in 3 twin functions plus 1 owner function. `restoreParkedIptvTwinIfNeeded` calls
+   `setIptvMediaItem` **without** the flag (a genuine tune that resets the machine and hides the pill). Pin both
+   shapes.
+6. **Branch order inside `onPlayerError`** (14 patches in one region). In-place prefixing only. A reorder
+   negative (twin check below the HLS retry) is needed, plus the `iptvLiveRecoveryEligible() && retry…`
+   short-circuit.
+7. **Constructor receiver with an inner inherited call.** `TextView(this).apply { … addContentView(this,
+   params); iptvReconnectPill = this }`: only the constructor `this` and the implicit `addContentView` receiver
+   change. Negatives:
+   - rewriting either inner `this`;
+   - `this.addContentView`;
+   - `Activity.addContentView` dispatch (must stay the AppCompat override);
+   - omitting the constructor audit.
+8. **`dp` parameter** in `dpToPx` shadows the activity `dp(Int)`. No substitution (negative).
+9. **Cross-feature temporary prefix from phase 15.** `controlsDockController.styler.updateIptvControlPresentation`
+   (434) becomes `host.controlsDockController.styler.…`. Phase-15 destination files are frozen.
+10. **Two writers of `currentIptvStreamUrl`.** The owner, and the channel-start Host setter (null before
+    candidate tuning). The re-pointed `var` must stay computed get + set (negative: getter-only or snapshot).
+11. **`iptvStartOverController.iptvCatchupToken++`** through a Host getter. The increment applies to the
+    controller's field (`host.iptvStartOverController.iptvCatchupToken++`), not to a copy.
+12. **Handler-removal identity.** `iptvTwinTrialTimeout` is the exact posted Runnable; reschedule removes the
+    previous one first.
+13. **Clock.** All twin/recovery timing uses `SystemClock.elapsedRealtime()`. Robolectric PAUSED advances it
+    with the main looper, so no extra clock instrumentation is needed, unlike phase 10's
+    `currentTimeMillis`. Verify on the original at step 0.
+14. **Lifecycle order** (§8). In-place patches only. Negatives: a reordered `onStop` park/clear/cancel/hide;
+    a reordered `onDestroy` clear → cancel; a folded `onStart` branch.
+15. **R8/DEX classes** to verify:
+    - `TvIptvTuneController`, `$Host`, the Callbacks anonymous class and the lazy lambda classes;
+    - `TvIptvTwinTrial` and its timeout lambda;
+    - the activity Host implementation class.
+
+    The anonymous class `…Activity$iptvLiveRecovery$2$1` becomes `TvIptvTuneController$iptvLiveRecovery$2$1`.
+
+---
+
+### 11. File split, counts, step T / step 0 needs
+
+**Files:**
+- `TvIptvTuneController.kt` ≈ 400 lines (342 moved + Host interface ≈ 25 + imports/header/`trial` pin ≈ 35);
+- `TvIptvTwinTrial.kt` ≈ 285;
+- both ≤ 500, no size exception.
+
+**Activity:** ≈ 5,360 after phase 17 (from ≈ 5,940 after phase 16).
+
+**Counts recap:**
+- 41 members / 614 lines;
+- 28 patches in 6 declarations; 8 re-points (9 edits) in 4 rows; 20-member Host;
+- 21 proofs (2 new forms); 28 cross-qualifications; 61 Host substitutions; 8 audit pins + 2 exclusions;
+- 23 visibility substitutions (≈ 120 substitutions total); 19 reflective sites / 3 routes; 0 Dart.
+
+**Step T (checker/auditor):**
+- **Classifier forms:**
+  - typed no-arg `HashSet`/`HashMap` (×3/×1) with binding/shadow validation;
+  - `by lazy { … }` delegate (×2) with mode/argument/shadow negatives and the bytecode no-construction check.
+- **Nested construction:** a field-bearing nested `trial`; the extraction fixture covers owner + nested twin
+  with fields, 21 proofs and the effective slot.
+- **Qualification:** `tune.`/`trial.` cross-qualification with occurrence counts.
+- **Volatile borrowing:**
+  - compiled pin that the two activity fields keep `ACC_VOLATILE`;
+  - pin that the Host setters reach them via `PUTFIELD` (through the accessor) with no intermediate field;
+  - negatives as in §10.1.
+- **Auditor:**
+  - the PSI collector records the implicit inherited `addContentView` **inside a receiver lambda**
+    (resolution skips the TextView receiver), with owner/descriptor/opcode before/after pins
+    (`AppCompatActivity` override);
+  - the constructor-receiver transformation for `TextView(this)` with both inner `this` preserved;
+  - existing pins for `isFinishing`/`isDestroyed`/`resources`/`Toast`.
+- **Opt-in:** the `@OptIn` set is re-derived from Media3 1.8.0 with `javap` (owner: required; twin: none).
+  The lint `UnsafeOptInUsage` identity set must be unchanged.
+- **Infrastructure:**
+  - 4 whole-property `patched` rows (phase-16 property built on its merged text);
+  - per-phase dispatcher keeping all historical suites;
+  - earlier destinations frozen at the phase-16 merge.
+
+**Step 0 (from zero). Prerequisite harnesses must be demonstrated on the original first; a failed
+prerequisite stops the phase.**
+1. **Deterministic handler/clock fixture.** PAUSED main looper with `idleFor` driving `elapsedRealtime`.
+   Prove it on the original with:
+   - the 40 s pre-READY twin deadline;
+   - the READY re-arm to `min(30 s, remaining-to-90 s)`;
+   - the 15 s advancing-streak acceptance fed by the real 5 s `progressRunnable`;
+   - the IptvLiveRecovery 0/1/3/5 s ladder and its watchdogs.
+2. **Player fake.** Extend the phase-5 `TvPhase5PlayerProbe` `Proxy`. It must support:
+   - `playWhenReady` read/write, `playbackState`, `playerError` (the stale-delivery gate), `videoFormat`;
+   - `videoDecoderCounters` (a real `DecoderCounters` with a settable `renderedOutputBufferCount`; resets
+     for counter-reset cases), plus `currentPosition`/`isPlaying`;
+   - recorded `setMediaItem(item[, startAt])`/`prepare`/`play`/`seekToDefaultPosition` events, with the
+     `MediaItem` mime type, URI and metadata kept.
+3. **Loader-thread fixture with Media3 factory access.** Build the **real** IPTV pipeline (`initIptvMode` →
+   `setupPlayer`, real `ExoPlayer`), then reach the installed `DefaultMediaSourceFactory` →
+   `dataSourceFactory`/`extractorsFactory` by reflection pinned to Media3 1.8.0 internals.
+   - Run `createDataSource().open(DataSpec(mockWebServer))` and `createExtractors(uri, headers)` on a
+     dedicated bounded worker thread (`mockwebserver:4.12.0` is already a test dependency).
+   - Assert per-call evaluation: a header/strict change on main between two worker calls is observed; a
+     build-time snapshot mutation fails.
+   - Identify strict vs aggressive by the `TsExtractor` payload-reader flags (reflection).
+   - Assert `Modifier.isVolatile` on both activity fields.
+
+   This proves the suppliers stay call-time and unedited. Volatility itself is pinned structurally, not by
+   timing. **If Media3 internals cannot be reached reliably, stop and report.** (The policy supplier is
+   already covered.)
+4. **Network-callback fixture.** `ShadowConnectivityManager` registered callbacks, `activeNetwork == null`
+   at registration, and `onLost`/`onAvailable` invoked from a worker thread (proving the `runOnUiThread`
+   hop) with a parked attempt firing `"<source>+online"`.
+5. **Error fixtures.**
+   - `ExoPlaybackException` with `UnrecognizedInputFormatException` cause chains;
+   - `InvalidResponseCodeException` 401/403/404 (AUTH);
+   - decoder-class codes with `rendererFormat` (toasts);
+   - `ERROR_CODE_BEHIND_LIVE_WINDOW`;
+   - `playerError == null` stale deliveries.
+6. **Device quirk.** `ShadowBuild` manufacturer/model/device set **before** the first tune, on separate
+   activity instances (the lazy is fixed per session). Also show that a later change has no effect.
+
+**Behaviour to pin** (through retained surfaces: `playbackListener`, `progressRunnable`, lifecycle, the
+Start Over/channel-start/recording controllers and the phase-16 play/pause path):
+- **`setIptvMediaItem`:**
+  - order: finalize recording on URL change → headers → identity → twin supersede → parked-restore
+    supersede → strict computation (quirk / URL / ≥ 2 URLs / twin / preferred) → diagnostics → machine
+    `expectRetune` + `onTuneStarted` → pill hide unless re-tune → frame-hold;
+  - media item: forced-HLS mime, VOD `startAt`, readiness replacement;
+  - then prepare/play → progress restart → record button.
+- **HLS retry:** already-forced guard, cause-chain walk, tee abort + toast, Stremio watchdog re-arm.
+- **Strict-TS:** enrolment at video-stall attempt ≥ 2 only for non-segmented, non-strict tunes; session
+  escalation at 2 URLs.
+- **Twin trial:** begin (diagnostics, deadline, flag bracket), judge streak/re-baseline/counter reset,
+  accept (preference, no strict enrolment), fail (blacklist, restore, interruption without blacklist,
+  destroyed guard), timeout park vs fail (pause and sleep), park/restore pairing, AUTH revoke of an accepted
+  twin.
+- **Recovery wiring:**
+  - eligibility gates (mode, finishing, live, sleep/end-of-item, Stremio ladder winner, `playWhenReady`);
+  - Start Over clearing + token bump + styler call;
+  - recording finalize on same-URL re-tune;
+  - Callbacks → pill texts/visibility/frame-hold;
+  - the surrender texts (auth vs other).
+- **Pill:** created once in the decor content view; padding/margins via density; colours; reuse.
+- **Lifecycle:** `onStop`/`onStart`/`onDestroy` orders (§8), and lazy first-access for VOD vs IPTV.
+- **Diagnostics:** `IptvDiag` log lines via `ShadowLog`.
+
+**Sweep and sampling:**
+- The systematic statement-level sweep starts **from the beginning** (39 `if`, 42 `return`, 20 elvis, 1
+  `while`, 0 `when` in the 21 moved functions/lazies), with a coverage matrix.
+- Mutation proofs on the original.
+- Claude's independent sample must reach ≥ 75 % kills, or a second sweep and a second sample follow
+  (phase-11 lesson). Then 0b.
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+- `onStop`/`onDestroy` `iptvLiveRecovery.cancel()` constructs the lazy machine (and its Handler) on VOD
+  sessions only to cancel it.
+- The reconnect pill is never removed or hidden in `onDestroy`; `iptvTwinTrialHandler` is never cleared
+  wholesale (only the stored timeout); a parked restore pair is not cleared in `onDestroy`.
+- `failIptvTwinTrial` checks `isFinishing`/`isDestroyed`; `restoreParkedIptvTwinIfNeeded` and
+  `restoreAcceptedIptvTwinAfterAuth` do not.
+- A network callback Runnable posted before `onDestroy`'s unregister can still run after destroy. It is
+  harmless (eligibility is false when destroyed), but unguarded.
+- `retryIptvAsHlsIfUnrecognized`'s KDoc sits above `reportDecoderFailure`'s doc (misplaced comment). It
+  travels with `reportDecoderFailure` under the partition rule.
+- `iptvDiagAnalyticsListener` mixes VOD startup-gate commits with IPTV diagnostics; reassess its owner in
+  phase 19.
+- `iptvMediaCodecSelector` reads non-volatile `isIptvMode`/`iptvDecoderMode` on the playback thread;
+  `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads (existing follow-up).

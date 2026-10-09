@@ -1866,6 +1866,83 @@ controls dock show/hide/auto-hide while playing and paused in each skin,
 play/pause from the dock and remote, cinema scrub seeking (hold/release,
 cancel), title/OTT identity text, the Next overlay during auto-advance.
 
+## Phase 17 — IPTV tune pipeline, HLS→TS twin trial, strict-TS, live recovery wiring
+
+Branch `refactor/tvplayer-p17` off the phase-16 merge. Evidence under
+`refactor-evidence/tvplayer/p17/`. Inventory: "Phase 17 inventory" in the deps
+report (measured at `ce3ddfb06`; re-measure on the phase-16 merge). All
+collaborator rules from phases 3–16 apply; statement-level coverage sweep
+from the start; the ≥ 75 % first-sample rule applies. **High risk:** no test
+touches the twin trial, recovery wiring, strict-TS or lifecycle parking today.
+
+**Selected (whole unit; splitting would cost ≈ 30 throwaway edits and a second
+step 0 because owner and twin reference each other 28 times):**
+`TvIptvTuneController` (≈ 400: tune pipeline `setIptvMediaItem`, strict-TS
+sets, recovery wiring, reconnect pill) eagerly constructs field-bearing
+`TvIptvTwinTrial` (≈ 285; owns `iptvTwinTrialHandler`); property
+`iptvTuneController` at the unit's first owned slot; 41 members / ≈ 614 lines.
+Qualifiers **`tune.`/`trial.`** (`twin` collides with 22 locals/parameters).
+
+**Deliberately left in the activity:** the two `@Volatile` loader-thread fields
+(`currentIptvHttpHeaders`, `iptvStrictTsActive`) — activity-owned with Host
+setters, as `activeVodHeaders` in phase 8, so the loader-thread code in
+`setupPlayer` is not edited at all (the decision moves to phase 19);
+`iptvTuneDiagnostics`, the diagnostic analytics listener (mostly VOD
+startup-gate commits), the codec selector and `iptvDecoderMode`,
+`reportDecoderFailure`, the network callback and the rejoin bookkeeping.
+
+- 28 activity patches in 6 declarations: `playbackListener` 14 (error-branch
+  order pinned), `progressRunnable` 3, `setupPlayer` 3 (`setOffline` calls
+  only), `onStart` 2, `onStop` 4, `onDestroy` 2 — all in place, order
+  unchanged.
+- 8 Host re-points (9 edits) in 4 properties: Start Over 1, channel start 3
+  (incl. the `currentIptvStreamUrl` get/set), recording actions 2, phase-16
+  controls overlay 2 (`iptvLiveRecovery`, `restoreParkedIptvTwinIfNeeded`).
+- 20-member Host (computed, explicitly qualified); ten names deliberately
+  not Host members so a missed `tune.`/`trial.` qualification fails to compile.
+- 21 initializer proofs; new narrow classifier forms: typed no-argument
+  `HashSet`/`HashMap`, and a `by lazy { … }` delegate (lazy first-access
+  timing preserved, incl. the VOD case where `onStop`/`onDestroy` builds the
+  recovery machine only to cancel it — pinned as-is).
+- ≈ 120 substitutions, no templates needing braces. Audit: 2 receiver sites
+  (`TextView(this)`, Toast) and 6 inherited pins incl. a **new kind**:
+  `addContentView` called implicitly inside `TextView.apply` must keep
+  dispatching to `AppCompatActivity`'s override while the inner `this` stays
+  the TextView. The owner needs `@OptIn(UnstableApi::class)` (Media3 javap
+  verified); the twin does not.
+- Retargets: 19 reflective sites via 3 owner-map routes; no Dart anchors.
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (owner + field-bearing twin,
+`tune.`/`trial.`) + negatives (missed qualification, snapshot of a volatile
+field, eager evaluation of the lazy recovery machine); compiled audit incl.
+the implicit `addContentView` inherited-dispatch pin; per-phase dispatcher
+keeping all historical suites; earlier destinations frozen at the phase-16
+merge.
+
+### Step 0 — characterization of the original
+
+Prerequisites demonstrated on the original (the phase stops if the
+loader-thread fixture cannot be made reliable): a PAUSED-looper clock fixture
+where `elapsedRealtime` advances with the looper; an extended player proxy
+(decoder counters, `playerError`); a real-pipeline loader-thread fixture
+reaching the Media3 1.8.0 factories by reflection with MockWebServer; a fake
+`ConnectivityManager` callback; error-chain fixtures; device-quirk instances.
+Then: tune pipeline (HLS/TS selection, headers, strict-TS), twin trial
+(arm/timeout/park/restore), recovery ladder (retune/backoff, error
+classification, reconnect pill), `onStart`/`onStop`/`onDestroy` parking and
+cancellation order; coverage sweep + matrix. Mutation proofs on the
+original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–16 additions. Device checklist (end of series): IPTV
+live channels on HLS and TS, an Xtream HLS channel that needs the `.ts`
+twin, strict-TS providers, network drop and recovery (Wi-Fi off/on),
+backgrounding (Home) and resuming live TV, a stalling channel's reconnect
+pill.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 16 original runtime observations, preserved by Step 0: hidden dock
