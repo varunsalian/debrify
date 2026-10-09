@@ -14139,3 +14139,705 @@ The cached lint-checks 31.11.1 OverdrawDetector associates layouts scanned insid
 Gate tested commit 83a1a41dd; Step 1 031e3b83e. The current move checker has zero differences across 2,013 original declarations; all 337 self-tests and historical p1–p12 checks pass. All 46 earlier destinations, 28 initializer proofs, 23 compiled receiver sites, the typed listener exclusion, two bound guideSkinBind references and lifecycle/teardown order pass. All assertions remain unchanged; only the owner-map and bytecode-access helpers are retargeted. Activity 9,079; new files 586/327/398; split helpers 325/555; size baseline updated and gate passes.
 
 Clean p13-gate exactly matches all 1,420 p13-step0 identities/statuses (1,419 passes and the same known focus failure) with matched 1 GiB workers and stable clean input. Kotlin warnings: five unchanged; analyzer: 1,758 unchanged. Lint: 1,352 retained, with the two raw inferred-theme message differences documented above. Release APK builds; R8/DEX checks all 12 generated classes and 177 members plus three negative controls. Decoder verification remains pending-environment with identical phase-1 failure output/native hashes/missing-feature manifest. Affected Dart source tests match all 45 statuses; the full quiet Flutter gate matches all 12,855 phase-12 statuses (12,794 success, 13 failure, 28 error, 20 skipped) on clean gate commit 83a1a41dd, unchanged SDK/flags and stable tree. Evidence p13/gate/summary.json and its referenced raw archives; junit/p13-gate/. No behavior change, bug fix, ProGuard/lock edit or device interaction was introduced. Stopped after phase 13.
+
+---
+
+## Phase 14 inventory (at `315448a3c`; re-measure on `82b16832c`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`315448a3c` (phase-12 merge, **10,297 lines**, class header 136, 559 depth-1 members). This is a read-only
+survey of the main checkout. Nothing was built and nothing under `../debrify-wt/` was touched.
+
+**Tooling.** The p13 scripts were copied to `scratchpad/p14/` and re-indexed on the current file:
+- `idx.py`: a brace/string/comment-aware member indexer;
+- `refs.py` / `unit.py`: word-boundary reference scans. They count templates and `this@Activity.`, and
+  exclude other receivers;
+- `subf.py` / `split.py`: unit membership and cross-file counts;
+- `refl.py`: quoted reflective names in `android/app/src/test`.
+
+Every count below was checked by hand against the source. Terms are as in the phase-11/13 inventories:
+- **patch**: a token edit in a retained activity declaration;
+- **re-point**: an edited forwarder in an existing controller property's Host object, which makes that
+  property a whole-property `patched` row;
+- **substitution**: a declared edit inside a moved body.
+
+**Phase 13** (playlist overlay + focus navigator + guide skin, in progress elsewhere) is treated as a
+controller. Scanned interplay: **0 references in either direction** between SUBF and the phase-13 unit.
+Both phases patch different statements in five shared declarations: `playbackListener`, `onCreate`,
+`handleMetadataUpdate`, `playMediaDirect`/`playPikPakVideoWithRetry`, and `onDestroy`. Re-measure on the
+phase-13 merge and merge the manifests. All spans after ≈ 182 shift by the phase-13 removals (≈ −1,180
+in total, mostly before the SUBF function spans).
+
+---
+
+### 1. Summary and recommendation
+
+**Do not merge into `TvSubtitleController`. Use a sibling owner plus one fieldless collaborator.** There
+are three reasons:
+1. **Size.** `TvSubtitleController.kt` is already **776** lines. Adding 1,094 moved lines gives ≈ 1,870;
+   adding only the fetch block (430) still gives ≈ 1,230. Both are over the 800-line limit.
+2. **Frozen destination.** Every earlier destination, including the phase-4 file, is frozen byte-identical.
+   A merge needs an earlier-destination exception, which no phase has used.
+3. **Self-forwarders.** The phase-4 Host has 9 forwarders into this unit. After a merge they would become
+   self-references inside the phase-4 file, which are non-verbatim edits.
+
+The responsibilities also differ:
+- The phase-4 controller owns **rendering, track selection, the settings panel and the
+  timing/appearance/embedded menu rows**.
+- SUBF owns the **external subtitle sources**: addon fan-out and fetch, injected captions, the manual
+  identity, auto-selection, the catalog search and its dialogs, and the subtitle menu column/addon/search
+  rows.
+
+**Selected (variant B′, ≈ 1,094 lines, 43 members):**
+- **`TvSubtitleSourcesController.kt`** (owner, **642 member lines → ≈ 712 lines**). It holds all 21 moved
+  fields and 17 functions: reset, fetch fan-out, auto-select, manual identity, identity label and the 4 UM
+  subtitle row builders. The activity property `subtitleSourcesController` sits at the `stremioSubtitles`
+  slot (1261), with `@OptIn(UnstableApi::class)` at class level (as in `TvSubtitleController`; it uses
+  `HlsManifest` and Media3 `Format` fields).
+- **`TvSubtitleSearchDialogs.kt`** (fieldless, **452 member lines → ≈ 487 lines**). It holds 5 functions:
+  `showSearchSubtitleDialog`, `getCurrentSubtitleSearchItem`, `requestSubtitleCatalogSearchFromFlutter`,
+  `createSubtitleCatalogResultAdapter` and `showSeasonEpisodePrompt`. The owner constructs it eagerly as
+  `val dialogs = TvSubtitleSearchDialogs(activity, host, this)` (the phase-11/12/13 precedent). It reaches
+  owner state only as `sources.x`.
+- **One shared 15-member Host**, all members computed and explicitly qualified. No Host `var` is needed:
+  moved code never writes an activity field.
+
+| item | count |
+|---|---|
+| moved members / lines | **43 / 1,094** (21 fields, 22 functions) |
+| activity patches | **24 in 9 declarations** (§4.1) |
+| Host re-points | **12 forwarders, 14 token edits, in 4 controller properties** (§4.2) |
+| initializer proofs | **20** (1 new classifier form: `emptyList()`; it reuses the phase-13 `-1` form) |
+| cross-file qualifications | **10** (owner→dialogs 5, dialogs→owner 5; no cross-file write) |
+| Host substitutions | **77** (owner 46, dialogs 31) |
+| receivers `this`→`activity` | **22** (owner 4 incl. 1 `this@Activity`, dialogs 18); 1 excluded receiver |
+| inherited-receiver pins | **3** (`runOnUiThread`) plus **6 reviewed non-substitution pins** (`context` ×4, `getItem`, named arg `resources =`) |
+| visibility substitutions | **22** (owner 18, dialogs 4; public, never `internal fun`) |
+| substitutions total | **≈ 134** |
+| reflective retargets | **34 literal sites, 7 names, 5 files → 7 owner-map routes**; 0 function pins (rescan after step 0) |
+| Dart retargets | **0**. One anchored range (`handleMetadataUpdate`) gets 1 patch; its asserted literals are untouched |
+| lifecycle | **1 in-place `onDestroy` patch**; no `onStart`/`onStop`/`onPause`/`finish` edits |
+
+**Activity:** ≈ −1,094 + ≈ 22 (property + Host) = **≈ −1,072**. That is ≈ 9,140 → **≈ 8,070** after phase 13.
+
+**Risk: medium-high.** The test gap is **high**. No JVM test drives addon fetch, injected captions, manual
+identity, catalog search, either dialog or the UM subtitle column. Only the pure policies
+(`chooseAutomaticSubtitle`, `SubtitleTrackReadiness`, `SubtitleSearchQuery` helpers) and the phase-4
+rendering paths (through the Host fields) are covered. The specific risks are:
+- two async protocols (per-addon slot tokens + content token; Flutter metadata and catalog-search
+  replies);
+- coroutines on the borrowed `subtitleScope`;
+- two `AlertDialog`s built from code;
+- bidirectional coupling with the phase-4 controller (18 `host.subtitleController.` reads; 9 re-pointed
+  phase-4 forwarders).
+
+**Reconciliation with the phase-13 plan's estimate.** The plan said "45 / 1,113, 36 patches (11), ≈ 14
+re-points in 6, 45 reflective sites". The differences:
+- **Members and lines.** Re-measured at `315448a3c`, there are 44 members / 1,095 lines. Keeping
+  `subtitleTrackReadiness` in the activity gives 43 / 1,094.
+- **Patches.** That scan counted 2 `return@requestSubtitleCatalogSearchFromFlutter` label tokens, which are
+  not patches. It also counted the 7 `subtitleTrackReadiness` sites, which do not move under this
+  recommendation.
+- **Re-points.** The 2 `subtitleTrackReadiness` re-points also disappear.
+- **Reflective sites.** The 45 were 36 quoted moved names plus the 9 `subtitleScope` sites, which stay
+  borrowed. Of the 36, the 2 `resetSubtitleState` sites in `NativePlayerSettingsConsumptionTest` reflect
+  **`TorboxTvPlayerActivity`** (Java, its own private method), so they are unaffected. That leaves 34 real
+  retargets.
+
+---
+
+### 2. Members (lines at `315448a3c`, attached comments included)
+
+**Owner `TvSubtitleSourcesController.kt` (642 member lines; 38 members).**
+
+Fields (21):
+
+| field | lines | initializer |
+|---|---|---|
+| `stremioSubtitles` | 1261 | `mutableListOf<StremioSubtitle>()` (**slot field**) |
+| `addonSubtitleResults` | 1262 | `mutableListOf<AddonSubtitleResult>()` |
+| `injectedSubtitles` | 1263–1267 (4-line comment) | `mutableListOf<StremioSubtitle>()` |
+| `suppressSubtitleAutoSelect` | 1268–1271 (3-line comment) | `false` |
+| `addonFetchTokens` | 1272 | `mutableMapOf<String, Int>()` |
+| `failedSubtitleUrls` | 1273 | `mutableSetOf<String>()` |
+| `currentStremioSubtitleIndex` | 1274 | `Int = -1` |
+| `subtitleAddonDiscoveryReady` | 1275 | `false` |
+| `isLoadingStremioSubtitles` | 1276 | `false` |
+| `userManuallySelectedSubtitle` | 1278 | `false` |
+| `addonSubtitleFetchToken` | 1279 | `0` |
+| `manualSubtitleImdbId` / `Type` / `Season` / `Episode` / `DisplayLabel` | 1280–1284 | `null` ×5 |
+| `subtitleSearchResults` | 8784–8785 (comment) | `List<SubtitleCatalogResult> = emptyList()` |
+| `subtitleSearchStatus` | 8786 | `String = ""` |
+| `pendingSeriesResult` | 8787 | `null` |
+| `pendingSeason` / `pendingEpisode` | 8788 / 8789 | `1` / `1` |
+
+Functions (17, in original order):
+
+| function | lines |
+|---|---|
+| `resetSubtitleState` | 4779–4822 |
+| `fetchStremioSubtitles` | 4917–5044 (KDoc 4917–4921) |
+| `seedInjectedSubtitles` | 5046–5075 |
+| `fetchStremioSubtitlesWithImdb` | 5077–5097 |
+| `launchAddonSubtitleFetch` | 5099–5142 |
+| `setAddonSubtitleSlot` | 5144–5155 |
+| `rebuildFlatStremioSubtitles` | 5157–5171 |
+| `retryAddonSubtitles` | 5173–5190 |
+| `refreshSubtitleUiForLoading` | 5192–5196 |
+| `clearStremioLoadingState` | 5198–5208 (verified as subtitle-only: loading flag, discovery flag, auto-select, panel refresh) |
+| `applyManualSubtitleIdentity` | 6365–6422 |
+| `currentSubtitleIdentityLabel` | 6424–6439 |
+| `tryAutoSelectAddonSubtitle` | 6504–6605 (KDoc 6504) |
+| `umSubsModel` | 8908–8951 |
+| `umAddonTrackRows` | 8953–8977 |
+| `umSearchRows` | 8979–9000 |
+| `umPickSearchResult` | 9002–9019 |
+
+**Fieldless collaborator `TvSubtitleSearchDialogs.kt` (452 member lines).**
+
+| function | lines | notes |
+|---|---|---|
+| `showSearchSubtitleDialog` | 5908–6120 | local `lateinit var dialog`; local funs `setLoading`/`updateResults`/`performSearch` |
+| `getCurrentSubtitleSearchItem` | 6122–6175 | |
+| `requestSubtitleCatalogSearchFromFlutter` | 6177–6215 | |
+| `createSubtitleCatalogResultAdapter` | 6217–6263 | anonymous `ArrayAdapter` |
+| `showSeasonEpisodePrompt` | 6265–6363 | local fun `submit` |
+
+**Stays in the activity (borrowed through the Host, owned and cleared where they are today):**
+
+| name | line | why it stays |
+|---|---|---|
+| `stremioSubtitleService` | 1259–1260 | Created in `onCreate` 2188 **and** again in `initIptvMode` 8077; nulled in `onDestroy` 10039. Lifecycle-owned. |
+| `subtitleScope` | 1285 | Cancelled in `onDestroy` 10037; also borrowed by auto-sync and phase-4. 9 reflective sites stay. |
+| `subtitleTrackReadiness` | 1277 | Media-lifecycle readiness. Written at 7 playback-start/listener sites (`playbackListener` 1513, `playMediaDirect` 4849/4852, `playPikPakVideoWithRetry` 6487, `setIptvMediaItem` 8640/8643, `playStremioTvPlaybackMap` 10238) and read by the channel-start (1037) and switcher (9580) Hosts. |
+| `dp`, `externalSubtitleHandler` | | Shared. |
+| `umSectionRows`, `unifiedMenuCallbacks` | | UM composition (retained per the phase-13 plan). |
+
+Moving `subtitleTrackReadiness` would cost:
+- a **new classifier form**: a no-argument constructor call `SubtitleTrackReadiness()` of a project class;
+- **7 more patches** in 2 more declarations, and **2 more re-points**;
+- 1 more proof.
+
+It belongs with playback start (phase 18), or it stays shared.
+
+**Split alternatives measured (`split.py`):**
+
+| variant | owner / collaborator member lines | cross-file refs | notes |
+|---|---|---|---|
+| A: identity in the dialogs file | 569 / 526 | 22, of which **13 are cross-file writes** of owner state | Rejected: the dialog file would mutate the content token and the manual identity. |
+| B: identity + search-item in the owner | 697 / 398 | 9 | Owner ≈ 770–785 lines, too close to 800. |
+| **B′: search-item in the dialogs file** | **642 / 452** | **10, reads only** | **Selected.** |
+| C / D: UM rows in the collaborator | | 42–44 | Rejected. |
+
+---
+
+### 3. Owned state and initializer proofs
+
+**Slot.** There is one slot: `stremioSubtitles` at 1261, immediately after the retained
+`stremioSubtitleService` (1259–1260). The retained `subtitleTrackReadiness` (1277) and `subtitleScope`
+(1285) keep their own slots, after the owner. The owner's construction reads neither: Host members are
+computed, and the dialogs collaborator is fieldless.
+
+**Every moved field except the slot field runs earlier → 20 proofs.** This includes the 5 fields at
+8784–8789, which today run after most controller properties.
+
+| form | fields | count | classifier |
+|---|---|---|---|
+| typed empty factory | `addonSubtitleResults`, `injectedSubtitles`, `addonFetchTokens`, `failedSubtitleUrls` | 4 | existing (p5) |
+| boolean literal | `suppressSubtitleAutoSelect`, `subtitleAddonDiscoveryReady`, `isLoadingStremioSubtitles`, `userManuallySelectedSubtitle` | 4 | existing |
+| `0` / `1` | `addonSubtitleFetchToken`; `pendingSeason`, `pendingEpisode` | 3 | existing |
+| `null` | `manualSubtitle*` ×5, `pendingSeriesResult` | 6 | existing |
+| `-1` | `currentStremioSubtitleIndex` | 1 | **phase-13 unary-minus form** (add it here if phase 13 did not land it) |
+| string literal `""` | `subtitleSearchStatus` | 1 | existing (p11) |
+| **`emptyList()`** (no type arguments; the type comes from the declaration `List<SubtitleCatalogResult>`) | `subtitleSearchResults` | 1 | **NEW** |
+
+**Classifier rules for `emptyList()`.**
+- **Accept:** the no-argument stdlib `kotlin.collections.emptyList` with an explicit declared property
+  type. It returns the `EmptyList` singleton, so there is no allocation and no state read.
+- **Negatives:**
+  - `listOf()` / `listOf(x)`;
+  - `emptyList().toMutableList()` or any chained call;
+  - an `emptyList` resolving to a non-stdlib declaration (step T greps that no `emptyList` is declared in
+    `com.debrify.app.tv` or imported by name);
+  - a missing declared type.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 24 in 9 declarations
+
+All are single-token prefixes: `subtitleSourcesController.`, or `subtitleSourcesController.dialogs.` for
+the two dialog-file names.
+
+| declaration (decl line) | lines | names |
+|---|---|---|
+| `playbackListener` (1506) | 1514 | `tryAutoSelectAddonSubtitle()`. The retained `subtitleTrackReadiness.onReady()` at 1513 is unchanged. |
+| `onCreate` (2021) | 2174, 2176 | `injectedSubtitles.add(…)`; **braced template** `"Loaded ${injectedSubtitles.size} …"` → `${subtitleSourcesController.injectedSubtitles.size}` |
+| `handleMetadataUpdate` (2257) | 2290 | `fetchStremioSubtitles(currentItem)` (inside the Dart-anchored range, §7) |
+| `playMediaDirect` (4824) | 4826, 4865 | `resetSubtitleState()`, `fetchStremioSubtitles(item)` |
+| `playPikPakVideoWithRetry` (6449) | 6453, 6498 | `resetSubtitleState()`, `fetchStremioSubtitles(item)` |
+| `umSectionRows` (8794) | 8796, 8797 ×2 | `isLoadingStremioSubtitles`; `stremioSubtitles.isNotEmpty()` and **braced template** `"${stremioSubtitles.size}"` |
+| `unifiedMenuCallbacks` (8808; anonymous object, retained) | 8813, 8830, 8831, 8832, 8834, 8838, 8839, 8845, 8852 | `umSubsModel`; `subtitleSearchStatus` ×3 (writes); `subtitleSearchResults` ×2 (writes); `pendingSeriesResult = null`; `requestSubtitleCatalogSearchFromFlutter(` → `.dialogs.`; `getCurrentSubtitleSearchItem()` → `.dialogs.` |
+| `onDestroy` (9944) | 10038 | `stremioSubtitles.clear()`, **in place** between the retained `subtitleScope.cancel()` (10037) and `stremioSubtitleService = null` (10039) |
+| `playStremioTvPlaybackMap` (10183) | 10206, 10207, 10264 | `resetSubtitleState()`, `clearStremioLoadingState()`, `fetchStremioSubtitles(playbackItem)` |
+
+**Labels are not patches.** `unifiedMenuCallbacks` 8837 and 8844 contain
+`return@requestSubtitleCatalogSearchFromFlutter`. The label is the callee's simple name and stays valid once
+the call is qualified. Pin it and add a negative that rejects any label rewrite.
+
+Of the 24 patches, 16 sit in code that later phases move:
+- `playbackListener` 1 (ROUTERS);
+- `handleMetadataUpdate` 1 (START-B);
+- `playMediaDirect`/`playPikPakVideoWithRetry`/`playStremioTvPlaybackMap` 7 (START-A);
+- `unifiedMenuCallbacks`/`umSectionRows` 12 (UM composition, retained).
+
+The UM-composition patches stay permanent.
+
+### 4.2 Host re-points: 12 forwarders, 14 token edits, 4 whole-property `patched` rows
+
+Earlier destination files stay byte-identical.
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 828 | `iptvStartOverController` | `resetSubtitleState()` → `…subtitleSourcesController.resetSubtitleState()` |
+| 869 | `iptvGuideController` (Host shared by the phase-11 navigator, `TvIptvChannelNavigator` 164/344) | `resetSubtitleState()` |
+| 1211–1213 | `subtitleController` | `currentStremioSubtitleIndex` get + set (2 tokens) |
+| 1214 | `subtitleController` | `currentSubtitleIdentityLabel()` |
+| 1216 | `subtitleController` | `failedSubtitleUrls` |
+| 1218 | `subtitleController` | `isLoadingStremioSubtitles` |
+| 1229 | `subtitleController` | `showSearchSubtitleDialog()` → `…subtitleSourcesController.dialogs.showSearchSubtitleDialog()` |
+| 1234 | `subtitleController` | `stremioSubtitles` |
+| 1244 | `subtitleController` | `tryAutoSelectAddonSubtitle()` |
+| 1246–1248 | `subtitleController` | `userManuallySelectedSubtitle` get + set (2 tokens) |
+| 1382 | `pikPakRetryController` | `tryAutoSelectAddonSubtitle()` |
+
+The `subtitleController` property alone has 9 forwarders and 11 token edits. Each target becomes
+`this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.x`, so cross-feature state is read through
+the owning controller.
+
+The `iptvStartOverController` and `iptvGuideController` properties were `patched` rows in phases 11/12.
+Phase 14 adds new rows relative to the phase-13 merge base, and the historical manifests are unchanged.
+
+**No re-point is needed** in these properties (each checked line by line):
+- `autoSyncController` (730–742; it reads phase-4 members only);
+- `progressReporter` (1105–1138);
+- `sourceFetchController` (9463–9503, episode fetch / fetch-more);
+- `startupGateController`, `stremioTvGuideController`, `skipSegmentController`, `sleepTimerController`,
+  `statusPillController`, `upNextController`;
+- the zap banner / recording / chrome controllers.
+
+`iptvChannelStartController` (1037) and `sourceSwitchController` (9580) forward only
+`subtitleTrackReadiness`, which stays, so they are unchanged.
+
+---
+
+### 5. Outbound Host (one shared 15-member Host, computed, explicitly qualified)
+
+| member | type | refs (owner / dialogs) | note |
+|---|---|---|---|
+| `subtitleController` | `TvSubtitleController` | 18 / 0 | Cross-feature getter. `refreshSubtitlePanelForLoading` ×4, `subtitleSettingsVisible` ×4, `stopExternalSubtitleRendering` ×3, `subtitleTracks.clear()`, `externalSubtitleActive`, `loadStremioSubtitle`, `umEmbeddedTrackRows`/`umAppearanceRows`/`umTimingRows`/`umSelectStremioSubtitleByUrl` (all public in the phase-4 class). Constructed at 1195, before the owner slot; still computed. |
+| `playerPreferences` | `com.debrify.app.profiles.NativePlayerPreferences` | 8 / 0 | **`lateinit`** (2019). The computed getter preserves `UninitializedPropertyAccessException` timing. |
+| `unifiedMenu` | `UnifiedMenuController?` | 6 / 0 | |
+| `trackSelector` | `DefaultTrackSelector?` | 4 / 0 | `parameters` writes go through the object, not the reference |
+| `subtitleTrackReadiness` | `SubtitleTrackReadiness` | 2 / 0 | borrowed |
+| `payload` | `PlaybackPayload?` | 2 / 1 | |
+| `stremioSubtitleService` | `StremioSubtitleService?` | 2 / 0 | Borrowed; read at use (reassigned by `initIptvMode`). |
+| `offsetRenderersFactory` | `OffsetRenderersFactory?` | 1 / 0 | |
+| `subtitleScope` | `CoroutineScope` | 1 / 0 | Borrowed. Read at `launch` time; phase-4 tests replace it by reflection. |
+| `currentIndex` | `Int` | 1 / 2 | |
+| `player` | `ExoPlayer?` | 1 / 1 | |
+| `dp(value: Int): Int` | fun | 0 / 22 | |
+| `isIptvMode` | `Boolean` | 0 / 1 | |
+| `currentIptvIndex` | `Int` | 0 / 2 | |
+| `iptvChannels` | `List<IptvChannelEntry>` | 0 / 2 | Activity `var` (793); a computed getter sees reassignment. |
+
+Host substitutions: **owner 46, dialogs 31 = 77**.
+
+Cross-file qualifications (all compile-checked; no Host member has these names):
+
+| direction | refs |
+|---|---|
+| dialogs → owner, as `sources.` | `applyManualSubtitleIdentity` ×3 (6085, 6094, 6344); `manualSubtitleSeason` (6287) and `manualSubtitleEpisode` (6297), both reads inside `setText(…)` |
+| owner → dialogs, as `dialogs.` | `getCurrentSubtitleSearchItem` ×4 (6370, 6430, 9004, 9009); `showSeasonEpisodePrompt` (6378) |
+
+Top-level callees stay unqualified. All were verified as `internal` top-level, not activity members:
+- `isSideRenderableSubtitle` (TvTrackLabels);
+- `buildSubtitleSearchInitialQuery`, `resolveSeasonEpisodeForSubtitle`, `buildManualSubtitleDisplayLabel`,
+  `parseSubtitleCatalogResults` (SubtitleSearchQuery);
+- `chooseAutomaticSubtitle`, `audioAllowsAutomaticSubtitles`, `selectedAudioLanguage`,
+  `isUndeclaredHlsCaption` (SubtitleAutoSelection);
+- `requestMovieMetadataFromFlutter` (TvPlayerFlutterRequests);
+- `mrow` (UnifiedMenuRows).
+
+---
+
+### 6. Receivers, inherited members, overload audit
+
+### `this` → `activity`: 22 sites (each pinned with exact context and an occurrence count)
+
+**Owner (4):**
+- 6550 `SubtitleSettings.getSubtitleSourcePriority(this)` (`Context` parameter);
+- 6372 and 6420 `Toast.makeText(this, …)`;
+- 5138 `Toast.makeText(this@AndroidTvTorrentPlayerActivity, …)`, inside the `subtitleScope.launch` lambda.
+
+**Dialogs (18):**
+
+| kind | count | lines |
+|---|---|---|
+| `Toast` | 3 | 5911; 6077 (in a SAM lambda, so `this` = activity); 6339 (in local fun `submit`) |
+| `LinearLayout(this)` | 4 | 5918, 5934, 6268, 6279 |
+| `EditText(this)` | 3 | 5923, 6283, 6293 |
+| `AppCompatButton(this)` | 1 | 5940 |
+| `ProgressBar(this)` | 1 | 5950 |
+| `TextView(this)` | 2 | 5966, 6273 |
+| `ListView(this)` | 1 | 5972 |
+| `AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)` | 2 | 6110, 6328 |
+| `object : ArrayAdapter<SubtitleCatalogResult>(this, 0, results)` | 1 | 6220 |
+
+The `this` at 6220 is a **super-constructor argument of an object expression**, which binds the
+*enclosing* instance. The PSI collector must classify it as an activity receiver, not as the anonymous
+object. That needs a positive fixture and a negative for misclassification. The constructor descriptor
+`(Landroid/content/Context;ILjava/util/List;)V` is audited.
+
+All 22 are argument or constructor sites for the compiled descriptor audit. None is overloaded on
+`Activity`/`FragmentActivity`, and there is no `Glide.with`.
+
+### Excluded receiver: 1
+
+5973 `this.adapter = adapter` inside `ListView(this).apply { … }` is the ListView. It is a reviewed
+exclusion with negatives for omission and substitution. The right-hand `adapter` is the outer function's
+local (locals win), so it is unchanged.
+
+### Inherited (implicit) receiver pins: 3
+
+`runOnUiThread` at 6195, 6200 and 6207 sit inside the anonymous `MethodChannel.Result`. The outer receiver
+is the activity, so each becomes `activity.runOnUiThread`. Pins record owner, descriptor and opcode before
+and after (`invokevirtual … runOnUiThread(Ljava/lang/Runnable;)V`), as in the phase-9/10 auditor.
+
+### Reviewed NON-substitution pins: 6
+
+Each gets a negative proving that substitution fails:
+- `context` ×3 at 6222/6230/6238 is `ArrayAdapter.getContext()` (implicit receiver = the anonymous
+  adapter);
+- `context` at 5976 is `View.getContext()` inside `ListView.apply`;
+- `getItem(position)` at 6229 is `ArrayAdapter.getItem`;
+- `resources = listOf("subtitles")` at 5060 is a **named argument** of the `StremioAddon(...)` constructor,
+  not `Activity.getResources()`. The current scanner reports it as inherited; it is a false positive.
+
+### Shadowing (no host substitution)
+
+- local `title` (TextView) at 6230 and 6273 shadows `Activity.title`;
+- locals `dialog`, `adapter`, `results`, `item`, `type`, `model`, `currentItem`;
+- lambda `selector ->` vs `ListView.selector` in a different scope.
+
+No local or parameter is named after a Host member (the PSI re-verifies this at step T).
+
+### Labels (unchanged)
+
+- `return@requestSubtitleCatalogSearchFromFlutter` ×2 (6058, 6063), plus the 2 retained ones in
+  `unifiedMenuCallbacks`;
+- `return@requestMovieMetadataFromFlutter` ×2 (5028, 5039);
+- `return@launch` ×2 (5127, 5128);
+- `return@setOnItemClickListener` ×2 (6074, 6078).
+
+### Templates
+
+- There is no host-qualified name inside a moved template (scan plus a manual check).
+- Owner-local templates stay as they are: `$pendingSeason`, `$pendingEpisode`, `$manualImdbId`,
+  `${addon.name}`, `${result.name}`, `"addon:${r.addon.id}"`, `"iptv:${entry.index}"`.
+- The 2 retained braced templates (2176, 8797) are patched in braced form. Negative: the unbraced form.
+
+### Anonymous and nested classes renamed (R8 mapping check)
+
+- `…Activity$createSubtitleCatalogResultAdapter$1` → `TvSubtitleSearchDialogs$…$1`;
+- `$requestSubtitleCatalogSearchFromFlutter$1` (the `Result` object);
+- the `launchAddonSubtitleFetch` coroutine lambda;
+- the SAM/listener lambdas of both dialogs.
+
+---
+
+### 7. Coroutines, handlers, tokens, Flutter, teardown
+
+**Coroutine.** Each `launchAddonSubtitleFetch` does `host.subtitleScope.launch { … }` on
+`Dispatchers.Main + SupervisorJob()`. The body calls the suspend `StremioSubtitleService.fetchSubtitlesForAddon`
+(`withContext(IO)`, a 3-attempt ladder with `delay` 500/1500 ms). The scope is **borrowed**: the activity
+creates it and cancels it only in `onDestroy` (10037). The controller never cancels it.
+
+**Tokens (owned by the controller):**
+- `addonSubtitleFetchToken` is the content generation. It is bumped in `resetSubtitleState` and
+  `applyManualSubtitleIdentity`, captured by `fetchStremioSubtitles` (metadata lookup) and by
+  `fetchStremioSubtitlesWithImdb` (`contentToken`), and passed live by `retryAddonSubtitles`.
+- `addonFetchTokens[addonId]` is the per-slot retry generation. It is incremented on every launch and
+  cleared on reset.
+- Guards apply after the IO result, in order: content token, then slot token.
+
+**Flutter calls:**
+- `requestMovieMetadata`, through the top-level `requestMovieMetadataFromFlutter`. There is no watchdog;
+  the reply is checked against the content token.
+- `searchSubtitleCatalogs` with argument map `{"query": query}`:
+  - success, error and notImplemented post via `activity.runOnUiThread`;
+  - a null channel or a thrown exception calls `onError` **synchronously**;
+  - consumer guards are `dialog.isShowing` (dialog) and `unifiedMenu?.isVisible` (UM).
+
+**No owned Handler, Runnable or timer.** The controller borrows `externalSubtitleHandler` only indirectly,
+through phase-4 code.
+
+**Teardown (unchanged order, `onDestroy`):**
+1. `subtitleScope.cancel()` (retained);
+2. `subtitleSourcesController.stremioSubtitles.clear()` (patched in place, not folded);
+3. `stremioSubtitleService = null` (retained).
+
+---
+
+### 8. Reflective tests and Dart anchors
+
+**Kotlin reflection: 34 literal sites, 7 field names, 5 files.** All go through
+`TvPlayerOriginalAccess.field/set` (base `TvPhase3OriginalTest.field`), so they need **7 owner-map routes**
+`"<name>" to "subtitleSourcesController"`. They go in the owner-route fixture that phase 13's first step-T
+item extracts from the 813-line helper. No route-key collision exists today.
+
+| name | sites | files |
+|---|---|---|
+| `currentStremioSubtitleIndex` | 16 | `TvSubtitleSelectionCharacterizationTest` :61 :62 :68 :80 :101 :156 :163 :167; `TvPhase4BoundaryCharacterizationTest` :36 :40 :41; `TvSubtitleRenderingCharacterizationTest` :65 :66; `TvPhase4PrerequisiteTest` :57 :59 :60 |
+| `isLoadingStremioSubtitles` | 7 | Selection :57 :84 :129; Boundary :70 :74 :83 :86 |
+| `userManuallySelectedSubtitle` | 4 | Selection :86 :87 :93 :102 |
+| `subtitleSearchStatus` | 4 | `TvIptvNavigatorSweepTest` :241 :247 :357 :361 (asserts reset through the navigator's Host `resetSubtitleState`) |
+| `stremioSubtitles` | 1 | Selection :38 (`external()` mutable list) |
+| `failedSubtitleUrls` | 1 | Prerequisite :61 |
+| `manualSubtitleDisplayLabel` | 1 | Selection :127 |
+
+These phase-4 tests drive the phase-4 controller through the re-pointed Host. They are therefore the
+existing regression net for the 9 `subtitleController` re-points.
+
+**Unchanged:**
+- `subtitleScope` 9 sites and `externalSubtitleHandler` 7 sites (borrowed);
+- `NativePlayerSettingsConsumptionTest` :79 :108 `getDeclaredMethod("resetSubtitleState")` on
+  **TorboxTvPlayerActivity**.
+
+**Public pins.** No moved function is reflected today. Members the activity, Host or the other file reach
+become **public** (unmangled), never `internal fun`. Rescan after step 0 adds `invoke(...)` accesses.
+
+**Dart:**
+- **0 retargets.** No Dart test names a SUBF member.
+- No `contains('…')` literal of any test that reads the activity lies inside a SUBF span (scripted check).
+- `android_tv_mdblist_progress_source_test.dart`
+  `_between('// Handle episode metadata updates', 'private fun requestMetadataFromFlutter()')` spans
+  `handleMetadataUpdate`, which gets 1 patch (2290). Its asserted literals (`hasWatchedUpdate`,
+  `model.items.indexOfFirst`, …) are untouched. Record this; no retarget. Phase 13 adds 4 patches in the
+  same range.
+- The `manual_source_validation_contract_test` / `android_tv_auto_advance_resume_test` ranges
+  (`playItem`…`resolveAndPlay`…`startPlayback`) contain no SUBF reference.
+- `profile_source_guard_test` scans `lib/` plus listed native files. It does not list the activity or
+  subtitle controllers, so it is unaffected.
+- `NativeAudioRoutingTest`'s activity source anchor (`setupPlayer`) is unaffected.
+
+---
+
+### 9. Hazards (each a step-T fixture or negative)
+
+1. **Bidirectional Host coupling with the phase-4 controller.**
+   - Owner → `host.subtitleController.` (18): its forwarder is computed (`subtitleController` is
+     constructed earlier).
+   - Phase-4 → 9 re-pointed forwarders.
+   - Negatives: a snapshotting forwarder for `subtitleController`, `subtitleScope`, `playerPreferences`
+     (lateinit) or `stremioSubtitleService`.
+2. **Fieldless dialogs collaborator.** It is constructed eagerly at the owner slot.
+   - Negatives: a dialogs field; the dialogs file reading the Host for owner state; reading `sources`/Host
+     during construction.
+3. **Missed `sources.`/`dialogs.` qualification** compiled against a same-name Host member (phase-11 style
+   negative).
+4. **Object-expression super-constructor `this`** (6220). It is classified as the activity. Positive plus a
+   misclassification negative.
+5. **Excluded `this.adapter`** (5973) and the **6 non-substitution pins** (`context` ×4, `getItem`, named
+   argument `resources =`). Negatives substitute each one.
+6. **Labels:** 10 label sites are never rewritten, including the 2 retained ones whose call becomes
+   `.dialogs.`-qualified.
+7. **Two braced retained-template patches** (2176, 8797). Negative: the unbraced form.
+8. **New classifier form** `emptyList()` plus reuse of `-1`. A complete set of 20 proofs.
+9. **Lateinit / volatile.** `playerPreferences` is `lateinit` (computed forwarder). There is no
+   `@Volatile` in the unit.
+10. **`onDestroy`:** 1 in-place statement between two retained statements. Negative: folding or reordering.
+11. **Lint opt-in parity.** The owner carries a class-level `@OptIn(UnstableApi::class)`, a pinned
+    structural span. The `lintDebug` issue set must stay identical (the dialogs file needs no opt-in).
+12. **Ordering inside `resetSubtitleState`** is preserved verbatim:
+    1. phase-4 `stopExternalSubtitleRendering`;
+    2. clears;
+    3. `subtitleTrackReadiness.onMediaReplacement()`;
+    4. selector rebuild;
+    5. token bump;
+    6. `SubtitleSettings.resetSyncOffset()`;
+    7. `offsetRenderersFactory?.setOffsetUs(0L)`.
+
+---
+
+### 10. File split and counts
+
+| file | content | ≈ lines |
+|---|---|---|
+| `TvSubtitleSourcesController.kt` | 642 member lines + ≈ 20 blank separators + ≈ 22 imports + header/`@OptIn`/ctor 6 + Host 17 + `dialogs` property 1 + close | **≈ 712** (band 501–800; one responsibility: external subtitle sources and identity) |
+| `TvSubtitleSearchDialogs.kt` | 452 + 4 blanks + ≈ 23 imports + header 6 | **≈ 487** |
+| activity | −1,094 + property/Host ≈ 22 | **≈ −1,072** |
+
+| substitution kind | count |
+|---|---|
+| `host.` | 77 |
+| cross-file (`sources.` 5, `dialogs.` 5) | 10 |
+| receivers (`this`/`this@` → `activity`) | 22 |
+| inherited (`runOnUiThread`) | 3 |
+| visibility: owner 7 functions (`resetSubtitleState`, `fetchStremioSubtitles`, `clearStremioLoadingState`, `tryAutoSelectAddonSubtitle`, `umSubsModel`, `applyManualSubtitleIdentity`, `currentSubtitleIdentityLabel`) + 11 fields (`stremioSubtitles`, `injectedSubtitles`, `failedSubtitleUrls`, `currentStremioSubtitleIndex`, `isLoadingStremioSubtitles`, `userManuallySelectedSubtitle`, `manualSubtitleSeason`, `manualSubtitleEpisode`, `subtitleSearchResults`, `subtitleSearchStatus`, `pendingSeriesResult`); dialogs 4 (`showSearchSubtitleDialog`, `getCurrentSubtitleSearchItem`, `requestSubtitleCatalogSearchFromFlutter`, `showSeasonEpisodePrompt`) | 22 |
+| **total** | **≈ 134** |
+
+The activity also gets:
+- 24 patches in 9 declarations;
+- 4 `patched` property rows (14 token edits);
+- 1 `added` slot-anchored property;
+- 0 readiness getters (no `::x.isInitialized` in the unit).
+
+---
+
+### 11. Step T / step 0 needs
+
+**Step 0 prerequisite (from phase 13):** `TvPlayerOriginalAccess.kt` owner-route split, done as phase
+13's first step-T item. Phase 14 adds 7+ routes to that fixture, not to the helper.
+
+**Step T:**
+- the `emptyList()` classifier form plus negatives (reuse `-1`);
+- the phase-14 production extraction fixture:
+  - owner plus an eager fieldless dialogs collaborator, its construction pinned;
+  - 20 proofs;
+  - 10 cross-qualifications;
+  - 4 re-point rows (14 tokens);
+  - 24 patches, including the 2 braced templates and the 2 `.dialogs.` prefixes;
+  - the in-place `onDestroy` patch;
+- negatives: §9, plus a dialogs field, a label rewrite, and substitution of a `context`/`getItem`/named
+  `resources =` site;
+- compiled audit: 22 receiver sites (including the object-expression super-constructor argument), 3
+  inherited `runOnUiThread` pins, 1 excluded receiver, 6 non-substitution pins;
+- per-phase dispatcher keeping all historical suites;
+- earlier destinations, **including `TvSubtitleController.kt`**, frozen at the phase-13 merge;
+- R8/DEX mapping covering both classes, the Host, the activity Host object and the renamed anonymous
+  classes.
+
+**Step 0** characterizes the original, mostly from zero. Each prerequisite is demonstrated on the original
+first; a failed prerequisite defers that slice and triggers a design re-review.
+
+**Prerequisites:**
+1. **Latch-controlled addon fetch.**
+   - Use a Robolectric shadow of `StremioSubtitleService.attemptFetch(StremioAddon, String)`, the private,
+     blocking per-attempt HTTP call (`TvPhase4Response` latch pattern). This keeps production
+     `withContext(IO)`, the retry ladder and Main publication. Prove the IO thread and Main publication.
+   - Seed addons through the profile-scoped `stremio_addons_v1` preference (`getSubtitleAddons`), or a
+     shadow of it.
+   - Failure paths run the real ladder with ≈ 2 s of `delay`. Throw on all 3 attempts.
+   - `StremioSubtitleService` is final and constructed by the activity, so it cannot be subclassed.
+   - `mockwebserver` 4.12.0 is available as a fallback.
+2. **Fake Flutter channel** (the phase-2 recording messenger), for `searchSubtitleCatalogs` and
+   `requestMovieMetadata`:
+   - paired inline and queued main-looper replies;
+   - error, notImplemented and encoded-null;
+   - a null channel and a throwing `send`, both with synchronous `onError`.
+3. **Dialog harness.**
+   - Robolectric `ShadowDialog.getLatestDialog()` / `ShadowAlertDialog`;
+   - views found in the custom container;
+   - IME `IME_ACTION_SEARCH`/`DONE` and `KEYCODE_ENTER` `ACTION_UP`;
+   - `ListView.performItemClick`;
+   - the positive button whose listener is installed in `OnShowListener` (the dialog must be shown);
+   - `ShadowToast`.
+4. **Clock control** for `System.currentTimeMillis()` in `getCurrentSubtitleSearchItem` (`updatedAt`), or
+   assertions that do not depend on it.
+
+**Behaviours:**
+- **`fetchStremioSubtitles` routing matrix:**
+  - a custom-series id without a manual id returns early;
+  - injected captions are seeded with suppression, unless a manual id is set;
+  - a merged `audioUrl` clears;
+  - series id, or empty → clear;
+  - manual identity (series/movie item copies);
+  - movie `perItemImdbIds` hit and cached-null;
+  - single-item fallback;
+  - Flutter metadata lookup with cache write, null result, and **stale content token**.
+- **Fan-out:**
+  - LOADING slots, the discovery flag and `isLoading`;
+  - per-slot token versus content token (a retry during in-flight; a content switch or manual identity
+    during in-flight);
+  - the side-renderable filter;
+  - `rebuildFlat` dedupe and URL re-pin;
+  - a FAILED slot with an error, then retry;
+  - the "No online subtitles" toast, only with a manual identity, and only when the last slot finishes
+    empty;
+  - UM versus panel refresh surfaces;
+  - `clearStremioLoadingState`.
+- **`tryAutoSelectAddonSubtitle` wiring:**
+  - readiness × READY;
+  - default/`off`/null preference;
+  - forced-only and only-foreign-audio preferences;
+  - manual / suppressed / addon-selected inputs;
+  - `failedSubtitleUrls` exclusion, the pt-BR label match, the null-preference trailing eligible indices;
+  - every branch: Off (stop plus selector disable, only if not already disabled), Wait/Keep/Addon,
+    Embedded (override only if not selected), AddonTrack (index by URL + `loadStremioSubtitle`);
+  - `getSubtitleSourcePriority(activity)`.
+- **`resetSubtitleState`:** all fields, the selector-disable triad, the sync-offset reset order, and through
+  each caller (direct VOD, PikPak, Stremio TV, IPTV navigator/Start Over Hosts).
+- **`applyManualSubtitleIdentity`:**
+  - no item → toast;
+  - series without season/episode → prompt;
+  - token bump, field values and label, stop rendering, selector disabled, panel refresh, toast text;
+  - fetch with the copied item.
+- **`currentSubtitleIdentityLabel`:** all 3 branches.
+- **`getCurrentSubtitleSearchItem`:** payload, IPTV entry, media-item title/URL fallback, and null.
+- **Search dialog:**
+  - initial query, empty query, loading state;
+  - 0, 1 and N results with focus/selection;
+  - error, and a reply after dismiss being ignored;
+  - item click for movie, series-resolved and series→prompt;
+  - no current item → toast;
+  - IME search / Enter;
+  - `OnShowListener` focus.
+- **Season/episode prompt:** default precedence (item → manual → 1), validation toast, IME Done, positive
+  button.
+- **Adapter rows:** text, styling, a recycled `convertView`.
+- **UM column:**
+  - col2 rows and badges (… / count / ⚠);
+  - the tag routing to phase-4 builders;
+  - col3 `SEARCH` versus `ROWS` with a pending series;
+  - the identity header and `previewVisible`.
+- **Addon rows:** loading, failed + retry + error `take(48)`, OK empty, and selection requiring both URL and
+  addon match.
+- **Search rows:** pending adjust bounds 1..99 / 1..999; fetch clears pending and hides; status rows.
+- **`umPickSearchResult`:** series resolved/unresolved (`coerceAtLeast(1)` defaults, render versus hide) and
+  movie.
+- **`onSearchSubmit`:** state and visibility guards; `searchInitialQuery`.
+- **`onDestroy`:**
+  - statement order;
+  - **destroy during an addon fetch** (§12.2) and a late metadata reply after destroy (§12.1), pinned as-is.
+
+**Mutation proofs.** Apply the phase-11 lesson from the start. The unit has **67 `if`, 5 `when`, 48
+`return`, 34 `?:` and 51 `?.`** sites. Build the PSI per-function coverage matrix and run a statement-level
+sweep in step 0, before Claude's first independent sample. Then:
+- the first sample must kill ≥ 75 %; otherwise sweep and take a second sample;
+- 0b closes the gaps;
+- a new JVM baseline follows.
+
+---
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+1. **`addonSubtitleFetchToken` is not bumped in `onDestroy`.** A `requestMovieMetadata` reply that arrives
+   after destroy passes the token check and runs `fetchStremioSubtitlesWithImdb`. That:
+   - sets LOADING slots and `isLoading`;
+   - refreshes the UI;
+   - calls `launch` on the cancelled scope, which is a no-op.
+2. **`launchAddonSubtitleFetch` catches `Exception`.** That includes the `CancellationException` raised when
+   `onDestroy` cancels `subtitleScope` during `withContext(IO)`. The coroutine then continues: it marks the
+   slot FAILED, auto-selects, can toast and refreshes the UI after destroy. Characterize it; do not fix.
+3. **Catalog search has no request generation.** In both the dialog and UM paths, an older reply can
+   overwrite newer results. Replies post via `runOnUiThread` even after destroy (guarded only by
+   `dialog.isShowing` / `unifiedMenu?.isVisible`). A null channel or an exception calls `onError`
+   synchronously, while other outcomes are asynchronous.
+4. **`stremioSubtitleService` is assigned twice:** in `onCreate` 2188 and `initIptvMode` 8077.
+5. **`subtitleTrackReadiness` and `stremioSubtitleService` remain shared activity state.** Move the first
+   with playback start (phase 18) if wanted.
+6. **Existing follow-up.** `showSubtitleTrackDialog` and `hideSubtitleSettingsPanel` (phase-4 file) still
+   have no callers. Unchanged.

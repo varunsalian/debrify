@@ -1611,6 +1611,78 @@ playlist overlay for a series (season tabs, episode rows, current episode
 highlighted) and a movie collection, DPAD navigation incl. edges and long
 lists, the playlist in each controls skin, opening/closing during playback.
 
+## Phase 14 — subtitle sources (addon fetch, auto-select, manual identity, search dialogs, subtitle menu rows)
+
+Branch `refactor/tvplayer-p14` off the phase-13 merge `82b16832c` (activity 9,079 lines). Evidence under
+`refactor-evidence/tvplayer/p14/`. Inventory: "Phase 14 inventory" in the deps
+report (measured at `315448a3c`; phases 13 and 14 patch the same five
+declarations at different statements — re-measure on the phase-13 merge).
+All collaborator rules from phases 3–13 apply; the statement-level coverage
+sweep runs from the start (67 `if`, 48 `return` sites).
+
+**Not merged into `TvSubtitleController`:** it is already 776 lines (merging
+would give ≈ 1,870), it is a frozen earlier destination, and its 9 Host
+forwarders into this unit would become self-references.
+
+**Selected (≈ 1,094 lines, 43 members):** `TvSubtitleSourcesController`
+(≈ 712: all 21 fields + addon fetch, auto-select, manual identity, identity
+label, the 4 subtitle menu rows) eagerly constructs fieldless
+`TvSubtitleSearchDialogs` (≈ 487: both dialogs, catalog search, result
+adapter, current-search-item lookup); one shared 15-member Host; property at
+the `stremioSubtitles` slot. `subtitleScope`, `stremioSubtitleService` and
+`subtitleTrackReadiness` stay activity-owned and are borrowed through the
+Host. 24 activity patches in 9 declarations (2 braced templates; 1 in-place
+`onDestroy` statement between `subtitleScope.cancel()` and
+`stremioSubtitleService = null`); 12 Host re-points (14 token edits) in 4
+properties (`subtitleController` ×9, `iptvStartOverController`,
+`iptvGuideController`, `pikPakRetryController`); 20 inert initializer proofs
+(new narrow form: `emptyList()`; reuses phase 13's `-1`); ≈ 134 substitutions
+(77 host, 10 cross-file reads, 22 `this` → `activity` incl. an `ArrayAdapter`
+super-constructor argument, 3 `runOnUiThread`, 22 visibility). Not
+substituted: the receiver `this.adapter`, `context` ×4, `getItem`, and the
+named argument `resources =`.
+
+**Retargets.** 34 reflective sites over 7 field names in 5 files via 7
+owner-map routes (`subtitleScope` sites stay; the 2 `resetSubtitleState`
+sites target `TorboxTvPlayerActivity` and are unaffected). No Dart retargets
+(one patch inside the `handleMetadataUpdate` anchored range; asserted text
+unchanged).
+
+**Pinned as-is (follow-ups, not fixed):** a late metadata reply after destroy
+still runs the fetch path (content token never bumped in `onDestroy`); a
+fetch cancelled by the activity's `subtitleScope.cancel()` is caught by
+`catch (e: Exception)`, marks the addon FAILED, retries auto-select and can
+toast after destroy; catalog search has no request counter, so an older
+reply can overwrite newer results.
+
+### Step T
+
+Classifier form `emptyList()` + negatives; phase-14 extraction fixture (owner
++ fieldless dialogs, borrowed scope/service/readiness) + negatives (receiver
+exclusions above, the named `resources =` argument, the `ArrayAdapter`
+super-constructor site); compiled audit; per-phase dispatcher keeping all
+historical suites; earlier destinations frozen at the phase-13 merge.
+
+### Step 0 — characterization of the original
+
+Three harnesses first, demonstrated on the original: a latch on
+`StremioSubtitleService.attemptFetch`, a fake Flutter channel for
+`searchSubtitleCatalogs` and `requestMovieMetadata` (paired inline/queued
+replies), and a dialog harness. Then: addon slot fetch/retry/failure, flat
+list rebuild, auto-select rules and `failedSubtitleUrls`, injected subtitle
+seeding, IMDb lookup path, manual identity apply, identity label, search
+dialogs (query, results, season/episode prompt), the 4 menu rows, the
+pinned-as-is quirks above, `onDestroy` order; systematic coverage sweep with
+a coverage matrix. Mutation proofs on the original; Claude's independent
+sample (≥ 75 % kills, else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–13 additions. Device checklist (end of series):
+addon subtitles for a movie and an episode (auto-select, retry of a failed
+addon), subtitle search dialog with season/episode prompt, manual identity
+correction, subtitle menu rows.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
