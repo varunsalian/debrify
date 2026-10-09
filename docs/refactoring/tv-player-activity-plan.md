@@ -3316,3 +3316,41 @@ correction, subtitle menu rows.
   proofs, teardown order, 25 compiled receiver sites plus six preserved
   bindings and all five Kotlin warning identities pass. Full checker suites
   and clean JVM/lint/release/Flutter gates follow on this gate commit.
+
+
+- 2026-10-09 — **Phase 14 gate complete on a85ae8f28; decoder
+  pending-environment. STOPPED after Phase 14.** Step 0b f576c6f68 adds
+  fourteen original-surface tests, every one assertion-proved; sweep 15/16
+  killed, r17 equivalent. Claude r03/r16 fail assertions on original 82b16832c;
+  r17 passes all 186 and original LanguageMapper bytecode produces identical
+  en/eng outcomes over 13,417 tags. Step 1 a85ae8f28 extracts the 710-line
+  subtitle-source owner and eager, fieldless 495-line dialogs collaborator;
+  activity 9,079 → 7,982. Scope/service/readiness stay activity-owned and
+  borrowed. Forty-one owner-map routes are the only test retarget; assertions
+  and Dart files remain byte-identical. Current checker classifies 1,850
+  original declarations with zero differences. All 378 checker/auditor
+  self-tests and historical p1–p13 merge checks pass. Forty-nine earlier
+  destinations are byte-identical to 82b16832c; twenty initializer proofs,
+  eager construction, slot anchoring, full lifecycle/teardown order and the
+  runtime cancellation → flat-list clear → service-null assertion pass.
+  Compiled audit pins 25 receiver calls and six preserved bindings, including
+  ListView Context construction with inner this.adapter preserved and the
+  ArrayAdapter super-constructor. Five Kotlin warnings and 1,758 analyzer
+  diagnostics are unchanged. Clean p14-gate exactly matches all 1,606
+  p14-step0b identities/statuses: 1,605 pass, same known SourceBrowser focus
+  failure, no missing/new skips, stable input, matched evidence-only 1 GiB heap.
+  Lint exactly retains all 1,352 issue identities (253 errors/1,099 warnings;
+  175 opt-in errors), with moved locations mapped back to original symbols;
+  no additions/removals/suppressions. Release APK succeeds. R8/DEX checks all
+  eight generated classes and 162 members, including Host, activity Host
+  implementation and anonymous/coroutine classes, with three negative
+  controls. Decoder failure output/native hashes/missing-feature manifest
+  remain identical to phase 1: pending-environment. Affected Dart source
+  tests match all 45 prior statuses. Full quiet Flutter suite via
+  suite_evidence.py on clean gate commit a85ae8f28 exactly matches all 12,855
+  phase-13 identities/statuses (12,794 success, 13 failure, 28 error, 20
+  skipped), same SDK/flags and stable tree. Size baseline updated; no new
+  exception. Evidence p14/step0b/, p14/step1/, p14/gate/ and junit/p14-gate/.
+  Lockfile, ProGuard and earlier manifests/destinations remain unchanged.
+  No push, branch switch, self independent review, device/emulator or bug fix.
+  Phase 15 not started.
