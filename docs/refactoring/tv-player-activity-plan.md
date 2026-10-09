@@ -1868,6 +1868,16 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase 16 original runtime observations, preserved by Step 0: hidden dock
+  scheduling leaves a pre-existing callback and deadline intact; queued focus
+  offers survive hide and can re-arm auto-hide; the 100 ms seekbar ticker is
+  retained through pause/stop and only removed by teardown; onDestroy does
+  not cancel a running scrub animator. The reflection-only legacy seekbar
+  hide resumes playback even when it was paused before entry. Any change to
+  these timing/lifetime behaviors belongs to a separate behavior change.
+  CLASSIC focus remaining on PlayerView is a Robolectric fixture observation,
+  not a claimed device finding; device checks stay at the planned milestone.
+
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
   newer navigation state unconditionally; rebuilding accumulates global focus
   listeners; already queued View focus work survives hide/rebuild/destroy.
@@ -3664,3 +3674,29 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   blockers); P3 retain all 23 view-binding pins. Phase 16 design approved.
 
 - 2026-10-10 — **Phase 16 step T complete** on `refactor/tvplayer-p16`. First routed all 34 existing reflective names (151 quoted accesses); assertions unchanged, original-owner compatibility retained until extraction. Re-measured at `df439aed1`: 1,727 declarations, 80 Activity members plus the companion constant, 48 in-place edits and 46 Host forwarders/68 token re-points. All-retained original self-comparison has zero differences; phase-15 historical check at the merge passes; all 54 earlier destinations are frozen. The complete extraction fixture (416/329/542 lines) compiles offline and passes the source partition, 38 initializer proofs, seven receiver pins, all 23 retained phase-15 view bindings (12 casts/11 absent, three array stores), and volatile identity field/writer/reader checks. Narrow float/null-array/Runnable classifier forms and negatives, readiness reads, nested slots, `controls`/local `overlay` and local `player` exclusions, computed forwarders, opt-in presence/absence and teardown/named-argument negatives are covered. **419 historical + 44 phase-16 checker/auditor self-tests pass**, including the separate phase-15 merge-history test; the router fixture context was corrected and all phase-16 cases rerun. Clean original JVM `baseline-df439aed1`: 1,943 identities (1,942 pass, unchanged source-browser focus failure); stable `p16-tools-recheck` preserves every identity/status. Original lint archived: 1,352 issues, 175 opt-in errors. Evidence: `p16/tools-result.json`, `overload-audit.json`, self-test logs, `remeasured-inventory.json`, `lint-original/`, and `junit/`. Production source, lockfile, ProGuard and all earlier manifests/destinations remain unchanged. Step 0 follows; no production moves.
+
+- 2026-10-10 — **Phase 16 Step 0 complete; stopped before production moves.**
+  Animator/recording-player prerequisites demonstrated first on df439aed1,
+  repeated and assertion-mutation-proved; no feature deferred. Added 287
+  named cases in 13 behavior suites plus prerequisite suite, 18 cohesive
+  files, separate real activities for seven skins. Pins full key routing,
+  twelve independent blockers/all-clear, dock/Next/auto-hide timing,
+  per-skin identity, live retry ordering, scrub/legacy seek and ticker,
+  metadata worker timing, Host/caller wiring, pause/stop and onDestroy.
+  Real framework callback stepping resolves paused-looper native vsync;
+  cancellation observations settle bootstrap and moved animations stay real.
+  Statement matrix: 668 nodes in 43 functions/callbacks; all 439 required
+  obligations (160 direct calls, eight Elvis guards included) have named
+  assertion proofs, no equivalents/unresolved nodes. 537 original attempts,
+  484 assertion kills; invalid/crash/cancelled attempts get no credit;
+  every one of 287 named cases has a witness. Deps table/matrix and raw
+  fixture hashes/patches/logs/XML in p16/step0. Final clean p16-step0:
+  2,230 identities (2,229 pass, same known source-browser focus failure),
+  versus baseline-df439aed1 1,943 (1,942 pass): exactly 287 passing additions,
+  strict old-status equality, stable fingerprints, matched evidence-only
+  1 GiB/JBR. Original lint archived: 1,352 issues (253 errors/1,099 warnings,
+  175 opt-in errors), exit 1. Final combined checker/auditor suite 463/463;
+  72 protected hashes unchanged. Reflection rescan: 78 names/699 sites;
+  Step-1 route additions remain. Original worktree removed; lockfile,
+  ProGuard, production and size baseline unchanged. No bug fix, push or
+  device interaction. STOP before Step 1 for Claude’s independent sample.

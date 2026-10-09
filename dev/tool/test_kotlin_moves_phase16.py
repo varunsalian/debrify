@@ -130,6 +130,8 @@ class Phase16MovesTest(unittest.TestCase):
         p=self.path('TvSeekScrubController');before='controls.showControlsMenu()'
         self.edit(p,before,'overlay.showControlsMenu()','token mismatch:',self.current[p].count(before))
         self.assertEqual(3,self.current[self.path('TvControlsOverlayController')].count('val overlay ='))
+        p=self.path('TvControlsOverlayController');before='if (!controlsMenuVisible) {'
+        self.edit(p,before,'if (!overlay.controlsMenuVisible) {','token mismatch:',self.current[p].count(before))
 
     def test_local_player_rhs_only(self):
         p=self.path('TvSeekScrubController');self.assertIn('val player = host.player ?: return',self.current[p])
