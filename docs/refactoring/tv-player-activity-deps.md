@@ -15216,3 +15216,571 @@ or assertions require editing; affected anchored content remains identical.
 Gate tested commit a85ae8f28; Step 0b f576c6f68; Step 1 a85ae8f28. The current checker has zero differences across 1,850 original declarations. All 378 self-tests and p1–p13 historical checks pass; 49 earlier destinations remain frozen. Twenty initializer proofs, 25 compiled receiver sites plus six preserved bindings, eager dialogs construction, property slot and lifecycle/teardown order pass. The cancellation/clear/null runtime assertion passes among all 186 phase-14 characterizations. Activity 7,982; new files 710/495; size ratchet lowered without an exception. The 41 owner routes above retain every assertion; all Dart files remain identical.
 
 Clean p14-gate exactly matches all 1,606 p14-step0b identities/statuses (1,605 passes and the same known focus failure), complete XML, stable clean input and matched 1 GiB workers. Kotlin warnings: five unchanged; analyzer: 1,758 unchanged. Lint exactly retains 1,352 issues (253 errors/1,099 warnings; 175 opt-in errors), no additions or removals after original-symbol location mapping. Release APK builds; all eight generated classes and 162 members have identity R8/DEX treatment, including both collaborators, the Host, the activity Host implementation and all anonymous/coroutine classes; three mapping negative controls pass. Decoder remains pending-environment with unchanged phase-1 failure output, all three library hashes and missing-feature manifest. The affected Dart source tests match all 45 prior statuses; the full Flutter suite matches all 12,855 phase-13 statuses (12,794 success, 13 failure, 28 error, 20 skipped) on clean gate commit a85ae8f28, unchanged SDK/flags and stable tree. No new behavior regression was observed; existing lint/analyzer/test failures are retained, and decoder parity remains explicitly pending. Evidence p14/gate/summary.json and its raw archives; junit/p14-gate/. Lockfile, ProGuard, earlier manifests and earlier destinations remain unchanged. Stopped after Phase 14; no production bug fix or device interaction.
+
+---
+
+## Phase 15 inventory (at `82b16832c`; re-measure on `ce3ddfb06`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`82b16832c` (phase-13 merge, **9,079 lines**, class header 136, 501 depth-1 members). This is a read-only
+survey of the main checkout. Nothing was built and nothing under `../debrify-wt/` was touched.
+
+**Tooling.** The p14 scripts were copied to `scratchpad/p15/` and re-indexed on the current file:
+- `idx.py` (brace/string/comment-aware member indexer), `refs.py` / `unit.py` (word-boundary reference
+  scans; templates and `this@Activity.` counted, other receivers excluded);
+- `groups.py` / `matrix.py`: the ten candidate groups and the group-to-group reference matrix (§2);
+- `sel.py`: the selected membership; `refl.py`: quoted reflective names under `android/app/src/test`.
+
+Counts were checked by hand against the source. Terms as in the phase-11/13/14 inventories: **patch** =
+token edit in a retained activity declaration; **re-point** = edited forwarder in an existing controller
+property's Host object (that property becomes a whole-property `patched` row); **substitution** = declared
+edit inside a moved body.
+
+**Phase 14** (subtitle sources/fetch/search + UM subtitle rows, in progress elsewhere) is treated as a
+controller. Measured interplay: **0 references in either direction** between the phase-14 unit and every
+name in this inventory. Both phases patch *different statements* of five shared retained declarations —
+`playbackListener`, `onCreate`, `unifiedMenuCallbacks`, `onDestroy`, `playStremioTvPlaybackMap` — and
+both re-point (different forwarders of) the `iptvStartOverController` and `iptvGuideController` Host
+properties. Re-measure on the phase-14 merge and build the phase-15 rows on the phase-14 versions of those
+declarations. Spans before ≈ 1,267 are unaffected by phase 14 except the members it removes; the phase-14
+property (+≈ 22) lands at the `stremioSubtitles` slot, so the display arrays (1352–1365) shift by its net
+field delta and every function span after 3792 shifts by ≈ −1,070.
+
+---
+
+### 1. Summary and recommendation
+
+**Phase 15 = "controls I + display/audio": the dock *builder* side, not the dock *runtime* side.** One
+owner + one nested collaborator for the dock, plus one sibling for display/audio settings:
+
+- **`TvControlsDockController.kt`** (owner; 448 member lines → **≈ 560**): OTT skin install, caption,
+  track height, `setupControls` (binding, click routing, focus treatments), the `DockSkinSpec` data class
+  (nested → top-level `internal`), the 17 **dock-only** views it binds, and the `USE_UNIFIED_MENU`
+  companion constant (file-private). Activity property `controlsDockController` at the `iptvPrevButton`
+  slot (212). `@OptIn(UnstableApi::class)` at class level.
+- **`TvLiveDockStyler.kt`** (nested, eagerly constructed by the owner; 260 → **≈ 290**): IPTV live dock
+  setup/styling/arrangement/restore (`setupIptvControls` … `restoreCinemaIptvControlStyle`) and the two
+  capture maps `cinemaIconTints`/`cinemaButtonTypefaces`. Reaches the dock views as `dock.x` (48
+  compile-checked cross-qualifications), shares the owner's Host.
+- **`TvPlaybackDisplayController.kt`** (sibling; 363 → **≈ 420**): aspect/resize, speed, night mode
+  (`LoudnessEnhancer`), system audio-effect session, content display-match mode (`TvDisplayModeController`),
+  `decoderAnalyticsListener`, `loadPlayerDefaults`, the label/value tables, the aspect/night button-label
+  updaters, and the UM **display** and **audio** sections (`umDisplayModel`, `umAudioModel`, `umAudioTracks`,
+  `umAudioSelectedIndex`, `showAudioTrackDialog`) plus the `DECODER_LOG_TAG` constant. Activity property
+  `displayController` at the `displayMatchMode` slot (289). `@OptIn(UnstableApi::class)`.
+
+**Phase 16 = "controls II"**: the dock *runtime* — show/hide/auto-hide timers (`controlsHandler`,
+`hideControlsRunnable`), focus probes, play/pause, legacy seekbar + cinema scrub + `seekbarHandler` ticker,
+title/OTT identity + extras + dock tags, loading overlay (`setResolvingState`), Next overlay,
+`isCleanPlaybackState`, and the shared presentation views that phase 15 leaves activity-owned (§1.2).
+
+| item | phase 15 |
+|---|---|
+| moved members / lines | **66 / 1,071** member lines (+ 7 companion lines) — dock 24 / 448, styler 11 / 260, display 31 / 363 |
+| owned state | 17 dock fields (16 views + `originalControlDockOrder`), 2 styler maps, 14 display fields |
+| activity patches | **42 in 13 declarations** (§4.1); 3 of them temporary (SH/SK code, phase 16) |
+| Host re-points | **12 forwarders in 5 properties** (§4.2) |
+| Hosts | dock+styler **58** members (24 view/state `var`/`val` forwarders), display **11** (§5) |
+| initializer proofs | **31** (dock 16 + styler 2 + display 13); **3 new narrow classifier forms** (§3) |
+| cross-qualifications | 48 styler→dock (`dock.`); sibling getters: dock→display 6, display→dock 9 |
+| receivers `this`→`activity` | **14** (5 bare + 1 `this@Activity` in dock/styler, 8 in display); 0 excluded |
+| inherited pins | **3** (`resources` ×2 → `getResources()`, `currentFocus` → `getCurrentFocus()`) |
+| `findViewById<T>` inference through Host-typed targets | **23** assignment sites (checkcast audit, §6) |
+| substitutions total | **≈ 338** (§10) |
+| reflective retargets | **41 literal sites / 10 names**: 9 owner-map routes + 1 local helper (`NativePlayerSettingsConsumptionTest`) |
+| Dart retargets | **0** |
+| lifecycle | **3 in-place `onDestroy` patches**; no `onStart`/`onStop`/`onPause`/`onResume`/`finish` edits |
+
+**Activity:** ≈ −1,078 + ≈ 128 (two properties + Hosts) ≈ **−950**, i.e. ≈ 8,000 (after phase 14) →
+**≈ 7,050**.
+
+**Risk: medium.** Deterministic view/settings code, no Flutter channel, no coroutine, no async token. The
+risks are the width of the dock Host (58), the native `LoudnessEnhancer` lifetime spread across
+`playbackListener`/analytics callbacks/`onDestroy`, the 7 controls skins × 4 guide styles presentation
+matrix, and **zero** existing characterization of click routing, OTT install, focus treatments, aspect/
+speed/night application and audio-track menus.
+
+### 1.1 Why this split (15/16) — measured alternatives
+
+Group sizes (member lines incl. attached comments) and cross references (refs / distinct names):
+
+| group | lines | refs into it from C1 (dock+styler) | refs from it into C1 |
+|---|---|---|---|
+| SH (show/hide/auto-hide, play/pause, focus probe, pause label) | 249 | **30 / 5** | 2 / 2 |
+| SK (seekbar legacy, cinema scrub, ticker) + CS (5 cinema fields) + SV (8 seekbar views) | 485 | 6 / 5 | 2 / 1 |
+| TI (title, OTT identity/extras, dock tags, loading overlay, Next overlay, clean-state) | 346 | 0 | 3 / 1 |
+| DI (display/audio, incl. UM audio+display) | 363 | 6 / 6 | 9 / 4 |
+
+| option | phase 15 | phase 16 | temporary patches in phase 15 | other costs | verdict |
+|---|---|---|---|---|---|
+| **A\*** (selected) | C1 + 17 dock-only views + DI (1,071) | SH+SK+CS+SV+TI + shared views (≈ 1,110) | **3** | dock Host 58 (24 view forwarders, re-pointed in 16); 41 reflective sites / 9 routes | best ratio |
+| A0 | C1 + DI, all views stay | same | 3 | dock Host **≈ 75** (41 view setters); only 3 reflective sites | rejects narrow-Host objection |
+| A′ | C1 + **all** 41 C1-bound views + DI | same | **≈ 80** (SH 11, SK 33, TI 29, +7 calls) | Host ≈ 35 | too many temporary patches |
+| B | SH+SK+CS+SV + DI (1,097) | C1 + TI + views (≈ 1,104) | **≈ 44** (C1 41 + TI 2) | 23 permanent `dispatchKeyEvent` patches + ≈ 30 reflective (`controlsMenuVisible` ×23) pulled forward; Host ≈ 50 | reverse dependency direction |
+| D | C1 + SH + views (1,062) | SK+TI+DI (1,089) | ≈ 82 (SK 38, TI 33, DI 11) | — | worst |
+
+A\* keeps the dependency direction the deps report recommended (C1 → SH/SK is 36 refs, SH/SK → C1 is 4):
+moving C1 first costs **10 Host forwarders** (SH 5, SK 3, CS 2) and **3 temporary patches**, all consumed
+by phase 16. DI rides with C1 because C1↔DI is 15 refs both ways and DI shares no state with SH/SK/TI.
+
+### 1.2 View-ownership decision (the deps report's open question)
+
+`setupControls`/`installOttControlsSkin` **bind** 41 view fields; their *runtime readers* differ:
+- **17 dock-only views** — read only by dock/styler/display, 3 iptv controller Hosts, and 2 retained
+  sites → **move to the dock owner** (single writer and its natural owner): `iptvPrevButton`,
+  `iptvNextButton`, `iptvGuideButton`, `iptvJumpButton`, `iptvStartOverButton`, `iptvStartOverSeekButton`,
+  `iptvRecordButton`, `originalControlDockOrder`, `audioButton`, `subtitleButton`, `aspectButton`,
+  `speedButton`, `nightModeButton`, `ottCaptionLabel`, `ottCaptionOwner`, `ottProgressTrackContainer`,
+  `ottSourcesButton`.
+- **24 shared presentation views/state** — read at runtime by SH/SK/TI (phase 16) → **stay activity-owned
+  in phase 15** behind computed Host `var`s (dock writes them once while binding); phase 16 decides their
+  final owner (re-pointing these 24 forwarders in one whole-property row): `controlsOverlay`,
+  `pauseButton`, `ottSkinInstalled`, `ottQualityChips` (val), `debrifyTimeDisplay`, `debrifyTimeCurrent`,
+  `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressContainer`,
+  `cinemaProgressBackground`, `cinemaProgressThumb`, `cinemaSpeedIndicator`, `ottIdentityTitle`,
+  `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`, `ottIdentityDivider`, `ottRatingChip`,
+  `ottMetaLine`, `ottScrubPreviewChip`, `ottScrubPreviewText`, plus the cinema state `cinemaSeekMode`,
+  `cinemaSeekWasPlaying` (written by the styler on a live transition).
+- **Session-fixed lazies stay** (guideStyle/guideTokens precedent, phases 6/12): `controlsSkin` (read by
+  the playlist Host, TI ×3, display log, `dockSkinSpec`; reflected as `getControlsSkin` by two tests) and
+  `dockSkinSpec` (read by dock ×4 and SH's `updatePauseButtonLabel`). This avoids a `by lazy` classifier
+  form, keeps `getControlsSkin` reflection on the activity, and removes one temporary SH patch. Only the
+  `DockSkinSpec` *type* leaves the activity (the Host must name it).
+- **Shared infrastructure stays**: `nativeAudioRouting` (the same instance is handed to
+  `NativeAudioRenderersFactory` in `setupPlayer`; `requiresPcm` is `@Volatile` and read on the playback
+  thread), `trackSelector`, `player`, `playerPreferences`, `skipSegmentsEnabled`/`skipSegmentProviderId`
+  (skip controller state written by `loadPlayerDefaults`).
+
+---
+
+### 2. Members (lines at `82b16832c`, attached comments included)
+
+**Owner `TvControlsDockController.kt` — 24 members / 448 lines.**
+- Fields (17): `iptvPrevButton` 212, `iptvNextButton` 213, `iptvGuideButton` 214, `iptvJumpButton` 215,
+  `iptvStartOverButton` 216, `iptvStartOverSeekButton` 217, `iptvRecordButton` 218,
+  `originalControlDockOrder` 223, `audioButton` 224, `subtitleButton` 225, `aspectButton` 226,
+  `speedButton` 227, `nightModeButton` 228, `ottCaptionLabel` 248, `ottCaptionOwner` 249,
+  `ottProgressTrackContainer` 269, `ottSourcesButton` 271–273 (KDoc).
+- Functions (6): `installOttControlsSkin` 3130–3205 (KDoc), `setOttTrackHeight` 3207–3220,
+  `updateOttCaption` 3222–3234, `clearOttCaption` 3236–3241, `refreshOttCaptionFor` 3243–3248,
+  `setupControls` 3250–3546 (297).
+- Type (1): `DockSkinSpec` 7244–7260 (KDoc + 8 constructor properties) → top-level
+  `internal data class DockSkinSpec` in this file (phase-1 nested-type move; binary name
+  `AndroidTvTorrentPlayerActivity$DockSkinSpec` → `DockSkinSpec`; no reflection; covered by
+  `-keep class com.debrify.app.** { *; }`). The retained `dockSkinSpec` lazy (7262–7317) constructs it by
+  the same simple name — token-identical.
+- Companion: `USE_UNIFIED_MENU` (9067–9072, KDoc + const) → file-private const (used only by
+  `setupControls`, 5 sites).
+
+**Nested `TvLiveDockStyler.kt` — 11 members / 260 lines.** `setupIptvControls` 6907–6943,
+`liveIptvDockButtons` 6945–6961, `cinemaIconTints` 6963–6966 (KDoc), `cinemaButtonTypefaces` 6967,
+`applyLiveIptvControlStyle` 6969–7021, `restoreCinemaDockIconTints` 7023–7040,
+`updateIptvControlPresentation` 7057–7104, `arrangeLiveIptvControlDock` 7106–7133,
+`restoreOriginalControlDockOrder` 7135–7142, `replaceControlDockOrder` 7144–7155,
+`restoreCinemaIptvControlStyle` 7157–7190. (Retained in between: `iptvRecordingActionsController`
+7041–7055, `iptvZapBannerController` 7191–7214.)
+
+**Sibling `TvPlaybackDisplayController.kt` — 31 members / 363 lines.**
+- Fields (14): `displayMatchMode` 289, `displayModeController` 290, `decoderAnalyticsListener` 292–339
+  (anonymous `AnalyticsListener`, own `inputFormat`), `resizeModeIndex` 783, `playbackSpeedIndex` 784,
+  `nightModeIndex` 785, `loudnessEnhancer` 786, `systemAudioEffectsEnabled` 788–790 (KDoc),
+  `resizeModes` 1352–1357, `resizeModeLabels` 1359, `playbackSpeeds` 1361, `playbackSpeedLabels` 1362,
+  `nightModeGains` 1364, `nightModeLabels` 1365.
+- Functions (17): `updateAspectButtonLabel` 6245–6248, `updateNightModeButtonLabel` 6250–6253,
+  `umAudioTracks` 7527–7549 (**leading trivia**: `// Track selection` + the "UNIFIED MENU · backing" banner
+  7527–7532 is attached to this child by the partitioner and travels with it — §9),
+  `umAudioSelectedIndex` 7551–7564, `umAudioModel` 7656–7688 (`// ── Audio`), `umDisplayModel` 7881–7894
+  (`// ── Display`), `showAudioTrackDialog` 7953–7993, `cycleAspectRatio` 7995–8001 (`// Aspect ratio`),
+  `applyResizeMode` 8003–8010, `cyclePlaybackSpeed` 8012–8016 (`// Playback speed`),
+  `applyPlaybackSpeed` 8018–8034, `syncAudioEffectSession` 8036–8049 (KDoc), `initializeLoudnessEnhancer`
+  8051–8068 (`// Night mode …`), `releaseLoudnessEnhancer` 8070–8077, `loadPlayerDefaults` 8079–8129
+  (KDoc), `showNightModeDialog` 8131–8140, `applyNightMode` 8142–8171.
+- Companion: `DECODER_LOG_TAG` 9061 → file-private const (only `decoderAnalyticsListener`).
+
+**Stays in the activity** (named so phase 16 can pick them up): SH — `controlsMenuVisible` 779,
+`controlsHandler` 1369, `hideControlsRunnable` 1493, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`,
+`togglePlayPause`, `showControlsMenu`, `hideControlsMenu`, `updateSubtitleControlsLift`,
+`hideTitleImmediately`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`,
+`updatePauseButtonLabel`; SK — `seekbarVisible`/`seekbarPosition`/`videoDuration` 780–782, `seekbarHandler`,
+`seekbarProgressRunnable`, `setupSeekbar`, seekbar/cinema functions 6255–6727, cinema fields 278–282,
+seekbar lateinit views 199–207; TI — 4585–4901 + Next overlay 6746–6767 + `isCleanPlaybackState`; the 24
+shared views (§1.2); `controlsSkin`, `dockSkinSpec`, `guideStyle`/`guideTokens`/`guideTypeface`; UM
+composition (`umSectionRows`, `unifiedMenuCallbacks`, `umPlaybackModel` — mixed owners: speed + sleep +
+shuffle).
+
+---
+
+### 3. Owned state and initializer proofs
+
+Two slots:
+- **dock** at `iptvPrevButton` (212), after the retained `controlsOverlay`/`pauseButton` (210/211). The
+  nested styler maps to the owner's effective slot (phase-6/13 `nested_construction`).
+- **display** at `displayMatchMode` (289), after the retained `nativeAudioRouting`/`trackSelector`/
+  `subtitleListener` (286–288). Its initializer (`TvContentDisplayMatchMode.SYSTEM`) runs at the same moment
+  as today (slot field — no proof).
+
+Every other moved property runs earlier (or, for the styler maps, at 212 instead of 6963) → **31 proofs**:
+
+| fields | form | kind | status |
+|---|---|---|---|
+| `iptvNextButton`…`iptvRecordButton` (6), `audioButton`…`nightModeButton` (5), `ottCaptionLabel`, `ottCaptionOwner`, `ottProgressTrackContainer`, `ottSourcesButton` `= null` | literal | constant | supported |
+| `originalControlDockOrder: List<View> = emptyList()` | `emptyList()` | allocation | supported (phase 14) |
+| **`cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()`**, **`cinemaButtonTypefaces = HashMap<View, Typeface?>()`** | **new: typed empty `HashMap<…>()`** | allocation | step T |
+| `displayModeController = null`, `loudnessEnhancer = null`, `resizeModeIndex = 1`, `playbackSpeedIndex = 2`, `nightModeIndex = 0`, `systemAudioEffectsEnabled = false` (comments stripped by the classifier) | literal | constant | supported |
+| **`decoderAnalyticsListener = object : AnalyticsListener { private var inputFormat: Format? = null … }`** | **new: reviewed anonymous object** | allocation | step T |
+| **`resizeModes = arrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, …FILL, …ZOOM, …FIT)`**, `resizeModeLabels`/`playbackSpeedLabels`/`nightModeLabels` (string literals), `playbackSpeeds` (float literals `0.5f`…), `nightModeGains` (int literals) | **new: `arrayOf` of literals / reviewed Java compile-time constants** | allocation | step T |
+
+**Step-T classifier additions** (narrow, each with negatives):
+1. **Typed empty `HashMap`**: `HashMap<T, U>()` with explicit type arguments and no arguments (sibling of
+   the phase-11 `java.util.ArrayDeque<Int>()` form). Reject `HashMap(other)`, `HashMap<…>(16)`,
+   `hashMapOf(x to y)`.
+2. **Literal `arrayOf`**: every element is an int/float literal, a template-free string literal, or one
+   of the allow-listed `AspectRatioFrameLayout.RESIZE_MODE_{FIT,FILL,ZOOM}` Java `static final int`
+   constants. **Bytecode proof**: the display controller's `<init>` contains no `GETSTATIC` on
+   `AspectRatioFrameLayout` (the constants are inlined), so no Media3 UI class initialisation moves earlier.
+   Reject a call, property read, template string or non-allow-listed qualified name as an element.
+3. **Reviewed anonymous object**: exactly `object : AnalyticsListener { … }` whose body has no `init`
+   block and whose only property initializer is `inputFormat: Format? = null`; the object captures the
+   controller only. Reject an `init` block, a state-reading property initializer, or another supertype.
+
+No `lateinit` property moves; no `::x.isInitialized` appears in the unit; no `by lazy` moves.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 42 in 13 declarations
+
+Single-token prefixes: `controlsDockController.`, `controlsDockController.styler.`, `displayController.`.
+
+| declaration (decl line) | lines | names | later owner |
+|---|---|---|---|
+| `performIptvLiveRetune` (424) | 434 | `updateIptvControlPresentation(entry)` → `.styler.` | TUNE (17) |
+| `playbackListener` (1508) | 1522 ×2, 1641 ×2, 1642, 1649, 1889, 2004, 2009, 2011, 2012, 2013 (**13**) | `playbackSpeeds[playbackSpeedIndex]` (`reprepareIfPending`); `loudnessEnhancer`/`nightModeIndex`; `initializeLoudnessEnhancer()` ×2; `syncAudioEffectSession()` / `syncAudioEffectSession(audioSessionId)`; `updateIptvControlPresentation(entry)` → `.styler.`; `releaseLoudnessEnhancer()` ×2; `nightModeIndex` | ROUTERS |
+| `onCreate` (2023) | 2050, 2152 | `loadPlayerDefaults()` (after `playerPreferences` init 2035); `setupControls()` (order `setupSeekbar` → `setupPlaylist` → `setupControls` → `setupStremioSources` kept) | lifecycle |
+| `setupPlayer` (2720) | 2802 ×4, 2960, 3044 ×2, 3047, 3077 (**9**) | `nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex])`; `when (displayMatchMode)`; `setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])`; `addAnalyticsListener(decoderAnalyticsListener)`; `applyResizeMode()` | START-B (19) |
+| `updateCatalogEpisodeControls` (4312) | 4324 | `iptvPrevButton?.visibility` | START-A (18) |
+| `updatePauseButtonLabel` (6229) | 6242 | `refreshOttCaptionFor(button)` (**temporary**) | SH (16) |
+| `enterCinemaSeekMode` (6393) / `exitCinemaSeekMode` (6471) | 6457 / 6496 | `setOttTrackHeight(focused = true/false)` — named argument kept (**temporary**) | SK (16) |
+| `initIptvMode` (6790) | 6842, 6843 | `setupControls()`; `setupIptvControls()` → `.styler.` (order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` kept) | retained |
+| `unifiedMenuCallbacks` (7590; anonymous object) | 7594, 7597 | `umAudioModel(…)`, `umDisplayModel(…)` (phase 14 patches `umSubsModel` and 8 more statements of the same object — merge rows) | UM composition |
+| `umPlaybackModel` (7897) | 7899 ×2, 7944, 7945, 7946 | `playbackSpeedLabels`/`playbackSpeedIndex` ×2 each, `applyPlaybackSpeed(i)` | UM composition |
+| `onDestroy` (8726) | 8728, 8729, 8837 | `displayModeController?.clear()`, `displayModeController = null`, `releaseLoudnessEnhancer()` — **in place** (§7) | lifecycle |
+| `playStremioTvPlaybackMap` (8965) | 8980 | `ottSourcesButton?.visibility` (the retained `ottSkinInstalled` at 8979 is unchanged) | START-A (18) |
+
+Permanent (composition/lifecycle/routers): 26; consumed by later moves: 16 (3 by phase 16).
+`dockSkinSpec` (6235) and `controlsSkin` (4653/4779/4833) need **no** patch (they stay).
+
+### 4.2 Host re-points: 12 forwarders in 5 whole-property `patched` rows
+
+Earlier destination files stay byte-identical; each target becomes
+`this@AndroidTvTorrentPlayerActivity.<controller>.x`.
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 827, 831 | `iptvStartOverController` | `iptvStartOverButton`, `iptvStartOverSeekButton` → `controlsDockController.` |
+| 841 | `iptvStartOverController` | `updateIptvControlPresentation(entry)` → `controlsDockController.styler.` |
+| 858, 859 | `iptvGuideController` (Host shared with the phase-11 navigator) | `iptvNextButton`, `iptvPrevButton` → `controlsDockController.` |
+| 881 | `iptvGuideController` | `updateIptvControlPresentation(entry)` → `controlsDockController.styler.` |
+| 1128, 1129, 1140, 1141 | `progressReporter` | `playbackSpeedIndex`, `playbackSpeeds`, `resizeModeIndex`, `resizeModeLabels` → `displayController.` |
+| 7052 | `iptvRecordingActionsController` | `iptvRecordButton` → `controlsDockController.` |
+| 8327 | `sourceSwitchController` | `ottSourcesButton` → `controlsDockController.` (8326 `ottSkinInstalled` unchanged) |
+
+`iptvStartOverController` and `iptvGuideController` are also re-pointed by phase 14 (different forwarders)
+→ phase-15 rows are built on the phase-14 versions. **No re-point** in: `iptvZapBannerController`
+(`controlsMenuVisible`, `controlsOverlay`, `updateSubtitleControlsLift` stay), `playlistController`
+(`controlsSkin` stays), `skipSegmentController`, `startupGateController`, `stremioTvGuideController`,
+`upNextController`, `subtitleController`, `autoSyncController`, the remaining Hosts (checked line by line).
+
+---
+
+### 5. Outbound Hosts (computed, explicitly qualified `this@AndroidTvTorrentPlayerActivity.x`)
+
+**Dock + styler: one shared 58-member Host.**
+
+| kind | members (refs in dock+styler) |
+|---|---|
+| shared views/state `var` (23) + `val` (1) | `controlsOverlay: View?` 3, `pauseButton: AppCompatButton?` 9, `ottSkinInstalled: Boolean` 5, `ottQualityChips: Array<TextView?>` (val, 3 indexed writes), `debrifyTimeDisplay` 1, `debrifyTimeCurrent` 2, `debrifyTimeTotal` 2, `debrifyProgressLine` 1, `cinemaProgressBuffered` 1, `cinemaProgressContainer` 3, `cinemaProgressBackground` 1, `cinemaProgressThumb` 2, `cinemaSpeedIndicator` 2, `ottIdentityTitle`/`Subtitle`/`Overline`/`Badge`/`Divider` 1 each, `ottRatingChip` 1, `ottMetaLine` 1, `ottScrubPreviewChip` 1, `ottScrubPreviewText` 1, `cinemaSeekMode` 1, `cinemaSeekWasPlaying` 1 |
+| activity state `val` (13) | `playerView` 38 (**lateinit**), `unifiedMenu` 11, `iptvChannels` 2, `currentIptvIndex` 2, `isIptvMode` 2, `guideStyle` 3 (lazy), `guideTokens` 3 (lazy), `dockSkinSpec: DockSkinSpec?` 4 (lazy; first access stays `setupControls` 3251), `sourceBrowser` 1, `subtitleControlsLift` 1 (**lateinit**), `player` 1, `iptvStartOverActive` 1, `iptvStartOverTimelineVisible` 1 |
+| cross-feature getters (7) | `iptvGuideController` 8, `iptvStartOverController` 4, `iptvRecordingActionsController` 3 (`recordingEngineEnabled` lazy first access unchanged), `iptvGuideChromeController` 1, `subtitleController` 1, `playlistController` 1, **`displayController`** 6 (`cycleAspectRatio`, `cyclePlaybackSpeed`, `showNightModeDialog`, `showAudioTrackDialog`, `updateAspectButtonLabel`, `updateNightModeButtonLabel`) |
+| functions (13) + getter (1) | `dp` 7, `guideTypeface` 1, `hideControlsMenu` 15, `scheduleHideControlsMenu` 9, `cancelScheduledHideControlsMenu` 1, `togglePlayPause` 1, `controlsMenuVisible` (val) 4, `seekBy` 2, `setupCinemaProgressBar` 1, `startSeekbarProgressUpdates` 1, `playNext` 1, `playPrevious` 1, `updateCatalogEpisodeControls` 1, `showRandomPlaybackDialog` 1 |
+
+Phase-16 consumption: SH 5 (`hideControlsMenu`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`,
+`togglePlayPause`, `controlsMenuVisible`), SK 3, CS 2, and the 24 view forwarders if those views move.
+`playNext`/`playPrevious`/`updateCatalogEpisodeControls`/`showRandomPlaybackDialog` re-point in phase 18.
+
+**Display: one 11-member Host.** `player` 8, `playerPreferences` 7 (**lateinit**), `nativeAudioRouting` 4
+(borrowed; never snapshotted), `playerView` 3 (lateinit), `trackSelector` 2, `iptvGuideController` 2
+(`navigator.onIptvSeriesAudioPicked`), `ottSkinInstalled` 1, `controlsSkin` 1 (log template), `var
+skipSegmentsEnabled` 2, `var skipSegmentProviderId` 2, **`controlsDockController`** 9 (`aspectButton` ×2,
+`nightModeButton` ×2, `speedButton` ×2, `refreshOttCaptionFor` ×3).
+
+Siblings reach each other only through computed activity getters; the dock (slot 212) is constructed
+before the display controller (slot 289) and never reads `displayController` during construction.
+
+---
+
+### 6. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 14 sites** (all argument/constructor sites, compiled descriptor audit):
+- dock 3145 `LayoutInflater.from(this)`;
+- styler 6987 / 7178 `ContextCompat.getColorStateList(this, …)` (inside `forEach {}` — non-receiver lambdas,
+  so `this` is the activity), 7185 **`this@AndroidTvTorrentPlayerActivity`** inside `pauseButton?.apply {}`
+  (the label is required there; bare `this` would be the button), 7086 `LiveRecordingService.isSupported(this)`,
+  7087 `LiveRecordingService.needsLegacyPermission(this)`;
+- display 7972 / 8000 / 8015 / 8170 `Toast.makeText(this, <CharSequence>, …)`, 7977 / 8132
+  `AlertDialog.Builder(this)` (androidx.appcompat), 8048 `AudioEffectSession.open(this, id)`, 8107
+  **constructor** `TvDisplayModeController(this, displayMatchMode)` (`Activity` parameter).
+
+**Excluded receivers: 0.** `PaintDrawable().apply { … object : ShapeDrawable.ShaderFactory() { … } }`
+(dock), `iptvPrevButton?.apply {}` / `iptvNextButton?.apply {}` / `pauseButton?.apply {}` (styler) and
+`object : AnalyticsListener` (display) contain no bare `this`. Implicit-receiver names inside those `apply`
+blocks (`text`, `setOnClickListener`, `setBackgroundResource`, `setTextColor`, `shape`, `shaderFactory`) are
+button/drawable members and are **not** substituted; the Host-qualified calls inside them
+(`hideControlsMenu`, `iptvGuideController`) resolve identically (step T PSI re-check of shadowing).
+
+**Inherited (implicit) receiver pins: 3** — `resources` 3213 / 3355 → `activity.resources`
+(`getResources()`), `currentFocus` 7100 → `activity.currentFocus` (`getCurrentFocus()`); phase-12 getter
+auditor forms with owner–descriptor–opcode pins.
+
+**Generic inference through Host targets: 23 `findViewById<T>` assignment sites** where `T` is inferred
+from a now Host-typed target (`host.pauseButton = playerView.findViewById(…)`, `host.ottQualityChips[0] =
+ott.findViewById(…)`; 11 control binds + 12 OTT binds). Host property types must equal the original field
+types exactly; step T pins the compiled `CHECKCAST` type of each site before/after. Owned-view binds
+(17) keep their field types trivially.
+
+**Templates:** `loadPlayerDefaults` 8123 `$skipSegmentsEnabled`, `$skipSegmentProviderId`, 8124
+`$controlsSkin` → **3 braced host templates**; 8124 `${playerPreferences.getString(…)}` already braced.
+Owned templates (`$resizeModeIndex`, `$nightModeIndex`, `${displayMatchMode.storageKey}`, Toast labels)
+unchanged; `decoderAnalyticsListener` templates are locals/params.
+
+**Defaults/named arguments:** `syncAudioEffectSession(sessionId: Int? = null)` — literal default, both
+call shapes kept (moved member, not a Host member); `setOttTrackHeight(focused = …)` named at all 4 sites.
+
+**Labels / callable references:** none in the unit.
+
+**Anonymous classes renamed (R8 mapping check):** `…Activity$decoderAnalyticsListener$1` →
+`TvPlaybackDisplayController$decoderAnalyticsListener$1`; the `ShaderFactory` object in
+`installOttControlsSkin`; `setupControls`' focus/click/`ControllerVisibilityListener` lambdas; styler
+click lambdas; UM `onOk` lambdas; `DockSkinSpec` (nested → top-level); both new Host objects.
+
+---
+
+### 7. Timers, handlers, native resources, teardown
+
+- **No owned Handler, coroutine, `MethodChannel` or token.** No `progressHandler` use (the zap banner's
+  progressHandler tokens are untouched).
+- **Controls auto-hide** stays activity-owned until phase 16: the unit calls
+  `scheduleHideControlsMenu` (9 click/focus sites → `controlsHandler.postDelayed(hideControlsRunnable,
+  4 s)` when playing) and `cancelScheduledHideControlsMenu` (pause click) through Host forwarders.
+- **Seekbar ticker**: `setupControls` calls `startSeekbarProgressUpdates()` (100 ms `seekbarHandler`
+  loop, SK) and `setupCinemaProgressBar()` (focus/key listeners) through the Host; ordering inside
+  `setupControls` unchanged.
+- **View animations** (uncancelled, pinned as-is): caption fade 120 ms; classic focus scale 200 ms; OTT
+  scale/lift 120 ms; no listener/animator is cleared on destroy (existing).
+- **`LoudnessEnhancer` (native, owned by display):** created in `initializeLoudnessEnhancer` from
+  `playbackListener` READY (1641–1642, only when null and night > 0), `onAudioSessionIdChanged`
+  (2011–2013, release-then-init), `decoderAnalyticsListener.onAudioTrackInitialized` (301) and
+  `applyNightMode` (when not reprepare-restarting); released by `releaseLoudnessEnhancer` on non-repeat
+  media-item transition (2004), session change, route change in `applyPlaybackSpeed`/`applyNightMode`, and
+  **`onDestroy` 8837** — after the three handler clears (8833–8835) and before
+  `AudioEffectSession.closeCurrent(this)` (stays in the activity) and the player release. **Not** released
+  in `onStop`/`onPause` (pinned as-is).
+- **System audio-effect session**: `syncAudioEffectSession` → `AudioEffectSession.open(activity, id)`
+  (READY 1649, session change 2009, track init); close stays in `onDestroy`.
+- **`NativeAudioRouting`** (activity-owned, borrowed): `update`/`setPlaybackSpeed`/`reprepare` from the
+  display controller; `reprepareIfPending` stays in `playbackListener` (1522, patched for its arguments);
+  `setupPlayer` keeps passing the same instance to `NativeAudioRenderersFactory`.
+- **`TvDisplayModeController`**: (re)created by `loadPlayerDefaults` (after `clear()` of a previous one),
+  fed by `decoderAnalyticsListener.onVideoInputFormatChanged`, cleared + nulled at `onDestroy` 8728–8729
+  (2nd/3rd statements, right after `cancelPendingIptvCatchupRequest`).
+- **Analytics callbacks** run on the application (main) looper; no moved field is read off-main; no
+  `@Volatile` field moves (`ottShowName`, the only volatile control field, is TI/phase 16).
+- **Teardown order unchanged**: the 3 `onDestroy` statements stay in place as single-reference patches
+  (phase-9 rule; not folded). `onStop`, `onPause`, `onStart`, `onResume`, `finish` untouched. Existing
+  bytecode teardown helpers (`TvPhase9BytecodeAccess`, `TvPlaylistBytecodeAccess`) filter other owners and
+  are unaffected; the phase-5/7/8 handler cleanup lists name only retained handlers.
+
+---
+
+### 8. Reflective tests and Dart anchors
+
+**Owner-map routes (`TvPlayerControllerOwners.kt`, 555 → ≈ 564 lines): 9 routes, 40 literal sites.**
+
+| name | sites / files | route |
+|---|---|---|
+| `iptvPrevButton` | 15 / `TvIptvNavigatorSweepTest`, `TvIptvNavigationCharacterizationTest`, `TvIptvVodCallerCharacterizationTest` | `controlsDockController` |
+| `iptvNextButton` | 14 / the same three + `TvIptvSessionSweepTest` | `controlsDockController` |
+| `iptvGuideButton` | 2 / `TvIptvNavigatorSweepTest` | `controlsDockController` |
+| `iptvRecordButton` | 2 / `TvRecordingCharacterizationTest` (set) | `controlsDockController` |
+| `iptvStartOverButton`, `iptvStartOverSeekButton` | 2 + 2 / `TvPhase5OriginalTest` (base-class `button()`/`seekButton()` + a set loop) | `controlsDockController` |
+| `ottSourcesButton` | 1 / `TvSourceSwitchFeedbackCharacterizationTest` (set; `ottSkinInstalled` on the same line stays) | `controlsDockController` |
+| `playbackSpeedIndex`, `resizeModeIndex` | 1 + 1 / `TvProgressReporterCharacterizationTest` (set) | `displayController` |
+
+All are backing fields of members of an `internal` class — JVM field names are unmangled even when the
+property is non-private; no function pin is needed.
+
+**Local helper retarget (1 site):** `NativePlayerSettingsConsumptionTest.assertDefaults` reads
+`field(activity, "nightModeIndex")` with its **own** `getDeclaredField` helper, shared by
+`AndroidTvTorrentPlayerActivity` and `TorboxTvPlayerActivity`. Retarget: resolve the owner to
+`displayController` only for the AndroidTv activity; the `assertEquals(if (custom) 3 else 0, …)`
+assertion and the Torbox path stay byte-identical.
+
+**Unchanged (stay in the activity):** `getControlsSkin` (`NativePlayerSettingsConsumptionTest`
+`getDeclaredMethod`, `TvPlaylistSkinContracts`), `trackSelector` ×17, `ottSkinInstalled`,
+`controlsOverlay` ×4, `cinemaProgressContainer`, `controlsMenuVisible` ×23, `controlsHandler`/
+`seekbarHandler` cleanup lists, `playerPreferences` ×5, `skipSegment*` ×6, `getGuideStyle`/`getGuideTokens`.
+Rescan after step 0 adds accesses.
+
+**Dart anchors: 0.** No anchor names a moved member. `android_tv_mdblist_progress_source_test`'s
+`handleMetadataUpdate` range and the `playItem`/`resolveAndPlay`/`startPlayback` ranges get no phase-15
+patch. `NativeAudioRoutingTest`'s source anchor (`.setAllowInvalidateSelectionsOnRendererCapabilitiesChange`)
+is in `setupPlayer` and untouched. `profile_source_guard_test` does not scan `tv/`.
+
+---
+
+### 9. Hazards (each a step-T fixture or negative)
+
+1. Two sibling controllers at different slots + a **field-bearing nested styler** at the dock's effective
+   slot (2 HashMap proofs). Negatives: omitted proof for the styler's first field; styler/display reading
+   the Host or owner during construction; lazily constructed styler/display.
+2. The **3 new classifier forms** (§3) incl. the `AspectRatioFrameLayout` constant-inlining bytecode proof.
+3. **24 shared view/state forwarders written by the dock** (`host.x = …`): computed `get`/`set` only.
+   Negative: an initialized/snapshotting forwarder (would read a `lateinit`/null at slot 212).
+4. **23 `findViewById<T>` inference sites** through Host-typed targets (CHECKCAST pins; a negative with a
+   widened Host type).
+5. **48 styler→dock `dock.` qualifications** — compile-checked (no same-name Host member exists for the 17
+   owned views); negative: a dock view accidentally added to the Host.
+6. **`nativeAudioRouting` identity**: borrowed through a computed getter; negative: a forwarder that
+   allocates/snapshots a routing instance (would silently desync `requiresPcm` from the renderer).
+7. **`LoudnessEnhancer` release ordering**: route-change `releaseLoudnessEnhancer()` before
+   `nativeAudioRouting.reprepare`/`setPlaybackSpeed`; `onDestroy` position; transition-repeat early return.
+8. **Last-set-wins focus listeners** in `setupControls` (classic animation → `extendTimerOnFocus` → OTT
+   re-apply list): statement order frozen; characterization per skin.
+9. **`this@AndroidTvTorrentPlayerActivity` inside `pauseButton?.apply {}`** → `activity` (declared label
+   substitution); negative: rewriting it to bare `this`.
+10. **3 braced host templates** in the `loadPlayerDefaults` log (negative: unbraced `$host.x`).
+11. **Leading trivia travels with its child**: the "UNIFIED MENU · backing" banner (7527–7532) moves with
+    `umAudioTracks`; `// Aspect ratio`, `// Playback speed`, `// Night mode …`, `// ── Display`, `// ── Audio`
+    move with theirs. Pin explicitly; the remaining UM backing (`subtitleSearch*` fields onward, phase 14)
+    starts without the banner.
+12. **Companion constants** `USE_UNIFIED_MENU` (with KDoc) and `DECODER_LOG_TAG` → file-private consts;
+    the companion is a split container (partition children; `PAYLOAD_KEY` and others retained in order).
+13. **`DockSkinSpec` type move** (nested private → top-level internal; retained `dockSkinSpec` lazy
+    token-identical); the Host's `dockSkinSpec` getter keeps lazy first-access timing.
+14. **Overloads:** `Toast.makeText` CharSequence overload ×4, `AlertDialog.Builder(Context)` ×2,
+    `ContextCompat.getColorStateList(Context,int)` ×3, `LayoutInflater.from(Context)`,
+    `LiveRecordingService` static `(Context)` ×2, `AudioEffectSession.open(Context,int)`,
+    `TvDisplayModeController(Activity, …)` constructor — compiled descriptor audit (14 sites + 3 getters).
+15. **Lint:** the dock-skin layouts stay referenced from the activity (`dockSkinSpec` keeps the
+    `R.layout.view_debrify_tv_*_controls` references), but the inflation moves
+    (`LayoutInflater.from(activity)`); check the phase-13 Overdraw "inferred theme" correspondence for any
+    existing issue on those layouts and record exact correspondences, no suppressions.
+16. `@OptIn(UnstableApi::class)` pinned on both new classes (`AspectRatioFrameLayout`, `PlayerView`
+    resize mode, `AnalyticsListener`/`DecoderReuseEvaluation`); lint opt-in error count must stay 175.
+17. Shared-declaration merges with phase 14 (`unifiedMenuCallbacks`, `playbackListener`, `onCreate`,
+    `onDestroy`, `playStremioTvPlaybackMap`, the two IPTV Host rows).
+
+---
+
+### 10. File split and counts
+
+| file | content | ≈ lines |
+|---|---|---|
+| `TvControlsDockController.kt` | 17 views, 6 functions, `DockSkinSpec`, `USE_UNIFIED_MENU`, 58-member Host interface, eager `styler` | 448 + ≈ 112 ≈ **560** |
+| `TvLiveDockStyler.kt` | 2 maps + 9 functions | 260 + ≈ 30 ≈ **290** |
+| `TvPlaybackDisplayController.kt` | 14 fields + 17 functions, `DECODER_LOG_TAG`, 11-member Host | 363 + ≈ 57 ≈ **420** |
+
+| substitution kind | count |
+|---|---|
+| dock/styler `host.` (incl. 4 `dockSkinSpec`, 23 view-var writes/reads) | ≈ 180 |
+| dock → `host.displayController.` | 6 |
+| styler → `dock.` | 48 |
+| display `host.` (incl. 3 braced templates) | 32 |
+| display → `host.controlsDockController.` | 9 |
+| receivers (`this`/`this@` → `activity`) | 14 |
+| inherited (`activity.resources` ×2, `activity.currentFocus`) | 3 |
+| visibility (`private` → public members of the internal classes; never `internal fun`) | ≈ 46 (dock 17: 13 VD views read by the styler + `ottSourcesButton` + 3 functions; styler 2; display ≈ 27) |
+| **total** | **≈ 338** |
+
+Activity: −1,071 member lines −7 companion lines + ≈ 128 property/Host lines (dock ≈ 108 with 3-line
+`var` forwarders; display ≈ 20) ≈ **−950**. Size gate: activity baseline lowered with `--update`; all three
+new files ≤ 800; `TvPlayerControllerOwners.kt` ≈ 564.
+
+**Phase 16 preview (re-inventory before it):** SH 249 + SK/CS/SV 485 + TI 346 ≈ 1,080, plus the 24
+shared views (≈ 30) ≈ **1,110** (two files: overlay/title ≈ 600, seek/scrub ≈ 500). It consumes the 10
+SH/SK/CS dock forwarders, the 24 view forwarders (one whole-property row on `controlsDockController`) and
+the 3 temporary patches; ≈ 45 reflective sites (`controlsMenuVisible` 23, `controlsOverlay` 4,
+`isCleanPlaybackState` 3, `seekbarVisible` 3, `ottShowName` 3, `controlsHandler`/`seekbarHandler` 3+3,
+others); 24 permanent `dispatchKeyEvent` patches; readiness getters for `::nextBackdrop` and
+`::startupGateView`; 2 `Glide.with(this)` (`setNextOverlayBackdrop`); `@Volatile ottShowName`.
+
+---
+
+### 11. Step T / step 0 needs
+
+**Step T:**
+- classifier forms (§3) with negatives; constant-inlining bytecode proof for `resizeModes`;
+- complete phase-15 production extraction fixture: dock owner + nested styler + sibling display at their
+  slots, 31 proofs, 48 `dock.` qualifications, sibling getters, `DockSkinSpec` type move, 2 companion
+  moves, the banner-trivia fate, 5 re-point rows (12 forwarders, merged on phase-14 rows), 42 patches in
+  13 declarations incl. 3 in-place `onDestroy` statements;
+- negatives: §9 plus a folded `onDestroy`, a missed `.styler.` on `updateIptvControlPresentation`, a
+  dropped `syncAudioEffectSession` call shape, a Host `var` with logic beyond its pinned text;
+- compiled audit: 14 receiver/constructor sites, 3 inherited getters, 23 CHECKCAST pins, 0 exclusions;
+- per-phase dispatcher keeping all historical suites; earlier destinations (incl. phase-14 files) frozen at
+  the phase-14 merge; owner-map routes + the one local test retarget (assertions byte-identical).
+
+**Step 0 (from zero; the systematic statement sweep from the start — 68 `if`, 2 `when`, 31 `return`,
+11 loops, 26 elvis sites):**
+- **Seams to demonstrate on the original first:** a deterministic `LoudnessEnhancer` observation
+  (Robolectric shadow or test-only shadow recording construct/`enabled`/`setTargetGain`/`release`), the
+  `AudioEffectSession` open/close broadcast capture, a recording `ExoPlayer` probe for
+  `setPlaybackSpeed`/`audioSessionId`, and fake `Tracks` for audio rows. If the native-effect seam cannot
+  be made reliable, night mode + effect session are deferred (display shrinks to aspect/speed/display-match)
+  and the design is re-reviewed.
+- **Dock install, 7 separate activity instances** (one per controls skin, CLASSIC never installs; IPTV
+  forces classic): inflate-failure fallback to classic, view replacement at the same index, the OTT-only
+  4-stop scrim, id binding of every optional view, idle track height per spec, seek ±10 s buttons
+  (+ auto-hide reschedule), Sources button (hide controls, hide UM, show browser).
+- **Caption**: owner-guarded clear, 120 ms fades, refresh on label writes (pause/speed/aspect/night).
+- **Focus treatments**: classic vs OTT per spec (scale/lift), last-set-wins sequence, the OTT re-apply list
+  (incl. its omissions — §12), timer extension only while controls are visible.
+- **Click routing matrix** for all buttons with the unified menu present and absent (`unifiedMenu = null`
+  fallback dialogs), IPTV vs catalog next/prev, playlist, random, start-over, jump; Media3 controller
+  visibility reconciliation (hide + lift snap only when `controlsMenuVisible`); `originalControlDockOrder`
+  captured once.
+- **Live dock**: VOD vs live entry, record/zap clicks, CH labels; classic vs styled guide styles (4 separate
+  instances; tint/typeface capture-once, live→VOD→live restore), dock order arrange/restore idempotence,
+  `updateIptvControlPresentation` visibility matrix (archive timeline, recorder availability by engine vs
+  tee and SDK), live-transition cinema reset and focus move.
+- **Display/audio**: `loadPlayerDefaults` (clamping, display-match parse, skip prefs, exception keeps
+  defaults, log text), aspect cycle (4-step wrap, Cinema Zoom 4/3 on `exo_content_frame` vs surface
+  fallback, Toast), speed (route change → release, `setPlaybackSpeed`, OTT label + caption), night
+  (route-change reprepare path, enhancer create/enable/gain/off, label, Toast), effect-session gating
+  (disabled / session 0 / explicit id), `LoudnessEnhancer` lifecycle through the real `playbackListener`
+  (READY, session change, non-repeat vs repeat transition) and `decoderAnalyticsListener` (track init,
+  format → display controller, decoder log line), `onDestroy` clear/null/release order;
+  `umDisplayModel`/`umAudioModel` rows and actions, `showAudioTrackDialog` (Off disables audio; series
+  language memory via `onIptvSeriesAudioPicked`), progress-map speed/aspect values.
+- Mutation proofs on the original; Claude's independent sample (≥ 75 % kills, else sweep + second
+  sample); 0b.
+
+---
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+- The OTT re-apply list in `setupControls` omits `iptvStartOverSeekButton` (it keeps
+  `extendTimerOnFocus`: no scale/caption under OTT), and `iptvRecordButton` gets no
+  `extendTimerOnFocus` in the classic pass.
+- Classic focus scale never fires (overwritten by `extendTimerOnFocus`; the code comment admits it).
+- `resizeModeIndex` field default is 1 (Fill, per its comment) but `loadPlayerDefaults` defaults to 0
+  (Fit); only the exception path keeps 1.
+- `updateIptvControlPresentation` resets `cinemaSeekWasPlaying` on a live transition, so a scrub
+  interrupted by a live switch does not resume playback.
+- `LoudnessEnhancer` survives `onStop` (released only on destroy/transition/route change).
+- `showAudioTrackDialog`/`showNightModeDialog` are reachable only when `unified_menu_root` is absent
+  (`USE_UNIFIED_MENU` is a constant `true`).
+- `cinemaIconTints`/`cinemaButtonTypefaces` capture once per button and are never cleared (hold View
+  references for the activity lifetime).

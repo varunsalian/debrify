@@ -1697,6 +1697,83 @@ addon subtitles for a movie and an episode (auto-select, retry of a failed
 addon), subtitle search dialog with season/episode prompt, manual identity
 correction, subtitle menu rows.
 
+## Phase 15 — controls dock builder + live dock styler, playback display/audio settings
+
+Branch `refactor/tvplayer-p15` off the phase-14 merge `ce3ddfb06` (activity 7,982 lines). Evidence under
+`refactor-evidence/tvplayer/p15/`. Inventory: "Phase 15 inventory" in the deps
+report (measured at `82b16832c`; phases 14 and 15 patch five of the same
+declarations incl. `unifiedMenuCallbacks` and two of the same Host properties
+— re-measure on the phase-14 merge). All collaborator rules from phases 3–14
+apply; statement-level coverage sweep from the start.
+
+**Split with phase 16.** Phase 15 = dock *builder* side + display/audio (66
+members, ≈ 1,071 lines); phase 16 = dock *runtime* (show/hide/auto-hide
+timers, play/pause, seekbar and cinema scrub, title/OTT identity, Next overlay,
+clean-state; ≈ 1,110). This direction leaves 3 temporary patches (the reverse
+would need ≈ 44).
+
+**Selected:**
+- `TvControlsDockController` (≈ 560): OTT skin install, caption,
+  `setupControls`, the 17 dock-only views; eagerly constructs
+  `TvLiveDockStyler` (≈ 290, IPTV live dock styling; 48 compile-checked
+  styler→dock qualifications). 24 shared views stay in the activity behind
+  Host `var`s (ownership decided in phase 16); `controlsSkin`, `dockSkinSpec`,
+  `nativeAudioRouting`, `trackSelector` and `player` stay; only the
+  `DockSkinSpec` type moves (top-level `internal`).
+- `TvPlaybackDisplayController` (≈ 420, sibling): aspect, speed, night mode,
+  audio effects, display-match, `loadPlayerDefaults`, the decoder analytics
+  listener, the unified-menu display/audio rows.
+- Hosts: dock/styler 58 members (24 view/state forwarders), display 11;
+  ≈ 338 substitutions. 42 activity patches in 13 declarations (13 in
+  `playbackListener`, 9 in `setupPlayer`); 12 Host re-points in 5 properties
+  (Start Over, guide, progress reporter, recording, source switch); 3
+  in-place `onDestroy` statements (display-mode clear/null,
+  `releaseLoudnessEnhancer`); nothing in `onStop`/`onPause`/`finish`. No
+  owned Handler/token/coroutine.
+- 31 initializer proofs from two slots; three new narrow classifier forms: an
+  empty typed `HashMap<…>()`, `arrayOf` with literal elements (incl.
+  `AspectRatioFrameLayout.RESIZE_MODE_*` constants, with bytecode proof they
+  are inlined), and the reviewed anonymous `object : AnalyticsListener`.
+- Audit: 14 receiver/constructor sites, 3 inherited getters, 23
+  `findViewById` calls whose declared type now comes from a Host property
+  (compiled-type check).
+- Reflection: 41 sites across 10 names via 9 owner-map routes plus the
+  `NativePlayerSettingsConsumptionTest` `nightModeIndex` helper change
+  (assertions unchanged); `getControlsSkin`/`trackSelector` stay. No Dart
+  anchors.
+- `LoudnessEnhancer` lifetime unchanged (created at READY, on session change,
+  track init, night-mode change; released on transitions, route changes and
+  `onDestroy`, **not** in `onStop` — recorded follow-up, not fixed).
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (two sibling owners, nested
+styler, Host-typed `findViewById`) + negatives; compiled audit incl. the
+`findViewById` compiled-type check; per-phase dispatcher keeping all
+historical suites; earlier destinations frozen at the phase-14 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: a deterministic way to observe `LoudnessEnhancer` creation,
+gain and release (shadow or seam) demonstrated on the original — if it
+cannot be made reliable, night mode + the effect session leave phase 15 and
+the design is re-reviewed. Then from zero: 7 controls skins × 4 guide styles
+(separate activity instances) for dock construction and OTT install; focus
+and click routing installed by `setupControls`; live dock styling; aspect
+(incl. 4:3 scale), speed (NativeAudioRouting interplay), night mode, audio
+effects, display-match, `loadPlayerDefaults`, decoder analytics listener
+callbacks, unified-menu display/audio rows, `onDestroy` statements; coverage
+sweep + matrix. Mutation proofs on the original; Claude's independent sample
+(≥ 75 %, else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–14 additions. Device checklist (end of series):
+controls dock in each of the 7 skins (buttons, captions, focus order), IPTV
+live dock styling, aspect cycling incl. 4:3, playback speed with audio
+pitch, night mode (loudness) on/off and across track/route changes, system
+audio effects toggle, display-mode matching (refresh rate) on a supported TV.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
