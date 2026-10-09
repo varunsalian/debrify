@@ -1788,6 +1788,78 @@ live dock styling, aspect cycling incl. 4:3, playback speed with audio
 pitch, night mode (loudness) on/off and across track/route changes, system
 audio effects toggle, display-mode matching (refresh rate) on a supported TV.
 
+## Phase 16 — controls dock runtime (overlay show/hide, dock identity, seekbar + cinema scrub)
+
+Branch `refactor/tvplayer-p16` off the phase-15 merge `df439aed1` (activity 6,986 lines). Evidence under
+`refactor-evidence/tvplayer/p16/`. Inventory: "Phase 16 inventory" in the deps
+report (measured at `ce3ddfb06` with phase 15 read from its branch;
+re-measure on the phase-15 merge). All collaborator rules from phases 3–15
+apply; statement-level coverage sweep from the start (104 `if`, 47 `return`).
+
+**Selected (80 members, ≈ 1,161 lines, one activity property
+`controlsOverlayController` at the phase's first owned slot, one shared
+Host):**
+- `TvControlsOverlayController` (owner, ≈ 430): show/hide/auto-hide (owns
+  `controlsHandler`, 4 s auto-hide only while playing), play/pause, Next
+  overlay, clean-state.
+- eagerly constructs `TvDockIdentityPresenter` (≈ 330: title/OTT identity
+  incl. `@Volatile ottShowName`, annotation kept) and `TvSeekScrubController`
+  (≈ 540: legacy seekbar + cinema scrub; owns `seekbarHandler` 100 ms ticker,
+  never stopped, and the 80 ms scrub animator).
+- The owner is referenced as **`controls`** (not `overlay` — three owner
+  functions have `val overlay` locals); `seek`/`identity` verified
+  collision-free; 10 compile-checked cross-references.
+- **View ownership decision:** 23 of the 24 shared views from phase 15 move
+  (owner 2, identity 8, seek 13); `ottSkinInstalled` stays (readers span
+  several owners); the 18 lateinit title/Next-overlay/seekbar views stay in
+  the activity (avoids 18 `bindViews` patches, 39 reflective retargets and an
+  un-checkable `::seekbarOverlay.isInitialized` in `onDestroy`).
+- 48 activity patches in 11 declarations (27 in `dispatchKeyEvent`; 10 later
+  consumed by phases 18–19); 46 Host re-points (68 token edits) in 10
+  properties (31 in phase 15's `controlsDockController` Host incl. 22 get/set
+  pairs); 2 in-place `onDestroy` patches; 2 activity-owned readiness getters
+  (`startupGateViewReady`, `nextBackdropReady`).
+- 38 initializer proofs; new narrow classifier forms: scalar float literals,
+  `arrayOfNulls<TextView>(3)`, a reviewed `object : Runnable`.
+- ≈ 228 substitutions (155 host, 3 `this` → `activity` incl. 2 `Glide.with`
+  and a Toast, 1 excluded Runnable `this`, 4 inherited calls, 53
+  visibility). `updateSeekbarProgress` shadows `player` with a local (not
+  substituted). `progressHandler` and the zap-banner tokens are untouched.
+- Retargets: 44 reflective sites via 9 owner-map routes (`controlsMenuVisible`
+  ×23); no Dart retargets (two anchored ranges get patches; asserted text
+  unchanged).
+
+**Pinned as-is:** `showSeekbar` has no caller (the legacy seekbar path is
+dead; step 0 reaches it by reflection); the seekbar ticker writes
+progress-reporter guards every tick; the 100 ms ticker is never stopped.
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (owner + two collaborators
+via `controls`/`seek`/`identity`, `@Volatile` preserved) + negatives (a
+`overlay`-named reference captured by a local, the shadowed `player` local);
+compiled audit; per-phase dispatcher keeping all historical suites; earlier
+destinations frozen at the phase-15 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: deterministic animator stepping under the paused looper and a
+recording player probe, demonstrated on the original. Then: 7 per-skin
+activity instances; show/hide/auto-hide timing (playing vs paused), the full
+key matrix that drives the dock, play/pause, Next overlay fade timings and
+clean-state, title/OTT identity per skin, cinema scrub (start, step, commit,
+cancel, animator), the legacy seekbar path via reflection, ticker effects on
+progress-reporter guards, `onDestroy` statements; coverage sweep + matrix.
+Mutation proofs on the original; Claude's independent sample (≥ 75 %, else
+sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–15 additions. Device checklist (end of series):
+controls dock show/hide/auto-hide while playing and paused in each skin,
+play/pause from the dock and remote, cinema scrub seeking (hold/release,
+cancel), title/OTT identity text, the Next overlay during auto-advance.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear

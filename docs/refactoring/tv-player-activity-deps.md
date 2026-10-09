@@ -16310,3 +16310,730 @@ Tested clean gate commit 699668ae8; Step 0b f3aea36e0; Step 1 699668ae8. Current
 Full clean p15-gate exactly matches all 1,943 p15-step0b identities/statuses (1,942 passing, same known SourceBrowser focus failure), complete XML, matched 1 GiB/JBR, stable clean input. All 337 characterizations pass. Five Kotlin warnings and all 1,758 analyzer diagnostics are unchanged. Lint exactly retains 1,352 issues, 253 errors/1,099 warnings and 175 opt-in errors. The initial raw lint comparison differs only because its original wrapper-version warning uses an absolute current-checkout path; canonical checkout-relative normalization pairs that same rule/severity/message/location, and the wrapper file is byte-identical to ce3ddfb06. Initial comparison, normalization proof and raw reports remain archived; no issue is accepted, removed or suppressed.
 
 Release APK succeeds. R8/DEX preserves identity treatment for all 13 generated classes/389 members, including TvControlsDockController, TvLiveDockStyler, TvPlaybackDisplayController, DockSkinSpec, both Hosts and activity Host implementations, anonymous/WhenMappings classes and both new Kt facades. Three mapping negative controls reject class rename, member rename and missing DEX member. Decoder remains pending-environment: failure output matches phase 14, and all three native-library hashes/missing-feature manifests match phase 1. No native artifact, dependency or ProGuard rule changed. Affected Dart source tests match all 45 prior statuses. Full Flutter via suite_evidence.py on clean 699668ae8 matches all 12,855 phase-14 identities/statuses: 12,794 success, 13 failure, 28 error, 20 skipped; same SDK/flags and stable inputs. Existing failures remain explicit; no new behavior regression was observed. Evidence p15/gate/summary.json and raw archives, junit/p15-gate/. Stopped after Phase 15; phase 16 not started.
+
+---
+
+## Phase 16 inventory (at `ce3ddfb06` + phase-15 branch; re-measure on `df439aed1`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `ce3ddfb06`
+(phase-14 merge, **7,982 lines**, class header 136, 460 depth-1 members incl. Host objects). Read-only survey
+of the main checkout. Nothing was built and nothing under `../debrify-wt/` was touched. The phase-15 plan
+section and "Phase 15 inventory" were read from commit `1e184b9b1` (branch `refactor/tvplayer-p15`) with
+`git show`.
+
+**Phase 15 is treated as a set of existing controllers:** `TvControlsDockController` (17 dock-only views,
+`installOttControlsSkin`, captions, `setupControls`, `DockSkinSpec` type), nested `TvLiveDockStyler`
+(reached as `controlsDock`), sibling `TvPlaybackDisplayController`. Their Hosts are frozen destinations.
+Phase 16 edits only the **activity's** `controlsDockController` property (its Host object), as a
+whole-property `patched` row. All line numbers below are at `ce3ddfb06`. Spans before ≈ 290 shift by the
+phase-15 field removals (≈ −20); spans after 3127 shift by ≈ −430 (setupControls block) and more after 5268
+and 5930. Re-measure everything on the phase-15 merge.
+
+**Tooling.** The p15 scripts were copied to `scratchpad/p16/` and re-indexed on the current file:
+- `idx.py` (brace/string/comment-aware member indexer), `refs.py`/`unit.py` (word-boundary references;
+  templates and `this@Activity.` counted, other receivers excluded);
+- `p16.py`/`fin.py` (phase-15 moved set, phase-16 groups, final three-file membership with leading trivia
+  attached per the partition rule), `inb.py`/`fin_rep.py` (inbound by category), `fin_out.py` (outbound per
+  file), `mat.py`/`views.py` (group matrix and per-view reader/writer table), `refl16.py` (quoted reflective
+  names in `android/app/src/test`).
+
+Each count below was checked by hand against the source. Terms as in phases 11–15: **patch** = token edit in
+a retained activity declaration; **re-point** = edited forwarder target in an existing controller property's
+Host object (that property becomes a whole-property `patched` row); **substitution** = declared edit inside a
+moved body.
+
+---
+
+### 1. Summary and recommendation
+
+**Phase 16 = "controls II": the dock runtime.** One owner with two eagerly constructed, field-bearing nested
+collaborators, one shared Host, one activity property:
+
+- **`TvControlsOverlayController.kt`** (owner; 21 members / 332 lines → **≈ 430**): show/hide/auto-hide
+  (`controlsHandler`, `hideControlsRunnable`, `CONTROLS_AUTO_HIDE_DELAY_MS`), focus probe, play/pause and the
+  pause label, subtitle lift, title reveal/hide, the loading/Next overlay (`setResolvingState`,
+  `setNextOverlayBackdrop`, `show/fadeIn/hideNextOverlay`), `isCleanPlaybackState`, and the views
+  `controlsOverlay`, `pauseButton`. Activity property **`controlsOverlayController`** at the
+  `controlsOverlay` slot (210). `@OptIn(UnstableApi::class)` is **required** (`PlayerView.showController()`
+  is `@UnstableApi` in media3-ui 1.8.0, verified with `javap`).
+- **`TvDockIdentityPresenter.kt`** (nested `val identity`; 16 members / 311 lines → **≈ 330**): `updateTitle`,
+  `guideTitleFor`, `updateOttIdentity`, `updateOttExtras`, `dockTagsFor`, the tag cache, `@Volatile
+  ottShowName`, and 8 identity views. Constructor `(host)` only: it uses no activity receiver and no owner
+  member (an unused `activity` parameter would add a Kotlin warning).
+- **`TvSeekScrubController.kt`** (nested `val seek`; 43 members / 518 lines → **≈ 540**): the 100 ms progress
+  ticker (`seekbarHandler`, `seekbarProgressRunnable`), cinema scrub (5 state fields + animator), the legacy
+  seekbar overlay logic and quick seek (`seekBy`), and 11 cinema/time/scrub views. Constructor
+  `(activity, host, controls)`.
+
+| item | phase 16 |
+|---|---|
+| moved members / lines | **80 / 1,161** (incl. leading trivia) + 1 companion line — owner 21 / 332, identity 16 / 311, seek 43 / 518 |
+| owned state | 39 fields: owner 5, identity 11, seek 23 (23 of the 24 phase-15 shared views/state move; §1.2) |
+| activity patches | **48 in 11 declarations** (§4.1): 38 permanent (routers/lifecycle/bootstrap), 10 consumed by phases 18/19 |
+| Host re-points | **46 forwarders / 68 token edits in 10 properties** (§4.2): 31 in phase-15 `controlsDockController` (53 edits), 15 in 9 older properties |
+| added activity declarations | 1 property + Host object (54 members), 2 readiness getters (`startupGateViewReady`, `nextBackdropReady`) |
+| initializer proofs | **38** (owner slot 210; all other 38 fields run at 210); **3 new narrow classifier forms** (§3) |
+| cross-qualifications | **10** compile-checked: seek→owner `controls.` 8, owner→`identity.` 1, owner→`seek.` 1 |
+| Host substitutions | **155** (owner 83 incl. 2 readiness, identity 18, seek 54) + **3** `host.controlsDockController.` |
+| receivers `this`→`activity` | **3** (2 `Glide.with(this)`, 1 `Toast.makeText(this, …)`); **1 excluded** (`Runnable` self-reference) |
+| inherited pins | **4** (`currentFocus`, `isFinishing`, `isDestroyed`, `findViewById<View>`) |
+| visibility substitutions | **53** (owner 18, identity 11, seek 24; public members of internal classes, never `internal fun`) |
+| substitutions total | **≈ 228** |
+| reflective retargets | **44 literal sites / 9 names → 9 owner-map routes**; 0 local-helper changes |
+| Dart retargets | **0** (2 anchored ranges receive patches; asserted literals untouched) |
+| lifecycle | **2 in-place `onDestroy` patches**; nothing in `onStart`/`onStop`/`onPause`/`onResume`/`finish` |
+
+**Activity:** ≈ −1,162 + ≈ 68 (property + 54-member Host + 2 readiness getters) ≈ **−1,094**:
+7,982 → ≈ 7,032 after phase 15 → **≈ 5,940** after phase 16.
+
+**Risk: medium-high.** No Flutter channel, no coroutine, no async token. The risks are:
+- **key routing**: 27 permanent `dispatchKeyEvent` patches (BACK/CENTER/DOWN/UP/LEFT/RIGHT matrix);
+- focus and animation timing (300/250/220/160/200/150/100/80 ms) across **7 controls skins**, with skin-specific
+  identity arms;
+- the 100 ms ticker feeding the progress reporter's watch guards (`maxStableDurationMs`,
+  `lastRealPositionMs`) and the skip-segment state every tick;
+- the **dead legacy seekbar path** (`showSeekbar` has no caller), which needs reflective characterization;
+- the widest re-point row so far: the phase-15 dock Host with 22 `get`/`set` pairs.
+
+Existing coverage only toggles `controlsMenuVisible`/`seekbarVisible` reflectively, drives some IPTV keys,
+and covers `isCleanPlaybackState` in Stremio TV wiring. Show/hide, scrub, title/identity and the Next overlay
+have **no** characterization.
+
+### 1.1 Why three files, nested, with this ownership
+
+Group sizes (member lines incl. trivia) and measured cross references:
+
+| group | members / lines | → SH | → SK/CS/SV | → TI | → 24 shared views | → title/next lateinit views |
+|---|---|---|---|---|---|---|
+| SH (show/hide, play/pause, lift, label) | 13 / 260 | — | 0 | 1 | 11 | 18 |
+| SK + CS + SV (ticker, scrub, legacy seekbar) | 38 / 511 | 3 | — | 0 | 33 | 0 (30 to lateinit seekbar views) |
+| TI (title, identity, extras, tags, Next overlay, clean-state) | 14 / 364 | 1 | 1 | — | 25 | 30 |
+
+- One file for SH + TI would be ≈ 624 + Host ≈ 730 lines, in the 501–800 review band, and mixes two
+  responsibilities. Three files keep each ≤ 550.
+- The Next overlay and `isCleanPlaybackState` go with the owner, not identity. They read
+  `controlsMenuVisible`/`seekbarVisible`/`nextOverlay` and are reached from the Up Next, gate and Stremio
+  guide Hosts as presentation state.
+- **Nested, not sibling.** Seek and owner share `pauseButton`, `controlsHandler`, `controlsMenuVisible`
+  and `showControlsMenu` (8 refs). The phase-11/13/15 precedent is cross-qualified nested collaborators:
+  shared state has one owner and a missed qualification does not compile. A sibling seek at slot 206 would
+  save one proof but needs 4 more Host forwarders, and the shared state would no longer be compile-checked.
+- **Qualifier names.** The owner is referenced as **`controls`**, never `overlay`: `showControlsMenu`,
+  `hideControlsMenu` and `isFocusInControlsOverlay` have `val overlay` locals (22 sites). Scanned
+  collisions for `controls`, `seek` and `identity` in all 80 spans: **0**. `updateSubtitleControlsLift` also
+  has a `val dock` local (4 sites); it needs no qualification because `controlsOverlay` is owner-owned.
+
+### 1.2 View-ownership decision (the 24 shared views/state left by phase 15)
+
+Rule: a view moves to the phase-16 file that is its **only runtime reader outside the dock**. The dock's
+`findViewById` write keeps going through its frozen Host `var`, now re-pointed. A view stays when its readers
+span several owners and retained code.
+
+Measured reader/writer sets (excluding the dock's write; H = existing controller Host):
+
+| view/state | readers | decision |
+|---|---|---|
+| `controlsOverlay` | SH 4, H zapBanner 1, dock 2 | **owner** |
+| `pauseButton` | SH 5, SK 5, styler 4, dock 4, `dispatchKeyEvent` 1 | **owner** (seek reads `controls.pauseButton`) |
+| `ottSkinInstalled` | SH 2, SK 6, TI 1, dock 4 (+ write), display 1, H sourceSwitch 1, `handleMetadataUpdate` 1, `playStremioTvPlaybackMap` 1 | **stays activity-owned** (multi-owner; writer is the frozen dock) |
+| `ottQualityChips` (val array) | TI 2 (dock writes 3 elements) | **identity** (new `arrayOfNulls` form, §3; fallback: stay, −1 proof, +1 Host getter) |
+| `ottIdentityTitle`, `…Subtitle`, `…Overline`, `…Badge`, `…Divider`, `ottRatingChip`, `ottMetaLine` | TI only | **identity** (7) |
+| `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressBackground`, `ottScrubPreviewChip`, `ottScrubPreviewText` | SK (+ styler reads Current/Total) | **seek** (8) |
+| `cinemaProgressContainer` | SK 3, styler 2, `dispatchKeyEvent` 3 | **seek** |
+| `cinemaProgressThumb`, `cinemaSpeedIndicator` | SK, styler 1 each | **seek** |
+| `cinemaSeekMode` | SK 8, styler write 1, `dispatchKeyEvent` 1 | **seek** |
+| `cinemaSeekWasPlaying` | SK 4, styler write 1 | **seek** |
+
+**Result: 23 move (owner 2, identity 8, seek 13), 1 stays (`ottSkinInstalled`).** All 23 phase-15 dock-Host
+forwarders for them are re-pointed in one whole-property row. The phase-15 destination files stay
+byte-identical.
+
+**Activity-bound `lateinit` views stay** (phase-13 precedent: views bound by retained `bindViews` stay behind
+computed Host getters):
+- the 8 title views: `titleContainer`, `titleView`, `titleOttContainer`, `ottEpisodeBadge`,
+  `ottEpisodeTitle`, `ottRatingContainer`, `ottRating`, `channelBadge`;
+- the 4 Next-overlay views: `nextOverlay`, `nextText`, `nextSubtext`, `nextBackdrop`;
+- the 6 seekbar views: `seekbarOverlay`, `seekbarProgress`, `seekbarHandle`, `seekbarCurrentTime`,
+  `seekbarTotalTime`, `seekbarSpeedIndicator`.
+
+Moving them would cost:
+- 18 `bindViews` patches with owner-typed `findViewById` inference;
+- 7 more re-points/patches (`titleView` ×4 Hosts, `nextText`/`nextSubtext`, `showBufferingIndicatorDebounced`);
+- an **unqualifiable** `::seekbarOverlay.isInitialized` in retained `onDestroy` (7792);
+- 39 reflective retargets (`titleView` 15, `nextText` 5, …);
+- a new `lateinit` move form.
+
+Staying costs 18 Host getters and two activity-owned readiness getters (`::startupGateView`,
+`::nextBackdrop`, both read by moved code).
+
+**Also stays:** `dockSkinSpec`/`controlsSkin` (session-fixed lazies, phase-15 decision), `startupGateView`,
+`playerView`, `subtitleControlsLift`, `seekFeedbackManager`, `pikPakReactivationIndicator`,
+`maxStableDurationMs`/`lastRealPositionMs` (progress-reporter guards, Host `var`s), `sleepStopLatched` (Host
+`var`), and `progressHandler` (not used by the unit). The companion constants `SEEK_STEP_MS` and
+`SEEK_LONG_PRESS_THRESHOLD` also stay (only `dispatchKeyEvent` uses them).
+
+---
+
+### 2. Members (lines at `ce3ddfb06`, attached comments/trivia included)
+
+**Owner `TvControlsOverlayController.kt`: 21 members / 332 lines.**
+- Fields (5): `controlsOverlay` 209–210 (`// Controls` header travels with it), `pauseButton` 211,
+  `controlsMenuVisible` 779, `controlsHandler` 1366, `hideControlsRunnable` 1490–1496 (`Runnable { … }`).
+- Functions (16): `isFocusInControlsOverlay` 5007–5016, `handlePlayPauseToggleFromCenter` 5029–5035,
+  `togglePlayPause` 5037–5067, `showControlsMenu` 5069–5159, `hideControlsMenu` 5161–5212,
+  `updateSubtitleControlsLift` 5214–5229 (KDoc), `hideTitleImmediately` 5231–5238,
+  `scheduleHideControlsMenu` 5240–5246, `cancelScheduledHideControlsMenu` 5248–5250,
+  `updatePauseButtonLabel` 5252–5266 (phase-15 patched), `setResolvingState` 4534–4543,
+  `setNextOverlayBackdrop` 4545–4560 (comment), `showNextOverlay` 5769–5774 (`// Next overlay`),
+  `fadeInNextOverlay` 5776–5781, `hideNextOverlay` 5783–5790, `isCleanPlaybackState` 5792–5807 (**the
+  `UP NEXT CARD` banner 5792–5794 is leading trivia and travels with it**; pin it).
+- Companion: `CONTROLS_AUTO_HIDE_DELAY_MS` 7977 → file-private const (only `scheduleHideControlsMenu`).
+- Retained between owner spans: `isFocusInIptvChannelList` 5018–5027 (IPTV/router), `updateAspectButtonLabel`
+  / `updateNightModeButtonLabel` 5268–5276 (phase 15), `reportValidatedSourceCommit` 4562, `dp` 4580,
+  `playPikPakVideoWithRetry` 4588, `dispatchKeyEvent` 4643, `releaseScreenForSleep` /
+  `holdScreenForPlayback` 5752–5767 (sleep).
+
+**Nested `TvDockIdentityPresenter.kt`: 16 members / 311 lines.**
+- Fields (11): `ottIdentityTitle` 250, `ottIdentitySubtitle` 251, `ottIdentityOverline` 253–255 (comment),
+  `ottIdentityBadge` 256, `ottIdentityDivider` 257, `ottQualityChips` 259–262 (comment), `ottRatingChip` 263,
+  `ottMetaLine` 264, `dockTagsCacheKey` 265, `dockTagsCache` 266, `ottShowName` 275–277 (KDoc +
+  **`@Volatile`**).
+- Functions (5): `guideTitleFor` 4244–4249, `updateTitle` 4251–4287, `updateOttIdentity` 4289–4402 (KDoc),
+  `updateOttExtras` 4404–4507 (KDoc), `dockTagsFor` 4509–4532 (KDoc).
+
+**Nested `TvSeekScrubController.kt`: 43 members / 518 lines.**
+- Fields (23): `seekbarBackgroundWidth` 206, `currentSeekSpeed` 207, `debrifyTimeDisplay` 230–231 (header),
+  `debrifyTimeCurrent` 232, `debrifyTimeTotal` 233, `debrifyProgressLine` 234, `cinemaProgressBuffered` 235,
+  `cinemaProgressContainer` 237–238 (header), `cinemaProgressBackground` 239, `cinemaProgressThumb` 240,
+  `cinemaSpeedIndicator` 241, `ottScrubPreviewChip` 267, `ottScrubPreviewText` 268,
+  `cinemaProgressTrackWidth` 278, `cinemaSeekMode` 279, `cinemaSeekWasPlaying` 280,
+  `cinemaProgressAnimator` 281, `cinemaLastAnimatedProgress` 282, `seekbarVisible` 780, `seekbarPosition` 781,
+  `videoDuration` 782, `seekbarHandler` 1367, `seekbarProgressRunnable` 1498–1503 (`object : Runnable`).
+- Functions (20): `setupSeekbar` 3116–3125, `startSeekbarProgressUpdates` 5278–5282 (comment),
+  `stopSeekbarProgressUpdates` 5284–5286 (**no caller**), `updateSeekbarProgress` 5288–5345,
+  `showControlsAndFocusProgressBar` 5347–5359 (**`CINEMA MODE` banner 5347–5349 is leading trivia**),
+  `setupCinemaProgressBar` 5361–5414, `enterCinemaSeekMode` 5416–5492 (phase-15 patched),
+  `exitCinemaSeekMode` 5494–5529 (phase-15 patched), `confirmCinemaSeek` 5531–5537,
+  `updateCinemaSeekSpeed` 5539–5542, `updateCinemaProgressUI` 5544–5605, `showSeekbar` 5607–5638
+  (**no caller**), `hideSeekbar` 5640–5653, `confirmSeekPosition` 5655–5660, `seekBackward` 5662–5669,
+  `seekForward` 5671–5678, `updateSeekSpeed` 5680–5689, `updateSeekbarUI` 5691–5709,
+  `updateSeekbarPosition` 5711–5728, `seekBy` 5730–5750.
+
+**Stays (named for later phases):**
+- `ottSkinInstalled`;
+- the 18 lateinit views (§1.2) and `startupGateView`;
+- `dockSkinSpec`, `controlsSkin`;
+- `iptvUpPressActive`/`iptvUpLongPressHandled` (router state);
+- `SEEK_STEP_MS`, `SEEK_LONG_PRESS_THRESHOLD`;
+- `releaseScreenForSleep`/`holdScreenForPlayback`.
+
+Field-block headers that stay: `// Seekbar` 199 stays with `seekbarOverlay`, and the OTT comment 243–246
+stays with `ottSkinInstalled`.
+
+---
+
+### 3. Owned state and initializer proofs
+
+**One slot: `controlsOverlayController` at `controlsOverlay` (210).** This is after the retained seekbar
+lateinit block (200–205) and before the phase-15 `controlsDockController` (212). Both nested collaborators map
+to the owner's effective slot (phase-6/13/15 `nested_construction`). Pin their construction initializers
+(`val identity = TvDockIdentityPresenter(host)` and `val seek = TvSeekScrubController(activity, host, this)`);
+recommended position is after the owner's 5 fields. Nothing reads `controls`, Host or the dock during
+construction. Every other moved field runs at 210 → **38 proofs** (39 fields − the slot field). Several run
+**earlier**:
+- the 4 owner fields after 210;
+- identity 250–277;
+- seek 231–282, 780–782, 1367, 1498;
+- the handlers, which are now created before `progressHandler` (1365). That is inert: posting order, not
+  handler creation order, sequences the shared main looper.
+
+Seek 206/207 run **later** (210 instead of 206). They are inert constants and nothing reads them before 210.
+
+| fields | form | kind | status |
+|---|---|---|---|
+| owner: `pauseButton = null`, `controlsMenuVisible = false` | literal | constant | supported |
+| owner: `controlsHandler = Handler(Looper.getMainLooper())` | `Handler(Looper.getMainLooper())` | handler-allocation | supported (phase 10) |
+| owner: `hideControlsRunnable = Runnable { … }` | `Runnable { … }` (SAM lambda, body reads nothing at construction) | allocation | supported |
+| identity: 7 views `= null`, `dockTagsCacheKey = null`, `ottShowName = null` (`@Volatile`; KDoc stripped) | literal | constant | supported |
+| identity: `dockTagsCache: List<DockFormatTags.Tag> = emptyList()` | `emptyList()` with declared type | allocation | supported (phase 14 binding check) |
+| identity: **`ottQualityChips = arrayOfNulls<TextView>(3)`** | **new: `arrayOfNulls<T>(<non-negative int literal>)`** | allocation | step T |
+| seek: `seekbarBackgroundWidth: Int = 0`, 11 views `= null`, `cinemaProgressTrackWidth: Int = 0`, `cinemaSeekMode = false`, `cinemaSeekWasPlaying = false`, `cinemaProgressAnimator = null`, `seekbarVisible = false`, `seekbarPosition: Long = 0`, `videoDuration: Long = 0` (trailing `//` comments stripped) | literal | constant | supported |
+| seek: **`currentSeekSpeed: Float = 1.0f`**, **`cinemaLastAnimatedProgress: Float = 0f`** | **new: scalar float literal** (`[0-9]+(\.[0-9]+)?f`; phase 15 only validated floats as `arrayOf` elements) | constant | step T |
+| seek: `seekbarHandler = Handler(Looper.getMainLooper())` | handler | handler-allocation | supported |
+| seek: **`seekbarProgressRunnable = object : Runnable { override fun run() { … } }`** | **new: reviewed `object : Runnable`** (no `init`, no property, single `run`; its only `this` is the Runnable self-reference in `postDelayed(this, 100)`) | allocation | step T |
+
+Totals: 38 = owner 4 + identity 11 + seek 23.
+
+**Step-T classifier additions (narrow, each with negatives):**
+1. Scalar float literal. Reject a negative or exponent form, a `Double`, a call, and a property read.
+2. `arrayOfNulls<T>(N)` with explicit type argument and decimal literal `N`. Reject an expression size,
+   `arrayOfNulls(3)` without a type argument, and `Array(3) { … }`.
+3. `object : Runnable { override fun run() { … } }`. Extend the phase-15 reviewed-anonymous-object mechanism
+   by **one allow-listed supertype**. Reject an `init` block, any property, a second supertype, and a
+   constructor-time read.
+
+No `lateinit` property moves. The only `::x.isInitialized` in moved code is
+`::startupGateView` (5121) and `::nextBackdrop` (4547). Both properties stay, so both become activity-owned
+`added` readiness getters (phase-3 rule), slot-anchored right after the controller property:
+`private val startupGateViewReady: Boolean get() = ::startupGateView.isInitialized`,
+`private val nextBackdropReady: Boolean get() = ::nextBackdrop.isInitialized`. No `by lazy` moves.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 48 in 11 declarations
+
+Prefixes:
+- `controlsOverlayController.` (owner, 24);
+- `controlsOverlayController.identity.` (identity, 8);
+- `controlsOverlayController.seek.` (seek, 16).
+
+| declaration (decl line) | lines | names | later owner |
+|---|---|---|---|
+| `playbackListener` (1505) | 1748, 1750, 1760, 1762, 1803, 1807 (**6**) | `showNextOverlay(model.items[…])` ×2, `hideNextOverlay()` ×2 inside the `progressHandler.postDelayed({ … }, 1500)` lambdas, `updatePauseButtonLabel()` ×2 (state change, `onIsPlayingChanged`) | ROUTERS (perm.) |
+| `onCreate` (2020) | 2147 | `setupSeekbar()` → `.seek.` (order `setupSeekbar` → `setupPlaylist` → `setupControls` kept) | lifecycle (perm.) |
+| `handleMetadataUpdate` (2256) | 2268, 2269, 2332, 2449 (**4**) | `ottShowName = showName.trim()` (volatile write) → `.identity.`; `runOnUiThread { updateOttIdentity() }` → `.identity.` (`ottSkinInstalled` on 2269 unchanged); `updateTitle(…)` ×2 → `.identity.` | metadata receiver (19) |
+| `resolveAndPlay` (3641) | 3645, 3698 | `setResolvingState(true/false)` | START (18) |
+| `playMediaDirect` (3789) | 3825 | `updateTitle(item)` → `.identity.` | START (18) |
+| `playPikPakVideoWithRetry` (4588) | 4632 | `updateTitle(item)` → `.identity.` | START (18) |
+| `dispatchKeyEvent` (4643) | 4779, 4784, 4789, 4793, 4797, 4833 ×1 (+4834), 4838, 4854, 4862, 4866, 4868, 4874–4876, 4879–4880, 4890 ×2, 4899 ×2, 4904, 4926, 4975, 4977, 4996, 4998 (**27**) | owner 14: `controlsMenuVisible` ×5, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`, `showControlsMenu` ×2, `hideControlsMenu` ×2, `scheduleHideControlsMenu` ×2, `pauseButton`; seek 13: `seekbarVisible`, `seekBackward`/`seekForward` (named `isContinuous =` kept), `confirmSeekPosition`, `hideSeekbar`, `showControlsAndFocusProgressBar` ×2, `seekBy(±SEEK_STEP_MS)` ×2, `cinemaSeekMode`, `cinemaProgressContainer` ×3 | ROUTERS (perm., phase 20) |
+| `initIptvMode` (5813) | 5864, 5917 | `setupSeekbar()` → `.seek.` (order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` kept); `hideControlsMenu()` | retained bootstrap (perm.) |
+| `onDestroy` (7629) | 7736, 7737 | `controlsHandler.removeCallbacksAndMessages(null)`; `seekbarHandler.…` → `.seek.` — **in place** (§7) | lifecycle (perm.) |
+| `replacePayloadWithStremioTvItem` (7816) | 7831 | `ottShowName = null` → `.identity.` | START (18) |
+| `playStremioTvPlaybackMap` (7868) | 7948 | `updateTitle(playbackItem)` → `.identity.` (7882 `ottSkinInstalled` unchanged) | START (18) |
+
+Permanent: 38 (`dispatchKeyEvent` 27, `playbackListener` 6, `onCreate` 1, `initIptvMode` 2, `onDestroy` 2).
+Consumed later: 10 (phase 18: 6; phase 19: 4).
+
+**Reconciliation with the phase-15 preview** ("24 permanent `dispatchKeyEvent` patches"): 22 are
+function/flag patches. The 5 view patches (`pauseButton` 1, `cinemaProgressContainer` 3, `cinemaSeekMode` 1)
+follow from the §1.2 ownership decision, giving 27.
+
+`onDestroy` 7792 (`::seekbarOverlay.isInitialized`) and `showBufferingIndicatorDebounced` 7610 (`nextOverlay`)
+need **no** patch because those views stay. **Phase-15 interplay:** phase 15 also patches
+`playbackListener`, `onCreate`, `initIptvMode`, `onDestroy` and `playStremioTvPlaybackMap` at different
+statements, so build the phase-16 rows on the phase-15 versions.
+
+### 4.2 Host re-points: 46 forwarders, 68 token edits, 10 whole-property `patched` rows
+
+**(a) Phase-15 `controlsDockController` property (dock + styler Host): 31 forwarders, 53 token edits.**
+The frozen phase-15 Host interface is unchanged; only the activity-side targets change to
+`this@AndroidTvTorrentPlayerActivity.controlsOverlayController[.identity|.seek].x`.
+- View/state `var` forwarders (`get` + `set`, 2 edits each, 22 vars → 44):
+  - owner: `controlsOverlay`, `pauseButton`;
+  - identity: `ottIdentityTitle`, `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`,
+    `ottIdentityDivider`, `ottRatingChip`, `ottMetaLine`;
+  - seek: `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`,
+    `cinemaProgressBuffered`, `cinemaProgressContainer`, `cinemaProgressBackground`, `cinemaProgressThumb`,
+    `cinemaSpeedIndicator`, `ottScrubPreviewChip`, `ottScrubPreviewText`, `cinemaSeekMode`,
+    `cinemaSeekWasPlaying`.
+- `val` forwarder (1): `ottQualityChips` → identity (the dock's 3 indexed element writes go through it).
+- SH (5): `controlsMenuVisible` (val), `hideControlsMenu`, `scheduleHideControlsMenu`,
+  `cancelScheduledHideControlsMenu`, `togglePlayPause` → owner.
+- SK (3): `seekBy`, `setupCinemaProgressBar`, `startSeekbarProgressUpdates` → seek.
+- **Unchanged in that Host:** `ottSkinInstalled` (var), `dockSkinSpec`, `controlsSkin`, `guideStyle`, … .
+  **The display Host gets no re-point** (its only shared-view member, `ottSkinInstalled`, stays).
+- The 15 dock `findViewById` sites whose targets are these Host `var`s keep their phase-15 CHECKCAST pins: the
+  Host property types are frozen, and the new owner fields are verbatim moves of the original declarations
+  (types and nullability equal).
+
+**(b) Nine earlier properties: 15 forwarders, 15 token edits** (all `val`/`fun`):
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 174 | `upNextController` | `isCleanPlaybackState()` → owner |
+| 189 | `playlistController` | `ottShowName` → `.identity.` |
+| 838 | `iptvStartOverController` | `showControlsAndFocusProgressBar()` → `.seek.` |
+| 848 | `iptvGuideController` | `controlsMenuVisible` → owner |
+| 1064, 1090 | `startupGateController` | `controlsMenuVisible`, `setResolvingState(resolving)` → owner |
+| 1185, 1186, 1187 | `stremioTvGuideController` | `fadeInNextOverlay`, `hideControlsMenu`, `hideNextOverlay` → owner |
+| 1304, 1306 | `skipSegmentController` | `controlsMenuVisible` → owner, `seekbarVisible` → `.seek.` |
+| 6217, 6218, 6235 | `iptvZapBannerController` | `controlsMenuVisible`, `controlsOverlay`, `updateSubtitleControlsLift()` → owner |
+| 7211 | `sourceSwitchController` | `hideControlsMenu()` → owner |
+
+**No re-point:** `titleView` (Start Over 840, guide 879, gate 1101, switcher 7266), `nextText`/`nextSubtext`
+(Stremio guide 1191/1192), `progressHandler` (all) and `controlsSkin` (playlist) stay. `iptvStartOverController`
+and `iptvGuideController` were already re-pointed in phases 14/15, so build on the phase-15 versions. Earlier
+destination files stay byte-identical.
+
+---
+
+### 5. Outbound Host (one shared 54-member Host, computed, explicitly qualified)
+
+All three classes use the same `TvControlsOverlayController.Host`. It is declared in the owner file and
+implemented by an `object` inside the activity property. Each forwarder is a computed `this@AndroidTvTorrentPlayerActivity.x`;
+none is read at construction.
+
+| kind | members (refs: owner / identity / seek) |
+|---|---|
+| lateinit view getters (21) | `titleContainer` 9/–/–, `titleView` 5/2/–, `titleOttContainer` 4/–/–, `nextOverlay` 10/–/–, `nextText` 2, `nextSubtext` 2, `nextBackdrop` 5, `startupGateView` 1, `playerView` 1, `pikPakReactivationIndicator` 1, `ottEpisodeBadge` –/3, `ottEpisodeTitle` –/1, `ottRatingContainer` –/2, `ottRating` –/1, `channelBadge` –/1, `seekbarOverlay` –/–/7, `seekbarProgress` 2, `seekbarHandle` 2, `seekbarCurrentTime` 1, `seekbarTotalTime` 1, `seekbarSpeedIndicator` 5 |
+| other lateinit (2) | `subtitleControlsLift` 3/–/–, `seekFeedbackManager` –/–/2 |
+| readiness getters (2, new `added`) | `startupGateViewReady` 1, `nextBackdropReady` 1 |
+| state `val` (12) | `player: ExoPlayer?` 4/–/19 (**seek 5292: `val player = player ?: return` substitutes only the RHS; 5294/5295/5332 are the local**), `payload` 1/3/–, `currentIndex` 1/1/–, `isIptvMode` 1, `iptvChannels` 2, `currentIptvIndex` 2, `ottSkinInstalled` 2/1/6, `dockSkinSpec: DockSkinSpec?` 1 (lazy; first access stays phase-15 `setupControls`), `controlsSkin` –/3 (lazy), `iptvLiveRecovery` 2 (lazy; read only inside the `deadLive` short-circuit, first-access timing kept), `stremioSources` –/–/1, `stremioSourceBadge` –/–/1 |
+| nullable overlay `val`s (5) | `subtitlePanel`, `linePickerOverlay`, `syncOverlay`, `unifiedMenu`, `sourceBrowser` (1 each, `isCleanPlaybackState`) |
+| state `var` (3) | `sleepStopLatched` (owner write 1), `maxStableDurationMs` (seek read+write), `lastRealPositionMs` (seek write) |
+| functions (2) | `restoreParkedIptvTwinIfNeeded(): Boolean` 1, `releaseResumeHold()` –/–/3 |
+| cross-feature getters (7) | `iptvZapBannerController` 8, `sourceSwitchController` 4, `playlistController` 1, `iptvGuideController` 1, `stremioTvGuideController` 1, `skipSegmentController` –/–/1, **`controlsDockController`** 1/–/2 (`refreshOttCaptionFor`, `setOttTrackHeight(focused = …)` ×2: the phase-15 temporary patches become `host.controlsDockController.` substitutions) |
+
+**Must not be Host members** (negative): `pauseButton`, `controlsMenuVisible`, `controlsHandler`,
+`showControlsMenu`, `seekbarVisible`, `updateOttIdentity`. A same-name Host member would let a missed
+`controls.`/`seek.`/`identity.` qualification compile.
+
+---
+
+### 6. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 3 sites** (compiled descriptor audit; activity injected as `AppCompatActivity`):
+- owner 4554 / 4556 `com.bumptech.glide.Glide.with(this)` (`.load(...).into(nextBackdrop)` and
+  `.clear(nextBackdrop)`). These must keep the `with(FragmentActivity)` overload (lifecycle-bound request
+  manager).
+- seek 5615 `Toast.makeText(this, "Seeking not available", …)` (`CharSequence` overload; dead path).
+
+**Excluded receiver: 1.** Seek 1501 `seekbarHandler.postDelayed(this, 100)` inside `object : Runnable` is the
+Runnable. It is pinned with context and never substituted (phase-3/10 precedent).
+
+**Inherited (implicit) receiver pins: 4.**
+- owner 5009 `currentFocus` → `activity.currentFocus` (`getCurrentFocus()`);
+- owner 4551 `isFinishing || isDestroyed` → `activity.isFinishing` / `activity.isDestroyed` (`isFinishing()` /
+  `isDestroyed()`, invokevirtual);
+- seek 5700 `findViewById<View>(R.id.seekbar_background)` → `activity.findViewById<View>(…)` (activity-level
+  lookup, **not** `playerView`; the explicit type argument is kept).
+
+**Volatile pin:** `ottShowName` keeps `@Volatile`. Check `ACC_VOLATILE` on
+`TvDockIdentityPresenter.ottShowName`, and that the two retained writers (2268, 7831) plus the playlist Host
+reader (189) access that field.
+
+**Receiver-lambda non-substitution pins (PSI):**
+- `ValueAnimator.ofFloat(…).apply { duration = 80; interpolator = …; addUpdateListener { … }; start() }`
+  (seek 5581–5602). `duration`, `interpolator`, `addUpdateListener` and `start` are animator members.
+- 3 `SpannableString(…).apply { setSpan(…) }` blocks (identity 4357, 4444, 4475; 4 `setSpan` calls).
+- `.takeIf { … }`/`?.let { … }` use `it`; no receiver.
+
+**Shadowing (no host substitution):**
+- seek `val player` (5292) and `val p` (5731);
+- `val currentPosition`/`duration`/`position` locals (5294/5295, 5732/5733);
+- identity `val title = ottIdentityTitle ?: return` (4296; also shadows the inherited `Activity.title`, so the
+  local wins and nothing is substituted);
+- owner `val overlay` (×3 functions) and `val dock` (5217).
+
+**Labels (unchanged):** `return@let` (togglePlayPause), `return@post` (lift), `return@setOnKeyListener`
+(setupSeekbar, setupCinemaProgressBar), `return@forEachIndexed` (updateOttExtras).
+
+**Templates:** no host name is interpolated in the unit (0 braced-template substitutions). The templates use
+locals/parameters (`$seasonStr`, `$show`, `$sign`, `$ratingText`, …).
+
+**Defaults / named arguments:** `seekBackward/seekForward(stepMs: Long = 10_000L, isContinuous: Boolean =
+false)` have literal defaults, called with a named `isContinuous =`. Also kept: `exitCinemaSeekMode(confirm =
+…)` named at 4 sites, and `setOttTrackHeight(focused = …)` named.
+
+**Anonymous/lambda classes renamed (R8 mapping check):**
+- `…Activity$seekbarProgressRunnable$1` → `TvSeekScrubController$seekbarProgressRunnable$1`;
+- the `hideControlsRunnable` SAM lambda;
+- the `setupSeekbar`/`setupCinemaProgressBar` key and focus listeners;
+- animator update listener and `withEndAction` lambdas (owner 4, seek 3);
+- the `controlsHandler.postDelayed({ … }, 100)` focus lambda;
+- `runOnUiThread` lambda in retained `handleMetadataUpdate` (unchanged class);
+- the new Host object.
+
+**`@OptIn(UnstableApi::class)`:** required on the owner (`PlayerView.showController()`). Not needed on identity
+or seek (`C.TIME_UNSET` and the `ExoPlayer` calls used are stable). Pin presence/absence; lint opt-in errors
+must stay 175.
+
+---
+
+### 7. Timers, handlers, animators, teardown
+
+- **`controlsHandler` (owned by the owner):**
+  - `scheduleHideControlsMenu` does `removeCallbacks(hideControlsRunnable)`, then
+    `postDelayed(hideControlsRunnable, 4000)` **only while `player.isPlaying`**;
+  - `cancelScheduledHideControlsMenu` removes it;
+  - `hideControlsRunnable` re-schedules itself while focus is inside the overlay;
+  - seek's `showControlsAndFocusProgressBar` posts a 100 ms `cinemaProgressContainer.requestFocus()` lambda on
+    the **owner's** handler (`controls.controlsHandler`, borrowed, never cleared by seek);
+  - the phase-15 dock schedules and cancels through its Host forwarders (9 + 1 sites).
+- **`seekbarHandler` (owned by seek):** the 100 ms `seekbarProgressRunnable` loop is started once by the
+  phase-15 `setupControls` (Host `startSeekbarProgressUpdates`). It is **never stopped**
+  (`stopSeekbarProgressUpdates` has no caller), so it runs through `onPause`/`onStop` until `onDestroy`. Each
+  tick:
+  - reads `host.player`;
+  - writes `host.maxStableDurationMs`/`host.lastRealPositionMs` (progress-reporter watch guards);
+  - calls `host.skipSegmentController.updateSkipSegmentState(…)`;
+  - updates the time, progress and buffered views (skipped while `cinemaSeekMode`).
+- **`progressHandler`: not used by the unit.** The Next-overlay 1.5 s auto-advance posts belong to the
+  retained `playbackListener` (its lambdas call the patched `hideNextOverlay`). The Stremio guide's 1.5 s hide
+  belongs to the phase-7 controller via its re-pointed Host. The zap banner's `progressHandler` tokens
+  (`iptvZapBannerHideToken`/`TickToken`) are only reached through `iptvZapBannerController.show/hide…` (Host
+  getter), unchanged. The 5 s `progressRunnable` is untouched.
+- **Cinema scrub animator** `cinemaProgressAnimator` (seek-owned, 80 ms `ValueAnimator`): cancelled by
+  `exitCinemaSeekMode` and on each `updateCinemaProgressUI`. It is **not** cancelled in `onDestroy` (pinned).
+- **View animations** (uncancelled at destroy, pinned as-is):
+  - controls overlay show 300 ms / hide 250 ms;
+  - title fade 250 ms;
+  - thumb in 200 + 100 ms / out 150 ms;
+  - Next overlay in 220 ms / out 160 ms;
+  - legacy seekbar 200 / 150 ms;
+  - `pauseButton?.post { requestFocus() }` and `dock.post { … }` re-measure;
+  - Glide backdrop load (guarded by `nextBackdropReady`, `isFinishing`, `isDestroyed`).
+- **`onDestroy`:** two in-place single-reference patches at 7736/7737. They come right after
+  `progressHandler.removeCallbacksAndMessages(null)` (7735) and before the phase-15 display patch
+  `releaseLoudnessEnhancer()` (7740) → `AudioEffectSession.closeCurrent(this)`. Order unchanged; not folded.
+  7792 (`seekbarOverlay` key listener clear) is unchanged. **`onStop`, `onPause`, `onStart`, `onResume` and
+  `finish`: untouched.** The existing reflective handler-cleanup lists (TvPhase5/7/8OriginalTest `@After`)
+  reach `controlsHandler`/`seekbarHandler` through the new owner routes.
+- **Construction:** `Handler(Looper.getMainLooper())` ×2 at slot 210 instead of 1366/1367 (supported
+  handler-allocation proof).
+
+---
+
+### 8. Reflective tests and Dart anchors
+
+**Owner-map routes (`TvPlayerControllerOwners.kt`, 596 → ≈ 605 after phase 15 → ≈ 614): 9 routes, 44 literal
+sites.** All use the shared `TvPlayerOriginalAccess.field/set/call` helpers via `memberOwner`. No local
+`getDeclaredField` helper touches a moved name: `TvSkipPresentationCharacterizationTest.overlay()` reflects
+only overlay-controller fields that stay.
+
+| name | sites / files | route |
+|---|---|---|
+| `controlsMenuVisible` | 23 / 13 (TvPhase11/6 bases, IptvKey, IptvNavigatorSweep, IptvStartOver, SkipPresentation, SkipUi, SourceSwitchSelection, StartupGateBoundary/Commit, StremioTvGuideUi, UpNext, ZapBannerTiming) | `controlsOverlayController` |
+| `controlsOverlay` | 4 / TvPhase7OriginalTest, TvIptvKeyCharacterizationTest ×2, TvPhase6OriginalTest | `controlsOverlayController` |
+| `controlsHandler` | 3 / TvPhase5/7/8OriginalTest cleanup lists | `controlsOverlayController` |
+| `isCleanPlaybackState` | 3 / TvStremioTvGuideWiringCharacterizationTest (`invoke`; public fun, unmangled) | `controlsOverlayController` |
+| `isFocusInControlsOverlay` | 1 / TvIptvKeyCharacterizationTest | `controlsOverlayController` |
+| `seekbarHandler` | 3 / TvPhase5/7/8OriginalTest cleanup lists | `controlsOverlayController.seek` |
+| `seekbarVisible` | 3 / TvSkipUi, TvSkipPresentation, TvUpNext | `controlsOverlayController.seek` |
+| `cinemaProgressContainer` | 1 / TvIptvStartOverCharacterizationTest (set) | `controlsOverlayController.seek` |
+| `ottShowName` | 3 / TvPlaylistGuideBinderCharacterizationTest, TvPlaylistSkinContracts ×2 | `controlsOverlayController.identity` |
+
+Backing fields of members of `internal` classes are unmangled, so no function pin is needed. **Unchanged (they
+stay):** `titleView` ×15, `nextText` ×5, `nextSubtext` ×2, `nextOverlay` ×3, `titleContainer`,
+`titleOttContainer`, `channelBadge` (1 each), `startupGateView` ×10, `ottSkinInstalled` ×1, `getControlsSkin`
+×2 (39 sites saved by §1.2). Rescan after step 0, because step 0 will add `showSeekbar`, `showControlsMenu`,
+`updateOttIdentity` and similar accesses.
+
+**Dart anchors: 0 retargets.**
+- `android_tv_mdblist_progress_source_test` `'// Handle episode metadata updates'` → `requestMetadataFromFlutter`
+  range contains the 4 `handleMetadataUpdate` patches. The asserted literals (`hasWatchedUpdate`,
+  `mergeLateMetadata…`, …) are untouched.
+- `manual_source_validation_contract_test` `resolveAndPlay` → `startPlayback` range contains the 2
+  `setResolvingState` patches. The asserted `reason=stale_manual_token` / `failManualSourceCandidate(...)` are
+  untouched.
+- `android_tv_auto_advance_resume_test` uses `resolveAndPlay` only as an end marker.
+- `NativeAudioRoutingTest` (`setupPlayer`) is not touched; `profile_source_guard_test` does not scan `tv/`.
+
+---
+
+### 9. Hazards (each a step-T fixture or negative)
+
+1. **Field-bearing nested collaborators** (identity 11, seek 23) at the owner slot, with 38 proofs and 3 new
+   forms. Negatives:
+   - omitted proof for a nested first field (`seekbarBackgroundWidth`, `ottIdentityTitle`);
+   - a collaborator reading `controls`/Host during construction;
+   - lazy instead of eager construction;
+   - a sibling-slot mis-mapping.
+2. **The widest re-point row so far:** the phase-15 dock Host with 22 `get`/`set` pairs plus 9 others. Negatives:
+   - a `get` re-pointed without its `set` (the dock would bind into a dead activity field);
+   - a forwarder snapshotting a view;
+   - a widened target type;
+   - `ottSkinInstalled` re-pointed by mistake.
+3. **Cross-qualification `controls.`/`seek.`/`identity.` (10), compile-checked.** Negatives:
+   - a Host member named like an owner field;
+   - a shadowing case where `overlay.` would be captured by the owner's `val overlay` locals (why the
+     qualifier is `controls`).
+4. **Shadowing:** `val player = player ?: return` (RHS only), plus `p`, `duration` and `title` locals.
+   Negative: substituting the local `player` at 5294.
+5. **Readiness getters:** `::startupGateView.isInitialized` → `host.startupGateViewReady` (5121),
+   `!::nextBackdrop.isInitialized` → `!host.nextBackdropReady` (4547). Negatives: an initialized/snapshotting
+   readiness forwarder; an omitted substitution (does not compile across objects).
+6. **`@Volatile ottShowName`** moves with its annotation (bytecode `ACC_VOLATILE`); written on the receiver path
+   before `runOnUiThread`. Negative: annotation dropped.
+7. **Lazy first access:** `iptvLiveRecovery` (only on the dead-live branch of `togglePlayPause`),
+   `dockSkinSpec`, `controlsSkin` via computed getters. Negative: an initialized `val`.
+8. **Dead legacy seekbar:** `showSeekbar` has no caller, so `seekbarVisible` is always false at runtime, the
+   `dispatchKeyEvent` seekbar branch (4779–4800) is unreachable, and `setupSeekbar`'s BACK listener calls a
+   no-op `hideSeekbar`. Moved verbatim; step 0 reaches it reflectively.
+9. **Never-stopped ticker:** 100 ms, cross-feature writes every tick (progress guards, skip state). Positions:
+   started inside phase-15 `setupControls` after `setupCinemaProgressBar`; cleared only in `onDestroy`.
+10. **`dispatchKeyEvent` (27 patches) and `playbackListener` (6)** are router declarations; the patches are
+    permanent until phase 20. Negative: a patch with a missed `.seek.` (e.g. on `cinemaSeekMode`).
+11. **Overloads:** `Glide.with(FragmentActivity)` ×2, `Toast.makeText(Context, CharSequence, int)`, inherited
+    `findViewById(int)`/`getCurrentFocus`/`isFinishing`/`isDestroyed`. Compiled descriptor + opcode pins (3 + 4
+    sites, 1 exclusion).
+12. **Phase-15 temporary patches consumed:** the 3 moved bodies already contain `controlsDockController.`
+    (phase-15 patched rows); phase 16 substitutes them to `host.controlsDockController.`. The manifest's
+    original is the phase-15 merge.
+13. **Leading trivia:** the `CINEMA MODE` banner moves with `showControlsAndFocusProgressBar`; the misleading
+    `UP NEXT CARD` banner moves with `isCleanPlaybackState`; the `// Controls`, `// Time Display…` and
+    `// Cinema Mode Interactive Progress Bar` field headers move with their first fields; `// Seekbar` and the
+    OTT comment stay.
+14. **Companion split:** `CONTROLS_AUTO_HIDE_DELAY_MS` → owner file-private const; `PAYLOAD_KEY`,
+    `SEEK_STEP_MS`, `SEEK_LONG_PRESS_THRESHOLD`, … retained in order.
+15. **`@OptIn` presence on the owner, absence on the collaborators**; lint opt-in count 175. Map existing lint
+    issues inside moved spans to their new locations by exact correspondence, without suppressions. Candidates:
+    - `DefaultLocale` on `String.format("→ %.1fx", …)` 5684;
+    - `SetTextI18n` on `"Pause"/"Play"`, `"S$seasonStr E$episodeStr"`.
+16. **Shared-declaration merges** with phase 15: `playbackListener`, `onCreate`, `initIptvMode`, `onDestroy`,
+    `playStremioTvPlaybackMap`, plus the Start Over and guide Host rows (already re-pointed in 14 and 15).
+17. **`isCleanPlaybackState` reads lateinit `nextOverlay`/`pikPakReactivationIndicator` unguarded.** The
+    computed getter throws the same `UninitializedPropertyAccessException` type; pinned.
+
+---
+
+### 10. File split and counts
+
+| file | content | ≈ lines |
+|---|---|---|
+| `TvControlsOverlayController.kt` | 5 fields, 16 functions, `CONTROLS_AUTO_HIDE_DELAY_MS`, 54-member `Host` interface, eager `identity`/`seek`, `@OptIn` | 332 + ≈ 95 ≈ **430** |
+| `TvDockIdentityPresenter.kt` | 11 fields + 5 functions; constructor `(host)` | 311 + ≈ 20 ≈ **330** |
+| `TvSeekScrubController.kt` | 23 fields + 20 functions; constructor `(activity, host, controls)` | 518 + ≈ 22 ≈ **540** |
+
+| substitution kind | count |
+|---|---|
+| owner `host.` (incl. 2 readiness) | 83 |
+| identity `host.` | 18 |
+| seek `host.` (incl. 19 `player`) | 54 |
+| `host.controlsDockController.` (phase-15 temporaries) | 3 |
+| cross-qualifications (`controls.` 8, `identity.` 1, `seek.` 1) | 10 |
+| receivers (`this` → `activity`) | 3 |
+| inherited (`activity.currentFocus`, `.isFinishing`, `.isDestroyed`, `.findViewById`) | 4 |
+| visibility (`private` → public; owner 18, identity 11, seek 24; 27 stay private) | 53 |
+| **total** | **≈ 228** |
+
+**Activity:** −1,161 member lines −1 companion line, + ≈ 66 property/Host lines (54 one-line forwarders, 3
+three-line `var`s, object/header) + 2 readiness getters ≈ **−1,094** → ≈ 5,940. Size gate: activity baseline
+lowered with `--update`; all three new files ≤ 800 (largest ≈ 540); `TvPlayerControllerOwners.kt` ≈ 614.
+
+**Remaining after phase 16 (preview):** 17 IPTV tune pipeline + twin trial + live recovery (≈ 732), 18
+playback start + shuffle (≈ 912; consumes 6 phase-16 patches), 19 media pipeline + metadata receiver (≈ 697;
+consumes 4), 20 routers decision (`dispatchKeyEvent` now carries 27 phase-16 prefixes).
+
+---
+
+### 11. Step T / Step 0 needs
+
+**Step T:**
+- classifier forms (§3) with negatives (float literal, `arrayOfNulls<T>(N)`, `object : Runnable`);
+- the complete phase-16 extraction fixture:
+  - owner + two field-bearing nested collaborators at effective slot 210, 38 proofs;
+  - 10 cross-qualifications;
+  - 2 `added` readiness getters + the controller property;
+  - companion split;
+  - trivia fates;
+  - 48 patches in 11 declarations incl. 2 in-place `onDestroy` statements;
+  - 10 whole-property re-point rows (phase-15 dock Host with get/set pairs, built on the phase-15 merge);
+- negatives:
+  - §9 items;
+  - a folded `onDestroy`;
+  - a dropped named argument (`isContinuous =`, `confirm =`, `focused =`);
+  - a Host `var` with logic beyond its pinned text;
+  - a re-point that edits a frozen phase-15 destination;
+- compiled audit:
+  - 3 receiver sites, 1 Runnable exclusion, 4 inherited pins, `ACC_VOLATILE`;
+  - PSI non-substitution pins (ValueAnimator `apply`, SpannableString `apply`, the shadowed locals);
+- per-phase dispatcher keeping every historical suite;
+- earlier destinations (incl. the three phase-15 files) frozen at the phase-15 merge;
+- 9 owner-map routes (assertions byte-identical).
+
+**Step 0** (from zero; systematic statement sweep from the start: 104 `if`, 4 `when`, 47 `return`, 2 loops, 23
+elvis, 35 `&&`/`||` sites):
+- **Seams to demonstrate on the original first:**
+  - a recording `ExoPlayer` probe with controllable `isPlaying`/`playWhenReady`/`currentPosition`/`duration`/
+    `bufferedPosition`/`playbackState`/`playerError` (auto-hide only schedules while playing);
+  - deterministic animator/ViewPropertyAnimator stepping under the PAUSED looper + `ShadowChoreographer`
+    (phase-7 settings) for the 80 ms scrub animator, thumb animation and fades;
+  - the Glide lifecycle-owner check (`glideTracks`);
+  - a laid-out view tree (parent widths) for progress/buffered widths and `seekbar_background`.
+
+  If animator stepping cannot be made reliable, pin end states only and record the gap before design review.
+- **Seven separate activity instances** (one per controls skin; CLASSIC never installs OTT):
+  - `updateOttIdentity` arms (FROST/MARQUEE/BROADCAST/PULSE/TICKET/else, series vs non-series, show name
+    present/blank, PULSE span colour/bold);
+  - `updateOttExtras` (chips 0–3, rating star colours per skin, MARQUEE meta line + gold span, TICKET overline
+    composition);
+  - `dockTagsFor` cache hit/miss, URL-name fallback, `URLDecoder` failure;
+  - `updatePauseButtonLabel` icon family per spec, plus classic.
+- **Show/hide:**
+  - first reveal vs already visible (300 ms rise, focus post);
+  - docked zap banner merge (live vs VOD);
+  - title presentation (OTT hides the title, series/simple mode, empty-title guard);
+  - startup-gate visible vs not (readiness both ways: uninitialized `startupGateView`);
+  - `showController()`;
+  - hide when already hidden (immediate branch) vs animated hide (title 250 ms then mode reset, end-action
+    guard on re-show);
+  - source badge calls;
+  - lift `liftAbove` immediate + post re-measure with/without the docked banner;
+  - `hideTitleImmediately`.
+- **Auto-hide:** 4 s only while playing; reschedule while focus inside the overlay; cancel on pause click;
+  `controlsMenuVisible` gate; `handlePlayPauseToggleFromCenter` ordering.
+- **`togglePlayPause`:** pause; play clears `sleepStopLatched`; parked-twin restore returns early (label
+  still updated); dead-live `userRetry("play-press")` with `playWhenReady` set first (IPTV live ENDED / error /
+  surrendered; lazy `iptvLiveRecovery` first access).
+- **Ticker:**
+  - 100 ms cadence;
+  - skipped during `cinemaSeekMode`;
+  - `maxStableDurationMs`/`lastRealPositionMs` updates;
+  - skip-state call;
+  - OTT remaining-time text vs classic;
+  - legacy combined text;
+  - progress/buffered width (unchanged-width skip);
+  - runs after `onStop` (pinned);
+  - stops at `onDestroy`.
+- **Cinema scrub:**
+  - focus enter/exit;
+  - zero-duration focus fallback (OTT → pause button; classic → badge if sources else pause);
+  - pause preservation via `playWhenReady`;
+  - accelerated steps and clamping;
+  - CENTER confirm (`releaseResumeHold` → `seekTo` → exit → focus);
+  - BACK/DOWN exit;
+  - key-up speed reset;
+  - OTT track height and preview chip (delta ≠ 0 / stays once shown, `−` sign);
+  - classic red/white current time;
+  - animator from the last progress;
+  - live-transition reset by the styler (via the dock Host).
+- **Legacy seekbar** (reflective `showSeekbar`): zero-duration Toast, pause, show/hide fades, play on hide,
+  `confirmSeekPosition`, `seekBackward/Forward` clamping, the speed indicator, `updateSeekbarUI` width caching
+  via `post`, the `dispatchKeyEvent` seekbar branch with `seekbarVisible` set reflectively.
+- **Quick seek `seekBy`:** clamping with known/unset duration, `releaseResumeHold`, `SeekFeedbackManager`
+  forward/backward labels.
+- **Key matrix through the real `dispatchKeyEvent`** for all 27 patched sites:
+  - BACK with controls;
+  - CENTER (skip-button and badge focus pass-through, focus in controls, repeat ignored);
+  - DOWN (badge → progress/pause by duration; show+schedule when hidden or focus outside);
+  - UP (progress → badge; dock → progress/badge by duration; live-IPTV exclusion; `cinemaSeekMode` gate);
+  - the long-press jump dialog `hideControlsMenu`;
+  - RIGHT/LEFT short `seekBy(±10 s)` vs long-press `showControlsAndFocusProgressBar` (100 ms focus post);
+  - focus-in-controls LEFT pass-through.
+- **Next/loading overlay:**
+  - `setResolvingState(true/false)` (text cleared, subtext hidden, fade-in 220 ms; hide 160 ms + backdrop clear);
+  - backdrop load/clear with the Glide owner;
+  - guards: uninitialized, finishing, destroyed;
+  - `playbackListener` ENDED auto-advance (continuous shuffle and next index, 1.5 s `progressHandler` post →
+    hide → `isAutoAdvancing` → `playItem`);
+  - the Stremio-guide path via its Host.
+- **`isCleanPlaybackState`:** each of the 9 conditions independently.
+- **Title:** `updateTitle` (series badge/episode-title fallback/rating, `channelBadge` hidden, OTT refresh) from
+  each patched caller; `handleMetadataUpdate` show-name write (volatile) + OTT-only `runOnUiThread` refresh;
+  `replacePayloadWithStremioTvItem` clears it.
+- **`onDestroy` handler clear order and pending auto-hide/ticker removal.**
+- Mutation proofs on the original; Claude's independent sample (≥ 75 % kills, else sweep + second sample); 0b.
+
+---
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+- `showSeekbar` has no caller: the legacy seekbar overlay, its `dispatchKeyEvent` branch, `seekBackward/Forward`,
+  `confirmSeekPosition`, `updateSeekSpeed`/`updateSeekbarUI`/`updateSeekbarPosition` are unreachable in
+  production; the `isContinuous` parameters are unused.
+- `stopSeekbarProgressUpdates` has no caller. The 100 ms ticker runs while the activity is paused/stopped
+  (until `onDestroy`), keeps touching the progress guards and the skip state, and wakes the main looper.
+- `cinemaProgressAnimator` and view animations are not cancelled in `onDestroy`; the `pauseButton?.post`
+  focus requests are not cancelled on hide.
+- `updateCinemaSeekSpeed` only stores the speed (the indicator UI was removed); `cinemaSpeedIndicator` is
+  hidden only on key-up.
+- The `UP NEXT CARD` banner sits above `isCleanPlaybackState` (an orphaned section header).
+- `isCleanPlaybackState` reads `nextOverlay`/`pikPakReactivationIndicator` without readiness checks.
+- `hideControlsRunnable` re-arms indefinitely while focus stays inside the overlay during playback (intended
+  "keep open while focused", but never times out).
+- `scheduleHideControlsMenu` never arms while paused/buffering (`isPlaying` false), so controls opened during
+  buffering stay up until the next interaction.
