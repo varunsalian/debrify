@@ -3572,3 +3572,12 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   Lockfile, ProGuard and earlier manifests/destinations unchanged. No push,
   branch switch, self independent review, device/emulator or bug fix.
   Phase 16 not started.
+- 2026-10-09 — phase 15 post-implementation reviews of `1e184b9b1..e92fe6fb7`.
+  Claude's independent sample 13/15 (87 %); s01 (extra aspect-label update
+  before apply) proved observable and pinned; s02 (`== 3` → `>= 3`)
+  equivalent under the verified 0–3 index invariant. Independent Codex review
+  (fresh session): **No P1s, no P2/P3**; 7 × 4 skin/style matrix, loudness
+  failure paths, aspect publication order, 12/11 cast pins all preserved;
+  lint path normalization changes only the wrapper path. Activity
+  7,982 → 6,986. Decoder verification remains pending-environment. Phase 15
+  complete; merged.
