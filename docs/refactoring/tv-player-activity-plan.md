@@ -2879,3 +2879,34 @@ now/next header with logo and letter fallback.
   protected inputs pass. Forced compile preserves all five warning identities.
   Evidence `p12/step1/`, `p12/gate/`. Full integration gate follows on the
   committed tree; no self independent review, bug fix or device interaction.
+
+
+- 2026-10-09 — **Phase 12 gate complete on `3d389848f`; decoder
+  pending-environment. STOPPED after Phase 12.** Step 0b `94f018032` adds ten
+  passing tests, ten named original assertion proofs and kills exact Claude
+  o03/o06/o12 against all 163 phase-12 cases; o08 remains invalid/excluded.
+  Clean `p12-gate` exactly matches all **1,300** Step-0b identities/statuses
+  (1,299 passes, unchanged focus failure), matched 1 GiB heap, no missing or
+  new skips and a stable clean tree. Checker classifies **2,139** originals
+  with zero differences; **298** self-tests and p1–p11 historical merge checks
+  pass. All **43** prior destinations remain byte-identical to `b870a16b1`.
+  Compiled audit **77/77** (24 constructor/context + 53 inherited, incl.
+  resources/currentFocus getters and EditText inner-this preservation), **20**
+  initializer proofs, full lifecycle/teardown order and exact test-retarget
+  reversal pass; five compiler warning identities unchanged. Size gate passes
+  at activity **10,297**, production **394/469/416**, with only the explicit
+  **813**-line test-helper exception and pre-next-route split milestone.
+  Lint exactly matches all **1,352** original identities (253 errors,
+  1,099 warnings; 175 existing opt-in errors); analyzer **1,758** unchanged.
+  Release APK succeeds; R8/DEX verifies **12 classes / 204 members**, including
+  all new controllers/collaborators/Host/anonymous objects and the activity
+  Host implementation, plus three mapping negative controls. Decoder failure
+  output, all three native library hashes and missing decoder/filter manifest
+  exactly match phase 1: pending-environment, no workaround. Affected Dart
+  source tests match all **45** prior statuses; full Flutter suite via
+  `suite_evidence.py` exactly matches all **12,855** phase-11 identities/statuses
+  (12,794 success, 13 failure, 28 error, 20 skipped), same SDK/flags and stable
+  clean committed tree. No Dart anchors changed. Evidence `p12/step0b/`,
+  `p12/step1/`, `p12/gate/`, `junit/p12-step0b/`, `junit/p12-gate/`. Detached
+  original removed; lockfile, ProGuard and earlier manifests unchanged.
+  No push, branch switch, self independent review, device/emulator or bug fix.

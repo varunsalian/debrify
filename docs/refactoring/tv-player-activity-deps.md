@@ -13254,3 +13254,30 @@ assertions, with no production change.
 | `TvIptvChromeBoundaryCharacterizationTest.positiveJumpNumbersIncludeOneAndIntegerMaximum` | `number == null \|\| number <= 0` → `number == null \|\| number <= 1` | java.lang.AssertionError: java.lang.AssertionError |
 
 Exact survivor rerun: `o03` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.nonHttpSchemesLeaveEpgStateAndTransportUntouched`, `o06` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.queuedArchiveRetrySkipsExpiredChannelNoLongerCurrent`, `o12` killed by `com.debrify.app.tv.TvIptvChromeBoundaryCharacterizationTest.zeroJumpEditorGoShowsErrorWithoutDismissingOrRequesting`.
+
+
+### Phase 12 gate disposition
+
+Step 0b is `94f018032`; manifest moves are `3d389848f`. Original assertion
+proofs and exact survivor reruns are under `p12/step0b/`; Claude's o08 was an
+absent-pattern invalid mutation, excluded from the independent sample's 15
+valid mutations. The accepted sample was 12/15 before closing its three
+survivors. No zero-test/crash-only attempt is counted as a valid proof.
+
+The clean moved-tree JVM run exactly matches all 1,300 Step-0b statuses
+(1,299 passes, existing source-browser focus failure). Current/historical
+checkers, 298 self-tests, 77 compiled receiver pins (24 + 53), 20 initializer
+proofs, complete lifecycle-order comparison and 43 frozen prior files pass.
+Lint's 1,352 identities and analyzer's 1,758 diagnostics are unchanged. The
+45 affected Dart and 12,855 full Flutter statuses exactly match the phase-11
+gate on the same SDK and stable clean tree. Release succeeds; R8/DEX retains
+12 new-source/Host classes and all 204 members, with three negative controls.
+Decoder verification is pending-environment: identical failure, library hashes
+and missing manifest to phase 1. No decoder/ProGuard workaround is applied.
+
+All assertions are byte-identical after reversing the 39 owner-map insertions;
+no Dart retarget is necessary. The access helper's 813-line capped exception
+and pre-next-route split milestone are in the plan; all three production
+destinations remain below 500 lines. Full evidence: `p12/gate/summary.json`,
+raw logs/results and `junit/p12-step0b/`, `junit/p12-gate/`. No push, branch
+switch, independent review, device/emulator interaction or production bug fix.
