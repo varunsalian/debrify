@@ -141,6 +141,70 @@ def receiver_lambda_transformations(manifest, original, unit, nodes, moved):
     return dict(zip(offsets, actual))
 
 
+def listener_inventory(manifest, original, unit, nodes, moved):
+    """Only the reviewed global-layout listener self receiver is excluded."""
+    expected = []
+    for site in unit['all_this_sites']:
+        row = next((r for name, r in moved.items()
+                    if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
+        if not row or site.get('receiver') != 'object':
+            continue
+        if (site.get('object_types') != ['android.view.ViewTreeObserver.OnGlobalLayoutListener'] or
+                site.get('object_method') != 'onGlobalLayout' or
+                site.get('callee') != 'removeOnGlobalLayoutListener' or site['text'] != 'this'):
+            raise ValueError('wrong receiver classification: unreviewed object this')
+        line = original.count('\n', 0, site['start']) + 1
+        expected.append(dict(original=row['original'], line=line,
+            context=original.splitlines()[line - 1].strip(), text='this',
+            object_types=site['object_types'], object_method=site['object_method'],
+            callee=site['callee']))
+    actual = manifest.get('listener_receivers', [])
+    keys = tuple(expected[0]) if expected else ()
+    if ([{key: row.get(key) for key in keys} for row in actual] != expected or
+            any(set(row) != {*keys, 'reason'} or not row.get('reason') for row in actual)):
+        raise ValueError('typed listener exclusion coverage/binding differs from original PSI')
+    return expected
+
+
+def reference_inventory(manifest, original, unit, nodes, moved):
+    expected = []
+    for site in unit['callable_references']:
+        row = next((r for name, r in moved.items()
+                    if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
+        if row:
+            expected.append(dict(original=row['original'], line=original.count('\n', 0, site['start']) + 1,
+                context=original.splitlines()[original.count('\n', 0, site['start'])].strip(),
+                callee=site['callee'], receiver=site['receiver']))
+    actual = manifest.get('function_references', [])
+    keys = tuple(expected[0]) if expected else ()
+    if ([{key: row.get(key) for key in keys} for row in actual] != expected or
+            any(not row.get('after_receiver') or not row.get('expected_before') or not row.get('expected_after') for row in actual)):
+        raise ValueError('function-reference audit coverage differs from original PSI')
+    return expected
+
+
+def check_special_bindings(manifest, original, current, units, nodes, moved):
+    """Pin typed listener self and callable-reference receiver after extraction."""
+    listener_inventory(manifest, original, units['original'], nodes['original'], moved)
+    reference_inventory(manifest, original, units['original'], nodes['original'], moved)
+    for name, row in moved.items():
+        if row['destination'] not in units:
+            continue
+        old, new = nodes['original'][name], nodes[row['destination']][row['target']]
+        def within(sites, node):
+            return [s for s in sites if node['start'] <= s['start'] < node['end']]
+        before = within(units['original']['all_this_sites'], old)
+        listeners = [s for s in before if s.get('receiver') == 'object']
+        after = within(units[row['destination']]['all_this_sites'], new)
+        keys = ('text', 'object_types', 'object_method', 'callee')
+        if [[s.get(key) for key in keys] for s in listeners] != [[s.get(key) for key in keys] for s in after if s.get('receiver') == 'object']:
+            raise ValueError('typed listener expression substituted or binding changed: ' + name)
+        old_refs = [r for r in manifest.get('function_references', []) if r['original'] == name]
+        new_refs = within(units[row['destination']]['callable_references'], new)
+        if [(r['callee'], r['after_receiver']) for r in old_refs] != [(r['callee'], r['receiver']) for r in new_refs]:
+            raise ValueError('function-reference receiver/dispatch changed: ' + name)
+
+
 def receiver_inventory(manifest, original, unit, nodes, moved):
     """Require every activity receiver, alias use and Runnable self site by PSI."""
     def row_at(offset):
@@ -149,6 +213,9 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
         line = original.count('\n', 0, site['start']) + 1
         return row['original'], line, original.splitlines()[line - 1].strip()
     expected_runnable, expected_alias, calls = [], [], []
+    if manifest['phase'] >= 13:
+        listener_inventory(manifest, original, unit, nodes, moved)
+        reference_inventory(manifest, original, unit, nodes, moved)
     if manifest['phase'] >= 11:
         receiver_lambda_inventory(manifest, original, unit, nodes, moved)
     if manifest['phase'] >= 12:
@@ -159,6 +226,8 @@ def receiver_inventory(manifest, original, unit, nodes, moved):
             continue
         if manifest['phase'] >= 11 and 'lambda_receiver' in site:
             continue
+        if manifest['phase'] >= 13 and site.get('receiver') == 'object':
+            continue  # Exhaustively checked by the typed listener inventory above.
         if site['receiver'] == 'Runnable':
             expected_runnable.append(identity(row, site))
             continue
@@ -232,6 +301,8 @@ def audit(manifest, original, current, before, after):
         if sorted(expected) != sorted(actual):
             raise ValueError('substituted this-site audit coverage differs from original PSI')
         receiver_sites = units['original']['this_sites']
+    if manifest['phase'] >= 13:
+        check_special_bindings(manifest, original, current, units, nodes, moved)
     results = []
     for site in sites:
         row = moved[site['original']]
@@ -275,6 +346,20 @@ def audit(manifest, original, current, before, after):
             raise ValueError(f'overload changed at original line {site["line"]}: {old} -> {new}')
         results.append(dict(site=site, resolved_before=old, resolved_after=new,
                             before=old_evidence, after=new_evidence))
+    if manifest['phase'] >= 13:
+        for reference in manifest.get('function_references', []):
+            row = moved[reference['original']]
+            old_node = nodes['original'][row['original']]
+            new_node = nodes[row['destination']][row['target']]
+            delta = current[row['destination']].count('\n', 0, new_node['start']) - original.count('\n', 0, old_node['start'])
+            for calls, pin, line in ((before, reference['expected_before'], reference['line']),
+                                     (after, reference['expected_after'], reference['line'] + delta)):
+                candidates = [call for call in calls if call['line'] == line and
+                              '$' in call['owner'] and ' invoke(' in call['method'] and
+                              call['call'].split(':')[0].endswith('.' + pin['callee'])]
+                signatures = { (call['call'], call['opcode']) for call in candidates }
+                if signatures != {(pin['owner'] + '.' + pin['callee'] + ':' + pin['descriptor'], pin['opcode'])}:
+                    raise ValueError('compiled function-reference dispatch changed: ' + reference['original'])
     return results
 
 
@@ -292,8 +377,10 @@ def main():
         current = {path: (args.tree / path).read_text() for path in manifest['destinations']}
         results = audit(manifest, original, current, bytecode(args.original_classes), bytecode(args.moved_classes))
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(dict(sites=len(results), results=results), indent=2) + '\n')
-        print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations')
+        args.output.write_text(json.dumps(dict(sites=len(results), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results), indent=2) + '\n')
+        print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations' +
+              (f'; {len(manifest.get("function_references", []))} compiled function references; '
+               f'{len(manifest.get("listener_receivers", []))} typed listener receivers' if manifest['phase'] >= 13 else ''))
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, 'FAIL: ' + str(error) + '\n')
 

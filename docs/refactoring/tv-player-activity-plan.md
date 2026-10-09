@@ -1613,7 +1613,7 @@ lists, the playlist in each controls skin, opening/closing during playback.
 
 ## Follow-ups (found while mapping; not fixed here)
 
-- Phase 12 scoped test-helper size exception:
+- Phase 12 scoped test-helper size exception (**resolved in Phase 13 Step T**):
   `android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt`
   grows 774 → 813 physical lines solely from the 39 required owner routes.
   Retain its existing reflection/adapter fixture behavior and byte-identical
@@ -3005,3 +3005,25 @@ lists, the playlist in each controls skin, opening/closing during playback.
   quirk cases); P3s: inventory totals corrected to 29 properties / 31
   functions / 3 view getters, router estimates per router (≈ 71 / ≈ 47).
   Phase 13 design approved.
+
+
+- 2026-10-09 — **Phase 13 Step T complete; production unchanged.** First split
+  the 813-line original-access test helper into the 325-line access fixture
+  and 494-line immutable owner table; all 487 route entries and all other
+  access code are byte-preserved, and the size exception is removed. Helper
+  JVM verification retains all 1,300 phase-12 identities/statuses (1,299 pass,
+  unchanged focus failure). Re-measured manifest at `315448a3c`: 60 members
+  (29 properties / 31 functions), 31 activity patches in 15 declarations,
+  seven Host re-points in six whole-property rows, 49 cross-qualifications,
+  28 initializer proofs and 46 frozen earlier destinations. Original
+  self-comparison classifies all 2,013 declarations with zero differences.
+  Complete extraction fixture passes and compiles only in the detached
+  original/evidence tree (586/327/398 lines). Audit pins all 23 receivers
+  (eight constructor/context plus 15 inherited, incl. layoutInflater), the
+  typed listener self binding and both bound guide-skin function references.
+  Narrow negative-integer, reviewed enum and getter-only classifier forms
+  reject their stated negatives. All 298 historical and 39 final phase-13
+  self-tests pass; historical suites retain their own manifests. Evidence
+  `p13/helper-split.json`, `p13/checker-self-tests.log`,
+  `p13/phase13-final-self-tests.log`, `p13/overload-audit.json`.
+  Step 0 follows on the original; no production move or owner-route addition.

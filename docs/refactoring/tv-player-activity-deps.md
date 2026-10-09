@@ -13833,3 +13833,66 @@ with them (each moved view adds a `bindViews` patch and removes a Host forwarder
 
 Either could bring the activity to ≈ 1,500–2,000. **≤ 800 is not reachable under the current verbatim
 rules.**
+
+
+## Phase 13 Step T — original re-measurement at `315448a3c`
+
+The corrections header governs: **29 properties / 31 functions / 60 members**.
+The 10,297-line activity is unchanged. The complete production-config fixture
+contains a 586-line playlist owner, 327-line focus navigator and 398-line guide
+skin; both collaborators are eager at the `seasonTabs` slot (182), with 28
+initializer proofs, nine view/state Host getters and two braced Host methods.
+The three playlist views remain activity-owned. Earlier **46** destinations
+are frozen byte-for-byte to the original merge, with an empty whitelist.
+
+The source inventory is `p13/remeasured-inventory.json`; the manifest owns
+all 2,013 original declarations. Re-measurement preserves 31 patches in 15
+activity declarations, seven re-points in six whole-property Host rows, seven
+in-place teardown statements and 49 cross-qualifications. There are 234
+explicit moved substitutions, including visibility and bound function
+references. Reflected functions and the two getter-only properties use public
+members on internal destinations to avoid JVM name mangling; Step 0 rescans
+the actual reflection needs before any production move.
+
+| Moved function | Original start–end lines |
+| --- | --- |
+| `setupPlaylist` | 3505–3579 |
+| `rebuildPlaylistContent` | 3581–3614 |
+| `setupSeriesPlaylist` | 3616–3643 |
+| `setupCollectionPlaylist` | 3645–3664 |
+| `setupSeasonTabs` | 3666–3696 |
+| `createSeasonTab` | 3698–3727 |
+| `selectSeasonTab` | 3729–3743 |
+| `setupCollectionTabs` | 3745–3772 |
+| `createMovieTab` | 4074–4100 |
+| `selectMovieTab` | 4102–4115 |
+| `showPlaylist` | 7733–7777 |
+| `alignSeriesTabsForCurrentEpisode` | 7779–7788 |
+| `alignMovieTabsForCurrentItem` | 7790–7797 |
+| `getNextPlayableIndex` | 7799–7835 |
+| `getPrevPlayableIndex` | 7837–7868 |
+| `computeMovieGroups` | 7870–7956 |
+| `hidePlaylist` | 7958–7962 |
+| `setupPlaylistNavigation` | 3774–3831 |
+| `findNextFocusablePosition` | 3833–3871 |
+| `ensureFocusInPlaylist` | 3873–3924 |
+| `transferFocusToPosition` | 3926–3979 |
+| `movePlaylistFocus` | 3981–4072 |
+| `installGuideOverlaySkin` | 3179–3189 |
+| `bindGuideSkinViews` | 3191–3207 |
+| `applyGuideLayoutManager` | 3209–3236 |
+| `applyGuideKeyOverride` | 3238–3302 |
+| `applyGuideTabStyle` | 3304–3357 |
+| `guideSkinBind` | 3359–3419 |
+| `updateGuideDetail` | 3421–3465 |
+| `loadGuideArt` | 3467–3476 |
+| `seedGuideSkinChrome` | 3478–3503 |
+
+Step T first resolves the Phase-12 helper milestone: the owner-route map is
+a separate 494-line fixture, the reflection/access fixture is 325 lines, all
+487 route entries and all remaining access bytes are preserved, and the size
+ratchet entry is removed. Its 1,300 JVM identities/statuses match `p12-gate`.
+The final checker suites comprise 298 historical plus 39 Phase-13 tests.
+The complete extraction fixture compiles with 23 pinned receivers, one typed
+listener self exclusion and two compiled guide-skin function references.
+Raw logs, fixtures and hashes are under `p13/`; production remains original.
