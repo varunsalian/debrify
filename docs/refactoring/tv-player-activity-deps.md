@@ -16264,3 +16264,20 @@ All patches apply to `ce3ddfb06` plus only the new tests. Each evidence director
 ### Reflection and checkpoint
 The post-test owner rescan finds 54 referenced moved names across 392 quoted/literal-list sites, beyond the design’s original 9 owner routes. Future Step 1 must route these names through the owning controller and retain public reflected members; direct reflection on non-activity fixture objects stays local. The existing NativePlayerSettingsConsumptionTest nightModeIndex helper also needs its planned retarget. Borrowed player/view/spec/routing/selector/skin/preferences stay activity-owned. Full names/locations: `p15/step0/reflective-owner-rescan.json`. No owner/helper or Dart retarget occurs in Step 0.
 All 419 checker/auditor self-tests pass in the final clean run (`p15/checker-final-full.log`), superseding the initial 418 + 42 repaired-check evidence recorded in Step T. The original 1,730-declaration self-comparison, complete production-config fixture/audit, 31 initializer proofs, 51 earlier destinations and 68 protected-path hashes remain valid. File-size and diff checks pass; no new exception. Detached original worktree is removed after archive completion. Production moves and their release/R8/Flutter gate remain pending Claude’s independent sample; no push, device interaction, dependency/ProGuard change or behavior fix.
+
+
+### Phase 15 Step 0b — independent aspect survivors
+
+Claude's independent sample killed 13/15 against the original ce3ddfb06. s02 is equivalent: the only four production assignments are the literal initial value 1, the clamped preference read, the clamped menu choice and cycling modulo the four-element resizeModes array. These preserve 0..3, where == 3 and >= 3 coincide. The exact s02 mutation passes all 337 phase-15 characterizations, including all 18 display tests. Evidence: p15/step0b/s02-invariant.json, s02-full/ (definition, fixture hashes, original patch, full log/XML/result). No production fix or out-of-invariant acceptance was introduced.
+
+s01 is observable through real TextView writes: the extra label update occurs before applyResizeMode, so the text/caption publication sees the previous resize mode and scale. Even an extra update after applyResizeMode creates a second label/caption repaint. Added two named tests using actual TextWatchers and real focused aspect-button/caption routing; their control passes on the original. Existing assertions are untouched.
+
+| Test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| TvPlaybackDisplayCharacterizationTest.aspectCycleWritesItsLabelOnceAfterApplyingBothScaleAxes | Claude s01: extra updateAspectButtonLabel before applyResizeMode | resize mode applied before publishing the label: FIT 0 expected, ZOOM 4 observed |
+| TvPlaybackDisplayCharacterizationTest.focusedAspectCyclePublishesOneCaptionAfterApplyingResizeState | Claude s01 | caption sees the new horizontal scale: 1.3333334 expected, 1.0 observed |
+| Both tests above | s01-after-apply: duplicate updateAspectButtonLabel after applying resize | one label publication / one caption repaint: [Cinema Zoom] expected, [Cinema Zoom, Cinema Zoom] observed |
+
+Both non-equivalent variants fail named assertions, without compile errors or crash credit. The exact s01 survivor is killed; s02 is recorded equivalent, not credited as killed. Original control: 337/337 pass. Raw evidence p15/step0/control-step0b[-all]/ and p15/step0b/mutations/, s02-full/, survivor-classification.json. The detached original worktree is removed after proof completion.
+
+Clean p15-step0b: 1,943 identities, 1,942 passing and the same known SourceBrowser focus failure. Comparison to p15-step0 permits exactly two passing additions; every prior identity/status is equal, no missing/new skips, complete non-aborted XML and stable inputs, same JBR and evidence-only 1 GiB worker heap. Evidence junit/p15-step0b/ and p15/step0b/jvm-strict-comparison.json. No production moves yet.

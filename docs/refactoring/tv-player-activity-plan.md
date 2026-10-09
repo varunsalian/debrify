@@ -3497,3 +3497,19 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   lockfile/ProGuard change, device interaction, branch switch or push.
   Stopped before Step 1 for Claude’s independent sample; move/release/R8/
   Flutter phase gates remain at their planned milestone.
+
+
+- 2026-10-09 — **Phase 15 Step 0b complete.** Independent s01 is observable:
+  the extra label/caption publication precedes resize application. Two new
+  original-surface TextWatcher tests pin evaluation-time resize state and one
+  repaint per action; exact s01 and a duplicate-after-resize variant each fail
+  both named assertions. All 337 phase-15 controls pass on original ce3ddfb06.
+  s02 is equivalent: all four production writers preserve resizeModeIndex
+  0..3; == 3 and >= 3 coincide, and its full 337-case mutant run passes.
+  Classification, invariant, immutable fixtures, logs/XML and mutation rows
+  are in p15/step0b/ and the deps report. p15-step0b has 1,943 identities:
+  1,942 pass, same known focus failure; exactly two passing additions versus
+  p15-step0, every prior status equal, stable tree, matched 1 GiB/JBR.
+  Original detached worktree removed; all 68 protected paths unchanged.
+  No old assertion edit, production bug fix, lockfile/ProGuard edit or device
+  interaction. Step 1 and the integration gate follow as authorized.

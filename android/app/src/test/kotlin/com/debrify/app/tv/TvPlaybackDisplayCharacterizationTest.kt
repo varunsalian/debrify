@@ -1,5 +1,7 @@
 package com.debrify.app.tv
 
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.TextView
 import androidx.media3.common.Player
@@ -132,5 +134,42 @@ internal class TvPlaybackDisplayCharacterizationTest : TvPhase15OriginalTest() {
         assertEquals("Playback speed", value.col3Title); assertEquals(speedLabels, value.col3.map { it.title })
         assertEquals(listOf(false, false, true, false, false, false), value.col3.map { it.selected })
         value.col3[4].onOk!!.invoke(); assertEquals(4, field("playbackSpeedIndex")); assertEquals(1.5f, speed, 0f)
+    }
+    private fun observeWrites(view: TextView, write: (String) -> Unit) {
+        view.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { write(s.toString()) }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+    @Test fun aspectCycleWritesItsLabelOnceAfterApplyingBothScaleAxes() {
+        aspect(2)
+        val writes = mutableListOf<String>()
+        observeWrites(button("aspectButton")) { text ->
+            writes.add(text)
+            assertEquals("resize mode applied before publishing the label", modes[3], pv().resizeMode)
+            assertEquals("horizontal scale applied before publishing the label", 4f / 3f, content().scaleX, 0f)
+            assertEquals("vertical scale applied before publishing the label", 4f / 3f, content().scaleY, 0f)
+        }
+        call("cycleAspectRatio", emptyArray())
+        assertEquals("one label publication per aspect action", listOf("Cinema Zoom"), writes)
+        assertEquals("Aspect: Cinema Zoom", toast())
+    }
+    @Test fun focusedAspectCyclePublishesOneCaptionAfterApplyingResizeState() {
+        pv().showController(); (field("controlsOverlay") as View).visibility = View.VISIBLE; layout()
+        assertTrue("aspect button actually holds focus", button("aspectButton").requestFocus())
+        set("ottSkinInstalled", true)
+        val caption = TextView(activity); set("ottCaptionLabel", caption)
+        aspect(2)
+        val writes = mutableListOf<String>()
+        observeWrites(caption) { text ->
+            writes.add(text)
+            assertEquals("caption sees the new horizontal scale", 4f / 3f, content().scaleX, 0f)
+            assertEquals("caption sees the new vertical scale", 4f / 3f, content().scaleY, 0f)
+        }
+        call("cycleAspectRatio", emptyArray())
+        assertEquals("one caption repaint per aspect action", listOf("Cinema Zoom"), writes)
+        assertSame(button("aspectButton"), field("ottCaptionOwner"))
+        assertEquals(1f, caption.alpha, 0f)
     }
 }
