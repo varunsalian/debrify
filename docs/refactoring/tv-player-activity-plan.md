@@ -1532,6 +1532,17 @@ now/next header with logo and letter fallback.
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase 12 scoped test-helper size exception:
+  `android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt`
+  grows 774 → 813 physical lines solely from the 39 required owner routes.
+  Retain its existing reflection/adapter fixture behavior and byte-identical
+  assertions in this move; the 813-line ratchet is explicit in the size baseline.
+  Exit milestone: before the next phase adds any owner route, extract the
+  immutable controller-owner lookup into a dedicated test fixture, preserving
+  all names/values and keeping the access helper below 800. No production
+  size exception or numeric-check exemption is added.
+
+
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
   Three attempts were rejected; matched original/extracted 1024 MiB runs pass
   identity comparison via an evidence-only init script. A durable test-harness
@@ -2851,3 +2862,20 @@ now/next header with logo and letter fallback.
   Evidence `p12/step0b/`, `junit/p12-step0b/`. Detached original removed;
   production, manifest, old tests/helpers, lockfile and ProGuard unchanged.
   Approved Step 1 and gate follow.
+
+
+- 2026-10-09 — **Phase 12 Step 1 moves complete.** Materialized the approved
+  manifest exactly into the chrome owner and eager fieldless overlay/pickers
+  (**394/469/416** lines), with the owner at the first removed field slot.
+  Activity **11,458 → 10,297**; size baseline lowered with `--update`.
+  Seven whole-declaration patches include the phase-11 Host span and in-place
+  teardown. Shared test-helper owner map gains all **39** rescanned routes;
+  all prior/new test assertions and Dart files remain byte-identical. The
+  helper's 813-line scoped exception and pre-next-route split milestone are
+  recorded explicitly; no production exception. All **163** phase-12
+  characterizations pass. Current checker: **2,139** original declarations
+  classified, zero differences; all **77** compiled receiver pins, **20**
+  initializer proofs, lifecycle order, **43** earlier destination bytes and
+  protected inputs pass. Forced compile preserves all five warning identities.
+  Evidence `p12/step1/`, `p12/gate/`. Full integration gate follows on the
+  committed tree; no self independent review, bug fix or device interaction.
