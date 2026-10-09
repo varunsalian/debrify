@@ -15135,3 +15135,77 @@ The sweep runs **16 original mutations: 15 assertion kills, one equivalent**. Th
 Same-class sweep inventory: every movie/series gate in fetch/launch/retry/manual apply, every null/empty identity/label/audio/cache/error guard, and the language fallback was reviewed against the existing Step-0 matrix and these new boundary cases. Series/movie field-copy gates retain their exact manifest tokens; movie service arguments are explicitly observed before the real fetch. Existing audio/cache/error/label/default-language witnesses remain, and the new tests fill the empty-manual and nullable-argument gaps. No production bug or policy change was made.
 
 `junit/p14-step0b` has **1,606 identities: 1,605 pass, the same known SourceBrowser focus failure, no skips**. Compared with p14-step0: **14 passing additions only**, all 1,592 prior statuses unchanged, stable fingerprints, complete XML and matched evidence-only 1 GiB workers. Production, lockfile, ProGuard and old assertions remain unchanged. This baseline is the Phase-14 move gate reference.
+
+
+## Phase 14 Step 1 — subtitle-source collaborators
+
+Moved the approved 21 fields and 22 functions into `TvSubtitleSourcesController`
+(710 physical lines), with the eagerly constructed, fieldless
+`TvSubtitleSearchDialogs` (495). The activity is 7,982 lines (from 9,079); its
+size ratchet is lowered, without a new exception. The scope, service and
+track-readiness object remain activity-owned and borrowed through computed
+Host getters. The manifest applies all 134 substitutions, the four whole
+Host-property patches (11 forwarders / 13 tokens, as corrected in Step T),
+and the 24 activity patches in nine declarations. The single onDestroy
+statement stays between subtitleScope cancellation and service clearing.
+
+All 186 phase-14 characterizations pass after extraction. The exhaustive
+checker classifies 1,850 original declarations with zero differences; the
+compiled audit passes all 25 receiver sites and six preserved bindings,
+including ListView construction, inner adapter receiver and ArrayAdapter
+super-constructor. Twenty initializer proofs, lifecycle/teardown order,
+49 frozen earlier destinations, protected inputs and all five Kotlin warning
+identities pass. Full gate results follow separately. Raw materialization,
+exact retargets and checks are under `p14/step1/` and `p14/gate/`.
+
+Only the shared `TvPlayerControllerOwners.kt` owner map changes in tests;
+all characterization/assertion text is byte-identical. The reflected old
+activity members below route through the named owner, retaining the same
+selectors and assertions. `resetSubtitleState` routes apply only to the
+AndroidTv activity: the existing Torbox sites remain unchanged. The borrowed
+scope/service/readiness reflect directly on the activity. No Dart anchors
+or assertions require editing; affected anchored content remains identical.
+
+| Old reflected activity member | New owner |
+| --- | --- |
+| `addonFetchTokens` | `subtitleSourcesController` |
+| `addonSubtitleFetchToken` | `subtitleSourcesController` |
+| `addonSubtitleResults` | `subtitleSourcesController` |
+| `applyManualSubtitleIdentity` | `subtitleSourcesController` |
+| `clearStremioLoadingState` | `subtitleSourcesController` |
+| `createSubtitleCatalogResultAdapter` | `subtitleSourcesController.dialogs` |
+| `currentStremioSubtitleIndex` | `subtitleSourcesController` |
+| `currentSubtitleIdentityLabel` | `subtitleSourcesController` |
+| `failedSubtitleUrls` | `subtitleSourcesController` |
+| `fetchStremioSubtitles` | `subtitleSourcesController` |
+| `fetchStremioSubtitlesWithImdb` | `subtitleSourcesController` |
+| `getCurrentSubtitleSearchItem` | `subtitleSourcesController.dialogs` |
+| `injectedSubtitles` | `subtitleSourcesController` |
+| `isLoadingStremioSubtitles` | `subtitleSourcesController` |
+| `launchAddonSubtitleFetch` | `subtitleSourcesController` |
+| `manualSubtitleDisplayLabel` | `subtitleSourcesController` |
+| `manualSubtitleEpisode` | `subtitleSourcesController` |
+| `manualSubtitleImdbId` | `subtitleSourcesController` |
+| `manualSubtitleSeason` | `subtitleSourcesController` |
+| `manualSubtitleType` | `subtitleSourcesController` |
+| `pendingEpisode` | `subtitleSourcesController` |
+| `pendingSeason` | `subtitleSourcesController` |
+| `pendingSeriesResult` | `subtitleSourcesController` |
+| `rebuildFlatStremioSubtitles` | `subtitleSourcesController` |
+| `refreshSubtitleUiForLoading` | `subtitleSourcesController` |
+| `resetSubtitleState` | `subtitleSourcesController` |
+| `retryAddonSubtitles` | `subtitleSourcesController` |
+| `setAddonSubtitleSlot` | `subtitleSourcesController` |
+| `showSearchSubtitleDialog` | `subtitleSourcesController.dialogs` |
+| `showSeasonEpisodePrompt` | `subtitleSourcesController.dialogs` |
+| `stremioSubtitles` | `subtitleSourcesController` |
+| `subtitleAddonDiscoveryReady` | `subtitleSourcesController` |
+| `subtitleSearchResults` | `subtitleSourcesController` |
+| `subtitleSearchStatus` | `subtitleSourcesController` |
+| `suppressSubtitleAutoSelect` | `subtitleSourcesController` |
+| `tryAutoSelectAddonSubtitle` | `subtitleSourcesController` |
+| `umAddonTrackRows` | `subtitleSourcesController` |
+| `umPickSearchResult` | `subtitleSourcesController` |
+| `umSearchRows` | `subtitleSourcesController` |
+| `umSubsModel` | `subtitleSourcesController` |
+| `userManuallySelectedSubtitle` | `subtitleSourcesController` |

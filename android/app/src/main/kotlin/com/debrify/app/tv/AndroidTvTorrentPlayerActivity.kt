@@ -833,7 +833,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 get() = this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible
                 set(value) { this@AndroidTvTorrentPlayerActivity.iptvStartOverTimelineVisible = value }
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
-            override fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.resetSubtitleState()
+            override fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.resetSubtitleState()
             override fun setIptvMediaItem(entry: IptvChannelEntry, streamUrl: String): Unit = this@AndroidTvTorrentPlayerActivity.setIptvMediaItem(entry, streamUrl)
             override fun showControlsAndFocusProgressBar(): Unit = this@AndroidTvTorrentPlayerActivity.showControlsAndFocusProgressBar()
             override fun switchToIptvChannel(entry: IptvChannelEntry, adoptVisibleBrowseList: Boolean, checkpointOutgoing: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.iptvGuideController.navigator.switchToIptvChannel(entry, adoptVisibleBrowseList, checkpointOutgoing)
@@ -874,7 +874,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val iptvZapBannerController: TvIptvZapBannerController get() = this@AndroidTvTorrentPlayerActivity.iptvZapBannerController
             override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
-            override fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.resetSubtitleState()
+            override fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.resetSubtitleState()
             override val sourceSwitchController: TvSourceSwitchController get() = this@AndroidTvTorrentPlayerActivity.sourceSwitchController
             override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
             override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
@@ -1217,13 +1217,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun cancelAutoSyncVerify(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.cancelAutoSyncVerify()
             override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
             override var currentStremioSubtitleIndex: Int
-                get() = this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex
-                set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex = value }
-            override fun currentSubtitleIdentityLabel(): String = this@AndroidTvTorrentPlayerActivity.currentSubtitleIdentityLabel()
+                get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentStremioSubtitleIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentStremioSubtitleIndex = value }
+            override fun currentSubtitleIdentityLabel(): String = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentSubtitleIdentityLabel()
             override val externalSubtitleHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.externalSubtitleHandler
-            override val failedSubtitleUrls: MutableSet<String> get() = this@AndroidTvTorrentPlayerActivity.failedSubtitleUrls
+            override val failedSubtitleUrls: MutableSet<String> get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.failedSubtitleUrls
             override fun hideStatusPill(): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.hideStatusPill()
-            override val isLoadingStremioSubtitles: Boolean get() = this@AndroidTvTorrentPlayerActivity.isLoadingStremioSubtitles
+            override val isLoadingStremioSubtitles: Boolean get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.isLoadingStremioSubtitles
             override var linePickerOverlay: SubtitleLinePickerController?
                 get() = this@AndroidTvTorrentPlayerActivity.linePickerOverlay
                 set(value) { this@AndroidTvTorrentPlayerActivity.linePickerOverlay = value }
@@ -1234,12 +1234,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val playerViewReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.playerViewReady
             override fun runSubtitleAutoSync(auto: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.runSubtitleAutoSync(auto)
             override fun scheduleAutoSyncVerify(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.scheduleAutoSyncVerify()
-            override fun showSearchSubtitleDialog(): Unit = this@AndroidTvTorrentPlayerActivity.showSearchSubtitleDialog()
+            override fun showSearchSubtitleDialog(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.dialogs.showSearchSubtitleDialog()
             override fun showStatusPill(message: String): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.showStatusPill(message)
             override fun showStatusPillTransient(message: String): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.showStatusPillTransient(message)
             override fun showSyncToast(glyph: String, accent: Int, title: String, hint: String?, autoHideMs: Long?, uppercase: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.showSyncToast(glyph, accent, title, hint, autoHideMs, uppercase)
             override fun startAutoSyncLadder(): Unit = this@AndroidTvTorrentPlayerActivity.autoSyncController.startAutoSyncLadder()
-            override val stremioSubtitles: List<StremioSubtitle> get() = this@AndroidTvTorrentPlayerActivity.stremioSubtitles
+            override val stremioSubtitles: List<StremioSubtitle> get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.stremioSubtitles
             override val subtitleControlsLift: SubtitleControlsLiftController get() = this@AndroidTvTorrentPlayerActivity.subtitleControlsLift
             override val subtitleOverlay: SubtitleView get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlay
             override val subtitleOverlayReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlayReady
@@ -1249,11 +1249,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 get() = this@AndroidTvTorrentPlayerActivity.syncOverlay
                 set(value) { this@AndroidTvTorrentPlayerActivity.syncOverlay = value }
             override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
-            override fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.tryAutoSelectAddonSubtitle()
+            override fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.tryAutoSelectAddonSubtitle()
             override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
             override var userManuallySelectedSubtitle: Boolean
-                get() = this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle
-                set(value) { this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle = value }
+                get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.userManuallySelectedSubtitle
+                set(value) { this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.userManuallySelectedSubtitle = value }
         },
     )
     private val playerViewReady: Boolean get() = ::playerView.isInitialized
@@ -1266,30 +1266,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Stremio external subtitles
     private var stremioSubtitleService: StremioSubtitleService? = null
-    private val stremioSubtitles = mutableListOf<StremioSubtitle>()  // deduped flat view over addonSubtitleResults
-    private val addonSubtitleResults = mutableListOf<AddonSubtitleResult>()  // per-addon, ordered/stable
-    // Subtitles supplied at launch (e.g. YouTube closed captions). Parsed once
-    // from the payload; re-seeded as a provider group on each item instead of
-    // an IMDb-keyed addon fetch. Non-empty only for sources that carry their
-    // own captions.
-    private val injectedSubtitles = mutableListOf<StremioSubtitle>()
-    // When launch-supplied captions are the only subtitles (YouTube), don't
-    // auto-enable them — matches YouTube's captions-off default and the phone
-    // player. The user turns them on from the subtitle menu.
-    private var suppressSubtitleAutoSelect = false
-    private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation
-    private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
-    private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
-    private var subtitleAddonDiscoveryReady = false
-    private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
+    private val subtitleSourcesController: TvSubtitleSourcesController = TvSubtitleSourcesController(
+        this,
+        object : TvSubtitleSourcesController.Host {
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override fun dp(value: Int): Int { return this@AndroidTvTorrentPlayerActivity.dp(value) }
+            override val iptvChannels: List<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val offsetRenderersFactory: OffsetRenderersFactory? get() = this@AndroidTvTorrentPlayerActivity.offsetRenderersFactory
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playerPreferences: com.debrify.app.profiles.NativePlayerPreferences get() = this@AndroidTvTorrentPlayerActivity.playerPreferences
+            override val stremioSubtitleService: StremioSubtitleService? get() = this@AndroidTvTorrentPlayerActivity.stremioSubtitleService
+            override val subtitleController: TvSubtitleController get() = this@AndroidTvTorrentPlayerActivity.subtitleController
+            override val subtitleScope: CoroutineScope get() = this@AndroidTvTorrentPlayerActivity.subtitleScope
+            override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
+            override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector
+            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
+        },
+    )
     private val subtitleTrackReadiness = SubtitleTrackReadiness()
-    private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
-    private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
-    private var manualSubtitleImdbId: String? = null  // Subtitle-only identity override from Search Subtitle
-    private var manualSubtitleType: String? = null
-    private var manualSubtitleSeason: Int? = null
-    private var manualSubtitleEpisode: Int? = null
-    private var manualSubtitleDisplayLabel: String? = null
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val skipSegmentController = TvSkipSegmentController(
         this,
@@ -1381,7 +1378,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val startupGateController: TvStartupGateController get() = this@AndroidTvTorrentPlayerActivity.startupGateController
             override val startupGateStatus: TextView get() = this@AndroidTvTorrentPlayerActivity.startupGateStatus
             override val startupGateStatusReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.startupGateStatusReady
-            override fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.tryAutoSelectAddonSubtitle()
+            override fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.tryAutoSelectAddonSubtitle()
         },
     )
     private val startupGateStatusReady: Boolean get() = ::startupGateStatus.isInitialized
@@ -1513,7 +1510,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                 if (player.playbackState == Player.STATE_READY) {
                     subtitleTrackReadiness.onReady()
-                    tryAutoSelectAddonSubtitle()
+                    subtitleSourcesController.tryAutoSelectAddonSubtitle()
                 }
             }
         }
@@ -2173,9 +2170,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 for (i in 0 until subsArray.length()) {
                     val obj = subsArray.optJSONObject(i) ?: continue
                     val source = obj.optString("source").takeIf { it.isNotEmpty() } ?: "Captions"
-                    injectedSubtitles.add(StremioSubtitle.fromJson(obj, source, addonId = "injected"))
+                    subtitleSourcesController.injectedSubtitles.add(StremioSubtitle.fromJson(obj, source, addonId = "injected"))
                 }
-                android.util.Log.d("AndroidTvPlayer", "Loaded ${injectedSubtitles.size} launch-supplied subtitles")
+                android.util.Log.d("AndroidTvPlayer", "Loaded ${subtitleSourcesController.injectedSubtitles.size} launch-supplied subtitles")
             }
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Failed to parse initialSubtitles from payload", e)
@@ -2289,7 +2286,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val currentItem = model.items.getOrNull(currentIndex)
                 if (currentItem != null) {
                     android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")
-                    fetchStremioSubtitles(currentItem)
+                    subtitleSourcesController.fetchStremioSubtitles(currentItem)
                 }
             }
         }
@@ -3789,54 +3786,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun resetSubtitleState() {
-        subtitleController.stopExternalSubtitleRendering()
-        stremioSubtitles.clear()
-        subtitleController.subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks
-        addonSubtitleResults.clear()
-        addonFetchTokens.clear()
-        failedSubtitleUrls.clear()
-        subtitleSearchResults = emptyList()
-        subtitleSearchStatus = ""
-        pendingSeriesResult = null
-        currentStremioSubtitleIndex = -1
-        isLoadingStremioSubtitles = false
-        subtitleAddonDiscoveryReady = false
-        subtitleTrackReadiness.onMediaReplacement()
-        trackSelector?.let { selector ->
-            selector.parameters = selector.parameters.buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setTrackTypeDisabled(
-                    C.TRACK_TYPE_TEXT,
-                    playerPreferences.getString("player_default_subtitle_language", null) == "off" ||
-                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
-                        playerPreferences.getBoolean("subtitle_forced_only", false),
-                )
-                .build()
-        }
-        userManuallySelectedSubtitle = false
-        // Re-established by seedInjectedSubtitles() when the next item has
-        // launch-supplied captions; cleared here so a non-injected item never
-        // inherits the previous item's auto-select suppression.
-        suppressSubtitleAutoSelect = false
-        manualSubtitleImdbId = null
-        manualSubtitleType = null
-        manualSubtitleSeason = null
-        manualSubtitleEpisode = null
-        manualSubtitleDisplayLabel = null
-        addonSubtitleFetchToken++
-        // Switching content resets the sync offset (it belonged to the previous
-        // item's subtitle). The identity-scoped read already returns 0 for the
-        // new content, but the embedded renderer offset is push-based and would
-        // otherwise keep the previous item's shift — pushing a stale offset onto
-        // the next episode's auto-selected subtitles while the UI reads 0.
-        SubtitleSettings.resetSyncOffset()
-        offsetRenderersFactory?.setOffsetUs(0L)
-    }
-
     private fun playMediaDirect(item: PlaybackItem) {
         // Clear subtitle state when switching content
-        resetSubtitleState()
+        subtitleSourcesController.resetSubtitleState()
 
         val metadata = MediaMetadata.Builder()
             .setTitle(item.title)
@@ -3875,7 +3827,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         restartProgressUpdates()
 
         // Fetch Stremio subtitles for this item
-        fetchStremioSubtitles(item)
+        subtitleSourcesController.fetchStremioSubtitles(item)
     }
 
     // Build a MergingMediaSource (video-only + audio) for high-res YouTube,
@@ -3924,299 +3876,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             android.util.Log.w("AndroidTvPlayer", "switch merge build failed, using single url", e)
             null
-        }
-    }
-
-    /**
-     * Fetch external subtitles from Stremio addons for the current item.
-     * For series: uses payload.imdbId
-     * For movie collections: uses per-item IMDB ID from perItemImdbIds cache or requests from Flutter
-     */
-    private fun fetchStremioSubtitles(item: PlaybackItem) {
-        val model = payload ?: return
-        if (model.imdbId?.startsWith("custom-series:") == true && manualSubtitleImdbId.isNullOrEmpty()) return
-
-        // Launch-supplied captions (e.g. YouTube): use them directly and skip
-        // addon discovery entirely — the title-based IMDB lookup would be
-        // spurious for arbitrary video titles, and these tracks are already
-        // known. Seeded as a single provider group so the subtitle menu shows
-        // them; not auto-selected (captions stay off until the user picks one).
-        //
-        // Exception: once the user has manually identified a title (Search
-        // Subtitle), honour that identity and fall through to the real addon
-        // fetch below — otherwise a re-fetch (source/quality switch, playlist
-        // advance) would silently discard their searched subtitles.
-        if (injectedSubtitles.isNotEmpty() && manualSubtitleImdbId.isNullOrEmpty()) {
-            seedInjectedSubtitles()
-            return
-        }
-
-        // The addon match is spurious for YouTube (title-based IMDB lookup on
-        // arbitrary video titles), so skip addon subtitle fetching for merged
-        // YouTube items. (Side-rendering no longer re-prepares the source, so
-        // the old merged-audio-drop hazard is gone — manually searched
-        // subtitles now work on YouTube too.)
-        if (!item.audioUrl.isNullOrEmpty()) {
-            stremioSubtitles.clear()
-            currentStremioSubtitleIndex = -1
-            clearStremioLoadingState()
-            return
-        }
-
-        val isSeries = model.contentType.lowercase(Locale.US) == "series"
-        val type = if (isSeries) "series" else "movie"
-
-        // Set loading state and refresh panel if visible
-        isLoadingStremioSubtitles = true
-        if (subtitleController.subtitleSettingsVisible) {
-            subtitleController.refreshSubtitlePanelForLoading()
-        }
-
-        val manualImdbId = manualSubtitleImdbId
-        if (!manualImdbId.isNullOrEmpty()) {
-            val manualType = if (manualSubtitleType == "series") "series" else "movie"
-            val subtitleItem = if (manualType == "series") {
-                item.copy(
-                    season = manualSubtitleSeason ?: item.season,
-                    episode = manualSubtitleEpisode ?: item.episode
-                )
-            } else {
-                item.copy(season = null, episode = null)
-            }
-            android.util.Log.d(
-                "StremioSubs",
-                "Using manual subtitle identity $manualImdbId type=$manualType S${subtitleItem.season}E${subtitleItem.episode}"
-            )
-            fetchStremioSubtitlesWithImdb(manualImdbId, manualType, subtitleItem)
-            return
-        }
-
-        // For series, use the shared IMDB ID directly
-        if (isSeries) {
-            val imdbId = model.imdbId
-            if (imdbId.isNullOrEmpty()) {
-                stremioSubtitles.clear()
-                currentStremioSubtitleIndex = -1
-                clearStremioLoadingState()
-                return
-            }
-            fetchStremioSubtitlesWithImdb(imdbId, type, item)
-            return
-        }
-
-        // For movie collections, use per-item IMDB ID
-        val itemIndex = item.index
-
-        // Check if we already have a cached IMDB ID for this item
-        if (model.perItemImdbIds.containsKey(itemIndex)) {
-            val cachedImdbId = model.perItemImdbIds[itemIndex]
-            if (cachedImdbId.isNullOrEmpty()) {
-                // Already looked up and found nothing
-                android.util.Log.d("StremioSubs", "No cached IMDB ID for item $itemIndex (previously not found)")
-                stremioSubtitles.clear()
-                currentStremioSubtitleIndex = -1
-                clearStremioLoadingState()
-                return
-            }
-            android.util.Log.d("StremioSubs", "Using cached IMDB ID $cachedImdbId for item $itemIndex")
-            fetchStremioSubtitlesWithImdb(cachedImdbId, type, item)
-            return
-        }
-
-        // Check if we have a fallback IMDB ID from payload (e.g., first item lookup)
-        val fallbackImdbId = model.imdbId
-        if (!fallbackImdbId.isNullOrEmpty() && model.items.size == 1) {
-            // Single item, use payload IMDB ID
-            android.util.Log.d("StremioSubs", "Single item, using payload IMDB ID: $fallbackImdbId")
-            fetchStremioSubtitlesWithImdb(fallbackImdbId, type, item)
-            return
-        }
-
-        // Request IMDB ID from Flutter for this item
-        android.util.Log.d("StremioSubs", "Requesting IMDB ID from Flutter for item $itemIndex")
-        val metadataFetchToken = addonSubtitleFetchToken
-        requestMovieMetadataFromFlutter(item, itemIndex) { imdbId ->
-            if (metadataFetchToken != addonSubtitleFetchToken) {
-                android.util.Log.d("StremioSubs", "Content changed during metadata lookup, discarding IMDB result for item $itemIndex")
-                return@requestMovieMetadataFromFlutter
-            }
-
-            // Cache the result (even if null to prevent repeated requests)
-            model.perItemImdbIds[itemIndex] = imdbId
-            android.util.Log.d("StremioSubs", "Received IMDB ID from Flutter: $imdbId for item $itemIndex")
-
-            if (imdbId.isNullOrEmpty()) {
-                stremioSubtitles.clear()
-                currentStremioSubtitleIndex = -1
-                clearStremioLoadingState()
-                return@requestMovieMetadataFromFlutter
-            }
-
-            fetchStremioSubtitlesWithImdb(imdbId, type, item)
-        }
-    }
-
-    /**
-     * Seed the launch-supplied captions ([injectedSubtitles]) as a single
-     * OK provider group, so they appear in the subtitle menu without any addon
-     * fetch. Not auto-selected: [suppressSubtitleAutoSelect] keeps them off
-     * until the user opts in from the menu (matching YouTube's own default).
-     */
-    private fun seedInjectedSubtitles() {
-        suppressSubtitleAutoSelect = true
-        val groupName = injectedSubtitles.first().source
-        val addon = StremioAddon(
-            id = "injected",
-            name = groupName,
-            manifestUrl = "",
-            baseUrl = "",
-            resources = listOf("subtitles"),
-            types = emptyList(),
-            enabled = true
-        )
-        addonSubtitleResults.clear()
-        addonSubtitleResults.add(
-            AddonSubtitleResult(
-                addon,
-                AddonSubtitleStatus.OK,
-                injectedSubtitles.filter { isSideRenderableSubtitle(it.url) }
-            )
-        )
-        rebuildFlatStremioSubtitles()
-        clearStremioLoadingState()
-        refreshSubtitleUiForLoading()
-    }
-
-    /**
-     * Actually fetch subtitles with a known IMDB ID.
-     */
-    private fun fetchStremioSubtitlesWithImdb(imdbId: String, type: String, item: PlaybackItem) {
-        // Fan out one independent fetch per addon so each keeps its own identity,
-        // loading/failed state and can be retried alone. Two guards:
-        //  • addonSubtitleFetchToken — invalidates ALL slots on a content switch.
-        //  • addonFetchTokens[addonId] — invalidates one addon's in-flight call
-        //    when that addon is retried.
-        val contentToken = addonSubtitleFetchToken
-        val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
-        subtitleAddonDiscoveryReady = true
-        addonSubtitleResults.clear()
-        addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
-        isLoadingStremioSubtitles = addons.isNotEmpty()
-        rebuildFlatStremioSubtitles()
-        refreshSubtitleUiForLoading()
-
-        addons.forEach { launchAddonSubtitleFetch(it, type, imdbId, item, contentToken) }
-        tryAutoSelectAddonSubtitle()
-    }
-
-    private fun launchAddonSubtitleFetch(
-        addon: StremioAddon,
-        type: String,
-        imdbId: String,
-        item: PlaybackItem,
-        contentToken: Int
-    ) {
-        val slotToken = (addonFetchTokens[addon.id] ?: 0) + 1
-        addonFetchTokens[addon.id] = slotToken
-        setAddonSubtitleSlot(addon.id, AddonSubtitleStatus.LOADING, emptyList(), null)
-        isLoadingStremioSubtitles = true   // covers single-addon retry too
-        refreshSubtitleUiForLoading()
-
-        subtitleScope.launch {
-            val result = try {
-                val subs = (stremioSubtitleService?.fetchSubtitlesForAddon(
-                    addon = addon,
-                    type = type,
-                    imdbId = imdbId,
-                    season = if (type == "series") item.season else null,
-                    episode = if (type == "series") item.episode else null
-                ) ?: emptyList()).filter { isSideRenderableSubtitle(it.url) }
-                AddonSubtitleResult(addon, AddonSubtitleStatus.OK, subs)
-            } catch (e: Exception) {
-                android.util.Log.w("StremioSubs", "${addon.name} subtitle fetch failed: ${e.message}")
-                AddonSubtitleResult(addon, AddonSubtitleStatus.FAILED, emptyList(), e.message)
-            }
-
-            if (contentToken != addonSubtitleFetchToken) return@launch      // content switched
-            if (slotToken != addonFetchTokens[addon.id]) return@launch      // superseded by a retry
-
-            setAddonSubtitleSlot(addon.id, result.status, result.subtitles, result.error)
-            rebuildFlatStremioSubtitles()
-            isLoadingStremioSubtitles =
-                addonSubtitleResults.any { it.status == AddonSubtitleStatus.LOADING }
-            tryAutoSelectAddonSubtitle()   // no-ops once a subtitle is selected
-            // When the LAST addon finishes a manual "Fix movie" search with nothing
-            // usable, tell the user (the old merged fetch showed this toast).
-            if (!isLoadingStremioSubtitles && stremioSubtitles.isEmpty() && !manualSubtitleImdbId.isNullOrEmpty()) {
-                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "No online subtitles found for this title", Toast.LENGTH_SHORT).show()
-            }
-            refreshSubtitleUiForLoading()
-        }
-    }
-
-    private fun setAddonSubtitleSlot(
-        addonId: String,
-        status: AddonSubtitleStatus,
-        subs: List<StremioSubtitle>,
-        error: String?
-    ) {
-        val i = addonSubtitleResults.indexOfFirst { it.addon.id == addonId }
-        if (i >= 0) {
-            addonSubtitleResults[i] =
-                addonSubtitleResults[i].copy(status = status, subtitles = subs, error = error)
-        }
-    }
-
-    /** Rebuild the deduped flat [stremioSubtitles] view, re-pinning the active
-     *  selection by URL so a late-arriving addon can't shift the user's pick. */
-    private fun rebuildFlatStremioSubtitles() {
-        val activeUrl = if (currentStremioSubtitleIndex >= 0)
-            stremioSubtitles.getOrNull(currentStremioSubtitleIndex)?.url else null
-        val seen = HashSet<String>()
-        stremioSubtitles.clear()
-        for (r in addonSubtitleResults) {
-            for (s in r.subtitles) {
-                if (s.url.isNotEmpty() && seen.add(s.url)) stremioSubtitles.add(s)
-            }
-        }
-        currentStremioSubtitleIndex =
-            if (activeUrl != null) stremioSubtitles.indexOfFirst { it.url == activeUrl } else -1
-    }
-
-    /** Retry a single addon's subtitle fetch (bound to the col3 "retry" row). */
-    private fun retryAddonSubtitles(addonId: String) {
-        val model = payload ?: return
-        val addon = addonSubtitleResults.firstOrNull { it.addon.id == addonId }?.addon ?: return
-        val item = model.items.getOrNull(currentIndex) ?: return
-        // Mirror fetchStremioSubtitles' id resolution: multi-item movie collections
-        // resolve per-item via perItemImdbIds (payload.imdbId is null for them).
-        val imdbId = manualSubtitleImdbId ?: model.perItemImdbIds[item.index] ?: model.imdbId ?: return
-        val type = if ((manualSubtitleType ?: model.contentType).lowercase(Locale.US) == "series")
-            "series" else "movie"
-        val subtitleItem = if (type == "series") {
-            item.copy(
-                season = manualSubtitleSeason ?: item.season,
-                episode = manualSubtitleEpisode ?: item.episode
-            )
-        } else item
-        launchAddonSubtitleFetch(addon, type, imdbId, subtitleItem, addonSubtitleFetchToken)
-    }
-
-    /** Repaint whichever subtitle surface is showing (unified menu or legacy panel). */
-    private fun refreshSubtitleUiForLoading() {
-        if (unifiedMenu?.isVisible == true) unifiedMenu?.render()
-        if (subtitleController.subtitleSettingsVisible) subtitleController.refreshSubtitlePanelForLoading()
-    }
-
-    /**
-     * Clear Stremio subtitle loading state and refresh panel if visible.
-     */
-    private fun clearStremioLoadingState() {
-        isLoadingStremioSubtitles = false
-        subtitleAddonDiscoveryReady = true
-        tryAutoSelectAddonSubtitle()
-        if (subtitleController.subtitleSettingsVisible) {
-            subtitleController.refreshSubtitlePanelForLoading()
         }
     }
 
@@ -4918,539 +4577,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSearchSubtitleDialog() {
-        val currentItem = getCurrentSubtitleSearchItem()
-        if (currentItem == null) {
-            Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val results = mutableListOf<SubtitleCatalogResult>()
-        val adapter = createSubtitleCatalogResultAdapter(results)
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), 0)
-        }
-
-        val queryInput = EditText(this).apply {
-            setSingleLine(true)
-            hint = "Movie or show title"
-            inputType = InputType.TYPE_CLASS_TEXT
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setText(buildSubtitleSearchInitialQuery(currentItem))
-            setSelectAllOnFocus(true)
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x80FFFFFF.toInt())
-        }
-
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(12), 0, dp(8))
-        }
-
-        val searchButton = AppCompatButton(this).apply {
-            text = "Search"
-            isFocusable = true
-            isAllCaps = true
-            setTextColor(Color.WHITE)
-            setBackgroundResource(R.drawable.subtitle_search_button_bg)
-            stateListAnimator = null
-            minimumHeight = dp(44)
-        }
-
-        val progressBar = ProgressBar(this).apply {
-            isIndeterminate = true
-            visibility = View.GONE
-        }
-
-        actionRow.addView(
-            searchButton,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        actionRow.addView(
-            progressBar,
-            LinearLayout.LayoutParams(dp(48), dp(48)).apply {
-                leftMargin = dp(16)
-            }
-        )
-
-        val statusText = TextView(this).apply {
-            text = "Find subtitles by choosing the correct title."
-            setPadding(0, 0, 0, dp(8))
-            setTextColor(0xB3FFFFFF.toInt())
-        }
-
-        val resultList = ListView(this).apply {
-            this.adapter = adapter
-            isFocusable = true
-            isFocusableInTouchMode = true
-            selector = ContextCompat.getDrawable(context, R.drawable.subtitle_catalog_row_selector)
-            isDrawSelectorOnTop = false
-            divider = ColorDrawable(0x14FFFFFF)
-            dividerHeight = 1
-            // Keep the DPAD-focused row fully on screen: with bottom padding + clipToPadding
-            // off, ListView scrolls the selection above the padding instead of half-clipping it.
-            clipToPadding = false
-            setPadding(0, 0, 0, dp(48))
-            emptyView = null
-        }
-
-        container.addView(
-            queryInput,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-        container.addView(
-            actionRow,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-        container.addView(
-            statusText,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-        container.addView(
-            resultList,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(360)
-            )
-        )
-
-        lateinit var dialog: AlertDialog
-
-        fun setLoading(loading: Boolean) {
-            progressBar.visibility = if (loading) View.VISIBLE else View.GONE
-            searchButton.isEnabled = !loading
-            queryInput.isEnabled = !loading
-            if (loading) {
-                statusText.text = "Searching..."
-            }
-        }
-
-        fun updateResults(newResults: List<SubtitleCatalogResult>) {
-            results.clear()
-            results.addAll(newResults)
-            adapter.notifyDataSetChanged()
-            statusText.text = when {
-                newResults.isEmpty() -> "No matching movie/show results found."
-                newResults.size == 1 -> "1 result"
-                else -> "${newResults.size} results"
-            }
-            if (newResults.isNotEmpty()) {
-                resultList.requestFocus()
-                resultList.setSelection(0)
-            } else {
-                searchButton.requestFocus()
-            }
-        }
-
-        fun performSearch() {
-            val query = queryInput.text?.toString()?.trim().orEmpty()
-            if (query.isEmpty()) {
-                results.clear()
-                adapter.notifyDataSetChanged()
-                statusText.text = "Enter a title to search."
-                queryInput.requestFocus()
-                return
-            }
-
-            setLoading(true)
-            requestSubtitleCatalogSearchFromFlutter(
-                query,
-                onSuccess = { searchResults ->
-                    if (!dialog.isShowing) return@requestSubtitleCatalogSearchFromFlutter
-                    setLoading(false)
-                    updateResults(searchResults)
-                },
-                onError = { message ->
-                    if (!dialog.isShowing) return@requestSubtitleCatalogSearchFromFlutter
-                    setLoading(false)
-                    results.clear()
-                    adapter.notifyDataSetChanged()
-                    statusText.text = message
-                    searchButton.requestFocus()
-                }
-            )
-        }
-
-        resultList.setOnItemClickListener { _, _, position, _ ->
-            val selected = adapter.getItem(position) ?: return@setOnItemClickListener
-            val item = getCurrentSubtitleSearchItem()
-            if (item == null) {
-                Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
-                return@setOnItemClickListener
-            }
-
-            dialog.dismiss()
-            if (selected.type == "series") {
-                val resolvedEpisode = resolveSeasonEpisodeForSubtitle(item)
-                if (resolvedEpisode != null) {
-                    applyManualSubtitleIdentity(
-                        selected,
-                        resolvedEpisode.season,
-                        resolvedEpisode.episode
-                    )
-                } else {
-                    showSeasonEpisodePrompt(selected)
-                }
-            } else {
-                applyManualSubtitleIdentity(selected, null, null)
-            }
-        }
-
-        searchButton.setOnClickListener { performSearch() }
-        queryInput.setOnEditorActionListener { _, actionId, event ->
-            val isSearchAction = actionId == EditorInfo.IME_ACTION_SEARCH
-            val isEnterKey = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
-            if (isSearchAction || isEnterKey) {
-                performSearch()
-                true
-            } else {
-                false
-            }
-        }
-
-        dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)
-            .setTitle("Search Movie/Show Subtitles")
-            .setView(container)
-            .setNegativeButton("Cancel", null)
-            .create()
-
-        dialog.setOnShowListener {
-            searchButton.requestFocus()
-        }
-        dialog.show()
-    }
-
-    private fun getCurrentSubtitleSearchItem(): PlaybackItem? {
-        payload?.items?.getOrNull(currentIndex)?.let { return it }
-
-        if (isIptvMode && currentIptvIndex in iptvChannels.indices) {
-            val entry = iptvChannels[currentIptvIndex]
-            return PlaybackItem(
-                id = "iptv:${entry.index}",
-                title = entry.name,
-                url = entry.url,
-                hdVideoUrl = null,
-                audioUrl = null,
-                index = 0,
-                season = null,
-                episode = null,
-                artwork = entry.logoUrl,
-                description = entry.group,
-                resumePositionMs = 0L,
-                durationMs = 0L,
-                updatedAt = System.currentTimeMillis(),
-                resumeId = null,
-                sizeBytes = null,
-                rating = null,
-                provider = "iptv",
-            )
-        }
-
-        val mediaItem = player?.currentMediaItem ?: return null
-        val mediaTitle = mediaItem.mediaMetadata.title?.toString()?.trim()
-        val mediaUrl = mediaItem.localConfiguration?.uri?.toString().orEmpty()
-        val fallbackTitle = mediaTitle
-            ?.takeIf { it.isNotEmpty() }
-            ?: mediaUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotEmpty() }
-            ?: return null
-
-        return PlaybackItem(
-            id = "current:${fallbackTitle.hashCode()}",
-            title = fallbackTitle,
-            url = mediaUrl,
-            hdVideoUrl = null,
-            audioUrl = null,
-            index = currentIndex,
-            season = null,
-            episode = null,
-            artwork = null,
-            description = null,
-            resumePositionMs = 0L,
-            durationMs = 0L,
-            updatedAt = System.currentTimeMillis(),
-            resumeId = null,
-            sizeBytes = null,
-            rating = null,
-            provider = null,
-        )
-    }
-
-    private fun requestSubtitleCatalogSearchFromFlutter(
-        query: String,
-        onSuccess: (List<SubtitleCatalogResult>) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        try {
-            val channel = MainActivity.getAndroidTvPlayerChannel()
-            if (channel == null) {
-                onError("Subtitle search is unavailable.")
-                return
-            }
-
-            channel.invokeMethod(
-                "searchSubtitleCatalogs",
-                hashMapOf<String, Any?>("query" to query),
-                object : io.flutter.plugin.common.MethodChannel.Result {
-                    override fun success(result: Any?) {
-                        val parsedResults = parseSubtitleCatalogResults(result)
-                        runOnUiThread { onSuccess(parsedResults) }
-                    }
-
-                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                        android.util.Log.e("StremioSubs", "Subtitle catalog search failed: $errorCode - $errorMessage")
-                        runOnUiThread {
-                            onError(errorMessage ?: "Subtitle search failed.")
-                        }
-                    }
-
-                    override fun notImplemented() {
-                        android.util.Log.e("StremioSubs", "Subtitle catalog search is not implemented")
-                        runOnUiThread { onError("Subtitle search is unavailable.") }
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("StremioSubs", "Subtitle catalog search exception", e)
-            onError("Subtitle search failed.")
-        }
-    }
-
-    private fun createSubtitleCatalogResultAdapter(
-        results: MutableList<SubtitleCatalogResult>
-    ): ArrayAdapter<SubtitleCatalogResult> {
-        return object : ArrayAdapter<SubtitleCatalogResult>(this, 0, results) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val row = (convertView as? LinearLayout) ?: LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(dp(20), dp(12), dp(20), dp(12))
-                    minimumHeight = dp(72)
-                }
-                row.removeAllViews()
-
-                val item = getItem(position)
-                val title = TextView(context).apply {
-                    text = item?.titleLine().orEmpty()
-                    textSize = 18f
-                    setTextColor(Color.WHITE)
-                    typeface = Typeface.DEFAULT_BOLD
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                }
-                val detail = TextView(context).apply {
-                    text = item?.detailLine().orEmpty()
-                    textSize = 14f
-                    setTextColor(Color.LTGRAY)
-                    maxLines = 1
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                }
-
-                row.addView(
-                    title,
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                )
-                row.addView(
-                    detail,
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                )
-                return row
-            }
-        }
-    }
-
-    private fun showSeasonEpisodePrompt(result: SubtitleCatalogResult) {
-        val currentItem = getCurrentSubtitleSearchItem()
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), 0)
-        }
-
-        val title = TextView(this).apply {
-            text = result.titleLine()
-            textSize = 18f
-            setPadding(0, 0, 0, dp(12))
-        }
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val seasonInput = EditText(this).apply {
-            hint = "Season"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            imeOptions = EditorInfo.IME_ACTION_NEXT
-            setText((currentItem?.season ?: manualSubtitleSeason ?: 1).toString())
-            setSelectAllOnFocus(true)
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x80FFFFFF.toInt())
-        }
-
-        val episodeInput = EditText(this).apply {
-            hint = "Episode"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            imeOptions = EditorInfo.IME_ACTION_DONE
-            setText((currentItem?.episode ?: manualSubtitleEpisode ?: 1).toString())
-            setSelectAllOnFocus(true)
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x80FFFFFF.toInt())
-        }
-
-        row.addView(
-            seasonInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = dp(12)
-            }
-        )
-        row.addView(
-            episodeInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        container.addView(
-            title,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-        container.addView(
-            row,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        val dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)
-            .setTitle("Series Episode")
-            .setView(container)
-            .setPositiveButton("Search", null)
-            .setNegativeButton("Cancel", null)
-            .create()
-
-        fun submit() {
-            val season = seasonInput.text?.toString()?.toIntOrNull()
-            val episode = episodeInput.text?.toString()?.toIntOrNull()
-            if (season == null || episode == null || season <= 0 || episode <= 0) {
-                Toast.makeText(this, "Enter a valid season and episode", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            dialog.dismiss()
-            applyManualSubtitleIdentity(result, season, episode)
-        }
-
-        episodeInput.setOnEditorActionListener { _, actionId, event ->
-            val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
-            val isEnterKey = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
-            if (isDoneAction || isEnterKey) {
-                submit()
-                true
-            } else {
-                false
-            }
-        }
-
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit() }
-            seasonInput.requestFocus()
-        }
-        dialog.show()
-    }
-
-    private fun applyManualSubtitleIdentity(
-        result: SubtitleCatalogResult,
-        season: Int?,
-        episode: Int?
-    ) {
-        val currentItem = getCurrentSubtitleSearchItem()
-        if (currentItem == null) {
-            Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val type = if (result.type == "series") "series" else "movie"
-        if (type == "series" && (season == null || episode == null || season <= 0 || episode <= 0)) {
-            showSeasonEpisodePrompt(result)
-            return
-        }
-
-        addonSubtitleFetchToken++
-        manualSubtitleImdbId = result.imdbId
-        manualSubtitleType = type
-        manualSubtitleSeason = if (type == "series") season else null
-        manualSubtitleEpisode = if (type == "series") episode else null
-        manualSubtitleDisplayLabel = buildManualSubtitleDisplayLabel(
-            result,
-            type,
-            manualSubtitleSeason,
-            manualSubtitleEpisode
-        )
-
-        // Tear down any side-rendered subtitle before switching identity —
-        // otherwise its cues keep drawing while the panel shows nothing selected.
-        subtitleController.stopExternalSubtitleRendering()
-
-        stremioSubtitles.clear()
-        currentStremioSubtitleIndex = -1
-        userManuallySelectedSubtitle = false
-        isLoadingStremioSubtitles = true
-
-        trackSelector?.let { selector ->
-            selector.parameters = selector.parameters.buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                .build()
-        }
-
-        if (subtitleController.subtitleSettingsVisible) {
-            subtitleController.refreshSubtitlePanelForLoading()
-        }
-
-        val subtitleItem = if (type == "series") {
-            currentItem.copy(season = season, episode = episode)
-        } else {
-            currentItem.copy(season = null, episode = null)
-        }
-
-        Toast.makeText(this, "Searching subtitles for ${result.name}", Toast.LENGTH_SHORT).show()
-        fetchStremioSubtitlesWithImdb(result.imdbId, type, subtitleItem)
-    }
-
-    private fun currentSubtitleIdentityLabel(): String {
-        val manualLabel = manualSubtitleDisplayLabel?.trim()
-        if (!manualLabel.isNullOrEmpty()) {
-            return "Subtitles for $manualLabel"
-        }
-
-        val detectedTitle = getCurrentSubtitleSearchItem()
-            ?.let { buildSubtitleSearchInitialQuery(it).trim() }
-            ?.takeIf { it.isNotEmpty() }
-
-        return if (detectedTitle != null) {
-            "Detected: $detectedTitle"
-        } else {
-            "Detected title unavailable"
-        }
-    }
-
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
     }
@@ -5463,7 +4589,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AndroidTvPlayer", "PikPak: Starting retry logic for cold storage handling")
 
         // Clear subtitle state when switching content
-        resetSubtitleState()
+        subtitleSourcesController.resetSubtitleState()
 
         // Cancel any previous retry loops
         pikPakRetryController.pikPakRetryId++
@@ -5508,113 +4634,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         restartProgressUpdates()
 
         // Fetch Stremio subtitles for this item (same as playMediaDirect)
-        fetchStremioSubtitles(item)
+        subtitleSourcesController.fetchStremioSubtitles(item)
 
         // Start retry loop with attempt 0
         pikPakRetryController.attemptPikPakPlaybackLoop(item, 0, myRetryId)
-    }
-
-    /** Apply source priority once tracks and any higher-priority addons are ready. */
-    private fun tryAutoSelectAddonSubtitle() {
-        val currentPlayer = player ?: return
-        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
-        val targetLanguage = defaultSubtitleLang ?: "en"
-        val tracks = currentPlayer.currentTracks
-        val positions = mutableListOf<Pair<Tracks.Group, Int>>()
-        val candidates = mutableListOf<EmbeddedSubtitleCandidate>()
-        for (group in tracks.groups) {
-            // A manual subtitle identity search explicitly asks for addon results.
-            if (!manualSubtitleImdbId.isNullOrEmpty()) break
-            if (group.type != C.TRACK_TYPE_TEXT) continue
-            for (i in 0 until group.length) {
-                val format = group.getTrackFormat(i)
-                positions.add(group to i)
-                candidates.add(EmbeddedSubtitleCandidate(
-                    supported = group.isTrackSupported(i),
-                    selected = group.isTrackSelected(i),
-                    matchesLanguage = LanguageMapper.matchesLanguage(targetLanguage, format.language) ||
-                        (!playerPreferences.getBoolean("subtitle_forced_only", false) &&
-                            (LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
-                                LanguageMapper.matchesLanguage(targetLanguage, format.id))),
-                    defaultTrack = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
-                    forcedTrack = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0,
-                    undeclaredHlsCaption = isUndeclaredHlsCaption(
-                        isHls = currentPlayer.currentManifest is HlsManifest,
-                        mimeType = format.sampleMimeType,
-                        accessibilityChannel = format.accessibilityChannel,
-                        language = format.language,
-                    ),
-                ))
-            }
-        }
-        when (val choice = chooseAutomaticSubtitle(
-            tracksReady = subtitleTrackReadiness.canSelect(currentPlayer.playbackState == Player.STATE_READY),
-            preference = defaultSubtitleLang,
-            manualSelection = userManuallySelectedSubtitle,
-            suppressed = suppressSubtitleAutoSelect,
-            addonSelected = currentStremioSubtitleIndex >= 0,
-            audioAllowsSubtitles = audioAllowsAutomaticSubtitles(
-                onlyForeignAudio = playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
-                preferredAudio = playerPreferences.getString("player_default_audio_language", null),
-                selectedAudio = selectedAudioLanguage(tracks),
-            ),
-            forcedOnly = playerPreferences.getBoolean("subtitle_forced_only", false),
-            candidates = candidates,
-            sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
-            addonDiscoveryReady = subtitleAddonDiscoveryReady,
-            addons = addonSubtitleResults.map { slot ->
-                val eligible = slot.subtitles.indices.filter { slot.subtitles[it].url !in failedSubtitleUrls }
-                val matching = eligible.filter {
-                    val subtitle = slot.subtitles[it]
-                    LanguageMapper.matchesLanguage(targetLanguage, subtitle.lang) ||
-                        (targetLanguage.equals("pt-BR", ignoreCase = true) &&
-                            LanguageMapper.matchesLanguage(targetLanguage, subtitle.label))
-                }
-                AddonSubtitleCandidate(
-                    addonId = slot.addon.priorityId,
-                    loading = slot.status == AddonSubtitleStatus.LOADING,
-                    matchingIndices = matching + if (defaultSubtitleLang == null) eligible.filter { it !in matching } else emptyList(),
-                )
-            },
-        )) {
-            SubtitleAutoSelection.Off -> {
-                if (currentStremioSubtitleIndex >= 0 || subtitleController.externalSubtitleActive) {
-                    subtitleController.stopExternalSubtitleRendering() // invalidates in-flight addon downloads
-                    currentStremioSubtitleIndex = -1
-                }
-                trackSelector?.let { selector ->
-                    if (!selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
-                        selector.parameters = selector.parameters.buildUpon()
-                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                            .build()
-                    }
-                }
-                return
-            }
-            SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
-            is SubtitleAutoSelection.Embedded -> {
-                val (group, index) = positions[choice.index]
-                if (!group.isTrackSelected(index)) {
-                    trackSelector?.let { selector ->
-                        selector.parameters = selector.parameters.buildUpon()
-                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, listOf(index)))
-                            .build()
-                    }
-                }
-                return
-            }
-            is SubtitleAutoSelection.AddonTrack -> {
-                val sub = addonSubtitleResults.firstOrNull { it.addon.priorityId == choice.addonId }
-                    ?.subtitles?.getOrNull(choice.index) ?: return
-                currentStremioSubtitleIndex = stremioSubtitles.indexOfFirst { it.url == sub.url }
-                subtitleController.loadStremioSubtitle(sub)
-            }
-            SubtitleAutoSelection.Addon -> return
-        }
-
     }
 
     // D-pad navigation
@@ -7563,20 +6586,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return 0
     }
 
-    // Inline subtitle-search state (rendered in the Subtitles → Fix movie column).
-    private var subtitleSearchResults: List<SubtitleCatalogResult> = emptyList()
-    private var subtitleSearchStatus: String = ""
-    private var pendingSeriesResult: SubtitleCatalogResult? = null
-    private var pendingSeason: Int = 1
-    private var pendingEpisode: Int = 1
-
     // Passed to the controller so named shortcuts match the visible rows.
     private val unifiedSectionIds = listOf("audio", "subs", "display", "playback")
 
     private fun umSectionRows(): List<UnifiedMenuController.Row> {
         val subBadge = when {
-            isLoadingStremioSubtitles -> "…"
-            stremioSubtitles.isNotEmpty() -> "${stremioSubtitles.size}"
+            subtitleSourcesController.isLoadingStremioSubtitles -> "…"
+            subtitleSourcesController.stremioSubtitles.isNotEmpty() -> "${subtitleSourcesController.stremioSubtitles.size}"
             else -> null
         }
         return listOf(
@@ -7592,7 +6608,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val col1 = umSectionRows()
             return when (unifiedSectionIds.getOrNull(sectionIndex)) {
                 "audio" -> umAudioModel(col1, col2Index)
-                "subs" -> umSubsModel(col1, col2Index)
+                "subs" -> subtitleSourcesController.umSubsModel(col1, col2Index)
                 "sources" -> umSourcesModel(col1, col2Index)
                 "display" -> umDisplayModel(col1, col2Index)
                 "playback" -> umPlaybackModel(col1, col2Index)
@@ -7609,29 +6625,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onSearchSubmit(query: String) {
-            subtitleSearchStatus = "Searching…"
-            subtitleSearchResults = emptyList()
-            pendingSeriesResult = null
+            subtitleSourcesController.subtitleSearchStatus = "Searching…"
+            subtitleSourcesController.subtitleSearchResults = emptyList()
+            subtitleSourcesController.pendingSeriesResult = null
             unifiedMenu?.render()
-            requestSubtitleCatalogSearchFromFlutter(
+            subtitleSourcesController.dialogs.requestSubtitleCatalogSearchFromFlutter(
                 query,
                 onSuccess = { results ->
                     if (unifiedMenu?.isVisible != true) return@requestSubtitleCatalogSearchFromFlutter
-                    subtitleSearchResults = results
-                    subtitleSearchStatus =
+                    subtitleSourcesController.subtitleSearchResults = results
+                    subtitleSourcesController.subtitleSearchStatus =
                         if (results.isEmpty()) "No matches — try a different title" else "${results.size} results"
                     unifiedMenu?.render()
                 },
                 onError = { msg ->
                     if (unifiedMenu?.isVisible != true) return@requestSubtitleCatalogSearchFromFlutter
-                    subtitleSearchStatus = msg
+                    subtitleSourcesController.subtitleSearchStatus = msg
                     unifiedMenu?.render()
                 }
             )
         }
 
         override fun searchInitialQuery(): String {
-            val item = getCurrentSubtitleSearchItem() ?: return ""
+            val item = subtitleSourcesController.dialogs.getCurrentSubtitleSearchItem() ?: return ""
             return buildSubtitleSearchInitialQuery(item)
         }
 
@@ -7685,119 +6701,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         return UnifiedMenuController.Model(col1, "AUDIO", col2, title, col3)
-    }
-
-    // ── Subtitles (embedded + per-addon + appearance + timing + search) ─────────
-    private fun umSubsModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {
-        val curSub = stremioSubtitles.getOrNull(currentStremioSubtitleIndex)
-        val col2 = mutableListOf<UnifiedMenuController.Row>()
-        col2.add(mrow("Embedded", tag = "emb", selected = curSub == null))
-        for (r in addonSubtitleResults) {
-            val badge = when (r.status) {
-                AddonSubtitleStatus.LOADING -> "…"
-                AddonSubtitleStatus.OK -> "${r.subtitles.size}"
-                AddonSubtitleStatus.FAILED -> "⚠"
-            }
-            col2.add(mrow(
-                r.addon.name, value = badge, tag = "addon:${r.addon.id}",
-                selected = curSub != null && curSub.addonId == r.addon.id
-            ))
-        }
-        col2.add(mrow("Fix movie", tag = "search", accent = true))
-        col2.add(mrow("Appearance", tag = "appearance"))
-        col2.add(mrow("Timing", tag = "timing"))
-
-        val tag = col2.getOrNull(col2Index)?.tag
-        var mode = UnifiedMenuController.Col3Mode.ROWS
-        val (col3Title, col3) = when {
-            tag == "emb" -> "Track" to subtitleController.umEmbeddedTrackRows()
-            tag == "appearance" -> "Appearance · live" to subtitleController.umAppearanceRows()
-            tag == "timing" -> "Timing" to subtitleController.umTimingRows()
-            tag == "search" -> {
-                if (pendingSeriesResult == null) mode = UnifiedMenuController.Col3Mode.SEARCH
-                "Fix movie" to umSearchRows()
-            }
-            tag != null && tag.startsWith("addon:") -> {
-                val id = tag.removePrefix("addon:")
-                (addonSubtitleResults.firstOrNull { it.addon.id == id }?.addon?.name ?: "Addon") to
-                    umAddonTrackRows(id)
-            }
-            else -> "" to emptyList()
-        }
-        // Column header carries the detected/override identity ("Detected: <title>" /
-        // "Subtitles for <title>") that the old panel showed as a persistent row.
-        return UnifiedMenuController.Model(
-            col1, currentSubtitleIdentityLabel(), col2, col3Title, col3, mode,
-            previewVisible = tag == "appearance"
-        )
-    }
-
-    private fun umAddonTrackRows(addonId: String): List<UnifiedMenuController.Row> {
-        val r = addonSubtitleResults.firstOrNull { it.addon.id == addonId } ?: return emptyList()
-        return when (r.status) {
-            AddonSubtitleStatus.LOADING -> listOf(mrow("Loading…", enabled = false))
-            AddonSubtitleStatus.FAILED -> {
-                val rows = mutableListOf(mrow("Failed — retry this addon", accent = true,
-                    onOk = { retryAddonSubtitles(addonId) }))
-                r.error?.takeIf { it.isNotBlank() }?.let { rows.add(mrow(it.take(48), enabled = false)) }
-                rows
-            }
-            AddonSubtitleStatus.OK ->
-                if (r.subtitles.isEmpty()) listOf(mrow("No subtitles from this addon", enabled = false))
-                else r.subtitles.map { sub ->
-                    val cur = stremioSubtitles.getOrNull(currentStremioSubtitleIndex)
-                    mrow(
-                        sub.displayName, value = sub.lang.uppercase(Locale.US),
-                        tag = "subtitle:${sub.url}",
-                        // Require addonId match too: a URL shared by two addons dedupes
-                        // to one owner, so only that addon's row highlights.
-                        selected = cur?.url == sub.url && cur.addonId == addonId,
-                        onOk = { subtitleController.umSelectStremioSubtitleByUrl(sub.url) }
-                    )
-                }
-        }
-    }
-
-    private fun umSearchRows(): List<UnifiedMenuController.Row> {
-        if (pendingSeriesResult != null) {
-            return listOf(
-                mrow("Season  ◀ ▶", value = "$pendingSeason", adjustable = true,
-                    onAdjust = { d -> pendingSeason = (pendingSeason + d).coerceIn(1, 99) }),
-                mrow("Episode  ◀ ▶", value = "$pendingEpisode", adjustable = true,
-                    onAdjust = { d -> pendingEpisode = (pendingEpisode + d).coerceIn(1, 999) }),
-                mrow("Fetch subtitles", accent = true, onOk = {
-                    val r = pendingSeriesResult
-                    pendingSeriesResult = null
-                    if (r != null) applyManualSubtitleIdentity(r, pendingSeason, pendingEpisode)
-                    unifiedMenu?.hide()
-                })
-            )
-        }
-        val rows = mutableListOf<UnifiedMenuController.Row>()
-        if (subtitleSearchStatus.isNotEmpty()) rows.add(mrow(subtitleSearchStatus, enabled = false))
-        for (r in subtitleSearchResults) {
-            rows.add(mrow(r.titleLine(), value = r.detailLine(), onOk = { umPickSearchResult(r) }))
-        }
-        return rows
-    }
-
-    private fun umPickSearchResult(r: SubtitleCatalogResult) {
-        if (r.type == "series") {
-            val se = getCurrentSubtitleSearchItem()?.let { resolveSeasonEpisodeForSubtitle(it) }
-            if (se != null) {
-                applyManualSubtitleIdentity(r, se.season, se.episode)
-                unifiedMenu?.hide()
-            } else {
-                val cur = getCurrentSubtitleSearchItem()
-                pendingSeriesResult = r
-                pendingSeason = (cur?.season ?: manualSubtitleSeason ?: 1).coerceAtLeast(1)
-                pendingEpisode = (cur?.episode ?: manualSubtitleEpisode ?: 1).coerceAtLeast(1)
-                unifiedMenu?.render()
-            }
-        } else {
-            applyManualSubtitleIdentity(r, null, null)
-            unifiedMenu?.hide()
-        }
     }
 
     // ── Sources ─────────────────────────────────────────────────────────────
@@ -8817,7 +7720,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Cancel Stremio subtitle coroutine scope
         subtitleScope.cancel()
-        stremioSubtitles.clear()
+        subtitleSourcesController.stremioSubtitles.clear()
         stremioSubtitleService = null
 
         // Cancel optional skip-provider work; late network responses must not retain
@@ -8985,8 +7888,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             stremioSourceBadge?.visibility = View.GONE
         }
 
-        resetSubtitleState()
-        clearStremioLoadingState()
+        subtitleSourcesController.resetSubtitleState()
+        subtitleSourcesController.clearStremioLoadingState()
         pikPakRetryController.cancelPikPakRetry()
 
         // Route the channel's slot-progress seek through the shared resume
@@ -9043,7 +7946,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         updateTitle(playbackItem)
-        fetchStremioSubtitles(playbackItem)
+        subtitleSourcesController.fetchStremioSubtitles(playbackItem)
 
         channel.isSwitchingChannel = false
         stremioTvGuideController.stremioTvChannelAdapter?.notifyDataSetChanged()

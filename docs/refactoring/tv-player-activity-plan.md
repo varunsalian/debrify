@@ -3303,3 +3303,16 @@ correction, subtitle menu rows.
   fourteen passing additions only vs p14-step0, stable matched 1 GiB inputs.
   Matrix/table and raw evidence under p14/step0b/. No production or protected
   input changes. Step 1 follows under the approved manifest.
+
+- 2026-10-09 — **Phase 14 Step 1 moves complete.** The approved 43-member
+  extraction produces the 710-line subtitle-source owner and eager fieldless
+  495-line dialogs collaborator; activity 9,079 → 7,982, size ratchet lowered.
+  Borrowed scope/service/readiness remain activity-owned. All 134 substitutions,
+  four Host-property rows (11 forwarders / 13 tokens) and in-place destruction
+  patch match the manifest. Forty-one reflection routes are added only in the
+  shared helper; all existing assertions and Dart anchors remain unchanged.
+  Focused characterizations 186/186 pass. Checker: 1,850 declarations, zero
+  differences; historical p1–p13, 49 frozen destinations, 20 initializer
+  proofs, teardown order, 25 compiled receiver sites plus six preserved
+  bindings and all five Kotlin warning identities pass. Full checker suites
+  and clean JVM/lint/release/Flutter gates follow on this gate commit.
