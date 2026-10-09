@@ -14125,3 +14125,10 @@ Step 1 materializes the approved manifest without additional production edits: p
 | Dart source-text anchors | Scanned for moved playlist names | None needed | All Dart files unchanged |
 
 The activity shrinks from 10,297 to 9,079 lines; its size baseline is lowered with --update. The split access helpers remain 325/555 lines. All 120 phase-13 characterizations pass after extraction with matched 1 GiB workers. Forced debug compilation preserves the same five Kotlin warning identities. Evidence: p13/step1/ and p13/gate/. Full integration gate follows on the committed tree.
+
+
+### Phase 13 lint correspondence
+
+The strict comparison retains its raw failure/deltas in p13/gate/lint-comparison.json: 1,350 exact identities and two existing Overdraw warnings on view_tv_guide_marquee.xml and view_tv_guide_pulse.xml, both line 7 column 5. Only the inferred theme changes from @style/Theme_AppCompat_DayNight_NoActionBar to @android:style/Theme.Holo. Total/severity/rule/location counts are unchanged (1,352; 253 errors / 1,099 warnings; 175 opt-in errors).
+
+The cached lint-checks 31.11.1 OverdrawDetector associates layouts scanned inside Activity subclasses with their manifest theme; detached layout getter code loses that static association and the detector selects its Theme.Holo fallback. Its disassembly and jar hash are archived. The manifest and both layout files remain byte-identical to 315448a3c, the activity still has its AppCompat theme, and the controller receives the same activity with the same audited getLayoutInflater invocation. All seven skin characterizations pass. The evidence-only exact correspondence check pins both full before/after messages and locations and rejects three negative controls (unknown message, changed location, extra issue). No wildcard normalization, suppression or production change was made. This is a documented diagnostic-inference difference, not a claim that the raw lint messages are identical. See p13/gate/lint-correspondence.json and explain_lint.py.

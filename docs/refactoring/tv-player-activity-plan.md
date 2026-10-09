@@ -3091,3 +3091,25 @@ lists, the playlist in each controls skin, opening/closing during playback.
   unchanged. No Dart anchors needed; split helpers remain 325/555 lines.
   Evidence p13/step1/, p13/gate/. Full integration gate follows on the
   committed tree; no self independent review, bug fix or device interaction.
+
+
+- 2026-10-09 — **Phase 13 native gate recorded on 031e3b83e; Flutter gate
+  pending.** Clean p13-gate exactly matches all 1,420 p13-step0 identities
+  (1,419 pass, the same pre-existing SourceBrowser focus failure), matched
+  1 GiB heap, stable clean tree. Analyzer matches all 1,758 prior diagnostics.
+  Release APK succeeds; R8/DEX verifies all 12 generated moved-slice classes
+  and 177 members, including Host/anonymous classes and the activity Host
+  implementation, with three mapping negative controls. Decoder output,
+  three library hashes and missing-feature manifest match phase 1 exactly:
+  pending-environment. Lint retains 1,352 issues (253 errors / 1,099 warnings,
+  175 opt-in errors): 1,350 exact identities, plus two existing Overdraw
+  warnings whose inferred-theme message changes from AppCompat to Holo for
+  marquee/pulse. Cached lint 31.11.1 detector bytecode proves its Activity-only
+  layout association and Holo fallback; unchanged manifest/layout hashes and
+  the compiled inflater audit prove runtime ownership/theme are unchanged.
+  Raw strict comparison remains archived as different; the exact two-pair
+  correspondence check rejects message/location/additional-issue changes.
+  No suppressions, checker relaxation or production fixes. Historical p1–p12
+  checks pass; full historical checker self-tests are still running. Full
+  Flutter comparison follows on a clean commit containing gate. Evidence
+  p13/gate/ and junit/p13-gate/.
