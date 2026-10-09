@@ -1788,7 +1788,95 @@ live dock styling, aspect cycling incl. 4:3, playback speed with audio
 pitch, night mode (loudness) on/off and across track/route changes, system
 audio effects toggle, display-mode matching (refresh rate) on a supported TV.
 
+## Phase 16 — controls dock runtime (overlay show/hide, dock identity, seekbar + cinema scrub)
+
+Branch `refactor/tvplayer-p16` off the phase-15 merge `df439aed1` (activity 6,986 lines). Evidence under
+`refactor-evidence/tvplayer/p16/`. Inventory: "Phase 16 inventory" in the deps
+report (measured at `ce3ddfb06` with phase 15 read from its branch;
+re-measure on the phase-15 merge). All collaborator rules from phases 3–15
+apply; statement-level coverage sweep from the start (104 `if`, 47 `return`).
+
+**Selected (80 members, ≈ 1,161 lines, one activity property
+`controlsOverlayController` at the phase's first owned slot, one shared
+Host):**
+- `TvControlsOverlayController` (owner, ≈ 430): show/hide/auto-hide (owns
+  `controlsHandler`, 4 s auto-hide only while playing), play/pause, Next
+  overlay, clean-state.
+- eagerly constructs `TvDockIdentityPresenter` (≈ 330: title/OTT identity
+  incl. `@Volatile ottShowName`, annotation kept) and `TvSeekScrubController`
+  (≈ 540: legacy seekbar + cinema scrub; owns `seekbarHandler` 100 ms ticker,
+  never stopped, and the 80 ms scrub animator).
+- The owner is referenced as **`controls`** (not `overlay` — three owner
+  functions have `val overlay` locals); `seek`/`identity` verified
+  collision-free; 10 compile-checked cross-references.
+- **View ownership decision:** 23 of the 24 shared views from phase 15 move
+  (owner 2, identity 8, seek 13); `ottSkinInstalled` stays (readers span
+  several owners); the 18 lateinit title/Next-overlay/seekbar views stay in
+  the activity (avoids 18 `bindViews` patches, 39 reflective retargets and an
+  un-checkable `::seekbarOverlay.isInitialized` in `onDestroy`).
+- 48 activity patches in 11 declarations (27 in `dispatchKeyEvent`; 10 later
+  consumed by phases 18–19); 46 Host re-points (68 token edits) in 10
+  properties (31 in phase 15's `controlsDockController` Host incl. 22 get/set
+  pairs); 2 in-place `onDestroy` patches; 2 activity-owned readiness getters
+  (`startupGateViewReady`, `nextBackdropReady`).
+- 38 initializer proofs; new narrow classifier forms: scalar float literals,
+  `arrayOfNulls<TextView>(3)`, a reviewed `object : Runnable`.
+- ≈ 228 substitutions (155 host, 3 `this` → `activity` incl. 2 `Glide.with`
+  and a Toast, 1 excluded Runnable `this`, 4 inherited calls, 53
+  visibility). `updateSeekbarProgress` shadows `player` with a local (not
+  substituted). `progressHandler` and the zap-banner tokens are untouched.
+- Retargets: all **34 moved names** accessed reflectively by existing tests
+  (151 quoted accesses incl. phase-15 suites, e.g. `hideControlsRunnable`,
+  `pauseButton`, `seekbarProgressRunnable`) are routed to their new owners
+  before step T, then extended for step-0 additions; assertions preserved;
+  no Dart retargets (two anchored ranges get patches; asserted text
+  unchanged).
+
+**Pinned as-is:** `showSeekbar` has no caller (the legacy seekbar path is
+dead; step 0 reaches it by reflection); the seekbar ticker writes
+progress-reporter guards every tick; the 100 ms ticker is never stopped.
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (owner + two collaborators
+via `controls`/`seek`/`identity`, `@Volatile` preserved) + negatives (a
+`overlay`-named reference captured by a local, the shadowed `player` local);
+compiled audit (incl. retaining all 23 phase-15 view-binding pins — 12
+casts, 11 without, incl. three array stores — with their target
+descriptors); per-phase dispatcher keeping all historical suites; earlier
+destinations frozen at the phase-15 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: deterministic animator stepping under the paused looper and a
+recording player probe, demonstrated on the original. Then: 7 per-skin
+activity instances; show/hide/auto-hide timing (playing vs paused), the full
+key matrix that drives the dock, play/pause, Next overlay fade timings and
+clean-state — **each of its twelve blockers independently** (that blocker set,
+all others clear) plus the all-clear case, each mutation-proved, title/OTT identity per skin, cinema scrub (start, step, commit,
+cancel, animator), the legacy seekbar path via reflection, ticker effects on
+progress-reporter guards, `onDestroy` statements; coverage sweep + matrix.
+Mutation proofs on the original; Claude's independent sample (≥ 75 %, else
+sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–15 additions. Device checklist (end of series):
+controls dock show/hide/auto-hide while playing and paused in each skin,
+play/pause from the dock and remote, cinema scrub seeking (hold/release,
+cancel), title/OTT identity text, the Next overlay during auto-advance.
+
 ## Follow-ups (found while mapping; not fixed here)
+
+- Phase 16 original runtime observations, preserved by Step 0: hidden dock
+  scheduling leaves a pre-existing callback and deadline intact; queued focus
+  offers survive hide and can re-arm auto-hide; the 100 ms seekbar ticker is
+  retained through pause/stop and only removed by teardown; onDestroy does
+  not cancel a running scrub animator. The reflection-only legacy seekbar
+  hide resumes playback even when it was paused before entry. Any change to
+  these timing/lifetime behaviors belongs to a separate behavior change.
+  CLASSIC focus remaining on PlayerView is a Robolectric fixture observation,
+  not a claimed device finding; device checks stay at the planned milestone.
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
   newer navigation state unconditionally; rebuilding accumulates global focus
@@ -3581,3 +3669,137 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   lint path normalization changes only the wrapper path. Activity
   7,982 → 6,986. Decoder verification remains pending-environment. Phase 15
   complete; merged.
+- 2026-10-09 — phase 16 design round 1 (Codex): **No P1s**; P2s folded (route
+  all 34 reflectively accessed moved names; twelve independent clean-state
+  blockers); P3 retain all 23 view-binding pins. Phase 16 design approved.
+
+- 2026-10-10 — **Phase 16 step T complete** on `refactor/tvplayer-p16`. First routed all 34 existing reflective names (151 quoted accesses); assertions unchanged, original-owner compatibility retained until extraction. Re-measured at `df439aed1`: 1,727 declarations, 80 Activity members plus the companion constant, 48 in-place edits and 46 Host forwarders/68 token re-points. All-retained original self-comparison has zero differences; phase-15 historical check at the merge passes; all 54 earlier destinations are frozen. The complete extraction fixture (416/329/542 lines) compiles offline and passes the source partition, 38 initializer proofs, seven receiver pins, all 23 retained phase-15 view bindings (12 casts/11 absent, three array stores), and volatile identity field/writer/reader checks. Narrow float/null-array/Runnable classifier forms and negatives, readiness reads, nested slots, `controls`/local `overlay` and local `player` exclusions, computed forwarders, opt-in presence/absence and teardown/named-argument negatives are covered. **419 historical + 44 phase-16 checker/auditor self-tests pass**, including the separate phase-15 merge-history test; the router fixture context was corrected and all phase-16 cases rerun. Clean original JVM `baseline-df439aed1`: 1,943 identities (1,942 pass, unchanged source-browser focus failure); stable `p16-tools-recheck` preserves every identity/status. Original lint archived: 1,352 issues, 175 opt-in errors. Evidence: `p16/tools-result.json`, `overload-audit.json`, self-test logs, `remeasured-inventory.json`, `lint-original/`, and `junit/`. Production source, lockfile, ProGuard and all earlier manifests/destinations remain unchanged. Step 0 follows; no production moves.
+
+- 2026-10-10 — **Phase 16 Step 0 complete; stopped before production moves.**
+  Animator/recording-player prerequisites demonstrated first on df439aed1,
+  repeated and assertion-mutation-proved; no feature deferred. Added 287
+  named cases in 13 behavior suites plus prerequisite suite, 18 cohesive
+  files, separate real activities for seven skins. Pins full key routing,
+  twelve independent blockers/all-clear, dock/Next/auto-hide timing,
+  per-skin identity, live retry ordering, scrub/legacy seek and ticker,
+  metadata worker timing, Host/caller wiring, pause/stop and onDestroy.
+  Real framework callback stepping resolves paused-looper native vsync;
+  cancellation observations settle bootstrap and moved animations stay real.
+  Statement matrix: 668 nodes in 43 functions/callbacks; all 439 required
+  obligations (160 direct calls, eight Elvis guards included) have named
+  assertion proofs, no equivalents/unresolved nodes. 537 original attempts,
+  484 assertion kills; invalid/crash/cancelled attempts get no credit;
+  every one of 287 named cases has a witness. Deps table/matrix and raw
+  fixture hashes/patches/logs/XML in p16/step0. Final clean p16-step0:
+  2,230 identities (2,229 pass, same known source-browser focus failure),
+  versus baseline-df439aed1 1,943 (1,942 pass): exactly 287 passing additions,
+  strict old-status equality, stable fingerprints, matched evidence-only
+  1 GiB/JBR. Original lint archived: 1,352 issues (253 errors/1,099 warnings,
+  175 opt-in errors), exit 1. Final combined checker/auditor suite 463/463;
+  72 protected hashes unchanged. Reflection rescan: 78 names/699 sites;
+  Step-1 route additions remain. Original worktree removed; lockfile,
+  ProGuard, production and size baseline unchanged. No bug fix, push or
+  device interaction. STOP before Step 1 for Claude’s independent sample.
+
+- 2026-10-10 — **Phase 16 Step 0b complete; STOP before production moves.**
+  First independent sample killed 11/16 (69%); all five survivors
+  t07/t12/t14/t15/t16 are now assertion-killed on df439aed1, including a
+  final rerun against all 379 Phase-16 cases. Added 92 named cases in five
+  cohesive suites plus a 27-line actual-framework end-action observation
+  helper (six files, at most 79 lines each); all 287 old cases and their
+  18 fixture/test files are byte-for-byte unchanged. Seven-skin hide/reveal
+  and scrub cases pin pre-cleanup alpha/translation/scale, exact durations
+  and easing, title reset, floating-banner lifetime, missing metadata and
+  deliberately late delivery of real production callbacks. Re-sweep:
+  96 PSI nodes / 67 required direct obligations across showControlsMenu,
+  hideControlsMenu and hideTitleImmediately freshly assertion-proved;
+  57 parameter variants (12 duration sites, five curves), seven end-action
+  installations/bodies (24 mutations), eight additional predicate variants.
+  166 original mutation attempts, all named assertion kills; every one of
+  92 additions has a witness, no missing matrix entry or equivalent claim.
+  Final original control: 379/379. Stable matched-1-GiB/JBR p16-step0b:
+  2,322 identities (2,321 pass, same known source-browser focus failure),
+  vs p16-step0 2,230: exactly 92 passing additions, all old statuses equal;
+  helper and strict comparisons pass. Coverage matrix, mutation table,
+  source patches, fixture snapshots, full logs/XML and comparisons archived
+  in p16/step0b and junit/p16-step0b. Reflection rescan: 78 names/756 sites.
+  All 72 protected hashes and the size baseline retained; size/diff checks
+  pass. Earlier unchanged checker/auditor and original lint evidence reused.
+  Detached original removed. No production move, bug fix, push or device
+  interaction. Claude runs the required second independent sample next.
+
+- 2026-10-10 — **Phase 16 Step 0c complete.** Claude's second sample's u06
+  and u12 are assertion-killed against all 399 Phase-16 cases. CLASSIC has a
+  null dock spec, but u12 changes the real styled-selected/uninstalled
+  live-IPTV gate; all seven legacy icon pairs are now pinned. u14 is
+  **equivalent**: the unchanged `formatTime` already maps every nonpositive
+  input to `00:00`; exact mutation runs all 399 cases successfully. Preserve
+  the original padded remaining string `-00:00`. Twenty added cases each
+  have a named assertion proof, including zero/past-duration boundaries.
+  `p16-step0c` archives 2,342 identities (2,341 pass, the unchanged focus
+  failure), additions-only versus `p16-step0b`, matched 1 GiB/JBR, stable
+  tree and complete XML. Rescan 78 referenced names/766 sites; all 80 moved
+  Activity members will be routed. Mutation table/matrix extension appended
+  to deps; evidence `p16/step0c/` and `junit/p16-step0c/`. No production
+  changes; Step 1 is now authorized by the second independent sample.
+
+- 2026-10-10 — **Phase 16 Step 1 complete.** Manifest-exact controls owner
+  plus eager identity/seek collaborators; 1,727 declarations, zero source
+  differences. View decision preserved (23 nullable views move;
+  `ottSkinInstalled` and 18 lateinit views retained), 46 Host re-points/68
+  edits, two readiness getters and two in-place teardown patches. Files
+  416/329/542 lines, Activity 6,986 → 5,891; size ratchet updated. All 80
+  Activity member routes (46 added) with unchanged assertion/Dart bytes.
+  All 399 Phase-16 cases pass, compiled audit of seven receiver sites and
+  all 23 phase-15 binding pins passes, volatile field/writers/reader verified.
+  Thirty-eight initializer proofs, teardown order and 54 frozen destinations
+  pass. Evidence `p16/step1/`, `p16/gate/`; full gate follows.
+
+- 2026-10-10 — **Phase 16 gate native checkpoint** at `8f3c3d35f`. Clean JVM
+  exactly matches all 2,342 `p16-step0c` identities/statuses (same one focus
+  failure); five Kotlin warnings unchanged. Current/historical p1..p15
+  checkers, original self-comparison, 54 frozen destinations, 38 initializer
+  proofs, compiled receiver/binding audit and teardown pass. Lint has no
+  additions and retains all 175 opt-in findings; one Activity-only
+  `GestureBackNavigation` finding disappears after its unchanged handler
+  moves to the seek controller, confirmed by the installed detector's
+  bytecode. All other 1,351 identities remain. Release APK succeeds; all
+  eight generated classes/289 members retain R8/DEX identities (three
+  negative controls). Decoder remains pending-environment with exact
+  phase-15 output and phase-1 library/gap hashes. Stable analyzer rerun
+  exactly matches 1,758 diagnostics; retained initial overlapping-build
+  attempt duplicated existing diagnostics, with no source changes. Full
+  checker fixtures continue; affected/full Flutter comparison follows on
+  this clean `gate` checkpoint. Evidence `p16/gate/`, `junit/p16-gate/`.
+
+- 2026-10-10 — **Phase 16 final gate complete; STOP after Phase 16.**
+  All 463 checker/auditor self-tests and historical p1..p15 merge checks pass,
+  1,727 declarations/zero differences, 54 frozen destinations, 38 initializer
+  proofs, seven compiled receiver sites plus all 23 phase-15 binding pins,
+  volatile identity writer/reader and teardown order verified. All 399
+  Phase-16 cases pass; clean `p16-gate` exactly preserves 2,342 `p16-step0c`
+  statuses (same one JVM failure). On clean gate commit 3ab9553da,
+  affected Dart tests preserve all 45 statuses and full Flutter preserves
+  all 12,855 phase-15 identities/statuses (12,794 success, 13 failure,
+  28 error, 20 skipped), stable tree/same SDK. Release + R8/DEX 8 classes/
+  289 members pass; five Kotlin warnings and 1,758 analyzer diagnostics
+  unchanged. Lint has no additions / 175 opt-in findings unchanged; the
+  single Activity-only back-navigation diagnostic removal is explained by
+  the installed detector's subclass predicate, with unchanged key behavior.
+  Decoder remains pending-environment with exact phase-15 failure and all
+  phase-1 binary/gap hashes. No new behavior regression observed. All 80
+  routes use unchanged assertions; Dart, lockfile, ProGuard, earlier files
+  and manifests unchanged. Evidence `p16/gate/summary.json` and raw
+  archives, `p16/step0c/`, `p16/step1/`, `junit/p16-step0c/`, `junit/p16-gate/`.
+  No push, device or emulator interaction; no independent self-review.
+  Phase 17 not started.
+- 2026-10-10 — phase 16 post-implementation reviews of `df439aed1..55f8b4135`.
+  Claude's independent samples 11/16 then 14/17 after the 0b sweep; 0c
+  closed u06/u12 by assertion, u14 (`coerceAtLeast(0)`) equivalent because
+  `formatTime` already maps nonpositive values to `"00:00"`. Independent
+  Codex review (fresh session): **No P1s, no P2**; one P3 (deps wording
+  "nullable views" → "shared dock fields") fixed. Verified 27 dispatcher
+  patches keep order and every `super` fallthrough, the cinema key listener
+  is byte-identical after reversals, and the back-navigation lint removal is
+  detector scope only. Activity 6,986 → 5,891. Decoder verification remains
+  pending-environment. Phase 16 complete; merged.

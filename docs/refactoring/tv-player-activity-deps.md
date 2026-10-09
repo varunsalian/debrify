@@ -16310,3 +16310,1651 @@ Tested clean gate commit 699668ae8; Step 0b f3aea36e0; Step 1 699668ae8. Current
 Full clean p15-gate exactly matches all 1,943 p15-step0b identities/statuses (1,942 passing, same known SourceBrowser focus failure), complete XML, matched 1 GiB/JBR, stable clean input. All 337 characterizations pass. Five Kotlin warnings and all 1,758 analyzer diagnostics are unchanged. Lint exactly retains 1,352 issues, 253 errors/1,099 warnings and 175 opt-in errors. The initial raw lint comparison differs only because its original wrapper-version warning uses an absolute current-checkout path; canonical checkout-relative normalization pairs that same rule/severity/message/location, and the wrapper file is byte-identical to ce3ddfb06. Initial comparison, normalization proof and raw reports remain archived; no issue is accepted, removed or suppressed.
 
 Release APK succeeds. R8/DEX preserves identity treatment for all 13 generated classes/389 members, including TvControlsDockController, TvLiveDockStyler, TvPlaybackDisplayController, DockSkinSpec, both Hosts and activity Host implementations, anonymous/WhenMappings classes and both new Kt facades. Three mapping negative controls reject class rename, member rename and missing DEX member. Decoder remains pending-environment: failure output matches phase 14, and all three native-library hashes/missing-feature manifests match phase 1. No native artifact, dependency or ProGuard rule changed. Affected Dart source tests match all 45 prior statuses. Full Flutter via suite_evidence.py on clean 699668ae8 matches all 12,855 phase-14 identities/statuses: 12,794 success, 13 failure, 28 error, 20 skipped; same SDK/flags and stable inputs. Existing failures remain explicit; no new behavior regression was observed. Evidence p15/gate/summary.json and raw archives, junit/p15-gate/. Stopped after Phase 15; phase 16 not started.
+
+---
+
+## Phase 16 inventory (at `ce3ddfb06` + phase-15 branch; re-measure on `df439aed1`)
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `ce3ddfb06`
+(phase-14 merge, **7,982 lines**, class header 136, 460 depth-1 members incl. Host objects). Read-only survey
+of the main checkout. Nothing was built and nothing under `../debrify-wt/` was touched. The phase-15 plan
+section and "Phase 15 inventory" were read from commit `1e184b9b1` (branch `refactor/tvplayer-p15`) with
+`git show`.
+
+**Phase 15 is treated as a set of existing controllers:** `TvControlsDockController` (17 dock-only views,
+`installOttControlsSkin`, captions, `setupControls`, `DockSkinSpec` type), nested `TvLiveDockStyler`
+(reached as `controlsDock`), sibling `TvPlaybackDisplayController`. Their Hosts are frozen destinations.
+Phase 16 edits only the **activity's** `controlsDockController` property (its Host object), as a
+whole-property `patched` row. All line numbers below are at `ce3ddfb06`. Spans before ≈ 290 shift by the
+phase-15 field removals (≈ −20); spans after 3127 shift by ≈ −430 (setupControls block) and more after 5268
+and 5930. Re-measure everything on the phase-15 merge.
+
+**Tooling.** The p15 scripts were copied to `scratchpad/p16/` and re-indexed on the current file:
+- `idx.py` (brace/string/comment-aware member indexer), `refs.py`/`unit.py` (word-boundary references;
+  templates and `this@Activity.` counted, other receivers excluded);
+- `p16.py`/`fin.py` (phase-15 moved set, phase-16 groups, final three-file membership with leading trivia
+  attached per the partition rule), `inb.py`/`fin_rep.py` (inbound by category), `fin_out.py` (outbound per
+  file), `mat.py`/`views.py` (group matrix and per-view reader/writer table), `refl16.py` (quoted reflective
+  names in `android/app/src/test`).
+
+Each count below was checked by hand against the source. Terms as in phases 11–15: **patch** = token edit in
+a retained activity declaration; **re-point** = edited forwarder target in an existing controller property's
+Host object (that property becomes a whole-property `patched` row); **substitution** = declared edit inside a
+moved body.
+
+---
+
+### 1. Summary and recommendation
+
+**Phase 16 = "controls II": the dock runtime.** One owner with two eagerly constructed, field-bearing nested
+collaborators, one shared Host, one activity property:
+
+- **`TvControlsOverlayController.kt`** (owner; 21 members / 332 lines → **≈ 430**): show/hide/auto-hide
+  (`controlsHandler`, `hideControlsRunnable`, `CONTROLS_AUTO_HIDE_DELAY_MS`), focus probe, play/pause and the
+  pause label, subtitle lift, title reveal/hide, the loading/Next overlay (`setResolvingState`,
+  `setNextOverlayBackdrop`, `show/fadeIn/hideNextOverlay`), `isCleanPlaybackState`, and the views
+  `controlsOverlay`, `pauseButton`. Activity property **`controlsOverlayController`** at the
+  `controlsOverlay` slot (210). `@OptIn(UnstableApi::class)` is **required** (`PlayerView.showController()`
+  is `@UnstableApi` in media3-ui 1.8.0, verified with `javap`).
+- **`TvDockIdentityPresenter.kt`** (nested `val identity`; 16 members / 311 lines → **≈ 330**): `updateTitle`,
+  `guideTitleFor`, `updateOttIdentity`, `updateOttExtras`, `dockTagsFor`, the tag cache, `@Volatile
+  ottShowName`, and 8 identity views. Constructor `(host)` only: it uses no activity receiver and no owner
+  member (an unused `activity` parameter would add a Kotlin warning).
+- **`TvSeekScrubController.kt`** (nested `val seek`; 43 members / 518 lines → **≈ 540**): the 100 ms progress
+  ticker (`seekbarHandler`, `seekbarProgressRunnable`), cinema scrub (5 state fields + animator), the legacy
+  seekbar overlay logic and quick seek (`seekBy`), and 11 cinema/time/scrub views. Constructor
+  `(activity, host, controls)`.
+
+| item | phase 16 |
+|---|---|
+| moved members / lines | **80 / 1,161** (incl. leading trivia) + 1 companion line — owner 21 / 332, identity 16 / 311, seek 43 / 518 |
+| owned state | 39 fields: owner 5, identity 11, seek 23 (23 of the 24 phase-15 shared views/state move; §1.2) |
+| activity patches | **48 in 11 declarations** (§4.1): 38 permanent (routers/lifecycle/bootstrap), 10 consumed by phases 18/19 |
+| Host re-points | **46 forwarders / 68 token edits in 10 properties** (§4.2): 31 in phase-15 `controlsDockController` (53 edits), 15 in 9 older properties |
+| added activity declarations | 1 property + Host object (54 members), 2 readiness getters (`startupGateViewReady`, `nextBackdropReady`) |
+| initializer proofs | **38** (owner slot 210; all other 38 fields run at 210); **3 new narrow classifier forms** (§3) |
+| cross-qualifications | **10** compile-checked: seek→owner `controls.` 8, owner→`identity.` 1, owner→`seek.` 1 |
+| Host substitutions | **155** (owner 83 incl. 2 readiness, identity 18, seek 54) + **3** `host.controlsDockController.` |
+| receivers `this`→`activity` | **3** (2 `Glide.with(this)`, 1 `Toast.makeText(this, …)`); **1 excluded** (`Runnable` self-reference) |
+| inherited pins | **4** (`currentFocus`, `isFinishing`, `isDestroyed`, `findViewById<View>`) |
+| visibility substitutions | **53** (owner 18, identity 11, seek 24; public members of internal classes, never `internal fun`) |
+| substitutions total | **≈ 228** |
+| reflective retargets | **44 literal sites / 9 names → 9 owner-map routes**; 0 local-helper changes |
+| Dart retargets | **0** (2 anchored ranges receive patches; asserted literals untouched) |
+| lifecycle | **2 in-place `onDestroy` patches**; nothing in `onStart`/`onStop`/`onPause`/`onResume`/`finish` |
+
+**Activity:** ≈ −1,162 + ≈ 68 (property + 54-member Host + 2 readiness getters) ≈ **−1,094**:
+7,982 → ≈ 7,032 after phase 15 → **≈ 5,940** after phase 16.
+
+**Risk: medium-high.** No Flutter channel, no coroutine, no async token. The risks are:
+- **key routing**: 27 permanent `dispatchKeyEvent` patches (BACK/CENTER/DOWN/UP/LEFT/RIGHT matrix);
+- focus and animation timing (300/250/220/160/200/150/100/80 ms) across **7 controls skins**, with skin-specific
+  identity arms;
+- the 100 ms ticker feeding the progress reporter's watch guards (`maxStableDurationMs`,
+  `lastRealPositionMs`) and the skip-segment state every tick;
+- the **dead legacy seekbar path** (`showSeekbar` has no caller), which needs reflective characterization;
+- the widest re-point row so far: the phase-15 dock Host with 22 `get`/`set` pairs.
+
+Existing coverage only toggles `controlsMenuVisible`/`seekbarVisible` reflectively, drives some IPTV keys,
+and covers `isCleanPlaybackState` in Stremio TV wiring. Show/hide, scrub, title/identity and the Next overlay
+have **no** characterization.
+
+### 1.1 Why three files, nested, with this ownership
+
+Group sizes (member lines incl. trivia) and measured cross references:
+
+| group | members / lines | → SH | → SK/CS/SV | → TI | → 24 shared views | → title/next lateinit views |
+|---|---|---|---|---|---|---|
+| SH (show/hide, play/pause, lift, label) | 13 / 260 | — | 0 | 1 | 11 | 18 |
+| SK + CS + SV (ticker, scrub, legacy seekbar) | 38 / 511 | 3 | — | 0 | 33 | 0 (30 to lateinit seekbar views) |
+| TI (title, identity, extras, tags, Next overlay, clean-state) | 14 / 364 | 1 | 1 | — | 25 | 30 |
+
+- One file for SH + TI would be ≈ 624 + Host ≈ 730 lines, in the 501–800 review band, and mixes two
+  responsibilities. Three files keep each ≤ 550.
+- The Next overlay and `isCleanPlaybackState` go with the owner, not identity. They read
+  `controlsMenuVisible`/`seekbarVisible`/`nextOverlay` and are reached from the Up Next, gate and Stremio
+  guide Hosts as presentation state.
+- **Nested, not sibling.** Seek and owner share `pauseButton`, `controlsHandler`, `controlsMenuVisible`
+  and `showControlsMenu` (8 refs). The phase-11/13/15 precedent is cross-qualified nested collaborators:
+  shared state has one owner and a missed qualification does not compile. A sibling seek at slot 206 would
+  save one proof but needs 4 more Host forwarders, and the shared state would no longer be compile-checked.
+- **Qualifier names.** The owner is referenced as **`controls`**, never `overlay`: `showControlsMenu`,
+  `hideControlsMenu` and `isFocusInControlsOverlay` have `val overlay` locals (22 sites). Scanned
+  collisions for `controls`, `seek` and `identity` in all 80 spans: **0**. `updateSubtitleControlsLift` also
+  has a `val dock` local (4 sites); it needs no qualification because `controlsOverlay` is owner-owned.
+
+### 1.2 View-ownership decision (the 24 shared views/state left by phase 15)
+
+Rule: a view moves to the phase-16 file that is its **only runtime reader outside the dock**. The dock's
+`findViewById` write keeps going through its frozen Host `var`, now re-pointed. A view stays when its readers
+span several owners and retained code.
+
+Measured reader/writer sets (excluding the dock's write; H = existing controller Host):
+
+| view/state | readers | decision |
+|---|---|---|
+| `controlsOverlay` | SH 4, H zapBanner 1, dock 2 | **owner** |
+| `pauseButton` | SH 5, SK 5, styler 4, dock 4, `dispatchKeyEvent` 1 | **owner** (seek reads `controls.pauseButton`) |
+| `ottSkinInstalled` | SH 2, SK 6, TI 1, dock 4 (+ write), display 1, H sourceSwitch 1, `handleMetadataUpdate` 1, `playStremioTvPlaybackMap` 1 | **stays activity-owned** (multi-owner; writer is the frozen dock) |
+| `ottQualityChips` (val array) | TI 2 (dock writes 3 elements) | **identity** (new `arrayOfNulls` form, §3; fallback: stay, −1 proof, +1 Host getter) |
+| `ottIdentityTitle`, `…Subtitle`, `…Overline`, `…Badge`, `…Divider`, `ottRatingChip`, `ottMetaLine` | TI only | **identity** (7) |
+| `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressBackground`, `ottScrubPreviewChip`, `ottScrubPreviewText` | SK (+ styler reads Current/Total) | **seek** (8) |
+| `cinemaProgressContainer` | SK 3, styler 2, `dispatchKeyEvent` 3 | **seek** |
+| `cinemaProgressThumb`, `cinemaSpeedIndicator` | SK, styler 1 each | **seek** |
+| `cinemaSeekMode` | SK 8, styler write 1, `dispatchKeyEvent` 1 | **seek** |
+| `cinemaSeekWasPlaying` | SK 4, styler write 1 | **seek** |
+
+**Result: 23 move (owner 2, identity 8, seek 13), 1 stays (`ottSkinInstalled`).** All 23 phase-15 dock-Host
+forwarders for them are re-pointed in one whole-property row. The phase-15 destination files stay
+byte-identical.
+
+**Activity-bound `lateinit` views stay** (phase-13 precedent: views bound by retained `bindViews` stay behind
+computed Host getters):
+- the 8 title views: `titleContainer`, `titleView`, `titleOttContainer`, `ottEpisodeBadge`,
+  `ottEpisodeTitle`, `ottRatingContainer`, `ottRating`, `channelBadge`;
+- the 4 Next-overlay views: `nextOverlay`, `nextText`, `nextSubtext`, `nextBackdrop`;
+- the 6 seekbar views: `seekbarOverlay`, `seekbarProgress`, `seekbarHandle`, `seekbarCurrentTime`,
+  `seekbarTotalTime`, `seekbarSpeedIndicator`.
+
+Moving them would cost:
+- 18 `bindViews` patches with owner-typed `findViewById` inference;
+- 7 more re-points/patches (`titleView` ×4 Hosts, `nextText`/`nextSubtext`, `showBufferingIndicatorDebounced`);
+- an **unqualifiable** `::seekbarOverlay.isInitialized` in retained `onDestroy` (7792);
+- 39 reflective retargets (`titleView` 15, `nextText` 5, …);
+- a new `lateinit` move form.
+
+Staying costs 18 Host getters and two activity-owned readiness getters (`::startupGateView`,
+`::nextBackdrop`, both read by moved code).
+
+**Also stays:** `dockSkinSpec`/`controlsSkin` (session-fixed lazies, phase-15 decision), `startupGateView`,
+`playerView`, `subtitleControlsLift`, `seekFeedbackManager`, `pikPakReactivationIndicator`,
+`maxStableDurationMs`/`lastRealPositionMs` (progress-reporter guards, Host `var`s), `sleepStopLatched` (Host
+`var`), and `progressHandler` (not used by the unit). The companion constants `SEEK_STEP_MS` and
+`SEEK_LONG_PRESS_THRESHOLD` also stay (only `dispatchKeyEvent` uses them).
+
+---
+
+### 2. Members (lines at `ce3ddfb06`, attached comments/trivia included)
+
+**Owner `TvControlsOverlayController.kt`: 21 members / 332 lines.**
+- Fields (5): `controlsOverlay` 209–210 (`// Controls` header travels with it), `pauseButton` 211,
+  `controlsMenuVisible` 779, `controlsHandler` 1366, `hideControlsRunnable` 1490–1496 (`Runnable { … }`).
+- Functions (16): `isFocusInControlsOverlay` 5007–5016, `handlePlayPauseToggleFromCenter` 5029–5035,
+  `togglePlayPause` 5037–5067, `showControlsMenu` 5069–5159, `hideControlsMenu` 5161–5212,
+  `updateSubtitleControlsLift` 5214–5229 (KDoc), `hideTitleImmediately` 5231–5238,
+  `scheduleHideControlsMenu` 5240–5246, `cancelScheduledHideControlsMenu` 5248–5250,
+  `updatePauseButtonLabel` 5252–5266 (phase-15 patched), `setResolvingState` 4534–4543,
+  `setNextOverlayBackdrop` 4545–4560 (comment), `showNextOverlay` 5769–5774 (`// Next overlay`),
+  `fadeInNextOverlay` 5776–5781, `hideNextOverlay` 5783–5790, `isCleanPlaybackState` 5792–5807 (**the
+  `UP NEXT CARD` banner 5792–5794 is leading trivia and travels with it**; pin it).
+- Companion: `CONTROLS_AUTO_HIDE_DELAY_MS` 7977 → file-private const (only `scheduleHideControlsMenu`).
+- Retained between owner spans: `isFocusInIptvChannelList` 5018–5027 (IPTV/router), `updateAspectButtonLabel`
+  / `updateNightModeButtonLabel` 5268–5276 (phase 15), `reportValidatedSourceCommit` 4562, `dp` 4580,
+  `playPikPakVideoWithRetry` 4588, `dispatchKeyEvent` 4643, `releaseScreenForSleep` /
+  `holdScreenForPlayback` 5752–5767 (sleep).
+
+**Nested `TvDockIdentityPresenter.kt`: 16 members / 311 lines.**
+- Fields (11): `ottIdentityTitle` 250, `ottIdentitySubtitle` 251, `ottIdentityOverline` 253–255 (comment),
+  `ottIdentityBadge` 256, `ottIdentityDivider` 257, `ottQualityChips` 259–262 (comment), `ottRatingChip` 263,
+  `ottMetaLine` 264, `dockTagsCacheKey` 265, `dockTagsCache` 266, `ottShowName` 275–277 (KDoc +
+  **`@Volatile`**).
+- Functions (5): `guideTitleFor` 4244–4249, `updateTitle` 4251–4287, `updateOttIdentity` 4289–4402 (KDoc),
+  `updateOttExtras` 4404–4507 (KDoc), `dockTagsFor` 4509–4532 (KDoc).
+
+**Nested `TvSeekScrubController.kt`: 43 members / 518 lines.**
+- Fields (23): `seekbarBackgroundWidth` 206, `currentSeekSpeed` 207, `debrifyTimeDisplay` 230–231 (header),
+  `debrifyTimeCurrent` 232, `debrifyTimeTotal` 233, `debrifyProgressLine` 234, `cinemaProgressBuffered` 235,
+  `cinemaProgressContainer` 237–238 (header), `cinemaProgressBackground` 239, `cinemaProgressThumb` 240,
+  `cinemaSpeedIndicator` 241, `ottScrubPreviewChip` 267, `ottScrubPreviewText` 268,
+  `cinemaProgressTrackWidth` 278, `cinemaSeekMode` 279, `cinemaSeekWasPlaying` 280,
+  `cinemaProgressAnimator` 281, `cinemaLastAnimatedProgress` 282, `seekbarVisible` 780, `seekbarPosition` 781,
+  `videoDuration` 782, `seekbarHandler` 1367, `seekbarProgressRunnable` 1498–1503 (`object : Runnable`).
+- Functions (20): `setupSeekbar` 3116–3125, `startSeekbarProgressUpdates` 5278–5282 (comment),
+  `stopSeekbarProgressUpdates` 5284–5286 (**no caller**), `updateSeekbarProgress` 5288–5345,
+  `showControlsAndFocusProgressBar` 5347–5359 (**`CINEMA MODE` banner 5347–5349 is leading trivia**),
+  `setupCinemaProgressBar` 5361–5414, `enterCinemaSeekMode` 5416–5492 (phase-15 patched),
+  `exitCinemaSeekMode` 5494–5529 (phase-15 patched), `confirmCinemaSeek` 5531–5537,
+  `updateCinemaSeekSpeed` 5539–5542, `updateCinemaProgressUI` 5544–5605, `showSeekbar` 5607–5638
+  (**no caller**), `hideSeekbar` 5640–5653, `confirmSeekPosition` 5655–5660, `seekBackward` 5662–5669,
+  `seekForward` 5671–5678, `updateSeekSpeed` 5680–5689, `updateSeekbarUI` 5691–5709,
+  `updateSeekbarPosition` 5711–5728, `seekBy` 5730–5750.
+
+**Stays (named for later phases):**
+- `ottSkinInstalled`;
+- the 18 lateinit views (§1.2) and `startupGateView`;
+- `dockSkinSpec`, `controlsSkin`;
+- `iptvUpPressActive`/`iptvUpLongPressHandled` (router state);
+- `SEEK_STEP_MS`, `SEEK_LONG_PRESS_THRESHOLD`;
+- `releaseScreenForSleep`/`holdScreenForPlayback`.
+
+Field-block headers that stay: `// Seekbar` 199 stays with `seekbarOverlay`, and the OTT comment 243–246
+stays with `ottSkinInstalled`.
+
+---
+
+### 3. Owned state and initializer proofs
+
+**One slot: `controlsOverlayController` at `controlsOverlay` (210).** This is after the retained seekbar
+lateinit block (200–205) and before the phase-15 `controlsDockController` (212). Both nested collaborators map
+to the owner's effective slot (phase-6/13/15 `nested_construction`). Pin their construction initializers
+(`val identity = TvDockIdentityPresenter(host)` and `val seek = TvSeekScrubController(activity, host, this)`);
+recommended position is after the owner's 5 fields. Nothing reads `controls`, Host or the dock during
+construction. Every other moved field runs at 210 → **38 proofs** (39 fields − the slot field). Several run
+**earlier**:
+- the 4 owner fields after 210;
+- identity 250–277;
+- seek 231–282, 780–782, 1367, 1498;
+- the handlers, which are now created before `progressHandler` (1365). That is inert: posting order, not
+  handler creation order, sequences the shared main looper.
+
+Seek 206/207 run **later** (210 instead of 206). They are inert constants and nothing reads them before 210.
+
+| fields | form | kind | status |
+|---|---|---|---|
+| owner: `pauseButton = null`, `controlsMenuVisible = false` | literal | constant | supported |
+| owner: `controlsHandler = Handler(Looper.getMainLooper())` | `Handler(Looper.getMainLooper())` | handler-allocation | supported (phase 10) |
+| owner: `hideControlsRunnable = Runnable { … }` | `Runnable { … }` (SAM lambda, body reads nothing at construction) | allocation | supported |
+| identity: 7 views `= null`, `dockTagsCacheKey = null`, `ottShowName = null` (`@Volatile`; KDoc stripped) | literal | constant | supported |
+| identity: `dockTagsCache: List<DockFormatTags.Tag> = emptyList()` | `emptyList()` with declared type | allocation | supported (phase 14 binding check) |
+| identity: **`ottQualityChips = arrayOfNulls<TextView>(3)`** | **new: `arrayOfNulls<T>(<non-negative int literal>)`** | allocation | step T |
+| seek: `seekbarBackgroundWidth: Int = 0`, 11 views `= null`, `cinemaProgressTrackWidth: Int = 0`, `cinemaSeekMode = false`, `cinemaSeekWasPlaying = false`, `cinemaProgressAnimator = null`, `seekbarVisible = false`, `seekbarPosition: Long = 0`, `videoDuration: Long = 0` (trailing `//` comments stripped) | literal | constant | supported |
+| seek: **`currentSeekSpeed: Float = 1.0f`**, **`cinemaLastAnimatedProgress: Float = 0f`** | **new: scalar float literal** (`[0-9]+(\.[0-9]+)?f`; phase 15 only validated floats as `arrayOf` elements) | constant | step T |
+| seek: `seekbarHandler = Handler(Looper.getMainLooper())` | handler | handler-allocation | supported |
+| seek: **`seekbarProgressRunnable = object : Runnable { override fun run() { … } }`** | **new: reviewed `object : Runnable`** (no `init`, no property, single `run`; its only `this` is the Runnable self-reference in `postDelayed(this, 100)`) | allocation | step T |
+
+Totals: 38 = owner 4 + identity 11 + seek 23.
+
+**Step-T classifier additions (narrow, each with negatives):**
+1. Scalar float literal. Reject a negative or exponent form, a `Double`, a call, and a property read.
+2. `arrayOfNulls<T>(N)` with explicit type argument and decimal literal `N`. Reject an expression size,
+   `arrayOfNulls(3)` without a type argument, and `Array(3) { … }`.
+3. `object : Runnable { override fun run() { … } }`. Extend the phase-15 reviewed-anonymous-object mechanism
+   by **one allow-listed supertype**. Reject an `init` block, any property, a second supertype, and a
+   constructor-time read.
+
+No `lateinit` property moves. The only `::x.isInitialized` in moved code is
+`::startupGateView` (5121) and `::nextBackdrop` (4547). Both properties stay, so both become activity-owned
+`added` readiness getters (phase-3 rule), slot-anchored right after the controller property:
+`private val startupGateViewReady: Boolean get() = ::startupGateView.isInitialized`,
+`private val nextBackdropReady: Boolean get() = ::nextBackdrop.isInitialized`. No `by lazy` moves.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 48 in 11 declarations
+
+Prefixes:
+- `controlsOverlayController.` (owner, 24);
+- `controlsOverlayController.identity.` (identity, 8);
+- `controlsOverlayController.seek.` (seek, 16).
+
+| declaration (decl line) | lines | names | later owner |
+|---|---|---|---|
+| `playbackListener` (1505) | 1748, 1750, 1760, 1762, 1803, 1807 (**6**) | `showNextOverlay(model.items[…])` ×2, `hideNextOverlay()` ×2 inside the `progressHandler.postDelayed({ … }, 1500)` lambdas, `updatePauseButtonLabel()` ×2 (state change, `onIsPlayingChanged`) | ROUTERS (perm.) |
+| `onCreate` (2020) | 2147 | `setupSeekbar()` → `.seek.` (order `setupSeekbar` → `setupPlaylist` → `setupControls` kept) | lifecycle (perm.) |
+| `handleMetadataUpdate` (2256) | 2268, 2269, 2332, 2449 (**4**) | `ottShowName = showName.trim()` (volatile write) → `.identity.`; `runOnUiThread { updateOttIdentity() }` → `.identity.` (`ottSkinInstalled` on 2269 unchanged); `updateTitle(…)` ×2 → `.identity.` | metadata receiver (19) |
+| `resolveAndPlay` (3641) | 3645, 3698 | `setResolvingState(true/false)` | START (18) |
+| `playMediaDirect` (3789) | 3825 | `updateTitle(item)` → `.identity.` | START (18) |
+| `playPikPakVideoWithRetry` (4588) | 4632 | `updateTitle(item)` → `.identity.` | START (18) |
+| `dispatchKeyEvent` (4643) | 4779, 4784, 4789, 4793, 4797, 4833 ×1 (+4834), 4838, 4854, 4862, 4866, 4868, 4874–4876, 4879–4880, 4890 ×2, 4899 ×2, 4904, 4926, 4975, 4977, 4996, 4998 (**27**) | owner 14: `controlsMenuVisible` ×5, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`, `showControlsMenu` ×2, `hideControlsMenu` ×2, `scheduleHideControlsMenu` ×2, `pauseButton`; seek 13: `seekbarVisible`, `seekBackward`/`seekForward` (named `isContinuous =` kept), `confirmSeekPosition`, `hideSeekbar`, `showControlsAndFocusProgressBar` ×2, `seekBy(±SEEK_STEP_MS)` ×2, `cinemaSeekMode`, `cinemaProgressContainer` ×3 | ROUTERS (perm., phase 20) |
+| `initIptvMode` (5813) | 5864, 5917 | `setupSeekbar()` → `.seek.` (order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` kept); `hideControlsMenu()` | retained bootstrap (perm.) |
+| `onDestroy` (7629) | 7736, 7737 | `controlsHandler.removeCallbacksAndMessages(null)`; `seekbarHandler.…` → `.seek.` — **in place** (§7) | lifecycle (perm.) |
+| `replacePayloadWithStremioTvItem` (7816) | 7831 | `ottShowName = null` → `.identity.` | START (18) |
+| `playStremioTvPlaybackMap` (7868) | 7948 | `updateTitle(playbackItem)` → `.identity.` (7882 `ottSkinInstalled` unchanged) | START (18) |
+
+Permanent: 38 (`dispatchKeyEvent` 27, `playbackListener` 6, `onCreate` 1, `initIptvMode` 2, `onDestroy` 2).
+Consumed later: 10 (phase 18: 6; phase 19: 4).
+
+**Reconciliation with the phase-15 preview** ("24 permanent `dispatchKeyEvent` patches"): 22 are
+function/flag patches. The 5 view patches (`pauseButton` 1, `cinemaProgressContainer` 3, `cinemaSeekMode` 1)
+follow from the §1.2 ownership decision, giving 27.
+
+`onDestroy` 7792 (`::seekbarOverlay.isInitialized`) and `showBufferingIndicatorDebounced` 7610 (`nextOverlay`)
+need **no** patch because those views stay. **Phase-15 interplay:** phase 15 also patches
+`playbackListener`, `onCreate`, `initIptvMode`, `onDestroy` and `playStremioTvPlaybackMap` at different
+statements, so build the phase-16 rows on the phase-15 versions.
+
+### 4.2 Host re-points: 46 forwarders, 68 token edits, 10 whole-property `patched` rows
+
+**(a) Phase-15 `controlsDockController` property (dock + styler Host): 31 forwarders, 53 token edits.**
+The frozen phase-15 Host interface is unchanged; only the activity-side targets change to
+`this@AndroidTvTorrentPlayerActivity.controlsOverlayController[.identity|.seek].x`.
+- View/state `var` forwarders (`get` + `set`, 2 edits each, 22 vars → 44):
+  - owner: `controlsOverlay`, `pauseButton`;
+  - identity: `ottIdentityTitle`, `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`,
+    `ottIdentityDivider`, `ottRatingChip`, `ottMetaLine`;
+  - seek: `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`,
+    `cinemaProgressBuffered`, `cinemaProgressContainer`, `cinemaProgressBackground`, `cinemaProgressThumb`,
+    `cinemaSpeedIndicator`, `ottScrubPreviewChip`, `ottScrubPreviewText`, `cinemaSeekMode`,
+    `cinemaSeekWasPlaying`.
+- `val` forwarder (1): `ottQualityChips` → identity (the dock's 3 indexed element writes go through it).
+- SH (5): `controlsMenuVisible` (val), `hideControlsMenu`, `scheduleHideControlsMenu`,
+  `cancelScheduledHideControlsMenu`, `togglePlayPause` → owner.
+- SK (3): `seekBy`, `setupCinemaProgressBar`, `startSeekbarProgressUpdates` → seek.
+- **Unchanged in that Host:** `ottSkinInstalled` (var), `dockSkinSpec`, `controlsSkin`, `guideStyle`, … .
+  **The display Host gets no re-point** (its only shared-view member, `ottSkinInstalled`, stays).
+- The 15 dock `findViewById` sites whose targets are these Host `var`s keep their phase-15 CHECKCAST pins: the
+  Host property types are frozen, and the new owner fields are verbatim moves of the original declarations
+  (types and nullability equal).
+
+**(b) Nine earlier properties: 15 forwarders, 15 token edits** (all `val`/`fun`):
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 174 | `upNextController` | `isCleanPlaybackState()` → owner |
+| 189 | `playlistController` | `ottShowName` → `.identity.` |
+| 838 | `iptvStartOverController` | `showControlsAndFocusProgressBar()` → `.seek.` |
+| 848 | `iptvGuideController` | `controlsMenuVisible` → owner |
+| 1064, 1090 | `startupGateController` | `controlsMenuVisible`, `setResolvingState(resolving)` → owner |
+| 1185, 1186, 1187 | `stremioTvGuideController` | `fadeInNextOverlay`, `hideControlsMenu`, `hideNextOverlay` → owner |
+| 1304, 1306 | `skipSegmentController` | `controlsMenuVisible` → owner, `seekbarVisible` → `.seek.` |
+| 6217, 6218, 6235 | `iptvZapBannerController` | `controlsMenuVisible`, `controlsOverlay`, `updateSubtitleControlsLift()` → owner |
+| 7211 | `sourceSwitchController` | `hideControlsMenu()` → owner |
+
+**No re-point:** `titleView` (Start Over 840, guide 879, gate 1101, switcher 7266), `nextText`/`nextSubtext`
+(Stremio guide 1191/1192), `progressHandler` (all) and `controlsSkin` (playlist) stay. `iptvStartOverController`
+and `iptvGuideController` were already re-pointed in phases 14/15, so build on the phase-15 versions. Earlier
+destination files stay byte-identical.
+
+---
+
+### 5. Outbound Host (one shared 54-member Host, computed, explicitly qualified)
+
+All three classes use the same `TvControlsOverlayController.Host`. It is declared in the owner file and
+implemented by an `object` inside the activity property. Each forwarder is a computed `this@AndroidTvTorrentPlayerActivity.x`;
+none is read at construction.
+
+| kind | members (refs: owner / identity / seek) |
+|---|---|
+| lateinit view getters (21) | `titleContainer` 9/–/–, `titleView` 5/2/–, `titleOttContainer` 4/–/–, `nextOverlay` 10/–/–, `nextText` 2, `nextSubtext` 2, `nextBackdrop` 5, `startupGateView` 1, `playerView` 1, `pikPakReactivationIndicator` 1, `ottEpisodeBadge` –/3, `ottEpisodeTitle` –/1, `ottRatingContainer` –/2, `ottRating` –/1, `channelBadge` –/1, `seekbarOverlay` –/–/7, `seekbarProgress` 2, `seekbarHandle` 2, `seekbarCurrentTime` 1, `seekbarTotalTime` 1, `seekbarSpeedIndicator` 5 |
+| other lateinit (2) | `subtitleControlsLift` 3/–/–, `seekFeedbackManager` –/–/2 |
+| readiness getters (2, new `added`) | `startupGateViewReady` 1, `nextBackdropReady` 1 |
+| state `val` (12) | `player: ExoPlayer?` 4/–/19 (**seek 5292: `val player = player ?: return` substitutes only the RHS; 5294/5295/5332 are the local**), `payload` 1/3/–, `currentIndex` 1/1/–, `isIptvMode` 1, `iptvChannels` 2, `currentIptvIndex` 2, `ottSkinInstalled` 2/1/6, `dockSkinSpec: DockSkinSpec?` 1 (lazy; first access stays phase-15 `setupControls`), `controlsSkin` –/3 (lazy), `iptvLiveRecovery` 2 (lazy; read only inside the `deadLive` short-circuit, first-access timing kept), `stremioSources` –/–/1, `stremioSourceBadge` –/–/1 |
+| nullable overlay `val`s (5) | `subtitlePanel`, `linePickerOverlay`, `syncOverlay`, `unifiedMenu`, `sourceBrowser` (1 each, `isCleanPlaybackState`) |
+| state `var` (3) | `sleepStopLatched` (owner write 1), `maxStableDurationMs` (seek read+write), `lastRealPositionMs` (seek write) |
+| functions (2) | `restoreParkedIptvTwinIfNeeded(): Boolean` 1, `releaseResumeHold()` –/–/3 |
+| cross-feature getters (7) | `iptvZapBannerController` 8, `sourceSwitchController` 4, `playlistController` 1, `iptvGuideController` 1, `stremioTvGuideController` 1, `skipSegmentController` –/–/1, **`controlsDockController`** 1/–/2 (`refreshOttCaptionFor`, `setOttTrackHeight(focused = …)` ×2: the phase-15 temporary patches become `host.controlsDockController.` substitutions) |
+
+**Must not be Host members** (negative): `pauseButton`, `controlsMenuVisible`, `controlsHandler`,
+`showControlsMenu`, `seekbarVisible`, `updateOttIdentity`. A same-name Host member would let a missed
+`controls.`/`seek.`/`identity.` qualification compile.
+
+---
+
+### 6. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 3 sites** (compiled descriptor audit; activity injected as `AppCompatActivity`):
+- owner 4554 / 4556 `com.bumptech.glide.Glide.with(this)` (`.load(...).into(nextBackdrop)` and
+  `.clear(nextBackdrop)`). These must keep the `with(FragmentActivity)` overload (lifecycle-bound request
+  manager).
+- seek 5615 `Toast.makeText(this, "Seeking not available", …)` (`CharSequence` overload; dead path).
+
+**Excluded receiver: 1.** Seek 1501 `seekbarHandler.postDelayed(this, 100)` inside `object : Runnable` is the
+Runnable. It is pinned with context and never substituted (phase-3/10 precedent).
+
+**Inherited (implicit) receiver pins: 4.**
+- owner 5009 `currentFocus` → `activity.currentFocus` (`getCurrentFocus()`);
+- owner 4551 `isFinishing || isDestroyed` → `activity.isFinishing` / `activity.isDestroyed` (`isFinishing()` /
+  `isDestroyed()`, invokevirtual);
+- seek 5700 `findViewById<View>(R.id.seekbar_background)` → `activity.findViewById<View>(…)` (activity-level
+  lookup, **not** `playerView`; the explicit type argument is kept).
+
+**Volatile pin:** `ottShowName` keeps `@Volatile`. Check `ACC_VOLATILE` on
+`TvDockIdentityPresenter.ottShowName`, and that the two retained writers (2268, 7831) plus the playlist Host
+reader (189) access that field.
+
+**Receiver-lambda non-substitution pins (PSI):**
+- `ValueAnimator.ofFloat(…).apply { duration = 80; interpolator = …; addUpdateListener { … }; start() }`
+  (seek 5581–5602). `duration`, `interpolator`, `addUpdateListener` and `start` are animator members.
+- 3 `SpannableString(…).apply { setSpan(…) }` blocks (identity 4357, 4444, 4475; 4 `setSpan` calls).
+- `.takeIf { … }`/`?.let { … }` use `it`; no receiver.
+
+**Shadowing (no host substitution):**
+- seek `val player` (5292) and `val p` (5731);
+- `val currentPosition`/`duration`/`position` locals (5294/5295, 5732/5733);
+- identity `val title = ottIdentityTitle ?: return` (4296; also shadows the inherited `Activity.title`, so the
+  local wins and nothing is substituted);
+- owner `val overlay` (×3 functions) and `val dock` (5217).
+
+**Labels (unchanged):** `return@let` (togglePlayPause), `return@post` (lift), `return@setOnKeyListener`
+(setupSeekbar, setupCinemaProgressBar), `return@forEachIndexed` (updateOttExtras).
+
+**Templates:** no host name is interpolated in the unit (0 braced-template substitutions). The templates use
+locals/parameters (`$seasonStr`, `$show`, `$sign`, `$ratingText`, …).
+
+**Defaults / named arguments:** `seekBackward/seekForward(stepMs: Long = 10_000L, isContinuous: Boolean =
+false)` have literal defaults, called with a named `isContinuous =`. Also kept: `exitCinemaSeekMode(confirm =
+…)` named at 4 sites, and `setOttTrackHeight(focused = …)` named.
+
+**Anonymous/lambda classes renamed (R8 mapping check):**
+- `…Activity$seekbarProgressRunnable$1` → `TvSeekScrubController$seekbarProgressRunnable$1`;
+- the `hideControlsRunnable` SAM lambda;
+- the `setupSeekbar`/`setupCinemaProgressBar` key and focus listeners;
+- animator update listener and `withEndAction` lambdas (owner 4, seek 3);
+- the `controlsHandler.postDelayed({ … }, 100)` focus lambda;
+- `runOnUiThread` lambda in retained `handleMetadataUpdate` (unchanged class);
+- the new Host object.
+
+**`@OptIn(UnstableApi::class)`:** required on the owner (`PlayerView.showController()`). Not needed on identity
+or seek (`C.TIME_UNSET` and the `ExoPlayer` calls used are stable). Pin presence/absence; lint opt-in errors
+must stay 175.
+
+---
+
+### 7. Timers, handlers, animators, teardown
+
+- **`controlsHandler` (owned by the owner):**
+  - `scheduleHideControlsMenu` does `removeCallbacks(hideControlsRunnable)`, then
+    `postDelayed(hideControlsRunnable, 4000)` **only while `player.isPlaying`**;
+  - `cancelScheduledHideControlsMenu` removes it;
+  - `hideControlsRunnable` re-schedules itself while focus is inside the overlay;
+  - seek's `showControlsAndFocusProgressBar` posts a 100 ms `cinemaProgressContainer.requestFocus()` lambda on
+    the **owner's** handler (`controls.controlsHandler`, borrowed, never cleared by seek);
+  - the phase-15 dock schedules and cancels through its Host forwarders (9 + 1 sites).
+- **`seekbarHandler` (owned by seek):** the 100 ms `seekbarProgressRunnable` loop is started once by the
+  phase-15 `setupControls` (Host `startSeekbarProgressUpdates`). It is **never stopped**
+  (`stopSeekbarProgressUpdates` has no caller), so it runs through `onPause`/`onStop` until `onDestroy`. Each
+  tick:
+  - reads `host.player`;
+  - writes `host.maxStableDurationMs`/`host.lastRealPositionMs` (progress-reporter watch guards);
+  - calls `host.skipSegmentController.updateSkipSegmentState(…)`;
+  - updates the time, progress and buffered views (skipped while `cinemaSeekMode`).
+- **`progressHandler`: not used by the unit.** The Next-overlay 1.5 s auto-advance posts belong to the
+  retained `playbackListener` (its lambdas call the patched `hideNextOverlay`). The Stremio guide's 1.5 s hide
+  belongs to the phase-7 controller via its re-pointed Host. The zap banner's `progressHandler` tokens
+  (`iptvZapBannerHideToken`/`TickToken`) are only reached through `iptvZapBannerController.show/hide…` (Host
+  getter), unchanged. The 5 s `progressRunnable` is untouched.
+- **Cinema scrub animator** `cinemaProgressAnimator` (seek-owned, 80 ms `ValueAnimator`): cancelled by
+  `exitCinemaSeekMode` and on each `updateCinemaProgressUI`. It is **not** cancelled in `onDestroy` (pinned).
+- **View animations** (uncancelled at destroy, pinned as-is):
+  - controls overlay show 300 ms / hide 250 ms;
+  - title fade 250 ms;
+  - thumb in 200 + 100 ms / out 150 ms;
+  - Next overlay in 220 ms / out 160 ms;
+  - legacy seekbar 200 / 150 ms;
+  - `pauseButton?.post { requestFocus() }` and `dock.post { … }` re-measure;
+  - Glide backdrop load (guarded by `nextBackdropReady`, `isFinishing`, `isDestroyed`).
+- **`onDestroy`:** two in-place single-reference patches at 7736/7737. They come right after
+  `progressHandler.removeCallbacksAndMessages(null)` (7735) and before the phase-15 display patch
+  `releaseLoudnessEnhancer()` (7740) → `AudioEffectSession.closeCurrent(this)`. Order unchanged; not folded.
+  7792 (`seekbarOverlay` key listener clear) is unchanged. **`onStop`, `onPause`, `onStart`, `onResume` and
+  `finish`: untouched.** The existing reflective handler-cleanup lists (TvPhase5/7/8OriginalTest `@After`)
+  reach `controlsHandler`/`seekbarHandler` through the new owner routes.
+- **Construction:** `Handler(Looper.getMainLooper())` ×2 at slot 210 instead of 1366/1367 (supported
+  handler-allocation proof).
+
+---
+
+### 8. Reflective tests and Dart anchors
+
+**Owner-map routes (`TvPlayerControllerOwners.kt`, 596 → ≈ 605 after phase 15 → ≈ 614): 9 routes, 44 literal
+sites.** All use the shared `TvPlayerOriginalAccess.field/set/call` helpers via `memberOwner`. No local
+`getDeclaredField` helper touches a moved name: `TvSkipPresentationCharacterizationTest.overlay()` reflects
+only overlay-controller fields that stay.
+
+| name | sites / files | route |
+|---|---|---|
+| `controlsMenuVisible` | 23 / 13 (TvPhase11/6 bases, IptvKey, IptvNavigatorSweep, IptvStartOver, SkipPresentation, SkipUi, SourceSwitchSelection, StartupGateBoundary/Commit, StremioTvGuideUi, UpNext, ZapBannerTiming) | `controlsOverlayController` |
+| `controlsOverlay` | 4 / TvPhase7OriginalTest, TvIptvKeyCharacterizationTest ×2, TvPhase6OriginalTest | `controlsOverlayController` |
+| `controlsHandler` | 3 / TvPhase5/7/8OriginalTest cleanup lists | `controlsOverlayController` |
+| `isCleanPlaybackState` | 3 / TvStremioTvGuideWiringCharacterizationTest (`invoke`; public fun, unmangled) | `controlsOverlayController` |
+| `isFocusInControlsOverlay` | 1 / TvIptvKeyCharacterizationTest | `controlsOverlayController` |
+| `seekbarHandler` | 3 / TvPhase5/7/8OriginalTest cleanup lists | `controlsOverlayController.seek` |
+| `seekbarVisible` | 3 / TvSkipUi, TvSkipPresentation, TvUpNext | `controlsOverlayController.seek` |
+| `cinemaProgressContainer` | 1 / TvIptvStartOverCharacterizationTest (set) | `controlsOverlayController.seek` |
+| `ottShowName` | 3 / TvPlaylistGuideBinderCharacterizationTest, TvPlaylistSkinContracts ×2 | `controlsOverlayController.identity` |
+
+Backing fields of members of `internal` classes are unmangled, so no function pin is needed. **Unchanged (they
+stay):** `titleView` ×15, `nextText` ×5, `nextSubtext` ×2, `nextOverlay` ×3, `titleContainer`,
+`titleOttContainer`, `channelBadge` (1 each), `startupGateView` ×10, `ottSkinInstalled` ×1, `getControlsSkin`
+×2 (39 sites saved by §1.2). Rescan after step 0, because step 0 will add `showSeekbar`, `showControlsMenu`,
+`updateOttIdentity` and similar accesses.
+
+**Dart anchors: 0 retargets.**
+- `android_tv_mdblist_progress_source_test` `'// Handle episode metadata updates'` → `requestMetadataFromFlutter`
+  range contains the 4 `handleMetadataUpdate` patches. The asserted literals (`hasWatchedUpdate`,
+  `mergeLateMetadata…`, …) are untouched.
+- `manual_source_validation_contract_test` `resolveAndPlay` → `startPlayback` range contains the 2
+  `setResolvingState` patches. The asserted `reason=stale_manual_token` / `failManualSourceCandidate(...)` are
+  untouched.
+- `android_tv_auto_advance_resume_test` uses `resolveAndPlay` only as an end marker.
+- `NativeAudioRoutingTest` (`setupPlayer`) is not touched; `profile_source_guard_test` does not scan `tv/`.
+
+---
+
+### 9. Hazards (each a step-T fixture or negative)
+
+1. **Field-bearing nested collaborators** (identity 11, seek 23) at the owner slot, with 38 proofs and 3 new
+   forms. Negatives:
+   - omitted proof for a nested first field (`seekbarBackgroundWidth`, `ottIdentityTitle`);
+   - a collaborator reading `controls`/Host during construction;
+   - lazy instead of eager construction;
+   - a sibling-slot mis-mapping.
+2. **The widest re-point row so far:** the phase-15 dock Host with 22 `get`/`set` pairs plus 9 others. Negatives:
+   - a `get` re-pointed without its `set` (the dock would bind into a dead activity field);
+   - a forwarder snapshotting a view;
+   - a widened target type;
+   - `ottSkinInstalled` re-pointed by mistake.
+3. **Cross-qualification `controls.`/`seek.`/`identity.` (10), compile-checked.** Negatives:
+   - a Host member named like an owner field;
+   - a shadowing case where `overlay.` would be captured by the owner's `val overlay` locals (why the
+     qualifier is `controls`).
+4. **Shadowing:** `val player = player ?: return` (RHS only), plus `p`, `duration` and `title` locals.
+   Negative: substituting the local `player` at 5294.
+5. **Readiness getters:** `::startupGateView.isInitialized` → `host.startupGateViewReady` (5121),
+   `!::nextBackdrop.isInitialized` → `!host.nextBackdropReady` (4547). Negatives: an initialized/snapshotting
+   readiness forwarder; an omitted substitution (does not compile across objects).
+6. **`@Volatile ottShowName`** moves with its annotation (bytecode `ACC_VOLATILE`); written on the receiver path
+   before `runOnUiThread`. Negative: annotation dropped.
+7. **Lazy first access:** `iptvLiveRecovery` (only on the dead-live branch of `togglePlayPause`),
+   `dockSkinSpec`, `controlsSkin` via computed getters. Negative: an initialized `val`.
+8. **Dead legacy seekbar:** `showSeekbar` has no caller, so `seekbarVisible` is always false at runtime, the
+   `dispatchKeyEvent` seekbar branch (4779–4800) is unreachable, and `setupSeekbar`'s BACK listener calls a
+   no-op `hideSeekbar`. Moved verbatim; step 0 reaches it reflectively.
+9. **Never-stopped ticker:** 100 ms, cross-feature writes every tick (progress guards, skip state). Positions:
+   started inside phase-15 `setupControls` after `setupCinemaProgressBar`; cleared only in `onDestroy`.
+10. **`dispatchKeyEvent` (27 patches) and `playbackListener` (6)** are router declarations; the patches are
+    permanent until phase 20. Negative: a patch with a missed `.seek.` (e.g. on `cinemaSeekMode`).
+11. **Overloads:** `Glide.with(FragmentActivity)` ×2, `Toast.makeText(Context, CharSequence, int)`, inherited
+    `findViewById(int)`/`getCurrentFocus`/`isFinishing`/`isDestroyed`. Compiled descriptor + opcode pins (3 + 4
+    sites, 1 exclusion).
+12. **Phase-15 temporary patches consumed:** the 3 moved bodies already contain `controlsDockController.`
+    (phase-15 patched rows); phase 16 substitutes them to `host.controlsDockController.`. The manifest's
+    original is the phase-15 merge.
+13. **Leading trivia:** the `CINEMA MODE` banner moves with `showControlsAndFocusProgressBar`; the misleading
+    `UP NEXT CARD` banner moves with `isCleanPlaybackState`; the `// Controls`, `// Time Display…` and
+    `// Cinema Mode Interactive Progress Bar` field headers move with their first fields; `// Seekbar` and the
+    OTT comment stay.
+14. **Companion split:** `CONTROLS_AUTO_HIDE_DELAY_MS` → owner file-private const; `PAYLOAD_KEY`,
+    `SEEK_STEP_MS`, `SEEK_LONG_PRESS_THRESHOLD`, … retained in order.
+15. **`@OptIn` presence on the owner, absence on the collaborators**; lint opt-in count 175. Map existing lint
+    issues inside moved spans to their new locations by exact correspondence, without suppressions. Candidates:
+    - `DefaultLocale` on `String.format("→ %.1fx", …)` 5684;
+    - `SetTextI18n` on `"Pause"/"Play"`, `"S$seasonStr E$episodeStr"`.
+16. **Shared-declaration merges** with phase 15: `playbackListener`, `onCreate`, `initIptvMode`, `onDestroy`,
+    `playStremioTvPlaybackMap`, plus the Start Over and guide Host rows (already re-pointed in 14 and 15).
+17. **`isCleanPlaybackState` reads lateinit `nextOverlay`/`pikPakReactivationIndicator` unguarded.** The
+    computed getter throws the same `UninitializedPropertyAccessException` type; pinned.
+
+---
+
+### 10. File split and counts
+
+| file | content | ≈ lines |
+|---|---|---|
+| `TvControlsOverlayController.kt` | 5 fields, 16 functions, `CONTROLS_AUTO_HIDE_DELAY_MS`, 54-member `Host` interface, eager `identity`/`seek`, `@OptIn` | 332 + ≈ 95 ≈ **430** |
+| `TvDockIdentityPresenter.kt` | 11 fields + 5 functions; constructor `(host)` | 311 + ≈ 20 ≈ **330** |
+| `TvSeekScrubController.kt` | 23 fields + 20 functions; constructor `(activity, host, controls)` | 518 + ≈ 22 ≈ **540** |
+
+| substitution kind | count |
+|---|---|
+| owner `host.` (incl. 2 readiness) | 83 |
+| identity `host.` | 18 |
+| seek `host.` (incl. 19 `player`) | 54 |
+| `host.controlsDockController.` (phase-15 temporaries) | 3 |
+| cross-qualifications (`controls.` 8, `identity.` 1, `seek.` 1) | 10 |
+| receivers (`this` → `activity`) | 3 |
+| inherited (`activity.currentFocus`, `.isFinishing`, `.isDestroyed`, `.findViewById`) | 4 |
+| visibility (`private` → public; owner 18, identity 11, seek 24; 27 stay private) | 53 |
+| **total** | **≈ 228** |
+
+**Activity:** −1,161 member lines −1 companion line, + ≈ 66 property/Host lines (54 one-line forwarders, 3
+three-line `var`s, object/header) + 2 readiness getters ≈ **−1,094** → ≈ 5,940. Size gate: activity baseline
+lowered with `--update`; all three new files ≤ 800 (largest ≈ 540); `TvPlayerControllerOwners.kt` ≈ 614.
+
+**Remaining after phase 16 (preview):** 17 IPTV tune pipeline + twin trial + live recovery (≈ 732), 18
+playback start + shuffle (≈ 912; consumes 6 phase-16 patches), 19 media pipeline + metadata receiver (≈ 697;
+consumes 4), 20 routers decision (`dispatchKeyEvent` now carries 27 phase-16 prefixes).
+
+---
+
+### 11. Step T / Step 0 needs
+
+**Step T:**
+- classifier forms (§3) with negatives (float literal, `arrayOfNulls<T>(N)`, `object : Runnable`);
+- the complete phase-16 extraction fixture:
+  - owner + two field-bearing nested collaborators at effective slot 210, 38 proofs;
+  - 10 cross-qualifications;
+  - 2 `added` readiness getters + the controller property;
+  - companion split;
+  - trivia fates;
+  - 48 patches in 11 declarations incl. 2 in-place `onDestroy` statements;
+  - 10 whole-property re-point rows (phase-15 dock Host with get/set pairs, built on the phase-15 merge);
+- negatives:
+  - §9 items;
+  - a folded `onDestroy`;
+  - a dropped named argument (`isContinuous =`, `confirm =`, `focused =`);
+  - a Host `var` with logic beyond its pinned text;
+  - a re-point that edits a frozen phase-15 destination;
+- compiled audit:
+  - 3 receiver sites, 1 Runnable exclusion, 4 inherited pins, `ACC_VOLATILE`;
+  - PSI non-substitution pins (ValueAnimator `apply`, SpannableString `apply`, the shadowed locals);
+- per-phase dispatcher keeping every historical suite;
+- earlier destinations (incl. the three phase-15 files) frozen at the phase-15 merge;
+- 9 owner-map routes (assertions byte-identical).
+
+**Step 0** (from zero; systematic statement sweep from the start: 104 `if`, 4 `when`, 47 `return`, 2 loops, 23
+elvis, 35 `&&`/`||` sites):
+- **Seams to demonstrate on the original first:**
+  - a recording `ExoPlayer` probe with controllable `isPlaying`/`playWhenReady`/`currentPosition`/`duration`/
+    `bufferedPosition`/`playbackState`/`playerError` (auto-hide only schedules while playing);
+  - deterministic animator/ViewPropertyAnimator stepping under the PAUSED looper + `ShadowChoreographer`
+    (phase-7 settings) for the 80 ms scrub animator, thumb animation and fades;
+  - the Glide lifecycle-owner check (`glideTracks`);
+  - a laid-out view tree (parent widths) for progress/buffered widths and `seekbar_background`.
+
+  If animator stepping cannot be made reliable, pin end states only and record the gap before design review.
+- **Seven separate activity instances** (one per controls skin; CLASSIC never installs OTT):
+  - `updateOttIdentity` arms (FROST/MARQUEE/BROADCAST/PULSE/TICKET/else, series vs non-series, show name
+    present/blank, PULSE span colour/bold);
+  - `updateOttExtras` (chips 0–3, rating star colours per skin, MARQUEE meta line + gold span, TICKET overline
+    composition);
+  - `dockTagsFor` cache hit/miss, URL-name fallback, `URLDecoder` failure;
+  - `updatePauseButtonLabel` icon family per spec, plus classic.
+- **Show/hide:**
+  - first reveal vs already visible (300 ms rise, focus post);
+  - docked zap banner merge (live vs VOD);
+  - title presentation (OTT hides the title, series/simple mode, empty-title guard);
+  - startup-gate visible vs not (readiness both ways: uninitialized `startupGateView`);
+  - `showController()`;
+  - hide when already hidden (immediate branch) vs animated hide (title 250 ms then mode reset, end-action
+    guard on re-show);
+  - source badge calls;
+  - lift `liftAbove` immediate + post re-measure with/without the docked banner;
+  - `hideTitleImmediately`.
+- **Auto-hide:** 4 s only while playing; reschedule while focus inside the overlay; cancel on pause click;
+  `controlsMenuVisible` gate; `handlePlayPauseToggleFromCenter` ordering.
+- **`togglePlayPause`:** pause; play clears `sleepStopLatched`; parked-twin restore returns early (label
+  still updated); dead-live `userRetry("play-press")` with `playWhenReady` set first (IPTV live ENDED / error /
+  surrendered; lazy `iptvLiveRecovery` first access).
+- **Ticker:**
+  - 100 ms cadence;
+  - skipped during `cinemaSeekMode`;
+  - `maxStableDurationMs`/`lastRealPositionMs` updates;
+  - skip-state call;
+  - OTT remaining-time text vs classic;
+  - legacy combined text;
+  - progress/buffered width (unchanged-width skip);
+  - runs after `onStop` (pinned);
+  - stops at `onDestroy`.
+- **Cinema scrub:**
+  - focus enter/exit;
+  - zero-duration focus fallback (OTT → pause button; classic → badge if sources else pause);
+  - pause preservation via `playWhenReady`;
+  - accelerated steps and clamping;
+  - CENTER confirm (`releaseResumeHold` → `seekTo` → exit → focus);
+  - BACK/DOWN exit;
+  - key-up speed reset;
+  - OTT track height and preview chip (delta ≠ 0 / stays once shown, `−` sign);
+  - classic red/white current time;
+  - animator from the last progress;
+  - live-transition reset by the styler (via the dock Host).
+- **Legacy seekbar** (reflective `showSeekbar`): zero-duration Toast, pause, show/hide fades, play on hide,
+  `confirmSeekPosition`, `seekBackward/Forward` clamping, the speed indicator, `updateSeekbarUI` width caching
+  via `post`, the `dispatchKeyEvent` seekbar branch with `seekbarVisible` set reflectively.
+- **Quick seek `seekBy`:** clamping with known/unset duration, `releaseResumeHold`, `SeekFeedbackManager`
+  forward/backward labels.
+- **Key matrix through the real `dispatchKeyEvent`** for all 27 patched sites:
+  - BACK with controls;
+  - CENTER (skip-button and badge focus pass-through, focus in controls, repeat ignored);
+  - DOWN (badge → progress/pause by duration; show+schedule when hidden or focus outside);
+  - UP (progress → badge; dock → progress/badge by duration; live-IPTV exclusion; `cinemaSeekMode` gate);
+  - the long-press jump dialog `hideControlsMenu`;
+  - RIGHT/LEFT short `seekBy(±10 s)` vs long-press `showControlsAndFocusProgressBar` (100 ms focus post);
+  - focus-in-controls LEFT pass-through.
+- **Next/loading overlay:**
+  - `setResolvingState(true/false)` (text cleared, subtext hidden, fade-in 220 ms; hide 160 ms + backdrop clear);
+  - backdrop load/clear with the Glide owner;
+  - guards: uninitialized, finishing, destroyed;
+  - `playbackListener` ENDED auto-advance (continuous shuffle and next index, 1.5 s `progressHandler` post →
+    hide → `isAutoAdvancing` → `playItem`);
+  - the Stremio-guide path via its Host.
+- **`isCleanPlaybackState`:** each of the 9 conditions independently.
+- **Title:** `updateTitle` (series badge/episode-title fallback/rating, `channelBadge` hidden, OTT refresh) from
+  each patched caller; `handleMetadataUpdate` show-name write (volatile) + OTT-only `runOnUiThread` refresh;
+  `replacePayloadWithStremioTvItem` clears it.
+- **`onDestroy` handler clear order and pending auto-hide/ticker removal.**
+- Mutation proofs on the original; Claude's independent sample (≥ 75 % kills, else sweep + second sample); 0b.
+
+---
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+- `showSeekbar` has no caller: the legacy seekbar overlay, its `dispatchKeyEvent` branch, `seekBackward/Forward`,
+  `confirmSeekPosition`, `updateSeekSpeed`/`updateSeekbarUI`/`updateSeekbarPosition` are unreachable in
+  production; the `isContinuous` parameters are unused.
+- `stopSeekbarProgressUpdates` has no caller. The 100 ms ticker runs while the activity is paused/stopped
+  (until `onDestroy`), keeps touching the progress guards and the skip state, and wakes the main looper.
+- `cinemaProgressAnimator` and view animations are not cancelled in `onDestroy`; the `pauseButton?.post`
+  focus requests are not cancelled on hide.
+- `updateCinemaSeekSpeed` only stores the speed (the indicator UI was removed); `cinemaSpeedIndicator` is
+  hidden only on key-up.
+- The `UP NEXT CARD` banner sits above `isCleanPlaybackState` (an orphaned section header).
+- `isCleanPlaybackState` reads `nextOverlay`/`pikPakReactivationIndicator` without readiness checks.
+- `hideControlsRunnable` re-arms indefinitely while focus stays inside the overlay during playback (intended
+  "keep open while focused", but never times out).
+- `scheduleHideControlsMenu` never arms while paused/buffering (`isPlaying` false), so controls opened during
+  buffering stay up until the next interaction.
+
+## Phase 16 step T — measurements at `df439aed1`
+
+The original Activity has 6,986 physical lines and 1,727 PSI declarations. The approved split selects 80 Activity members plus `CONTROLS_AUTO_HIDE_DELAY_MS`; all are classified in `dev/tool/kotlin_moves/tvplayer_p16.json`. The owner slot is `controlsOverlay` at line 209; seek's two earlier inert fields run at that same effective slot. The complete extraction fixture is 416/329/542 lines (controls/identity/seek); it is evidence only. No production move has been applied.
+
+The earlier inventory's reflection count is superseded: all 34 existing moved names are routed before Step T (151 quoted accesses), with original-owner compatibility while the controller is absent. Twelve independent clean-state blockers, rather than the inventory's older nine-condition wording, are required by the approved plan.
+
+The manifest pins 38 initializer proofs, ten cross-qualifications, 48 Activity token edits in eleven declarations, and 46 Host forwarders/68 token edits in ten whole-property rows. Substitutions total 228: 53 visibility, 155 ordinary Host reads plus three controls-dock Host reads, ten cross-qualifications, three Activity receivers and four inherited receivers. Both eager collaborators follow the five owner fields. The shared Host has 54 computed, explicitly qualified members.
+
+| Original member | Start–end line | Destination |
+| --- | --- | --- |
+| `seekbarBackgroundWidth` | 206–206 | `TvSeekScrubController` |
+| `currentSeekSpeed` | 207–207 | `TvSeekScrubController` |
+| `controlsOverlay` | 209–210 | `TvControlsOverlayController` |
+| `pauseButton` | 211–211 | `TvControlsOverlayController` |
+| `debrifyTimeDisplay` | 326–327 | `TvSeekScrubController` |
+| `debrifyTimeCurrent` | 328–328 | `TvSeekScrubController` |
+| `debrifyTimeTotal` | 329–329 | `TvSeekScrubController` |
+| `debrifyProgressLine` | 330–330 | `TvSeekScrubController` |
+| `cinemaProgressBuffered` | 331–331 | `TvSeekScrubController` |
+| `cinemaProgressContainer` | 333–334 | `TvSeekScrubController` |
+| `cinemaProgressBackground` | 335–335 | `TvSeekScrubController` |
+| `cinemaProgressThumb` | 336–336 | `TvSeekScrubController` |
+| `cinemaSpeedIndicator` | 337–337 | `TvSeekScrubController` |
+| `ottIdentityTitle` | 344–344 | `TvDockIdentityPresenter` |
+| `ottIdentitySubtitle` | 345–345 | `TvDockIdentityPresenter` |
+| `ottIdentityOverline` | 347–349 | `TvDockIdentityPresenter` |
+| `ottIdentityBadge` | 350–350 | `TvDockIdentityPresenter` |
+| `ottIdentityDivider` | 351–351 | `TvDockIdentityPresenter` |
+| `ottQualityChips` | 353–356 | `TvDockIdentityPresenter` |
+| `ottRatingChip` | 357–357 | `TvDockIdentityPresenter` |
+| `ottMetaLine` | 358–358 | `TvDockIdentityPresenter` |
+| `dockTagsCacheKey` | 359–359 | `TvDockIdentityPresenter` |
+| `dockTagsCache` | 360–360 | `TvDockIdentityPresenter` |
+| `ottScrubPreviewChip` | 361–361 | `TvSeekScrubController` |
+| `ottScrubPreviewText` | 362–362 | `TvSeekScrubController` |
+| `ottShowName` | 364–366 | `TvDockIdentityPresenter` |
+| `cinemaProgressTrackWidth` | 367–367 | `TvSeekScrubController` |
+| `cinemaSeekMode` | 368–368 | `TvSeekScrubController` |
+| `cinemaSeekWasPlaying` | 369–369 | `TvSeekScrubController` |
+| `cinemaProgressAnimator` | 370–370 | `TvSeekScrubController` |
+| `cinemaLastAnimatedProgress` | 371–371 | `TvSeekScrubController` |
+| `controlsMenuVisible` | 837–837 | `TvControlsOverlayController` |
+| `seekbarVisible` | 838–838 | `TvSeekScrubController` |
+| `seekbarPosition` | 839–839 | `TvSeekScrubController` |
+| `videoDuration` | 840–840 | `TvSeekScrubController` |
+| `controlsHandler` | 1401–1401 | `TvControlsOverlayController` |
+| `seekbarHandler` | 1402–1402 | `TvSeekScrubController` |
+| `hideControlsRunnable` | 1525–1531 | `TvControlsOverlayController` |
+| `seekbarProgressRunnable` | 1533–1538 | `TvSeekScrubController` |
+| `setupSeekbar` | 3151–3160 | `TvSeekScrubController` |
+| `guideTitleFor` | 3861–3866 | `TvDockIdentityPresenter` |
+| `updateTitle` | 3868–3904 | `TvDockIdentityPresenter` |
+| `updateOttIdentity` | 3906–4019 | `TvDockIdentityPresenter` |
+| `updateOttExtras` | 4021–4124 | `TvDockIdentityPresenter` |
+| `dockTagsFor` | 4126–4149 | `TvDockIdentityPresenter` |
+| `setResolvingState` | 4151–4160 | `TvControlsOverlayController` |
+| `setNextOverlayBackdrop` | 4162–4177 | `TvControlsOverlayController` |
+| `isFocusInControlsOverlay` | 4624–4633 | `TvControlsOverlayController` |
+| `handlePlayPauseToggleFromCenter` | 4646–4652 | `TvControlsOverlayController` |
+| `togglePlayPause` | 4654–4684 | `TvControlsOverlayController` |
+| `showControlsMenu` | 4686–4776 | `TvControlsOverlayController` |
+| `hideControlsMenu` | 4778–4829 | `TvControlsOverlayController` |
+| `updateSubtitleControlsLift` | 4831–4846 | `TvControlsOverlayController` |
+| `hideTitleImmediately` | 4848–4855 | `TvControlsOverlayController` |
+| `scheduleHideControlsMenu` | 4857–4863 | `TvControlsOverlayController` |
+| `cancelScheduledHideControlsMenu` | 4865–4867 | `TvControlsOverlayController` |
+| `updatePauseButtonLabel` | 4869–4883 | `TvControlsOverlayController` |
+| `startSeekbarProgressUpdates` | 4885–4889 | `TvSeekScrubController` |
+| `stopSeekbarProgressUpdates` | 4891–4893 | `TvSeekScrubController` |
+| `updateSeekbarProgress` | 4895–4952 | `TvSeekScrubController` |
+| `showControlsAndFocusProgressBar` | 4958–4966 | `TvSeekScrubController` |
+| `setupCinemaProgressBar` | 4968–5021 | `TvSeekScrubController` |
+| `enterCinemaSeekMode` | 5023–5099 | `TvSeekScrubController` |
+| `exitCinemaSeekMode` | 5101–5136 | `TvSeekScrubController` |
+| `confirmCinemaSeek` | 5138–5144 | `TvSeekScrubController` |
+| `updateCinemaSeekSpeed` | 5146–5149 | `TvSeekScrubController` |
+| `updateCinemaProgressUI` | 5151–5212 | `TvSeekScrubController` |
+| `showSeekbar` | 5214–5245 | `TvSeekScrubController` |
+| `hideSeekbar` | 5247–5260 | `TvSeekScrubController` |
+| `confirmSeekPosition` | 5262–5267 | `TvSeekScrubController` |
+| `seekBackward` | 5269–5276 | `TvSeekScrubController` |
+| `seekForward` | 5278–5285 | `TvSeekScrubController` |
+| `updateSeekSpeed` | 5287–5296 | `TvSeekScrubController` |
+| `updateSeekbarUI` | 5298–5316 | `TvSeekScrubController` |
+| `updateSeekbarPosition` | 5318–5335 | `TvSeekScrubController` |
+| `seekBy` | 5337–5357 | `TvSeekScrubController` |
+| `showNextOverlay` | 5376–5381 | `TvControlsOverlayController` |
+| `fadeInNextOverlay` | 5383–5388 | `TvControlsOverlayController` |
+| `hideNextOverlay` | 5390–5397 | `TvControlsOverlayController` |
+| `isCleanPlaybackState` | 5403–5414 | `TvControlsOverlayController` |
+| `CONTROLS_AUTO_HIDE_DELAY_MS` | 6981–6981 | `TvControlsOverlayController` |
+
+Step-T evidence: `p16/remeasured-inventory.json`, `original-self-comparison.log`, `phase15-historical-check.log`, `earlier-destination-check.log`, `overload-audit.json`, and checker self-test logs. Original `baseline-df439aed1`: 1,943 identities (1,942 pass, the existing source-browser focus failure); original lint: 1,352 issues (253 errors/1,099 warnings, 175 opt-in errors). Stable routing run `p16-tools-recheck` preserves all original identities/statuses. The first tools run is explicitly discarded because its tree changed while tooling was being edited.
+
+## Phase 16 step 0 — original controls runtime characterization
+
+Original: `df439aed1`. Production remains unchanged. The prerequisites ran FIRST: `p16/step0/prerequisite-framework-frame/` and the repeated `prerequisite-framework-repeat/` demonstrate deterministic 80 ms scrub interpolation/width and original seek → pause → play observations; both prerequisite cases have assertion-killed original mutations in `prerequisite-mutations/`. No feature is deferred.
+
+Added **287 named cases in 13 behavior suites plus the two-case prerequisite suite**, in 18 cohesive test/fixture files (14–148 physical lines). Every per-skin case boots its own real Activity with the persisted CLASSIC/OTT/FROST/MARQUEE/BROADCAST/PULSE/TICKET choice and actual dock wiring. Player calls, playback intent and selected reads are recorded; UI tests use actual installed listeners, Activity key dispatch, real Handler queues, live recovery callbacks, metadata worker replies and Activity-owned Glide requests. Existing tests/assertions remain unchanged after the Step-T helper routing.
+
+Native vsync stalls after bootstrap under the paused looper. `TvControlsAnimationClock` dispatches the actual framework AnimationFrameCallback for all registered callbacks (including AnimatorSet) at the controlled main-looper clock; it does not replace the moved animator, duration, interpolator, listener or end action. Media3 parent animations are disabled only for focused-key delegation, the parent-reopen observation and seven independent cancellation cases. Those cancellation cases settle bootstrap first and use a running unrelated rotation to expose explicit cancellation that replacement alpha animations would otherwise mask. Production settings are unchanged. Raw discarded fixture-development attempts remain archived; they are not accepted controls. Forcing dock height to 160 clipped TICKET focus and altered its label; the final show test uses each real dock’s measured bounds.
+
+Pinned: 300 ms dock show and interpolation/lift, 250 ms hide/end guard, 4 s auto-hide while playing only, synchronous cancellation versus posted focus/re-arm, real Center/Enter/Back/Down/Up/Left/Right and repeat/release routing, every one of twelve independent clean-state blockers plus all-clear, title/OTT identity and spans/cache/URL fallbacks for every skin, live dead-stream recovery and lazy construction after intent, parked twin restoration, 220/160 ms Next overlay and Glide ownership/liveness, cinema start/step/commit/cancel including 200+100/150 ms thumb and 80 ms bar, legacy reflection-only seekbar/default arguments, 100 ms ticker guards/layout publications/skip wiring, pause/stop retention and ordered onDestroy. Request-offer observers pin focus calls even when the destination is already focused; the hidden scheduling guard pins the old callback deadline, not just pending status.
+
+Clean original `junit/baseline-df439aed1`: 1,943 identities (1,942 pass, one known source-browser focus failure). Final `junit/p16-step0`: 2,230 identities (2,229 pass, the same failure). The standard comparison and strict old-status comparison allow **287 passing additions only**. Both use JBR and the matched evidence-only 1 GiB worker init; final fingerprints are stable and the run is not aborted. Earlier full archives `p16-step0-pre-wiring` and `p16-step0-pre-offers` are explicitly superseded by final assertion strengthening. Evidence: `p16/step0/jvm-final-accepted.log`, `jvm-comparison.log`, `jvm-strict-comparison.json`, and the named junit archives.
+
+Original lint archived at `p16/lint-original/`: 1,352 issue identities, 253 errors/1,099 warnings, including 175 UnsafeOptInUsage errors; original lint exit 1 is recorded, not claimed as a passing lint run. The normalized issue set plus XML/HTML/text and Gradle log are retained for the later move gate.
+
+The systematic sweep inventories **668 PSI nodes in all 43 moved functions/callbacks**: 345 calls, 167 writes, 104 ifs, 47 returns, four whens and one loop. **All 439 required obligations have direct named assertion proofs**, including all 160 direct/value calls and eight Elvis-return guards; no equivalent or unresolved required node. Nested reads/returns link to their enclosing asserted output or exact function contract. There are **537 isolated original-code attempts, 484 assertion kills**, 10 compile-invalid, 3 crash-only, 39 earlier no-assertion attempts, and 1 cancelled invalid attempt. Removing a focus traversal cursor update caused nontermination; it was cancelled and rejected, then a terminating cursor-to-null variant failed the descendant-focus assertion. Invalid/crash/cancelled attempts receive no credit. Earlier survivors remain beside strengthened killed variants; every one of the 287 named cases has a named original assertion witness.
+
+Additional caller proofs cover the actual metadata store/queued publish, payload replacement, playbackListener auto-advance, playItem/PikPak title updates, guide Host overlay callbacks, short/long seek routes, key focus/repeat guards, and both in-place Handler cleanup statements and their order. Adding scrub-animator cancellation to onDestroy also fails the original continuation assertion. Exact before/after patches, named selectors, logs/XML and immutable fixture-signature source snapshots are archived under `p16/step0/`.
+
+### Statement-level coverage matrix
+
+Each required write, condition, loop, when, direct call and Elvis guard has an exact mutation/assertion. The JSON keeps original code-point offsets/lines, every rejected attempt, named witnesses and tested source hashes. Inventory: `psi-sweep-inventory.json`; complete matrix/contracts: `coverage-matrix.json`, `contracts.json`; caller and guard definitions: `wiring.json`, `named-extra.json`, `elvis.json`, `final-proofs.json`, `last-retry.json`.
+
+| Original moved function/callback | Calls / writes / if / loops / when / returns | Direct obligations proved | Observable contract |
+| --- | --- | ---: | --- |
+| `hideControlsRunnable` | 4 / 0 / 1 / 0 / 0 / 0 | 4 | Four-second callback hides outside focus; a dock descendant re-arms rather than hides. |
+| `run` | 2 / 0 / 0 / 0 / 0 / 0 | 2 | Owned progress Runnable updates guards immediately and re-posts itself at 100 ms; teardown removes callbacks. |
+| `setupSeekbar` | 2 / 1 / 1 / 0 / 0 / 1 | 4 | Original dead legacy path normalizes GONE and installs Back-DOWN only listener. |
+| `guideTitleFor` | 3 / 0 / 1 / 0 / 0 / 2 | 2 | Series with both season/episode use padded SxxExx; otherwise original item title. |
+| `updateTitle` | 14 / 9 / 4 / 0 / 0 / 0 | 14 | Guide title vs simple/OTT title; current item and nullable model; cached show identity and original visibility/text. |
+| `updateOttIdentity` | 25 / 32 / 7 / 0 / 1 / 1 | 46 | Seven independent skins: series/movie/blank show and episode, badges and spans, original per-skin visibility, then quality/rating extras. |
+| `updateOttExtras` | 38 / 13 / 11 / 0 / 2 / 2 | 41 | Tags/cache/URL decode, optional chips, rating defaults/rounding and colors/spans, MARQUEE text combinations, TICKET intermediate show/quality publications. |
+| `dockTagsFor` | 10 / 2 / 3 / 0 / 0 / 3 | 8 | Source-title nonblank preference; exact cache hit/miss; original URL basename/query/decoded/bad-percent fallback. |
+| `setResolvingState` | 3 / 2 / 1 / 0 / 0 / 0 | 6 | Resolving true clears title/subtitle and starts 220 ms Next overlay; false hides and clears backdrop. |
+| `setNextOverlayBackdrop` | 7 / 2 / 3 / 0 / 0 / 2 | 8 | Activity-owned Glide request/clear, exact artwork identity, finishing/destroyed no-op and optional readiness. |
+| `isFocusInControlsOverlay` | 0 / 1 / 2 / 1 / 0 / 3 | 5 | Null/outside/deep descendant traversal and parent cursor update; prevents focused auto-hide. |
+| `handlePlayPauseToggleFromCenter` | 3 / 0 / 1 / 0 / 0 / 0 | 4 | Hidden controls first show; toggle exactly once; playing re-arms and paused cancels timer. |
+| `togglePlayPause` | 7 / 2 / 3 / 0 / 0 / 1 | 10 | Pause/play and sleep latch, live ended/error/surrendered retry, intent before lazy eligibility, parked twin restore, label on every branch. |
+| `showControlsMenu` | 30 / 16 / 6 / 0 / 0 / 1 | 39 | PlayerView controller reopen, live banner gate, per-skin title children/visibility, startup badge readiness, 300 ms fade/lift, synchronous cancel then posted focus, already-visible normalize. |
+| `hideControlsMenu` | 22 / 10 / 3 / 0 / 0 / 2 | 23 | Null/hidden guards; 250 ms fade and guarded end callback, title reset, badge hide, live docked banner hide, timer cancellation and subtitle-lift restore. |
+| `updateSubtitleControlsLift` | 5 / 0 / 2 / 0 / 0 / 3 | 6 | Dock plus visible non-floating banner height, initial and posted remeasurement, hidden/null guards, posts do not restore after hide. |
+| `hideTitleImmediately` | 2 / 4 / 0 / 0 / 0 / 0 | 5 | Cancels real title animator and restores GONE alpha/translation. |
+| `scheduleHideControlsMenu` | 2 / 0 / 2 / 0 / 0 / 1 | 4 | Hidden returns without cancellation; visible cancels prior deadline; only playing posts exact 4000 ms. |
+| `cancelScheduledHideControlsMenu` | 1 / 0 / 0 / 0 / 0 / 0 | 1 | Removes exact owned Runnable from controls Handler. |
+| `updatePauseButtonLabel` | 3 / 1 / 2 / 0 / 0 / 1 | 6 | Null player/button guards, skin icon family/text and actual OTT caption refresh. |
+| `startSeekbarProgressUpdates` | 2 / 0 / 0 / 0 / 0 / 0 | 2 | Removes duplicate existing ticker, posts immediately. |
+| `stopSeekbarProgressUpdates` | 1 / 0 / 0 / 0 / 0 / 0 | 1 | Removes exact owned ticker callback. |
+| `updateSeekbarProgress` | 16 / 9 / 8 / 0 / 0 / 2 | 22 | Cinema/null/nonpositive guards; stable duration max and in-range real position (inclusive bounds), skip wiring, displayed times, played/layout publication, buffered clamp/change-only publication. |
+| `showControlsAndFocusProgressBar` | 3 / 0 / 1 / 0 / 0 / 0 | 4 | Shows dock immediately and posts progress focus exactly 100 ms later via real Activity key router. |
+| `setupCinemaProgressBar` | 17 / 4 / 5 / 0 / 1 / 1 | 23 | Actual focus enter/exit and DOWN/UP/Back/Center/Enter/left/right matrix, acceleration, clamp, chip reset, focus restore. |
+| `enterCinemaSeekMode` | 27 / 11 / 7 / 0 / 0 / 2 | 29 | Duplicate/null/no-duration guards and skin fallback offers; caches intent/position/duration/track, pauses buffering intent, 200+100 ms thumb, palette/height, bar starts. |
+| `exitCinemaSeekMode` | 14 / 6 / 3 / 0 / 0 / 1 | 14 | Cancel bar, original 150 ms thumb end resets scales and INVISIBLE, restore track/chip/color and prior intent, duplicate exit no effects. |
+| `confirmCinemaSeek` | 4 / 0 / 1 / 0 / 0 / 1 | 5 | Mode guard; resume hold release before seek then exit(true) and pause focus request. |
+| `updateCinemaProgressUI` | 19 / 11 / 6 / 0 / 0 / 1 | 23 | Exact times/preview +/- glyph and null origin, no track returns after text, cancels previous bar, 80 ms decelerate, frame width publication and clamped thumb. |
+| `updateCinemaSeekSpeed` | 0 / 1 / 0 / 0 / 0 / 0 | 1 | Stores the exact accelerated step/10000 float speed; no speed text is rendered in the original cinema path. Both directions are observed via the installed key listener. |
+| `showSeekbar` | 8 / 8 / 3 / 0 / 0 / 2 | 15 | Reflection-only dead entry: player/visible/duration guards, exact short toast; cache/reset/pause, initial UI and 200 ms fade. |
+| `hideSeekbar` | 6 / 3 / 1 / 0 / 0 / 1 | 6 | Visible guard, speed GONE, 150 ms end GONE and original unconditional resume even when initially paused. |
+| `confirmSeekPosition` | 3 / 0 / 1 / 0 / 0 / 1 | 4 | Resume hold release then seek and hide, original delayed play. |
+| `seekBackward` | 3 / 1 / 0 / 0 / 0 / 0 | 3 | Default 10 s and explicit continuous arguments, lower clamp, speed/UI effects, real key caller wiring. |
+| `seekForward` | 3 / 1 / 0 / 0 / 0 / 0 | 3 | Default 10 s and explicit continuous arguments, duration clamp, speed/UI effects, real key caller wiring. |
+| `updateSeekSpeed` | 1 / 4 / 1 / 0 / 0 / 0 | 5 | Speed from explicit step, exact arrow text and GONE for base speed. |
+| `updateSeekbarUI` | 8 / 3 / 2 / 0 / 0 / 0 | 8 | Exact current/total times, captured fraction across posted width lookup, zero-duration fraction, cached width path. |
+| `updateSeekbarPosition` | 5 / 2 / 1 / 0 / 0 / 1 | 4 | Width guard, layout setter publication, progress width and zero-duration handle animation with clamped offset. |
+| `seekBy` | 8 / 2 / 2 / 0 / 0 / 1 | 9 | Null guard, known/unset duration clamping, hold release before seek, exact directional feedback and real key caller wiring. |
+| `showNextOverlay` | 1 / 2 / 0 / 0 / 0 / 0 | 3 | Exact next item title/subtitle, visibility and fade start; actual playbackListener auto-advance caller. |
+| `fadeInNextOverlay` | 6 / 2 / 0 / 0 / 0 / 0 | 4 | Cancels prior animation, VISIBLE alpha0/scale1 initialization, exact 220 ms fade. |
+| `hideNextOverlay` | 7 / 2 / 1 / 0 / 0 / 1 | 5 | Cancels prior animation, guarded 160 ms fade end GONE alpha1, already hidden returns. |
+| `isCleanPlaybackState` | 0 / 0 / 8 / 0 / 0 / 9 | 8 | All-clear plus each twelve independent fresh-state blocker; VISIBLE versus INVISIBLE distinctions. |
+
+### Named test → original mutation → failing assertion
+
+Every patch applies to `df439aed1` plus the test files. Each row links to its definition/patch, raw Gradle log/XML and immutable fixture archive; parameterized identities are separate rows. Failure text below is an excerpt; XML preserves the named assertion and stack location. Earlier fixture versions are explicitly identified by signature and retained alongside strengthened reruns.
+
+| Named test | Original mutation | Failing assertion excerpt | Raw evidence below p16/step0 |
+| --- | --- | --- | --- |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[BROADCAST]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[CLASSIC]` | `call-o508`: formatTime(videoDuration) → "" | org.junit.ComparisonFailure: expected:<[01:40]> but was:<[]> | `sweep-calls/call-o508/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[FROST]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[MARQUEE]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[OTT]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[PULSE]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barAnimationCancelsItsPredecessorAndUsesExactPlayedWidthThumbClampAndTime[TICKET]` | `call-o522`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o522/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[BROADCAST]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[CLASSIC]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[FROST]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[MARQUEE]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[OTT]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[PULSE]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::barWithoutTrackWidthUpdatesTextButDoesNotReplaceItsAnimator[TICKET]` | `s502`: debrifyTimeCurrent?.text = formatTime(seekbarPosition) → Unit | org.junit.ComparisonFailure: expected:<[01:20]> but was:<[]> | `sweep-observed/s502/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[BROADCAST]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[CLASSIC]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[FROST]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[MARQUEE]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[OTT]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[PULSE]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::cancelNeverSeeksResumesPriorIntentCancelsBarAndRestoresThumbPaletteAndChip[TICKET]` | `call-o474`: cinemaProgressAnimator?.cancel() → Unit | java.lang.AssertionError | `sweep-calls/call-o474/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[BROADCAST]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[CLASSIC]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[FROST]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[MARQUEE]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[OTT]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[PULSE]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::commitReleasesTheResumeHoldSeeksThenResumesAndExits[TICKET]` | `call-o497`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o497/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[BROADCAST]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[CLASSIC]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[FROST]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[MARQUEE]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[OTT]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[PULSE]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::entryPreservesBufferingPlaybackIntentCachesStateAndRunsBothThumbAnimations[TICKET]` | `call-o438`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o438/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[BROADCAST]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[CLASSIC]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[FROST]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[MARQUEE]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[OTT]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[PULSE]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::installedFocusAndKeyListenersEnterStepClampReleaseCommitAndCancel[TICKET]` | `call-o396`: cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus -> → Unit | java.lang.AssertionError: setup installs focus listener | `sweep-calls/call-o396/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[BROADCAST]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[CLASSIC]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[FROST]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[MARQUEE]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[OTT]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[PULSE]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::originallyPausedScrubDoesNotPauseOrResumeAndDuplicateEntryDoesNotReadPlayer[TICKET]` | `s427`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError | `sweep-observed/s427/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[BROADCAST]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[CLASSIC]` | `call-o508`: formatTime(videoDuration) → "" | org.junit.ComparisonFailure: expected:<[00:00]> but was:<[]> | `sweep-calls/call-o508/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[FROST]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[MARQUEE]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[OTT]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[PULSE]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::previewChipPinsPositiveNegativeZeroAndNullPlayerOrigins[TICKET]` | `s504`: debrifyTimeTotal?.text = if (ottSkinInstalled) { → Unit | org.junit.ComparisonFailure: expected:<[-00:00]> but was:<[]> | `sweep-observed/s504/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[BROADCAST]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[CLASSIC]` | `call-o433`: stremioSourceBadge?.requestFocus() → Unit | java.lang.AssertionError: expected:<[source]> but was:<[]> | `sweep-calls/call-o433/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[FROST]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[MARQUEE]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[OTT]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[PULSE]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCinemaScrubCharacterizationTest::unavailableDurationAndNullPlayerDoNotEnterScrub[TICKET]` | `call-o430`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o430/` |
+| `TvCleanPlaybackCharacterizationTest::controlsAloneBlock` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::iptvGuideAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::legacySeekbarAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::linePickerAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::nextOverlayAloneBlocksOnlyAtVisible` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::noVisibleBlockerIsClean` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::pikPakIndicatorAloneBlocksOnlyAtVisible` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::playlistAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::sourceBrowserAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::stremioGuideAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::subtitlePanelAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::syncOverlayAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvCleanPlaybackCharacterizationTest::unifiedMenuAloneBlocks` | `s647`: controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible → !(controlsMenuVisible \|\| seekbarVisible \|\| playlistController.playlistVisible) | java.lang.AssertionError: all twelve blockers independently cleared | `sweep-observed/s647/` |
+| `TvControlsCallerCharacterizationTest::absentIdentityTitleReturnsWithoutPublishingMetadataOrChangingTheCache` | `guard-o041`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o041/` |
+| `TvControlsCallerCharacterizationTest::directPlayItemAndPikPakRetryBothRefreshTitleThroughTheirActualCallers` | `wire-pikpak-title`: updateTitle(item) → Unit | org.junit.ComparisonFailure: expected:<[PikPak] title> but was:<[Direct] title> | `sweep-final-proofs/wire-pikpak-title/` |
+| `TvControlsCallerCharacterizationTest::endedPlaybackShowsTheNextItemThenHidesAndPlaysItAtFifteenHundredMs` | `wire-ended-hide`: hideNextOverlay() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-final-proofs/wire-ended-hide/` |
+| `TvControlsCallerCharacterizationTest::metadataWritesTrimmedShowNameAndRefreshesTheDockWithoutRevealingTopTitle` | `caller-inline-show`: ottShowName = showName.trim() → Unit | org.junit.ComparisonFailure: expected:<[New Show]> but was:<[Old]> | `sweep-final-proofs/caller-inline-show/` |
+| `TvControlsCallerCharacterizationTest::noDurationClassicFallbackAndDefaultConfirmGuardsDoNotSeek` | `named-confirm-null`: !cinemaSeekMode \|\| player == null → !cinemaSeekMode | java.lang.AssertionError | `sweep-final-proofs/named-confirm-null/` |
+| `TvControlsCallerCharacterizationTest::stremioGuideHostUsesTheOriginalResolvingAndLoadingOverlay` | `wire-guide-controls-hide`: override fun hideControlsMenu(): Unit = this@AndroidTvTorrentPlayerActivity.hideContr → override fun hideControlsMenu(): Unit = Unit | java.lang.AssertionError | `sweep-final-proofs/wire-guide-controls-hide/` |
+| `TvControlsCallerCharacterizationTest::stremioPayloadReplacementClearsThePreviousShowName` | `wire-clear-show`: ottShowName = null → Unit | java.lang.AssertionError: expected null, but was:<Previous Show> | `sweep-final-proofs/wire-clear-show/` |
+| `TvControlsCallerCharacterizationTest::workerMetadataStoresShowNameBeforeItsQueuedIdentityPublication` | `caller-inline-show`: ottShowName = showName.trim() → Unit | org.junit.ComparisonFailure: expected:<[New]> but was:<[Old]> | `sweep-final-proofs/caller-inline-show/` |
+| `TvControlsKeyCharacterizationTest::activityDelegatesFocusedScrubRightCenterAndDownToTheInstalledListener` | `call-o237`: playerView.showController() → Unit | java.lang.AssertionError: expected:<35000> but was:<25000> | `sweep-calls/call-o237/` |
+| `TvControlsKeyCharacterizationTest::backDownHidesVisibleControlsAndBackUpDoesNotHideThem` | `key-back-action`: controlsMenuVisible && keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.A → controlsMenuVisible && keyCode == KeyEvent.KEYCODE_BACK | java.lang.AssertionError | `sweep-final-proofs/key-back-action/` |
+| `TvControlsKeyCharacterizationTest::badgeAndSkipFocusPassCenterThroughWithoutOpeningOrTogglingControls` | `key-badge-skip`: if (::skipSegmentButton.isInitialized && currentFocus == skipSegmentButton) → if (false) | java.lang.AssertionError | `sweep-final-proofs/key-badge-skip/` |
+| `TvControlsKeyCharacterizationTest::controlsFocusedCenterAndHorizontalKeysDoNotUseTheGlobalToggleOrQuickSeek` | `key-center-focus`: if (focusInControls) → if (false) | java.lang.AssertionError | `sweep-final-proofs/key-center-focus/` |
+| `TvControlsKeyCharacterizationTest::dockUpRepeatsAndReleasesDoNotStealFocusAndCinemaGateDoesNotEnterAgain` | `key-up-cinema-guard`: focusInControls && controlsMenuVisible && !cinemaSeekMode → focusInControls && controlsMenuVisible | java.lang.AssertionError: active cinema gate does not request progress focus | `sweep-final-proofs/key-up-cinema-guard/` |
+| `TvControlsKeyCharacterizationTest::dockUpWithKnownDurationEntersScrubAndUnknownDurationWithSourcesUsesBadge` | `key-up-known`: cinemaProgressContainer?.requestFocus() → Unit | java.lang.AssertionError | `sweep-final-proofs/key-up-known/` |
+| `TvControlsKeyCharacterizationTest::downRepeatAndUpDoNotRevealHiddenControls` | `key-down-general-first`: event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 → true | java.lang.AssertionError | `sweep-final-proofs/key-down-general-first/` |
+| `TvControlsKeyCharacterizationTest::downRevealsHiddenControlsAndOutsideFocusRevealsThemAgain` | `key-down-reveal`: !focusInControls → false | java.lang.AssertionError | `sweep-final-proofs/key-down-reveal/` |
+| `TvControlsKeyCharacterizationTest::enterHasTheSameFirstDownContractAsCenter` | `key-center-first`: event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 → event.action == KeyEvent.ACTION_DOWN | java.lang.AssertionError: expected:<[pause]> but was:<[pause, play]> | `sweep-final-proofs/key-center-first/` |
+| `TvControlsKeyCharacterizationTest::firstCenterDownTogglesButRepeatedDownAndUpAreConsumedWithoutAnotherToggle` | `key-center-first`: event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 → event.action == KeyEvent.ACTION_DOWN | java.lang.AssertionError: expected:<[pause]> but was:<[pause, play]> | `sweep-final-proofs/key-center-first/` |
+| `TvControlsKeyCharacterizationTest::leftQuickSeekUsesNegativeTenSecondsAndLongPressShowsTheDock` | `call-o393`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o393/` |
+| `TvControlsKeyCharacterizationTest::legacyRouterBackCancelsWithoutASeek` | `key-legacy-back`: hideSeekbar() → Unit | java.lang.AssertionError | `sweep-final-proofs/key-legacy-back/` |
+| `TvControlsKeyCharacterizationTest::legacyRouterStepsAcceleratesConfirmsAndConsumesAllUpEvents` | `key-legacy-step`: seekBackward(step, isContinuous = event.repeatCount > 0) → Unit | java.lang.AssertionError: expected:<21000> but was:<35000> | `sweep-final-proofs/key-legacy-step/` |
+| `TvControlsKeyCharacterizationTest::progressUpWithSourcesReturnsToTheBadgeWithoutTogglingPlayback` | `key-up-badge`: stremioSourceBadge?.requestFocus() → Unit | java.lang.AssertionError | `sweep-final-proofs/key-up-badge/` |
+| `TvControlsKeyCharacterizationTest::quickSeekKnownAndUnsetDurationClampAndPublishExactDirectionalFeedback` | `call-o618`: releaseResumeHold() → Unit | java.lang.AssertionError: expected:<0> but was:<80000> | `sweep-calls/call-o618/` |
+| `TvControlsKeyCharacterizationTest::rightQuickSeekClampsAndLongPressSchedulesProgressFocusAtOneHundredMs` | `call-o393`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o393/` |
+| `TvControlsKeyCharacterizationTest::sourceBadgeDownMovesToScrubForKnownDurationButNotRepeatedOrReleasedKeys` | `key-down-focuspositive`: cinemaProgressContainer?.requestFocus() → Unit | java.lang.AssertionError | `sweep-final-proofs/key-down-focuspositive/` |
+| `TvControlsKeyCharacterizationTest::sourceBadgeDownWithUnknownDurationFallsBackToPause` | `key-down-focuszero`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-last-guards/key-down-focuszero/` |
+| `TvControlsLifecycleCharacterizationTest::destroyClearsBothOwnedHandlersAtTheirOriginalPositions` | `wire-destroy-controls`: controlsHandler.removeCallbacksAndMessages(null) → Unit | java.lang.AssertionError: expected:<[progressHandler, controlsHandler, seekbarHandler, releaseEffect]> but was:<[progressHandler, seekbarHandler, releaseEffect]> | `sweep-final-proofs/wire-destroy-controls/` |
+| `TvControlsLifecycleCharacterizationTest::destroyDoesNotCancelAnInFlightScrubAnimator` | `wire-destroy-animator`: // Clear all handlers → cinemaProgressAnimator?.cancel() | java.lang.AssertionError | `sweep-final-proofs/wire-destroy-animator/` |
+| `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` | `s247`: ottSkinInstalled → !(ottSkinInstalled) | java.lang.AssertionError: expected:<0> but was:<8> | `sweep-observed/s247/` |
+| `TvControlsLifecycleCharacterizationTest::pauseAndStopLeaveTheTickerRunningAndUpdatingProgressGuards` | `named-lifecycle-ticker`: seekbarHandler.post(seekbarProgressRunnable) → Unit | java.lang.AssertionError | `sweep-final-proofs/named-lifecycle-ticker/` |
+| `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` | `call-o237`: playerView.showController() → Unit | java.lang.AssertionError | `sweep-calls/call-o237/` |
+| `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` | `call-o260`: sourceSwitchController.hideStremioSourceBadgeImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o260/` |
+| `TvControlsLifecycleCharacterizationTest::uninitializedBackdropReturnsBeforeGlideAndDoesNotTouchTheOldView` | `named-backdrop-ready`: !::nextBackdrop.isInitialized → false | java.lang.AssertionError | `sweep-final-proofs/named-backdrop-ready/` |
+| `TvControlsLiftCharacterizationTest::dockedVisibleBannerContributesHeightImmediatelyAndAfterPostedRemeasure` | `call-o329`: subtitleControlsLift.liftAbove(dock.height + extraPanelHeight) → Unit | java.lang.AssertionError: expected:<160> but was:<0> | `sweep-calls/call-o329/` |
+| `TvControlsLiftCharacterizationTest::floatingAndInvisibleBannerDoNotContributeHeight` | `call-o329`: subtitleControlsLift.liftAbove(dock.height + extraPanelHeight) → Unit | java.lang.AssertionError: expected:<100> but was:<0> | `sweep-calls/call-o329/` |
+| `TvControlsLiftCharacterizationTest::hiddenDockAndNullDockLeaveLiftUnchangedAndLatePostedWorkDoesNotRestoreIt` | `call-o329`: subtitleControlsLift.liftAbove(dock.height + extraPanelHeight) → Unit | java.lang.AssertionError: expected:<160> but was:<0> | `sweep-calls/call-o329/` |
+| `TvControlsLiftCharacterizationTest::visibleHideRestoresSubtitleClearanceImmediately` | `call-o303`: subtitleControlsLift.restore() → Unit | java.lang.AssertionError: expected:<0> but was:<160> | `sweep-calls/call-o303/` |
+| `TvControlsLiveCharacterizationTest::endedLiveConstructsItsLazyRecoveryAfterSettingPlaybackIntent` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsLiveCharacterizationTest::endedLiveSetsIntentBeforeTheRetryEligibilityRead` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsLiveCharacterizationTest::erroredLiveSetsIntentBeforeTheRetryEligibilityRead` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsLiveCharacterizationTest::liveUpExcludesScrubAndLongPressHidesControlsBeforeOpeningJumpDialog` | `s293`: !controlsMenuVisible → !(!controlsMenuVisible) | java.lang.AssertionError | `sweep-observed/s293/` |
+| `TvControlsLiveCharacterizationTest::nonLiveEndedItemPlaysNormallyInsteadOfRetuning` | `call-o222`: player?.let { → Unit | java.lang.AssertionError: expected:<[play]> but was:<[]> | `sweep-calls/call-o222/` |
+| `TvControlsLiveCharacterizationTest::parkedTwinIsRestoredBeforeOrdinaryPlayAndLabelStillRefreshes` | `call-o222`: player?.let { → Unit | java.lang.AssertionError: expected null, but was:<https://phase16.invalid/live.m3u8> | `sweep-calls/call-o222/` |
+| `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` | `call-o241`: iptvZapBannerController.showIptvZapBanner(liveEntry, docked = true) → Unit | java.lang.AssertionError | `sweep-calls/call-o241/` |
+| `TvControlsLiveCharacterizationTest::surrenderedLiveSetsIntentBeforeTheRetryEligibilityRead` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsRuntimePrerequisiteTest::originalSeekAndPlayPauseReachTheRecordingPlayerInOrder` | `prerequisite-player`: p.seekTo(target) → Unit | java.lang.AssertionError: expected:<[seek:35000, pause, play]> but was:<[pause, play]> | `prerequisite-mutations/prerequisite-player/` |
+| `TvControlsRuntimePrerequisiteTest::pausedFramesAdvanceTheOriginalScrubAnimator` | `prerequisite-animator`: duration = 80 → duration = 800 | java.lang.AssertionError: original scrub duration expected:<80> but was:<800> | `prerequisite-mutations/prerequisite-animator/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[BROADCAST]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[FROST]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[MARQUEE]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[OTT]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[PULSE]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[TICKET]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<1.0> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[BROADCAST]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[CLASSIC]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[FROST]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[MARQUEE]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[OTT]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[PULSE]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[TICKET]` | `guard-o235`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o235/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[BROADCAST]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[FROST]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[MARQUEE]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[OTT]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[PULSE]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[TICKET]` | `call-o236`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError: synchronous cancel | `sweep-calls/call-o236/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[BROADCAST]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[CLASSIC]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[FROST]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[MARQUEE]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[OTT]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[PULSE]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::centerActionPausesThenPlaysAndSchedulesOnlyWhenPlaying[TICKET]` | `call-o218`: showControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o218/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[BROADCAST]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[CLASSIC]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[FROST]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[MARQUEE]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[OTT]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[PULSE]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::explicitPlayClearsSleepStopAndPausedNullPlayerLabelsRemainPlay[TICKET]` | `call-o222`: player?.let { → Unit | java.lang.AssertionError | `sweep-calls/call-o222/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[BROADCAST]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[FROST]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[MARQUEE]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[OTT]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[PULSE]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[TICKET]` | `call-o297`: hideTitleImmediately() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o297/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[BROADCAST]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[FROST]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[MARQUEE]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[OTT]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[PULSE]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[TICKET]` | `call-o301`: cancelScheduledHideControlsMenu() → Unit | java.lang.AssertionError | `sweep-calls/call-o301/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[BROADCAST]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[CLASSIC]` | `s348`: button.text = if (playing) "Pause" else "Play" → Unit | org.junit.ComparisonFailure: expected:<P[ause]> but was:<P[lay]> | `sweep-observed/s348/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[FROST]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[MARQUEE]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[OTT]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[PULSE]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::pauseLabelUsesTheSkinIconAndRefreshesTheOwnedCaptionAfterPlaybackChanges[TICKET]` | `call-o279`: pauseButton?.post { → Unit | org.junit.ComparisonFailure: expected:<P[lay]> but was:<P[ause]> | `sweep-calls/call-o279/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[BROADCAST]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[FROST]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[MARQUEE]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[OTT]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[PULSE]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[TICKET]` | `call-o244`: titleContainer.animate().cancel() → Unit | java.lang.AssertionError: prior animation cancelled: titleContainer expected:<3.6> but was:<30.689999> | `sweep-calls-strengthened/call-o244/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[BROADCAST]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` | `call-o278`: overlay.animate() → Unit | java.lang.AssertionError: expected:<0.875> but was:<0.0> | `sweep-calls/call-o278/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[FROST]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[MARQUEE]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[OTT]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[PULSE]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[TICKET]` | `call-o249`: updateOttIdentity() → Unit | org.junit.ComparisonFailure: expected:<[Runtime film]> but was:<[Film.mkv]> | `sweep-calls/call-o249/` |
+| `TvControlsTimerCharacterizationTest::focusedChildKeepsTheDockAliveAndRearmsTheFourSecondDeadline` | `call-o212`: while (current != null) { → Unit | java.lang.AssertionError: expected:<true> but was:<false> | `sweep-calls/call-o212/` |
+| `TvControlsTimerCharacterizationTest::hiddenScheduleReturnsWithoutRemovingAnExistingCallback` | `call-o346`: controlsHandler.removeCallbacks(hideControlsRunnable) → Unit | java.lang.AssertionError | `sweep-calls/call-o346/` |
+| `TvControlsTimerCharacterizationTest::outsideAndAbsentDockAreNotControlsFocus` | `guard-o211`: return false → return true | java.lang.AssertionError: expected:<false> but was:<true> | `sweep-final-proofs/guard-o211/` |
+| `TvControlsTimerCharacterizationTest::pausedVisibleDockCancelsTheDeadlineWithoutSchedulingAnother` | `call-o343`: controlsHandler.removeCallbacks(hideControlsRunnable) → Unit | java.lang.AssertionError | `sweep-calls/call-o343/` |
+| `TvControlsTimerCharacterizationTest::playingAutoHideWaitsExactlyFourSecondsAndRemovesAnOlderDeadline` | `call-o343`: controlsHandler.removeCallbacks(hideControlsRunnable) → Unit | java.lang.AssertionError | `sweep-calls/call-o343/` |
+| `TvControlsTimerCharacterizationTest::startingTickerTwiceStillProducesOneHundredMsCallback` | `call-o001`: updateSeekbarProgress() → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `sweep-calls/call-o001/` |
+| `TvControlsTimerCharacterizationTest::tickerDoesNotShrinkStableDurationOrAcceptAnOutOfRangeRealPosition` | `s357`: cinemaSeekMode → !(cinemaSeekMode) | java.lang.AssertionError: expected:<0> but was:<123> | `sweep-observed/s357/` |
+| `TvControlsTimerCharacterizationTest::tickerPaintsCurrentTotalCombinedPlayedAndClampedBufferedProgress` | `call-o372`: formatTime(duration) → "" | org.junit.ComparisonFailure: expected:<[01:40]> but was:<[]> | `sweep-calls/call-o372/` |
+| `TvControlsTimerCharacterizationTest::tickerRoutesTheOutgoingUnreadyMediaThroughSkipStateCleanup` | `call-o365`: skipSegmentController.updateSkipSegmentState(currentPosition, duration) → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o365/` |
+| `TvControlsTimerCharacterizationTest::tickerRunsImmediatelyThenEveryHundredMsAndStopRemovesItsCallback` | `call-o001`: updateSeekbarProgress() → Unit | java.lang.AssertionError: expected:<100000> but was:<0> | `sweep-calls/call-o001/` |
+| `TvControlsTimerCharacterizationTest::tickerSkipsCinemaNullPlayerAndNonpositiveDurationsWithoutWritingGuards` | `guard-o359`: return → error("missing optional state") | java.lang.AssertionError | `sweep-final-proofs/guard-o359/` |
+| `TvControlsTimerCharacterizationTest::unchangedBufferedWidthAvoidsAnotherLayoutWriteButChangedWidthPublishesOnce` | `call-o376`: debrifyProgressLine?.let { progressLine -> → Unit | java.lang.AssertionError: expected:<250> but was:<0> | `sweep-calls/call-o376/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[BROADCAST]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[S02E07]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[CLASSIC]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[S02E07]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[FROST]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<S[eason 2 · Episode ]7> but was:<S[02 · E0]7> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[MARQUEE]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[S02E07]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[OTT]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[S02E07]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[PULSE]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<S[eason 2, Episode ]7> but was:<S[02 · E0]7> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::blankEpisodeAndBlankShowUseTheOriginalPerSkinFallbacksWithoutReleaseFilename[TICKET]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[S02E07]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[BROADCAST]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[CLASSIC]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[FROST]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[MARQUEE]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[OTT]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[PULSE]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::guideTitleMatchesBothNumbersRejectsBlankAndOverridesTheFilename[TICKET]` | `call-o013`: it.isNotBlank() → false | org.junit.ComparisonFailure: expected:<[Guide titl]e> but was:<[Filenam]e> | `sweep-calls/call-o013/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[BROADCAST]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[CLASSIC]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[FROST]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[MARQUEE]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[OTT]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[PULSE]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::marqueeMetadataSeparatesQualityOnlyRatingOnlyAndNeither[TICKET]` | `call-o115`: String.format(java.util.Locale.US, "%.1f", it) → "" | org.junit.ComparisonFailure: expected:<★ [8.6]> but was:<★ []> | `sweep-calls/call-o115/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[BROADCAST]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[CLASSIC]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[FROST]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[MARQUEE]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[OTT]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[PULSE]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::missingEpisodeNumbersHideTheBadgeAndNonpositiveRatingContainer[TICKET]` | `call-o016`: model?.title.orEmpty() → "" | org.junit.ComparisonFailure: expected:<[release.name.mkv]> but was:<[]> | `sweep-calls/call-o016/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[BROADCAST]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[CLASSIC]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[FROST]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[MARQUEE]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[OTT]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[PULSE]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::movieAndInvalidCurrentIndexResetSeriesOnlyIdentityViews[TICKET]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Movie]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[BROADCAST]` | `call-o106`: updateOttExtras(item) → Unit | org.junit.ComparisonFailure: expected:<[4K]> but was:<[]> | `sweep-calls/call-o106/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[CLASSIC]` | `s108`: !hasAnyView → !(!hasAnyView) | org.junit.ComparisonFailure: expected:<[untouched]> but was:<[Film.2160p.DV.Atmos.mkv]> | `sweep-strengthened/s108/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[FROST]` | `call-o106`: updateOttExtras(item) → Unit | org.junit.ComparisonFailure: expected:<[4K]> but was:<[]> | `sweep-calls/call-o106/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[MARQUEE]` | `call-o106`: updateOttExtras(item) → Unit | org.junit.ComparisonFailure: expected:<[4K · DOLBY VISION · ATMOS — ★ 8.6]> but was:<[]> | `sweep-calls/call-o106/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[OTT]` | `s108`: !hasAnyView → !(!hasAnyView) | org.junit.ComparisonFailure: expected:<[untouched]> but was:<[Film.2160p.DV.Atmos.mkv]> | `sweep-strengthened/s108/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[PULSE]` | `call-o106`: updateOttExtras(item) → Unit | org.junit.ComparisonFailure: expected:<[4K]> but was:<[]> | `sweep-calls/call-o106/` |
+| `TvDockIdentityCharacterizationTest::qualityRatingAndMetadataShowExactTextColorSpansAndHideAbsentValues[TICKET]` | `call-o106`: updateOttExtras(item) → Unit | org.junit.ComparisonFailure: expected:<[★ 8.6]> but was:<[]> | `sweep-calls/call-o106/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[BROADCAST]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[CLASSIC]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[FROST]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[MARQUEE]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[OTT]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[PULSE]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::qualityUsesOriginalReleaseNameCachesAndFallsBackToDecodedUrl[TICKET]` | `call-o174`: it.isNotBlank() → false | java.lang.AssertionError: expected:<[4K, DV, ATMOS]> but was:<[1080p]> | `sweep-calls/call-o174/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[BROADCAST]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<Show[]> but was:<Show[ — Fetched episode]> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[CLASSIC]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Fetched episode]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[FROST]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<[]Fetched episode> but was:<[Show — ]Fetched episode> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[MARQUEE]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<[]Fetched episode> but was:<[Show — ]Fetched episode> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[OTT]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Fetched episode]> but was:<[]> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[PULSE]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<[]Fetched episode> but was:<[Show — ]Fetched episode> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::seriesTitlePinsPaddedBadgeFetchedEpisodeRatingAndPerSkinIdentity[TICKET]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | org.junit.ComparisonFailure: expected:<[]Fetched episode> but was:<[Show — ]Fetched episode> | `sweep-calls/call-o051/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[BROADCAST]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[CLASSIC]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[FROST]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[MARQUEE]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[OTT]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[PULSE]` | `named-s018`: titleView.text = displayTitle.ifBlank { fallbackTitle } → Unit | org.junit.ComparisonFailure: expected:<[Episod]e> but was:<[stal]e> | `sweep-final-proofs/named-s018/` |
+| `TvDockIdentityCharacterizationTest::ticketIdentityPublishesShowThenQualityAndOtherSkinsRetainTheirShowVisibility[TICKET]` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | java.lang.AssertionError: expected:<[Show, Show · 4K · Dolby Vision]> but was:<[Show · 4K · Dolby Vision]> | `sweep-calls/call-o051/` |
+| `TvLegacySeekCharacterizationTest::backwardForwardClampAndPublishTheExactSpeedAndTime` | `call-o582`: updateSeekSpeed(stepMs) → Unit | java.lang.AssertionError: expected:<2.0> but was:<1.0> | `sweep-calls/call-o582/` |
+| `TvLegacySeekCharacterizationTest::hideResumesEvenOriginallyPausedPlaybackAfterExactlyOneHundredFiftyMs` | `call-o569`: player?.play() → Unit | java.lang.AssertionError: expected:<[play]> but was:<[]> | `sweep-calls/call-o569/` |
+| `TvLegacySeekCharacterizationTest::legacyConfirmReleasesResumeHoldThenSeeksAndHides` | `call-o569`: player?.play() → Unit | java.lang.AssertionError: expected:<[seek:65000, play]> but was:<[seek:65000]> | `sweep-calls/call-o569/` |
+| `TvLegacySeekCharacterizationTest::legacyDefaultArgumentsUseTenSecondsAndTheContinuousFlagDoesNotChangeTheStep` | `s576`: seekbarPosition = (seekbarPosition - stepMs).coerceAtLeast(0) → Unit | java.lang.AssertionError: expected:<40000> but was:<50000> | `sweep-observed/s576/` |
+| `TvLegacySeekCharacterizationTest::legacyPostedWidthUsesTheCapturedFractionAndInstantHandlePosition` | `call-o599`: seekbarBackground.post { → Unit | java.lang.AssertionError: expected:<1000> but was:<0> | `sweep-calls/call-o599/` |
+| `TvLegacySeekCharacterizationTest::legacyShowCachesPlayerStateResetsSpeedPausesAndFadesForTwoHundredMs` | `call-o548`: player?.pause() → Unit | java.lang.AssertionError: expected:<[pause]> but was:<[]> | `sweep-calls/call-o548/` |
+| `TvLegacySeekCharacterizationTest::legacyShowRejectsNonpositiveDurationWithExactShortToast` | `call-o545`: Toast.makeText(this, "Seeking not available", Toast.LENGTH_SHORT).show() → Unit | java.lang.AssertionError: expected:<Seeking not available> but was:<null> | `sweep-calls/call-o545/` |
+| `TvLegacySeekCharacterizationTest::legacyShowReturnsForNullPlayerOrAlreadyVisibleAndPausedShowDoesNotPause` | `s542`: videoDuration = player?.duration ?: 0 → Unit | java.lang.AssertionError: expected:<7> but was:<25000> | `sweep-observed/s542/` |
+| `TvLegacySeekCharacterizationTest::setupInstallsBackDownOnlyAndNormalizesTheOverlayToGone` | `call-o006`: hideSeekbar() → Unit | java.lang.AssertionError | `sweep-calls/call-o006/` |
+| `TvNextOverlayCharacterizationTest::artworkRequestBelongsToTheActivityAndEmptyStringClearsItsRequest` | `call-o206`: com.bumptech.glide.Glide.with(this).load(artworkUrl).into(nextBackdrop) → Unit | java.lang.AssertionError | `sweep-calls/call-o206/` |
+| `TvNextOverlayCharacterizationTest::destroyedActivityLeavesArtworkAndVisibilityUntouchedWithoutCreatingARequest` | `s199`: isFinishing \|\| isDestroyed → !(isFinishing \|\| isDestroyed) | java.lang.AssertionError | `sweep-strengthened/s199/` |
+| `TvNextOverlayCharacterizationTest::finishingActivityLeavesArtworkAndVisibilityUntouched` | `s199`: isFinishing \|\| isDestroyed → !(isFinishing \|\| isDestroyed) | java.lang.AssertionError: expected same:<android.graphics.drawable.ColorDrawable@1f90828c> was not:<null> | `sweep-strengthened/s199/` |
+| `TvNextOverlayCharacterizationTest::hideWaitsOneHundredSixtyMsThenRestoresAlphaForTheNextReveal` | `call-o646`: nextOverlay.animate().alpha(0f).setDuration(160).withEndAction { → Unit | java.lang.AssertionError: expected:<160> but was:<220> | `sweep-calls/call-o646/` |
+| `TvNextOverlayCharacterizationTest::nextItemSetsTheExactTitleHidesTheSubtextAndCancelsThePriorFade` | `call-o627`: fadeInNextOverlay() → Unit | java.lang.AssertionError: expected:<0.0> but was:<0.12212524> | `sweep-calls/call-o627/` |
+| `TvNextOverlayCharacterizationTest::resolvingClearsOldTitleAndSubtextThenFadesInForTwoHundredTwentyMs` | `call-o194`: fadeInNextOverlay() → Unit | java.lang.AssertionError: expected:<0> but was:<8> | `sweep-calls/call-o194/` |
+| `TvNextOverlayCharacterizationTest::resolvingFalseClearsTheExistingBackdropAndHidesBothViews` | `call-o195`: hideNextOverlay() → Unit | java.lang.AssertionError: expected:<8> but was:<0> | `sweep-calls/call-o195/` |
+| `TvTicketPublicationCharacterizationTest::absentShowPublishesGoneBeforeQualityMakesTheOverlineVisible` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | java.lang.AssertionError: expected:<[8, 0]> but was:<[0]> | `sweep-calls/call-o051/` |
+| `TvTicketPublicationCharacterizationTest::movieIdentityHidesSeriesOverlineBeforeQualityRevealsIt` | `call-o106`: updateOttExtras(item) → Unit | java.lang.AssertionError: expected:<[8, 0]> but was:<[8]> | `sweep-calls/call-o106/` |
+| `TvTicketPublicationCharacterizationTest::presentShowPublishesVisibleBeforeExtrasPublishesVisibleAgain` | `call-o051`: when (controlsSkin) { → when (TvControlsSkin.CLASSIC) { | java.lang.AssertionError: expected:<[0, 0]> but was:<[0]> | `sweep-calls/call-o051/` |
+
+### Reflection and checkpoint
+
+The post-test conservative quoted/literal-list rescan finds **78 moved names at 699 sites**, excluding dispatch-helper implementation. Step T routed all 34 pre-existing names first; future Step 1 must add the new routes to controls/identity/seek, retain public reflected members and preserve typed/default-argument selectors. Full owners/sites: `reflective-owner-rescan.json`. The two Dart anchors need no retarget; asserted text stays.
+
+All **463 checker/auditor self-tests pass in one final combined run** (`p16/checker-final-full.log`). Step-T original self-comparison (1,727 declarations, zero differences), complete 416/329/542-line compiled fixture, 38 initializer proofs, seven receiver sites, all 23 phase-15 view binding pins (12 casts/11 without; three array stores), volatile identity and readiness-read audits remain valid. All 72 protected paths (production, 54 earlier destinations, earlier manifests, lockfile and ProGuard) match their hashes. Size/diff checks pass; no new exception or size-baseline update. Original detached worktree removed after archive completion. No production move, bug fix, device interaction, branch switch or push. Move/release/R8/Flutter gates await Step 1 and Claude’s independent sample.
+
+## Phase 16 Step 0b — hide/reveal and animation sweep
+
+The first independent sample on `df439aed1` killed 11/16 (69%); t07/t12/t14/t15/t16 survived. This Step 0b closes those exact five and performs the requested systematic re-sweep. Production source remains unchanged; stop before moves for Claude’s second independent sample.
+
+Added **92 named cases**, in five cohesive behavior suites plus the 27-line `TvControlsEndActions` observation helper: 42 show/hide cases across seven separate skin activities, 35 scrub-animation cases across seven separate skin activities, seven metadata/banner cases, five legacy/Next cases and three predicate boundaries. All 287 earlier Phase-16 cases and their 18 fixture/test files remain byte-for-byte unchanged. The expanded original control has **379 passing Phase-16 cases**.
+
+The callback fixture captures the actual framework-installed production `Runnable` from `ViewPropertyAnimator` before cancellation. It deliberately delivers that same callback after a real re-show, or after setting the documented clean-state boundary, and checks visible output. It does not replace a callback body or interpolate a fake animator. The existing natural cancel/re-show case remains unchanged. This deliberate late-delivery stimulus tests the guard that ordinary animation cancellation had masked.
+
+The floating-banner case opens real controls, then starts the actual floating banner. It asserts retained channel identity and visibility after 251 ms, then its original 4,500 ms timeout. Immediate visibility alone was insufficient because the incorrect hide starts a fade. Metadata cases separately pin season-only, episode-only, movie-with-numbers, mixed-case series, blank/simple/whitespace title and initialized GONE/INVISIBLE startup gates.
+
+### Exact independent survivors
+
+| Mutation | Named failing assertion | Evidence |
+| --- | --- | --- |
+| t07 | `TvControlsMetadataBoundaryCharacterizationTest::seasonOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader`: `java.lang.AssertionError: expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t07/` (379 cases; assertion kill) |
+| t12 | `TvControlsMetadataBoundaryCharacterizationTest::visibleControlsLeaveTheFloatingLiveBannerUntilItsOwnTimeout`: `java.lang.AssertionError: floating channel identity retained expected same:<IptvChannelEntry(index=0, channelNumber=7, name=Cinema, url=https://phase5.invalid/live.ts, logoUrl=https://phase5.invalid/logo, group=Movies, isLive=true, isCurrent=true, resumePositionMs=12345, httpHeaders={X-Test=header}, epgNowTitle=null, epgNowStartMs=0, epgNowStopMs=0, epgNowHasArchive=false, epgCatchupMetadataLoaded=false, epgNextTitle=null, epgNextStartMs=0, epgLoaded=false, epgLoading=true, contentType=live, duration=-1, tvArchive=1, tvArchiveDuration=3, sourceId=playlist, sourceName=Source, isFavorite=false, seriesId=series, seriesName=Show, season=2, episode=4, hasNextEpisode=true)> was not:<null>` | `p16/step0b/claude-survivors-final/t12/` (379 cases; assertion kill) |
+| t14 | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]`: `java.lang.AssertionError: simple title restored expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t14/` (379 cases; assertion kill) |
+| t15 | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]`: `java.lang.AssertionError: hide lift before reset expected:<3.7892911> but was:<5.6839366>` | `p16/step0b/claude-survivors-final/t15/` (379 cases; assertion kill) |
+| t16 | `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]`: `java.lang.AssertionError: late hide preserves reveal expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t16/` (379 cases; assertion kill) |
+
+### Statement-level coverage matrix
+
+The Step-0 PSI inventory remains the source of truth: 668 nodes / 43 functions or callbacks, with 439 direct obligations. The three requested functions are re-measured at the unchanged original: **96 nodes, 67 required direct obligations**, every one rerun with a named assertion failure against the expanded fixture. Earlier proofs for other functions remain linked in the Step-0 matrix. This re-sweep adds literal/operand/callback variants: a statement deletion alone had not pinned every guarded state or animation target.
+
+| Function | PSI nodes | Calls / writes / conditions / returns | Required direct obligations freshly proved |
+| --- | ---: | --- | ---: |
+| `showControlsMenu` | 53 | 30 / 16 / 6 / 1 | 39 |
+| `hideControlsMenu` | 37 | 22 / 10 / 3 / 2 | 23 |
+| `hideTitleImmediately` | 6 | 2 / 4 / 0 / 0 | 5 |
+
+| Original PSI obligation (line at df439aed1) | Statement / gate | Mutation → named assertion |
+| --- | --- | --- |
+| o235 (L4687) | `return` | `repeat-o235` → `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[CLASSIC]` |
+| o236 (L4688) | `cancelScheduledHideControlsMenu()` | `repeat-o236` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o237 (L4692) | `showController()` | `repeat-o237` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o240 (L4698) | `liveEntry != null` | `repeat-o240` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o241 (L4699) | `showIptvZapBanner(liveEntry, docked = true)` | `repeat-o241` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o242 (L4701) | `hideIptvZapBanner()` | `repeat-o242` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o244 (L4706) | `cancel()` | `repeat-o244` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o247 (L4714) | `ottSkinInstalled` | `repeat-o247` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o248 (L4717) | `titleContainer.visibility = View.GONE` | `repeat-o248` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[OTT]` |
+| o249 (L4718) | `updateOttIdentity()` | `repeat-o249` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[OTT]` |
+| o250 (L4720) | `hasSeriesMetadata` | `repeat-o250` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o251 (L4721) | `titleView.visibility = View.GONE` | `repeat-o251` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o252 (L4722) | `titleOttContainer.visibility = View.VISIBLE` | `repeat-o252` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o253 (L4724) | `titleView.visibility = View.VISIBLE` | `repeat-o253` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o254 (L4725) | `titleOttContainer.visibility = View.GONE` | `repeat-o254` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o255 (L4728) | `titleView.text?.isNotEmpty() == true \|\| hasSeriesMetadata` | `repeat-o255` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o257 (L4729) | `titleContainer.visibility = View.VISIBLE` | `repeat-o257` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o258 (L4730) | `titleContainer.alpha = 1f` | `repeat-o258` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o259 (L4738) | `::startupGateView.isInitialized &&             startupGateView.visibility == View.VISIBLE` | `repeat-o259` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o260 (L4741) | `hideStremioSourceBadgeImmediately()` | `repeat-o260` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o261 (L4743) | `showStremioSourceBadge()` | `repeat-o261` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o263 (L4746) | `cancel()` | `repeat-o263` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o264 (L4748) | `!controlsMenuVisible` | `repeat-o264` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o265 (L4749) | `controlsMenuVisible = true` | `repeat-o265` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o266 (L4750) | `overlay.visibility = View.VISIBLE` | `repeat-o266` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o267 (L4751) | `overlay.alpha = 0f` | `repeat-o267` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o268 (L4752) | `overlay.translationY = 30f` | `repeat-o268` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o276 (L4759) | `overlay.alpha = 1f` | `repeat-o276` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o277 (L4760) | `overlay.translationY = 0f` | `repeat-o277` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o278 (L4762) | `start()` | `repeat-o278` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o279 (L4763) | `post {                 pauseButton?.requestFocus()             }` | `repeat-o279` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o280 (L4764) | `requestFocus()` | `repeat-o280` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o281 (L4767) | `overlay.alpha = 1f` | `repeat-o281` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o282 (L4768) | `overlay.translationY = 0f` | `repeat-o282` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o283 (L4769) | `overlay.visibility = View.VISIBLE` | `repeat-o283` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o284 (L4770) | `post {                 pauseButton?.requestFocus()             }` | `repeat-o284` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[OTT]` |
+| o285 (L4771) | `requestFocus()` | `repeat-o285` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[OTT]` |
+| o286 (L4774) | `updatePauseButtonLabel()` | `repeat-o286` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o287 (L4775) | `updateSubtitleControlsLift()` | `repeat-o287` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o288 (L4779) | `return` | `repeat-o288` → `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[CLASSIC]` |
+| o289 (L4783) | `iptvZapBannerController.iptvZapBannerDocked` | `repeat-o289` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o292 (L4785) | `cancel()` | `repeat-o292` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o293 (L4787) | `!controlsMenuVisible` | `repeat-o293` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o294 (L4788) | `overlay.visibility = View.GONE` | `repeat-o294` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o295 (L4789) | `overlay.alpha = 0f` | `repeat-o295` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o296 (L4790) | `overlay.translationY = 0f` | `repeat-o296` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o297 (L4791) | `hideTitleImmediately()` | `repeat-o297` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o298 (L4792) | `hideStremioSourceBadge()` | `repeat-o298` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o299 (L4793) | `cancelScheduledHideControlsMenu()` | `repeat-o299` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o301 (L4797) | `cancelScheduledHideControlsMenu()` | `repeat-o301` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o302 (L4798) | `controlsMenuVisible = false` | `repeat-o302` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o303 (L4799) | `restore()` | `repeat-o303` → `TvControlsLiftCharacterizationTest::visibleHideRestoresSubtitleClearanceImmediately` |
+| o308 (L4806) | `titleContainer.visibility = View.GONE` | `repeat-o308` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o309 (L4808) | `titleView.visibility = View.VISIBLE` | `repeat-o309` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o310 (L4809) | `titleOttContainer.visibility = View.GONE` | `repeat-o310` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o311 (L4811) | `start()` | `repeat-o311` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o312 (L4814) | `hideStremioSourceBadge()` | `repeat-o312` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o320 (L4822) | `!controlsMenuVisible` | `repeat-o320` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o321 (L4823) | `overlay.visibility = View.GONE` | `repeat-o321` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o322 (L4824) | `overlay.alpha = 0f` | `repeat-o322` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o323 (L4825) | `overlay.translationY = 0f` | `repeat-o323` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o324 (L4828) | `start()` | `repeat-o324` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o336 (L4849) | `cancel()` | `repeat-o336` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o337 (L4850) | `titleContainer.visibility = View.GONE` | `repeat-o337` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o338 (L4851) | `titleContainer.alpha = 0f` | `repeat-o338` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o339 (L4853) | `titleView.visibility = View.VISIBLE` | `repeat-o339` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o340 (L4854) | `titleOttContainer.visibility = View.GONE` | `repeat-o340` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+
+### Animation parameters and end actions
+
+Exhaustive inventory over all ten moved functions containing animation parameters: **57 parameter variants**, including every literal origin/target, all twelve explicit duration sites, all five explicit easing curves, both `ValueAnimator` endpoints, calculated scrub-thumb translation and instant legacy-handle translation. Raw inventory preserves overlapping expression entries; each links to its exact or enclosing parameter mutation. Targets are asserted before cleanup resets them. Easing is checked at 0.25/0.5/0.75 and animation motion is stepped under the paused real framework clock.
+
+All **seven `withEndAction` installations** and their bodies are swept (**24 mutations**). The sole explicit end-action guard (`!controlsMenuVisible`) is observed both true and false. Unguarded title/show/Next/legacy/thumb callbacks retain their original behavior under deliberate late delivery; no liveness condition is added. The default/inherited easing of the thumb’s settle is preserved. Eight extra predicate variants pin type/season/episode operands, boolean joins, whitespace text, live-entry selection and startup-gate visibility.
+
+| Function | Parameter mutation | Exact parameter change | Named assertion |
+| --- | --- | --- |
+| `showControlsMenu` | `anim-001` | `.alpha(1f)` → `.alpha(0.8f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `showControlsMenu` | `anim-002` | `.translationY(0f)` → `.translationY(10.0f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `showControlsMenu` | `anim-003` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| `showControlsMenu` | `anim-004` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| `showControlsMenu` | `anim-005` | `.translationY = 30f  // Start slightly below for Apple TV effect` → `.translationY = 40.0f  // Start slightly below for Apple TV effect` | `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| `showControlsMenu` | `anim-006` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` | `anim-007` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` | `anim-008` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| `showControlsMenu` | `anim-009` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| `showControlsMenu` | `anim-010` | `.setDuration(300)` → `.setDuration(350)` | `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]` |
+| `showControlsMenu` | `anim-011` | `DecelerateInterpolator(1.5f)` → `DecelerateInterpolator(2f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-012` | `.alpha(0f)` → `.alpha(0.2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-013` | `.alpha(0f)` → `.alpha(0.2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-014` | `.translationY(20f)` → `.translationY(30.0f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-015` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| `hideControlsMenu` | `anim-016` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| `hideControlsMenu` | `anim-017` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-018` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-019` | `.setDuration(250)` → `.setDuration(300)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-020` | `.setDuration(250)` → `.setDuration(300)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-021` | `AccelerateInterpolator(1.2f)` → `AccelerateInterpolator(2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-022` | `.alpha(1f)` → `.alpha(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-023` | `.scaleX(1.15f)` → `.scaleX(1.35f)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-024` | `.scaleY(1.15f)` → `.scaleY(1.35f)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-025` | `.scaleX(1f)` → `.scaleX(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-026` | `.scaleY(1f)` → `.scaleY(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-027` | `.alpha = 0f` → `.alpha = 0.2f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-028` | `.scaleX = 0.6f` → `.scaleX = 0.8f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-029` | `.scaleY = 0.6f` → `.scaleY = 0.8f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-030` | `.setDuration(200)` → `.setDuration(250)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-031` | `.setDuration(100)` → `.setDuration(150)` | `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-032` | `OvershootInterpolator(2f)` → `OvershootInterpolator(3f)` | `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-033` | `.alpha(0f)` → `.alpha(0.2f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-034` | `.scaleX(0.3f)` → `.scaleX(0.5f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-035` | `.scaleY(0.3f)` → `.scaleY(0.5f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-036` | `.scaleX = 1f` → `.scaleX = 0.8f` | `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-037` | `.scaleY = 1f` → `.scaleY = 0.8f` | `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-038` | `.setDuration(150)` → `.setDuration(200)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-039` | `DecelerateInterpolator()` → `DecelerateInterpolator(2f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-040` | `duration = 80` → `duration = 130` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-041` | `DecelerateInterpolator()` → `DecelerateInterpolator(2f)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `showSeekbar` | `anim-042` | `.alpha(1f)` → `.alpha(0.8f)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `showSeekbar` | `anim-043` | `.alpha = 0f` → `.alpha = 0.2f` | `TvLegacySeekCharacterizationTest::legacyShowCachesPlayerStateResetsSpeedPausesAndFadesForTwoHundredMs` |
+| `showSeekbar` | `anim-044` | `.setDuration(200)` → `.setDuration(250)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` | `anim-045` | `.alpha(0f)` → `.alpha(0.2f)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` | `anim-046` | `.setDuration(150)` → `.setDuration(200)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `updateSeekbarPosition` | `anim-047` | `.setDuration(0)` → `.setDuration(50)` | `TvLegacySeekCharacterizationTest::legacyPostedWidthUsesTheCapturedFractionAndInstantHandlePosition` |
+| `fadeInNextOverlay` | `anim-048` | `.alpha(1f)` → `.alpha(0.8f)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `fadeInNextOverlay` | `anim-049` | `.alpha = 0f` → `.alpha = 0.2f` | `TvNextOverlayCharacterizationTest::nextItemSetsTheExactTitleHidesTheSubtextAndCancelsThePriorFade` |
+| `fadeInNextOverlay` | `anim-050` | `.setDuration(220)` → `.setDuration(270)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-051` | `.alpha(0f)` → `.alpha(0.2f)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-052` | `.alpha = 1f` → `.alpha = 0.8f` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-053` | `.setDuration(160)` → `.setDuration(210)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `updateCinemaProgressUI` | `anim-054` | `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, targetProgress)` → `ValueAnimator.ofFloat(0f, targetProgress)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-055` | `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, targetProgress)` → `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, 0f)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateSeekbarPosition` | `anim-056` | `.translationX(handleX)` → `.translationX(0f)` | `TvLegacySeekCharacterizationTest::legacyPostedWidthUsesTheCapturedFractionAndInstantHandlePosition` |
+| `updateCinemaProgressUI` | `anim-057` | `thumb.translationX = thumbOffset.coerceAtLeast(0f)` → `thumb.translationX = 0f` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+
+| End-action obligation | Callback statement / guard | Mutation → named assertion |
+| --- | --- | --- |
+| `showControlsMenu` / o275 | `installation` | `end-o275` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` / o276 | `overlay.alpha = 1f` | `end-o276` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` / o277 | `overlay.translationY = 0f` | `end-o277` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `hideControlsMenu` / o307 | `installation` | `end-o307` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o308 | `titleContainer.visibility = View.GONE` | `end-o308` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o309 | `titleView.visibility = View.VISIBLE` | `end-o309` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o310 | `titleOttContainer.visibility = View.GONE` | `end-o310` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o319 | `installation` | `end-o319` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o320 | `!controlsMenuVisible` | `end-o320` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o321 | `overlay.visibility = View.GONE` | `end-o321` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o322 | `overlay.alpha = 0f` | `end-o322` → `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[CLASSIC]` |
+| `hideControlsMenu` / o323 | `overlay.translationY = 0f` | `end-o323` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `enterCinemaSeekMode` / o457 | `installation` | `end-o457` → `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` / o462 | `thumb.animate()                         .scaleX(1f)                         .scaleY(1f)                         .setDuration(100)                         .start()` | `end-o462` → `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` / o483 | `installation` | `end-o483` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o484 | `thumb.visibility = View.INVISIBLE` | `end-o484` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o485 | `thumb.scaleX = 1f` | `end-o485` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o486 | `thumb.scaleY = 1f` | `end-o486` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `hideSeekbar` / o567 | `installation` | `end-o567` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` / o568 | `seekbarOverlay.visibility = View.GONE` | `end-o568` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` / o569 | `player?.play()` | `end-o569` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideNextOverlay` / o643 | `installation` | `end-o643` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` / o644 | `nextOverlay.visibility = View.GONE` | `end-o644` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` / o645 | `nextOverlay.alpha = 1f` | `end-o645` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+
+### Added-test mutation table
+
+Every new named case has an assertion witness on the original. Rows below use its own failing assertion, not a compile error or another test’s crash. Raw source patches, immutable fixture hashes/copies, complete Gradle logs and JUnit XML are under `p16/step0b/<run>/<mutation>/`; definitions and the machine-readable coverage matrix are adjacent.
+
+| New named test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[BROADCAST]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[CLASSIC]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[FROST]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[MARQUEE]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[OTT]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[PULSE]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[TICKET]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[BROADCAST]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[CLASSIC]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[FROST]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[MARQUEE]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[OTT]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[PULSE]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[TICKET]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[BROADCAST]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[FROST]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[MARQUEE]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[OTT]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[PULSE]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[TICKET]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::episodeOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::immediateTitleHideResetsEveryPresentationPropertyFromAnInvisibleSimpleTitle` | `statement-resweep/repeat-o337` | `java.lang.AssertionError: expected:<8> but was:<4>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::missingSeriesNumbersWithTitleUsesTheSimpleHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::mixedCaseSeriesWithBothNumbersUsesTheOttHeaderWithoutSimpleText` | `animation-sweep/anim-003` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::movieWithBothNumbersUsesTheSimpleHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::seasonOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader` | `claude-survivors/t07` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::visibleControlsLeaveTheFloatingLiveBannerUntilItsOwnTimeout` | `claude-survivors/t12` | `java.lang.AssertionError: floating channel identity retained expected same:<IptvChannelEntry(index=0, channelNumber=7, name=Cinema, url=https://phase5.invalid/live.ts, logoUrl=https://phase5.invalid/logo, group=Movies, isLive=true, isCurrent=true, resumePositionMs=12345, httpHeaders={X-Test=header}, epgNowTitle=null, epgNowStartMs=0, epgNowStopMs=0, epgNowHasArchive=false, epgCatchupMetadataLoaded=false, epgNextTitle=null, epgNextStartMs=0, epgLoaded=false, epgLoading=true, contentType=live, duration=-1, tvArchive=1, tvArchiveDuration=3, sourceId=playlist, sourceName=Source, isFavorite=false, seriesId=series, seriesName=Show, season=2, episode=4, hasNextEpisode=true)> was not:<null>` |
+| `TvControlsPredicateCharacterizationTest::initializedGoneStartupGateDoesNotSuppressTheSourceBadge` | `predicate-sweep/predicate-gate-visibility` | `java.lang.AssertionError: a non-visible initialized gate permits the badge expected:<0> but was:<8>` |
+| `TvControlsPredicateCharacterizationTest::initializedInvisibleStartupGateDoesNotSuppressTheSourceBadge` | `predicate-sweep/predicate-gate-visibility` | `java.lang.AssertionError: a non-visible initialized gate permits the badge expected:<0> but was:<8>` |
+| `TvControlsPredicateCharacterizationTest::whitespaceSimpleTitleCountsAsNonemptyForTheClassicReveal` | `predicate-sweep/predicate-title-or` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedLegacyExitStillHidesAndResumesAfterAnotherReveal` | `end-action-sweep/end-o567` | `java.lang.AssertionError: production animation must install its end action` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedLegacyExitWithNoPlayerHidesWithoutAnExceptionOrPlayback` | `end-action-sweep/end-o567` | `java.lang.AssertionError: production animation must install its end action` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedNextExitResetsVisibilityAndAlphaEvenAfterAnotherReveal` | `animation-sweep/anim-052` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` | `animation-sweep/anim-042` | `java.lang.AssertionError: expected:<1.0> but was:<0.79995066>` |
+| `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` | `animation-sweep/anim-048` | `java.lang.AssertionError: expected:<1.0> but was:<0.7999592>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[BROADCAST]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[FROST]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[MARQUEE]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[OTT]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[PULSE]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[TICKET]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[BROADCAST]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[FROST]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[MARQUEE]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[OTT]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[PULSE]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[TICKET]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[BROADCAST]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[FROST]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[MARQUEE]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[OTT]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[PULSE]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[TICKET]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[BROADCAST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[FROST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[MARQUEE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[OTT]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[PULSE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[TICKET]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[BROADCAST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[FROST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[MARQUEE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[OTT]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[PULSE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[TICKET]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+
+### Evidence and JVM comparison
+
+**166 original mutation attempts; 166 named assertion kills**, zero compile-invalid/crash-only/surviving mutations in this Step-0b sweep. No equivalent variants claimed. The five exact independent survivors were rerun against all 376 initial expanded cases, then all **379 final cases**; both runs killed all five. Controls: `control-all-first` and `control-final`; neither has a Phase-16 failure. Initial compile-only fixture correction and an aborted root-filter setup are discarded control attempts, not proofs.
+
+Clean JVM `p16-step0b`: **2,322 identities (2,321 pass, one unchanged known source-browser focus failure)** versus `p16-step0` **2,230 (2,229 pass, same failure)**. Exactly **92 passing additions**, no removals and strict equality of every old status. `android_junit_evidence.py compare p16-step0b --against p16-step0` passes; stable tree fingerprint, not aborted, matched evidence-only 1 GiB worker heap / Android Studio JBR. Archive: `junit/p16-step0b`; strict comparison: `p16/step0b/jvm-strict-comparison.json`.
+
+Original lint and unchanged checker/auditor evidence from Step T/0 remain applicable; no production/tooling change invalidates them. The protected-file check preserves all 72 hashes, including production, earlier destinations, lockfile and ProGuard; size check and diff check pass without a baseline update. Final reflection rescan is archived in `p16/step0b/reflective-owner-rescan.json`. The detached original is removed after proofs. No production move, bug fix, push or device interaction; **STOP before Step 1 for the second independent sample**.
+
+### Phase 16 step 0c — second sample: identity, icon gating and remaining time
+
+Original `df439aed1`; 399 Phase-16 cases pass with the same evidence-only
+1 GiB worker heap. Added 20 identities (two cohesive helpers, 40/24 lines),
+each with an assertion mutation proof. Claude's exact u06/u12/u14 changes
+were rerun against all 399 cases. The original and all Kotlin/Dart assertion
+bytes from step 0b remain unchanged; no production changes here.
+
+| Test / cases | Original mutation | Failing assertion / outcome |
+| --- | --- | --- |
+| `titleUpdateHidesAPreviouslyVisibleOrInvisibleChannelBadge` × 7 skins | u06 removes `channelBadge.visibility = View.GONE` | Previously VISIBLE badge stays visible: expected GONE (8), actual VISIBLE (0); also pins INVISIBLE → GONE. |
+| `uninstalledDockUsesLegacyPlayAndPauseIconsEvenWithASelectedStyledSpec` × 6 styled skins | u12 removes `takeIf { ottSkinInstalled }` | Expected legacy `ic_play`, actual dock/wire play drawable; both playback states are asserted. |
+| Same icon test × all 7 skins | `c-icons-legacy`: legacy pause fallback becomes `ic_play` | Expected legacy `ic_pause`, actual `ic_play`; proves CLASSIC as well. |
+| `remainingTimeClampsAtZeroAtAndBeyondTheDuration` × 6 styled skins | `c-remaining-threshold`: clamp minimum becomes 1,000 ms | Expected `-00:00`, actual `-00:01` at exact duration; also asserts duration + 61,000 ms and 1,000 ms before duration. |
+| Exact u14 (drop subtraction clamp) × all 399 cases | Exact independent mutation | **Equivalent**, exit 0/no failures. `formatTime(ms)` immediately returns `"00:00"` for every `ms <= 0`; for positive `ms` the removed primitive clamp is an identity. Thus `formatTime(max(x,0)) == formatTime(x)` for every Long subtraction result, with the identical minus prefix and no side effect. Original exact zero string is `-00:00` (padded minutes), preserved. |
+
+u12 is equivalent only for CLASSIC (`dockSkinSpec == null`), not for every
+production state. `TvControlsDockController.setupControls` installs a styled
+skin only when `!host.isIptvMode`; selected styled skins can have a non-null
+spec while `ottSkinInstalled == false`. The test explicitly asserts that spec
+condition and exercises the retained legacy icon fallback. No behavior fixed.
+
+Coverage matrix extension: `updateTitle`'s badge reset now starts from two
+non-GONE states in all seven skins; `updatePauseButtonLabel` covers the
+selected-spec / installed-flag combinations and both play/pause resources;
+`updateCinemaProgressUI` covers remaining-time < 0, == 0 and > 0. The pure
+formatter's nonpositive guard establishes the u14 equivalence. Every added
+identity appears in `p16/step0c/named-proofs.json`; exact definitions, immutable
+fixture hashes, raw Gradle logs and XML are under `p16/step0c/survivors/`.
+The initial control's time-format and lazy-getter harness expectation errors
+are retained under `control/` and excluded; corrected `control-corrected/`
+passes before every proof.
+
+Clean test-task archive `p16-step0c`: 2,342 identities, 2,341 pass and the
+unchanged source-browser focus failure. Comparison against `p16-step0b`
+retains every prior identity/status and adds only the 20 passing cases;
+complete XML, stable fingerprint, matched JBR/heap. Final conservative owner
+rescan: 78 referenced moved names, 766 literal sites; Step 1 will route all
+80 moved Activity members. Lockfile, ProGuard, original production and all
+54 earlier destinations unchanged. Evidence `p16/step0c/`,
+`junit/p16-step0c/`.
+
+### Phase 16 step 1 — controls overlay, dock identity and seek/scrub
+
+Materialized `tvplayer_p16.json` exactly at original `df439aed1`: all 1,727
+declarations classified, zero checker differences. New owner
+`TvControlsOverlayController` eagerly constructs `identity` and `seek` at
+the pinned slots. Files 416/329/542 lines, Activity 6,986 → 5,891.
+Twenty-three shared dock fields (20 nullable views, the chips array and two scrub flags) move (2/8/13); `ottSkinInstalled` and
+the 18 lateinit title/Next/legacy views stay Activity-owned. Computed
+explicitly qualified Host forwarders, two readiness getters, 46 re-points
+(68 edits in 10 patched Activity properties), 48 in-place edits and the
+two `onDestroy` patches match the manifest with unchanged statement order.
+All 38 initializer proofs and 54 earlier destination byte comparisons pass.
+
+Reflection retargets: original Activity name → following owner path in
+`TvPlayerControllerOwners.kt` (34 existing routes plus 46 new = all 80
+Activity members). `CONTROLS_AUTO_HIDE_DELAY_MS` is a file-private constant,
+not a reflected Activity member. Original-access dispatch falls back to the
+Activity on the original; extraction uses public reflected members.
+Assertions and every Dart file remain byte-identical to step 0c; no Dart
+anchor change is needed.
+
+- `controlsOverlayController`: `controlsOverlay`, `pauseButton`, `controlsMenuVisible`, `controlsHandler`, `hideControlsRunnable`, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`, `togglePlayPause`, `showControlsMenu`, `hideControlsMenu`, `updateSubtitleControlsLift`, `hideTitleImmediately`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`, `updatePauseButtonLabel`, `setResolvingState`, `setNextOverlayBackdrop`, `showNextOverlay`, `fadeInNextOverlay`, `hideNextOverlay`, `isCleanPlaybackState`.
+- `controlsOverlayController.identity`: `ottIdentityTitle`, `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`, `ottIdentityDivider`, `ottQualityChips`, `ottRatingChip`, `ottMetaLine`, `dockTagsCacheKey`, `dockTagsCache`, `ottShowName`, `guideTitleFor`, `updateTitle`, `updateOttIdentity`, `updateOttExtras`, `dockTagsFor`.
+- `controlsOverlayController.seek`: `seekbarBackgroundWidth`, `currentSeekSpeed`, `debrifyTimeDisplay`, `debrifyTimeCurrent`, `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressContainer`, `cinemaProgressBackground`, `cinemaProgressThumb`, `cinemaSpeedIndicator`, `ottScrubPreviewChip`, `ottScrubPreviewText`, `cinemaProgressTrackWidth`, `cinemaSeekMode`, `cinemaSeekWasPlaying`, `cinemaProgressAnimator`, `cinemaLastAnimatedProgress`, `seekbarVisible`, `seekbarPosition`, `videoDuration`, `seekbarHandler`, `seekbarProgressRunnable`, `setupSeekbar`, `startSeekbarProgressUpdates`, `stopSeekbarProgressUpdates`, `updateSeekbarProgress`, `showControlsAndFocusProgressBar`, `setupCinemaProgressBar`, `enterCinemaSeekMode`, `exitCinemaSeekMode`, `confirmCinemaSeek`, `updateCinemaSeekSpeed`, `updateCinemaProgressUI`, `showSeekbar`, `hideSeekbar`, `confirmSeekPosition`, `seekBackward`, `seekForward`, `updateSeekSpeed`, `updateSeekbarUI`, `updateSeekbarPosition`, `seekBy`.
+
+All 399 Phase-16 cases pass after extraction. Compiled audit passes seven
+receiver sites including both Glide calls, plus all 23 frozen phase-15
+view-binding pins (12 casts, 11 absent, three array stores), unchanged field
+descriptors and volatile identity field / two writers / playlist Host reader.
+Size baseline ratcheted with `--update`; every new file is below 800.
+Only manifest-defined production edits, owner-map additions and the size
+ratchet applied. Full phase gate follows. Evidence `p16/step1/`,
+`p16/gate/overload-audit.json`, `audit-contract.json`, `teardown-order.json`,
+`initializer-timing.json`, `earlier-destinations.json`, `test-retargets.json`.
+
+### Phase 16 gate checkpoint — native parity before full Flutter
+
+Clean native gate at Step-1 commit `8f3c3d35f`: all 2,342 JVM identities/statuses
+exactly match `p16-step0c` (2,341 pass, unchanged source-browser focus failure),
+complete XML, same JBR/1 GiB heap and stable clean input. All 399 Phase-16
+cases pass. Five production Kotlin warnings are unchanged; current source
+checker, original self-comparison, historical p1..p15 merge checks and 54
+earlier destination files pass. Extended compiled audit, 38 initializer
+proofs, teardown and byte-identical assertions/Dart files pass.
+
+Lint comparison: no new issues; all 175 opt-in identities are unchanged.
+Total 1,352 → 1,351 (253 → 252 errors, 1,099 warnings unchanged). The sole
+removed finding is `GestureBackNavigation` in `setupCinemaProgressBar`'s
+Back/Escape case, now in `TvSeekScrubController`. AGP 8.11.1's actual
+`GestureBackNavDetector.visitReference` bytecode (pc 151–205) reports only
+when its containing method belongs to Activity, Dialog or
+DialogInterface.OnKeyListener; the new owner belongs to none. The listener
+branch is manifest-identical after declared substitutions, and all per-skin
+Back assertions pass. This diagnostic disappearance is an extraction-context
+effect; predictive-back handling is not fixed or suppressed. Original raw
+strict failure and the exact one-removal comparison remain under
+`gate/initial-strict-lint-comparison.*` and
+`gate/lint-structural-comparison.json`; detector bytecode/hash is archived.
+Every other normalized issue identity is retained.
+
+`flutter build apk --release --no-pub` succeeds without installation. R8
+and independent DEX checks retain all 8 generated classes / 289 members,
+including owner, presenters, Host, Activity Host object, Runnable, enum
+helper and `TvControlsOverlayControllerKt`; three negative controls pass.
+Decoder script reproduces the phase-15 exit/output and all three library
+hashes / missing-feature sets match phase 1: **pending-environment**.
+
+Settled `flutter analyze --no-pub` exactly matches all 1,758 phase-15
+diagnostics (917 errors, 113 warnings, 728 info). Initial analysis overlapped
+native asset rebuilding and duplicated 23 existing diagnostics at identical
+file/line positions; that failed comparison is retained under
+`initial-overlapping-build-*`, then a stable rerun exactly matches the
+original multiset. No input or analyzer rule changed.
+
+Full historical/Phase-16 checker fixture suite continues independently with
+pinned tool/manifest hashes. This `gate` checkpoint provides a clean tree
+for the affected Dart and full Flutter suite comparison with the phase-15
+gate. Their final outcomes will be appended after completion.
+
+### Phase 16 final gate — complete; stop after this phase
+
+All **463 checker/auditor self-tests** pass, including every historical
+suite with its own manifest and the complete Phase-16 fixture / negatives.
+Tool and manifest fingerprints are unchanged throughout and at final gate.
+The current checker classifies all 1,727 declarations with zero differences;
+historical `--at` checks pass for p1..p15 at their merge SHAs. All 54 earlier
+destinations remain byte-identical to `df439aed1`. The compiled audit,
+23 phase-15 bindings (12 casts/11 absent/three array stores), volatile
+identity writers/reader, 38 initializer proofs and teardown order pass.
+All 80 reflection routes resolve; only the immutable owner map changed,
+with every pre-move Kotlin assertion and every Dart file preserved.
+
+Clean gate commit `3ab9553da`: affected source tests exactly preserve
+all 45 statuses (44 success / same one failure). Full Flutter run via
+`suite_evidence.py` exactly preserves all **12,855** phase-15 identities
+and statuses: **12,794 success, 13 failure, 28 error, 20 skipped** across
+1,232 suites. Stable clean input, same SDK/flags; no new or missing result.
+No known-failure allowlist or `--record` update is used. Raw JSONL, environment
+metadata and strict comparisons are archived under `p16/gate/`.
+
+Clean JVM at Step-1 commit `8f3c3d35f` exactly preserves all 2,342
+`p16-step0c` statuses; all 399 Phase-16 characterizations pass. Release,
+R8/DEX (8 classes, 289 members), five compiler warnings and 1,758 analyzer
+diagnostics are verified as recorded above. Lint has no additions, all
+175 opt-in identities retained, with the one explained Activity-only
+non-opt-in diagnostic disappearance (not a behavior fix). Decoder remains
+**pending-environment** with identical phase-15 failure and phase-1 binary
+provenance. Existing JVM/Flutter/lint/analyzer failures are retained and not
+reported as passing raw runs. The initial analyzer duplicate-output attempt
+and initial strict lint comparison are retained with their resolutions.
+
+Evidence `p16/gate/summary.json`, `p16/step0c/`, `p16/step1/`,
+`junit/p16-step0c/`, `junit/p16-gate/`. All commits carry the requested
+trailers. Lockfile, ProGuard and earlier source/manifests unchanged; original
+mutation worktree removed. No push, device, emulator or self independent
+review. **STOP after Phase 16; Phase 17 not started.**

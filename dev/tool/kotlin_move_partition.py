@@ -140,6 +140,27 @@ def initializer_kind(expression):
         return 'constant'
     if re.fullmatch(r'-[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?', expression):
         return 'constant'
+    # Phase 16: scalar floats, typed fixed-size null arrays, and one fieldless
+    # Runnable implementation. Callback execution is deferred until posting.
+    if re.fullmatch(r'[0-9]+(?:\.[0-9]+)?f', expression):
+        return 'constant'
+    if re.fullmatch(r'arrayOfNulls<[A-Za-z_][\w.]*(?:\?)?>\([0-9]+\)', expression):
+        return 'allocation'
+    if expression.startswith('object : Runnable {'):
+        wrapper = 'class Proof { val callback = ' + expression + '\n}'
+        try:
+            unit = k.parse({'inert-runnable': wrapper})['inert-runnable']
+            outer = unit['declarations'][0]['children'][0]
+            objects = [n for n in outer['children'] if n['kind'] == 'KtObjectDeclaration']
+            if len(objects) == 1:
+                obj = objects[0]
+                children = k.members(obj)
+                if (wrapper[obj['start']:obj['body_start']].strip() == 'object : Runnable' and
+                        len(children) == 1 and children[0]['selector'] == 'fun run()' and
+                        wrapper[children[0]['start']:children[0]['end']].lstrip().startswith('override fun run()')):
+                    return 'allocation'
+        except ValueError:
+            pass
     if expression == 'PlaylistMode.NONE':
         return 'constant'
     if expression == 'Any()':
@@ -268,13 +289,18 @@ def check_initializer_timing(manifest, inventory, original, errors):
             if expression.startswith('object : AnalyticsListener'):
                 bindings['AnalyticsListener'] = {'androidx.media3.exoplayer.analytics.AnalyticsListener'}
                 bindings['Format'] = {'androidx.media3.common.Format'}
+            if manifest['phase'] >= 16:
+                if expression.startswith('arrayOfNulls<'):
+                    bindings['arrayOfNulls'] = {'kotlin.arrayOfNulls'}
+                if expression.startswith('object : Runnable'):
+                    bindings['Runnable'] = {'java.lang.Runnable', 'kotlin.Runnable'}
             if bindings:
                 package = re.search(r'^package\s+([\w.]+)', original, re.M).group(1)
                 sources = [original]
                 sources.extend(path.read_text() for path in (k.ROOT / 'android/app/src/main/kotlin').rglob('*.kt')
                                if re.search(r'^package\s+' + re.escape(package) + r'\s*$', path.read_text(), re.M))
                 for binding, allowed in bindings.items():
-                    shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|object|typealias)\s+)'
+                    shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|interface|object|typealias)\s+)'
                                            + re.escape(binding) + r'\b|\b' + re.escape(binding) + r'\s*:', source)
                                  for source in sources)
                     for imported in re.findall(r'^import\s+([^\n]+)', original, re.M):
@@ -293,7 +319,7 @@ def check_initializer_timing(manifest, inventory, original, errors):
             sources = [original]
             sources.extend(path.read_text() for path in (k.ROOT / 'android/app/src/main/kotlin').rglob('*.kt')
                            if re.search(r'^package\s+' + re.escape(package) + r'\s*$', path.read_text(), re.M))
-            shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|object|typealias)\s+)emptyList\b|\bemptyList\s*:', text)
+            shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|interface|object|typealias)\s+)emptyList\b|\bemptyList\s*:', text)
                          for text in sources)
             for imported in re.findall(r'^import\s+([^\n]+)', original, re.M):
                 parts = imported.strip().split(' as ')
