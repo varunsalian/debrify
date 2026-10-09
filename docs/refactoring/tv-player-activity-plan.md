@@ -3291,3 +3291,15 @@ correction, subtitle menu rows.
   file-size/diff checks pass. Production, old assertions, lockfile and
   ProGuard unchanged; no moves, gate, push, branch switch, device or bug fix.
   Claude's independent sample and Step 1 remain for the next checkpoint.
+
+- 2026-10-09 — **Phase 14 Step 0b complete.** Claude r03/r16 are now
+  assertion-killed on original 82b16832c against all 186 characterizations;
+  r17 is equivalent (en/eng share canonical English matching), proved by
+  original bytecode execution over 13,417 tags and the full r17 rerun.
+  Fourteen new boundary tests each have named assertion witnesses; the
+  type/null/empty/language sweep kills 15 of 16 variants, with only r17
+  equivalent. The recording suspend-call seam preserves real IO/retries/Main.
+  p14-step0b has 1,606 identities (1,605 pass, same known focus failure):
+  fourteen passing additions only vs p14-step0, stable matched 1 GiB inputs.
+  Matrix/table and raw evidence under p14/step0b/. No production or protected
+  input changes. Step 1 follows under the approved manifest.

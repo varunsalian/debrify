@@ -71,7 +71,7 @@ internal open class TvPhase14OriginalTest : TvPhase5OriginalTest() {
         activity.findViewById<View>(com.debrify.app.R.id.android_tv_startup_gate).visibility = View.GONE
         idle()
         endpoint.requests.clear(); probe.events.clear()
-        TvPhase14SubtitleFetchShadow.responses.clear(); TvPhase4CueFetchShadow.responses.clear()
+        TvPhase14SubtitleFetchShadow.invocations.clear(); TvPhase14SubtitleFetchShadow.responses.clear(); TvPhase4CueFetchShadow.responses.clear()
         assertNotNull("Activity constructs the borrowed subtitle service", field("stremioSubtitleService"))
         set("userManuallySelectedSubtitle", true) // Slot tests must not start a separate subtitle download.
     }
@@ -191,7 +191,7 @@ internal open class TvPhase14OriginalTest : TvPhase5OriginalTest() {
         jobs().forEach { it.cancel(); settle(it) }
         if (!destroyed) lifecycle.destroy()
         MainActivity.setAndroidTvPlayerChannel(savedChannel)
-        TvPhase14SubtitleFetchShadow.responses.clear(); TvPhase4CueFetchShadow.responses.clear()
+        TvPhase14SubtitleFetchShadow.invocations.clear(); TvPhase14SubtitleFetchShadow.responses.clear(); TvPhase4CueFetchShadow.responses.clear()
         ShadowDialog.getLatestDialog()?.dismiss()
         org.robolectric.shadows.ShadowToast.reset()
     }
