@@ -1649,7 +1649,11 @@ sites target `TorboxTvPlayerActivity` and are unaffected). No Dart retargets
 unchanged).
 
 **Pinned as-is (follow-ups, not fixed):** a late metadata reply after destroy
-still runs the fetch path (content token never bumped in `onDestroy`); a
+still runs the fetch path (content token never bumped in `onDestroy`) — but
+because destruction already nulled `stremioSubtitleService`, it obtains zero
+addons, clears slots, sets discovery ready and loading **false**, launches
+nothing, while the captured metadata cache still receives the reply (pinned
+exactly; separate from the already-running-fetch cancellation case); a
 fetch cancelled by the activity's `subtitleScope.cancel()` is caught by
 `catch (e: Exception)`, marks the addon FAILED, retries auto-select and can
 toast after destroy; catalog search has no request counter, so an older
@@ -1657,7 +1661,13 @@ reply can overwrite newer results.
 
 ### Step T
 
-Classifier form `emptyList()` + negatives; phase-14 extraction fixture (owner
+`emptyList()` is already accepted (phase-4 proofs); step T only tightens its
+validation (declared type / stdlib binding checks, historical proofs stay
+compatible); `ListView(this)` constructor-receiver transformation (Context
+constructor pinned, inner `this.adapter` receiver preserved, omission and
+substitution negatives), mirroring the phase-12 `EditText` mechanism; the
+PSI collector also records `KtSuperTypeCallEntry` call metadata so the
+`ArrayAdapter` super-constructor argument is audited; phase-14 extraction fixture (owner
 + fieldless dialogs, borrowed scope/service/readiness) + negatives (receiver
 exclusions above, the named `resources =` argument, the `ArrayAdapter`
 super-constructor site); compiled audit; per-phase dispatcher keeping all
@@ -1666,9 +1676,13 @@ historical suites; earlier destinations frozen at the phase-13 merge.
 ### Step 0 — characterization of the original
 
 Three harnesses first, demonstrated on the original: a latch on
-`StremioSubtitleService.attemptFetch`, a fake Flutter channel for
-`searchSubtitleCatalogs` and `requestMovieMetadata` (paired inline/queued
-replies), and a dialog harness. Then: addon slot fetch/retry/failure, flat
+`StremioSubtitleService.attemptFetch`, a fake Flutter channel with
+**endpoint-specific contracts** — `searchSubtitleCatalogs` (success/error;
+`runOnUiThread` runs inline on the activity thread; inline, queued-main and a
+worker-thread reply proving main-thread dispatch) and `requestMovieMetadata`
+(no `onError`: a null channel produces no callback, a send failure invokes
+`callback(null)` synchronously), each asserting the resulting controller
+loading state — and a dialog harness. Then: addon slot fetch/retry/failure, flat
 list rebuild, auto-select rules and `failedSubtitleUrls`, injected subtitle
 seeding, IMDb lookup path, manual identity apply, identity label, search
 dialogs (query, results, season/episode prompt), the 4 menu rows, the
@@ -3234,3 +3248,8 @@ correction, subtitle menu rows.
   unchanged AppCompat manifest theme. Test helper split (325/494), its size
   exception removed. Activity 10,297 → 9,079. Decoder verification remains
   pending-environment. Phase 13 complete; merged.
+- 2026-10-09 — phase 14 design round 1 (Codex): **No P1s**; P2s folded
+  (correct post-destroy late-metadata outcome; endpoint-specific fake-channel
+  contracts incl. worker-thread catalog reply; ListView constructor-receiver
+  transformation + KtSuperTypeCallEntry audit); P3 `emptyList()` wording.
+  Phase 14 design approved.
