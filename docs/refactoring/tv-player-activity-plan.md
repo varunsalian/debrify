@@ -3354,3 +3354,12 @@ correction, subtitle menu rows.
   Lockfile, ProGuard and earlier manifests/destinations remain unchanged.
   No push, branch switch, self independent review, device/emulator or bug fix.
   Phase 15 not started.
+- 2026-10-09 — phase 14 post-implementation reviews of `66ddf4d27..3c09a7a38`.
+  Claude's independent sample 14/17 (82 %); r03/r16 closed in 0b; r17
+  ("en" vs "eng" default) equivalent — both canonicalize to English
+  (13,417 language-tag checks, independently re-run by the reviewer).
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; single
+  ownership of 21 fields, borrowed scope/service/readiness untouched,
+  teardown cancellation → flat-list clear → service null order unchanged,
+  `this.adapter` binding preserved. Activity 9,079 → 7,982. Decoder
+  verification remains pending-environment. Phase 14 complete; merged.
