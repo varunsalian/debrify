@@ -262,10 +262,18 @@ def run(manifest_path=k.MANIFEST):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase14OverloadsTest))
     if manifest['phase'] >= 15:
         import test_kotlin_moves_phase15
-        test_kotlin_moves_phase15.MANIFEST = manifest
+        test_kotlin_moves_phase15.MANIFEST = (manifest if manifest['phase'] == 15 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p15.json').read_text()))
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase15.Phase15MovesTest))
         from test_kotlin_overloads_phase15 import Phase15OverloadsTest
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase15OverloadsTest))
+    if manifest['phase'] >= 16:
+        import test_kotlin_moves_phase16
+        test_kotlin_moves_phase16.MANIFEST = (manifest if manifest['phase'] == 16 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p16.json').read_text()))
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase16.Phase16MovesTest))
+        from test_kotlin_overloads_phase16 import Phase16OverloadsTest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase16OverloadsTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 

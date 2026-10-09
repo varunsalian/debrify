@@ -17037,3 +17037,97 @@ elvis, 35 `&&`/`||` sites):
   "keep open while focused", but never times out).
 - `scheduleHideControlsMenu` never arms while paused/buffering (`isPlaying` false), so controls opened during
   buffering stay up until the next interaction.
+
+## Phase 16 step T — measurements at `df439aed1`
+
+The original Activity has 6,986 physical lines and 1,727 PSI declarations. The approved split selects 80 Activity members plus `CONTROLS_AUTO_HIDE_DELAY_MS`; all are classified in `dev/tool/kotlin_moves/tvplayer_p16.json`. The owner slot is `controlsOverlay` at line 209; seek's two earlier inert fields run at that same effective slot. The complete extraction fixture is 416/329/542 lines (controls/identity/seek); it is evidence only. No production move has been applied.
+
+The earlier inventory's reflection count is superseded: all 34 existing moved names are routed before Step T (151 quoted accesses), with original-owner compatibility while the controller is absent. Twelve independent clean-state blockers, rather than the inventory's older nine-condition wording, are required by the approved plan.
+
+The manifest pins 38 initializer proofs, ten cross-qualifications, 48 Activity token edits in eleven declarations, and 46 Host forwarders/68 token edits in ten whole-property rows. Substitutions total 228: 53 visibility, 155 ordinary Host reads plus three controls-dock Host reads, ten cross-qualifications, three Activity receivers and four inherited receivers. Both eager collaborators follow the five owner fields. The shared Host has 54 computed, explicitly qualified members.
+
+| Original member | Start–end line | Destination |
+| --- | --- | --- |
+| `seekbarBackgroundWidth` | 206–206 | `TvSeekScrubController` |
+| `currentSeekSpeed` | 207–207 | `TvSeekScrubController` |
+| `controlsOverlay` | 209–210 | `TvControlsOverlayController` |
+| `pauseButton` | 211–211 | `TvControlsOverlayController` |
+| `debrifyTimeDisplay` | 326–327 | `TvSeekScrubController` |
+| `debrifyTimeCurrent` | 328–328 | `TvSeekScrubController` |
+| `debrifyTimeTotal` | 329–329 | `TvSeekScrubController` |
+| `debrifyProgressLine` | 330–330 | `TvSeekScrubController` |
+| `cinemaProgressBuffered` | 331–331 | `TvSeekScrubController` |
+| `cinemaProgressContainer` | 333–334 | `TvSeekScrubController` |
+| `cinemaProgressBackground` | 335–335 | `TvSeekScrubController` |
+| `cinemaProgressThumb` | 336–336 | `TvSeekScrubController` |
+| `cinemaSpeedIndicator` | 337–337 | `TvSeekScrubController` |
+| `ottIdentityTitle` | 344–344 | `TvDockIdentityPresenter` |
+| `ottIdentitySubtitle` | 345–345 | `TvDockIdentityPresenter` |
+| `ottIdentityOverline` | 347–349 | `TvDockIdentityPresenter` |
+| `ottIdentityBadge` | 350–350 | `TvDockIdentityPresenter` |
+| `ottIdentityDivider` | 351–351 | `TvDockIdentityPresenter` |
+| `ottQualityChips` | 353–356 | `TvDockIdentityPresenter` |
+| `ottRatingChip` | 357–357 | `TvDockIdentityPresenter` |
+| `ottMetaLine` | 358–358 | `TvDockIdentityPresenter` |
+| `dockTagsCacheKey` | 359–359 | `TvDockIdentityPresenter` |
+| `dockTagsCache` | 360–360 | `TvDockIdentityPresenter` |
+| `ottScrubPreviewChip` | 361–361 | `TvSeekScrubController` |
+| `ottScrubPreviewText` | 362–362 | `TvSeekScrubController` |
+| `ottShowName` | 364–366 | `TvDockIdentityPresenter` |
+| `cinemaProgressTrackWidth` | 367–367 | `TvSeekScrubController` |
+| `cinemaSeekMode` | 368–368 | `TvSeekScrubController` |
+| `cinemaSeekWasPlaying` | 369–369 | `TvSeekScrubController` |
+| `cinemaProgressAnimator` | 370–370 | `TvSeekScrubController` |
+| `cinemaLastAnimatedProgress` | 371–371 | `TvSeekScrubController` |
+| `controlsMenuVisible` | 837–837 | `TvControlsOverlayController` |
+| `seekbarVisible` | 838–838 | `TvSeekScrubController` |
+| `seekbarPosition` | 839–839 | `TvSeekScrubController` |
+| `videoDuration` | 840–840 | `TvSeekScrubController` |
+| `controlsHandler` | 1401–1401 | `TvControlsOverlayController` |
+| `seekbarHandler` | 1402–1402 | `TvSeekScrubController` |
+| `hideControlsRunnable` | 1525–1531 | `TvControlsOverlayController` |
+| `seekbarProgressRunnable` | 1533–1538 | `TvSeekScrubController` |
+| `setupSeekbar` | 3151–3160 | `TvSeekScrubController` |
+| `guideTitleFor` | 3861–3866 | `TvDockIdentityPresenter` |
+| `updateTitle` | 3868–3904 | `TvDockIdentityPresenter` |
+| `updateOttIdentity` | 3906–4019 | `TvDockIdentityPresenter` |
+| `updateOttExtras` | 4021–4124 | `TvDockIdentityPresenter` |
+| `dockTagsFor` | 4126–4149 | `TvDockIdentityPresenter` |
+| `setResolvingState` | 4151–4160 | `TvControlsOverlayController` |
+| `setNextOverlayBackdrop` | 4162–4177 | `TvControlsOverlayController` |
+| `isFocusInControlsOverlay` | 4624–4633 | `TvControlsOverlayController` |
+| `handlePlayPauseToggleFromCenter` | 4646–4652 | `TvControlsOverlayController` |
+| `togglePlayPause` | 4654–4684 | `TvControlsOverlayController` |
+| `showControlsMenu` | 4686–4776 | `TvControlsOverlayController` |
+| `hideControlsMenu` | 4778–4829 | `TvControlsOverlayController` |
+| `updateSubtitleControlsLift` | 4831–4846 | `TvControlsOverlayController` |
+| `hideTitleImmediately` | 4848–4855 | `TvControlsOverlayController` |
+| `scheduleHideControlsMenu` | 4857–4863 | `TvControlsOverlayController` |
+| `cancelScheduledHideControlsMenu` | 4865–4867 | `TvControlsOverlayController` |
+| `updatePauseButtonLabel` | 4869–4883 | `TvControlsOverlayController` |
+| `startSeekbarProgressUpdates` | 4885–4889 | `TvSeekScrubController` |
+| `stopSeekbarProgressUpdates` | 4891–4893 | `TvSeekScrubController` |
+| `updateSeekbarProgress` | 4895–4952 | `TvSeekScrubController` |
+| `showControlsAndFocusProgressBar` | 4958–4966 | `TvSeekScrubController` |
+| `setupCinemaProgressBar` | 4968–5021 | `TvSeekScrubController` |
+| `enterCinemaSeekMode` | 5023–5099 | `TvSeekScrubController` |
+| `exitCinemaSeekMode` | 5101–5136 | `TvSeekScrubController` |
+| `confirmCinemaSeek` | 5138–5144 | `TvSeekScrubController` |
+| `updateCinemaSeekSpeed` | 5146–5149 | `TvSeekScrubController` |
+| `updateCinemaProgressUI` | 5151–5212 | `TvSeekScrubController` |
+| `showSeekbar` | 5214–5245 | `TvSeekScrubController` |
+| `hideSeekbar` | 5247–5260 | `TvSeekScrubController` |
+| `confirmSeekPosition` | 5262–5267 | `TvSeekScrubController` |
+| `seekBackward` | 5269–5276 | `TvSeekScrubController` |
+| `seekForward` | 5278–5285 | `TvSeekScrubController` |
+| `updateSeekSpeed` | 5287–5296 | `TvSeekScrubController` |
+| `updateSeekbarUI` | 5298–5316 | `TvSeekScrubController` |
+| `updateSeekbarPosition` | 5318–5335 | `TvSeekScrubController` |
+| `seekBy` | 5337–5357 | `TvSeekScrubController` |
+| `showNextOverlay` | 5376–5381 | `TvControlsOverlayController` |
+| `fadeInNextOverlay` | 5383–5388 | `TvControlsOverlayController` |
+| `hideNextOverlay` | 5390–5397 | `TvControlsOverlayController` |
+| `isCleanPlaybackState` | 5403–5414 | `TvControlsOverlayController` |
+| `CONTROLS_AUTO_HIDE_DELAY_MS` | 6981–6981 | `TvControlsOverlayController` |
+
+Step-T evidence: `p16/remeasured-inventory.json`, `original-self-comparison.log`, `phase15-historical-check.log`, `earlier-destination-check.log`, `overload-audit.json`, and checker self-test logs. Original `baseline-df439aed1`: 1,943 identities (1,942 pass, the existing source-browser focus failure); original lint: 1,352 issues (253 errors/1,099 warnings, 175 opt-in errors). Stable routing run `p16-tools-recheck` preserves all original identities/statuses. The first tools run is explicitly discarded because its tree changed while tooling was being edited.

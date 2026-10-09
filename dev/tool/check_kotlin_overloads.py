@@ -315,6 +315,8 @@ def reference_inventory(manifest, original, unit, nodes, moved):
         row = next((r for name, r in moved.items()
                     if nodes[name]['start'] <= site['start'] < nodes[name]['end']), None)
         if row:
+            if manifest['phase'] >= 16 and site['callee'] in ('nextBackdrop', 'startupGateView'):
+                continue  # Exhaustively pinned readiness reads, checked separately.
             expected.append(dict(original=row['original'], line=original.count('\n', 0, site['start']) + 1,
                 context=original.splitlines()[original.count('\n', 0, site['start'])].strip(),
                 callee=site['callee'], receiver=site['receiver']))
@@ -327,6 +329,9 @@ def reference_inventory(manifest, original, unit, nodes, moved):
 
 
 def check_special_bindings(manifest, original, current, units, nodes, moved):
+    if manifest['phase'] >= 16:
+        from kotlin_overloads_phase16 import validate
+        validate(manifest, original, current, units, nodes, moved)
     if manifest['phase'] >= 15:
         find_assignment_inventory(manifest, original, current, units, nodes, moved)
         constant_inlining_inventory(manifest, original, nodes, moved)
@@ -589,6 +594,10 @@ def main():
             before, after = typed_bytecode(args.original_classes), typed_bytecode(args.moved_classes)
             view_results = audit_view_bindings(manifest, original, current, before, after)
             constant_results = audit_constant_inlining(manifest, original, before, after)
+            if manifest['phase'] >= 16:
+                from kotlin_overloads_phase16 import audit as audit_retained, field_declarations
+                view_results += audit_retained(manifest, original, current, before, after,
+                    field_declarations(args.original_classes), field_declarations(args.moved_classes))
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(dict(sites=len(results), preserved_receivers=len(manifest.get('preserved_receivers', [])), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results, find_view_assignments=len(view_results), view_results=view_results, constant_inlining=constant_results), indent=2) + '\n')
         print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations' +
