@@ -1546,8 +1546,10 @@ controls I + display/speed/night mode (≈ 1,075); 16 controls II + title
 identity + Next overlay (1,116); 17 IPTV tune pipeline + twin trial + live
 recovery (732; no existing tests); 18 playback start + shuffle (912); 19
 media pipeline + metadata receiver (697); 20 the routers decision
-(`playbackListener`, `dispatchKeyEvent` — each would need a ≈ 110-member Host;
-likely a documented exception). **Revised end state:** ≈ 3,450–3,750 lines
+(`playbackListener` ≈ 71 and `dispatchKeyEvent` ≈ 47 activity-member
+dependencies at `b870a16b1`, ≈ 110 combined; later extractions shrink both —
+the phase-20 exception decision is based on the interfaces remaining after
+phase 19). **Revised end state:** ≈ 3,450–3,750 lines
 if the routers stay (≈ 2,850–3,150 if they move): lifecycle, ≈ 26 controller
 Hosts (~30 lines each), `bindViews`, `parsePayload`, `initIptvMode`, menu
 composition and shared single-owner state — recorded as the documented
@@ -1574,7 +1576,12 @@ member after the move).
 ### Step T
 
 Phase-13 extraction fixture (owner + navigator with fields + skin; computed
-view getters) + negatives; classifier forms + negatives (non-literal negative
+view getters) + negatives; auditor extensions: PSI getter collection for
+`layoutInflater` → `getLayoutInflater()` and a narrowly typed
+`ViewTreeObserver.OnGlobalLayoutListener` `this` exclusion pinned to
+declaration/context/binding (omission, wrong-dispatch and
+listener-substitution negatives; other unreviewed object receivers still
+rejected); classifier forms + negatives (non-literal negative
 expression, enum entry with arguments, getter with side effects); compiled
 audit (8 + 15 sites, listener exclusion, function references); per-phase
 dispatcher keeping all historical suites; earlier destinations frozen at the
@@ -1585,7 +1592,12 @@ phase-12 merge.
 From zero: 7 separate activity instances (one per controls skin); playlist
 show/hide (animation, focus restore), season tabs and group filtering,
 movie-collection tabs, focus engine (DPAD up/down/left/right across tabs and
-rows, edge behaviour, recovery posts and their cancellation), guide skin
+rows, edge behaviour, recovery posts and their cancellation) incl. explicit
+paused-looper cases for recovery replacement/cancellation, an older reset
+callback overlapping newer navigation (it clears the current navigation state
+unconditionally — pinned as-is), pending View work across hide/rebuild/
+destroy, and global focus-listener accumulation across rebuilds (pinned
+as-is), guide skin
 binding per skin (`::guideSkinBind`), current-item highlight and scroll,
 adapter rebuild paths, `onDestroy` statements; plus the systematic
 statement-level coverage sweep with a coverage matrix. Mutation proofs on the
@@ -2988,3 +3000,8 @@ lists, the playlist in each controls skin, opening/closing during playback.
   rows, ratcheted, split before the next route is added — first item of
   phase 13). Activity 11,458 → 10,297. Decoder verification remains
   pending-environment. Phase 12 complete; merged.
+- 2026-10-09 — phase 13 design round 1 (Codex): **No P1s**; P2s folded
+  (getter + typed listener-exclusion auditor extensions; explicit async focus
+  quirk cases); P3s: inventory totals corrected to 29 properties / 31
+  functions / 3 view getters, router estimates per router (≈ 71 / ≈ 47).
+  Phase 13 design approved.

@@ -13286,6 +13286,8 @@ switch, independent review, device/emulator interaction or production bug fix.
 
 ## Phase 13 inventory + remaining plan (at `b870a16b1`; re-measure on `315448a3c`)
 
+> Corrections (phase 13 design round 1): the selection is 29 properties + 31 functions (28 initializer proofs stand), 3 lateinit view getters; router estimates are ≈ 71 (`playbackListener`) and ≈ 47 (`dispatchKeyEvent`) dependencies, ≈ 110 combined — not 110 each.
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
 `b870a16b1` (phase-11 merge, **11,458 lines**, class header 136). This is a read-only survey of the main
