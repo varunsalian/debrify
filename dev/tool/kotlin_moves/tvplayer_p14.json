@@ -1,0 +1,4326 @@
+{
+  "phase": 14,
+  "base": "82b16832c",
+  "source": "android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt",
+  "split_containers": [
+    "class AndroidTvTorrentPlayerActivity",
+    "class AndroidTvTorrentPlayerActivity/companion Companion"
+  ],
+  "destinations": {
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt": {
+      "prefix": "package com.debrify.app.tv\n\nimport android.util.Log\nimport android.widget.Toast\nimport androidx.annotation.OptIn\nimport androidx.appcompat.app.AppCompatActivity\nimport androidx.media3.common.C\nimport androidx.media3.exoplayer.hls.HlsManifest\nimport androidx.media3.common.Player\nimport androidx.media3.common.TrackSelectionOverride\nimport androidx.media3.common.Tracks\nimport androidx.media3.common.util.UnstableApi\nimport androidx.media3.exoplayer.ExoPlayer\nimport androidx.media3.exoplayer.trackselection.DefaultTrackSelector\nimport com.debrify.app.subtitle.AddonSubtitleResult\nimport com.debrify.app.subtitle.AddonSubtitleStatus\nimport com.debrify.app.subtitle.StremioAddon\nimport com.debrify.app.subtitle.StremioSubtitle\nimport com.debrify.app.subtitle.StremioSubtitleService\nimport com.debrify.app.util.LanguageMapper\nimport com.debrify.app.util.OffsetRenderersFactory\nimport com.debrify.app.util.SubtitleSettings\nimport kotlinx.coroutines.CoroutineScope\nimport kotlinx.coroutines.launch\nimport java.util.Locale",
+      "split_containers": [
+        "class TvSubtitleSourcesController"
+      ],
+      "pinned_spans": {
+        ":prefix": "package com.debrify.app.tv\n\nimport android.util.Log\nimport android.widget.Toast\nimport androidx.annotation.OptIn\nimport androidx.appcompat.app.AppCompatActivity\nimport androidx.media3.common.C\nimport androidx.media3.exoplayer.hls.HlsManifest\nimport androidx.media3.common.Player\nimport androidx.media3.common.TrackSelectionOverride\nimport androidx.media3.common.Tracks\nimport androidx.media3.common.util.UnstableApi\nimport androidx.media3.exoplayer.ExoPlayer\nimport androidx.media3.exoplayer.trackselection.DefaultTrackSelector\nimport com.debrify.app.subtitle.AddonSubtitleResult\nimport com.debrify.app.subtitle.AddonSubtitleStatus\nimport com.debrify.app.subtitle.StremioAddon\nimport com.debrify.app.subtitle.StremioSubtitle\nimport com.debrify.app.subtitle.StremioSubtitleService\nimport com.debrify.app.util.LanguageMapper\nimport com.debrify.app.util.OffsetRenderersFactory\nimport com.debrify.app.util.SubtitleSettings\nimport kotlinx.coroutines.CoroutineScope\nimport kotlinx.coroutines.launch\nimport java.util.Locale",
+        "class TvSubtitleSourcesController:header": "\n\n@OptIn(UnstableApi::class)\ninternal class TvSubtitleSourcesController(\n    private val activity: AppCompatActivity,\n    private val host: Host,\n) {",
+        "class TvSubtitleSourcesController:tail": "\n",
+        "class TvSubtitleSourcesController:close": "}",
+        ":tail": "\n",
+        "class TvSubtitleSourcesController/class Host": "\n    interface Host {\n        val currentIndex: Int\n        val currentIptvIndex: Int\n        fun dp(value: Int): Int\n        val iptvChannels: List<IptvChannelEntry>\n        val isIptvMode: Boolean\n        val offsetRenderersFactory: OffsetRenderersFactory?\n        val payload: PlaybackPayload?\n        val player: ExoPlayer?\n        val playerPreferences: com.debrify.app.profiles.NativePlayerPreferences\n        val stremioSubtitleService: StremioSubtitleService?\n        val subtitleController: TvSubtitleController\n        val subtitleScope: CoroutineScope\n        val subtitleTrackReadiness: SubtitleTrackReadiness\n        val trackSelector: DefaultTrackSelector?\n        val unifiedMenu: UnifiedMenuController?\n    }",
+        "class TvSubtitleSourcesController/property dialogs": "\n    internal val dialogs = TvSubtitleSearchDialogs(activity, host, this)"
+      },
+      "order": {
+        "": [
+          "class TvSubtitleSourcesController"
+        ],
+        "class TvSubtitleSourcesController": [
+          "class TvSubtitleSourcesController/class Host",
+          "class TvSubtitleSourcesController/property dialogs",
+          "class TvSubtitleSourcesController/property stremioSubtitles",
+          "class TvSubtitleSourcesController/property addonSubtitleResults",
+          "class TvSubtitleSourcesController/property injectedSubtitles",
+          "class TvSubtitleSourcesController/property suppressSubtitleAutoSelect",
+          "class TvSubtitleSourcesController/property addonFetchTokens",
+          "class TvSubtitleSourcesController/property failedSubtitleUrls",
+          "class TvSubtitleSourcesController/property currentStremioSubtitleIndex",
+          "class TvSubtitleSourcesController/property subtitleAddonDiscoveryReady",
+          "class TvSubtitleSourcesController/property isLoadingStremioSubtitles",
+          "class TvSubtitleSourcesController/property userManuallySelectedSubtitle",
+          "class TvSubtitleSourcesController/property addonSubtitleFetchToken",
+          "class TvSubtitleSourcesController/property manualSubtitleImdbId",
+          "class TvSubtitleSourcesController/property manualSubtitleType",
+          "class TvSubtitleSourcesController/property manualSubtitleSeason",
+          "class TvSubtitleSourcesController/property manualSubtitleEpisode",
+          "class TvSubtitleSourcesController/property manualSubtitleDisplayLabel",
+          "class TvSubtitleSourcesController/fun resetSubtitleState()",
+          "class TvSubtitleSourcesController/fun fetchStremioSubtitles(PlaybackItem)",
+          "class TvSubtitleSourcesController/fun seedInjectedSubtitles()",
+          "class TvSubtitleSourcesController/fun fetchStremioSubtitlesWithImdb(String,String,PlaybackItem)",
+          "class TvSubtitleSourcesController/fun launchAddonSubtitleFetch(StremioAddon,String,String,PlaybackItem,Int)",
+          "class TvSubtitleSourcesController/fun setAddonSubtitleSlot(String,AddonSubtitleStatus,List<StremioSubtitle>,String?)",
+          "class TvSubtitleSourcesController/fun rebuildFlatStremioSubtitles()",
+          "class TvSubtitleSourcesController/fun retryAddonSubtitles(String)",
+          "class TvSubtitleSourcesController/fun refreshSubtitleUiForLoading()",
+          "class TvSubtitleSourcesController/fun clearStremioLoadingState()",
+          "class TvSubtitleSourcesController/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+          "class TvSubtitleSourcesController/fun currentSubtitleIdentityLabel()",
+          "class TvSubtitleSourcesController/fun tryAutoSelectAddonSubtitle()",
+          "class TvSubtitleSourcesController/property subtitleSearchResults",
+          "class TvSubtitleSourcesController/property subtitleSearchStatus",
+          "class TvSubtitleSourcesController/property pendingSeriesResult",
+          "class TvSubtitleSourcesController/property pendingSeason",
+          "class TvSubtitleSourcesController/property pendingEpisode",
+          "class TvSubtitleSourcesController/fun umSubsModel(List<UnifiedMenuController.Row>,Int)",
+          "class TvSubtitleSourcesController/fun umAddonTrackRows(String)",
+          "class TvSubtitleSourcesController/fun umSearchRows()",
+          "class TvSubtitleSourcesController/fun umPickSearchResult(SubtitleCatalogResult)"
+        ]
+      }
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt": {
+      "prefix": "package com.debrify.app.tv\n\nimport android.graphics.Color\nimport android.graphics.Typeface\nimport android.graphics.drawable.ColorDrawable\nimport android.text.InputType\nimport android.util.Log\nimport android.view.Gravity\nimport android.view.KeyEvent\nimport android.view.View\nimport android.view.ViewGroup\nimport android.view.inputmethod.EditorInfo\nimport androidx.core.content.ContextCompat\nimport android.widget.ArrayAdapter\nimport android.widget.EditText\nimport android.widget.LinearLayout\nimport android.widget.ListView\nimport android.widget.ProgressBar\nimport android.widget.TextView\nimport android.widget.Toast\nimport androidx.appcompat.app.AlertDialog\nimport androidx.appcompat.app.AppCompatActivity\nimport androidx.appcompat.widget.AppCompatButton\nimport androidx.media3.exoplayer.ExoPlayer\nimport androidx.media3.exoplayer.trackselection.DefaultTrackSelector\nimport com.debrify.app.MainActivity\nimport com.debrify.app.R\nimport com.debrify.app.subtitle.StremioSubtitleService\nimport com.debrify.app.util.OffsetRenderersFactory\nimport io.flutter.plugin.common.MethodChannel\nimport kotlinx.coroutines.CoroutineScope",
+      "split_containers": [
+        "class TvSubtitleSearchDialogs"
+      ],
+      "pinned_spans": {
+        ":prefix": "package com.debrify.app.tv\n\nimport android.graphics.Color\nimport android.graphics.Typeface\nimport android.graphics.drawable.ColorDrawable\nimport android.text.InputType\nimport android.util.Log\nimport android.view.Gravity\nimport android.view.KeyEvent\nimport android.view.View\nimport android.view.ViewGroup\nimport android.view.inputmethod.EditorInfo\nimport androidx.core.content.ContextCompat\nimport android.widget.ArrayAdapter\nimport android.widget.EditText\nimport android.widget.LinearLayout\nimport android.widget.ListView\nimport android.widget.ProgressBar\nimport android.widget.TextView\nimport android.widget.Toast\nimport androidx.appcompat.app.AlertDialog\nimport androidx.appcompat.app.AppCompatActivity\nimport androidx.appcompat.widget.AppCompatButton\nimport androidx.media3.exoplayer.ExoPlayer\nimport androidx.media3.exoplayer.trackselection.DefaultTrackSelector\nimport com.debrify.app.MainActivity\nimport com.debrify.app.R\nimport com.debrify.app.subtitle.StremioSubtitleService\nimport com.debrify.app.util.OffsetRenderersFactory\nimport io.flutter.plugin.common.MethodChannel\nimport kotlinx.coroutines.CoroutineScope",
+        "class TvSubtitleSearchDialogs:header": "\n\ninternal class TvSubtitleSearchDialogs(\n    private val activity: AppCompatActivity,\n    private val host: TvSubtitleSourcesController.Host,\n    private val sources: TvSubtitleSourcesController,\n) {",
+        "class TvSubtitleSearchDialogs:tail": "\n",
+        "class TvSubtitleSearchDialogs:close": "}",
+        ":tail": "\n"
+      },
+      "order": {
+        "": [
+          "class TvSubtitleSearchDialogs"
+        ],
+        "class TvSubtitleSearchDialogs": [
+          "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+          "class TvSubtitleSearchDialogs/fun getCurrentSubtitleSearchItem()",
+          "class TvSubtitleSearchDialogs/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+          "class TvSubtitleSearchDialogs/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+          "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)"
+        ]
+      }
+    }
+  },
+  "declarations": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playerView",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property startupGateView",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property startupGateStatus",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property titleContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property titleView",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property titleOttContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottEpisodeBadge",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottEpisodeTitle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottRatingContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottRating",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property channelBadge",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleControlsLift",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playlistOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playlistView",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seasonTabsContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nextOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nextText",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nextSubtext",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nextBackdrop",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property upNextController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playlistController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarProgress",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarHandle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarCurrentTime",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarTotalTime",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarSpeedIndicator",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarBackgroundWidth",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentSeekSpeed",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property controlsOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pauseButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvPrevButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvNextButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvGuideButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvJumpButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverSeekButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvRecordButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvRecordingController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvUpPressActive",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvUpLongPressHandled",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property originalControlDockOrder",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property audioButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property aspectButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property speedButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nightModeButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property debrifyTimeDisplay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property debrifyTimeCurrent",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property debrifyTimeTotal",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property debrifyProgressLine",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressBuffered",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressBackground",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressThumb",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaSpeedIndicator",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottSkinInstalled",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottCaptionLabel",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottCaptionOwner",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottIdentityTitle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottIdentitySubtitle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottIdentityOverline",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottIdentityBadge",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottIdentityDivider",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottQualityChips",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottRatingChip",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottMetaLine",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property dockTagsCacheKey",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property dockTagsCache",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottScrubPreviewChip",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottScrubPreviewText",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottProgressTrackContainer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottSourcesButton",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property ottShowName",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressTrackWidth",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaSeekMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaSeekWasPlaying",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaProgressAnimator",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaLastAnimatedProgress",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property player",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nativeAudioRouting",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property trackSelector",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleListener",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property displayMatchMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property displayModeController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property decoderAnalyticsListener",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property offsetRenderersFactory",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTuneDiagnostics",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvLiveRetuneInFlight",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStoppedAtRealtime",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property IPTV_LIVE_REJOIN_AFTER_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvNetworkCallback",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvReconnectPill",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvLiveRecovery",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun iptvLiveRecoveryEligible()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun performIptvLiveRetune(String,Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun beginIptvTwinTrial(IptvChannelEntry,String,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun judgeIptvTwinTrial(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun acceptIptvTwinTrial()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun failIptvTwinTrial(String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onIptvTwinTrialTimeout()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun scheduleIptvTwinTrialTimeout(Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun rearmIptvTwinTrialDeadline()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun parkIptvTwinTrialRestore()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreParkedIptvTwinIfNeeded()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun clearParkedIptvTwinRestore()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun clearIptvTwinTrial()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreAcceptedIptvTwinAfterAuth(PlaybackException)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showIptvReconnectPill(String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideIptvReconnectPill()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun dpToPx(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvDiagAnalyticsListener",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property speechTap",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property autoSyncController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekFeedbackManager",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property payload",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property activeVodHeaders",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property protectedStreamClient",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property mediaPreparationScope",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property mediaPreparationGeneration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingSeekMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property percentSeekApplied",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingItemTraktPercent",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property isAutoAdvancing",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property controlsMenuVisible",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarVisible",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarPosition",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property videoDuration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property resizeModeIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playbackSpeedIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nightModeIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property loudnessEnhancer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property systemAudioEffectsEnabled",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentsEnabled",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentProviderId",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property continuousShuffleEnabled",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property shuffleBag",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property showShuffle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property showShuffleGeneration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property lastBackPressTime",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property isIptvMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvChannels",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentIptvIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverActive",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverLoading",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverTimelineVisible",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartOverController",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\noverride fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.resetSubtitleState()",
+          "after": "\noverride fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.resetSubtitleState()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvGuideController",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\noverride fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.resetSubtitleState()",
+          "after": "\noverride fun resetSubtitleState(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.resetSubtitleState()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentIptvHttpHeaders",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvHlsForcedUrls",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStrictTsUrls",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStrictTsActive",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvStartsWithStrictTs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialOriginalUrl",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialUrl",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinFailedUrls",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinPreferredUrls",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialTimeout",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialRestoreOriginal",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialRestoreTwin",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialLastFrames",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialAdvanceSince",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvTwinTrialStartedRealtime",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property IPTV_TWIN_TRIAL_STABLE_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property IPTV_TWIN_TRIAL_TIMEOUT_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property IPTV_TWIN_TRIAL_POST_READY_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property IPTV_TWIN_TRIAL_MAX_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentIptvStreamUrl",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvGuideChromeController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvSources",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvSourceId",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvChannelStartController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvBrowseHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioSources",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentStremioSourceIndex",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioSourceBadge",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioSourceBadgeText",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioResolutionToken",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property hasPlaylistResolver",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property hasAdjacentEpisodeResolver",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property customShuffleEpisodes",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property startupGateController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sourcePersistenceSessionId",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoveryProfileId",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoveryDataGeneration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoveryTitle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoverySeriesTitle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property useAddonTextFormatting",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property showSourceAddonLogos",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoveryImdbId",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property recoveryStartedAtMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property progressReporter",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property networkPatience",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property networkBuffer",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvDecoderMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seriesSourceTabs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seriesPacksFetched",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seriesEpisodesFetched",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property movieMoreSources",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property movieSourcesFetched",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property moreSourcesLoadingMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/class TvSourceAddon",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sourceAddons",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonFetchState",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonPackProbing",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property isStremioTvMode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioTvGuideController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleSettingsRoot",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleController",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\noverride fun currentSubtitleIdentityLabel(): String = this@AndroidTvTorrentPlayerActivity.currentSubtitleIdentityLabel()",
+          "after": "\noverride fun currentSubtitleIdentityLabel(): String = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentSubtitleIdentityLabel()",
+          "count": 1
+        },
+        {
+          "before": "\noverride val isLoadingStremioSubtitles: Boolean get() = this@AndroidTvTorrentPlayerActivity.isLoadingStremioSubtitles",
+          "after": "\noverride val isLoadingStremioSubtitles: Boolean get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.isLoadingStremioSubtitles",
+          "count": 1
+        },
+        {
+          "before": "\noverride fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.tryAutoSelectAddonSubtitle()",
+          "after": "\noverride fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.tryAutoSelectAddonSubtitle()",
+          "count": 1
+        },
+        {
+          "before": "\noverride val failedSubtitleUrls: MutableSet<String> get() = this@AndroidTvTorrentPlayerActivity.failedSubtitleUrls",
+          "after": "\noverride val failedSubtitleUrls: MutableSet<String> get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.failedSubtitleUrls",
+          "count": 1
+        },
+        {
+          "before": "\noverride val stremioSubtitles: List<StremioSubtitle> get() = this@AndroidTvTorrentPlayerActivity.stremioSubtitles",
+          "after": "\noverride val stremioSubtitles: List<StremioSubtitle> get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.stremioSubtitles",
+          "count": 1
+        },
+        {
+          "before": "\noverride fun showSearchSubtitleDialog(): Unit = this@AndroidTvTorrentPlayerActivity.showSearchSubtitleDialog()",
+          "after": "\noverride fun showSearchSubtitleDialog(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.dialogs.showSearchSubtitleDialog()",
+          "count": 1
+        },
+        {
+          "before": "\nset(value) { this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle = value }",
+          "after": "\nset(value) { this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.userManuallySelectedSubtitle = value }",
+          "count": 1
+        },
+        {
+          "before": "\nset(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex = value }",
+          "after": "\nset(value) { this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentStremioSubtitleIndex = value }",
+          "count": 1
+        },
+        {
+          "before": "\nget() = this@AndroidTvTorrentPlayerActivity.userManuallySelectedSubtitle",
+          "after": "\nget() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.userManuallySelectedSubtitle",
+          "count": 1
+        },
+        {
+          "before": "\nget() = this@AndroidTvTorrentPlayerActivity.currentStremioSubtitleIndex",
+          "after": "\nget() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.currentStremioSubtitleIndex",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playerViewReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleOverlayReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitlePanel",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property syncOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property linePickerOverlay",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property unifiedMenu",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sourceBrowser",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioSubtitleService",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property stremioSubtitles",
+      "substitutions": [
+        {
+          "before": "\nprivate val stremioSubtitles = mutableListOf<StremioSubtitle>()  // deduped flat view over addonSubtitleResults",
+          "after": "\ninternal val stremioSubtitles = mutableListOf<StremioSubtitle>()  // deduped flat view over addonSubtitleResults",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonSubtitleResults",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property addonSubtitleResults",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property injectedSubtitles",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property injectedSubtitles",
+      "substitutions": [
+        {
+          "before": "\nprivate val injectedSubtitles = mutableListOf<StremioSubtitle>()",
+          "after": "\ninternal val injectedSubtitles = mutableListOf<StremioSubtitle>()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property suppressSubtitleAutoSelect",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property suppressSubtitleAutoSelect",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonFetchTokens",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property addonFetchTokens",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property failedSubtitleUrls",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property failedSubtitleUrls",
+      "substitutions": [
+        {
+          "before": "\nprivate val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues \u2014 don't re-auto-select",
+          "after": "\ninternal val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues \u2014 don't re-auto-select",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentStremioSubtitleIndex",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property currentStremioSubtitleIndex",
+      "substitutions": [
+        {
+          "before": "\nprivate var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected",
+          "after": "\ninternal var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleAddonDiscoveryReady",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property subtitleAddonDiscoveryReady",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property isLoadingStremioSubtitles",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property isLoadingStremioSubtitles",
+      "substitutions": [
+        {
+          "before": "\nprivate var isLoadingStremioSubtitles = false  // Loading state for UI indicator",
+          "after": "\ninternal var isLoadingStremioSubtitles = false  // Loading state for UI indicator",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleTrackReadiness",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property userManuallySelectedSubtitle",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property userManuallySelectedSubtitle",
+      "substitutions": [
+        {
+          "before": "\nprivate var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle",
+          "after": "\ninternal var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonSubtitleFetchToken",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property addonSubtitleFetchToken",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleImdbId",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property manualSubtitleImdbId",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleType",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property manualSubtitleType",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleSeason",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property manualSubtitleSeason",
+      "substitutions": [
+        {
+          "before": "\nprivate var manualSubtitleSeason: Int? = null",
+          "after": "\ninternal var manualSubtitleSeason: Int? = null",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleEpisode",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property manualSubtitleEpisode",
+      "substitutions": [
+        {
+          "before": "\nprivate var manualSubtitleEpisode: Int? = null",
+          "after": "\ninternal var manualSubtitleEpisode: Int? = null",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleDisplayLabel",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property manualSubtitleDisplayLabel",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleScope",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentButtonReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekFeedbackManagerReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sleepTimerController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sleepStopLatched",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property externalSubtitleHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property statusPillController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property resizeModes",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property resizeModeLabels",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playbackSpeeds",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playbackSpeedLabels",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nightModeGains",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property nightModeLabels",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property progressHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property controlsHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pikPakRetryController",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\noverride fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.tryAutoSelectAddonSubtitle()",
+          "after": "\noverride fun tryAutoSelectAddonSubtitle(): Unit = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController.tryAutoSelectAddonSubtitle()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property startupGateStatusReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pikPakReactivationIndicatorReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property bufferingIndicator",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pikPakReactivationIndicator",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pikPakReactivationText",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property hasEverBeenReady",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property resumeHoldTargetMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property resumeHoldArmedAtMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun armResumeHold(Long,Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun releaseResumeHold()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun heldResumePositionMs(Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property maxStableDurationMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property lastRealPositionMs",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property bufferingHandler",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property bufferingDebounceRunnable",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property progressRunnable",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property hideControlsRunnable",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property seekbarProgressRunnable",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playbackListener",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\ntryAutoSelectAddonSubtitle()",
+          "after": "\nsubtitleSourcesController.tryAutoSelectAddonSubtitle()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property metadataUpdateReceiver",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property playerPreferences",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onCreate(Bundle?)",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nandroid.util.Log.d(\"AndroidTvPlayer\", \"Loaded ${injectedSubtitles.size} launch-supplied subtitles\")",
+          "after": "\nandroid.util.Log.d(\"AndroidTvPlayer\", \"Loaded ${subtitleSourcesController.injectedSubtitles.size} launch-supplied subtitles\")",
+          "count": 1
+        },
+        {
+          "before": "\ninjectedSubtitles.add(StremioSubtitle.fromJson(obj, source, addonId = \"injected\"))",
+          "after": "\nsubtitleSourcesController.injectedSubtitles.add(StremioSubtitle.fromJson(obj, source, addonId = \"injected\"))",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupMetadataReceiver()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun readStagedExtra(android.content.Intent?,String,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun handleMetadataUpdate(String?,String?,String?,String?)",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nfetchStremioSubtitles(currentItem)",
+          "after": "\nsubtitleSourcesController.fetchStremioSubtitles(currentItem)",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun requestMetadataFromFlutter()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun bindViews()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun iptvMediaCodecSelector()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupPlayer()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupSeekbar()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun installOttControlsSkin()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setOttTrackHeight(Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateOttCaption(View)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun clearOttCaption(View)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun refreshOttCaptionFor(View?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupControls()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playItem(Int,Boolean,Boolean,ShufflePlaybackAttempt?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun resolveAndPlay(Int,PlaybackItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun discoverProtectedMime(String,Map<String, String>,(String?) -> Unit)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun startPlayback(PlaybackItem,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun resetSubtitleState()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun resetSubtitleState()",
+      "substitutions": [
+        {
+          "before": "\nsubtitleController.subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks",
+          "after": "\nhost.subtitleController.subtitleTracks.clear()   // rebuilt lazily for the new media's embedded tracks",
+          "count": 1
+        },
+        {
+          "before": "\nplayerPreferences.getString(\"player_default_subtitle_language\", null) == \"off\" ||",
+          "after": "\nhost.playerPreferences.getString(\"player_default_subtitle_language\", null) == \"off\" ||",
+          "count": 1
+        },
+        {
+          "before": "\nplayerPreferences.getBoolean(\"subtitle_only_foreign_audio\", false) ||",
+          "after": "\nhost.playerPreferences.getBoolean(\"subtitle_only_foreign_audio\", false) ||",
+          "count": 1
+        },
+        {
+          "before": "\nplayerPreferences.getBoolean(\"subtitle_forced_only\", false),",
+          "after": "\nhost.playerPreferences.getBoolean(\"subtitle_forced_only\", false),",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.stopExternalSubtitleRendering()",
+          "after": "\nhost.subtitleController.stopExternalSubtitleRendering()",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleTrackReadiness.onMediaReplacement()",
+          "after": "\nhost.subtitleTrackReadiness.onMediaReplacement()",
+          "count": 1
+        },
+        {
+          "before": "\noffsetRenderersFactory?.setOffsetUs(0L)",
+          "after": "\nhost.offsetRenderersFactory?.setOffsetUs(0L)",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun resetSubtitleState() {",
+          "after": "\nfun resetSubtitleState() {",
+          "count": 1
+        },
+        {
+          "before": "\ntrackSelector?.let { selector ->",
+          "after": "\nhost.trackSelector?.let { selector ->",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playMediaDirect(PlaybackItem)",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nfetchStremioSubtitles(item)",
+          "after": "\nsubtitleSourcesController.fetchStremioSubtitles(item)",
+          "count": 1
+        },
+        {
+          "before": "\nresetSubtitleState()",
+          "after": "\nsubtitleSourcesController.resetSubtitleState()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun buildMergedSourceOrNull(PlaybackItem,MediaItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun buildMergedSource(String,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun fetchStremioSubtitles(PlaybackItem)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun fetchStremioSubtitles(PlaybackItem)",
+      "substitutions": [
+        {
+          "before": "\nprivate fun fetchStremioSubtitles(item: PlaybackItem) {",
+          "after": "\nfun fetchStremioSubtitles(item: PlaybackItem) {",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.refreshSubtitlePanelForLoading()",
+          "after": "\nhost.subtitleController.refreshSubtitlePanelForLoading()",
+          "count": 1
+        },
+        {
+          "before": "\nif (subtitleController.subtitleSettingsVisible) {",
+          "after": "\nif (host.subtitleController.subtitleSettingsVisible) {",
+          "count": 1
+        },
+        {
+          "before": "\nval model = payload ?: return",
+          "after": "\nval model = host.payload ?: return",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun seedInjectedSubtitles()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun seedInjectedSubtitles()",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun fetchStremioSubtitlesWithImdb(String,String,PlaybackItem)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun fetchStremioSubtitlesWithImdb(String,String,PlaybackItem)",
+      "substitutions": [
+        {
+          "before": "\nval addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()",
+          "after": "\nval addons = host.stremioSubtitleService?.getSubtitleAddons() ?: emptyList()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun launchAddonSubtitleFetch(StremioAddon,String,String,PlaybackItem,Int)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun launchAddonSubtitleFetch(StremioAddon,String,String,PlaybackItem,Int)",
+      "substitutions": [
+        {
+          "before": "\nToast.makeText(this@AndroidTvTorrentPlayerActivity, \"No online subtitles found for this title\", Toast.LENGTH_SHORT).show()",
+          "after": "\nToast.makeText(activity, \"No online subtitles found for this title\", Toast.LENGTH_SHORT).show()",
+          "count": 1
+        },
+        {
+          "before": "\nval subs = (stremioSubtitleService?.fetchSubtitlesForAddon(",
+          "after": "\nval subs = (host.stremioSubtitleService?.fetchSubtitlesForAddon(",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleScope.launch {",
+          "after": "\nhost.subtitleScope.launch {",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setAddonSubtitleSlot(String,AddonSubtitleStatus,List<StremioSubtitle>,String?)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun setAddonSubtitleSlot(String,AddonSubtitleStatus,List<StremioSubtitle>,String?)",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun rebuildFlatStremioSubtitles()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun rebuildFlatStremioSubtitles()",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun retryAddonSubtitles(String)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun retryAddonSubtitles(String)",
+      "substitutions": [
+        {
+          "before": "\nval item = model.items.getOrNull(currentIndex) ?: return",
+          "after": "\nval item = model.items.getOrNull(host.currentIndex) ?: return",
+          "count": 1
+        },
+        {
+          "before": "\nval model = payload ?: return",
+          "after": "\nval model = host.payload ?: return",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun refreshSubtitleUiForLoading()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun refreshSubtitleUiForLoading()",
+      "substitutions": [
+        {
+          "before": "\nif (subtitleController.subtitleSettingsVisible) subtitleController.refreshSubtitlePanelForLoading()",
+          "after": "\nif (host.subtitleController.subtitleSettingsVisible) host.subtitleController.refreshSubtitlePanelForLoading()",
+          "count": 1
+        },
+        {
+          "before": "\nif (unifiedMenu?.isVisible == true) unifiedMenu?.render()",
+          "after": "\nif (host.unifiedMenu?.isVisible == true) host.unifiedMenu?.render()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun clearStremioLoadingState()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun clearStremioLoadingState()",
+      "substitutions": [
+        {
+          "before": "\nsubtitleController.refreshSubtitlePanelForLoading()",
+          "after": "\nhost.subtitleController.refreshSubtitlePanelForLoading()",
+          "count": 1
+        },
+        {
+          "before": "\nif (subtitleController.subtitleSettingsVisible) {",
+          "after": "\nif (host.subtitleController.subtitleSettingsVisible) {",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun clearStremioLoadingState() {",
+          "after": "\nfun clearStremioLoadingState() {",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playNext()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playPrevious()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateCatalogEpisodeControls()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playRandom()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showRandomPlaybackDialog()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun resetShuffle()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/class ShufflePlaybackAttempt",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingShufflePlayback",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property queuedShuffleGeneration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property queuedShuffleNavigation",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun shuffleAttemptCurrent(ShufflePlaybackAttempt)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun shuffleAttemptOwned(ShufflePlaybackAttempt)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreShufflePreparation(ShufflePlaybackAttempt)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun failShufflePlayback()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property shuffleWatchGeneration",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun watchShufflePlayback(ShufflePlaybackAttempt)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun clearQueuedShuffle(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun yieldEpisodeFetchToQueuedShuffle()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun canShuffleWholeShow()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playShowShuffle(Set<ShuffleEpisode>,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun getShuffleEligibleIndices()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun pickShuffleIndex()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun guideTitleFor(PlaybackItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateTitle(PlaybackItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateOttIdentity()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateOttExtras(PlaybackItem?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun dockTagsFor(PlaybackItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setResolvingState(Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setNextOverlayBackdrop(String?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun reportValidatedSourceCommit(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "substitutions": [
+        {
+          "before": "\nToast.makeText(this, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+          "after": "\nToast.makeText(activity, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+          "count": 2
+        },
+        {
+          "before": "\ndialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)",
+          "after": "\ndialog = AlertDialog.Builder(activity, R.style.Theme_Debrify_SubtitleDialog)",
+          "count": 1
+        },
+        {
+          "before": "\napplyManualSubtitleIdentity(selected, null, null)",
+          "after": "\nsources.applyManualSubtitleIdentity(selected, null, null)",
+          "count": 1
+        },
+        {
+          "before": "\nLinearLayout.LayoutParams(dp(48), dp(48)).apply {",
+          "after": "\nLinearLayout.LayoutParams(host.dp(48), host.dp(48)).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval searchButton = AppCompatButton(this).apply {",
+          "after": "\nval searchButton = AppCompatButton(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval progressBar = ProgressBar(this).apply {",
+          "after": "\nval progressBar = ProgressBar(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval actionRow = LinearLayout(this).apply {",
+          "after": "\nval actionRow = LinearLayout(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval container = LinearLayout(this).apply {",
+          "after": "\nval container = LinearLayout(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun showSearchSubtitleDialog() {",
+          "after": "\nfun showSearchSubtitleDialog() {",
+          "count": 1
+        },
+        {
+          "before": "\nval resultList = ListView(this).apply {",
+          "after": "\nval resultList = ListView(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval statusText = TextView(this).apply {",
+          "after": "\nval statusText = TextView(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval queryInput = EditText(this).apply {",
+          "after": "\nval queryInput = EditText(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(dp(24), dp(8), dp(24), 0)",
+          "after": "\nsetPadding(host.dp(24), host.dp(8), host.dp(24), 0)",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(0, dp(12), 0, dp(8))",
+          "after": "\nsetPadding(0, host.dp(12), 0, host.dp(8))",
+          "count": 1
+        },
+        {
+          "before": "\napplyManualSubtitleIdentity(",
+          "after": "\nsources.applyManualSubtitleIdentity(",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(0, 0, 0, dp(48))",
+          "after": "\nsetPadding(0, 0, 0, host.dp(48))",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(0, 0, 0, dp(8))",
+          "after": "\nsetPadding(0, 0, 0, host.dp(8))",
+          "count": 1
+        },
+        {
+          "before": "\nminimumHeight = dp(44)",
+          "after": "\nminimumHeight = host.dp(44)",
+          "count": 1
+        },
+        {
+          "before": "\nleftMargin = dp(16)",
+          "after": "\nleftMargin = host.dp(16)",
+          "count": 1
+        },
+        {
+          "before": "\ndp(360)",
+          "after": "\nhost.dp(360)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun getCurrentSubtitleSearchItem()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun getCurrentSubtitleSearchItem()",
+      "substitutions": [
+        {
+          "before": "\nif (isIptvMode && currentIptvIndex in iptvChannels.indices) {",
+          "after": "\nif (host.isIptvMode && host.currentIptvIndex in host.iptvChannels.indices) {",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun getCurrentSubtitleSearchItem(): PlaybackItem? {",
+          "after": "\nfun getCurrentSubtitleSearchItem(): PlaybackItem? {",
+          "count": 1
+        },
+        {
+          "before": "\npayload?.items?.getOrNull(currentIndex)?.let { return it }",
+          "after": "\nhost.payload?.items?.getOrNull(host.currentIndex)?.let { return it }",
+          "count": 1
+        },
+        {
+          "before": "\nval mediaItem = player?.currentMediaItem ?: return null",
+          "after": "\nval mediaItem = host.player?.currentMediaItem ?: return null",
+          "count": 1
+        },
+        {
+          "before": "\nval entry = iptvChannels[currentIptvIndex]",
+          "after": "\nval entry = host.iptvChannels[host.currentIptvIndex]",
+          "count": 1
+        },
+        {
+          "before": "\nindex = currentIndex,",
+          "after": "\nindex = host.currentIndex,",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "substitutions": [
+        {
+          "before": "\nrunOnUiThread { onError(\"Subtitle search is unavailable.\") }",
+          "after": "\nactivity.runOnUiThread { onError(\"Subtitle search is unavailable.\") }",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun requestSubtitleCatalogSearchFromFlutter(",
+          "after": "\nfun requestSubtitleCatalogSearchFromFlutter(",
+          "count": 1
+        },
+        {
+          "before": "\nrunOnUiThread { onSuccess(parsedResults) }",
+          "after": "\nactivity.runOnUiThread { onSuccess(parsedResults) }",
+          "count": 1
+        },
+        {
+          "before": "\nrunOnUiThread {",
+          "after": "\nactivity.runOnUiThread {",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "substitutions": [
+        {
+          "before": "\nreturn object : ArrayAdapter<SubtitleCatalogResult>(this, 0, results) {",
+          "after": "\nreturn object : ArrayAdapter<SubtitleCatalogResult>(activity, 0, results) {",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(dp(20), dp(12), dp(20), dp(12))",
+          "after": "\nsetPadding(host.dp(20), host.dp(12), host.dp(20), host.dp(12))",
+          "count": 1
+        },
+        {
+          "before": "\nminimumHeight = dp(72)",
+          "after": "\nminimumHeight = host.dp(72)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "substitutions": [
+        {
+          "before": "\nToast.makeText(this, \"Enter a valid season and episode\", Toast.LENGTH_SHORT).show()",
+          "after": "\nToast.makeText(activity, \"Enter a valid season and episode\", Toast.LENGTH_SHORT).show()",
+          "count": 1
+        },
+        {
+          "before": "\nval dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)",
+          "after": "\nval dialog = AlertDialog.Builder(activity, R.style.Theme_Debrify_SubtitleDialog)",
+          "count": 1
+        },
+        {
+          "before": "\nsetText((currentItem?.episode ?: manualSubtitleEpisode ?: 1).toString())",
+          "after": "\nsetText((currentItem?.episode ?: sources.manualSubtitleEpisode ?: 1).toString())",
+          "count": 1
+        },
+        {
+          "before": "\nsetText((currentItem?.season ?: manualSubtitleSeason ?: 1).toString())",
+          "after": "\nsetText((currentItem?.season ?: sources.manualSubtitleSeason ?: 1).toString())",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun showSeasonEpisodePrompt(result: SubtitleCatalogResult) {",
+          "after": "\nfun showSeasonEpisodePrompt(result: SubtitleCatalogResult) {",
+          "count": 1
+        },
+        {
+          "before": "\napplyManualSubtitleIdentity(result, season, episode)",
+          "after": "\nsources.applyManualSubtitleIdentity(result, season, episode)",
+          "count": 1
+        },
+        {
+          "before": "\nval container = LinearLayout(this).apply {",
+          "after": "\nval container = LinearLayout(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval episodeInput = EditText(this).apply {",
+          "after": "\nval episodeInput = EditText(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval seasonInput = EditText(this).apply {",
+          "after": "\nval seasonInput = EditText(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nval row = LinearLayout(this).apply {",
+          "after": "\nval row = LinearLayout(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(dp(24), dp(8), dp(24), 0)",
+          "after": "\nsetPadding(host.dp(24), host.dp(8), host.dp(24), 0)",
+          "count": 1
+        },
+        {
+          "before": "\nval title = TextView(this).apply {",
+          "after": "\nval title = TextView(activity).apply {",
+          "count": 1
+        },
+        {
+          "before": "\nsetPadding(0, 0, 0, dp(12))",
+          "after": "\nsetPadding(0, 0, 0, host.dp(12))",
+          "count": 1
+        },
+        {
+          "before": "\nrightMargin = dp(12)",
+          "after": "\nrightMargin = host.dp(12)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "substitutions": [
+        {
+          "before": "\nToast.makeText(this, \"Searching subtitles for ${result.name}\", Toast.LENGTH_SHORT).show()",
+          "after": "\nToast.makeText(activity, \"Searching subtitles for ${result.name}\", Toast.LENGTH_SHORT).show()",
+          "count": 1
+        },
+        {
+          "before": "\nToast.makeText(this, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+          "after": "\nToast.makeText(activity, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.refreshSubtitlePanelForLoading()",
+          "after": "\nhost.subtitleController.refreshSubtitlePanelForLoading()",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.stopExternalSubtitleRendering()",
+          "after": "\nhost.subtitleController.stopExternalSubtitleRendering()",
+          "count": 1
+        },
+        {
+          "before": "\nif (subtitleController.subtitleSettingsVisible) {",
+          "after": "\nif (host.subtitleController.subtitleSettingsVisible) {",
+          "count": 1
+        },
+        {
+          "before": "\nval currentItem = getCurrentSubtitleSearchItem()",
+          "after": "\nval currentItem = dialogs.getCurrentSubtitleSearchItem()",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun applyManualSubtitleIdentity(",
+          "after": "\nfun applyManualSubtitleIdentity(",
+          "count": 1
+        },
+        {
+          "before": "\ntrackSelector?.let { selector ->",
+          "after": "\nhost.trackSelector?.let { selector ->",
+          "count": 1
+        },
+        {
+          "before": "\nshowSeasonEpisodePrompt(result)",
+          "after": "\ndialogs.showSeasonEpisodePrompt(result)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun currentSubtitleIdentityLabel()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun currentSubtitleIdentityLabel()",
+      "substitutions": [
+        {
+          "before": "\nprivate fun currentSubtitleIdentityLabel(): String {",
+          "after": "\nfun currentSubtitleIdentityLabel(): String {",
+          "count": 1
+        },
+        {
+          "before": "\nval detectedTitle = getCurrentSubtitleSearchItem()",
+          "after": "\nval detectedTitle = dialogs.getCurrentSubtitleSearchItem()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun dp(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playPikPakVideoWithRetry(PlaybackItem)",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nfetchStremioSubtitles(item)",
+          "after": "\nsubtitleSourcesController.fetchStremioSubtitles(item)",
+          "count": 1
+        },
+        {
+          "before": "\nresetSubtitleState()",
+          "after": "\nsubtitleSourcesController.resetSubtitleState()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun tryAutoSelectAddonSubtitle()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun tryAutoSelectAddonSubtitle()",
+      "substitutions": [
+        {
+          "before": "\ntracksReady = subtitleTrackReadiness.canSelect(currentPlayer.playbackState == Player.STATE_READY),",
+          "after": "\ntracksReady = host.subtitleTrackReadiness.canSelect(currentPlayer.playbackState == Player.STATE_READY),",
+          "count": 1
+        },
+        {
+          "before": "\nval defaultSubtitleLang = playerPreferences.getString(\"player_default_subtitle_language\", null)",
+          "after": "\nval defaultSubtitleLang = host.playerPreferences.getString(\"player_default_subtitle_language\", null)",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.stopExternalSubtitleRendering() // invalidates in-flight addon downloads",
+          "after": "\nhost.subtitleController.stopExternalSubtitleRendering() // invalidates in-flight addon downloads",
+          "count": 1
+        },
+        {
+          "before": "\nonlyForeignAudio = playerPreferences.getBoolean(\"subtitle_only_foreign_audio\", false),",
+          "after": "\nonlyForeignAudio = host.playerPreferences.getBoolean(\"subtitle_only_foreign_audio\", false),",
+          "count": 1
+        },
+        {
+          "before": "\nif (currentStremioSubtitleIndex >= 0 || subtitleController.externalSubtitleActive) {",
+          "after": "\nif (currentStremioSubtitleIndex >= 0 || host.subtitleController.externalSubtitleActive) {",
+          "count": 1
+        },
+        {
+          "before": "\npreferredAudio = playerPreferences.getString(\"player_default_audio_language\", null),",
+          "after": "\npreferredAudio = host.playerPreferences.getString(\"player_default_audio_language\", null),",
+          "count": 1
+        },
+        {
+          "before": "\nforcedOnly = playerPreferences.getBoolean(\"subtitle_forced_only\", false),",
+          "after": "\nforcedOnly = host.playerPreferences.getBoolean(\"subtitle_forced_only\", false),",
+          "count": 1
+        },
+        {
+          "before": "\nsourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),",
+          "after": "\nsourcePriority = SubtitleSettings.getSubtitleSourcePriority(activity),",
+          "count": 1
+        },
+        {
+          "before": "\n(!playerPreferences.getBoolean(\"subtitle_forced_only\", false) &&",
+          "after": "\n(!host.playerPreferences.getBoolean(\"subtitle_forced_only\", false) &&",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleController.loadStremioSubtitle(sub)",
+          "after": "\nhost.subtitleController.loadStremioSubtitle(sub)",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun tryAutoSelectAddonSubtitle() {",
+          "after": "\nfun tryAutoSelectAddonSubtitle() {",
+          "count": 1
+        },
+        {
+          "before": "\nval currentPlayer = player ?: return",
+          "after": "\nval currentPlayer = host.player ?: return",
+          "count": 1
+        },
+        {
+          "before": "\ntrackSelector?.let { selector ->",
+          "after": "\nhost.trackSelector?.let { selector ->",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun dispatchKeyEvent(KeyEvent)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun isFocusInControlsOverlay()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun isFocusInIptvChannelList()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun handlePlayPauseToggleFromCenter()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun togglePlayPause()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showControlsMenu()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideControlsMenu()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateSubtitleControlsLift()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideTitleImmediately()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun scheduleHideControlsMenu()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun cancelScheduledHideControlsMenu()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updatePauseButtonLabel()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateAspectButtonLabel()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateNightModeButtonLabel()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun startSeekbarProgressUpdates()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun stopSeekbarProgressUpdates()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateSeekbarProgress()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showControlsAndFocusProgressBar()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupCinemaProgressBar()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun enterCinemaSeekMode()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun exitCinemaSeekMode(Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun confirmCinemaSeek()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateCinemaSeekSpeed(Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateCinemaProgressUI()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeekbar()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideSeekbar()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun confirmSeekPosition()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun seekBackward(Long,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun seekForward(Long,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateSeekSpeed(Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateSeekbarUI()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateSeekbarPosition(Float)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun seekBy(Long)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun releaseScreenForSleep()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun holdScreenForPlayback()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showNextOverlay(PlaybackItem)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun fadeInNextOverlay()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideNextOverlay()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun isCleanPlaybackState()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun initIptvMode(JSONObject)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupIptvControls()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun liveIptvDockButtons()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaIconTints",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property cinemaButtonTypefaces",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyLiveIptvControlStyle()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreCinemaDockIconTints()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvRecordingActionsController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateIptvControlPresentation(IptvChannelEntry?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun arrangeLiveIptvControlDock()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreOriginalControlDockOrder()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun replaceControlDockOrder(LinearLayout,List<View>)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restoreCinemaIptvControlStyle()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property iptvZapBannerController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property guideStyle",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property guideTokens",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property controlsSkin",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/class DockSkinSpec",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property dockSkinSpec",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property guideTypefaces",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun guideTypeface(String?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setIptvMediaItem(IptvChannelEntry,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun reportDecoderFailure(PlaybackException)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun retryIptvAsHlsIfUnrecognized(PlaybackException)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umAudioTracks()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umAudioSelectedIndex()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleSearchResults",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property subtitleSearchResults",
+      "substitutions": [
+        {
+          "before": "\nprivate var subtitleSearchResults: List<SubtitleCatalogResult> = emptyList()",
+          "after": "\ninternal var subtitleSearchResults: List<SubtitleCatalogResult> = emptyList()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleSearchStatus",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property subtitleSearchStatus",
+      "substitutions": [
+        {
+          "before": "\nprivate var subtitleSearchStatus: String = \"\"",
+          "after": "\ninternal var subtitleSearchStatus: String = \"\"",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingSeriesResult",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property pendingSeriesResult",
+      "substitutions": [
+        {
+          "before": "\nprivate var pendingSeriesResult: SubtitleCatalogResult? = null",
+          "after": "\ninternal var pendingSeriesResult: SubtitleCatalogResult? = null",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingSeason",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property pendingSeason",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingEpisode",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/property pendingEpisode",
+      "substitutions": []
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property unifiedSectionIds",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umSectionRows()",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nstremioSubtitles.isNotEmpty() -> \"${stremioSubtitles.size}\"",
+          "after": "\nsubtitleSourcesController.stremioSubtitles.isNotEmpty() -> \"${subtitleSourcesController.stremioSubtitles.size}\"",
+          "count": 1
+        },
+        {
+          "before": "\nisLoadingStremioSubtitles -> \"\u2026\"",
+          "after": "\nsubtitleSourcesController.isLoadingStremioSubtitles -> \"\u2026\"",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property unifiedMenuCallbacks",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nval item = getCurrentSubtitleSearchItem() ?: return \"\"",
+          "after": "\nval item = subtitleSourcesController.dialogs.getCurrentSubtitleSearchItem() ?: return \"\"",
+          "count": 1
+        },
+        {
+          "before": "\nrequestSubtitleCatalogSearchFromFlutter(",
+          "after": "\nsubtitleSourcesController.dialogs.requestSubtitleCatalogSearchFromFlutter(",
+          "count": 1
+        },
+        {
+          "before": "\n\"subs\" -> umSubsModel(col1, col2Index)",
+          "after": "\n\"subs\" -> subtitleSourcesController.umSubsModel(col1, col2Index)",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleSearchResults = emptyList()",
+          "after": "\nsubtitleSourcesController.subtitleSearchResults = emptyList()",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleSearchStatus = \"Searching\u2026\"",
+          "after": "\nsubtitleSourcesController.subtitleSearchStatus = \"Searching\u2026\"",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleSearchResults = results",
+          "after": "\nsubtitleSourcesController.subtitleSearchResults = results",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleSearchStatus = msg",
+          "after": "\nsubtitleSourcesController.subtitleSearchStatus = msg",
+          "count": 1
+        },
+        {
+          "before": "\npendingSeriesResult = null",
+          "after": "\nsubtitleSourcesController.pendingSeriesResult = null",
+          "count": 1
+        },
+        {
+          "before": "\nsubtitleSearchStatus =",
+          "after": "\nsubtitleSourcesController.subtitleSearchStatus =",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umAudioModel(List<UnifiedMenuController.Row>,Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umSubsModel(List<UnifiedMenuController.Row>,Int)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun umSubsModel(List<UnifiedMenuController.Row>,Int)",
+      "substitutions": [
+        {
+          "before": "\nprivate fun umSubsModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {",
+          "after": "\nfun umSubsModel(col1: List<UnifiedMenuController.Row>, col2Index: Int): UnifiedMenuController.Model {",
+          "count": 1
+        },
+        {
+          "before": "\ntag == \"appearance\" -> \"Appearance \u00b7 live\" to subtitleController.umAppearanceRows()",
+          "after": "\ntag == \"appearance\" -> \"Appearance \u00b7 live\" to host.subtitleController.umAppearanceRows()",
+          "count": 1
+        },
+        {
+          "before": "\ntag == \"emb\" -> \"Track\" to subtitleController.umEmbeddedTrackRows()",
+          "after": "\ntag == \"emb\" -> \"Track\" to host.subtitleController.umEmbeddedTrackRows()",
+          "count": 1
+        },
+        {
+          "before": "\ntag == \"timing\" -> \"Timing\" to subtitleController.umTimingRows()",
+          "after": "\ntag == \"timing\" -> \"Timing\" to host.subtitleController.umTimingRows()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umAddonTrackRows(String)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun umAddonTrackRows(String)",
+      "substitutions": [
+        {
+          "before": "\nonOk = { subtitleController.umSelectStremioSubtitleByUrl(sub.url) }",
+          "after": "\nonOk = { host.subtitleController.umSelectStremioSubtitleByUrl(sub.url) }",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umSearchRows()",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun umSearchRows()",
+      "substitutions": [
+        {
+          "before": "\nunifiedMenu?.hide()",
+          "after": "\nhost.unifiedMenu?.hide()",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umPickSearchResult(SubtitleCatalogResult)",
+      "subtree": true,
+      "fate": "moved",
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun umPickSearchResult(SubtitleCatalogResult)",
+      "substitutions": [
+        {
+          "before": "\nval se = getCurrentSubtitleSearchItem()?.let { resolveSeasonEpisodeForSubtitle(it) }",
+          "after": "\nval se = dialogs.getCurrentSubtitleSearchItem()?.let { resolveSeasonEpisodeForSubtitle(it) }",
+          "count": 1
+        },
+        {
+          "before": "\nval cur = getCurrentSubtitleSearchItem()",
+          "after": "\nval cur = dialogs.getCurrentSubtitleSearchItem()",
+          "count": 1
+        },
+        {
+          "before": "\nunifiedMenu?.render()",
+          "after": "\nhost.unifiedMenu?.render()",
+          "count": 1
+        },
+        {
+          "before": "\nunifiedMenu?.hide()",
+          "after": "\nhost.unifiedMenu?.hide()",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umSourceRows(List<StremioSource>,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umAddLoadMoreRow(MutableList<UnifiedMenuController.Row>,String,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umSourcesModel(List<UnifiedMenuController.Row>,Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umDisplayModel(List<UnifiedMenuController.Row>,Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun umPlaybackModel(List<UnifiedMenuController.Row>,Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showAudioTrackDialog()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun cycleAspectRatio()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyResizeMode()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun cyclePlaybackSpeed()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyPlaybackSpeed(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun syncAudioEffectSession(Int?)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun initializeLoudnessEnhancer()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun releaseLoudnessEnhancer()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun loadPlayerDefaults()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showNightModeDialog()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyNightMode(Int)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun restartProgressUpdates()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property finalProgressSnapshot",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property finishProgressAttempted",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun recordPlaybackLifecycle(String,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun finish()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun sendFinished()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun guideAdjacent(PlaybackPayload,PlaybackItem?,Int,Boolean)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sourceFetchController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property sourceSwitchController",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun parsePayload(String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onStart()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onStop()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun setupBackPressHandler()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property legacyStoragePermissionRequestCode",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onRequestPermissionsResult(Int,Array<out String>,IntArray)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onResume()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onPause()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showBufferingIndicatorDebounced()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun hideBufferingIndicator()",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun onDestroy()",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nstremioSubtitles.clear()",
+          "after": "\nsubtitleSourcesController.stremioSubtitles.clear()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun updateStremioSourcesFromPlaybackMap(Map<*, *>)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun replacePayloadWithStremioTvItem(StremioTvGuideChannel,Map<*, *>,String,String)",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun playStremioTvPlaybackMap(StremioTvGuideChannel,Map<*, *>,String,String,Boolean)",
+      "subtree": true,
+      "fate": "patched",
+      "patches": [
+        {
+          "before": "\nfetchStremioSubtitles(playbackItem)",
+          "after": "\nsubtitleSourcesController.fetchStremioSubtitles(playbackItem)",
+          "count": 1
+        },
+        {
+          "before": "\nclearStremioLoadingState()",
+          "after": "\nsubtitleSourcesController.clearStremioLoadingState()",
+          "count": 1
+        },
+        {
+          "before": "\nresetSubtitleState()",
+          "after": "\nsubtitleSourcesController.resetSubtitleState()",
+          "count": 1
+        }
+      ],
+      "reason": "Retarget subtitle-source access to its single owner/collaborators in place; bootstrap and teardown stay Activity-owned.",
+      "test": "Phase-14 original bootstrap/callback characterization and complete extraction fixture"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property PAYLOAD_KEY",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property DECODER_LOG_TAG",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property RESUME_HOLD_TOLERANCE_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property RESUME_HOLD_SETTLE_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property USE_UNIFIED_MENU",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property PROGRESS_INTERVAL_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property CONTROLS_AUTO_HIDE_DELAY_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property SEEK_STEP_MS",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property SEEK_LONG_PRESS_THRESHOLD",
+      "subtree": true,
+      "fate": "retained"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/companion Companion/property BACK_PRESS_INTERVAL_MS",
+      "subtree": true,
+      "fate": "retained"
+    }
+  ],
+  "added": [
+    {
+      "target": "class AndroidTvTorrentPlayerActivity/property subtitleSourcesController",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "text": "\n    private val subtitleSourcesController: TvSubtitleSourcesController = TvSubtitleSourcesController(\n        this,\n        object : TvSubtitleSourcesController.Host {\n            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex\n            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex\n            override fun dp(value: Int): Int { return this@AndroidTvTorrentPlayerActivity.dp(value) }\n            override val iptvChannels: List<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels\n            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode\n            override val offsetRenderersFactory: OffsetRenderersFactory? get() = this@AndroidTvTorrentPlayerActivity.offsetRenderersFactory\n            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload\n            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player\n            override val playerPreferences: com.debrify.app.profiles.NativePlayerPreferences get() = this@AndroidTvTorrentPlayerActivity.playerPreferences\n            override val stremioSubtitleService: StremioSubtitleService? get() = this@AndroidTvTorrentPlayerActivity.stremioSubtitleService\n            override val subtitleController: TvSubtitleController get() = this@AndroidTvTorrentPlayerActivity.subtitleController\n            override val subtitleScope: CoroutineScope get() = this@AndroidTvTorrentPlayerActivity.subtitleScope\n            override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness\n            override val trackSelector: DefaultTrackSelector? get() = this@AndroidTvTorrentPlayerActivity.trackSelector\n            override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu\n        },\n    )",
+      "reason": "Single subtitle-source owner at first removed field; fieldless dialogs eager; all Host forwarding computed."
+    }
+  ],
+  "initializer_timing": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonSubtitleResults",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1270,
+      "text": "private val addonSubtitleResults = mutableListOf<AddonSubtitleResult>()  // per-addon, ordered/stable",
+      "kind": "allocation",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property injectedSubtitles",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1271,
+      "text": "// Subtitles supplied at launch (e.g. YouTube closed captions). Parsed once\n    // from the payload; re-seeded as a provider group on each item instead of\n    // an IMDb-keyed addon fetch. Non-empty only for sources that carry their\n    // own captions.\n    private val injectedSubtitles = mutableListOf<StremioSubtitle>()",
+      "kind": "allocation",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property suppressSubtitleAutoSelect",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1276,
+      "text": "// When launch-supplied captions are the only subtitles (YouTube), don't\n    // auto-enable them \u2014 matches YouTube's captions-off default and the phone\n    // player. The user turns them on from the subtitle menu.\n    private var suppressSubtitleAutoSelect = false",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonFetchTokens",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1280,
+      "text": "private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation",
+      "kind": "allocation",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property failedSubtitleUrls",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1281,
+      "text": "private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues \u2014 don't re-auto-select",
+      "kind": "allocation",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property currentStremioSubtitleIndex",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1282,
+      "text": "private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleAddonDiscoveryReady",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1283,
+      "text": "private var subtitleAddonDiscoveryReady = false",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property isLoadingStremioSubtitles",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1284,
+      "text": "private var isLoadingStremioSubtitles = false  // Loading state for UI indicator",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property userManuallySelectedSubtitle",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1286,
+      "text": "private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property addonSubtitleFetchToken",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1287,
+      "text": "private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleImdbId",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1288,
+      "text": "private var manualSubtitleImdbId: String? = null  // Subtitle-only identity override from Search Subtitle",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleType",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1289,
+      "text": "private var manualSubtitleType: String? = null",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleSeason",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1290,
+      "text": "private var manualSubtitleSeason: Int? = null",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleEpisode",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1291,
+      "text": "private var manualSubtitleEpisode: Int? = null",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property manualSubtitleDisplayLabel",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 1292,
+      "text": "private var manualSubtitleDisplayLabel: String? = null",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleSearchResults",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 7566,
+      "text": "// Inline subtitle-search state (rendered in the Subtitles \u2192 Fix movie column).\n    private var subtitleSearchResults: List<SubtitleCatalogResult> = emptyList()",
+      "kind": "allocation",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property subtitleSearchStatus",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 7568,
+      "text": "private var subtitleSearchStatus: String = \"\"",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingSeriesResult",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 7569,
+      "text": "private var pendingSeriesResult: SubtitleCatalogResult? = null",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingSeason",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 7570,
+      "text": "private var pendingSeason: Int = 1",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/property pendingEpisode",
+      "slot": "class AndroidTvTorrentPlayerActivity/property stremioSubtitles",
+      "line": 7571,
+      "text": "private var pendingEpisode: Int = 1",
+      "kind": "constant",
+      "proof": "Inert original constant or owned empty allocation; no construction-time reads of Activity/Host or later controller slots."
+    }
+  ],
+  "overload_audit": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun launchAddonSubtitleFetch(StremioAddon,String,String,PlaybackItem,Int)",
+      "line": 4151,
+      "context": "Toast.makeText(this@AndroidTvTorrentPlayerActivity, \"No online subtitles found for this title\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 4151,
+      "call_end_line": 4151,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun launchAddonSubtitleFetch(StremioAddon,String,String,PlaybackItem,Int)",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4924,
+      "context": "Toast.makeText(this, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 4924,
+      "call_end_line": 4924,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4931,
+      "context": "val container = LinearLayout(this).apply {",
+      "callee": "LinearLayout",
+      "call_start_line": 4931,
+      "call_end_line": 4931,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4936,
+      "context": "val queryInput = EditText(this).apply {",
+      "callee": "EditText",
+      "call_start_line": 4936,
+      "call_end_line": 4936,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4947,
+      "context": "val actionRow = LinearLayout(this).apply {",
+      "callee": "LinearLayout",
+      "call_start_line": 4947,
+      "call_end_line": 4947,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4953,
+      "context": "val searchButton = AppCompatButton(this).apply {",
+      "callee": "AppCompatButton",
+      "call_start_line": 4953,
+      "call_end_line": 4953,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "androidx/appcompat/widget/AppCompatButton",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "androidx/appcompat/widget/AppCompatButton",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4963,
+      "context": "val progressBar = ProgressBar(this).apply {",
+      "callee": "ProgressBar",
+      "call_start_line": 4963,
+      "call_end_line": 4963,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/ProgressBar",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/ProgressBar",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4979,
+      "context": "val statusText = TextView(this).apply {",
+      "callee": "TextView",
+      "call_start_line": 4979,
+      "call_end_line": 4979,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/TextView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/TextView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4985,
+      "context": "val resultList = ListView(this).apply {",
+      "callee": "ListView",
+      "call_start_line": 4985,
+      "call_end_line": 4985,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/ListView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/ListView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 5090,
+      "context": "Toast.makeText(this, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 5090,
+      "call_end_line": 5090,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 5123,
+      "context": "dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)",
+      "callee": "Builder",
+      "call_start_line": 5123,
+      "call_end_line": 5123,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSearchSubtitleDialog()",
+      "expected_before": {
+        "owner": "androidx/appcompat/app/AlertDialog$Builder",
+        "descriptor": "(Landroid/content/Context;I)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "androidx/appcompat/app/AlertDialog$Builder",
+        "descriptor": "(Landroid/content/Context;I)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "line": 5233,
+      "context": "return object : ArrayAdapter<SubtitleCatalogResult>(this, 0, results) {",
+      "callee": "ArrayAdapter",
+      "call_start_line": 5233,
+      "call_end_line": 5233,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "expected_before": {
+        "owner": "android/widget/ArrayAdapter",
+        "descriptor": "(Landroid/content/Context;ILjava/util/List;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/ArrayAdapter",
+        "descriptor": "(Landroid/content/Context;ILjava/util/List;)V",
+        "opcode": "invokespecial"
+      },
+      "call_kind": "KtSuperTypeCallEntry"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5281,
+      "context": "val container = LinearLayout(this).apply {",
+      "callee": "LinearLayout",
+      "call_start_line": 5281,
+      "call_end_line": 5281,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5286,
+      "context": "val title = TextView(this).apply {",
+      "callee": "TextView",
+      "call_start_line": 5286,
+      "call_end_line": 5286,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/TextView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/TextView",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5292,
+      "context": "val row = LinearLayout(this).apply {",
+      "callee": "LinearLayout",
+      "call_start_line": 5292,
+      "call_end_line": 5292,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/LinearLayout",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5296,
+      "context": "val seasonInput = EditText(this).apply {",
+      "callee": "EditText",
+      "call_start_line": 5296,
+      "call_end_line": 5296,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5306,
+      "context": "val episodeInput = EditText(this).apply {",
+      "callee": "EditText",
+      "call_start_line": 5306,
+      "call_end_line": 5306,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "android/widget/EditText",
+        "descriptor": "(Landroid/content/Context;)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5341,
+      "context": "val dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)",
+      "callee": "Builder",
+      "call_start_line": 5341,
+      "call_end_line": 5341,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "androidx/appcompat/app/AlertDialog$Builder",
+        "descriptor": "(Landroid/content/Context;I)V",
+        "opcode": "invokespecial"
+      },
+      "expected_after": {
+        "owner": "androidx/appcompat/app/AlertDialog$Builder",
+        "descriptor": "(Landroid/content/Context;I)V",
+        "opcode": "invokespecial"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "line": 5352,
+      "context": "Toast.makeText(this, \"Enter a valid season and episode\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 5352,
+      "call_end_line": 5352,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun showSeasonEpisodePrompt(SubtitleCatalogResult)",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "line": 5385,
+      "context": "Toast.makeText(this, \"No current video to search\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 5385,
+      "call_end_line": 5385,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "line": 5433,
+      "context": "Toast.makeText(this, \"Searching subtitles for ${result.name}\", Toast.LENGTH_SHORT).show()",
+      "callee": "makeText",
+      "call_start_line": 5433,
+      "call_end_line": 5433,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun applyManualSubtitleIdentity(SubtitleCatalogResult,Int?,Int?)",
+      "expected_before": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "android/widget/Toast",
+        "descriptor": "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun tryAutoSelectAddonSubtitle()",
+      "line": 5563,
+      "context": "sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),",
+      "callee": "getSubtitleSourcePriority",
+      "call_start_line": 5563,
+      "call_end_line": 5563,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "target": "class TvSubtitleSourcesController/fun tryAutoSelectAddonSubtitle()",
+      "expected_before": {
+        "owner": "com/debrify/app/util/SubtitleSettings",
+        "descriptor": "(Landroid/content/Context;)Ljava/util/List;",
+        "opcode": "invokestatic"
+      },
+      "expected_after": {
+        "owner": "com/debrify/app/util/SubtitleSettings",
+        "descriptor": "(Landroid/content/Context;)Ljava/util/List;",
+        "opcode": "invokestatic"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "line": 5208,
+      "context": "runOnUiThread { onSuccess(parsedResults) }",
+      "callee": "runOnUiThread",
+      "call_start_line": 5208,
+      "call_end_line": 5208,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "expected_before": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity"
+      },
+      "expected_after": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "androidx/appcompat/app/AppCompatActivity"
+      },
+      "receiver": "implicit-inherited"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "line": 5213,
+      "context": "runOnUiThread {",
+      "callee": "runOnUiThread",
+      "call_start_line": 5213,
+      "call_end_line": 5215,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "expected_before": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity"
+      },
+      "expected_after": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "androidx/appcompat/app/AppCompatActivity"
+      },
+      "receiver": "implicit-inherited"
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "line": 5220,
+      "context": "runOnUiThread { onError(\"Subtitle search is unavailable.\") }",
+      "callee": "runOnUiThread",
+      "call_start_line": 5220,
+      "call_end_line": 5220,
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "target": "class TvSubtitleSearchDialogs/fun requestSubtitleCatalogSearchFromFlutter(String,(List<SubtitleCatalogResult>) -> Unit,(String) -> Unit)",
+      "expected_before": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity"
+      },
+      "expected_after": {
+        "descriptor": "(Ljava/lang/Runnable;)V",
+        "opcode": "invokevirtual",
+        "owner": "androidx/appcompat/app/AppCompatActivity"
+      },
+      "receiver": "implicit-inherited"
+    }
+  ],
+  "runnable_receivers": [],
+  "context_aliases": [],
+  "receiver_lambda_exclusions": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4986,
+      "context": "this.adapter = adapter",
+      "text": "this",
+      "receiver": "receiver-lambda",
+      "lambda_callee": "apply",
+      "lambda_receiver": "ListView(this)",
+      "reason": "ListView.apply inner this remains the ListView; Activity constructor argument is substituted separately."
+    }
+  ],
+  "receiver_lambda_transformations": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4986,
+      "constructor_line": 4985,
+      "context": "val resultList = ListView(this).apply {",
+      "before": "ListView(this)",
+      "after": "ListView(activity)",
+      "callee": "ListView",
+      "reason": "Only the Context constructor argument changes; apply receiver and this.adapter stay bound to ListView."
+    }
+  ],
+  "listener_receivers": [],
+  "function_references": [],
+  "nested_construction": [
+    {
+      "destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+      "owner_destination": "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+      "container": "class TvSubtitleSourcesController",
+      "initializer": "class TvSubtitleSourcesController/property dialogs",
+      "text": "\n    internal val dialogs = TvSubtitleSearchDialogs(activity, host, this)",
+      "reason": "Eager collaborator constructed at the owner slot; all later field/accessor proofs required."
+    }
+  ],
+  "earlier_destinations": {
+    "revision": "82b16832c",
+    "paths": [
+      "android/app/src/main/kotlin/com/debrify/app/tv/AutoSyncRingView.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvChannelAdapter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvEntryRules.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvEpgAdapter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvLoadErrorPolicy.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvPayloadParsing.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvPickerAdapters.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/IptvRecordingUrlRules.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/PlaylistNavigationMaps.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/StremioTvGuideAdapter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/StremioTvGuideData.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleSearchQuery.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvAutoSyncController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelNavigator.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelStartController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideChromeController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideOverlayBuilder.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuidePickers.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvRecordingActionsController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvStartOverController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerStyledRenderer.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapPager.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvMoviePlaylistAdapter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPikPakRetryController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackItem.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackPayload.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlayerFlutterRequests.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlayerFormatting.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistAdapter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistFocusNavigator.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistGuideSkin.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistOverlayController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSkipSegmentController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSleepTimerController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupDiagnostics.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvStatusPillController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioSource.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioTvGuideController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvTrackLabels.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/TvUpNextController.kt",
+      "android/app/src/main/kotlin/com/debrify/app/tv/UnifiedMenuRows.kt"
+    ],
+    "whitelist": []
+  },
+  "preserved_receivers": [
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun seedInjectedSubtitles()",
+      "line": 4073,
+      "context": "resources = listOf(\"subtitles\"),",
+      "text": "resources",
+      "binding": "named-argument",
+      "callee": null,
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access."
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun showSearchSubtitleDialog()",
+      "line": 4989,
+      "context": "selector = ContextCompat.getDrawable(context, R.drawable.subtitle_catalog_row_selector)",
+      "text": "context",
+      "binding": "receiver-getter",
+      "callee": "getContext",
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access.",
+      "expected_before": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "android/widget/ListView"
+      },
+      "expected_after": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "android/widget/ListView"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "line": 5235,
+      "context": "val row = (convertView as? LinearLayout) ?: LinearLayout(context).apply {",
+      "text": "context",
+      "binding": "receiver-getter",
+      "callee": "getContext",
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access.",
+      "expected_before": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity$createSubtitleCatalogResultAdapter$1"
+      },
+      "expected_after": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/TvSubtitleSearchDialogs$createSubtitleCatalogResultAdapter$1"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "line": 5242,
+      "context": "val item = getItem(position)",
+      "text": "getItem",
+      "binding": "receiver-call",
+      "callee": "getItem",
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access.",
+      "expected_before": {
+        "descriptor": "(I)Ljava/lang/Object;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity$createSubtitleCatalogResultAdapter$1"
+      },
+      "expected_after": {
+        "descriptor": "(I)Ljava/lang/Object;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/TvSubtitleSearchDialogs$createSubtitleCatalogResultAdapter$1"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "line": 5243,
+      "context": "val title = TextView(context).apply {",
+      "text": "context",
+      "binding": "receiver-getter",
+      "callee": "getContext",
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access.",
+      "expected_before": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity$createSubtitleCatalogResultAdapter$1"
+      },
+      "expected_after": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/TvSubtitleSearchDialogs$createSubtitleCatalogResultAdapter$1"
+      }
+    },
+    {
+      "original": "class AndroidTvTorrentPlayerActivity/fun createSubtitleCatalogResultAdapter(MutableList<SubtitleCatalogResult>)",
+      "line": 5251,
+      "context": "val detail = TextView(context).apply {",
+      "text": "context",
+      "binding": "receiver-getter",
+      "callee": "getContext",
+      "reason": "Adapter/View receiver or constructor named argument remains unchanged; not an inherited Activity access.",
+      "expected_before": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/AndroidTvTorrentPlayerActivity$createSubtitleCatalogResultAdapter$1"
+      },
+      "expected_after": {
+        "descriptor": "()Landroid/content/Context;",
+        "opcode": "invokevirtual",
+        "owner": "com/debrify/app/tv/TvSubtitleSearchDialogs$createSubtitleCatalogResultAdapter$1"
+      }
+    }
+  ]
+}

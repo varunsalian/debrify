@@ -217,6 +217,24 @@ def check_initializer_timing(manifest, inventory, original, errors):
                        not node.get('has_initializer') and not node.get('has_delegate') and
                        node.get('getter_effect_free'))
         kind = 'none' if getter_only else initializer_kind(expression)
+        if manifest['phase'] >= 14 and expression == 'emptyList()':
+            if not node.get('declared_type'):
+                errors.append('emptyList requires an explicit declared property type: ' + row['original'])
+            # PSI is syntax-only. Conservatively reject any package declaration
+            # or explicit import that could shadow the default stdlib binding.
+            package = re.search(r'^package\s+([\w.]+)', original, re.M).group(1)
+            sources = [original]
+            sources.extend(path.read_text() for path in (k.ROOT / 'android/app/src/main/kotlin').rglob('*.kt')
+                           if re.search(r'^package\s+' + re.escape(package) + r'\s*$', path.read_text(), re.M))
+            shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|object|typealias)\s+)emptyList\b|\bemptyList\s*:', text)
+                         for text in sources)
+            for imported in re.findall(r'^import\s+([^\n]+)', original, re.M):
+                parts = imported.strip().split(' as ')
+                binding = parts[-1] if len(parts) == 2 else parts[0].rsplit('.', 1)[-1]
+                if binding == 'emptyList' and parts[0] != 'kotlin.collections.emptyList':
+                    shadow = True
+            if shadow:
+                errors.append('emptyList stdlib binding is shadowed: ' + row['original'])
         if kind is None or row.get('kind') != kind:
             errors.append('initializer timing not proven inert: ' + row['original'])
 

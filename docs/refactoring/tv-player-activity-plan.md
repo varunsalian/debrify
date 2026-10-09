@@ -1611,6 +1611,92 @@ playlist overlay for a series (season tabs, episode rows, current episode
 highlighted) and a movie collection, DPAD navigation incl. edges and long
 lists, the playlist in each controls skin, opening/closing during playback.
 
+## Phase 14 — subtitle sources (addon fetch, auto-select, manual identity, search dialogs, subtitle menu rows)
+
+Branch `refactor/tvplayer-p14` off the phase-13 merge `82b16832c` (activity 9,079 lines). Evidence under
+`refactor-evidence/tvplayer/p14/`. Inventory: "Phase 14 inventory" in the deps
+report (measured at `315448a3c`; phases 13 and 14 patch the same five
+declarations at different statements — re-measure on the phase-13 merge).
+All collaborator rules from phases 3–13 apply; the statement-level coverage
+sweep runs from the start (67 `if`, 48 `return` sites).
+
+**Not merged into `TvSubtitleController`:** it is already 776 lines (merging
+would give ≈ 1,870), it is a frozen earlier destination, and its 9 Host
+forwarders into this unit would become self-references.
+
+**Selected (≈ 1,094 lines, 43 members):** `TvSubtitleSourcesController`
+(≈ 712: all 21 fields + addon fetch, auto-select, manual identity, identity
+label, the 4 subtitle menu rows) eagerly constructs fieldless
+`TvSubtitleSearchDialogs` (≈ 487: both dialogs, catalog search, result
+adapter, current-search-item lookup); one shared 15-member Host; property at
+the `stremioSubtitles` slot. `subtitleScope`, `stremioSubtitleService` and
+`subtitleTrackReadiness` stay activity-owned and are borrowed through the
+Host. 24 activity patches in 9 declarations (2 braced templates; 1 in-place
+`onDestroy` statement between `subtitleScope.cancel()` and
+`stremioSubtitleService = null`); 12 Host re-points (14 token edits) in 4
+properties (`subtitleController` ×9, `iptvStartOverController`,
+`iptvGuideController`, `pikPakRetryController`); 20 inert initializer proofs
+(new narrow form: `emptyList()`; reuses phase 13's `-1`); ≈ 134 substitutions
+(77 host, 10 cross-file reads, 22 `this` → `activity` incl. an `ArrayAdapter`
+super-constructor argument, 3 `runOnUiThread`, 22 visibility). Not
+substituted: the receiver `this.adapter`, `context` ×4, `getItem`, and the
+named argument `resources =`.
+
+**Retargets.** 34 reflective sites over 7 field names in 5 files via 7
+owner-map routes (`subtitleScope` sites stay; the 2 `resetSubtitleState`
+sites target `TorboxTvPlayerActivity` and are unaffected). No Dart retargets
+(one patch inside the `handleMetadataUpdate` anchored range; asserted text
+unchanged).
+
+**Pinned as-is (follow-ups, not fixed):** a late metadata reply after destroy
+still runs the fetch path (content token never bumped in `onDestroy`) — but
+because destruction already nulled `stremioSubtitleService`, it obtains zero
+addons, clears slots, sets discovery ready and loading **false**, launches
+nothing, while the captured metadata cache still receives the reply (pinned
+exactly; separate from the already-running-fetch cancellation case); a
+fetch cancelled by the activity's `subtitleScope.cancel()` is caught by
+`catch (e: Exception)`, marks the addon FAILED, retries auto-select and can
+toast after destroy; catalog search has no request counter, so an older
+reply can overwrite newer results.
+
+### Step T
+
+`emptyList()` is already accepted (phase-4 proofs); step T only tightens its
+validation (declared type / stdlib binding checks, historical proofs stay
+compatible); `ListView(this)` constructor-receiver transformation (Context
+constructor pinned, inner `this.adapter` receiver preserved, omission and
+substitution negatives), mirroring the phase-12 `EditText` mechanism; the
+PSI collector also records `KtSuperTypeCallEntry` call metadata so the
+`ArrayAdapter` super-constructor argument is audited; phase-14 extraction fixture (owner
++ fieldless dialogs, borrowed scope/service/readiness) + negatives (receiver
+exclusions above, the named `resources =` argument, the `ArrayAdapter`
+super-constructor site); compiled audit; per-phase dispatcher keeping all
+historical suites; earlier destinations frozen at the phase-13 merge.
+
+### Step 0 — characterization of the original
+
+Three harnesses first, demonstrated on the original: a latch on
+`StremioSubtitleService.attemptFetch`, a fake Flutter channel with
+**endpoint-specific contracts** — `searchSubtitleCatalogs` (success/error;
+`runOnUiThread` runs inline on the activity thread; inline, queued-main and a
+worker-thread reply proving main-thread dispatch) and `requestMovieMetadata`
+(no `onError`: a null channel produces no callback, a send failure invokes
+`callback(null)` synchronously), each asserting the resulting controller
+loading state — and a dialog harness. Then: addon slot fetch/retry/failure, flat
+list rebuild, auto-select rules and `failedSubtitleUrls`, injected subtitle
+seeding, IMDb lookup path, manual identity apply, identity label, search
+dialogs (query, results, season/episode prompt), the 4 menu rows, the
+pinned-as-is quirks above, `onDestroy` order; systematic coverage sweep with
+a coverage matrix. Mutation proofs on the original; Claude's independent
+sample (≥ 75 % kills, else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–13 additions. Device checklist (end of series):
+addon subtitles for a movie and an episode (auto-select, retry of a failed
+addon), subtitle search dialog with season/episode prompt, manual identity
+correction, subtitle menu rows.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
@@ -3162,3 +3248,118 @@ lists, the playlist in each controls skin, opening/closing during playback.
   unchanged AppCompat manifest theme. Test helper split (325/494), its size
   exception removed. Activity 10,297 → 9,079. Decoder verification remains
   pending-environment. Phase 13 complete; merged.
+- 2026-10-09 — phase 14 design round 1 (Codex): **No P1s**; P2s folded
+  (correct post-destroy late-metadata outcome; endpoint-specific fake-channel
+  contracts incl. worker-thread catalog reply; ListView constructor-receiver
+  transformation + KtSuperTypeCallEntry audit); P3 `emptyList()` wording.
+  Phase 14 design approved.
+
+- 2026-10-09 — phase 14 Step T complete: re-measured `82b16832c`; 43-member
+  production-config fixture, 134 substitutions, 20 initializer proofs and 49
+  frozen earlier destinations. Corrected Host counts to 13 tokens / 11
+  forwarders in four whole-property patched rows (deps Step T explains).
+  Original self-comparison: 1,850 declarations, zero differences. All 378
+  checker self-tests pass, including every historical suite; compiled complete
+  fixture passes 25 receiver calls plus six preserved bindings. Typed stdlib
+  emptyList validation, ListView inner receiver and ArrayAdapter super-call
+  metadata/pins are covered by positives and stated-reason negatives. Evidence
+  `p14/`; production unchanged. Step 0 next; no production moves.
+
+- 2026-10-09 — **Phase 14 Step 0 complete; STOPPED before production moves.**
+  All three prerequisite harnesses pass on original 82b16832c, including the
+  real IO/retry/Main ladder, endpoint-specific inline/queued/worker replies
+  and shown/measured dialog callbacks. All 172 new tests pass. Systematic
+  PSI sweep covers 724 nodes in every one of the 22 moved functions
+  (106 writes, 66 if, five when, 48 returns, six loops, 493 calls). Every
+  required state/branch/loop/direct-call node is resolved: 364 assertion
+  proofs and three documented Android setter equivalents. Raw sweep has
+  465 runs, 396 assertion kills; compile-invalid/crash-only/draft variants
+  receive no kill credit. Every new named test has an assertion witness.
+  Matrix and test→mutation→assertion table are appended to the deps report;
+  exact patches, immutable fixtures, logs/XML and equivalence bytecode are
+  archived under p14/step0/. Corrected late-metadata outcome is pinned:
+  cache write, zero addons, discovery true/loading false/no jobs after destroy.
+  Running-fetch cancellation publication and older catalog overwrite remain
+  unchanged. Clean baseline-82b16832c has 1,420 identities; p14-step0 has
+  1,592 (1,591 pass, same known SourceBrowser focus failure, no skips):
+  172 passing additions only, stable fingerprints, matched 1 GiB heap/JBR.
+  Original lint archives 1,352 issues (253 errors/1,099 warnings; 175 opt-in)
+  for the later comparison. Reflection rescan identifies 41 future routes;
+  borrowed scope/service/readiness stay Activity-owned. Step T is 1ce352474:
+  378 self-tests, zero original differences, 20 initializer proofs and
+  25 receiver pins plus six preserved bindings. Detached original removed;
+  file-size/diff checks pass. Production, old assertions, lockfile and
+  ProGuard unchanged; no moves, gate, push, branch switch, device or bug fix.
+  Claude's independent sample and Step 1 remain for the next checkpoint.
+
+- 2026-10-09 — **Phase 14 Step 0b complete.** Claude r03/r16 are now
+  assertion-killed on original 82b16832c against all 186 characterizations;
+  r17 is equivalent (en/eng share canonical English matching), proved by
+  original bytecode execution over 13,417 tags and the full r17 rerun.
+  Fourteen new boundary tests each have named assertion witnesses; the
+  type/null/empty/language sweep kills 15 of 16 variants, with only r17
+  equivalent. The recording suspend-call seam preserves real IO/retries/Main.
+  p14-step0b has 1,606 identities (1,605 pass, same known focus failure):
+  fourteen passing additions only vs p14-step0, stable matched 1 GiB inputs.
+  Matrix/table and raw evidence under p14/step0b/. No production or protected
+  input changes. Step 1 follows under the approved manifest.
+
+- 2026-10-09 — **Phase 14 Step 1 moves complete.** The approved 43-member
+  extraction produces the 710-line subtitle-source owner and eager fieldless
+  495-line dialogs collaborator; activity 9,079 → 7,982, size ratchet lowered.
+  Borrowed scope/service/readiness remain activity-owned. All 134 substitutions,
+  four Host-property rows (11 forwarders / 13 tokens) and in-place destruction
+  patch match the manifest. Forty-one reflection routes are added only in the
+  shared helper; all existing assertions and Dart anchors remain unchanged.
+  Focused characterizations 186/186 pass. Checker: 1,850 declarations, zero
+  differences; historical p1–p13, 49 frozen destinations, 20 initializer
+  proofs, teardown order, 25 compiled receiver sites plus six preserved
+  bindings and all five Kotlin warning identities pass. Full checker suites
+  and clean JVM/lint/release/Flutter gates follow on this gate commit.
+
+
+- 2026-10-09 — **Phase 14 gate complete on a85ae8f28; decoder
+  pending-environment. STOPPED after Phase 14.** Step 0b f576c6f68 adds
+  fourteen original-surface tests, every one assertion-proved; sweep 15/16
+  killed, r17 equivalent. Claude r03/r16 fail assertions on original 82b16832c;
+  r17 passes all 186 and original LanguageMapper bytecode produces identical
+  en/eng outcomes over 13,417 tags. Step 1 a85ae8f28 extracts the 710-line
+  subtitle-source owner and eager, fieldless 495-line dialogs collaborator;
+  activity 9,079 → 7,982. Scope/service/readiness stay activity-owned and
+  borrowed. Forty-one owner-map routes are the only test retarget; assertions
+  and Dart files remain byte-identical. Current checker classifies 1,850
+  original declarations with zero differences. All 378 checker/auditor
+  self-tests and historical p1–p13 merge checks pass. Forty-nine earlier
+  destinations are byte-identical to 82b16832c; twenty initializer proofs,
+  eager construction, slot anchoring, full lifecycle/teardown order and the
+  runtime cancellation → flat-list clear → service-null assertion pass.
+  Compiled audit pins 25 receiver calls and six preserved bindings, including
+  ListView Context construction with inner this.adapter preserved and the
+  ArrayAdapter super-constructor. Five Kotlin warnings and 1,758 analyzer
+  diagnostics are unchanged. Clean p14-gate exactly matches all 1,606
+  p14-step0b identities/statuses: 1,605 pass, same known SourceBrowser focus
+  failure, no missing/new skips, stable input, matched evidence-only 1 GiB heap.
+  Lint exactly retains all 1,352 issue identities (253 errors/1,099 warnings;
+  175 opt-in errors), with moved locations mapped back to original symbols;
+  no additions/removals/suppressions. Release APK succeeds. R8/DEX checks all
+  eight generated classes and 162 members, including Host, activity Host
+  implementation and anonymous/coroutine classes, with three negative
+  controls. Decoder failure output/native hashes/missing-feature manifest
+  remain identical to phase 1: pending-environment. Affected Dart source
+  tests match all 45 prior statuses. Full quiet Flutter suite via
+  suite_evidence.py on clean gate commit a85ae8f28 exactly matches all 12,855
+  phase-13 identities/statuses (12,794 success, 13 failure, 28 error, 20
+  skipped), same SDK/flags and stable tree. Size baseline updated; no new
+  exception. Evidence p14/step0b/, p14/step1/, p14/gate/ and junit/p14-gate/.
+  Lockfile, ProGuard and earlier manifests/destinations remain unchanged.
+  No push, branch switch, self independent review, device/emulator or bug fix.
+  Phase 15 not started.
+- 2026-10-09 — phase 14 post-implementation reviews of `66ddf4d27..3c09a7a38`.
+  Claude's independent sample 14/17 (82 %); r03/r16 closed in 0b; r17
+  ("en" vs "eng" default) equivalent — both canonicalize to English
+  (13,417 language-tag checks, independently re-run by the reviewer).
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; single
+  ownership of 21 fields, borrowed scope/service/readiness untouched,
+  teardown cancellation → flat-list clear → service null order unchanged,
+  `this.adapter` binding preserved. Activity 9,079 → 7,982. Decoder
+  verification remains pending-environment. Phase 14 complete; merged.
