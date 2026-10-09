@@ -1872,8 +1872,9 @@ Branch `refactor/tvplayer-p17` off the phase-16 merge. Evidence under
 `refactor-evidence/tvplayer/p17/`. Inventory: "Phase 17 inventory" in the deps
 report (measured at `ce3ddfb06`; re-measure on the phase-16 merge). All
 collaborator rules from phases 3–16 apply; statement-level coverage sweep
-from the start; the ≥ 75 % first-sample rule applies. **High risk:** no test
-touches the twin trial, recovery wiring, strict-TS or lifecycle parking today.
+from the start; the ≥ 75 % first-sample rule applies. **High risk:** the twin trial, recovery wiring
+and strict-TS have no tests yet; phase-16 tests already cover parked
+restoration and lazy recovery timing and are reused in step 0.
 
 **Selected (whole unit; splitting would cost ≈ 30 throwaway edits and a second
 step 0 because owner and twin reference each other 28 times):**
@@ -1881,7 +1882,8 @@ step 0 because owner and twin reference each other 28 times):**
 sets, recovery wiring, reconnect pill) eagerly constructs field-bearing
 `TvIptvTwinTrial` (≈ 285; owns `iptvTwinTrialHandler`); property
 `iptvTuneController` at the unit's first owned slot; 41 members / ≈ 614 lines.
-Qualifiers **`tune.`/`trial.`** (`twin` collides with 22 locals/parameters).
+Qualifiers **`tune.`/`trial.`** (`twin` collides with 8 local bindings and 1 parameter binding — 25
+code-token occurrences in moved code).
 
 **Deliberately left in the activity:** the two `@Volatile` loader-thread fields
 (`currentIptvHttpHeaders`, `iptvStrictTsActive`) — activity-owned with Host
@@ -1910,7 +1912,11 @@ startup-gate commits), the codec selector and `iptvDecoderMode`,
   dispatching to `AppCompatActivity`'s override while the inner `this` stays
   the TextView. The owner needs `@OptIn(UnstableApi::class)` (Media3 javap
   verified); the twin does not.
-- Retargets: 19 reflective sites via 3 owner-map routes; no Dart anchors.
+- Retargets: 31 reflective sites over 7 routing keys (`currentIptvStreamUrl`
+  ×22, `iptvHlsForcedUrls` ×2, `iptvTwinPreferredUrls` ×1, both parked-restore
+  fields ×2 each, `iptvLiveRecovery$delegate` ×1 and the generated getter
+  `getIptvLiveRecovery` ×1 — `memberOwner` strips `$delegate` but does not
+  normalize getter names, so the getter is routed explicitly); no Dart anchors.
 
 ### Step T
 
@@ -3880,3 +3886,10 @@ pill.
   is byte-identical after reversals, and the back-navigation lint removal is
   detector scope only. Activity 6,986 → 5,891. Decoder verification remains
   pending-environment. Phase 16 complete; merged.
+- 2026-10-10 — phase 17 design review (Codex, `tvp-design`): **No P1s**.
+  P2 folded: reflective retargets are 31 sites over 7 routing keys incl.
+  the generated getter `getIptvLiveRecovery`; phase-16 tests already cover
+  parked restoration and lazy recovery timing. P3 folded: `twin` collision
+  count (8 local + 1 parameter bindings, 25 occurrences). Other counts
+  re-verified on `be5635fae`: 41 members / 614 lines, 28 activity patches,
+  8 Host re-points / 9 edits, 20 Host members, 21 initializer proofs.

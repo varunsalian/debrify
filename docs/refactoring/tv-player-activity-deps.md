@@ -18089,7 +18089,7 @@ one activity property.** It follows the phase-13/16 precedent.
   does not compile, because the Host must not declare those names.
 - **Qualifier names.** On blanked code across all moved spans plus every patched declaration:
   - `tune`, `trial`, `iptvTuneController`, `host` and `activity` have **0** collisions;
-  - **`twin` collides with 22 locals/parameters** (`val twin = …`, `beginIptvTwinTrial(entry, original,
+  - **`twin` collides with 8 local bindings and 1 parameter binding (25 code-token occurrences)** (`val twin = …`, `beginIptvTwinTrial(entry, original,
     twin)`), so it must never be a qualifier;
   - `pill` is a local (`val pill`) in `showIptvReconnectPill`.
 
