@@ -1825,8 +1825,11 @@ Host):**
   and a Toast, 1 excluded Runnable `this`, 4 inherited calls, 53
   visibility). `updateSeekbarProgress` shadows `player` with a local (not
   substituted). `progressHandler` and the zap-banner tokens are untouched.
-- Retargets: 44 reflective sites via 9 owner-map routes (`controlsMenuVisible`
-  ×23); no Dart retargets (two anchored ranges get patches; asserted text
+- Retargets: all **34 moved names** accessed reflectively by existing tests
+  (151 quoted accesses incl. phase-15 suites, e.g. `hideControlsRunnable`,
+  `pauseButton`, `seekbarProgressRunnable`) are routed to their new owners
+  before step T, then extended for step-0 additions; assertions preserved;
+  no Dart retargets (two anchored ranges get patches; asserted text
   unchanged).
 
 **Pinned as-is:** `showSeekbar` has no caller (the legacy seekbar path is
@@ -1838,7 +1841,9 @@ progress-reporter guards every tick; the 100 ms ticker is never stopped.
 Classifier forms + negatives; extraction fixture (owner + two collaborators
 via `controls`/`seek`/`identity`, `@Volatile` preserved) + negatives (a
 `overlay`-named reference captured by a local, the shadowed `player` local);
-compiled audit; per-phase dispatcher keeping all historical suites; earlier
+compiled audit (incl. retaining all 23 phase-15 view-binding pins — 12
+casts, 11 without, incl. three array stores — with their target
+descriptors); per-phase dispatcher keeping all historical suites; earlier
 destinations frozen at the phase-15 merge.
 
 ### Step 0 — characterization of the original
@@ -1847,7 +1852,8 @@ Prerequisite: deterministic animator stepping under the paused looper and a
 recording player probe, demonstrated on the original. Then: 7 per-skin
 activity instances; show/hide/auto-hide timing (playing vs paused), the full
 key matrix that drives the dock, play/pause, Next overlay fade timings and
-clean-state, title/OTT identity per skin, cinema scrub (start, step, commit,
+clean-state — **each of its twelve blockers independently** (that blocker set,
+all others clear) plus the all-clear case, each mutation-proved, title/OTT identity per skin, cinema scrub (start, step, commit,
 cancel, animator), the legacy seekbar path via reflection, ticker effects on
 progress-reporter guards, `onDestroy` statements; coverage sweep + matrix.
 Mutation proofs on the original; Claude's independent sample (≥ 75 %, else
@@ -3653,3 +3659,6 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   lint path normalization changes only the wrapper path. Activity
   7,982 → 6,986. Decoder verification remains pending-environment. Phase 15
   complete; merged.
+- 2026-10-09 — phase 16 design round 1 (Codex): **No P1s**; P2s folded (route
+  all 34 reflectively accessed moved names; twelve independent clean-state
+  blockers); P3 retain all 23 view-binding pins. Phase 16 design approved.
