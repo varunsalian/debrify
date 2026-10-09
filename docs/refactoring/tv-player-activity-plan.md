@@ -3113,3 +3113,42 @@ lists, the playlist in each controls skin, opening/closing during playback.
   checks pass; full historical checker self-tests are still running. Full
   Flutter comparison follows on a clean commit containing gate. Evidence
   p13/gate/ and junit/p13-gate/.
+
+
+- 2026-10-09 — **Phase 13 gate complete on 83a1a41dd; decoder
+  pending-environment. STOPPED after Phase 13.** Step 1 031e3b83e extracts
+  the playlist owner / focus navigator / guide skin (586/327/398 lines);
+  activity 10,297 → 9,079. All 120 characterizations pass with assertions
+  unchanged. Claude's sample kills all 12 non-equivalent mutations; q06 is
+  equivalent (index 0 returns the same fallback 0), recorded without Step 0b.
+  Current checker classifies 2,013 originals with zero differences; all 337
+  checker/auditor self-tests and p1–p12 historical merge checks pass. All 46
+  earlier destination files are byte-identical to 315448a3c. Compiled audit
+  preserves 23 receiver pins (8 context/constructors incl. two Glide
+  FragmentActivity calls, 15 inherited incl. getLayoutInflater), the typed
+  OnGlobalLayoutListener exclusion and both guideSkinBind references.
+  All 28 initializer proofs, eager nested construction, original property
+  slot, full lifecycle order and the seven-event runtime/bytecode teardown
+  assertion pass. Shared owner-map retargets and bytecode-access changes are
+  exact; every assertion and all Dart files remain unchanged. Size gate
+  passes with no new exception; split helpers remain 325/555 lines. Five
+  Kotlin warning identities and 1,758 analyzer diagnostics are unchanged.
+  Clean p13-gate exactly matches all 1,420 p13-step0 identities/statuses:
+  1,419 passes, the same pre-existing SourceBrowser focus failure, matched
+  1 GiB heap, no missing/new skips and a stable clean tree. Lint retains
+  1,352 issues (253 errors / 1,099 warnings; 175 opt-in errors): 1,350 exact
+  identities and two documented Overdraw inferred-theme correspondences.
+  Raw message differences remain archived; detector bytecode, unchanged
+  manifest/layout hashes, audited inflater ownership and three correspondence
+  negative controls explain the delta without suppressions or fixes.
+  Release APK succeeds; R8/DEX verifies 12 classes / 177 members, including
+  all new owners/Host/anonymous classes and the activity Host implementation,
+  with three mapping negative controls. Decoder failure output, all three
+  library hashes and missing-feature manifest exactly match phase 1:
+  pending-environment. Affected Dart source tests match all 45 prior statuses;
+  full quiet Flutter suite via suite_evidence.py on clean gate commit
+  83a1a41dd exactly matches all 12,855 phase-12 identities/statuses (12,794
+  success, 13 failure, 28 error, 20 skipped), same SDK/flags and stable tree.
+  Evidence p13/step1/, p13/gate/, junit/p13-gate/. Lockfile, ProGuard,
+  earlier manifests and destinations unchanged. No push, branch switch,
+  self independent review, device/emulator or bug fix. Phase 14 not started.
