@@ -3152,3 +3152,13 @@ lists, the playlist in each controls skin, opening/closing during playback.
   Evidence p13/step1/, p13/gate/, junit/p13-gate/. Lockfile, ProGuard,
   earlier manifests and destinations unchanged. No push, branch switch,
   self independent review, device/emulator or bug fix. Phase 14 not started.
+- 2026-10-09 — phase 13 post-implementation reviews of `f7d1541bf..2f3a82759`.
+  Claude's independent sample 12/13 killed; q06 equivalent (index 0 falls back
+  to the same 0) — no 0b needed. Independent Codex review (fresh session):
+  **No P1s, no P2/P3**; the two lint "inferred theme" message changes are
+  static-analysis only (lint's Overdraw detector associates layouts with
+  Activity subclasses; moved inflation lost that association → Holo
+  fallback), while runtime inflation uses the same injected activity and the
+  unchanged AppCompat manifest theme. Test helper split (325/494), its size
+  exception removed. Activity 10,297 → 9,079. Decoder verification remains
+  pending-environment. Phase 13 complete; merged.
