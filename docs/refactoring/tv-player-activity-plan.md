@@ -3459,3 +3459,4 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   14 of 48 sites; shadowing negative); P2s folded (per-site cast
   presence/absence pins for the 23 findViewById sites; LoudnessEnhancer
   failure injection pinned as-is); P3 patch count 41.
+- 2026-10-09 — phase 15 design round 2 (Codex): **No P1s**, no further collisions or findings. Phase 15 design approved.
