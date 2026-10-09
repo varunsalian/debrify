@@ -20,6 +20,22 @@ internal object TvPlaylistBytecodeAccess {
                             if(opcode==Opcodes.PUTFIELD && name in listOf("playlistAdapter","seriesPlaylistAdapter","moviePlaylistAdapter","focusRecoveryRunnable"))events.add(name)
                         }
                         override fun visitMethodInsn(opcode: Int,owner: String,name: String,descriptor: String,isInterface: Boolean) {
+                            val member = name.substringBefore('$')
+                            if (owner == "com/debrify/app/tv/TvPlaylistOverlayController") {
+                                when (member) {
+                                    "setPlaylistAdapter" -> events.add("playlistAdapter")
+                                    "setSeriesPlaylistAdapter" -> events.add("seriesPlaylistAdapter")
+                                    "setMoviePlaylistAdapter" -> events.add("moviePlaylistAdapter")
+                                    "getSeasonTabs" -> lastField = "seasonTabs"
+                                    "getMovieTabs" -> lastField = "movieTabs"
+                                }
+                            }
+                            if (owner == "com/debrify/app/tv/TvPlaylistFocusNavigator") {
+                                when (member) {
+                                    "getFocusRecoveryHandler" -> lastField = "focusRecoveryHandler"
+                                    "setFocusRecoveryRunnable" -> events.add("focusRecoveryRunnable")
+                                }
+                            }
                             if(name=="removeCallbacksAndMessages" && lastField=="focusRecoveryHandler")events.add("focusRecoveryHandler.remove")
                             if(name=="clear" && lastField in listOf("seasonTabs","movieTabs"))events.add(lastField+".clear")
                         }

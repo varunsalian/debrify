@@ -3071,3 +3071,23 @@ lists, the playlist in each controls skin, opening/closing during playback.
   Helper-size exception remains resolved; lockfile, ProGuard and all production
   sources unchanged. No push, branch switch, device/emulator or bug fix.
   **Stopped before production moves; Claude's independent sample follows.**
+
+
+- 2026-10-09 — **Phase 13 Step 1 moves complete.** Claude's sample kills all
+  12 non-equivalent mutations against 120 phase-13 tests; q06 is equivalent
+  because index 0 falls back to the same 0, recorded in the deps report and
+  p13/claude-mutations/classification.json. No Step 0b required. Materialized
+  the approved overlay owner, focus navigator and guide skin (586/327/398
+  lines); activity 10,297 → 9,079, size baseline lowered with --update.
+  Three playlist views stay behind computed Host getters; eager child
+  construction, the original slot and seven in-place teardown statements
+  are preserved. Owner map adds 59 name routes plus two getter aliases;
+  bytecode-access helper recognizes the new setters/getters, keeping all
+  test assertions byte-identical. All 120 characterizations pass with matched
+  1 GiB workers. Checker classifies 2,013 originals with zero differences;
+  historical p1–p12 checks, 46 frozen earlier destinations, 28 initializer
+  proofs, full lifecycle order, 23 compiled receiver pins, the typed listener
+  exclusion and both bound references pass. Five Kotlin warning identities
+  unchanged. No Dart anchors needed; split helpers remain 325/555 lines.
+  Evidence p13/step1/, p13/gate/. Full integration gate follows on the
+  committed tree; no self independent review, bug fix or device interaction.

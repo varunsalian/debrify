@@ -14106,3 +14106,22 @@ Clean `baseline-315448a3c`: 1,300 identities, 1,299 passing and the previously o
 Original `:app:lintDebug` is archived in `p13/lint-original/`: 1,352 issues (253 errors, 1,099 warnings, including 175 UnsafeOptInUsage); exit 1 is pre-existing. This is the issue-set baseline for the later extraction gate, not a lint pass.
 
 The post-test owner rescan is `p13/step0/reflective-owner-rescan.json`: 59 of the 60 moved names require routing, including all 31 functions, the 13 dynamically named view bindings and the two getter aliases; `guideGridSpan` has no reflected use. Keep the three playlist views activity-owned. The phase-13 manifest already exposes the reflected functions/getters publicly on internal classes. The ASM teardown helper must follow the new receiver/setter/getter instructions while retaining its seven-event assertion exactly. No routing or production move is made in Step 0.
+
+
+## Phase 13 independent sample and Step 1
+
+Claude's original-code sample (`p13/claude-mutations/`, matched 1 GiB workers, all 120 phase-13 tests): 12 assertion kills out of 12 non-equivalent mutations. No Step 0b is needed.
+
+| Mutation | Classification | Reason |
+|---|---|---|
+| q06: `seasons.indexOf(currentSeason).takeIf { it >= 0 } ?: 0` → `> 0` | Equivalent | At index 0 the original returns 0 directly and the mutant returns the same fallback 0. Negative indices and positive indices give the same result under both predicates. |
+
+Step 1 materializes the approved manifest without additional production edits: playlist overlay owner (586 lines), focus navigator owning the four focus fields (327), and guide skin (398). The three playlist views stay activity-owned and are read through computed, explicitly qualified Host getters. Nested collaborators are eager; the owner remains anchored at seasonTabs. All 28 initializer proofs, 23 compiled receiver sites, the typed OnGlobalLayoutListener exclusion and both bound guideSkinBind references pass. Seven onDestroy statements stay in place and retain their order. All 46 earlier destination files remain byte-identical to 315448a3c.
+
+| Test access | Original owner/anchor | Retarget | Assertions |
+|---|---|---|---|
+| TvPlayerControllerOwners.routes | Activity fields/functions; 59 names from the post-test rescan | playlistController / playlistController.navigator / playlistController.guideSkin; 59 name routes plus two getter aliases | Every test file unchanged except the two access helpers |
+| TvPlaylistBytecodeAccess.teardown | Activity field writes/reads | Recognize exact controller setter/getter receivers in the existing seven-event scan | Seven-event lifecycle assertion unchanged; runtime cleanup checks unchanged |
+| Dart source-text anchors | Scanned for moved playlist names | None needed | All Dart files unchanged |
+
+The activity shrinks from 10,297 to 9,079 lines; its size baseline is lowered with --update. The split access helpers remain 325/555 lines. All 120 phase-13 characterizations pass after extraction with matched 1 GiB workers. Forced debug compilation preserves the same five Kotlin warning identities. Evidence: p13/step1/ and p13/gate/. Full integration gate follows on the committed tree.
