@@ -17799,3 +17799,45 @@ Every new named case has an assertion witness on the original. Rows below use it
 Clean JVM `p16-step0b`: **2,322 identities (2,321 pass, one unchanged known source-browser focus failure)** versus `p16-step0` **2,230 (2,229 pass, same failure)**. Exactly **92 passing additions**, no removals and strict equality of every old status. `android_junit_evidence.py compare p16-step0b --against p16-step0` passes; stable tree fingerprint, not aborted, matched evidence-only 1 GiB worker heap / Android Studio JBR. Archive: `junit/p16-step0b`; strict comparison: `p16/step0b/jvm-strict-comparison.json`.
 
 Original lint and unchanged checker/auditor evidence from Step T/0 remain applicable; no production/tooling change invalidates them. The protected-file check preserves all 72 hashes, including production, earlier destinations, lockfile and ProGuard; size check and diff check pass without a baseline update. Final reflection rescan is archived in `p16/step0b/reflective-owner-rescan.json`. The detached original is removed after proofs. No production move, bug fix, push or device interaction; **STOP before Step 1 for the second independent sample**.
+
+### Phase 16 step 0c — second sample: identity, icon gating and remaining time
+
+Original `df439aed1`; 399 Phase-16 cases pass with the same evidence-only
+1 GiB worker heap. Added 20 identities (two cohesive helpers, 40/24 lines),
+each with an assertion mutation proof. Claude's exact u06/u12/u14 changes
+were rerun against all 399 cases. The original and all Kotlin/Dart assertion
+bytes from step 0b remain unchanged; no production changes here.
+
+| Test / cases | Original mutation | Failing assertion / outcome |
+| --- | --- | --- |
+| `titleUpdateHidesAPreviouslyVisibleOrInvisibleChannelBadge` × 7 skins | u06 removes `channelBadge.visibility = View.GONE` | Previously VISIBLE badge stays visible: expected GONE (8), actual VISIBLE (0); also pins INVISIBLE → GONE. |
+| `uninstalledDockUsesLegacyPlayAndPauseIconsEvenWithASelectedStyledSpec` × 6 styled skins | u12 removes `takeIf { ottSkinInstalled }` | Expected legacy `ic_play`, actual dock/wire play drawable; both playback states are asserted. |
+| Same icon test × all 7 skins | `c-icons-legacy`: legacy pause fallback becomes `ic_play` | Expected legacy `ic_pause`, actual `ic_play`; proves CLASSIC as well. |
+| `remainingTimeClampsAtZeroAtAndBeyondTheDuration` × 6 styled skins | `c-remaining-threshold`: clamp minimum becomes 1,000 ms | Expected `-00:00`, actual `-00:01` at exact duration; also asserts duration + 61,000 ms and 1,000 ms before duration. |
+| Exact u14 (drop subtraction clamp) × all 399 cases | Exact independent mutation | **Equivalent**, exit 0/no failures. `formatTime(ms)` immediately returns `"00:00"` for every `ms <= 0`; for positive `ms` the removed primitive clamp is an identity. Thus `formatTime(max(x,0)) == formatTime(x)` for every Long subtraction result, with the identical minus prefix and no side effect. Original exact zero string is `-00:00` (padded minutes), preserved. |
+
+u12 is equivalent only for CLASSIC (`dockSkinSpec == null`), not for every
+production state. `TvControlsDockController.setupControls` installs a styled
+skin only when `!host.isIptvMode`; selected styled skins can have a non-null
+spec while `ottSkinInstalled == false`. The test explicitly asserts that spec
+condition and exercises the retained legacy icon fallback. No behavior fixed.
+
+Coverage matrix extension: `updateTitle`'s badge reset now starts from two
+non-GONE states in all seven skins; `updatePauseButtonLabel` covers the
+selected-spec / installed-flag combinations and both play/pause resources;
+`updateCinemaProgressUI` covers remaining-time < 0, == 0 and > 0. The pure
+formatter's nonpositive guard establishes the u14 equivalence. Every added
+identity appears in `p16/step0c/named-proofs.json`; exact definitions, immutable
+fixture hashes, raw Gradle logs and XML are under `p16/step0c/survivors/`.
+The initial control's time-format and lazy-getter harness expectation errors
+are retained under `control/` and excluded; corrected `control-corrected/`
+passes before every proof.
+
+Clean test-task archive `p16-step0c`: 2,342 identities, 2,341 pass and the
+unchanged source-browser focus failure. Comparison against `p16-step0b`
+retains every prior identity/status and adds only the 20 passing cases;
+complete XML, stable fingerprint, matched JBR/heap. Final conservative owner
+rescan: 78 referenced moved names, 766 literal sites; Step 1 will route all
+80 moved Activity members. Lockfile, ProGuard, original production and all
+54 earlier destinations unchanged. Evidence `p16/step0c/`,
+`junit/p16-step0c/`.

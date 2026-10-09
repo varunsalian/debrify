@@ -3727,3 +3727,18 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   pass. Earlier unchanged checker/auditor and original lint evidence reused.
   Detached original removed. No production move, bug fix, push or device
   interaction. Claude runs the required second independent sample next.
+
+- 2026-10-10 — **Phase 16 Step 0c complete.** Claude's second sample's u06
+  and u12 are assertion-killed against all 399 Phase-16 cases. CLASSIC has a
+  null dock spec, but u12 changes the real styled-selected/uninstalled
+  live-IPTV gate; all seven legacy icon pairs are now pinned. u14 is
+  **equivalent**: the unchanged `formatTime` already maps every nonpositive
+  input to `00:00`; exact mutation runs all 399 cases successfully. Preserve
+  the original padded remaining string `-00:00`. Twenty added cases each
+  have a named assertion proof, including zero/past-duration boundaries.
+  `p16-step0c` archives 2,342 identities (2,341 pass, the unchanged focus
+  failure), additions-only versus `p16-step0b`, matched 1 GiB/JBR, stable
+  tree and complete XML. Rescan 78 referenced names/766 sites; all 80 moved
+  Activity members will be routed. Mutation table/matrix extension appended
+  to deps; evidence `p16/step0c/` and `junit/p16-step0c/`. No production
+  changes; Step 1 is now authorized by the second independent sample.
