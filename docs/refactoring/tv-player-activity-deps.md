@@ -17499,3 +17499,303 @@ Every patch applies to `df439aed1` plus the test files. Each row links to its de
 The post-test conservative quoted/literal-list rescan finds **78 moved names at 699 sites**, excluding dispatch-helper implementation. Step T routed all 34 pre-existing names first; future Step 1 must add the new routes to controls/identity/seek, retain public reflected members and preserve typed/default-argument selectors. Full owners/sites: `reflective-owner-rescan.json`. The two Dart anchors need no retarget; asserted text stays.
 
 All **463 checker/auditor self-tests pass in one final combined run** (`p16/checker-final-full.log`). Step-T original self-comparison (1,727 declarations, zero differences), complete 416/329/542-line compiled fixture, 38 initializer proofs, seven receiver sites, all 23 phase-15 view binding pins (12 casts/11 without; three array stores), volatile identity and readiness-read audits remain valid. All 72 protected paths (production, 54 earlier destinations, earlier manifests, lockfile and ProGuard) match their hashes. Size/diff checks pass; no new exception or size-baseline update. Original detached worktree removed after archive completion. No production move, bug fix, device interaction, branch switch or push. Move/release/R8/Flutter gates await Step 1 and Claude’s independent sample.
+
+## Phase 16 Step 0b — hide/reveal and animation sweep
+
+The first independent sample on `df439aed1` killed 11/16 (69%); t07/t12/t14/t15/t16 survived. This Step 0b closes those exact five and performs the requested systematic re-sweep. Production source remains unchanged; stop before moves for Claude’s second independent sample.
+
+Added **92 named cases**, in five cohesive behavior suites plus the 27-line `TvControlsEndActions` observation helper: 42 show/hide cases across seven separate skin activities, 35 scrub-animation cases across seven separate skin activities, seven metadata/banner cases, five legacy/Next cases and three predicate boundaries. All 287 earlier Phase-16 cases and their 18 fixture/test files remain byte-for-byte unchanged. The expanded original control has **379 passing Phase-16 cases**.
+
+The callback fixture captures the actual framework-installed production `Runnable` from `ViewPropertyAnimator` before cancellation. It deliberately delivers that same callback after a real re-show, or after setting the documented clean-state boundary, and checks visible output. It does not replace a callback body or interpolate a fake animator. The existing natural cancel/re-show case remains unchanged. This deliberate late-delivery stimulus tests the guard that ordinary animation cancellation had masked.
+
+The floating-banner case opens real controls, then starts the actual floating banner. It asserts retained channel identity and visibility after 251 ms, then its original 4,500 ms timeout. Immediate visibility alone was insufficient because the incorrect hide starts a fade. Metadata cases separately pin season-only, episode-only, movie-with-numbers, mixed-case series, blank/simple/whitespace title and initialized GONE/INVISIBLE startup gates.
+
+### Exact independent survivors
+
+| Mutation | Named failing assertion | Evidence |
+| --- | --- | --- |
+| t07 | `TvControlsMetadataBoundaryCharacterizationTest::seasonOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader`: `java.lang.AssertionError: expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t07/` (379 cases; assertion kill) |
+| t12 | `TvControlsMetadataBoundaryCharacterizationTest::visibleControlsLeaveTheFloatingLiveBannerUntilItsOwnTimeout`: `java.lang.AssertionError: floating channel identity retained expected same:<IptvChannelEntry(index=0, channelNumber=7, name=Cinema, url=https://phase5.invalid/live.ts, logoUrl=https://phase5.invalid/logo, group=Movies, isLive=true, isCurrent=true, resumePositionMs=12345, httpHeaders={X-Test=header}, epgNowTitle=null, epgNowStartMs=0, epgNowStopMs=0, epgNowHasArchive=false, epgCatchupMetadataLoaded=false, epgNextTitle=null, epgNextStartMs=0, epgLoaded=false, epgLoading=true, contentType=live, duration=-1, tvArchive=1, tvArchiveDuration=3, sourceId=playlist, sourceName=Source, isFavorite=false, seriesId=series, seriesName=Show, season=2, episode=4, hasNextEpisode=true)> was not:<null>` | `p16/step0b/claude-survivors-final/t12/` (379 cases; assertion kill) |
+| t14 | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]`: `java.lang.AssertionError: simple title restored expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t14/` (379 cases; assertion kill) |
+| t15 | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]`: `java.lang.AssertionError: hide lift before reset expected:<3.7892911> but was:<5.6839366>` | `p16/step0b/claude-survivors-final/t15/` (379 cases; assertion kill) |
+| t16 | `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]`: `java.lang.AssertionError: late hide preserves reveal expected:<0> but was:<8>` | `p16/step0b/claude-survivors-final/t16/` (379 cases; assertion kill) |
+
+### Statement-level coverage matrix
+
+The Step-0 PSI inventory remains the source of truth: 668 nodes / 43 functions or callbacks, with 439 direct obligations. The three requested functions are re-measured at the unchanged original: **96 nodes, 67 required direct obligations**, every one rerun with a named assertion failure against the expanded fixture. Earlier proofs for other functions remain linked in the Step-0 matrix. This re-sweep adds literal/operand/callback variants: a statement deletion alone had not pinned every guarded state or animation target.
+
+| Function | PSI nodes | Calls / writes / conditions / returns | Required direct obligations freshly proved |
+| --- | ---: | --- | ---: |
+| `showControlsMenu` | 53 | 30 / 16 / 6 / 1 | 39 |
+| `hideControlsMenu` | 37 | 22 / 10 / 3 / 2 | 23 |
+| `hideTitleImmediately` | 6 | 2 / 4 / 0 / 0 | 5 |
+
+| Original PSI obligation (line at df439aed1) | Statement / gate | Mutation → named assertion |
+| --- | --- | --- |
+| o235 (L4687) | `return` | `repeat-o235` → `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[CLASSIC]` |
+| o236 (L4688) | `cancelScheduledHideControlsMenu()` | `repeat-o236` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o237 (L4692) | `showController()` | `repeat-o237` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o240 (L4698) | `liveEntry != null` | `repeat-o240` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o241 (L4699) | `showIptvZapBanner(liveEntry, docked = true)` | `repeat-o241` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o242 (L4701) | `hideIptvZapBanner()` | `repeat-o242` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o244 (L4706) | `cancel()` | `repeat-o244` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o247 (L4714) | `ottSkinInstalled` | `repeat-o247` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o248 (L4717) | `titleContainer.visibility = View.GONE` | `repeat-o248` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[OTT]` |
+| o249 (L4718) | `updateOttIdentity()` | `repeat-o249` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[OTT]` |
+| o250 (L4720) | `hasSeriesMetadata` | `repeat-o250` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o251 (L4721) | `titleView.visibility = View.GONE` | `repeat-o251` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o252 (L4722) | `titleOttContainer.visibility = View.VISIBLE` | `repeat-o252` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o253 (L4724) | `titleView.visibility = View.VISIBLE` | `repeat-o253` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o254 (L4725) | `titleOttContainer.visibility = View.GONE` | `repeat-o254` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o255 (L4728) | `titleView.text?.isNotEmpty() == true \|\| hasSeriesMetadata` | `repeat-o255` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o257 (L4729) | `titleContainer.visibility = View.VISIBLE` | `repeat-o257` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o258 (L4730) | `titleContainer.alpha = 1f` | `repeat-o258` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o259 (L4738) | `::startupGateView.isInitialized &&             startupGateView.visibility == View.VISIBLE` | `repeat-o259` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o260 (L4741) | `hideStremioSourceBadgeImmediately()` | `repeat-o260` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o261 (L4743) | `showStremioSourceBadge()` | `repeat-o261` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o263 (L4746) | `cancel()` | `repeat-o263` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o264 (L4748) | `!controlsMenuVisible` | `repeat-o264` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o265 (L4749) | `controlsMenuVisible = true` | `repeat-o265` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o266 (L4750) | `overlay.visibility = View.VISIBLE` | `repeat-o266` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o267 (L4751) | `overlay.alpha = 0f` | `repeat-o267` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o268 (L4752) | `overlay.translationY = 30f` | `repeat-o268` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o276 (L4759) | `overlay.alpha = 1f` | `repeat-o276` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o277 (L4760) | `overlay.translationY = 0f` | `repeat-o277` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o278 (L4762) | `start()` | `repeat-o278` → `TvControlsSkinRuntimeCharacterizationTest::aLateHideEndActionCannotHideAReshownDock[CLASSIC]` |
+| o279 (L4763) | `post {                 pauseButton?.requestFocus()             }` | `repeat-o279` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o280 (L4764) | `requestFocus()` | `repeat-o280` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o281 (L4767) | `overlay.alpha = 1f` | `repeat-o281` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o282 (L4768) | `overlay.translationY = 0f` | `repeat-o282` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o283 (L4769) | `overlay.visibility = View.VISIBLE` | `repeat-o283` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| o284 (L4770) | `post {                 pauseButton?.requestFocus()             }` | `repeat-o284` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[OTT]` |
+| o285 (L4771) | `requestFocus()` | `repeat-o285` → `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[OTT]` |
+| o286 (L4774) | `updatePauseButtonLabel()` | `repeat-o286` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o287 (L4775) | `updateSubtitleControlsLift()` | `repeat-o287` → `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| o288 (L4779) | `return` | `repeat-o288` → `TvControlsSkinRuntimeCharacterizationTest::absentDockOrPauseButtonDoesNotMutateOtherViews[CLASSIC]` |
+| o289 (L4783) | `iptvZapBannerController.iptvZapBannerDocked` | `repeat-o289` → `TvControlsLiveCharacterizationTest::showMergesLiveBannerAndHideClearsOnlyTheDockedBanner` |
+| o292 (L4785) | `cancel()` | `repeat-o292` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o293 (L4787) | `!controlsMenuVisible` | `repeat-o293` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o294 (L4788) | `overlay.visibility = View.GONE` | `repeat-o294` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o295 (L4789) | `overlay.alpha = 0f` | `repeat-o295` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o296 (L4790) | `overlay.translationY = 0f` | `repeat-o296` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o297 (L4791) | `hideTitleImmediately()` | `repeat-o297` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o298 (L4792) | `hideStremioSourceBadge()` | `repeat-o298` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o299 (L4793) | `cancelScheduledHideControlsMenu()` | `repeat-o299` → `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| o301 (L4797) | `cancelScheduledHideControlsMenu()` | `repeat-o301` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o302 (L4798) | `controlsMenuVisible = false` | `repeat-o302` → `TvControlsLifecycleCharacterizationTest::showExplicitlyReopensMedia3ParentControllerAndPostedFocusSurvivesHide` |
+| o303 (L4799) | `restore()` | `repeat-o303` → `TvControlsLiftCharacterizationTest::visibleHideRestoresSubtitleClearanceImmediately` |
+| o308 (L4806) | `titleContainer.visibility = View.GONE` | `repeat-o308` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o309 (L4808) | `titleView.visibility = View.VISIBLE` | `repeat-o309` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o310 (L4809) | `titleOttContainer.visibility = View.GONE` | `repeat-o310` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o311 (L4811) | `start()` | `repeat-o311` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o312 (L4814) | `hideStremioSourceBadge()` | `repeat-o312` → `TvControlsLifecycleCharacterizationTest::startupGateVisibilitySuppressesSourceBadgeAndUninitializedGateAllowsIt` |
+| o320 (L4822) | `!controlsMenuVisible` | `repeat-o320` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o321 (L4823) | `overlay.visibility = View.GONE` | `repeat-o321` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o322 (L4824) | `overlay.alpha = 0f` | `repeat-o322` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o323 (L4825) | `overlay.translationY = 0f` | `repeat-o323` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o324 (L4828) | `start()` | `repeat-o324` → `TvControlsSkinRuntimeCharacterizationTest::hideClearsStateThenFinishesTheOriginalTwoHundredFiftyMsFade[CLASSIC]` |
+| o336 (L4849) | `cancel()` | `repeat-o336` → `TvControlsSkinRuntimeCharacterizationTest::showBothBranchesHideAndTitleResetCancelAlreadyRunningAnimations[CLASSIC]` |
+| o337 (L4850) | `titleContainer.visibility = View.GONE` | `repeat-o337` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o338 (L4851) | `titleContainer.alpha = 0f` | `repeat-o338` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o339 (L4853) | `titleView.visibility = View.VISIBLE` | `repeat-o339` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| o340 (L4854) | `titleOttContainer.visibility = View.GONE` | `repeat-o340` → `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+
+### Animation parameters and end actions
+
+Exhaustive inventory over all ten moved functions containing animation parameters: **57 parameter variants**, including every literal origin/target, all twelve explicit duration sites, all five explicit easing curves, both `ValueAnimator` endpoints, calculated scrub-thumb translation and instant legacy-handle translation. Raw inventory preserves overlapping expression entries; each links to its exact or enclosing parameter mutation. Targets are asserted before cleanup resets them. Easing is checked at 0.25/0.5/0.75 and animation motion is stepped under the paused real framework clock.
+
+All **seven `withEndAction` installations** and their bodies are swept (**24 mutations**). The sole explicit end-action guard (`!controlsMenuVisible`) is observed both true and false. Unguarded title/show/Next/legacy/thumb callbacks retain their original behavior under deliberate late delivery; no liveness condition is added. The default/inherited easing of the thumb’s settle is preserved. Eight extra predicate variants pin type/season/episode operands, boolean joins, whitespace text, live-entry selection and startup-gate visibility.
+
+| Function | Parameter mutation | Exact parameter change | Named assertion |
+| --- | --- | --- |
+| `showControlsMenu` | `anim-001` | `.alpha(1f)` → `.alpha(0.8f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `showControlsMenu` | `anim-002` | `.translationY(0f)` → `.translationY(10.0f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `showControlsMenu` | `anim-003` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsLifecycleCharacterizationTest::emptyClassicTitleStaysHiddenAndSeriesMetadataUsesTheOttHeader` |
+| `showControlsMenu` | `anim-004` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| `showControlsMenu` | `anim-005` | `.translationY = 30f  // Start slightly below for Apple TV effect` → `.translationY = 40.0f  // Start slightly below for Apple TV effect` | `TvControlsSkinRuntimeCharacterizationTest::showRevealsTheDockAndCompletesItsOriginalThreeHundredMsAnimation[CLASSIC]` |
+| `showControlsMenu` | `anim-006` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` | `anim-007` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` | `anim-008` | `.alpha = 1f` → `.alpha = 0.8f` | `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| `showControlsMenu` | `anim-009` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsSkinRuntimeCharacterizationTest::alreadyVisibleShowRestoresAnInterruptedAnimationAndCancelsAutoHide[CLASSIC]` |
+| `showControlsMenu` | `anim-010` | `.setDuration(300)` → `.setDuration(350)` | `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]` |
+| `showControlsMenu` | `anim-011` | `DecelerateInterpolator(1.5f)` → `DecelerateInterpolator(2f)` | `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-012` | `.alpha(0f)` → `.alpha(0.2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-013` | `.alpha(0f)` → `.alpha(0.2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-014` | `.translationY(20f)` → `.translationY(30.0f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-015` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| `hideControlsMenu` | `anim-016` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsSkinRuntimeCharacterizationTest::hiddenHideNormalizesVisibilityTranslationTitleAndPendingWork[CLASSIC]` |
+| `hideControlsMenu` | `anim-017` | `.alpha = 0f` → `.alpha = 0.2f` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-018` | `.translationY = 0f` → `.translationY = 10.0f` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-019` | `.setDuration(250)` → `.setDuration(300)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-020` | `.setDuration(250)` → `.setDuration(300)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` | `anim-021` | `AccelerateInterpolator(1.2f)` → `AccelerateInterpolator(2f)` | `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-022` | `.alpha(1f)` → `.alpha(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-023` | `.scaleX(1.15f)` → `.scaleX(1.35f)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-024` | `.scaleY(1.15f)` → `.scaleY(1.35f)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-025` | `.scaleX(1f)` → `.scaleX(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-026` | `.scaleY(1f)` → `.scaleY(0.8f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-027` | `.alpha = 0f` → `.alpha = 0.2f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-028` | `.scaleX = 0.6f` → `.scaleX = 0.8f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-029` | `.scaleY = 0.6f` → `.scaleY = 0.8f` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-030` | `.setDuration(200)` → `.setDuration(250)` | `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-031` | `.setDuration(100)` → `.setDuration(150)` | `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` |
+| `enterCinemaSeekMode` | `anim-032` | `OvershootInterpolator(2f)` → `OvershootInterpolator(3f)` | `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-033` | `.alpha(0f)` → `.alpha(0.2f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-034` | `.scaleX(0.3f)` → `.scaleX(0.5f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-035` | `.scaleY(0.3f)` → `.scaleY(0.5f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-036` | `.scaleX = 1f` → `.scaleX = 0.8f` | `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-037` | `.scaleY = 1f` → `.scaleY = 0.8f` | `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-038` | `.setDuration(150)` → `.setDuration(200)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` | `anim-039` | `DecelerateInterpolator()` → `DecelerateInterpolator(2f)` | `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-040` | `duration = 80` → `duration = 130` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-041` | `DecelerateInterpolator()` → `DecelerateInterpolator(2f)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `showSeekbar` | `anim-042` | `.alpha(1f)` → `.alpha(0.8f)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `showSeekbar` | `anim-043` | `.alpha = 0f` → `.alpha = 0.2f` | `TvLegacySeekCharacterizationTest::legacyShowCachesPlayerStateResetsSpeedPausesAndFadesForTwoHundredMs` |
+| `showSeekbar` | `anim-044` | `.setDuration(200)` → `.setDuration(250)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` | `anim-045` | `.alpha(0f)` → `.alpha(0.2f)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` | `anim-046` | `.setDuration(150)` → `.setDuration(200)` | `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `updateSeekbarPosition` | `anim-047` | `.setDuration(0)` → `.setDuration(50)` | `TvLegacySeekCharacterizationTest::legacyPostedWidthUsesTheCapturedFractionAndInstantHandlePosition` |
+| `fadeInNextOverlay` | `anim-048` | `.alpha(1f)` → `.alpha(0.8f)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `fadeInNextOverlay` | `anim-049` | `.alpha = 0f` → `.alpha = 0.2f` | `TvNextOverlayCharacterizationTest::nextItemSetsTheExactTitleHidesTheSubtextAndCancelsThePriorFade` |
+| `fadeInNextOverlay` | `anim-050` | `.setDuration(220)` → `.setDuration(270)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-051` | `.alpha(0f)` → `.alpha(0.2f)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-052` | `.alpha = 1f` → `.alpha = 0.8f` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` | `anim-053` | `.setDuration(160)` → `.setDuration(210)` | `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `updateCinemaProgressUI` | `anim-054` | `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, targetProgress)` → `ValueAnimator.ofFloat(0f, targetProgress)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateCinemaProgressUI` | `anim-055` | `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, targetProgress)` → `ValueAnimator.ofFloat(cinemaLastAnimatedProgress, 0f)` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+| `updateSeekbarPosition` | `anim-056` | `.translationX(handleX)` → `.translationX(0f)` | `TvLegacySeekCharacterizationTest::legacyPostedWidthUsesTheCapturedFractionAndInstantHandlePosition` |
+| `updateCinemaProgressUI` | `anim-057` | `thumb.translationX = thumbOffset.coerceAtLeast(0f)` → `thumb.translationX = 0f` | `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` |
+
+| End-action obligation | Callback statement / guard | Mutation → named assertion |
+| --- | --- | --- |
+| `showControlsMenu` / o275 | `installation` | `end-o275` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` / o276 | `overlay.alpha = 1f` | `end-o276` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `showControlsMenu` / o277 | `overlay.translationY = 0f` | `end-o277` → `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` |
+| `hideControlsMenu` / o307 | `installation` | `end-o307` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o308 | `titleContainer.visibility = View.GONE` | `end-o308` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o309 | `titleView.visibility = View.VISIBLE` | `end-o309` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o310 | `titleOttContainer.visibility = View.GONE` | `end-o310` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o319 | `installation` | `end-o319` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o320 | `!controlsMenuVisible` | `end-o320` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o321 | `overlay.visibility = View.GONE` | `end-o321` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `hideControlsMenu` / o322 | `overlay.alpha = 0f` | `end-o322` → `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[CLASSIC]` |
+| `hideControlsMenu` / o323 | `overlay.translationY = 0f` | `end-o323` → `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` |
+| `enterCinemaSeekMode` / o457 | `installation` | `end-o457` → `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `enterCinemaSeekMode` / o462 | `thumb.animate()                         .scaleX(1f)                         .scaleY(1f)                         .setDuration(100)                         .start()` | `end-o462` → `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` |
+| `exitCinemaSeekMode` / o483 | `installation` | `end-o483` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o484 | `thumb.visibility = View.INVISIBLE` | `end-o484` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o485 | `thumb.scaleX = 1f` | `end-o485` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `exitCinemaSeekMode` / o486 | `thumb.scaleY = 1f` | `end-o486` → `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` |
+| `hideSeekbar` / o567 | `installation` | `end-o567` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` / o568 | `seekbarOverlay.visibility = View.GONE` | `end-o568` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideSeekbar` / o569 | `player?.play()` | `end-o569` → `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` |
+| `hideNextOverlay` / o643 | `installation` | `end-o643` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` / o644 | `nextOverlay.visibility = View.GONE` | `end-o644` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+| `hideNextOverlay` / o645 | `nextOverlay.alpha = 1f` | `end-o645` → `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` |
+
+### Added-test mutation table
+
+Every new named case has an assertion witness on the original. Rows below use its own failing assertion, not a compile error or another test’s crash. Raw source patches, immutable fixture hashes/copies, complete Gradle logs and JUnit XML are under `p16/step0b/<run>/<mutation>/`; definitions and the machine-readable coverage matrix are adjacent.
+
+| New named test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionLeavesAReshownDockUntouched[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[BROADCAST]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[CLASSIC]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[FROST]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[MARQUEE]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[OTT]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[PULSE]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedHideEndActionNormalizesEveryPropertyWhileStillHidden[TICKET]` | `animation-sweep/anim-017` | `java.lang.AssertionError: expected:<0.0> but was:<0.2>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedShowEndActionNormalizesAlphaAndLiftEvenAfterAHide[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[BROADCAST]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[CLASSIC]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[FROST]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[MARQUEE]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[OTT]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[PULSE]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::capturedTitleEndActionResetsModeEvenAfterAReshow[TICKET]` | `claude-survivors/t14` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[BROADCAST]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[CLASSIC]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[FROST]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[MARQUEE]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[OTT]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[PULSE]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::freshShowKeepsTheExactEntranceCurveAndEndsAtFullAlphaAndZeroLift[TICKET]` | `animation-sweep/anim-001` | `java.lang.AssertionError: expected:<1.0> but was:<0.79999995>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[BROADCAST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[CLASSIC]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[FROST]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[MARQUEE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[OTT]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[PULSE]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsHideRaceCharacterizationTest::visibleHideResetsAnOttTitleAndUsesItsExactExitCurveAndLift[TICKET]` | `animation-sweep/anim-006` | `java.lang.AssertionError: hide alpha before reset expected:<0.81053543> but was:<0.6484284>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::episodeOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::immediateTitleHideResetsEveryPresentationPropertyFromAnInvisibleSimpleTitle` | `statement-resweep/repeat-o337` | `java.lang.AssertionError: expected:<8> but was:<4>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::missingSeriesNumbersWithTitleUsesTheSimpleHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::mixedCaseSeriesWithBothNumbersUsesTheOttHeaderWithoutSimpleText` | `animation-sweep/anim-003` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::movieWithBothNumbersUsesTheSimpleHeader` | `predicate-sweep/predicate-join` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::seasonOnlySeriesWithBlankTitleNeverUsesTheOttSeriesHeader` | `claude-survivors/t07` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvControlsMetadataBoundaryCharacterizationTest::visibleControlsLeaveTheFloatingLiveBannerUntilItsOwnTimeout` | `claude-survivors/t12` | `java.lang.AssertionError: floating channel identity retained expected same:<IptvChannelEntry(index=0, channelNumber=7, name=Cinema, url=https://phase5.invalid/live.ts, logoUrl=https://phase5.invalid/logo, group=Movies, isLive=true, isCurrent=true, resumePositionMs=12345, httpHeaders={X-Test=header}, epgNowTitle=null, epgNowStartMs=0, epgNowStopMs=0, epgNowHasArchive=false, epgCatchupMetadataLoaded=false, epgNextTitle=null, epgNextStartMs=0, epgLoaded=false, epgLoading=true, contentType=live, duration=-1, tvArchive=1, tvArchiveDuration=3, sourceId=playlist, sourceName=Source, isFavorite=false, seriesId=series, seriesName=Show, season=2, episode=4, hasNextEpisode=true)> was not:<null>` |
+| `TvControlsPredicateCharacterizationTest::initializedGoneStartupGateDoesNotSuppressTheSourceBadge` | `predicate-sweep/predicate-gate-visibility` | `java.lang.AssertionError: a non-visible initialized gate permits the badge expected:<0> but was:<8>` |
+| `TvControlsPredicateCharacterizationTest::initializedInvisibleStartupGateDoesNotSuppressTheSourceBadge` | `predicate-sweep/predicate-gate-visibility` | `java.lang.AssertionError: a non-visible initialized gate permits the badge expected:<0> but was:<8>` |
+| `TvControlsPredicateCharacterizationTest::whitespaceSimpleTitleCountsAsNonemptyForTheClassicReveal` | `predicate-sweep/predicate-title-or` | `java.lang.AssertionError: expected:<0> but was:<8>` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedLegacyExitStillHidesAndResumesAfterAnotherReveal` | `end-action-sweep/end-o567` | `java.lang.AssertionError: production animation must install its end action` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedLegacyExitWithNoPlayerHidesWithoutAnExceptionOrPlayback` | `end-action-sweep/end-o567` | `java.lang.AssertionError: production animation must install its end action` |
+| `TvLegacyNextAnimationCharacterizationTest::capturedNextExitResetsVisibilityAndAlphaEvenAfterAnotherReveal` | `animation-sweep/anim-052` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvLegacyNextAnimationCharacterizationTest::legacyEntranceAndExitReachTheirOriginalAlphaTargetsBeforeTheEndAction` | `animation-sweep/anim-042` | `java.lang.AssertionError: expected:<1.0> but was:<0.79995066>` |
+| `TvLegacyNextAnimationCharacterizationTest::nextEntranceAndExitReachTheirTargetsBeforeTheResetAndPreserveExactDurations` | `animation-sweep/anim-048` | `java.lang.AssertionError: expected:<1.0> but was:<0.7999592>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[BROADCAST]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[CLASSIC]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[FROST]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[MARQUEE]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[OTT]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[PULSE]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedEntranceEndActionSchedulesTheOriginalSettleWithoutASeekModeGuard[TICKET]` | `animation-sweep/anim-025` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[BROADCAST]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[CLASSIC]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[FROST]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[MARQUEE]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[OTT]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[PULSE]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::capturedExitEndActionResetsBothAxesEvenIfScrubbingWasReentered[TICKET]` | `animation-sweep/anim-036` | `java.lang.AssertionError: expected:<1.0> but was:<0.8>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[BROADCAST]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[CLASSIC]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[FROST]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[MARQUEE]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[OTT]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[PULSE]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::progressAnimatorKeepsItsEightyMsCurveAndBothEndpoints[TICKET]` | `animation-sweep/anim-040` | `java.lang.AssertionError: expected:<80> but was:<130>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[BROADCAST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[CLASSIC]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[FROST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[MARQUEE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[OTT]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[PULSE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbEntrancePinsOvershootAlphaAndBothAxesBeforeTheSettle[TICKET]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<1.125> but was:<0.90000004>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[BROADCAST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[CLASSIC]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[FROST]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[MARQUEE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[OTT]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[PULSE]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+| `TvScrubAnimationCharacterizationTest::thumbExitPinsAlphaBothAxesAndEasingBeforeTheInvisibleReset[TICKET]` | `animation-sweep/anim-022` | `java.lang.AssertionError: expected:<0.25> but was:<0.19999999>` |
+
+### Evidence and JVM comparison
+
+**166 original mutation attempts; 166 named assertion kills**, zero compile-invalid/crash-only/surviving mutations in this Step-0b sweep. No equivalent variants claimed. The five exact independent survivors were rerun against all 376 initial expanded cases, then all **379 final cases**; both runs killed all five. Controls: `control-all-first` and `control-final`; neither has a Phase-16 failure. Initial compile-only fixture correction and an aborted root-filter setup are discarded control attempts, not proofs.
+
+Clean JVM `p16-step0b`: **2,322 identities (2,321 pass, one unchanged known source-browser focus failure)** versus `p16-step0` **2,230 (2,229 pass, same failure)**. Exactly **92 passing additions**, no removals and strict equality of every old status. `android_junit_evidence.py compare p16-step0b --against p16-step0` passes; stable tree fingerprint, not aborted, matched evidence-only 1 GiB worker heap / Android Studio JBR. Archive: `junit/p16-step0b`; strict comparison: `p16/step0b/jvm-strict-comparison.json`.
+
+Original lint and unchanged checker/auditor evidence from Step T/0 remain applicable; no production/tooling change invalidates them. The protected-file check preserves all 72 hashes, including production, earlier destinations, lockfile and ProGuard; size check and diff check pass without a baseline update. Final reflection rescan is archived in `p16/step0b/reflective-owner-rescan.json`. The detached original is removed after proofs. No production move, bug fix, push or device interaction; **STOP before Step 1 for the second independent sample**.

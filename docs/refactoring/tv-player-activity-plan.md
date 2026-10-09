@@ -3700,3 +3700,30 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   Step-1 route additions remain. Original worktree removed; lockfile,
   ProGuard, production and size baseline unchanged. No bug fix, push or
   device interaction. STOP before Step 1 for Claude’s independent sample.
+
+- 2026-10-10 — **Phase 16 Step 0b complete; STOP before production moves.**
+  First independent sample killed 11/16 (69%); all five survivors
+  t07/t12/t14/t15/t16 are now assertion-killed on df439aed1, including a
+  final rerun against all 379 Phase-16 cases. Added 92 named cases in five
+  cohesive suites plus a 27-line actual-framework end-action observation
+  helper (six files, at most 79 lines each); all 287 old cases and their
+  18 fixture/test files are byte-for-byte unchanged. Seven-skin hide/reveal
+  and scrub cases pin pre-cleanup alpha/translation/scale, exact durations
+  and easing, title reset, floating-banner lifetime, missing metadata and
+  deliberately late delivery of real production callbacks. Re-sweep:
+  96 PSI nodes / 67 required direct obligations across showControlsMenu,
+  hideControlsMenu and hideTitleImmediately freshly assertion-proved;
+  57 parameter variants (12 duration sites, five curves), seven end-action
+  installations/bodies (24 mutations), eight additional predicate variants.
+  166 original mutation attempts, all named assertion kills; every one of
+  92 additions has a witness, no missing matrix entry or equivalent claim.
+  Final original control: 379/379. Stable matched-1-GiB/JBR p16-step0b:
+  2,322 identities (2,321 pass, same known source-browser focus failure),
+  vs p16-step0 2,230: exactly 92 passing additions, all old statuses equal;
+  helper and strict comparisons pass. Coverage matrix, mutation table,
+  source patches, fixture snapshots, full logs/XML and comparisons archived
+  in p16/step0b and junit/p16-step0b. Reflection rescan: 78 names/756 sites.
+  All 72 protected hashes and the size baseline retained; size/diff checks
+  pass. Earlier unchanged checker/auditor and original lint evidence reused.
+  Detached original removed. No production move, bug fix, push or device
+  interaction. Claude runs the required second independent sample next.
