@@ -15221,6 +15221,8 @@ Clean p14-gate exactly matches all 1,606 p14-step0b identities/statuses (1,605 p
 
 ## Phase 15 inventory (at `82b16832c`; re-measure on `ce3ddfb06`)
 
+> Superseded where they differ (phase 15 design round 1): the styler→dock reference is named `controlsDock` (not `dock`); `findViewById` audit pins cast presence/absence per site (15 cast / 8 not); LoudnessEnhancer failure injection is part of the step-0 prerequisite; totals are 41 patches (12 in `playbackListener`).
+
 
 Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
 `82b16832c` (phase-13 merge, **9,079 lines**, class header 136, 501 depth-1 members). This is a read-only

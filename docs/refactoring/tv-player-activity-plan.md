@@ -1716,7 +1716,11 @@ would need ≈ 44).
 - `TvControlsDockController` (≈ 560): OTT skin install, caption,
   `setupControls`, the 17 dock-only views; eagerly constructs
   `TvLiveDockStyler` (≈ 290, IPTV live dock styling; 48 compile-checked
-  styler→dock qualifications). 24 shared views stay in the activity behind
+  styler→dock qualifications through an injected reference named
+  **`controlsDock`** — not `dock`, which would collide with the existing
+  `dock` locals/parameter in `arrangeLiveIptvControlDock`,
+  `restoreOriginalControlDockOrder` and `replaceControlDockOrder` (14 of the
+  48 sites); the original locals are preserved). 24 shared views stay in the activity behind
   Host `var`s (ownership decided in phase 16); `controlsSkin`, `dockSkinSpec`,
   `nativeAudioRouting`, `trackSelector` and `player` stay; only the
   `DockSkinSpec` type moves (top-level `internal`).
@@ -1724,7 +1728,7 @@ would need ≈ 44).
   audio effects, display-match, `loadPlayerDefaults`, the decoder analytics
   listener, the unified-menu display/audio rows.
 - Hosts: dock/styler 58 members (24 view/state forwarders), display 11;
-  ≈ 338 substitutions. 42 activity patches in 13 declarations (13 in
+  ≈ 338 substitutions. 41 activity patches in 13 declarations (12 in
   `playbackListener`, 9 in `setupPlayer`); 12 Host re-points in 5 properties
   (Start Over, guide, progress reporter, recording, source switch); 3
   in-place `onDestroy` statements (display-mode clear/null,
@@ -1734,9 +1738,12 @@ would need ≈ 44).
   empty typed `HashMap<…>()`, `arrayOf` with literal elements (incl.
   `AspectRatioFrameLayout.RESIZE_MODE_*` constants, with bytecode proof they
   are inlined), and the reviewed anonymous `object : AnalyticsListener`.
-- Audit: 14 receiver/constructor sites, 3 inherited getters, 23
-  `findViewById` calls whose declared type now comes from a Host property
-  (compiled-type check).
+- Audit: 14 receiver/constructor sites, 3 inherited getters, and all 23
+  `findViewById` assignment sites inventoried with **cast presence/absence
+  and target type pinned** (15 sites cast, 8 targets already typed `View`
+  with no cast), comparing the original field descriptors against the new
+  Host setter or array-getter descriptors; exact source types and
+  nullability preserved; widening and omitted-site negatives.
 - Reflection: 41 sites across 10 names via 9 owner-map routes plus the
   `NativePlayerSettingsConsumptionTest` `nightModeIndex` helper change
   (assertions unchanged); `getControlsSkin`/`trackSelector` stay. No Dart
@@ -1748,14 +1755,21 @@ would need ≈ 44).
 ### Step T
 
 Classifier forms + negatives; extraction fixture (two sibling owners, nested
-styler, Host-typed `findViewById`) + negatives; compiled audit incl. the
+styler via `controlsDock`, Host-typed `findViewById`) + negatives (incl. a
+shadowing negative where a `dock`-named reference would be captured by a
+local); compiled audit incl. the
 `findViewById` compiled-type check; per-phase dispatcher keeping all
 historical suites; earlier destinations frozen at the phase-14 merge.
 
 ### Step 0 — characterization of the original
 
 Prerequisite: a deterministic way to observe `LoudnessEnhancer` creation,
-gain and release (shadow or seam) demonstrated on the original — if it
+gain and release (shadow or seam) **and to inject failures** (constructor,
+enable/gain incl. failure on the second gain call, release), demonstrated on
+the original, pinning as-is: an enable/gain failure during initialization
+clears the reference without releasing the newly allocated effect; a release
+failure still clears it; enable/gain calls in `applyNightMode` sit outside
+that catch and propagate — if it
 cannot be made reliable, night mode + the effect session leave phase 15 and
 the design is re-reviewed. Then from zero: 7 controls skins × 4 guide styles
 (separate activity instances) for dock construction and OTT install; focus
@@ -3440,3 +3454,8 @@ audio effects toggle, display-mode matching (refresh rate) on a supported TV.
   teardown cancellation → flat-list clear → service null order unchanged,
   `this.adapter` binding preserved. Activity 9,079 → 7,982. Decoder
   verification remains pending-environment. Phase 14 complete; merged.
+- 2026-10-09 — phase 15 design round 1 (Codex): P1 folded (styler's injected
+  owner named `controlsDock` to avoid the `dock` local/parameter collision at
+  14 of 48 sites; shadowing negative); P2s folded (per-site cast
+  presence/absence pins for the 23 findViewById sites; LoudnessEnhancer
+  failure injection pinned as-is); P3 patch count 41.
