@@ -52,6 +52,147 @@ def bytecode(folder):
         [str(k.JBR / 'bin/javap'), '-p', '-c', '-l', '-s', *map(str, paths)], text=True))
 
 
+def typed_bytecode(folder):
+    """Read field/cast/constant instructions without changing historical call output."""
+    paths = sorted(Path(folder).glob('*.class'))
+    if not paths:
+        raise ValueError('compiled classes missing: ' + str(folder))
+    raw = subprocess.check_output([str(k.JBR / 'bin/javap'), '-p', '-c', '-l', '-s',
+                                   *map(str, paths)], text=True)
+    result, owner, method, code, lines = [], None, None, [], []
+    def flush():
+        offsets = [pc for pc, line in lines]
+        for pc, opcode, operand in code:
+            index = bisect.bisect_right(offsets, pc) - 1
+            if index >= 0:
+                result.append(dict(owner=owner, method=method, line=lines[index][1],
+                                   pc=pc, opcode=opcode, operand=operand))
+    for line in raw.splitlines():
+        if re.match(r'^\S.*\b(class|interface)\b', line):
+            flush(); code, lines = [], []
+            owner = re.search(r'\b(?:class|interface) (\S+)', line).group(1)
+        elif re.match(r'^  \S.*\);$', line) or line == '  static {};':
+            flush(); code, lines = [], []; method = line.strip()
+        else:
+            instruction = re.match(r'\s+(\d+): (\w+)\s*(.*)', line)
+            location = re.match(r'\s+line (\d+): (\d+)$', line)
+            if instruction:
+                operand = instruction[3].split('// ', 1)[-1].replace('"', '')
+                code.append((int(instruction[1]), instruction[2], operand))
+            elif location:
+                lines.append((int(location[2]), int(location[1])))
+    flush()
+    return result
+
+
+def find_assignment_inventory(manifest, original, current, units, nodes, moved):
+    """Exhaust all moved assignments to shared Host targets, including no-cast sites."""
+    if manifest['phase'] < 15:
+        return []
+    original_fields = {n['selector'].removeprefix('property '): n for n in nodes['original'].values()
+                       if n['id'].startswith('class AndroidTvTorrentPlayerActivity/property ')
+                       and n['id'].count('/') == 1}
+    expected = []
+    for site in units['original']['find_view_assignments']:
+        row = next((r for name, r in moved.items() if nodes['original'][name]['start'] <= site['start'] < nodes['original'][name]['end']), None)
+        if row is None:
+            continue
+        field = site['target'].split('[', 1)[0]
+        hosts = [n for n in nodes[row['destination']].values()
+                 if n['id'].endswith('/class Host/property ' + field)]
+        if not hosts:
+            continue
+        if len(hosts) != 1 or field not in original_fields:
+            raise ValueError('findViewById shared target must resolve uniquely')
+        old = original_fields[field]
+        typ = old.get('declared_type')
+        if typ is None and re.fullmatch(r'arrayOfNulls<TextView>\(3\)', old.get('initializer_text') or ''):
+            typ = 'Array<TextView?>'
+        if typ is None or hosts[0].get('declared_type') != typ:
+            raise ValueError('findViewById Host target type/nullability differs: ' + field)
+        line = original.count('\n', 0, site['start']) + 1
+        expected.append(dict(original=row['original'], destination=row['destination'], target=row['target'],
+                             line=line, context=original.splitlines()[line-1].strip(),
+                             field=field, assignment_target=site['target'], source_type=typ))
+    actual = manifest.get('find_view_assignments', [])
+    keys = tuple(expected[0]) if expected else ()
+    if [{key: r.get(key) for key in keys} for r in actual] != expected:
+        raise ValueError('findViewById assignment audit coverage differs from original PSI')
+    for site in actual:
+        if 'cast' not in site or not site.get('descriptor') or not site.get('reason'):
+            raise ValueError('findViewById requires cast presence/absence and descriptor pins')
+    return actual
+
+
+def audit_view_bindings(manifest, original, current, before, after):
+    """Compare field descriptors against setters/array getters and per-site casts."""
+    units = k.parse({'original': original, **current})
+    nodes = {p: {n['id']: n for n in k.walk(u['declarations'])} for p, u in units.items()}
+    moved = {r['original']: r for r in manifest['declarations'] if r['fate'] == 'moved'}
+    sites = find_assignment_inventory(manifest, original, current, units, nodes, moved)
+    results = []
+    for site in sites:
+        old_node = nodes['original'][site['original']];new_node = nodes[site['destination']][site['target']]
+        delta = current[site['destination']].count('\n', 0, new_node['start']) - original.count('\n', 0, old_node['start'])
+        old_owner = 'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
+        new_owner = 'com.debrify.app.tv.' + site['target'].split('/')[0].removeprefix('class ')
+        evidence = []
+        for instructions, owner, line, is_new in ((before, old_owner, site['line'], False), (after, new_owner, site['line']+delta, True)):
+            local = [i for i in instructions if i['owner'] == owner and i['line'] == line]
+            finds = [i for i in local if i['opcode'] == 'invokevirtual' and '.findViewById:(I)Landroid/view/View;' in i['operand']]
+            casts = [i['operand'].removeprefix('class ') for i in local if i['opcode'] == 'checkcast']
+            if len(finds) != 1 or casts != ([] if site['cast'] is None else [site['cast']]):
+                raise ValueError('findViewById cast presence/type differs: ' + site['context'])
+            field = site['field'];array = '[' in site['assignment_target'];descriptor = site['descriptor']
+            if is_new:
+                method = ('get' if array else 'set') + field[0].upper() + field[1:]
+                target = method + (':()'+descriptor if array else ':('+descriptor+')V')
+                matches = [i for i in local if i['opcode'] == 'invokeinterface' and i['operand'].endswith('.'+target)]
+            else:
+                matches = [i for i in local if i['opcode'] == ('getfield' if array else 'putfield') and
+                           i['operand'].endswith(field+':'+descriptor)]
+            if len(matches) != 1:
+                raise ValueError('findViewById field/Host descriptor differs: ' + site['context'])
+            if array and not any(i['opcode'] == 'aastore' for i in local):
+                raise ValueError('findViewById array-element assignment missing')
+            evidence.append(local)
+        results.append(dict(site=site, before=evidence[0], after=evidence[1]))
+    return results
+
+
+def constant_inlining_inventory(manifest, original, nodes, moved):
+    if manifest['phase'] < 15:
+        return []
+    expected = []
+    for row in moved.values():
+        node = nodes['original'][row['original']]
+        expression = node.get('initializer_text') or ''
+        if 'AspectRatioFrameLayout.RESIZE_MODE_' in expression:
+            expected.append(dict(original=row['original'], destination=row['destination'], target=row['target'],
+                                 expression=expression, owner='androidx/media3/ui/AspectRatioFrameLayout'))
+    actual = manifest.get('constant_inlining', [])
+    keys = tuple(expected[0]) if expected else ()
+    if [{key: r.get(key) for key in keys} for r in actual] != expected or any(not r.get('reason') for r in actual):
+        raise ValueError('array constant-inlining proof coverage differs')
+    return actual
+
+
+def audit_constant_inlining(manifest, original, before, after):
+    unit = k.parse({'original': original})['original']
+    nodes = {'original': {n['id']: n for n in k.walk(unit['declarations'])}}
+    moved = {r['original']: r for r in manifest['declarations'] if r['fate'] == 'moved'}
+    rows = constant_inlining_inventory(manifest, original, nodes, moved)
+    for row in rows:
+        old_owner = 'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
+        new_owner = 'com.debrify.app.tv.' + row['target'].split('/')[0].removeprefix('class ')
+        for instructions, owner in ((before, old_owner), (after, new_owner)):
+            constructor = [i for i in instructions if i['owner'] == owner and
+                           i['method'].startswith('public '+owner+'(')]
+            if not constructor or any(i['opcode'] == 'getstatic' and row['owner'] in i['operand'] for i in constructor):
+                raise ValueError('reviewed array constants must be inlined in constructor bytecode')
+    return rows
+
+
 def resolve(calls, site, start, end):
     callee = site['callee']
     def matches(call):
@@ -186,6 +327,9 @@ def reference_inventory(manifest, original, unit, nodes, moved):
 
 
 def check_special_bindings(manifest, original, current, units, nodes, moved):
+    if manifest['phase'] >= 15:
+        find_assignment_inventory(manifest, original, current, units, nodes, moved)
+        constant_inlining_inventory(manifest, original, nodes, moved)
     """Pin typed listener self and callable-reference receiver after extraction."""
     listener_inventory(manifest, original, units['original'], nodes['original'], moved)
     reference_inventory(manifest, original, units['original'], nodes['original'], moved)
@@ -440,11 +584,18 @@ def main():
         original = subprocess.check_output(['git', '-C', str(k.ROOT), 'show', manifest['base'] + ':' + manifest['source']], text=True)
         current = {path: (args.tree / path).read_text() for path in manifest['destinations']}
         results = audit(manifest, original, current, bytecode(args.original_classes), bytecode(args.moved_classes))
+        view_results, constant_results = [], []
+        if manifest['phase'] >= 15:
+            before, after = typed_bytecode(args.original_classes), typed_bytecode(args.moved_classes)
+            view_results = audit_view_bindings(manifest, original, current, before, after)
+            constant_results = audit_constant_inlining(manifest, original, before, after)
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(dict(sites=len(results), preserved_receivers=len(manifest.get('preserved_receivers', [])), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results), indent=2) + '\n')
+        args.output.write_text(json.dumps(dict(sites=len(results), preserved_receivers=len(manifest.get('preserved_receivers', [])), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results, find_view_assignments=len(view_results), view_results=view_results, constant_inlining=constant_results), indent=2) + '\n')
         print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations' +
               (f'; {len(manifest.get("function_references", []))} compiled function references; '
                f'{len(manifest.get("listener_receivers", []))} typed listener receivers' if manifest['phase'] >= 13 else ''))
+        if manifest['phase'] >= 15:
+            print(f'PASS: {len(view_results)} field/Host type and cast pins; {len(constant_results)} constant-inlining proofs')
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, 'FAIL: ' + str(error) + '\n')
 

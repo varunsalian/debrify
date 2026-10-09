@@ -15216,3 +15216,1097 @@ or assertions require editing; affected anchored content remains identical.
 Gate tested commit a85ae8f28; Step 0b f576c6f68; Step 1 a85ae8f28. The current checker has zero differences across 1,850 original declarations. All 378 self-tests and p1–p13 historical checks pass; 49 earlier destinations remain frozen. Twenty initializer proofs, 25 compiled receiver sites plus six preserved bindings, eager dialogs construction, property slot and lifecycle/teardown order pass. The cancellation/clear/null runtime assertion passes among all 186 phase-14 characterizations. Activity 7,982; new files 710/495; size ratchet lowered without an exception. The 41 owner routes above retain every assertion; all Dart files remain identical.
 
 Clean p14-gate exactly matches all 1,606 p14-step0b identities/statuses (1,605 passes and the same known focus failure), complete XML, stable clean input and matched 1 GiB workers. Kotlin warnings: five unchanged; analyzer: 1,758 unchanged. Lint exactly retains 1,352 issues (253 errors/1,099 warnings; 175 opt-in errors), no additions or removals after original-symbol location mapping. Release APK builds; all eight generated classes and 162 members have identity R8/DEX treatment, including both collaborators, the Host, the activity Host implementation and all anonymous/coroutine classes; three mapping negative controls pass. Decoder remains pending-environment with unchanged phase-1 failure output, all three library hashes and missing-feature manifest. The affected Dart source tests match all 45 prior statuses; the full Flutter suite matches all 12,855 phase-13 statuses (12,794 success, 13 failure, 28 error, 20 skipped) on clean gate commit a85ae8f28, unchanged SDK/flags and stable tree. No new behavior regression was observed; existing lint/analyzer/test failures are retained, and decoder parity remains explicitly pending. Evidence p14/gate/summary.json and its raw archives; junit/p14-gate/. Lockfile, ProGuard, earlier manifests and earlier destinations remain unchanged. Stopped after Phase 14; no production bug fix or device interaction.
+
+---
+
+## Phase 15 inventory (at `82b16832c`; re-measure on `ce3ddfb06`)
+
+> Superseded where they differ (phase 15 design round 1 and Step T bytecode re-measurement): the styler→dock reference is named `controlsDock` (not `dock`); `findViewById` audit pins cast presence/absence per site (12 cast / 11 not; the three typed-array stores have no CHECKCAST); LoudnessEnhancer failure injection is part of the step-0 prerequisite; totals are 41 patches (12 in `playbackListener`).
+
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`82b16832c` (phase-13 merge, **9,079 lines**, class header 136, 501 depth-1 members). This is a read-only
+survey of the main checkout. Nothing was built and nothing under `../debrify-wt/` was touched.
+
+**Tooling.** The p14 scripts were copied to `scratchpad/p15/` and re-indexed on the current file:
+- `idx.py` (brace/string/comment-aware member indexer), `refs.py` / `unit.py` (word-boundary reference
+  scans; templates and `this@Activity.` counted, other receivers excluded);
+- `groups.py` / `matrix.py`: the ten candidate groups and the group-to-group reference matrix (§2);
+- `sel.py`: the selected membership; `refl.py`: quoted reflective names under `android/app/src/test`.
+
+Counts were checked by hand against the source. Terms as in the phase-11/13/14 inventories: **patch** =
+token edit in a retained activity declaration; **re-point** = edited forwarder in an existing controller
+property's Host object (that property becomes a whole-property `patched` row); **substitution** = declared
+edit inside a moved body.
+
+**Phase 14** (subtitle sources/fetch/search + UM subtitle rows, in progress elsewhere) is treated as a
+controller. Measured interplay: **0 references in either direction** between the phase-14 unit and every
+name in this inventory. Both phases patch *different statements* of five shared retained declarations —
+`playbackListener`, `onCreate`, `unifiedMenuCallbacks`, `onDestroy`, `playStremioTvPlaybackMap` — and
+both re-point (different forwarders of) the `iptvStartOverController` and `iptvGuideController` Host
+properties. Re-measure on the phase-14 merge and build the phase-15 rows on the phase-14 versions of those
+declarations. Spans before ≈ 1,267 are unaffected by phase 14 except the members it removes; the phase-14
+property (+≈ 22) lands at the `stremioSubtitles` slot, so the display arrays (1352–1365) shift by its net
+field delta and every function span after 3792 shifts by ≈ −1,070.
+
+---
+
+### 1. Summary and recommendation
+
+**Phase 15 = "controls I + display/audio": the dock *builder* side, not the dock *runtime* side.** One
+owner + one nested collaborator for the dock, plus one sibling for display/audio settings:
+
+- **`TvControlsDockController.kt`** (owner; 448 member lines → **≈ 560**): OTT skin install, caption,
+  track height, `setupControls` (binding, click routing, focus treatments), the `DockSkinSpec` data class
+  (nested → top-level `internal`), the 17 **dock-only** views it binds, and the `USE_UNIFIED_MENU`
+  companion constant (file-private). Activity property `controlsDockController` at the `iptvPrevButton`
+  slot (212). `@OptIn(UnstableApi::class)` at class level.
+- **`TvLiveDockStyler.kt`** (nested, eagerly constructed by the owner; 260 → **≈ 290**): IPTV live dock
+  setup/styling/arrangement/restore (`setupIptvControls` … `restoreCinemaIptvControlStyle`) and the two
+  capture maps `cinemaIconTints`/`cinemaButtonTypefaces`. Reaches the dock views as `dock.x` (48
+  compile-checked cross-qualifications), shares the owner's Host.
+- **`TvPlaybackDisplayController.kt`** (sibling; 363 → **≈ 420**): aspect/resize, speed, night mode
+  (`LoudnessEnhancer`), system audio-effect session, content display-match mode (`TvDisplayModeController`),
+  `decoderAnalyticsListener`, `loadPlayerDefaults`, the label/value tables, the aspect/night button-label
+  updaters, and the UM **display** and **audio** sections (`umDisplayModel`, `umAudioModel`, `umAudioTracks`,
+  `umAudioSelectedIndex`, `showAudioTrackDialog`) plus the `DECODER_LOG_TAG` constant. Activity property
+  `displayController` at the `displayMatchMode` slot (289). `@OptIn(UnstableApi::class)`.
+
+**Phase 16 = "controls II"**: the dock *runtime* — show/hide/auto-hide timers (`controlsHandler`,
+`hideControlsRunnable`), focus probes, play/pause, legacy seekbar + cinema scrub + `seekbarHandler` ticker,
+title/OTT identity + extras + dock tags, loading overlay (`setResolvingState`), Next overlay,
+`isCleanPlaybackState`, and the shared presentation views that phase 15 leaves activity-owned (§1.2).
+
+| item | phase 15 |
+|---|---|
+| moved members / lines | **66 / 1,071** member lines (+ 7 companion lines) — dock 24 / 448, styler 11 / 260, display 31 / 363 |
+| owned state | 17 dock fields (16 views + `originalControlDockOrder`), 2 styler maps, 14 display fields |
+| activity patches | **42 in 13 declarations** (§4.1); 3 of them temporary (SH/SK code, phase 16) |
+| Host re-points | **12 forwarders in 5 properties** (§4.2) |
+| Hosts | dock+styler **58** members (24 view/state `var`/`val` forwarders), display **11** (§5) |
+| initializer proofs | **31** (dock 16 + styler 2 + display 13); **3 new narrow classifier forms** (§3) |
+| cross-qualifications | 48 styler→dock (`dock.`); sibling getters: dock→display 6, display→dock 9 |
+| receivers `this`→`activity` | **14** (5 bare + 1 `this@Activity` in dock/styler, 8 in display); 0 excluded |
+| inherited pins | **3** (`resources` ×2 → `getResources()`, `currentFocus` → `getCurrentFocus()`) |
+| `findViewById<T>` inference through Host-typed targets | **23** assignment sites (checkcast audit, §6) |
+| substitutions total | **≈ 338** (§10) |
+| reflective retargets | **41 literal sites / 10 names**: 9 owner-map routes + 1 local helper (`NativePlayerSettingsConsumptionTest`) |
+| Dart retargets | **0** |
+| lifecycle | **3 in-place `onDestroy` patches**; no `onStart`/`onStop`/`onPause`/`onResume`/`finish` edits |
+
+**Activity:** ≈ −1,078 + ≈ 128 (two properties + Hosts) ≈ **−950**, i.e. ≈ 8,000 (after phase 14) →
+**≈ 7,050**.
+
+**Risk: medium.** Deterministic view/settings code, no Flutter channel, no coroutine, no async token. The
+risks are the width of the dock Host (58), the native `LoudnessEnhancer` lifetime spread across
+`playbackListener`/analytics callbacks/`onDestroy`, the 7 controls skins × 4 guide styles presentation
+matrix, and **zero** existing characterization of click routing, OTT install, focus treatments, aspect/
+speed/night application and audio-track menus.
+
+### 1.1 Why this split (15/16) — measured alternatives
+
+Group sizes (member lines incl. attached comments) and cross references (refs / distinct names):
+
+| group | lines | refs into it from C1 (dock+styler) | refs from it into C1 |
+|---|---|---|---|
+| SH (show/hide/auto-hide, play/pause, focus probe, pause label) | 249 | **30 / 5** | 2 / 2 |
+| SK (seekbar legacy, cinema scrub, ticker) + CS (5 cinema fields) + SV (8 seekbar views) | 485 | 6 / 5 | 2 / 1 |
+| TI (title, OTT identity/extras, dock tags, loading overlay, Next overlay, clean-state) | 346 | 0 | 3 / 1 |
+| DI (display/audio, incl. UM audio+display) | 363 | 6 / 6 | 9 / 4 |
+
+| option | phase 15 | phase 16 | temporary patches in phase 15 | other costs | verdict |
+|---|---|---|---|---|---|
+| **A\*** (selected) | C1 + 17 dock-only views + DI (1,071) | SH+SK+CS+SV+TI + shared views (≈ 1,110) | **3** | dock Host 58 (24 view forwarders, re-pointed in 16); 41 reflective sites / 9 routes | best ratio |
+| A0 | C1 + DI, all views stay | same | 3 | dock Host **≈ 75** (41 view setters); only 3 reflective sites | rejects narrow-Host objection |
+| A′ | C1 + **all** 41 C1-bound views + DI | same | **≈ 80** (SH 11, SK 33, TI 29, +7 calls) | Host ≈ 35 | too many temporary patches |
+| B | SH+SK+CS+SV + DI (1,097) | C1 + TI + views (≈ 1,104) | **≈ 44** (C1 41 + TI 2) | 23 permanent `dispatchKeyEvent` patches + ≈ 30 reflective (`controlsMenuVisible` ×23) pulled forward; Host ≈ 50 | reverse dependency direction |
+| D | C1 + SH + views (1,062) | SK+TI+DI (1,089) | ≈ 82 (SK 38, TI 33, DI 11) | — | worst |
+
+A\* keeps the dependency direction the deps report recommended (C1 → SH/SK is 36 refs, SH/SK → C1 is 4):
+moving C1 first costs **10 Host forwarders** (SH 5, SK 3, CS 2) and **3 temporary patches**, all consumed
+by phase 16. DI rides with C1 because C1↔DI is 15 refs both ways and DI shares no state with SH/SK/TI.
+
+### 1.2 View-ownership decision (the deps report's open question)
+
+`setupControls`/`installOttControlsSkin` **bind** 41 view fields; their *runtime readers* differ:
+- **17 dock-only views** — read only by dock/styler/display, 3 iptv controller Hosts, and 2 retained
+  sites → **move to the dock owner** (single writer and its natural owner): `iptvPrevButton`,
+  `iptvNextButton`, `iptvGuideButton`, `iptvJumpButton`, `iptvStartOverButton`, `iptvStartOverSeekButton`,
+  `iptvRecordButton`, `originalControlDockOrder`, `audioButton`, `subtitleButton`, `aspectButton`,
+  `speedButton`, `nightModeButton`, `ottCaptionLabel`, `ottCaptionOwner`, `ottProgressTrackContainer`,
+  `ottSourcesButton`.
+- **24 shared presentation views/state** — read at runtime by SH/SK/TI (phase 16) → **stay activity-owned
+  in phase 15** behind computed Host `var`s (dock writes them once while binding); phase 16 decides their
+  final owner (re-pointing these 24 forwarders in one whole-property row): `controlsOverlay`,
+  `pauseButton`, `ottSkinInstalled`, `ottQualityChips` (val), `debrifyTimeDisplay`, `debrifyTimeCurrent`,
+  `debrifyTimeTotal`, `debrifyProgressLine`, `cinemaProgressBuffered`, `cinemaProgressContainer`,
+  `cinemaProgressBackground`, `cinemaProgressThumb`, `cinemaSpeedIndicator`, `ottIdentityTitle`,
+  `ottIdentitySubtitle`, `ottIdentityOverline`, `ottIdentityBadge`, `ottIdentityDivider`, `ottRatingChip`,
+  `ottMetaLine`, `ottScrubPreviewChip`, `ottScrubPreviewText`, plus the cinema state `cinemaSeekMode`,
+  `cinemaSeekWasPlaying` (written by the styler on a live transition).
+- **Session-fixed lazies stay** (guideStyle/guideTokens precedent, phases 6/12): `controlsSkin` (read by
+  the playlist Host, TI ×3, display log, `dockSkinSpec`; reflected as `getControlsSkin` by two tests) and
+  `dockSkinSpec` (read by dock ×4 and SH's `updatePauseButtonLabel`). This avoids a `by lazy` classifier
+  form, keeps `getControlsSkin` reflection on the activity, and removes one temporary SH patch. Only the
+  `DockSkinSpec` *type* leaves the activity (the Host must name it).
+- **Shared infrastructure stays**: `nativeAudioRouting` (the same instance is handed to
+  `NativeAudioRenderersFactory` in `setupPlayer`; `requiresPcm` is `@Volatile` and read on the playback
+  thread), `trackSelector`, `player`, `playerPreferences`, `skipSegmentsEnabled`/`skipSegmentProviderId`
+  (skip controller state written by `loadPlayerDefaults`).
+
+---
+
+### 2. Members (lines at `82b16832c`, attached comments included)
+
+**Owner `TvControlsDockController.kt` — 24 members / 448 lines.**
+- Fields (17): `iptvPrevButton` 212, `iptvNextButton` 213, `iptvGuideButton` 214, `iptvJumpButton` 215,
+  `iptvStartOverButton` 216, `iptvStartOverSeekButton` 217, `iptvRecordButton` 218,
+  `originalControlDockOrder` 223, `audioButton` 224, `subtitleButton` 225, `aspectButton` 226,
+  `speedButton` 227, `nightModeButton` 228, `ottCaptionLabel` 248, `ottCaptionOwner` 249,
+  `ottProgressTrackContainer` 269, `ottSourcesButton` 271–273 (KDoc).
+- Functions (6): `installOttControlsSkin` 3130–3205 (KDoc), `setOttTrackHeight` 3207–3220,
+  `updateOttCaption` 3222–3234, `clearOttCaption` 3236–3241, `refreshOttCaptionFor` 3243–3248,
+  `setupControls` 3250–3546 (297).
+- Type (1): `DockSkinSpec` 7244–7260 (KDoc + 8 constructor properties) → top-level
+  `internal data class DockSkinSpec` in this file (phase-1 nested-type move; binary name
+  `AndroidTvTorrentPlayerActivity$DockSkinSpec` → `DockSkinSpec`; no reflection; covered by
+  `-keep class com.debrify.app.** { *; }`). The retained `dockSkinSpec` lazy (7262–7317) constructs it by
+  the same simple name — token-identical.
+- Companion: `USE_UNIFIED_MENU` (9067–9072, KDoc + const) → file-private const (used only by
+  `setupControls`, 5 sites).
+
+**Nested `TvLiveDockStyler.kt` — 11 members / 260 lines.** `setupIptvControls` 6907–6943,
+`liveIptvDockButtons` 6945–6961, `cinemaIconTints` 6963–6966 (KDoc), `cinemaButtonTypefaces` 6967,
+`applyLiveIptvControlStyle` 6969–7021, `restoreCinemaDockIconTints` 7023–7040,
+`updateIptvControlPresentation` 7057–7104, `arrangeLiveIptvControlDock` 7106–7133,
+`restoreOriginalControlDockOrder` 7135–7142, `replaceControlDockOrder` 7144–7155,
+`restoreCinemaIptvControlStyle` 7157–7190. (Retained in between: `iptvRecordingActionsController`
+7041–7055, `iptvZapBannerController` 7191–7214.)
+
+**Sibling `TvPlaybackDisplayController.kt` — 31 members / 363 lines.**
+- Fields (14): `displayMatchMode` 289, `displayModeController` 290, `decoderAnalyticsListener` 292–339
+  (anonymous `AnalyticsListener`, own `inputFormat`), `resizeModeIndex` 783, `playbackSpeedIndex` 784,
+  `nightModeIndex` 785, `loudnessEnhancer` 786, `systemAudioEffectsEnabled` 788–790 (KDoc),
+  `resizeModes` 1352–1357, `resizeModeLabels` 1359, `playbackSpeeds` 1361, `playbackSpeedLabels` 1362,
+  `nightModeGains` 1364, `nightModeLabels` 1365.
+- Functions (17): `updateAspectButtonLabel` 6245–6248, `updateNightModeButtonLabel` 6250–6253,
+  `umAudioTracks` 7527–7549 (**leading trivia**: `// Track selection` + the "UNIFIED MENU · backing" banner
+  7527–7532 is attached to this child by the partitioner and travels with it — §9),
+  `umAudioSelectedIndex` 7551–7564, `umAudioModel` 7656–7688 (`// ── Audio`), `umDisplayModel` 7881–7894
+  (`// ── Display`), `showAudioTrackDialog` 7953–7993, `cycleAspectRatio` 7995–8001 (`// Aspect ratio`),
+  `applyResizeMode` 8003–8010, `cyclePlaybackSpeed` 8012–8016 (`// Playback speed`),
+  `applyPlaybackSpeed` 8018–8034, `syncAudioEffectSession` 8036–8049 (KDoc), `initializeLoudnessEnhancer`
+  8051–8068 (`// Night mode …`), `releaseLoudnessEnhancer` 8070–8077, `loadPlayerDefaults` 8079–8129
+  (KDoc), `showNightModeDialog` 8131–8140, `applyNightMode` 8142–8171.
+- Companion: `DECODER_LOG_TAG` 9061 → file-private const (only `decoderAnalyticsListener`).
+
+**Stays in the activity** (named so phase 16 can pick them up): SH — `controlsMenuVisible` 779,
+`controlsHandler` 1369, `hideControlsRunnable` 1493, `isFocusInControlsOverlay`, `handlePlayPauseToggleFromCenter`,
+`togglePlayPause`, `showControlsMenu`, `hideControlsMenu`, `updateSubtitleControlsLift`,
+`hideTitleImmediately`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`,
+`updatePauseButtonLabel`; SK — `seekbarVisible`/`seekbarPosition`/`videoDuration` 780–782, `seekbarHandler`,
+`seekbarProgressRunnable`, `setupSeekbar`, seekbar/cinema functions 6255–6727, cinema fields 278–282,
+seekbar lateinit views 199–207; TI — 4585–4901 + Next overlay 6746–6767 + `isCleanPlaybackState`; the 24
+shared views (§1.2); `controlsSkin`, `dockSkinSpec`, `guideStyle`/`guideTokens`/`guideTypeface`; UM
+composition (`umSectionRows`, `unifiedMenuCallbacks`, `umPlaybackModel` — mixed owners: speed + sleep +
+shuffle).
+
+---
+
+### 3. Owned state and initializer proofs
+
+Two slots:
+- **dock** at `iptvPrevButton` (212), after the retained `controlsOverlay`/`pauseButton` (210/211). The
+  nested styler maps to the owner's effective slot (phase-6/13 `nested_construction`).
+- **display** at `displayMatchMode` (289), after the retained `nativeAudioRouting`/`trackSelector`/
+  `subtitleListener` (286–288). Its initializer (`TvContentDisplayMatchMode.SYSTEM`) runs at the same moment
+  as today (slot field — no proof).
+
+Every other moved property runs earlier (or, for the styler maps, at 212 instead of 6963) → **31 proofs**:
+
+| fields | form | kind | status |
+|---|---|---|---|
+| `iptvNextButton`…`iptvRecordButton` (6), `audioButton`…`nightModeButton` (5), `ottCaptionLabel`, `ottCaptionOwner`, `ottProgressTrackContainer`, `ottSourcesButton` `= null` | literal | constant | supported |
+| `originalControlDockOrder: List<View> = emptyList()` | `emptyList()` | allocation | supported (phase 14) |
+| **`cinemaIconTints = HashMap<View, android.content.res.ColorStateList?>()`**, **`cinemaButtonTypefaces = HashMap<View, Typeface?>()`** | **new: typed empty `HashMap<…>()`** | allocation | step T |
+| `displayModeController = null`, `loudnessEnhancer = null`, `resizeModeIndex = 1`, `playbackSpeedIndex = 2`, `nightModeIndex = 0`, `systemAudioEffectsEnabled = false` (comments stripped by the classifier) | literal | constant | supported |
+| **`decoderAnalyticsListener = object : AnalyticsListener { private var inputFormat: Format? = null … }`** | **new: reviewed anonymous object** | allocation | step T |
+| **`resizeModes = arrayOf(AspectRatioFrameLayout.RESIZE_MODE_FIT, …FILL, …ZOOM, …FIT)`**, `resizeModeLabels`/`playbackSpeedLabels`/`nightModeLabels` (string literals), `playbackSpeeds` (float literals `0.5f`…), `nightModeGains` (int literals) | **new: `arrayOf` of literals / reviewed Java compile-time constants** | allocation | step T |
+
+**Step-T classifier additions** (narrow, each with negatives):
+1. **Typed empty `HashMap`**: `HashMap<T, U>()` with explicit type arguments and no arguments (sibling of
+   the phase-11 `java.util.ArrayDeque<Int>()` form). Reject `HashMap(other)`, `HashMap<…>(16)`,
+   `hashMapOf(x to y)`.
+2. **Literal `arrayOf`**: every element is an int/float literal, a template-free string literal, or one
+   of the allow-listed `AspectRatioFrameLayout.RESIZE_MODE_{FIT,FILL,ZOOM}` Java `static final int`
+   constants. **Bytecode proof**: the display controller's `<init>` contains no `GETSTATIC` on
+   `AspectRatioFrameLayout` (the constants are inlined), so no Media3 UI class initialisation moves earlier.
+   Reject a call, property read, template string or non-allow-listed qualified name as an element.
+3. **Reviewed anonymous object**: exactly `object : AnalyticsListener { … }` whose body has no `init`
+   block and whose only property initializer is `inputFormat: Format? = null`; the object captures the
+   controller only. Reject an `init` block, a state-reading property initializer, or another supertype.
+
+No `lateinit` property moves; no `::x.isInitialized` appears in the unit; no `by lazy` moves.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+### 4.1 Activity patches: 42 in 13 declarations
+
+Single-token prefixes: `controlsDockController.`, `controlsDockController.styler.`, `displayController.`.
+
+| declaration (decl line) | lines | names | later owner |
+|---|---|---|---|
+| `performIptvLiveRetune` (424) | 434 | `updateIptvControlPresentation(entry)` → `.styler.` | TUNE (17) |
+| `playbackListener` (1508) | 1522 ×2, 1641 ×2, 1642, 1649, 1889, 2004, 2009, 2011, 2012, 2013 (**13**) | `playbackSpeeds[playbackSpeedIndex]` (`reprepareIfPending`); `loudnessEnhancer`/`nightModeIndex`; `initializeLoudnessEnhancer()` ×2; `syncAudioEffectSession()` / `syncAudioEffectSession(audioSessionId)`; `updateIptvControlPresentation(entry)` → `.styler.`; `releaseLoudnessEnhancer()` ×2; `nightModeIndex` | ROUTERS |
+| `onCreate` (2023) | 2050, 2152 | `loadPlayerDefaults()` (after `playerPreferences` init 2035); `setupControls()` (order `setupSeekbar` → `setupPlaylist` → `setupControls` → `setupStremioSources` kept) | lifecycle |
+| `setupPlayer` (2720) | 2802 ×4, 2960, 3044 ×2, 3047, 3077 (**9**) | `nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex])`; `when (displayMatchMode)`; `setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])`; `addAnalyticsListener(decoderAnalyticsListener)`; `applyResizeMode()` | START-B (19) |
+| `updateCatalogEpisodeControls` (4312) | 4324 | `iptvPrevButton?.visibility` | START-A (18) |
+| `updatePauseButtonLabel` (6229) | 6242 | `refreshOttCaptionFor(button)` (**temporary**) | SH (16) |
+| `enterCinemaSeekMode` (6393) / `exitCinemaSeekMode` (6471) | 6457 / 6496 | `setOttTrackHeight(focused = true/false)` — named argument kept (**temporary**) | SK (16) |
+| `initIptvMode` (6790) | 6842, 6843 | `setupControls()`; `setupIptvControls()` → `.styler.` (order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` kept) | retained |
+| `unifiedMenuCallbacks` (7590; anonymous object) | 7594, 7597 | `umAudioModel(…)`, `umDisplayModel(…)` (phase 14 patches `umSubsModel` and 8 more statements of the same object — merge rows) | UM composition |
+| `umPlaybackModel` (7897) | 7899 ×2, 7944, 7945, 7946 | `playbackSpeedLabels`/`playbackSpeedIndex` ×2 each, `applyPlaybackSpeed(i)` | UM composition |
+| `onDestroy` (8726) | 8728, 8729, 8837 | `displayModeController?.clear()`, `displayModeController = null`, `releaseLoudnessEnhancer()` — **in place** (§7) | lifecycle |
+| `playStremioTvPlaybackMap` (8965) | 8980 | `ottSourcesButton?.visibility` (the retained `ottSkinInstalled` at 8979 is unchanged) | START-A (18) |
+
+Permanent (composition/lifecycle/routers): 26; consumed by later moves: 16 (3 by phase 16).
+`dockSkinSpec` (6235) and `controlsSkin` (4653/4779/4833) need **no** patch (they stay).
+
+### 4.2 Host re-points: 12 forwarders in 5 whole-property `patched` rows
+
+Earlier destination files stay byte-identical; each target becomes
+`this@AndroidTvTorrentPlayerActivity.<controller>.x`.
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 827, 831 | `iptvStartOverController` | `iptvStartOverButton`, `iptvStartOverSeekButton` → `controlsDockController.` |
+| 841 | `iptvStartOverController` | `updateIptvControlPresentation(entry)` → `controlsDockController.styler.` |
+| 858, 859 | `iptvGuideController` (Host shared with the phase-11 navigator) | `iptvNextButton`, `iptvPrevButton` → `controlsDockController.` |
+| 881 | `iptvGuideController` | `updateIptvControlPresentation(entry)` → `controlsDockController.styler.` |
+| 1128, 1129, 1140, 1141 | `progressReporter` | `playbackSpeedIndex`, `playbackSpeeds`, `resizeModeIndex`, `resizeModeLabels` → `displayController.` |
+| 7052 | `iptvRecordingActionsController` | `iptvRecordButton` → `controlsDockController.` |
+| 8327 | `sourceSwitchController` | `ottSourcesButton` → `controlsDockController.` (8326 `ottSkinInstalled` unchanged) |
+
+`iptvStartOverController` and `iptvGuideController` are also re-pointed by phase 14 (different forwarders)
+→ phase-15 rows are built on the phase-14 versions. **No re-point** in: `iptvZapBannerController`
+(`controlsMenuVisible`, `controlsOverlay`, `updateSubtitleControlsLift` stay), `playlistController`
+(`controlsSkin` stays), `skipSegmentController`, `startupGateController`, `stremioTvGuideController`,
+`upNextController`, `subtitleController`, `autoSyncController`, the remaining Hosts (checked line by line).
+
+---
+
+### 5. Outbound Hosts (computed, explicitly qualified `this@AndroidTvTorrentPlayerActivity.x`)
+
+**Dock + styler: one shared 58-member Host.**
+
+| kind | members (refs in dock+styler) |
+|---|---|
+| shared views/state `var` (23) + `val` (1) | `controlsOverlay: View?` 3, `pauseButton: AppCompatButton?` 9, `ottSkinInstalled: Boolean` 5, `ottQualityChips: Array<TextView?>` (val, 3 indexed writes), `debrifyTimeDisplay` 1, `debrifyTimeCurrent` 2, `debrifyTimeTotal` 2, `debrifyProgressLine` 1, `cinemaProgressBuffered` 1, `cinemaProgressContainer` 3, `cinemaProgressBackground` 1, `cinemaProgressThumb` 2, `cinemaSpeedIndicator` 2, `ottIdentityTitle`/`Subtitle`/`Overline`/`Badge`/`Divider` 1 each, `ottRatingChip` 1, `ottMetaLine` 1, `ottScrubPreviewChip` 1, `ottScrubPreviewText` 1, `cinemaSeekMode` 1, `cinemaSeekWasPlaying` 1 |
+| activity state `val` (13) | `playerView` 38 (**lateinit**), `unifiedMenu` 11, `iptvChannels` 2, `currentIptvIndex` 2, `isIptvMode` 2, `guideStyle` 3 (lazy), `guideTokens` 3 (lazy), `dockSkinSpec: DockSkinSpec?` 4 (lazy; first access stays `setupControls` 3251), `sourceBrowser` 1, `subtitleControlsLift` 1 (**lateinit**), `player` 1, `iptvStartOverActive` 1, `iptvStartOverTimelineVisible` 1 |
+| cross-feature getters (7) | `iptvGuideController` 8, `iptvStartOverController` 4, `iptvRecordingActionsController` 3 (`recordingEngineEnabled` lazy first access unchanged), `iptvGuideChromeController` 1, `subtitleController` 1, `playlistController` 1, **`displayController`** 6 (`cycleAspectRatio`, `cyclePlaybackSpeed`, `showNightModeDialog`, `showAudioTrackDialog`, `updateAspectButtonLabel`, `updateNightModeButtonLabel`) |
+| functions (13) + getter (1) | `dp` 7, `guideTypeface` 1, `hideControlsMenu` 15, `scheduleHideControlsMenu` 9, `cancelScheduledHideControlsMenu` 1, `togglePlayPause` 1, `controlsMenuVisible` (val) 4, `seekBy` 2, `setupCinemaProgressBar` 1, `startSeekbarProgressUpdates` 1, `playNext` 1, `playPrevious` 1, `updateCatalogEpisodeControls` 1, `showRandomPlaybackDialog` 1 |
+
+Phase-16 consumption: SH 5 (`hideControlsMenu`, `scheduleHideControlsMenu`, `cancelScheduledHideControlsMenu`,
+`togglePlayPause`, `controlsMenuVisible`), SK 3, CS 2, and the 24 view forwarders if those views move.
+`playNext`/`playPrevious`/`updateCatalogEpisodeControls`/`showRandomPlaybackDialog` re-point in phase 18.
+
+**Display: one 11-member Host.** `player` 8, `playerPreferences` 7 (**lateinit**), `nativeAudioRouting` 4
+(borrowed; never snapshotted), `playerView` 3 (lateinit), `trackSelector` 2, `iptvGuideController` 2
+(`navigator.onIptvSeriesAudioPicked`), `ottSkinInstalled` 1, `controlsSkin` 1 (log template), `var
+skipSegmentsEnabled` 2, `var skipSegmentProviderId` 2, **`controlsDockController`** 9 (`aspectButton` ×2,
+`nightModeButton` ×2, `speedButton` ×2, `refreshOttCaptionFor` ×3).
+
+Siblings reach each other only through computed activity getters; the dock (slot 212) is constructed
+before the display controller (slot 289) and never reads `displayController` during construction.
+
+---
+
+### 6. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 14 sites** (all argument/constructor sites, compiled descriptor audit):
+- dock 3145 `LayoutInflater.from(this)`;
+- styler 6987 / 7178 `ContextCompat.getColorStateList(this, …)` (inside `forEach {}` — non-receiver lambdas,
+  so `this` is the activity), 7185 **`this@AndroidTvTorrentPlayerActivity`** inside `pauseButton?.apply {}`
+  (the label is required there; bare `this` would be the button), 7086 `LiveRecordingService.isSupported(this)`,
+  7087 `LiveRecordingService.needsLegacyPermission(this)`;
+- display 7972 / 8000 / 8015 / 8170 `Toast.makeText(this, <CharSequence>, …)`, 7977 / 8132
+  `AlertDialog.Builder(this)` (androidx.appcompat), 8048 `AudioEffectSession.open(this, id)`, 8107
+  **constructor** `TvDisplayModeController(this, displayMatchMode)` (`Activity` parameter).
+
+**Excluded receivers: 0.** `PaintDrawable().apply { … object : ShapeDrawable.ShaderFactory() { … } }`
+(dock), `iptvPrevButton?.apply {}` / `iptvNextButton?.apply {}` / `pauseButton?.apply {}` (styler) and
+`object : AnalyticsListener` (display) contain no bare `this`. Implicit-receiver names inside those `apply`
+blocks (`text`, `setOnClickListener`, `setBackgroundResource`, `setTextColor`, `shape`, `shaderFactory`) are
+button/drawable members and are **not** substituted; the Host-qualified calls inside them
+(`hideControlsMenu`, `iptvGuideController`) resolve identically (step T PSI re-check of shadowing).
+
+**Inherited (implicit) receiver pins: 3** — `resources` 3213 / 3355 → `activity.resources`
+(`getResources()`), `currentFocus` 7100 → `activity.currentFocus` (`getCurrentFocus()`); phase-12 getter
+auditor forms with owner–descriptor–opcode pins.
+
+**Generic inference through Host targets: 23 `findViewById<T>` assignment sites** where `T` is inferred
+from a now Host-typed target (`host.pauseButton = playerView.findViewById(…)`, `host.ottQualityChips[0] =
+ott.findViewById(…)`; 11 control binds + 12 OTT binds). Host property types must equal the original field
+types exactly; step T pins the compiled `CHECKCAST` type of each site before/after. Owned-view binds
+(17) keep their field types trivially.
+
+**Templates:** `loadPlayerDefaults` 8123 `$skipSegmentsEnabled`, `$skipSegmentProviderId`, 8124
+`$controlsSkin` → **3 braced host templates**; 8124 `${playerPreferences.getString(…)}` already braced.
+Owned templates (`$resizeModeIndex`, `$nightModeIndex`, `${displayMatchMode.storageKey}`, Toast labels)
+unchanged; `decoderAnalyticsListener` templates are locals/params.
+
+**Defaults/named arguments:** `syncAudioEffectSession(sessionId: Int? = null)` — literal default, both
+call shapes kept (moved member, not a Host member); `setOttTrackHeight(focused = …)` named at all 4 sites.
+
+**Labels / callable references:** none in the unit.
+
+**Anonymous classes renamed (R8 mapping check):** `…Activity$decoderAnalyticsListener$1` →
+`TvPlaybackDisplayController$decoderAnalyticsListener$1`; the `ShaderFactory` object in
+`installOttControlsSkin`; `setupControls`' focus/click/`ControllerVisibilityListener` lambdas; styler
+click lambdas; UM `onOk` lambdas; `DockSkinSpec` (nested → top-level); both new Host objects.
+
+---
+
+### 7. Timers, handlers, native resources, teardown
+
+- **No owned Handler, coroutine, `MethodChannel` or token.** No `progressHandler` use (the zap banner's
+  progressHandler tokens are untouched).
+- **Controls auto-hide** stays activity-owned until phase 16: the unit calls
+  `scheduleHideControlsMenu` (9 click/focus sites → `controlsHandler.postDelayed(hideControlsRunnable,
+  4 s)` when playing) and `cancelScheduledHideControlsMenu` (pause click) through Host forwarders.
+- **Seekbar ticker**: `setupControls` calls `startSeekbarProgressUpdates()` (100 ms `seekbarHandler`
+  loop, SK) and `setupCinemaProgressBar()` (focus/key listeners) through the Host; ordering inside
+  `setupControls` unchanged.
+- **View animations** (uncancelled, pinned as-is): caption fade 120 ms; classic focus scale 200 ms; OTT
+  scale/lift 120 ms; no listener/animator is cleared on destroy (existing).
+- **`LoudnessEnhancer` (native, owned by display):** created in `initializeLoudnessEnhancer` from
+  `playbackListener` READY (1641–1642, only when null and night > 0), `onAudioSessionIdChanged`
+  (2011–2013, release-then-init), `decoderAnalyticsListener.onAudioTrackInitialized` (301) and
+  `applyNightMode` (when not reprepare-restarting); released by `releaseLoudnessEnhancer` on non-repeat
+  media-item transition (2004), session change, route change in `applyPlaybackSpeed`/`applyNightMode`, and
+  **`onDestroy` 8837** — after the three handler clears (8833–8835) and before
+  `AudioEffectSession.closeCurrent(this)` (stays in the activity) and the player release. **Not** released
+  in `onStop`/`onPause` (pinned as-is).
+- **System audio-effect session**: `syncAudioEffectSession` → `AudioEffectSession.open(activity, id)`
+  (READY 1649, session change 2009, track init); close stays in `onDestroy`.
+- **`NativeAudioRouting`** (activity-owned, borrowed): `update`/`setPlaybackSpeed`/`reprepare` from the
+  display controller; `reprepareIfPending` stays in `playbackListener` (1522, patched for its arguments);
+  `setupPlayer` keeps passing the same instance to `NativeAudioRenderersFactory`.
+- **`TvDisplayModeController`**: (re)created by `loadPlayerDefaults` (after `clear()` of a previous one),
+  fed by `decoderAnalyticsListener.onVideoInputFormatChanged`, cleared + nulled at `onDestroy` 8728–8729
+  (2nd/3rd statements, right after `cancelPendingIptvCatchupRequest`).
+- **Analytics callbacks** run on the application (main) looper; no moved field is read off-main; no
+  `@Volatile` field moves (`ottShowName`, the only volatile control field, is TI/phase 16).
+- **Teardown order unchanged**: the 3 `onDestroy` statements stay in place as single-reference patches
+  (phase-9 rule; not folded). `onStop`, `onPause`, `onStart`, `onResume`, `finish` untouched. Existing
+  bytecode teardown helpers (`TvPhase9BytecodeAccess`, `TvPlaylistBytecodeAccess`) filter other owners and
+  are unaffected; the phase-5/7/8 handler cleanup lists name only retained handlers.
+
+---
+
+### 8. Reflective tests and Dart anchors
+
+**Owner-map routes (`TvPlayerControllerOwners.kt`, 555 → ≈ 564 lines): 9 routes, 40 literal sites.**
+
+| name | sites / files | route |
+|---|---|---|
+| `iptvPrevButton` | 15 / `TvIptvNavigatorSweepTest`, `TvIptvNavigationCharacterizationTest`, `TvIptvVodCallerCharacterizationTest` | `controlsDockController` |
+| `iptvNextButton` | 14 / the same three + `TvIptvSessionSweepTest` | `controlsDockController` |
+| `iptvGuideButton` | 2 / `TvIptvNavigatorSweepTest` | `controlsDockController` |
+| `iptvRecordButton` | 2 / `TvRecordingCharacterizationTest` (set) | `controlsDockController` |
+| `iptvStartOverButton`, `iptvStartOverSeekButton` | 2 + 2 / `TvPhase5OriginalTest` (base-class `button()`/`seekButton()` + a set loop) | `controlsDockController` |
+| `ottSourcesButton` | 1 / `TvSourceSwitchFeedbackCharacterizationTest` (set; `ottSkinInstalled` on the same line stays) | `controlsDockController` |
+| `playbackSpeedIndex`, `resizeModeIndex` | 1 + 1 / `TvProgressReporterCharacterizationTest` (set) | `displayController` |
+
+All are backing fields of members of an `internal` class — JVM field names are unmangled even when the
+property is non-private; no function pin is needed.
+
+**Local helper retarget (1 site):** `NativePlayerSettingsConsumptionTest.assertDefaults` reads
+`field(activity, "nightModeIndex")` with its **own** `getDeclaredField` helper, shared by
+`AndroidTvTorrentPlayerActivity` and `TorboxTvPlayerActivity`. Retarget: resolve the owner to
+`displayController` only for the AndroidTv activity; the `assertEquals(if (custom) 3 else 0, …)`
+assertion and the Torbox path stay byte-identical.
+
+**Unchanged (stay in the activity):** `getControlsSkin` (`NativePlayerSettingsConsumptionTest`
+`getDeclaredMethod`, `TvPlaylistSkinContracts`), `trackSelector` ×17, `ottSkinInstalled`,
+`controlsOverlay` ×4, `cinemaProgressContainer`, `controlsMenuVisible` ×23, `controlsHandler`/
+`seekbarHandler` cleanup lists, `playerPreferences` ×5, `skipSegment*` ×6, `getGuideStyle`/`getGuideTokens`.
+Rescan after step 0 adds accesses.
+
+**Dart anchors: 0.** No anchor names a moved member. `android_tv_mdblist_progress_source_test`'s
+`handleMetadataUpdate` range and the `playItem`/`resolveAndPlay`/`startPlayback` ranges get no phase-15
+patch. `NativeAudioRoutingTest`'s source anchor (`.setAllowInvalidateSelectionsOnRendererCapabilitiesChange`)
+is in `setupPlayer` and untouched. `profile_source_guard_test` does not scan `tv/`.
+
+---
+
+### 9. Hazards (each a step-T fixture or negative)
+
+1. Two sibling controllers at different slots + a **field-bearing nested styler** at the dock's effective
+   slot (2 HashMap proofs). Negatives: omitted proof for the styler's first field; styler/display reading
+   the Host or owner during construction; lazily constructed styler/display.
+2. The **3 new classifier forms** (§3) incl. the `AspectRatioFrameLayout` constant-inlining bytecode proof.
+3. **24 shared view/state forwarders written by the dock** (`host.x = …`): computed `get`/`set` only.
+   Negative: an initialized/snapshotting forwarder (would read a `lateinit`/null at slot 212).
+4. **23 `findViewById<T>` inference sites** through Host-typed targets (CHECKCAST pins; a negative with a
+   widened Host type).
+5. **48 styler→dock `dock.` qualifications** — compile-checked (no same-name Host member exists for the 17
+   owned views); negative: a dock view accidentally added to the Host.
+6. **`nativeAudioRouting` identity**: borrowed through a computed getter; negative: a forwarder that
+   allocates/snapshots a routing instance (would silently desync `requiresPcm` from the renderer).
+7. **`LoudnessEnhancer` release ordering**: route-change `releaseLoudnessEnhancer()` before
+   `nativeAudioRouting.reprepare`/`setPlaybackSpeed`; `onDestroy` position; transition-repeat early return.
+8. **Last-set-wins focus listeners** in `setupControls` (classic animation → `extendTimerOnFocus` → OTT
+   re-apply list): statement order frozen; characterization per skin.
+9. **`this@AndroidTvTorrentPlayerActivity` inside `pauseButton?.apply {}`** → `activity` (declared label
+   substitution); negative: rewriting it to bare `this`.
+10. **3 braced host templates** in the `loadPlayerDefaults` log (negative: unbraced `$host.x`).
+11. **Leading trivia travels with its child**: the "UNIFIED MENU · backing" banner (7527–7532) moves with
+    `umAudioTracks`; `// Aspect ratio`, `// Playback speed`, `// Night mode …`, `// ── Display`, `// ── Audio`
+    move with theirs. Pin explicitly; the remaining UM backing (`subtitleSearch*` fields onward, phase 14)
+    starts without the banner.
+12. **Companion constants** `USE_UNIFIED_MENU` (with KDoc) and `DECODER_LOG_TAG` → file-private consts;
+    the companion is a split container (partition children; `PAYLOAD_KEY` and others retained in order).
+13. **`DockSkinSpec` type move** (nested private → top-level internal; retained `dockSkinSpec` lazy
+    token-identical); the Host's `dockSkinSpec` getter keeps lazy first-access timing.
+14. **Overloads:** `Toast.makeText` CharSequence overload ×4, `AlertDialog.Builder(Context)` ×2,
+    `ContextCompat.getColorStateList(Context,int)` ×3, `LayoutInflater.from(Context)`,
+    `LiveRecordingService` static `(Context)` ×2, `AudioEffectSession.open(Context,int)`,
+    `TvDisplayModeController(Activity, …)` constructor — compiled descriptor audit (14 sites + 3 getters).
+15. **Lint:** the dock-skin layouts stay referenced from the activity (`dockSkinSpec` keeps the
+    `R.layout.view_debrify_tv_*_controls` references), but the inflation moves
+    (`LayoutInflater.from(activity)`); check the phase-13 Overdraw "inferred theme" correspondence for any
+    existing issue on those layouts and record exact correspondences, no suppressions.
+16. `@OptIn(UnstableApi::class)` pinned on both new classes (`AspectRatioFrameLayout`, `PlayerView`
+    resize mode, `AnalyticsListener`/`DecoderReuseEvaluation`); lint opt-in error count must stay 175.
+17. Shared-declaration merges with phase 14 (`unifiedMenuCallbacks`, `playbackListener`, `onCreate`,
+    `onDestroy`, `playStremioTvPlaybackMap`, the two IPTV Host rows).
+
+---
+
+### 10. File split and counts
+
+| file | content | ≈ lines |
+|---|---|---|
+| `TvControlsDockController.kt` | 17 views, 6 functions, `DockSkinSpec`, `USE_UNIFIED_MENU`, 58-member Host interface, eager `styler` | 448 + ≈ 112 ≈ **560** |
+| `TvLiveDockStyler.kt` | 2 maps + 9 functions | 260 + ≈ 30 ≈ **290** |
+| `TvPlaybackDisplayController.kt` | 14 fields + 17 functions, `DECODER_LOG_TAG`, 11-member Host | 363 + ≈ 57 ≈ **420** |
+
+| substitution kind | count |
+|---|---|
+| dock/styler `host.` (incl. 4 `dockSkinSpec`, 23 view-var writes/reads) | ≈ 180 |
+| dock → `host.displayController.` | 6 |
+| styler → `dock.` | 48 |
+| display `host.` (incl. 3 braced templates) | 32 |
+| display → `host.controlsDockController.` | 9 |
+| receivers (`this`/`this@` → `activity`) | 14 |
+| inherited (`activity.resources` ×2, `activity.currentFocus`) | 3 |
+| visibility (`private` → public members of the internal classes; never `internal fun`) | ≈ 46 (dock 17: 13 VD views read by the styler + `ottSourcesButton` + 3 functions; styler 2; display ≈ 27) |
+| **total** | **≈ 338** |
+
+Activity: −1,071 member lines −7 companion lines + ≈ 128 property/Host lines (dock ≈ 108 with 3-line
+`var` forwarders; display ≈ 20) ≈ **−950**. Size gate: activity baseline lowered with `--update`; all three
+new files ≤ 800; `TvPlayerControllerOwners.kt` ≈ 564.
+
+**Phase 16 preview (re-inventory before it):** SH 249 + SK/CS/SV 485 + TI 346 ≈ 1,080, plus the 24
+shared views (≈ 30) ≈ **1,110** (two files: overlay/title ≈ 600, seek/scrub ≈ 500). It consumes the 10
+SH/SK/CS dock forwarders, the 24 view forwarders (one whole-property row on `controlsDockController`) and
+the 3 temporary patches; ≈ 45 reflective sites (`controlsMenuVisible` 23, `controlsOverlay` 4,
+`isCleanPlaybackState` 3, `seekbarVisible` 3, `ottShowName` 3, `controlsHandler`/`seekbarHandler` 3+3,
+others); 24 permanent `dispatchKeyEvent` patches; readiness getters for `::nextBackdrop` and
+`::startupGateView`; 2 `Glide.with(this)` (`setNextOverlayBackdrop`); `@Volatile ottShowName`.
+
+---
+
+### 11. Step T / step 0 needs
+
+**Step T:**
+- classifier forms (§3) with negatives; constant-inlining bytecode proof for `resizeModes`;
+- complete phase-15 production extraction fixture: dock owner + nested styler + sibling display at their
+  slots, 31 proofs, 48 `dock.` qualifications, sibling getters, `DockSkinSpec` type move, 2 companion
+  moves, the banner-trivia fate, 5 re-point rows (12 forwarders, merged on phase-14 rows), 42 patches in
+  13 declarations incl. 3 in-place `onDestroy` statements;
+- negatives: §9 plus a folded `onDestroy`, a missed `.styler.` on `updateIptvControlPresentation`, a
+  dropped `syncAudioEffectSession` call shape, a Host `var` with logic beyond its pinned text;
+- compiled audit: 14 receiver/constructor sites, 3 inherited getters, 23 CHECKCAST pins, 0 exclusions;
+- per-phase dispatcher keeping all historical suites; earlier destinations (incl. phase-14 files) frozen at
+  the phase-14 merge; owner-map routes + the one local test retarget (assertions byte-identical).
+
+**Step 0 (from zero; the systematic statement sweep from the start — 68 `if`, 2 `when`, 31 `return`,
+11 loops, 26 elvis sites):**
+- **Seams to demonstrate on the original first:** a deterministic `LoudnessEnhancer` observation
+  (Robolectric shadow or test-only shadow recording construct/`enabled`/`setTargetGain`/`release`), the
+  `AudioEffectSession` open/close broadcast capture, a recording `ExoPlayer` probe for
+  `setPlaybackSpeed`/`audioSessionId`, and fake `Tracks` for audio rows. If the native-effect seam cannot
+  be made reliable, night mode + effect session are deferred (display shrinks to aspect/speed/display-match)
+  and the design is re-reviewed.
+- **Dock install, 7 separate activity instances** (one per controls skin, CLASSIC never installs; IPTV
+  forces classic): inflate-failure fallback to classic, view replacement at the same index, the OTT-only
+  4-stop scrim, id binding of every optional view, idle track height per spec, seek ±10 s buttons
+  (+ auto-hide reschedule), Sources button (hide controls, hide UM, show browser).
+- **Caption**: owner-guarded clear, 120 ms fades, refresh on label writes (pause/speed/aspect/night).
+- **Focus treatments**: classic vs OTT per spec (scale/lift), last-set-wins sequence, the OTT re-apply list
+  (incl. its omissions — §12), timer extension only while controls are visible.
+- **Click routing matrix** for all buttons with the unified menu present and absent (`unifiedMenu = null`
+  fallback dialogs), IPTV vs catalog next/prev, playlist, random, start-over, jump; Media3 controller
+  visibility reconciliation (hide + lift snap only when `controlsMenuVisible`); `originalControlDockOrder`
+  captured once.
+- **Live dock**: VOD vs live entry, record/zap clicks, CH labels; classic vs styled guide styles (4 separate
+  instances; tint/typeface capture-once, live→VOD→live restore), dock order arrange/restore idempotence,
+  `updateIptvControlPresentation` visibility matrix (archive timeline, recorder availability by engine vs
+  tee and SDK), live-transition cinema reset and focus move.
+- **Display/audio**: `loadPlayerDefaults` (clamping, display-match parse, skip prefs, exception keeps
+  defaults, log text), aspect cycle (4-step wrap, Cinema Zoom 4/3 on `exo_content_frame` vs surface
+  fallback, Toast), speed (route change → release, `setPlaybackSpeed`, OTT label + caption), night
+  (route-change reprepare path, enhancer create/enable/gain/off, label, Toast), effect-session gating
+  (disabled / session 0 / explicit id), `LoudnessEnhancer` lifecycle through the real `playbackListener`
+  (READY, session change, non-repeat vs repeat transition) and `decoderAnalyticsListener` (track init,
+  format → display controller, decoder log line), `onDestroy` clear/null/release order;
+  `umDisplayModel`/`umAudioModel` rows and actions, `showAudioTrackDialog` (Off disables audio; series
+  language memory via `onIptvSeriesAudioPicked`), progress-map speed/aspect values.
+- Mutation proofs on the original; Claude's independent sample (≥ 75 % kills, else sweep + second
+  sample); 0b.
+
+---
+
+### 12. Follow-ups found while mapping (pin as-is; do not fix)
+
+- The OTT re-apply list in `setupControls` omits `iptvStartOverSeekButton` (it keeps
+  `extendTimerOnFocus`: no scale/caption under OTT), and `iptvRecordButton` gets no
+  `extendTimerOnFocus` in the classic pass.
+- Classic focus scale never fires (overwritten by `extendTimerOnFocus`; the code comment admits it).
+- `resizeModeIndex` field default is 1 (Fill, per its comment) but `loadPlayerDefaults` defaults to 0
+  (Fit); only the exception path keeps 1.
+- `updateIptvControlPresentation` resets `cinemaSeekWasPlaying` on a live transition, so a scrub
+  interrupted by a live switch does not resume playback.
+- `LoudnessEnhancer` survives `onStop` (released only on destroy/transition/route change).
+- `showAudioTrackDialog`/`showNightModeDialog` are reachable only when `unified_menu_root` is absent
+  (`USE_UNIFIED_MENU` is a constant `true`).
+- `cinemaIconTints`/`cinemaButtonTypefaces` capture once per button and are never cleared (hold View
+  references for the activity lifetime).
+
+## Phase 15 Step T — re-measured at `ce3ddfb06`
+
+The original activity has 7,982 physical lines and 1,730 PSI declarations. The manifest classifies every declaration, including the 68 moved subtrees (66 selected members and two companion constants). Original self-comparison has zero differences. Production code is unchanged in this step.
+
+**Measured bytecode correction to the inventory/design:** all 23 shared-view assignments remain covered, but Kotlin 2.2.20 emits 12 CHECKCAST sites and 11 no-cast sites. The three `ottQualityChips` assignments load a typed `TextView[]` and use `aastore` without CHECKCAST; the other eight no-cast targets are `View`. The audit pins these observed instructions and the original field/new Host setter or array-getter descriptors, plus exact source type/nullability.
+
+The two construction slots are `iptvPrevButton` (212) and `displayMatchMode` (289). The eagerly constructed styler is pinned in its owner, with 31 later-field initializer proofs including its first map. There are 337 moved token re-points in 306 counted whole-line substitutions, 41 activity edits in 13 declarations and 12 Host re-points in five whole-property rows. All 51 earlier destinations are frozen at the merge with an empty whitelist.
+
+| Destination | Original member | Lines at `ce3ddfb06` |
+| --- | --- | --- |
+| `TvControlsDockController` | `iptvPrevButton` | 212–212 |
+| `TvControlsDockController` | `iptvNextButton` | 213–213 |
+| `TvControlsDockController` | `iptvGuideButton` | 214–214 |
+| `TvControlsDockController` | `iptvJumpButton` | 215–215 |
+| `TvControlsDockController` | `iptvStartOverButton` | 216–216 |
+| `TvControlsDockController` | `iptvStartOverSeekButton` | 217–217 |
+| `TvControlsDockController` | `iptvRecordButton` | 218–218 |
+| `TvControlsDockController` | `originalControlDockOrder` | 223–223 |
+| `TvControlsDockController` | `audioButton` | 224–224 |
+| `TvControlsDockController` | `subtitleButton` | 225–225 |
+| `TvControlsDockController` | `aspectButton` | 226–226 |
+| `TvControlsDockController` | `speedButton` | 227–227 |
+| `TvControlsDockController` | `nightModeButton` | 228–228 |
+| `TvControlsDockController` | `ottCaptionLabel` | 248–248 |
+| `TvControlsDockController` | `ottCaptionOwner` | 249–249 |
+| `TvControlsDockController` | `ottProgressTrackContainer` | 269–269 |
+| `TvControlsDockController` | `ottSourcesButton` | 271–273 |
+| `TvPlaybackDisplayController` | `displayMatchMode` | 289–289 |
+| `TvPlaybackDisplayController` | `displayModeController` | 290–290 |
+| `TvPlaybackDisplayController` | `decoderAnalyticsListener` | 292–339 |
+| `TvPlaybackDisplayController` | `resizeModeIndex` | 783–783 |
+| `TvPlaybackDisplayController` | `playbackSpeedIndex` | 784–784 |
+| `TvPlaybackDisplayController` | `nightModeIndex` | 785–785 |
+| `TvPlaybackDisplayController` | `loudnessEnhancer` | 786–786 |
+| `TvPlaybackDisplayController` | `systemAudioEffectsEnabled` | 788–790 |
+| `TvPlaybackDisplayController` | `resizeModes` | 1349–1354 |
+| `TvPlaybackDisplayController` | `resizeModeLabels` | 1356–1356 |
+| `TvPlaybackDisplayController` | `playbackSpeeds` | 1358–1358 |
+| `TvPlaybackDisplayController` | `playbackSpeedLabels` | 1359–1359 |
+| `TvPlaybackDisplayController` | `nightModeGains` | 1361–1361 |
+| `TvPlaybackDisplayController` | `nightModeLabels` | 1362–1362 |
+| `TvControlsDockController` | `installOttControlsSkin` | 3127–3202 |
+| `TvControlsDockController` | `setOttTrackHeight` | 3204–3217 |
+| `TvControlsDockController` | `updateOttCaption` | 3219–3231 |
+| `TvControlsDockController` | `clearOttCaption` | 3233–3238 |
+| `TvControlsDockController` | `refreshOttCaptionFor` | 3240–3245 |
+| `TvControlsDockController` | `setupControls` | 3247–3543 |
+| `TvPlaybackDisplayController` | `updateAspectButtonLabel` | 5268–5271 |
+| `TvPlaybackDisplayController` | `updateNightModeButtonLabel` | 5273–5276 |
+| `TvLiveDockStyler` | `setupIptvControls` | 5930–5966 |
+| `TvLiveDockStyler` | `liveIptvDockButtons` | 5968–5984 |
+| `TvLiveDockStyler` | `cinemaIconTints` | 5986–5989 |
+| `TvLiveDockStyler` | `cinemaButtonTypefaces` | 5990–5990 |
+| `TvLiveDockStyler` | `applyLiveIptvControlStyle` | 5992–6044 |
+| `TvLiveDockStyler` | `restoreCinemaDockIconTints` | 6046–6063 |
+| `TvLiveDockStyler` | `updateIptvControlPresentation` | 6080–6127 |
+| `TvLiveDockStyler` | `arrangeLiveIptvControlDock` | 6129–6156 |
+| `TvLiveDockStyler` | `restoreOriginalControlDockOrder` | 6158–6165 |
+| `TvLiveDockStyler` | `replaceControlDockOrder` | 6167–6178 |
+| `TvLiveDockStyler` | `restoreCinemaIptvControlStyle` | 6180–6213 |
+| `TvControlsDockController` | `DockSkinSpec` | 6267–6283 |
+| `TvPlaybackDisplayController` | `umAudioTracks` | 6556–6572 |
+| `TvPlaybackDisplayController` | `umAudioSelectedIndex` | 6574–6587 |
+| `TvPlaybackDisplayController` | `umAudioModel` | 6672–6704 |
+| `TvPlaybackDisplayController` | `umDisplayModel` | 6784–6797 |
+| `TvPlaybackDisplayController` | `showAudioTrackDialog` | 6856–6896 |
+| `TvPlaybackDisplayController` | `cycleAspectRatio` | 6898–6904 |
+| `TvPlaybackDisplayController` | `applyResizeMode` | 6906–6913 |
+| `TvPlaybackDisplayController` | `cyclePlaybackSpeed` | 6915–6919 |
+| `TvPlaybackDisplayController` | `applyPlaybackSpeed` | 6921–6937 |
+| `TvPlaybackDisplayController` | `syncAudioEffectSession` | 6939–6952 |
+| `TvPlaybackDisplayController` | `initializeLoudnessEnhancer` | 6954–6971 |
+| `TvPlaybackDisplayController` | `releaseLoudnessEnhancer` | 6973–6980 |
+| `TvPlaybackDisplayController` | `loadPlayerDefaults` | 6982–7032 |
+| `TvPlaybackDisplayController` | `showNightModeDialog` | 7034–7043 |
+| `TvPlaybackDisplayController` | `applyNightMode` | 7045–7074 |
+| `TvPlaybackDisplayController` | `DECODER_LOG_TAG` | 7964–7964 |
+| `TvControlsDockController` | `USE_UNIFIED_MENU` | 7970–7975 |
+
+The complete production-config fixture compiles on the original detached tree: dock owner 554 lines, nested styler 294 and display controller 438. The compiled audit passes 17 receiver/getter pins, all 23 field/Host assignment pins, and the resize-mode constant-inlining proof. Raw source, PSI, JVM instructions and reports: `p15/fixtures/phase15/`, `p15/compiled-original/`, `p15/compiled-fixture/`, `p15/overload-audit.json`, and `p15/remeasured-inventory.json`.
+
+The phase-15 checker suite includes allocation/binding negatives, missing-proof checks for every initializer and view assignment, computed Host forwarders, eager nested construction, owner-slot relocation, `controlsDock` qualification and `dock` shadowing, nullability/type widening, cast presence/absence, non-inlined constants, extra activity-property edits, unchanged teardown ordering and all earlier destinations. Historical suites are dispatched with their own manifests.
+
+All 419 checker cases are verified: the full run passed 418 and exposed one historical phase-6 exception-reporting incompatibility; restoring the pre-phase-15 exception behavior and rerunning that case plus all 41 phase-15 cases passed 42/42. The corrected earlier-destination test also consumes the comparator result directly. Raw initial and corrected runs are retained; compiled negatives fail on their stated audit reason, rather than compilation. Protected hashes confirm the activity, all 51 earlier destinations, all 14 earlier manifests, ProGuard and lockfile remain byte-identical to the merge.
+
+## Phase 15 step 0 — original dock and playback-display characterization
+Original: `ce3ddfb06`. Production remains unchanged. The LoudnessEnhancer prerequisite ran first: `p15/step0/prerequisite-inherited-shadow/` demonstrates 7/7 creation, enable/gain, release and failure-injection cases. Both initialization failures discard the new reference without releasing it, release failure still clears it, and applyNightMode enable/second-gain errors propagate. No feature is deferred.
+Added **335 named cases in 13 behavior suites**, using 16 cohesive test/fixture files. The matrix owns a separate activity for every one of the 7 controls skins × 4 guide styles in each scenario. It exercises real onCreate/setupControls wiring, real click/focus listeners, actual binary watch ACKs for IPTV episode navigation, Media3 visibility/analytics callbacks, scoped preference snapshots, real diagnostic-writer barriers, the framework animation implementation, and the active recording engine. Loudness and animation-cancellation shadows are observation/failure seams only. Existing tests and assertions are unchanged.
+Construction, root replacement, every shared/owned binding and null, first-order retention, focus scales/lifts/durations/captions/timers, every click route, live/VOD style/order/visibility, exact restored backgrounds and color states, per-invocation Start Over/Record refresh, aspect/speed/audio route interplay, eight night gains, system-effect broadcasts/default dispatch, audio menu/dialog capture versus re-read semantics, all preference defaults/bounds and decoder persistence are pinned. Text/hierarchy observers also pin the repeated timeline refresh and reverse detach/forward attach callbacks. The three onDestroy operations retain their original positions and display-clear/null → effect release → player release order; pause/stop retention is covered.
+Clean original `junit/baseline-ce3ddfb06`: 1606 identities, {'failure': 1, 'pass': 1605}. Current `junit/p15-step0`: 1941 identities, {'failure': 1, 'pass': 1940}. Identity comparison plus strict status equality retains every old identity/status and permits **335 passing additions only**. Both runs have stable input fingerprints and use the same JBR and evidence-only 1024 MiB worker init script; repository build settings are unchanged. The known TvSourceBrowserFocusTest failure remains. Evidence: `p15/step0/jvm-run.log`, `p15/step0/jvm-comparison.log`, `p15/step0/jvm-strict-comparison.json`.
+Original lint is archived in `p15/lint-original/`: 1,352 issue identities, 253 errors/1,099 warnings, including 175 UnsafeOptInUsage errors; exit 1 is existing evidence, not a passing lint claim. XML, HTML/text, Gradle log and normalized issues are retained for the later move gate.
+The final sweep contains **493 isolated original-code attempts: 406 assertion-killed**, 16 compile-invalid, 7 crash-only and 64 no-assertion attempts. Invalid/crash attempts receive no proof credit. Earlier weak-net survivors are retained alongside their repaired, assertion-killed variants. Every one of the 335 named tests has a named assertion witness. The complete PSI inventory contains **668 nodes in all 35 moved functions/callbacks**: 445 calls, 116 writes, 68 ifs, 31 returns, 6 loops and 2 whens. **All 406 required write/branch/loop/direct-call obligations are resolved: 386 direct assertion proofs and 20 reviewed equivalents**, with no unresolved required node. All 214 direct calls were attempted; typed value-returning calls use compilable argument/output mutations after rejected Unit deletions.
+The equivalent obligations are narrowly scoped: 19 lie in the initial focus assignments/callback that setupControls synchronously overwrites before publication; a combined throwing-sentinel/deletion probe passes all 335 cases, backed by View.setOnFocusChangeListener bytecode. The twentieth is the final styled Start Over focus install: the target is null in all six layouts selected by dockSkinSpec, while CLASSIC does not enter that branch. Null bindings and all 28 skin/guide focus cases are pinned. Raw evidence: `p15/step0/equivalents.json`, `equivalence-control/`, `android.view.View.javap.txt`, `styled-start-over-layout-absence.json`. These original calls remain intact; no cleanup or bug fix is included.
+As-is details retained: CLASSIC keeps the timer listener instead of its earlier scale listener; final styled focus reapply omits Start Over Seek; long preference values narrow to Int before clamping; audio dialogs have no negative button; pending caption end actions transfer into the replacement alpha animator; loudness is retained through pause/stop. These are characterization facts, not fixes.
+### Statement-level coverage matrix
+Each write, condition, loop, when and direct side-effect/value call has an exact mutation/assertion or an explicit equivalent entry. Nested reads/returns are tied to enclosing asserted output and the listed function contract. The JSON preserves every original offset/line, selector, named witness, rejected attempt, fixture hash and patch; no untested statement is hidden by a count. Raw inventory/matrix: `p15/step0/psi-sweep-inventory.json`, `coverage-matrix.json`, `contracts.json`.
+| Original moved function/callback | Calls / writes / if / loops / when / returns | Direct proofs | Equivalent nodes | Observable contract |
+| --- | --- | ---: | --- | --- |
+| `onAudioTrackInitialized` | 2 / 0 / 1 / 0 / 0 / 0 | 2 | — | Actual decoder listener reattaches night effects even at the same session, releases the old effect first and announces system effects independently while night mode is off. |
+| `onVideoInputFormatChanged` | 1 / 1 / 0 / 0 / 0 / 0 | 2 | — | Actual decoder listener replaces its cached format and forwards even incomplete formats to the borrowed display matcher to clear an old preference; absent matcher still caches. |
+| `onVideoDecoderInitialized` | 3 / 0 / 0 / 0 / 0 / 0 | 2 | — | Exact Logcat level/tag/message and real persisted source/event/level/message; player format wins and is read on each callback; input cache and null/generation fallbacks are pinned. |
+| `installOttControlsSkin` | 45 / 19 / 1 / 0 / 0 / 4 | 36 | — | Seven independent launch skins across four guide styles; same-index root replacement, spec/root/parent guards and logged inflation failure; every view binding, shader color/stop/geometry, idle height and installed seek/source listeners. |
+| `setOttTrackHeight` | 2 / 2 / 2 / 0 / 0 / 2 | 4 | — | Both focus and idle DP values are converted through actual density; same layout-param object retained, missing track/spec guarded, changed height applied. |
+| `updateOttCaption` | 8 / 2 / 0 / 0 / 0 / 2 | 5 | — | Text/description/non-TextView precedence and absent label/text; incoming owner and text plus cancel/alpha/duration through real focus and animation dispatch. |
+| `clearOttCaption` | 6 / 1 / 1 / 0 / 0 / 1 | 4 | — | Only the current owner can clear; stale outgoing callback retains incoming owner and caption, missing label still drops ownership; cancel/alpha/duration are observed. |
+| `refreshOttCaptionFor` | 1 / 0 / 1 / 0 / 0 / 1 | 2 | — | Independent installed/null/actual-focus guards and evaluation-time latest text; speed/aspect/playback callers update focused captions. |
+| `setupControls` | 162 / 41 / 19 / 0 / 0 / 0 | 137 | o175, o177, o185, o186, o187, o195, o222, o223, o224, o225, o226, o227, o228, o229, o230, o231, o232, o233, o234, o325 | All view identities/nulls, first captured order, overlay GONE/alpha zero, actual cinema-progress and seekbar ticker wiring, independent Media3 visibility dispatch, all click/focus routes, seven skin focus scales/lifts/durations and classic overwritten-listener quirk. |
+| `updateAspectButtonLabel` | 1 / 1 / 0 / 0 / 0 / 0 | 2 | — | All four exact labels and actually focused caption refresh through aspect changes and setup. |
+| `setupIptvControls` | 17 / 6 / 1 / 0 / 0 / 1 | 21 | — | Real IPTV launch and bound channel-minus/plus/record callbacks; VOD early return hides random/guide/previous/next and preserves existing listeners; null entry uses the live branch. |
+| `liveIptvDockButtons` | 2 / 0 / 0 / 0 / 0 / 0 | 1 | — | Exact styled button membership is asserted from captured tint/typeface map keys and resource/color assertions across all layouts, preserving absent controls. |
+| `applyLiveIptvControlStyle` | 31 / 5 / 3 / 0 / 2 / 1 | 17 | — | Classic exact XML panel/button resources and full state colors; three styled radii, borders, full text/icon state colors, console font; original tint/font captured only once. |
+| `restoreCinemaDockIconTints` | 6 / 1 / 3 / 0 / 0 / 1 | 6 | — | Styled live-to-VOD restores original tint and font independently by map membership; missing-map entries retain the unaffected property, empty map is a no-op. |
+| `updateIptvControlPresentation` | 11 / 12 / 12 / 0 / 0 / 0 | 30 | — | Live/null/VOD and four active/timeline combinations pin GONE/VISIBLE/INVISIBLE, guide hiding, record availability by active engine, Start Over/record refresh, seek state resets and actual pause focus handoff only from progress. |
+| `arrangeLiveIptvControlDock` | 5 / 0 / 0 / 0 / 0 / 1 | 1 | — | Exact live leading order plus all hidden/original extras across all layouts, missing dock no-op and repeated identical order produces no detach/add callbacks. |
+| `restoreOriginalControlDockOrder` | 3 / 0 / 1 / 0 / 0 / 1 | 2 | — | Live-to-VOD restores original identities/order; missing dock and empty original-order guards leave attached children untouched. |
+| `replaceControlDockOrder` | 6 / 0 / 1 / 0 / 0 / 1 | 4 | — | Exact requested leading order and original extras, child count/index identity gate; already applied leaves hierarchy untouched; live/VOD trips never reinflate. |
+| `restoreCinemaIptvControlStyle` | 12 / 0 / 0 / 0 / 0 / 0 | 8 | — | Original order and exact standard panel/button/play-button backgrounds and full text colors restored on VOD, followed by styled-only tint/font restoration. |
+| `umAudioTracks` | 7 / 0 / 1 / 2 / 0 / 2 | 5 | — | Off plus every audio track in original group/track order with exact labels and overrides, ignores other group types and handles absent player. |
+| `umAudioSelectedIndex` | 1 / 1 / 2 / 2 / 0 / 3 | 5 | — | Off when no player/selection, flattened index counts every audio track including multiple groups and excludes other track types. |
+| `umAudioModel` | 25 / 1 / 4 / 0 / 0 / 1 | 11 | — | Exact audio/night headers, tags, values, disabled empty placeholder, all gains and row selection; menu callbacks re-read player tracks/selector, vanished row turns audio off, series-language persistence only for a real selected track. |
+| `umDisplayModel` | 9 / 1 / 0 / 0 / 0 / 1 | 4 | — | Exact display/ratio headers, all labels, selected state/current value, unknown index fallback; installed row actions apply aspect to the real frame and refresh label. |
+| `showAudioTrackDialog` | 24 / 1 / 3 / 2 / 0 / 3 | 14 | — | No-player/selector/track guards and exact toast; exact title/items and no negative button; captured original tracks and selector survive replacement before click, Off disables captured selector and language persistence follows actual chosen track. |
+| `cycleAspectRatio` | 4 / 1 / 0 / 0 / 0 / 0 | 4 | — | All four increments and wrap, exact toast, resize mode/scale and label refresh including actually focused caption. |
+| `applyResizeMode` | 1 / 3 / 1 / 0 / 0 / 0 | 4 | — | All four Media3 modes, both 4:3 scale axes and normal reset, retained video-surface fallback when content frame is absent. |
+| `cyclePlaybackSpeed` | 3 / 0 / 0 / 0 / 0 / 0 | 2 | — | All six increments/wrap, exact toast and scalar speed dispatch with PCM route state. |
+| `applyPlaybackSpeed` | 5 / 2 / 2 / 0 / 0 / 0 | 7 | — | Both numeric bounds and all six values; route-release and stop/speed/prepare order, already-PCM retention and night/system effects, ENDED deferred READY, classic unchanged text versus OTT label/caption. |
+| `syncAudioEffectSession` | 1 / 0 / 2 / 0 / 0 / 3 | 3 | — | Independent enabled/null/zero guards, explicit callback ID wins, default dispatcher reads current player each time, open/close broadcast identities/order and extras. |
+| `initializeLoudnessEnhancer` | 4 / 3 / 2 / 0 / 0 / 2 | 8 | — | Allocation/session, prior release, enabled flag and all literal gains; null/zero retain prior effect, constructor/enable/gain catch clears reference but does not release newly allocated effect. |
+| `releaseLoudnessEnhancer` | 2 / 1 / 0 / 0 / 0 / 0 | 3 | — | Release and unconditional reference clear, release failure caught and logged, transition/route/destroy caller wiring; pause and stop preserve ownership. |
+| `loadPlayerDefaults` | 18 / 7 / 1 / 0 / 0 / 0 | 12 | — | Every default and preference key, aspect/night bounds, all display modes and old preference reset, known/unknown skip provider, first/later read failures stop remaining reads without applying speed/resize/effects. |
+| `showNightModeDialog` | 7 / 0 / 0 / 0 / 0 / 0 | 3 | — | Exact title/eight labels/selected row/cancel and actual installed fallback click applies selection then dismisses. |
+| `applyNightMode` | 9 / 3 / 4 / 0 / 0 / 0 | 13 | — | Every exact gain/label/toast, route change releases/reprepares before READY attachment, non-media initializes immediately, already-PCM retains effect; off enable and second gain errors propagate outside initialization catch. |
+| `updateNightModeButtonLabel` | 1 / 1 / 0 / 0 / 0 / 0 | 2 | — | All eight exact labels through initialization/setup/night actions and focused-caption refresh. |
+
+### Named test → original mutation → failing assertion
+All patches apply to `ce3ddfb06` plus only the new tests. Each evidence directory has the exact definition/patch, Gradle log and XML; its fixture-signature archive contains the tested source. Parameterized identities are listed individually. Messages below are excerpts; raw XML retains full failures and stack locations.
+| Named test | Original mutation | Failing assertion excerpt | Raw evidence below p15/step0 |
+| --- | --- | --- | --- |
+| `TvAudioMenuCharacterizationTest::audioDialogRejectsMissingPlayerOrSelectorWithoutShowing` | `missing-audio-player`: val tracks = player?.currentTracks ?: return → val tracks = player?.currentTracks ?: androidx.media3.common.Tracks.EMPTY | java.lang.AssertionError: expected null, but was:<No audio tracks available> | `extra-final-wiring/missing-audio-player/` |
+| `TvAudioMenuCharacterizationTest::audioDialogWithoutRealTracksShowsTheExactToastInsteadOfADialog` | `call-o561`: Toast.makeText(this, "No audio tracks available", Toast.LENGTH_SHORT).show() → Unit | java.lang.AssertionError: expected:<No audio tracks available> but was:<null> | `calls/call-o561/` |
+| `TvAudioMenuCharacterizationTest::audioMenuActionReadsReplacementTracksAtClickTime` | `call-o525`: p.setOverrideForType(override) → Unit | java.lang.AssertionError: exactly one chosen audio override expected:<1> but was:<0> | `calls/call-o525/` |
+| `TvAudioMenuCharacterizationTest::audioMenuActionReadsTheReplacementTrackSelectorAtClickTime` | `call-o525`: p.setOverrideForType(override) → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o525/` |
+| `TvAudioMenuCharacterizationTest::audioMenuOffDisablesAudioAndDoesNotPersistAReplacementLanguage` | `repair-if-o520`: ts != null → (ts != null) && false | java.lang.AssertionError | `expanded-repairs/repair-if-o520/` |
+| `TvAudioMenuCharacterizationTest::audioMenuOnActionSetsOverrideEnablesAudioAndPersistsSeriesLanguage` | `call-o525`: p.setOverrideForType(override) → Unit | java.lang.AssertionError: exactly one chosen audio override expected:<1> but was:<0> | `calls/call-o525/` |
+| `TvAudioMenuCharacterizationTest::audioMenuWithoutTracksHasOneDisabledExactPlaceholder` | `if-o508`: tag == "night" → !(tag == "night") | org.junit.ComparisonFailure: expected:<[Audio track]s> but was:<[Night mode · loudnes]s> | `sweep/if-o508/` |
+| `TvAudioMenuCharacterizationTest::dialogChoiceUsesTheCapturedTracksAndSelectorRatherThanReplacementState` | `dialog-reenable-o571`: params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false) → Unit | java.lang.AssertionError: choosing a track re-enables the captured selector | `dialog-reenable-repair/dialog-reenable-o571/` |
+| `TvAudioMenuCharacterizationTest::dialogOffDisablesItsCapturedSelector` | `call-o548`: audioTracks.add(Pair("Off", null)) → Unit | java.lang.AssertionError: installed callback shows dialog | `calls/call-o548/` |
+| `TvAudioMenuCharacterizationTest::nightMenuPinsEightRowsAndInvokesTheirOriginalApplyLogic` | `call-o511`: applyNightMode(i) → Unit | java.lang.AssertionError: expected:<6> but was:<3> | `calls/call-o511/` |
+| `TvAudioMenuCharacterizationTest::noPlayerReturnsOnlyOffAndSelectedIndexZero` | `call-o483`: out.add("Off" to null) → Unit | java.lang.AssertionError: expected:<[(Off, null)]> but was:<[]> | `calls/call-o483/` |
+| `TvAudioMenuCharacterizationTest::nullSelectorAtMenuClickDoesNotApplyOrPersistLanguage` | `null-selector-fallback`: val ts = trackSelector → val ts = trackSelector ?: androidx.media3.exoplayer.trackselection.DefaultTrackSelect | java.lang.AssertionError | `extra-named-and-callers/null-selector-fallback/` |
+| `TvAudioMenuCharacterizationTest::selectedIndexCountsEveryAudioTrackButNeverNonAudioTracks` | `if-o496`: group.type == C.TRACK_TYPE_AUDIO → !(group.type == C.TRACK_TYPE_AUDIO) | java.lang.AssertionError: expected:<4> but was:<1> | `sweep/if-o496/` |
+| `TvAudioMenuCharacterizationTest::tracksFlattenAudioGroupsInOrderAndIgnoreOtherTypes` | `call-o483`: out.add("Off" to null) → Unit | java.lang.AssertionError: expected:<4> but was:<3> | `calls/call-o483/` |
+| `TvAudioMenuCharacterizationTest::unknownAudioSubIndexStillBuildsTheTrackBranch` | `call-o483`: out.add("Off" to null) → Unit | java.lang.AssertionError: expected:<3> but was:<2> | `calls/call-o483/` |
+| `TvAudioMenuCharacterizationTest::vanishedAudioRowFallsBackToOffAtClickTime` | `repair-if-o520`: ts != null → (ts != null) && false | java.lang.AssertionError | `expanded-repairs/repair-if-o520/` |
+| `TvDecoderDisplayCharacterizationTest::absentFormatAndPeriodUseUnknownCodecZeroResolutionAndMinusOneGeneration` | `call-o008`: Log.i( → Unit | java.lang.AssertionError: expected:<[generation=-1 phase=stable status=unknown platform=android_tv backend=media3 codec=unknown decoder=vendor.broken output=surface_vi… | `calls/call-o008/` |
+| `TvDecoderDisplayCharacterizationTest::destroyClearsAndDropsDisplayOwnershipBeforeReleasingEffectsAndPlayer` | `destroy-clear`: displayModeController?.clear() → Unit | java.lang.AssertionError: window was reset before effect teardown expected:<0> but was:<97> | `extra-named-and-callers/destroy-clear/` |
+| `TvDecoderDisplayCharacterizationTest::inputCallbackForwardsAnIncompleteFormatToClearTheOldDisplayPreference` | `call-o005`: displayModeController?.onVideoFormat(format) → Unit | java.lang.AssertionError: expected:<0> but was:<97> | `calls/call-o005/` |
+| `TvDecoderDisplayCharacterizationTest::inputFormatIsCachedForDecoderLoggingWhenPlayerHasNoFormat` | `call-o007`: DiagnosticFileLog.record( → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o007/` |
+| `TvDecoderDisplayCharacterizationTest::laterInputFormatReplacesTheCacheEvenWhenTheDisplayControllerIsAbsent` | `write-o004`: inputFormat = format → Unit | java.lang.AssertionError | `sweep/write-o004/` |
+| `TvDecoderDisplayCharacterizationTest::pauseAndStopLeaveTheDisplayPreferenceOwnedUntilDestroy` | `destroy-clear`: displayModeController?.clear() → Unit | java.lang.AssertionError: expected:<0> but was:<97> | `extra-named-and-callers/destroy-clear/` |
+| `TvDecoderDisplayCharacterizationTest::playerFormatTakesPrecedenceOverTheCachedInputAndIsReadPerCallback` | `call-o008`: Log.i( → Unit | java.lang.AssertionError: expected:<[generation=7 phase=stable status=unknown platform=android_tv backend=media3 codec=video/hevc decoder=OMX.vendor.hevc.decoder outpu… | `calls/call-o008/` |
+| `TvDockCaptionCharacterizationTest::captionPrefersNonemptyButtonTextAndRecordsItsOwner` | `call-o097`: label.animate().alpha(1f).setDuration(120).start() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o097/` |
+| `TvDockCaptionCharacterizationTest::changedTrackHeightRequestsLayoutButAnUnchangedHeightDoesNot` | `repaired-write-o085`: track.layoutParams = params → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `initial-repairs/repaired-write-o085/` |
+| `TvDockCaptionCharacterizationTest::clearingAnOutgoingNonOwnerCannotEraseTheIncomingCaption` | `repair-call-o015`: LayoutInflater.from(this).inflate(spec.layoutRes, parent, false) → LayoutInflater.from(this).inflate(0, parent, false) | java.lang.AssertionError: expected same:<android.view.View{521dc27b V.ED..... ........ 0,0-0,0}> was not:<null> | `early-call-repairs/repair-call-o015/` |
+| `TvDockCaptionCharacterizationTest::clearingCaptionCancelsOtherMotionAlreadyRunningOnTheLabel` | `observed-cancel-o102`: ottCaptionLabel?.animate()?.cancel() → Unit | java.lang.AssertionError: expected:<[android.view.ViewPropertyAnimator@75480d2a]> but was:<[]> | `final-first-repairs/observed-cancel-o102/` |
+| `TvDockCaptionCharacterizationTest::clearingTheOwnerStillClearsOwnershipWhenTheLabelIsAbsent` | `if-o098`: ottCaptionOwner !== view → !(ottCaptionOwner !== view) | java.lang.AssertionError: expected null, but was:<android.view.View{744ac502 V.ED..... ........ 0,0-0,0}> | `sweep/if-o098/` |
+| `TvDockCaptionCharacterizationTest::emptyButtonTextFallsBackToContentDescription` | `repair-call-o088`: it.isNotEmpty() → it.isEmpty() | org.junit.ComparisonFailure: expected:<[Fallback caption]> but was:<[]> | `early-call-repairs/repair-call-o088/` |
+| `TvDockCaptionCharacterizationTest::media3HideCallbackClearsVisibleControlsAndSnapsSubtitleLiftImmediately` | `call-o019`: parent.addView(ott, index) → Unit | java.lang.AssertionError: expected:<false> but was:<true> | `calls/call-o019/` |
+| `TvDockCaptionCharacterizationTest::media3HideWhileControlsAreAlreadyHiddenDoesNotResetAnotherLift` | `repair-call-o114`: playerView.setControllerVisibilityListener( → Unit | java.lang.AssertionError: setupControls registers the actual Media3 visibility callback | `early-call-repairs/repair-call-o114/` |
+| `TvDockCaptionCharacterizationTest::media3VisibleCallbackDoesNotHideControlsOrRestoreTheirLift` | `repair-call-o114`: playerView.setControllerVisibilityListener( → Unit | java.lang.AssertionError: setupControls registers the actual Media3 visibility callback | `early-call-repairs/repair-call-o114/` |
+| `TvDockCaptionCharacterizationTest::missingLabelOrMissingTextDoesNotReplaceThePreviousOwner` | `repair-call-o015`: LayoutInflater.from(this).inflate(spec.layoutRes, parent, false) → LayoutInflater.from(this).inflate(0, parent, false) | java.lang.AssertionError: expected same:<android.view.View{6f05359a V.ED..... ........ 0,0-0,0}> was not:<null> | `early-call-repairs/repair-call-o015/` |
+| `TvDockCaptionCharacterizationTest::nonTextViewUsesItsContentDescription` | `write-o090`: ottCaptionOwner = view → Unit | java.lang.AssertionError: expected same:<android.view.View{2cf11f1 V.ED..... ........ 0,0-0,0}> was not:<null> | `sweep/write-o090/` |
+| `TvDockCaptionCharacterizationTest::ottScrimKeepsAllFourExactColorsStopsAndGeometry` | `repair-call-o029`: LinearGradient( → LinearGradient( | java.lang.AssertionError: expected:<500.0> but was:<800.0> | `early-call-repairs/repair-call-o029/` |
+| `TvDockCaptionCharacterizationTest::refreshAcceptsTheActuallyFocusedViewAndReadsItsLatestText` | `call-o109`: updateOttCaption(view) → Unit | org.junit.ComparisonFailure: expected:<[Latest speed]> but was:<[1.0x]> | `calls/call-o109/` |
+| `TvDockCaptionCharacterizationTest::refreshRejectsNullUnfocusedOrNotInstalledViewsIndependently` | `repair-call-o015`: LayoutInflater.from(this).inflate(spec.layoutRes, parent, false) → LayoutInflater.from(this).inflate(0, parent, false) | java.lang.AssertionError: expected same:<android.view.View{313d2abb V.ED..... ........ 0,0-0,0}> was not:<null> | `early-call-repairs/repair-call-o015/` |
+| `TvDockCaptionCharacterizationTest::trackHeightDoesNothingWhenItsViewIsAbsent` | `guard-setOttTrackHeight-0`: ?: return → ?: throw IllegalStateException("guard removed") | java.lang.AssertionError: Missing track must return without throwing: java.lang.IllegalStateException: guard removed | `extra-named-and-callers/guard-setOttTrackHeight-0/` |
+| `TvDockCaptionCharacterizationTest::trackHeightReturnsWithoutRequestingLayoutWhenItsSpecIsAbsent` | `guard-setOttTrackHeight-1`: ?: return → ?: throw IllegalStateException("guard removed") | java.lang.AssertionError: Missing spec must return without throwing: java.lang.IllegalStateException: guard removed | `extra-named-and-callers/guard-setOttTrackHeight-1/` |
+| `TvDockCaptionCharacterizationTest::trackHeightUsesFocusedAndIdleDpAndRetainsTheSameLayoutParams` | `if-o081`: focused → !(focused) | java.lang.AssertionError: expected:<6> but was:<3> | `sweep/if-o081/` |
+| `TvDockCaptionCharacterizationTest::updatingCaptionCancelsOtherMotionAlreadyRunningOnTheLabel` | `observed-cancel-o093`: label.animate().cancel() → Unit | java.lang.AssertionError: expected:<[android.view.ViewPropertyAnimator@1353c949]> but was:<[]> | `final-first-repairs/observed-cancel-o093/` |
+| `TvDockClickCharacterizationTest::aspectClickCyclesAndKeepsAnAutoHideTimer` | `call-o275`: aspectButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener aspectButton | `calls/call-o275/` |
+| `TvDockClickCharacterizationTest::audioClickHidesDockAndShowsTheAudioMenu` | `call-o262`: audioButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener audioButton | `calls/call-o262/` |
+| `TvDockClickCharacterizationTest::audioFallbackShowsNoTrackToastAndExtendsTimer` | `call-o262`: audioButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener audioButton | `calls/call-o262/` |
+| `TvDockClickCharacterizationTest::nextAndPreviousClicksTakeTheCatalogFallbackAtPlaylistBoundaries` | `call-o291`: nextButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o291/` |
+| `TvDockClickCharacterizationTest::nightClickHidesDockAndTargetsNightRowsInTheAudioMenu` | `call-o244`: nightModeButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener nightModeButton | `calls/call-o244/` |
+| `TvDockClickCharacterizationTest::nightFallbackShowsAllEightChoicesAndAppliesItsCapturedSelection` | `call-o244`: nightModeButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener nightModeButton | `calls/call-o244/` |
+| `TvDockClickCharacterizationTest::pauseClickPausesAndCancelsTheDockTimer` | `call-o238`: pauseButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener pauseButton | `calls/call-o238/` |
+| `TvDockClickCharacterizationTest::playlistClickHidesDockAndShowsTheInstalledPlaylist` | `call-o287`: playlistButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o287/` |
+| `TvDockClickCharacterizationTest::randomClickHidesDockAndTargetsShuffleRows` | `call-o307`: randomButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener debrifyRandom | `calls/call-o307/` |
+| `TvDockClickCharacterizationTest::randomFallbackShowsTheShuffleDialog` | `call-o307`: randomButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener debrifyRandom | `calls/call-o307/` |
+| `TvDockClickCharacterizationTest::resumeClickPlaysAndSchedulesTheDockTimer` | `call-o238`: pauseButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener pauseButton | `calls/call-o238/` |
+| `TvDockClickCharacterizationTest::speedClickHidesDockAndTargetsSpeedRows` | `call-o280`: speedButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener speedButton | `calls/call-o280/` |
+| `TvDockClickCharacterizationTest::speedFallbackCyclesAndExtendsTimerWithoutHidingDock` | `call-o280`: speedButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener speedButton | `calls/call-o280/` |
+| `TvDockClickCharacterizationTest::subtitleClickHidesDockAndShowsTheSubtitleMenu` | `call-o269`: subtitleButton?.setOnClickListener { → Unit | java.lang.AssertionError: installed click listener subtitleButton | `calls/call-o269/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[BROADCAST-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[BROADCAST-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[BROADCAST-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[BROADCAST-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[CLASSIC-CLASSIC]` | `complete-call-o250`: updateNightModeButtonLabel() → Unit | org.junit.ComparisonFailure: expected:<[Off]> but was:<[Rebind night]> | `complete-ui-repairs/complete-call-o250/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[CLASSIC-CONSOLE]` | `complete-call-o250`: updateNightModeButtonLabel() → Unit | org.junit.ComparisonFailure: expected:<[Off]> but was:<[Rebind night]> | `complete-ui-repairs/complete-call-o250/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[CLASSIC-EDITION]` | `complete-call-o250`: updateNightModeButtonLabel() → Unit | org.junit.ComparisonFailure: expected:<[Off]> but was:<[Rebind night]> | `complete-ui-repairs/complete-call-o250/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[CLASSIC-GLASS]` | `complete-call-o250`: updateNightModeButtonLabel() → Unit | org.junit.ComparisonFailure: expected:<[Off]> but was:<[Rebind night]> | `complete-ui-repairs/complete-call-o250/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[FROST-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[FROST-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[FROST-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[FROST-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[MARQUEE-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<2> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[MARQUEE-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<2> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[MARQUEE-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<2> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[MARQUEE-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<2> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[OTT-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[OTT-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[OTT-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[OTT-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<3> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[PULSE-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[PULSE-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[PULSE-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[PULSE-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<5> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[TICKET-CLASSIC]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<4> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[TICKET-CONSOLE]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<4> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[TICKET-EDITION]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<4> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::constructionBindsTheSelectedLayoutAndEverySharedView[TICKET-GLASS]` | `call-o063`: setOttTrackHeight(focused = false) → Unit | java.lang.AssertionError: expected:<4> but was:<6> | `calls/call-o063/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[BROADCAST-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[BROADCAST-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[BROADCAST-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[BROADCAST-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[CLASSIC-CLASSIC]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[CLASSIC-CONSOLE]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[CLASSIC-EDITION]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[CLASSIC-GLASS]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[FROST-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[FROST-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[FROST-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[FROST-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[MARQUEE-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[MARQUEE-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[MARQUEE-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[MARQUEE-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[OTT-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[OTT-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[OTT-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[OTT-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[PULSE-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[PULSE-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[PULSE-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[PULSE-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[TICKET-CLASSIC]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[TICKET-CONSOLE]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[TICKET-EDITION]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::everyInstalledFocusListenerHonoursControlsVisibilityAndFocusLoss[TICKET-GLASS]` | `call-o211`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focus pauseButton | `calls/call-o211/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[BROADCAST-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[BROADCAST-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[BROADCAST-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[BROADCAST-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[CLASSIC-CLASSIC]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focused playing controls extend timeout | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[CLASSIC-CONSOLE]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focused playing controls extend timeout | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[CLASSIC-EDITION]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focused playing controls extend timeout | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[CLASSIC-GLASS]` | `call-o237`: scheduleHideControlsMenu() → Unit | java.lang.AssertionError: focused playing controls extend timeout | `calls/call-o237/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[FROST-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[FROST-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[FROST-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[FROST-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[MARQUEE-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[MARQUEE-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[MARQUEE-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[MARQUEE-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[OTT-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[OTT-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[OTT-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[OTT-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[PULSE-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[PULSE-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[PULSE-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[PULSE-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[TICKET-CLASSIC]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[TICKET-CONSOLE]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[TICKET-EDITION]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::focusAnimationCaptionAndTheClassicOverrideQuirkArePreserved[TICKET-GLASS]` | `call-o111`: installOttControlsSkin() → Unit | java.lang.AssertionError: expected:<120> but was:<300> | `calls/call-o111/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[BROADCAST-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{25f85f18 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[BROADCAST-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{3f2c63cc V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[BROADCAST-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{6650e34 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv_… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[BROADCAST-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{2ddd0d40 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[CLASSIC-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{22837cce V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[CLASSIC-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{72e186eb V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[CLASSIC-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{600b2502 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[CLASSIC-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{62eea77c V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[FROST-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{39e6f36d V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[FROST-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{7a849180 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[FROST-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{3d3b04a V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv_… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[FROST-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{39b69ac2 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[MARQUEE-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{4d501260 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[MARQUEE-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{51ea8aed V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[MARQUEE-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{4749fd8d V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[MARQUEE-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{531bcd8 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv_… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[OTT-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{428cd8a V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv_… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[OTT-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{59c4a3df V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[OTT-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{54cb774f V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[OTT-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{164b0fc3 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[PULSE-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{2b27fd13 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[PULSE-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{21fcfed8 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[PULSE-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{5149ab5e V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[PULSE-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{31fe3627 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[TICKET-CLASSIC]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{4e818157 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[TICKET-CONSOLE]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{570d9f2e V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[TICKET-EDITION]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{5707952d V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::liveToVodRestoresDockOrderVisibilityAndSeekState[TICKET-GLASS]` | `cinema-restore-o467`: dock.removeAllViews() → List(dock.childCount) { dock.getChildAt(it) }.forEach { dock.removeView(it) } | java.lang.AssertionError: original detach callback order expected:<[androidx.appcompat.widget.AppCompatButton{30e25c87 V..D..C.. ......I. 0,0-0,0 #7f0a01f0 app:id/iptv… | `cinema-restore-repairs/cinema-restore-o467/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[BROADCAST-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{7dbb2a8b GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[BROADCAST-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{79ac2a50 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[BROADCAST-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{5e9d9635 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[BROADCAST-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{7e0f08d1 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[CLASSIC-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{589a64af VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, android… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[CLASSIC-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{cd9595e VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[CLASSIC-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{2c70f352 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, android… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[CLASSIC-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{5d7a70d8 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, android… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[FROST-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{a10d7e5 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx.… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[FROST-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{7b793adc GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[FROST-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{56f8dab5 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[FROST-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{6cec14dc GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[MARQUEE-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{e403797 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx.… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[MARQUEE-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{23dc050f GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[MARQUEE-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{254ea74b GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[MARQUEE-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{48aac492 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[OTT-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{447b2e1 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx.… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[OTT-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{4395cb1a GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[OTT-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{102ee0f8 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[OTT-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{5dde23e2 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[PULSE-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{6a2cd4d5 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[PULSE-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{134fc82b GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[PULSE-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{42054312 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[PULSE-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{417f8889 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[TICKET-CLASSIC]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{11d7b321 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[TICKET-CONSOLE]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{6f3ec28c GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[TICKET-EDITION]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{5de6bfe8 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::setupRetainsTheFirstCapturedDockOrderAndDoesNotReinflate[TICKET-GLASS]` | `recapture-first-order`: originalControlDockOrder.isEmpty() → true | java.lang.AssertionError: expected same:<[androidx.appcompat.widget.AppCompatButton{78009053 GFED..C.. ......I. 0,0-0,0 #7f0a00e7 app:id/debrify_prev_button}, androidx… | `extra-named-and-callers/recapture-first-order/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[BROADCAST-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131230846> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[BROADCAST-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{731273a1 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[BROADCAST-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{194372af VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[BROADCAST-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{c6dfa89 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.appc… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[CLASSIC-CLASSIC]` | `call-o345`: applyLiveIptvControlStyle() → Unit | java.lang.AssertionError: expected:<2131231119> but was:<2131230871> | `calls/call-o345/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[CLASSIC-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{75560608 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[CLASSIC-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{1ff25684 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[CLASSIC-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{1ec082ef VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[FROST-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131231280> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[FROST-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{30d525df VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[FROST-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{66a56ca3 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[FROST-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{716705d2 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[MARQUEE-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131231133> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[MARQUEE-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{5cd2ac36 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[MARQUEE-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{69ecfdd6 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[MARQUEE-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{4e5d2d57 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[OTT-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131231280> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[OTT-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{6951a12f VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[OTT-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{37a9a20b VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[OTT-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{5952b031 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[PULSE-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131231317> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[PULSE-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{2aadf2e4 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[PULSE-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{1123422a VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[PULSE-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{57fccc26 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[TICKET-CLASSIC]` | `call-o367`: buttons.forEach { → Unit | java.lang.AssertionError: expected:<2131231117> but was:<2131231381> | `calls/call-o367/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[TICKET-CONSOLE]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{15e9aced VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[TICKET-EDITION]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{1fcceafe VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::styledLiveSkinCapturesIconTintAndTypefaceOnceAndRestoresThem[TICKET-GLASS]` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{661761f2 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `calls/call-o391/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[BROADCAST-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[BROADCAST-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[BROADCAST-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[BROADCAST-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[CLASSIC-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[CLASSIC-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[CLASSIC-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[CLASSIC-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[FROST-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[FROST-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[FROST-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[FROST-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[MARQUEE-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[MARQUEE-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[MARQUEE-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[MARQUEE-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[OTT-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[OTT-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[OTT-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[OTT-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[PULSE-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[PULSE-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[PULSE-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[PULSE-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[TICKET-CLASSIC]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: classic retains its restored cinema background on the return trip expected:<2131230871> but was:<2131231119> | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[TICKET-CONSOLE]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[TICKET-EDITION]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvDockSkinMatrixCharacterizationTest::vodToLiveRestylesOnlyTheNonClassicGuideSkin[TICKET-GLASS]` | `repair-if-o420`: guideTokens != null → !(guideTokens != null) | java.lang.AssertionError: styled panel is reapplied | `expanded-repairs/repair-if-o420/` |
+| `TvEpisodeDockClickCharacterizationTest::nextClickUsesTheIptvEpisodeNavigatorRatherThanCatalogNext` | `repair-if-o294`: iptvNext != null → (iptvNext != null) && false | java.lang.AssertionError: expected:<1> but was:<0> | `expanded-repairs/repair-if-o294/` |
+| `TvEpisodeDockClickCharacterizationTest::previousClickUsesTheIptvEpisodeNavigatorAndStopsAtItsBeginning` | `episode-caller-o302`: iptvGuideController.navigator.prevIptvEpisode()?.let { iptvGuideController.navigator. → Unit | java.lang.AssertionError: expected:<0> but was:<1> | `episode-caller-repairs/episode-caller-o302/` |
+| `TvLiveDockCharacterizationTest::emptyOriginalOrderGuardDoesNotDiscardTheExistingDock` | `if-o459`: originalControlDockOrder.isNotEmpty() → !(originalControlDockOrder.isNotEmpty()) | java.lang.AssertionError: expected:<[androidx.appcompat.widget.AppCompatButton{4770e430 VFED..C.. ......I. 0,0-0,0 #7f0a00da app:id/debrify_audio_button}, androidx.app… | `sweep/if-o459/` |
+| `TvLiveDockCharacterizationTest::iconAndTypefaceRestoreUseTheirOwnPresenceChecks` | `call-o391`: liveIptvDockButtons().forEach { button -> → Unit | java.lang.AssertionError: expected same:<android.graphics.Typeface@ca01fe23> was not:<android.graphics.Typeface@aa1b745d> | `calls/call-o391/` |
+| `TvLiveDockCharacterizationTest::jumpClickHidesDockAndShowsTheNumberInput` | `call-o251`: iptvJumpButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o251/` |
+| `TvLiveDockCharacterizationTest::liveArchiveProgressRequiresBothActiveAndTimelineVisible` | `presentation-refresh-o434`: iptvStartOverController.updateIptvStartOverButton(entry) → Unit | org.junit.ComparisonFailure: expected:<Sta[rt Over]> but was:<Sta[le]> | `presentation-refresh-repairs/presentation-refresh-o434/` |
+| `TvLiveDockCharacterizationTest::liveRecordingClickHidesTheDockAndRoutesToThePreQPermissionFlow` | `call-o346`: iptvRecordButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o346/` |
+| `TvLiveDockCharacterizationTest::liveSeekFocusIsTransferredToPauseButOtherFocusIsPreserved` | `call-o450`: pauseButton?.requestFocus() → Unit | java.lang.AssertionError | `calls/call-o450/` |
+| `TvLiveDockCharacterizationTest::liveSetupInstallsChannelMinusPlusAndRecordingCallbacks` | `call-o349`: iptvPrevButton?.apply { → Unit | java.lang.AssertionError: expected:<0> but was:<1> | `calls/call-o349/` |
+| `TvLiveDockCharacterizationTest::missingDockGuardsDoNotTouchDetachedChildren` | `guard-arrangeLiveIptvControlDock-0`: ?: return → ?: throw IllegalStateException("guard removed") | java.lang.AssertionError: Missing dock must leave detached children untouched: java.lang.IllegalStateException: guard removed | `extra-named-and-callers/guard-arrangeLiveIptvControlDock-0/` |
+| `TvLiveDockCharacterizationTest::missingEntryUsesTheLiveVisibilityAndSeekResetPath` | `repair-write-o429`: nightModeButton?.visibility = View.VISIBLE → nightModeButton?.visibility = View.GONE | java.lang.AssertionError: expected:<0> but was:<8> | `expanded-repairs/repair-write-o429/` |
+| `TvLiveDockCharacterizationTest::recordingVisibilityUsesTheActiveEngineAndLiveStatus` | `presentation-refresh-o441`: iptvRecordingActionsController.updateRecordButtonState() → Unit | org.junit.ComparisonFailure: expected:<[Record]> but was:<[Stale]> | `presentation-refresh-repairs/presentation-refresh-o441/` |
+| `TvLiveDockCharacterizationTest::repeatedLiveOrderDoesNotDetachAnyChildAndPreservesHiddenExtras` | `call-o147`: playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock -> → Unit | java.lang.AssertionError | `calls/call-o147/` |
+| `TvLiveDockCharacterizationTest::startOverAndSeekClickRouteIntoTheirTimelineState` | `call-o255`: iptvStartOverButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o255/` |
+| `TvLiveDockCharacterizationTest::vodPresentationHidesAnOpenGuideAndLivePresentationLeavesItOpen` | `if-o442`: !live && iptvGuideController.iptvGuideVisible → !(!live && iptvGuideController.iptvGuideVisible) | java.lang.AssertionError | `sweep/if-o442/` |
+| `TvLiveDockCharacterizationTest::vodProgressIsVisibleEvenWithoutAnyStartOverState` | `if-o416`: live → !(live) | java.lang.AssertionError: expected:<0> but was:<8> | `sweep/if-o416/` |
+| `TvLiveDockCharacterizationTest::vodSetupHidesOnlyTheGuideNavigationAndKeepsExistingClickListeners` | `call-o343`: updateIptvControlPresentation(entry) → Unit | java.lang.AssertionError: guide is hidden before restyling and remains hidden in the final presentation expected:<[8, 8]> but was:<[8]> | `calls/call-o343/` |
+| `TvLiveLaunchDockCharacterizationTest::liveBootstrapKeepsClassicDockDespiteTheSelectedOttSkin` | `live-launch-install-guard`: !isIptvMode && dockSkinSpec != null && !ottSkinInstalled → dockSkinSpec != null && !ottSkinInstalled | java.lang.AssertionError | `extra-final-wiring/live-launch-install-guard/` |
+| `TvLoudnessPrerequisiteTest::applyEnableFailurePropagatesWithEffectStillOwned` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500]> but was:<[]> | `calls/call-o614/` |
+| `TvLoudnessPrerequisiteTest::applySecondGainFailurePropagatesAfterSuccessfulInitialization` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: gain must propagate outside initialization catch | `calls/call-o614/` |
+| `TvLoudnessPrerequisiteTest::constructorFailureIsCaughtAndClearsReference` | `call-o615`: android.util.Log.e("AndroidTvPlayer", "Failed to initialize LoudnessEnhancer", e) → Unit | java.lang.AssertionError: failure is logged: Failed to initialize LoudnessEnhancer | `calls/call-o615/` |
+| `TvLoudnessPrerequisiteTest::creationEnableGainAndReleaseAreObservable` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500]> but was:<[]> | `calls/call-o614/` |
+| `TvLoudnessPrerequisiteTest::initializationEnableFailureClearsWithoutReleasingAllocatedEffect` | `call-o615`: android.util.Log.e("AndroidTvPlayer", "Failed to initialize LoudnessEnhancer", e) → Unit | java.lang.AssertionError: failure is logged: Failed to initialize LoudnessEnhancer | `calls/call-o615/` |
+| `TvLoudnessPrerequisiteTest::initializationGainFailureClearsWithoutReleasingAllocatedEffect` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected null, but was:<android.media.audiofx.LoudnessEnhancer@4728b83a> | `calls/call-o614/` |
+| `TvLoudnessPrerequisiteTest::releaseFailureIsCaughtAndStillClearsReference` | `call-o617`: loudnessEnhancer?.release() → Unit | org.junit.ComparisonFailure: expected:<[release]> but was:<[gain:500]> | `calls/call-o617/` |
+| `TvOttInstallCharacterizationTest::detachedRootParentGuardLeavesThePlayerViewUntouched` | `guard-installOttControlsSkin-2`: ?: return → ?: throw IllegalStateException("guard removed") | java.lang.AssertionError: OTT install handles missing dependencies without throwing: java.lang.IllegalStateException: guard removed | `extra-named-and-callers/guard-installOttControlsSkin-2/` |
+| `TvOttInstallCharacterizationTest::inflateFailureKeepsTheOriginalRootAndReportsTheOriginalMessage` | `call-o016`: android.util.Log.e("AndroidTvPlayer", "Dock skin inflate failed; keeping classic", e) → Unit | org.junit.ComparisonFailure: expected:<[Dock skin inflate failed; keeping classic]> but was:<[startPlayback - using direct playback]> | `calls/call-o016/` |
+| `TvOttInstallCharacterizationTest::installReplacesExactlyTheOldRootAtItsOriginalParentIndex` | `call-o018`: parent.removeViewAt(index) → Unit | java.lang.AssertionError: expected null, but was:<androidx.media3.ui.PlayerControlView{44207bb G.E...... ......ID 0,0-0,0 #7f0a0136 app:id/exo_controller}> | `calls/call-o018/` |
+| `TvOttInstallCharacterizationTest::iptvSetupGateDoesNotReinstallAnOttSkinEvenWhenItsFlagWasCleared` | `if-o110`: !isIptvMode && dockSkinSpec != null && !ottSkinInstalled → !(!isIptvMode && dockSkinSpec != null && !ottSkinInstalled) | java.lang.AssertionError: expected same:<android.widget.FrameLayout{56b6fb31 G.E...... ......I. 0,0-0,0 #7f0a00df app:id/debrify_controls_root}> was not:<android.widge… | `sweep/if-o110/` |
+| `TvOttInstallCharacterizationTest::missingLegacyRootDoesNotInflateOrReplaceTheController` | `call-o018`: parent.removeViewAt(index) → Unit | java.lang.AssertionError | `calls/call-o018/` |
+| `TvOttInstallCharacterizationTest::missingSkinSpecLeavesTheExistingRootAndInstallationFlagUntouched` | `guard-installOttControlsSkin-0`: ?: return → ?: throw IllegalStateException("guard removed") | java.lang.AssertionError: OTT install handles missing dependencies without throwing: java.lang.IllegalStateException: guard removed | `extra-named-and-callers/guard-installOttControlsSkin-0/` |
+| `TvOttInstallCharacterizationTest::ottSeekButtonsUseOppositeTenSecondOffsetsAndExtendTheDockTimer` | `call-o065`: ott.findViewById<View>(R.id.ott_seek_back_button)?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o065/` |
+| `TvOttInstallCharacterizationTest::sourcesClickHidesTheDockAndUnifiedMenuBeforeOpeningTheSourceBrowser` | `call-o074`: ottSourcesButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o074/` |
+| `TvOttInstallCharacterizationTest::subtitleFallbackRoutesToTheBorrowedPanelAfterHidingTheDock` | `call-o269`: subtitleButton?.setOnClickListener { → Unit | java.lang.AssertionError | `calls/call-o269/` |
+| `TvPlaybackDisplayCharacterizationTest::aspectCyclingWrapsAndPinsEveryVisibleLabelAndToast` | `call-o579`: applyResizeMode() → Unit | java.lang.AssertionError: expected:<3> but was:<0> | `calls/call-o579/` |
+| `TvPlaybackDisplayCharacterizationTest::aspectLabelRefreshReadsCurrentFocusedCaptionOwner` | `call-o333`: refreshOttCaptionFor(aspectButton) → Unit | org.junit.ComparisonFailure: expected:<[Cinema Zoom]> but was:<[]> | `calls/call-o333/` |
+| `TvPlaybackDisplayCharacterizationTest::aspectScalingFallsBackToTheRetainedVideoSurfaceIfTheFrameIsAbsent` | `if-o585`: resizeModeIndex == 3 → !(resizeModeIndex == 3) | java.lang.AssertionError: expected:<1.3333334> but was:<1.0> | `sweep/if-o585/` |
+| `TvPlaybackDisplayCharacterizationTest::classicSpeedLeavesButtonTextAndCaptionUntouched` | `if-o597`: ottSkinInstalled → !(ottSkinInstalled) | org.junit.ComparisonFailure: expected:<1[]x> but was:<1[.25]x> | `sweep/if-o597/` |
+| `TvPlaybackDisplayCharacterizationTest::displayMenuPinsHeadersAllRowsSelectionAndInstalledActions` | `call-o541`: applyResizeMode() → Unit | java.lang.AssertionError: expected:<1.3333334> but was:<1.0> | `calls/call-o541/` |
+| `TvPlaybackDisplayCharacterizationTest::displayMenuUnknownIndexHasNoSelectedOrCurrentValueUntilAnAction` | `if-o585`: resizeModeIndex == 3 → !(resizeModeIndex == 3) | java.lang.AssertionError: expected:<1.0> but was:<1.3333334> | `sweep/if-o585/` |
+| `TvPlaybackDisplayCharacterizationTest::endedRouteChangeDefersSpeedAndReprepareUntilReady` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<[stop, speed:1.25, prepare]> but was:<[]> | `calls/call-o596/` |
+| `TvPlaybackDisplayCharacterizationTest::everyAspectModeUsesTheCorrectResizeModeAndBothScaleAxes` | `if-o585`: resizeModeIndex == 3 → !(resizeModeIndex == 3) | java.lang.AssertionError: expected:<1.0> but was:<1.3333334> | `sweep/if-o585/` |
+| `TvPlaybackDisplayCharacterizationTest::nightModeKeepsThePcmRouteWhenSpeedReturnsToNormal` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<[speed:1.0]> but was:<[]> | `calls/call-o596/` |
+| `TvPlaybackDisplayCharacterizationTest::ottSpeedUpdatesButtonAndItsActuallyFocusedCaption` | `call-o599`: refreshOttCaptionFor(speedButton) → Unit | org.junit.ComparisonFailure: expected:<[1.5x]> but was:<[]> | `calls/call-o599/` |
+| `TvPlaybackDisplayCharacterizationTest::playbackSpeedClampsBothBoundariesAndReadsAllSixLiteralSpeeds` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<0.5> but was:<1.0> | `calls/call-o596/` |
+| `TvPlaybackDisplayCharacterizationTest::retainedPlaybackMenuSpeedRowsDispatchToTheOriginalDisplayLogic` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<1.5> but was:<1.0> | `calls/call-o596/` |
+| `TvPlaybackDisplayCharacterizationTest::speedChangeOnAnAlreadyPcmRouteRetainsEffectAndDoesNotRestart` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<[speed:1.25]> but was:<[]> | `calls/call-o596/` |
+| `TvPlaybackDisplayCharacterizationTest::speedCyclingWrapsAndPinsEveryToast` | `call-o588`: applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.size) → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o588/` |
+| `TvPlaybackDisplayCharacterizationTest::speedRouteChangeReleasesEffectAndRepreparesInStopSpeedPrepareOrder` | `call-o595`: releaseLoudnessEnhancer() → Unit | java.lang.AssertionError | `calls/call-o595/` |
+| `TvPlaybackDisplayCharacterizationTest::systemEffectsKeepThePcmRouteWhenSpeedReturnsToNormal` | `call-o596`: nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged) → Unit | java.lang.AssertionError: expected:<[speed:1.0]> but was:<[]> | `calls/call-o596/` |
+| `TvPlaybackEffectsCharacterizationTest::changingNightGainOnAnExistingRouteDoesNotReplaceOrRestartThePlayer` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500, 1500]> but was:<[1500]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::decoderAudioTrackInitAnnouncesSystemEffectsWhileNightModeIsOff` | `call-o605`: com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId) → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o605/` |
+| `TvPlaybackEffectsCharacterizationTest::decoderAudioTrackInitReattachesEffectsEvenWhenTheSessionIdIsUnchanged` | `call-o605`: com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId) → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o605/` |
+| `TvPlaybackEffectsCharacterizationTest::disabledSystemEffectsDoNotReadOrAnnounceAPlayerSession` | `if-o600`: !systemAudioEffectsEnabled → !(!systemAudioEffectsEnabled) | java.lang.AssertionError | `sweep/if-o600/` |
+| `TvPlaybackEffectsCharacterizationTest::everyNightModeGainLabelAndToastIsPinned` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500, 500]> but was:<[500]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::initializationReleasesTheOldEffectBeforeCreatingTheReplacement` | `call-o609`: releaseLoudnessEnhancer() → Unit | java.lang.AssertionError | `calls/call-o609/` |
+| `TvPlaybackEffectsCharacterizationTest::invalidSessionLeavesThePreviouslyOwnedEnhancerUntouched` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[create:51, enabled:true, gain:500]> but was:<[create:51, enabled:true]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::nightLabelRefreshUpdatesTheActuallyFocusedCaption` | `call-o335`: refreshOttCaptionFor(nightModeButton) → Unit | org.junit.ComparisonFailure: expected:<[Higher]> but was:<[]> | `calls/call-o335/` |
+| `TvPlaybackEffectsCharacterizationTest::nullPlayerAndZeroPlayerSessionDoNotAllocateEffects` | `if-o600`: !systemAudioEffectsEnabled → !(!systemAudioEffectsEnabled) | java.lang.AssertionError | `sweep/if-o600/` |
+| `TvPlaybackEffectsCharacterizationTest::offInitializationCreatesADisabledEffectWithoutSettingGain` | `if-o607`: audioSessionId == 0 → !(audioSessionId == 0) | java.lang.AssertionError: one effect allocated expected:<1> but was:<0> | `sweep/if-o607/` |
+| `TvPlaybackEffectsCharacterizationTest::pauseAndStopRetainNightEffectUntilDestroy` | `call-o617`: loudnessEnhancer?.release() → Unit | java.lang.AssertionError | `calls/call-o617/` |
+| `TvPlaybackEffectsCharacterizationTest::readyOnlyCreatesNightEffectWhenEnabledAndAbsent` | `if-o607`: audioSessionId == 0 → !(audioSessionId == 0) | java.lang.AssertionError: one effect allocated expected:<1> but was:<0> | `sweep/if-o607/` |
+| `TvPlaybackEffectsCharacterizationTest::repeatTransitionRetainsNightEffectButOtherTransitionsReleaseIt` | `call-o617`: loudnessEnhancer?.release() → Unit | java.lang.AssertionError | `calls/call-o617/` |
+| `TvPlaybackEffectsCharacterizationTest::routeChangingNightModeReleasesAndRepreparesBeforeReadyCreatesAnEffect` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500]> but was:<[]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::routeChangingNightModeWithoutMediaInitializesImmediately` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500, 500]> but was:<[500]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::sessionCallbackReleasesAndReinitializesOnlyWhenNightModeIsOn` | `call-o617`: loudnessEnhancer?.release() → Unit | java.lang.AssertionError | `calls/call-o617/` |
+| `TvPlaybackEffectsCharacterizationTest::sessionCallbackUsesItsIdForAnnouncementButThePlayerForEnhancer` | `if-o600`: !systemAudioEffectsEnabled → !(!systemAudioEffectsEnabled) | java.lang.AssertionError: expected:<88> but was:<1> | `sweep/if-o600/` |
+| `TvPlaybackEffectsCharacterizationTest::switchingNightModeOffDisablesAnEffectWhenSystemEffectsKeepPcmActive` | `call-o614`: loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex]) → Unit | java.lang.AssertionError: expected:<[500]> but was:<[]> | `calls/call-o614/` |
+| `TvPlaybackEffectsCharacterizationTest::systemEffectsDefaultDispatcherReadsCurrentPlayerSessionPerCall` | `call-o605`: com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId) → Unit | java.lang.AssertionError: expected:<[51, 51, 52]> but was:<[]> | `calls/call-o605/` |
+| `TvPlaybackEffectsCharacterizationTest::systemEffectsUseTheExplicitCallbackSessionBeforeThePlayerValue` | `if-o600`: !systemAudioEffectsEnabled → !(!systemAudioEffectsEnabled) | java.lang.AssertionError: expected:<88> but was:<1> | `sweep/if-o600/` |
+| `TvPlaybackEffectsCharacterizationTest::zeroSessionCallbackDoesNotReleaseExistingNightEffect` | `if-o607`: audioSessionId == 0 → !(audioSessionId == 0) | java.lang.AssertionError: one effect allocated expected:<1> but was:<0> | `sweep/if-o607/` |
+| `TvPlaybackEffectsCharacterizationTest::zeroSessionDoesNotAnnounceOrCloseAnAlreadyOpenEffectSession` | `call-o605`: com.debrify.app.audio.AudioEffectSession.open(this, audioSessionId) → Unit | java.lang.AssertionError: expected:<1> but was:<0> | `calls/call-o605/` |
+| `TvPlayerDefaultsCharacterizationTest::absentPreferencesApplyAllLiteralDefaultsAndConstructDisplayController` | `call-o642`: android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nig → Unit | java.lang.AssertionError | `calls/call-o642/` |
+| `TvPlayerDefaultsCharacterizationTest::allStoredDisplayMatchModesSelectTheirOwnControllerMode` | `write-o630`: displayMatchMode = TvContentDisplayMatchMode.fromStorage( → Unit | java.lang.AssertionError: expected:<OFF> but was:<SYSTEM> | `sweep/write-o630/` |
+| `TvPlayerDefaultsCharacterizationTest::bothNumericPreferenceBoundariesClampToTheActualArrayBounds` | `write-o620`: resizeModeIndex = playerPreferences → Unit | java.lang.AssertionError: expected:<0> but was:<1> | `sweep/write-o620/` |
+| `TvPlayerDefaultsCharacterizationTest::defaultReadsUseTvAspectKeyAndIgnoreTheMobileAspectKey` | `write-o620`: resizeModeIndex = playerPreferences → Unit | java.lang.AssertionError: expected:<2> but was:<1> | `sweep/write-o620/` |
+| `TvPlayerDefaultsCharacterizationTest::firstPreferenceReadFailureKeepsTheOriginalFillInitializerAndStopsLaterReads` | `call-o645`: android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e) → Unit | java.lang.AssertionError | `calls/call-o645/` |
+| `TvPlayerDefaultsCharacterizationTest::knownSkipProviderIsPreservedAndUnknownOrMissingFallsBackToAuto` | `if-o640`: TvSkipSegmentClients.supports(storedSkipSegmentProvider) → !(TvSkipSegmentClients.supports(storedSkipSegmentProvider)) | org.junit.ComparisonFailure: expected:<[skipdb]> but was:<[auto]> | `sweep/if-o640/` |
+| `TvPlayerDefaultsCharacterizationTest::laterReadFailureRetainsAlreadyAppliedAspectAndSkipsRemainingDefaults` | `write-o620`: resizeModeIndex = playerPreferences → Unit | java.lang.AssertionError: expected:<3> but was:<1> | `sweep/write-o620/` |
+| `TvPlayerDefaultsCharacterizationTest::loadingPreferencesDoesNotAllocateEffectsOrApplyResizeAndPlaybackSpeed` | `write-o620`: resizeModeIndex = playerPreferences → Unit | java.lang.AssertionError: expected:<3> but was:<1> | `sweep/write-o620/` |
+| `TvPlayerDefaultsCharacterizationTest::preferenceLongValuesNarrowToIntBeforeTheArrayBoundsClamp` | `narrow-long-aspect`: .getLong("player_default_aspect_index_tv", 0L).toInt() → .getLong("player_default_aspect_index_tv", 0L).coerceIn(0L, 3L).toInt() | java.lang.AssertionError: expected:<0> but was:<3> | `extra-named-and-callers/narrow-long-aspect/` |
+| `TvPlayerDefaultsCharacterizationTest::reloadClearsTheOldPreferredDisplayModeAndReplacesItsController` | `call-o633`: displayModeController?.clear() → Unit | java.lang.AssertionError: expected:<0> but was:<97> | `calls/call-o633/` |
+| `TvPlayerDefaultsCharacterizationTest::storedAudioEffectsAndDisabledManualSkipSettingsAreRead` | `write-o628`: systemAudioEffectsEnabled = playerPreferences → Unit | java.lang.AssertionError: expected:<true> but was:<false> | `sweep/write-o628/` |
+| `TvPlayerDefaultsCharacterizationTest::unknownAndNullDisplayModesFallBackToSystem` | `unknown-display-mode`: displayMatchMode = TvContentDisplayMatchMode.fromStorage( → displayMatchMode = TvContentDisplayMatchMode.FRAME_RATE | java.lang.AssertionError: expected:<SYSTEM> but was:<FRAME_RATE> | `extra-named-and-callers/unknown-display-mode/` |
+
+### Reflection and checkpoint
+The post-test owner rescan finds 54 referenced moved names across 392 quoted/literal-list sites, beyond the design’s original 9 owner routes. Future Step 1 must route these names through the owning controller and retain public reflected members; direct reflection on non-activity fixture objects stays local. The existing NativePlayerSettingsConsumptionTest nightModeIndex helper also needs its planned retarget. Borrowed player/view/spec/routing/selector/skin/preferences stay activity-owned. Full names/locations: `p15/step0/reflective-owner-rescan.json`. No owner/helper or Dart retarget occurs in Step 0.
+All 419 checker/auditor self-tests pass in the final clean run (`p15/checker-final-full.log`), superseding the initial 418 + 42 repaired-check evidence recorded in Step T. The original 1,730-declaration self-comparison, complete production-config fixture/audit, 31 initializer proofs, 51 earlier destinations and 68 protected-path hashes remain valid. File-size and diff checks pass; no new exception. Detached original worktree is removed after archive completion. Production moves and their release/R8/Flutter gate remain pending Claude’s independent sample; no push, device interaction, dependency/ProGuard change or behavior fix.
+
+
+### Phase 15 Step 0b — independent aspect survivors
+
+Claude's independent sample killed 13/15 against the original ce3ddfb06. s02 is equivalent: the only four production assignments are the literal initial value 1, the clamped preference read, the clamped menu choice and cycling modulo the four-element resizeModes array. These preserve 0..3, where == 3 and >= 3 coincide. The exact s02 mutation passes all 337 phase-15 characterizations, including all 18 display tests. Evidence: p15/step0b/s02-invariant.json, s02-full/ (definition, fixture hashes, original patch, full log/XML/result). No production fix or out-of-invariant acceptance was introduced.
+
+s01 is observable through real TextView writes: the extra label update occurs before applyResizeMode, so the text/caption publication sees the previous resize mode and scale. Even an extra update after applyResizeMode creates a second label/caption repaint. Added two named tests using actual TextWatchers and real focused aspect-button/caption routing; their control passes on the original. Existing assertions are untouched.
+
+| Test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| TvPlaybackDisplayCharacterizationTest.aspectCycleWritesItsLabelOnceAfterApplyingBothScaleAxes | Claude s01: extra updateAspectButtonLabel before applyResizeMode | resize mode applied before publishing the label: FIT 0 expected, ZOOM 4 observed |
+| TvPlaybackDisplayCharacterizationTest.focusedAspectCyclePublishesOneCaptionAfterApplyingResizeState | Claude s01 | caption sees the new horizontal scale: 1.3333334 expected, 1.0 observed |
+| Both tests above | s01-after-apply: duplicate updateAspectButtonLabel after applying resize | one label publication / one caption repaint: [Cinema Zoom] expected, [Cinema Zoom, Cinema Zoom] observed |
+
+Both non-equivalent variants fail named assertions, without compile errors or crash credit. The exact s01 survivor is killed; s02 is recorded equivalent, not credited as killed. Original control: 337/337 pass. Raw evidence p15/step0/control-step0b[-all]/ and p15/step0b/mutations/, s02-full/, survivor-classification.json. The detached original worktree is removed after proof completion.
+
+Clean p15-step0b: 1,943 identities, 1,942 passing and the same known SourceBrowser focus failure. Comparison to p15-step0 permits exactly two passing additions; every prior identity/status is equal, no missing/new skips, complete non-aborted XML and stable inputs, same JBR and evidence-only 1 GiB worker heap. Evidence junit/p15-step0b/ and p15/step0b/jvm-strict-comparison.json. No production moves yet.
+
+
+### Phase 15 Step 1 — production extraction and reflection retargets
+
+Materialized the approved manifest exactly: TvControlsDockController (554 physical lines) eagerly constructs TvLiveDockStyler (294) through the injected controlsDock reference; sibling TvPlaybackDisplayController is 438. DockSkinSpec is top-level in the dock file. Activity 7,982 → 6,986, with dock runtime, shared views, session-fixed skin lazies, native routing/player/preferences/selector retained. Two controller properties stay at their original slots. Five whole-property Host re-points and the three onDestroy statement patches stay in place; no stop/pause/finish order change. The activity size baseline was lowered with --update; no exception was added.
+
+The checker classifies all 1,730 original declarations with zero differences, including all patched/retained bodies and ordered partitions; all 51 earlier destinations are byte-identical to ce3ddfb06. Thirty-one initializer proofs, eager child construction and all lifecycle bodies match after only declared substitutions. Compiled production audit passes 17 receiver/getter sites, all 23 shared-view binds with exactly 12 CHECKCAST / 11 no-cast pins (including three typed TextView[] stores), and resize constant inlining. Five complete Kotlin warning identities are unchanged.
+
+Reflection rescan routes 54 moved names through TvPlayerControllerOwners, preserving all method argument selectors, default dispatch and assertions. These original Activity anchors now resolve through the following owner paths:
+
+| Original reflected names | New owner path in Activity |
+| --- | --- |
+| iptvPrevButton, iptvNextButton, iptvGuideButton, iptvJumpButton, iptvStartOverButton, iptvStartOverSeekButton, iptvRecordButton, originalControlDockOrder, audioButton, subtitleButton, aspectButton, speedButton, nightModeButton, ottCaptionLabel, ottCaptionOwner, ottProgressTrackContainer, ottSourcesButton, installOttControlsSkin, setOttTrackHeight, updateOttCaption, clearOttCaption, refreshOttCaptionFor, setupControls | controlsDockController |
+| setupIptvControls, cinemaIconTints, cinemaButtonTypefaces, applyLiveIptvControlStyle, restoreCinemaDockIconTints, updateIptvControlPresentation, arrangeLiveIptvControlDock, restoreOriginalControlDockOrder | controlsDockController.styler |
+| displayMatchMode, displayModeController, decoderAnalyticsListener, resizeModeIndex, playbackSpeedIndex, nightModeIndex, loudnessEnhancer, systemAudioEffectsEnabled, updateAspectButtonLabel, umAudioTracks, umAudioSelectedIndex, umAudioModel, umDisplayModel, showAudioTrackDialog, cycleAspectRatio, applyResizeMode, cyclePlaybackSpeed, applyPlaybackSpeed, syncAudioEffectSession, initializeLoudnessEnhancer, releaseLoudnessEnhancer, loadPlayerDefaults, applyNightMode | displayController |
+
+
+NativePlayerSettingsConsumptionTest.field: Android TV nightModeIndex → displayController.nightModeIndex; Torbox and every other field remain on their original owner. Its assertions are byte-identical. Exact reversible helper patches and hashes for every Kotlin test and Dart test are archived in p15/step1/retargets.json and tests-before.json; gate/test-retargets.json verifies those patches are the only test edits. No Dart anchor needs retargeting. Split reflection helpers remain 325/650 lines.
+
+Post-move focused run: all 337 phase-15 cases plus four NativePlayerSettingsConsumptionTest cases pass (341/341). Raw XML/logs and materialization details are in p15/step1/; compiled audit, initializer/teardown/protected-input evidence in p15/gate/. Full clean JVM, historical/self-test, lint, release/R8/decoder and Flutter integration gates follow on the committed tree.
+
+
+### Phase 15 final gate
+
+Tested clean gate commit 699668ae8; Step 0b f3aea36e0; Step 1 699668ae8. Current checker: 1,730 original declarations, zero differences. All 419 checker/auditor self-tests and p1–p14 historical checks pass. Earlier 51 destinations remain byte-identical to ce3ddfb06. All 31 initializer proofs, slot/eager construction and lifecycle/teardown statements pass. Compiled production audit: 17 receiver/getter pins, 23 view-binding descriptors/casts (12 cast / 11 no-cast, including three typed array stores) and one resize constant-inlining proof. Fifty-four owner routes plus the native settings helper are the only test retargets; every assertion and Dart file remains unchanged. Activity 6,986, new files 554/294/438, helpers 325/650; size baseline lowered without an exception.
+
+Full clean p15-gate exactly matches all 1,943 p15-step0b identities/statuses (1,942 passing, same known SourceBrowser focus failure), complete XML, matched 1 GiB/JBR, stable clean input. All 337 characterizations pass. Five Kotlin warnings and all 1,758 analyzer diagnostics are unchanged. Lint exactly retains 1,352 issues, 253 errors/1,099 warnings and 175 opt-in errors. The initial raw lint comparison differs only because its original wrapper-version warning uses an absolute current-checkout path; canonical checkout-relative normalization pairs that same rule/severity/message/location, and the wrapper file is byte-identical to ce3ddfb06. Initial comparison, normalization proof and raw reports remain archived; no issue is accepted, removed or suppressed.
+
+Release APK succeeds. R8/DEX preserves identity treatment for all 13 generated classes/389 members, including TvControlsDockController, TvLiveDockStyler, TvPlaybackDisplayController, DockSkinSpec, both Hosts and activity Host implementations, anonymous/WhenMappings classes and both new Kt facades. Three mapping negative controls reject class rename, member rename and missing DEX member. Decoder remains pending-environment: failure output matches phase 14, and all three native-library hashes/missing-feature manifests match phase 1. No native artifact, dependency or ProGuard rule changed. Affected Dart source tests match all 45 prior statuses. Full Flutter via suite_evidence.py on clean 699668ae8 matches all 12,855 phase-14 identities/statuses: 12,794 success, 13 failure, 28 error, 20 skipped; same SDK/flags and stable inputs. Existing failures remain explicit; no new behavior regression was observed. Evidence p15/gate/summary.json and raw archives, junit/p15-gate/. Stopped after Phase 15; phase 16 not started.

@@ -1697,6 +1697,97 @@ addon subtitles for a movie and an episode (auto-select, retry of a failed
 addon), subtitle search dialog with season/episode prompt, manual identity
 correction, subtitle menu rows.
 
+## Phase 15 — controls dock builder + live dock styler, playback display/audio settings
+
+Branch `refactor/tvplayer-p15` off the phase-14 merge `ce3ddfb06` (activity 7,982 lines). Evidence under
+`refactor-evidence/tvplayer/p15/`. Inventory: "Phase 15 inventory" in the deps
+report (measured at `82b16832c`; phases 14 and 15 patch five of the same
+declarations incl. `unifiedMenuCallbacks` and two of the same Host properties
+— re-measure on the phase-14 merge). All collaborator rules from phases 3–14
+apply; statement-level coverage sweep from the start.
+
+**Split with phase 16.** Phase 15 = dock *builder* side + display/audio (66
+members, ≈ 1,071 lines); phase 16 = dock *runtime* (show/hide/auto-hide
+timers, play/pause, seekbar and cinema scrub, title/OTT identity, Next overlay,
+clean-state; ≈ 1,110). This direction leaves 3 temporary patches (the reverse
+would need ≈ 44).
+
+**Selected:**
+- `TvControlsDockController` (≈ 560): OTT skin install, caption,
+  `setupControls`, the 17 dock-only views; eagerly constructs
+  `TvLiveDockStyler` (≈ 290, IPTV live dock styling; 48 compile-checked
+  styler→dock qualifications through an injected reference named
+  **`controlsDock`** — not `dock`, which would collide with the existing
+  `dock` locals/parameter in `arrangeLiveIptvControlDock`,
+  `restoreOriginalControlDockOrder` and `replaceControlDockOrder` (14 of the
+  48 sites); the original locals are preserved). 24 shared views stay in the activity behind
+  Host `var`s (ownership decided in phase 16); `controlsSkin`, `dockSkinSpec`,
+  `nativeAudioRouting`, `trackSelector` and `player` stay; only the
+  `DockSkinSpec` type moves (top-level `internal`).
+- `TvPlaybackDisplayController` (≈ 420, sibling): aspect, speed, night mode,
+  audio effects, display-match, `loadPlayerDefaults`, the decoder analytics
+  listener, the unified-menu display/audio rows.
+- Hosts: dock/styler 58 members (24 view/state forwarders), display 11;
+  ≈ 338 substitutions. 41 activity patches in 13 declarations (12 in
+  `playbackListener`, 9 in `setupPlayer`); 12 Host re-points in 5 properties
+  (Start Over, guide, progress reporter, recording, source switch); 3
+  in-place `onDestroy` statements (display-mode clear/null,
+  `releaseLoudnessEnhancer`); nothing in `onStop`/`onPause`/`finish`. No
+  owned Handler/token/coroutine.
+- 31 initializer proofs from two slots; three new narrow classifier forms: an
+  empty typed `HashMap<…>()`, `arrayOf` with literal elements (incl.
+  `AspectRatioFrameLayout.RESIZE_MODE_*` constants, with bytecode proof they
+  are inlined), and the reviewed anonymous `object : AnalyticsListener`.
+- Audit: 14 receiver/constructor sites, 3 inherited getters, and all 23
+  `findViewById` assignment sites inventoried with **cast presence/absence
+  and target type pinned** (re-measured bytecode: 12 sites cast; 8 `View`
+  targets and 3 typed-array stores have no cast), comparing the original field descriptors against the new
+  Host setter or array-getter descriptors; exact source types and
+  nullability preserved; widening and omitted-site negatives.
+- Reflection: 41 sites across 10 names via 9 owner-map routes plus the
+  `NativePlayerSettingsConsumptionTest` `nightModeIndex` helper change
+  (assertions unchanged); `getControlsSkin`/`trackSelector` stay. No Dart
+  anchors.
+- `LoudnessEnhancer` lifetime unchanged (created at READY, on session change,
+  track init, night-mode change; released on transitions, route changes and
+  `onDestroy`, **not** in `onStop` — recorded follow-up, not fixed).
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (two sibling owners, nested
+styler via `controlsDock`, Host-typed `findViewById`) + negatives (incl. a
+shadowing negative where a `dock`-named reference would be captured by a
+local); compiled audit incl. the
+`findViewById` compiled-type check; per-phase dispatcher keeping all
+historical suites; earlier destinations frozen at the phase-14 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: a deterministic way to observe `LoudnessEnhancer` creation,
+gain and release (shadow or seam) **and to inject failures** (constructor,
+enable/gain incl. failure on the second gain call, release), demonstrated on
+the original, pinning as-is: an enable/gain failure during initialization
+clears the reference without releasing the newly allocated effect; a release
+failure still clears it; enable/gain calls in `applyNightMode` sit outside
+that catch and propagate — if it
+cannot be made reliable, night mode + the effect session leave phase 15 and
+the design is re-reviewed. Then from zero: 7 controls skins × 4 guide styles
+(separate activity instances) for dock construction and OTT install; focus
+and click routing installed by `setupControls`; live dock styling; aspect
+(incl. 4:3 scale), speed (NativeAudioRouting interplay), night mode, audio
+effects, display-match, `loadPlayerDefaults`, decoder analytics listener
+callbacks, unified-menu display/audio rows, `onDestroy` statements; coverage
+sweep + matrix. Mutation proofs on the original; Claude's independent sample
+(≥ 75 %, else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–14 additions. Device checklist (end of series):
+controls dock in each of the 7 skins (buttons, captions, focus order), IPTV
+live dock styling, aspect cycling incl. 4:3, playback speed with audio
+pitch, night mode (loudness) on/off and across track/route changes, system
+audio effects toggle, display-mode matching (refresh rate) on a supported TV.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 13 focus behavior, preserved by Step 0: older reset callbacks clear
@@ -3363,3 +3454,130 @@ correction, subtitle menu rows.
   teardown cancellation → flat-list clear → service null order unchanged,
   `this.adapter` binding preserved. Activity 9,079 → 7,982. Decoder
   verification remains pending-environment. Phase 14 complete; merged.
+- 2026-10-09 — phase 15 design round 1 (Codex): P1 folded (styler's injected
+  owner named `controlsDock` to avoid the `dock` local/parameter collision at
+  14 of 48 sites; shadowing negative); P2s folded (per-site cast
+  presence/absence pins for the 23 findViewById sites; LoudnessEnhancer
+  failure injection pinned as-is); P3 patch count 41.
+- 2026-10-09 — phase 15 design round 2 (Codex): **No P1s**, no further collisions or findings. Phase 15 design approved.
+- 2026-10-09 — phase 15 Step T complete. Manifest re-measured at ce3ddfb06:
+  1,730 original declarations classified, 68 moved subtrees, zero original
+  self-comparison differences; two slots and 31 initializer proofs. Complete
+  production-config fixture passes and compiles (dock 554, styler 294,
+  display 438 lines). Audit passes 17 receiver/getter pins, 23 shared-view
+  binds and resize-array constant inlining. Measured cast correction:
+  12 CHECKCAST / 11 no-cast, including three typed TextView[] stores.
+  All 419 checker cases verified through the full run and 42 corrected
+  rechecks; historical phase-6 exception behavior restored and retained.
+  Phase-14 historical comparison and all 51 frozen destinations pass.
+  Evidence p15/; 68 protected paths byte-identical to the merge. No
+  production moves, lockfile/ProGuard edits, new size exception or bug fix.
+  Step 0 is next; LoudnessEnhancer prerequisite must run first.
+
+- 2026-10-09 — phase 15 Step 0 complete. Loudness prerequisite 7/7 on
+  ce3ddfb06, including constructor/enable/gain/second-gain/release failure
+  semantics; no feature deferred. Added 335 named characterization cases,
+  with separate activities for all 7 skins × 4 guide styles, real installed
+  click/focus/Media3 callbacks, IPTV watch ACK routing, diagnostic-writer
+  barriers and exact live/VOD repaint, style and lifecycle behavior.
+  Statement sweep: 668 nodes across all 35 functions/callbacks, all 214
+  direct calls attempted; 386 required assertion proofs plus 20 reviewed
+  equivalents resolve all 406 required obligations. 493 archived original
+  attempts, 406 assertion kills; invalid/crash attempts get no credit.
+  All 335 named cases have original mutation witnesses. Full table/matrix,
+  fixture hashes, patches/logs/XML and owner rescan are in deps/p15/step0.
+  Clean baseline-ce3ddfb06 has 1,606 identities (1,605 pass, known focus
+  failure); p15-step0 has 1,941 (1,940 pass, same failure): exactly 335
+  passing additions, strict old-status equality and stable fingerprints,
+  matched evidence-only 1 GiB heap/JBR. Original lint archived: 1,352 issues
+  (253 errors/1,099 warnings, 175 opt-in errors), exit 1 unchanged baseline.
+  Final clean checker suite passes 419/419; earlier destinations and all
+  protected paths unchanged. Original detached worktree removed. No new
+  size exception, old-test assertion edit, production move, bug fix,
+  lockfile/ProGuard change, device interaction, branch switch or push.
+  Stopped before Step 1 for Claude’s independent sample; move/release/R8/
+  Flutter phase gates remain at their planned milestone.
+
+
+- 2026-10-09 — **Phase 15 Step 0b complete.** Independent s01 is observable:
+  the extra label/caption publication precedes resize application. Two new
+  original-surface TextWatcher tests pin evaluation-time resize state and one
+  repaint per action; exact s01 and a duplicate-after-resize variant each fail
+  both named assertions. All 337 phase-15 controls pass on original ce3ddfb06.
+  s02 is equivalent: all four production writers preserve resizeModeIndex
+  0..3; == 3 and >= 3 coincide, and its full 337-case mutant run passes.
+  Classification, invariant, immutable fixtures, logs/XML and mutation rows
+  are in p15/step0b/ and the deps report. p15-step0b has 1,943 identities:
+  1,942 pass, same known focus failure; exactly two passing additions versus
+  p15-step0, every prior status equal, stable tree, matched 1 GiB/JBR.
+  Original detached worktree removed; all 68 protected paths unchanged.
+  No old assertion edit, production bug fix, lockfile/ProGuard edit or device
+  interaction. Step 1 and the integration gate follow as authorized.
+
+
+- 2026-10-09 — **Phase 15 Step 1 moves complete.** Extracted the approved
+  dock owner (554 lines), eagerly constructed live styler (294, reference
+  controlsDock) and sibling playback-display owner (438); DockSkinSpec is
+  top-level. Activity 7,982 → 6,986, size baseline lowered with --update.
+  Shared views, skin lazies and borrowed routing/player/preferences/selector
+  remain activity-owned; dock runtime stays for phase 16. Computed Hosts,
+  both original slots, five Host-property re-points and three in-place
+  onDestroy patches preserve initializer and lifecycle order.
+  Checker: 1,730 original declarations, zero differences; 51 earlier files
+  frozen at ce3ddfb06, 31 initializer proofs. Compiled production audit:
+  17 receiver/getter pins, 23 findViewById assignments (12 cast/11 no-cast),
+  resize constants inlined. All five Kotlin warning identities unchanged.
+  Owner map routes 54 moved names; NativePlayerSettings helper retargets
+  Android TV nightModeIndex only. All assertions and Dart files unchanged,
+  helpers 325/650 lines. Focused JVM run passes 341/341 (337 phase-15 plus
+  four native settings cases). Evidence p15/step1/ and p15/gate/.
+  No production bug fix, new size exception, lockfile/ProGuard edit, push,
+  branch switch or device interaction. Integration gate follows on this
+  committed tree; no self independent review.
+
+
+- 2026-10-09 — **Phase 15 gate complete on 699668ae8; decoder
+  pending-environment. STOPPED after Phase 15.** Step 0b f3aea36e0 pins
+  observable s01 with two original-surface tests and two assertion-killed
+  variants; s02 is equivalent under the proven 0..3 production invariant
+  and passes all 337 mutant cases. Step 1 699668ae8 extracts the 554-line
+  dock owner, eager 294-line live styler via controlsDock and sibling
+  438-line playback-display owner; DockSkinSpec is top-level. Activity
+  7,982 → 6,986. Dock runtime and borrowed infrastructure stay; size
+  baseline lowered without a new exception. Current checker: all 1,730
+  original declarations classified, zero differences. All 419 self-tests
+  and historical p1–p14 merge checks pass. Fifty-one earlier destinations
+  remain byte-identical to ce3ddfb06; 31 initializer proofs, slot/eager
+  construction and full lifecycle/teardown order pass. Production compiled
+  audit pins 17 receiver/getter sites, 23 view bindings (12 cast/11 no-cast)
+  and resize constant inlining. Fifty-four owner routes and the Android TV
+  nightModeIndex helper retarget retain every assertion; Dart unchanged.
+  Clean p15-gate exactly matches all 1,943 p15-step0b identities/statuses
+  (1,942 pass, same known focus failure), stable clean tree, complete XML,
+  matched evidence-only 1 GiB workers/JBR. Five Kotlin warnings and 1,758
+  analyzer diagnostics are unchanged. Lint exactly retains all 1,352 issue
+  identities (253 errors/1,099 warnings, 175 opt-in errors), after normalizing
+  one absolute wrapper path from the original archive to the same checkout-
+  relative location; raw initial comparison and identical wrapper bytes are
+  archived, with no suppressions or diagnostic changes. Release APK builds.
+  R8/DEX checks all 13 generated classes and 389 members, including both
+  Hosts/activity implementations, DockSkinSpec, anonymous classes and new
+  file facades; three mapping negative controls pass. Decoder failure
+  output, all three native hashes and missing-feature manifest match prior
+  phases/phase 1: pending-environment. Affected Dart source tests match all
+  45 prior statuses. Full Flutter suite via suite_evidence.py on clean gate
+  commit 699668ae8 exactly matches all 12,855 phase-14 identities/statuses
+  (12,794 success, 13 failure, 28 error, 20 skipped), same SDK/flags, stable
+  tree. Evidence p15/step0b/, step1/, gate/ and junit/p15-step0b/, p15-gate/.
+  Lockfile, ProGuard and earlier manifests/destinations unchanged. No push,
+  branch switch, self independent review, device/emulator or bug fix.
+  Phase 16 not started.
+- 2026-10-09 — phase 15 post-implementation reviews of `1e184b9b1..e92fe6fb7`.
+  Claude's independent sample 13/15 (87 %); s01 (extra aspect-label update
+  before apply) proved observable and pinned; s02 (`== 3` → `>= 3`)
+  equivalent under the verified 0–3 index invariant. Independent Codex review
+  (fresh session): **No P1s, no P2/P3**; 7 × 4 skin/style matrix, loudness
+  failure paths, aspect publication order, 12/11 cast pins all preserved;
+  lint path normalization changes only the wrapper path. Activity
+  7,982 → 6,986. Decoder verification remains pending-environment. Phase 15
+  complete; merged.

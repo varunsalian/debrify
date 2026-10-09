@@ -144,6 +144,38 @@ def initializer_kind(expression):
         return 'constant'
     if expression == 'Any()':
         return 'allocation'
+    # Phase 15: only the typed, empty stdlib HashMap constructor. No capacity,
+    # source-map argument or factory wrapper is an inert reviewed form.
+    if re.fullmatch(r'HashMap<[A-Za-z_][\w.]*(?:\?)?,\s*[A-Za-z_][\w.]*(?:\?)?>\(\)', expression):
+        return 'allocation'
+    if expression.startswith('arrayOf(') and expression.endswith(')'):
+        literal = r'(?:[0-9]+(?:_[0-9]+)*(?:\.[0-9]+)?[fF]?|"[^"\\$\r\n]*"|AspectRatioFrameLayout\.RESIZE_MODE_(?:FIT|FILL|ZOOM))'
+        if re.fullmatch(r'\s*' + literal + r'(?:\s*,\s*' + literal + r')*\s*,?\s*', expression[8:-1]):
+            return 'allocation'
+    if expression.startswith('object : AnalyticsListener {'):
+        # PSI distinguishes construction-time declarations from deferred callback
+        # bodies. This reviewed interface has no superclass constructor; its sole
+        # field is the nullable input-format slot. Every callback remains pinned
+        # by the whole moved-property comparison.
+        try:
+            unit = k.parse({'inert-listener': 'class Proof { val listener = ' + expression + '\n}'})['inert-listener']
+        except ValueError:
+            return None
+        outer = unit['declarations'][0]['children'][0]
+        objects = [n for n in outer['children'] if n['kind'] == 'KtObjectDeclaration']
+        if len(objects) == 1:
+            obj = objects[0]
+            wrapper = 'class Proof { val listener = ' + expression + '\n}'
+            header = wrapper[obj['start']:obj['body_start']].strip()
+            children = k.members(obj)
+            fields = [n for n in children if n['kind'] == 'KtProperty']
+            if (header == 'object : AnalyticsListener' and len(fields) == 1 and
+                    all(n['kind'] in ('KtProperty', 'KtNamedFunction') for n in children) and
+                    fields[0]['selector'] == 'property inputFormat' and
+                    fields[0].get('declared_type') == 'Format?' and
+                    fields[0].get('initializer_text') == 'null' and
+                    not fields[0].get('has_delegate') and not fields[0]['children']):
+                return 'allocation'
     # Phase 11: only a quoted constant (no interpolation or escapes), and an
     # explicitly typed empty Java deque. Constructor arguments remain excluded.
     if re.fullmatch(r'"[^"\\$\r\n]*"', expression):
@@ -201,7 +233,13 @@ def check_initializer_timing(manifest, inventory, original, errors):
             if path not in direct:
                 raise ValueError('destination lacks effective construction slot: ' + path)
             return direct[path]
-        slots = {path: effective(path) for path in slots}
+        try:
+            slots = {path: effective(path) for path in slots}
+        except ValueError as failure:
+            if manifest['phase'] < 15:
+                raise
+            errors.append('initializer timing construction invalid: ' + str(failure))
+            return
     expected = {r['original']: slots[r['destination']] for r in fields if r['original'] != slots[r['destination']]}
     rows = manifest.get('initializer_timing', [])
     if len(rows) != len(expected) or {r['original']: r['slot'] for r in rows} != expected:
@@ -213,10 +251,39 @@ def check_initializer_timing(manifest, inventory, original, errors):
         if row.get('text') != text or row.get('line') != original.count('\n', 0, node['start']) + 1 or not row.get('proof'):
             errors.append('initializer timing requires original text/line and inert proof: ' + row['original'])
         expression = text.split(' = ', 1)[-1].split(' //', 1)[0].strip()
+        if manifest['phase'] >= 15 and node.get('has_initializer'):
+            expression = node['initializer_text']
         getter_only = (manifest['phase'] >= 13 and node.get('getter_only') and
                        not node.get('has_initializer') and not node.get('has_delegate') and
                        node.get('getter_effect_free'))
         kind = 'none' if getter_only else initializer_kind(expression)
+        if manifest['phase'] >= 15:
+            bindings = {}
+            if expression.startswith('HashMap<'):
+                bindings['HashMap'] = {'kotlin.collections.HashMap', 'java.util.HashMap'}
+            if expression.startswith('arrayOf('):
+                bindings['arrayOf'] = {'kotlin.arrayOf'}
+                if 'AspectRatioFrameLayout.' in expression:
+                    bindings['AspectRatioFrameLayout'] = {'androidx.media3.ui.AspectRatioFrameLayout'}
+            if expression.startswith('object : AnalyticsListener'):
+                bindings['AnalyticsListener'] = {'androidx.media3.exoplayer.analytics.AnalyticsListener'}
+                bindings['Format'] = {'androidx.media3.common.Format'}
+            if bindings:
+                package = re.search(r'^package\s+([\w.]+)', original, re.M).group(1)
+                sources = [original]
+                sources.extend(path.read_text() for path in (k.ROOT / 'android/app/src/main/kotlin').rglob('*.kt')
+                               if re.search(r'^package\s+' + re.escape(package) + r'\s*$', path.read_text(), re.M))
+                for binding, allowed in bindings.items():
+                    shadow = any(re.search(r'\b(?:fun\s*(?:<[^>]+>\s*)?|(?:val|var|class|object|typealias)\s+)'
+                                           + re.escape(binding) + r'\b|\b' + re.escape(binding) + r'\s*:', source)
+                                 for source in sources)
+                    for imported in re.findall(r'^import\s+([^\n]+)', original, re.M):
+                        parts = imported.strip().split(' as ')
+                        name = parts[-1] if len(parts) == 2 else parts[0].rsplit('.', 1)[-1]
+                        if name == binding and parts[0] not in allowed:
+                            shadow = True
+                    if shadow:
+                        errors.append('phase-15 initializer binding is shadowed: ' + binding + ': ' + row['original'])
         if manifest['phase'] >= 14 and expression == 'emptyList()':
             if not node.get('declared_type'):
                 errors.append('emptyList requires an explicit declared property type: ' + row['original'])
