@@ -3210,7 +3210,7 @@
         },
         {
           "before": "\nprivate fun setupIptvOverlay() {",
-          "after": "\ninternal fun setupIptvOverlay() {",
+          "after": "\nfun setupIptvOverlay() {",
           "count": 1
         },
         {
@@ -3473,6 +3473,11 @@
           "count": 3
         },
         {
+          "before": "\nprivate fun applyGuideStyle() {",
+          "after": "\nfun applyGuideStyle() {",
+          "count": 1
+        },
+        {
           "before": "\nval t = guideTokens ?: return",
           "after": "\nval t = host.guideTokens ?: return",
           "count": 1
@@ -3509,6 +3514,11 @@
         {
           "before": "\niptvGuideController.selectIptvSource(liveSources[index])",
           "after": "\nhost.iptvGuideController.selectIptvSource(liveSources[index])",
+          "count": 1
+        },
+        {
+          "before": "\nprivate fun showIptvSourcePicker() {",
+          "after": "\nfun showIptvSourcePicker() {",
           "count": 1
         },
         {
@@ -3602,7 +3612,7 @@
         },
         {
           "before": "\nprivate fun showIptvCategoryPicker() {",
-          "after": "\ninternal fun showIptvCategoryPicker() {",
+          "after": "\nfun showIptvCategoryPicker() {",
           "count": 1
         },
         {
@@ -3686,7 +3696,7 @@
         },
         {
           "before": "\nprivate fun showIptvListPicker(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun showIptvListPicker(entry: IptvChannelEntry) {",
+          "after": "\nfun showIptvListPicker(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -3784,6 +3794,11 @@
           "count": 1
         },
         {
+          "before": "\nprivate fun removeIptvGuideRow(entry: IptvChannelEntry) {",
+          "after": "\nfun removeIptvGuideRow(entry: IptvChannelEntry) {",
+          "count": 1
+        },
+        {
           "before": "\niptvGuideController.refreshIptvBrowserChrome()",
           "after": "\nhost.iptvGuideController.refreshIptvBrowserChrome()",
           "count": 1
@@ -3804,7 +3819,7 @@
         },
         {
           "before": "\nprivate fun toggleIptvFavorite(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun toggleIptvFavorite(entry: IptvChannelEntry) {",
+          "after": "\nfun toggleIptvFavorite(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -3843,7 +3858,7 @@
         },
         {
           "before": "\nprivate fun ensureIptvChannelEpg(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun ensureIptvChannelEpg(entry: IptvChannelEntry) {",
+          "after": "\nfun ensureIptvChannelEpg(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -3879,6 +3894,11 @@
           "before": "\nval entry = iptvChannels.getOrNull(currentIptvIndex)",
           "after": "\nval entry = host.iptvChannels.getOrNull(host.currentIptvIndex)",
           "count": 1
+        },
+        {
+          "before": "\nprivate fun updateIptvGuideEpgHeader() {",
+          "after": "\nfun updateIptvGuideEpgHeader() {",
+          "count": 1
         }
       ]
     },
@@ -3901,7 +3921,7 @@
         },
         {
           "before": "\nprivate fun focusedIptvGuideEntry(): IptvChannelEntry? {",
-          "after": "\ninternal fun focusedIptvGuideEntry(): IptvChannelEntry? {",
+          "after": "\nfun focusedIptvGuideEntry(): IptvChannelEntry? {",
           "count": 1
         }
       ]
@@ -3920,7 +3940,7 @@
         },
         {
           "before": "\nprivate fun formatEpgTime(ms: Long): String =",
-          "after": "\ninternal fun formatEpgTime(ms: Long): String =",
+          "after": "\nfun formatEpgTime(ms: Long): String =",
           "count": 1
         }
       ]
@@ -3934,7 +3954,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun showIptvSchedulePane(entry: IptvChannelEntry) {",
-          "after": "\ninternal fun showIptvSchedulePane(entry: IptvChannelEntry) {",
+          "after": "\nfun showIptvSchedulePane(entry: IptvChannelEntry) {",
           "count": 1
         },
         {
@@ -3957,6 +3977,11 @@
       "target": "class TvIptvGuideChromeController/fun paintIptvEpgLogo(IptvChannelEntry)",
       "substitutions": [
         {
+          "before": "\nprivate fun paintIptvEpgLogo(entry: IptvChannelEntry) {",
+          "after": "\nfun paintIptvEpgLogo(entry: IptvChannelEntry) {",
+          "count": 1
+        },
+        {
           "before": "\ncom.bumptech.glide.Glide.with(this)",
           "after": "\ncom.bumptech.glide.Glide.with(activity)",
           "count": 1
@@ -3972,7 +3997,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun selectIptvEpgDay(dayOffset: Int, requestFocus: Boolean = true) {",
-          "after": "\ninternal fun selectIptvEpgDay(dayOffset: Int, requestFocus: Boolean = true) {",
+          "after": "\nfun selectIptvEpgDay(dayOffset: Int, requestFocus: Boolean = true) {",
           "count": 1
         },
         {
@@ -4021,7 +4046,7 @@
         },
         {
           "before": "\nprivate fun hideIptvEpgPane() {",
-          "after": "\ninternal fun hideIptvEpgPane() {",
+          "after": "\nfun hideIptvEpgPane() {",
           "count": 1
         }
       ]
@@ -4035,7 +4060,7 @@
       "substitutions": [
         {
           "before": "\nprivate fun isFocusInIptvEpgPanel(): Boolean {",
-          "after": "\ninternal fun isFocusInIptvEpgPanel(): Boolean {",
+          "after": "\nfun isFocusInIptvEpgPanel(): Boolean {",
           "count": 1
         },
         {
@@ -4059,7 +4084,7 @@
         },
         {
           "before": "\nprivate fun updateIptvGuideCurrentName() {",
-          "after": "\ninternal fun updateIptvGuideCurrentName() {",
+          "after": "\nfun updateIptvGuideCurrentName() {",
           "count": 1
         },
         {

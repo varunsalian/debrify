@@ -1553,6 +1553,12 @@ now/next header with logo and letter fallback.
   `setupPlaylistNavigation` adds a focus listener per rebuild.
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+- Phase-12 evidence found a timing-sensitive original Phase-1 guide test:
+  `TvGuideVisibilityCharacterizationTest.epgAiringReplayFutureAndExpiredRowsPinVisibilityAlphaAndProgressScale`
+  allows only 30 ms of real-clock binding drift. One concurrent full run
+  produced progress 32 outside 1..31; the unchanged isolated and quiet full
+  runs pass. Investigate clock control separately; no test window or
+  production change is included here.
 - Revisit the per-class R8 keep rules after the series.
 - `keyword_cache_screen_test.dart` uses a 150ms real async startup wait; one full run under concurrent gate workload missed it, while the isolated file and complete quiet retry passed unchanged. Investigate timing reliability separately; no test delay/allowlist or application fix here.
 - Independent post-review P3 coverage follow-up before phase 3: characterize
@@ -2799,3 +2805,34 @@ now/next header with logo and letter fallback.
   extraction, all 20 missing-proof negatives and phase-11 at its merge. Evidence
   `p12/`, including compiled original/extraction archives and raw self-test logs.
   Production, lockfile and ProGuard remain unchanged. Step 0 follows.
+
+- 2026-10-09 — **Phase 12 Step 0 complete; stopped before production moves.**
+  Added **153** original characterization tests in 18 behavior classes plus
+  the bootstrap fixture: four separately cached guide styles, real adapter
+  and key/IME callbacks, pickers, jump dialog, EPG pane/header, Glide lifecycle
+  and request/model/listener/scaling, paired replies, exact freshness, the
+  45 s watchdog and 60 s retry including the existing after-destroy behavior.
+  Every new test has an original named assertion mutation proof. The systematic
+  sweep covers all 18 moved functions and **793** PSI sites; **540 accepted
+  assertion-killed proof records** across the final archives, three equivalent
+  removals explained, compile/crash-only variants excluded. The per-function
+  matrix and 153-row mutation table are in the dependency report; raw patches,
+  logs, XML and immutable fixture versions are in `p12/step0/`. Detached
+  original `b870a16b1` worktree removed after restoring and archiving.
+  Clean JVM `baseline-b870a16b1`: **1,137** identities, 1,136 passes and the
+  existing focus failure. Final quiet `p12-step0`: **1,290** identities,
+  1,289 passes and the same failure, **153 passing additions only**, no
+  removals/status changes/skips, stable fingerprint. A concurrent run's
+  unchanged live-clock guide failure was rejected and retained; isolated and
+  quiet full verification pass without test/allowlist edits. Original lint:
+  **1,352** identities (253 errors, 1,099 warnings), archived for the gate.
+  Rescan: **250** quoted references across **39** routes (21 fields, 18
+  functions); all moved functions have public unmangled members in the
+  internal destination classes. Five additional visibility substitutions
+  raise the manifest total from 294 to **299**; the regenerated future fixture
+  compiles and preserves all **77** receiver pins, **20** initializer proofs
+  and **43** earlier files. All **298** checker self-tests pass; original
+  self-comparison classifies **2,139** declarations with zero differences.
+  Production, prior tests/helpers, lockfile and ProGuard are unchanged; no
+  push, branch switch or device interaction. Claude's independent sample,
+  moves, helper retargets and production gates remain for their next steps.
