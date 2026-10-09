@@ -1431,7 +1431,117 @@ guide (open/close, browse categories, search), zapping up/down and by number
 across category pages, channel switch while the guide is open/closed, VOD
 episode next/previous, startup channel restore, Start Over after a switch.
 
+## Phase 12 — IPTV guide chrome (EPG pane + now/next header, overlay builder, pickers)
+
+Branch `refactor/tvplayer-p12` off the phase-11 merge `b870a16b1` (activity 11,458 lines). Evidence under
+`refactor-evidence/tvplayer/p12/`. Inventory: section 3 of the "Phase 11
+inventory" in the deps report (measured at `8a4d40d1c`; re-measure on the
+phase-11 merge). All collaborator rules from phases 3–11 apply, and the
+phase-11 lesson: a first independent mutation sample below ~75 % kills
+triggers a systematic statement-level sweep and a second sample before moves.
+
+**Selected (≈ 1,154 lines, 39 members):**
+- `TvIptvGuideChromeController.kt` (owner, ≈ 400 lines): 21 fields (6
+  now/next header views; EPG pane views, adapter, programmes, day offset,
+  `iptvEpgToken`, visibility, entry) + 10 functions (`ensureIptvChannelEpg`,
+  `updateIptvGuideEpgHeader`, `focusedIptvGuideEntry`, `formatEpgTime`,
+  `showIptvSchedulePane`, `paintIptvEpgLogo`, `selectIptvEpgDay`,
+  `hideIptvEpgPane`, `isFocusInIptvEpgPanel`, `updateIptvGuideCurrentName`);
+  activity property at the `iptvGuideCurrentName` slot; one 13-member Host
+  (incl. a `host.iptvGuideController` cross-feature getter).
+- It eagerly constructs fieldless `TvIptvGuideOverlayBuilder.kt` (≈ 475:
+  `setupIptvOverlay`, `applyGuideStyle`, `showIptvSourcePicker`,
+  `showIptvChannelJumpDialog`) and fieldless `TvIptvGuidePickers.kt` (≈ 415:
+  category/list pickers, `removeIptvGuideRow`, `toggleIptvFavorite`).
+  Cross-file references: overlay → owner as `chrome.x` (14 refs incl. one
+  **write** of `iptvEpgAdapter`), overlay → pickers as `chrome.pickers.x`.
+- 26 activity patches in 4 declarations (`setupControls`, `dispatchKeyEvent`,
+  `initIptvMode` view binds + `setupIptvOverlay` call, in-place `onDestroy`
+  `iptvEpgToken++`); 5 Host re-points (Start Over `iptvEpgToken`; zap banner
+  `ensureIptvChannelEpg`/`formatEpgTime`; the phase-11 `iptvGuideController`
+  property's added Host span → a phase-12 `patched` row, phase-11 files stay
+  byte-identical); the 67 temporary `iptvGuideController.` prefixes from
+  phase 11 become `host.iptvGuideController.` substitutions.
+- 20 inert initializer proofs (supported forms). ≈ 330 substitutions.
+
+**Audit.** 24 `this` → `activity` sites (incl. **2 `Glide.with(this)`** that
+must keep the `FragmentActivity` overload, `AlertDialog.Builder(ctx, theme)`,
+`EditText`/`TextView`/`LinearLayout`/`RecyclerView` constructors,
+`LinearLayoutManager`, Toasts, `ContextCompat.getColorStateList`,
+`DateFormat.getTimeFormat`); 53 implicit inherited sites (`findViewById` ×46,
+`resources` ×2, `isFinishing`/`isDestroyed` ×2 each, `currentFocus`); one
+**excluded receiver**: `TextViewCompat.setCompoundDrawableTintList(this, …)`
+inside `EditText(this).apply {}` — that `this` is the EditText; shadowed
+`title` (lambda parameter, local).
+
+**Timers/teardown.** 60 s archive retry on the borrowed `iptvBrowseHandler`
+(cleared wholesale in `onDestroy`), `iptvEpgToken` guard bumped in place in
+`onDestroy`, uncancelled view posts pinned as-is, `requestIptvEpg` 45 s
+watchdog unchanged (follow-up).
+
+**Retargets.** 20 reflective accesses across 5 names (`iptvEpgToken` ×4,
+`iptvGuideCurrentName` ×7, `iptvEpgPanel` ×4, `iptvEpgVisible` ×4,
+`showIptvChannelJumpDialog` ×1, incl. phase-11 sweep tests): four field
+routes to the chrome owner and the dialog route to `.overlay` (dialog method
+public in the internal class, unmangled); assertions preserved; rescanned
+after step 0. No Dart anchors.
+
+### Step T
+
+Phase-12 extraction fixture (owner + two fieldless collaborators, the
+`iptvEpgAdapter` cross-file write) + negatives; receiver handling for
+`EditText(this).apply { … this … }`: the checker permits exactly the reviewed
+constructor-receiver transformation (`EditText(this)` → `EditText(activity)`)
+while preserving the inner `this` binding (positive fixture with both
+expressions; negatives for rewriting the inner `this`, changing its receiver,
+or omitting the constructor audit); the PSI collector also records
+`resources` and `currentFocus` property reads, resolved to `getResources()` /
+`getCurrentFocus()` with before/after owner–descriptor–opcode pins and
+omission/wrong-receiver negatives; compiled audit of 24 + 53 sites; per-phase dispatcher
+keeping all historical suites; earlier destinations frozen at the phase-11
+merge.
+
+### Step 0 — characterization of the original
+
+Through the real IPTV bootstrap: overlay construction for each of the 4 guide
+styles (separate activity instances — the style is cached per session);
+adapter callbacks (select, long-press series sentinel, favourite, list,
+replay, record); search field focus/IME/Back; source/category/list pickers
+incl. membership load-before-toggle and favourites; channel-jump dialog
+gating (favourites/list source toast); EPG pane show/hide, day buttons, stale
+token, null reply, destroy; now/next header (Glide lifecycle owner, letter
+fallback); the 60 s archive retry; **now/next fetching and enrichment**:
+the captured `requestedCatchupMetadata` vs live `entry.isCurrent`
+distinction (paired main-looper replies where current-channel identity
+changes during a cheap request), silent-request/watchdog delivery after
+destruction (enrichment replies are unguarded after destroy and can post
+another borrowed-handler retry — pinned as-is), enrichment bookkeeping,
+follow-up request arguments, metadata clearing before the retry's lifecycle
+guard, and freshness boundaries under clock instrumentation covering both the
+original activity and the future chrome owner — mutation-proved. Mutation proofs on the original; Claude's
+independent sample (≥ 75 % kill rate required, else sweep + second sample);
+0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–11 additions. Device checklist (end of series): IPTV
+guide in each guide style (overlay layout, fonts, tokens), category/list
+pickers, favourites toggle, row removal from a custom list, channel-number
+jump dialog, EPG schedule pane (day navigation, replay/record actions),
+now/next header with logo and letter fallback.
+
 ## Follow-ups (found while mapping; not fixed here)
+
+- Phase 12 scoped test-helper size exception:
+  `android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt`
+  grows 774 → 813 physical lines solely from the 39 required owner routes.
+  Retain its existing reflection/adapter fixture behavior and byte-identical
+  assertions in this move; the 813-line ratchet is explicit in the size baseline.
+  Exit milestone: before the next phase adds any owner route, extract the
+  immutable controller-owner lookup into a dedicated test fixture, preserving
+  all names/values and keeping the access helper below 800. No production
+  size exception or numeric-check exemption is added.
+
 
 - Phase-9 full Robolectric suite exceeds the default 512 MiB test-worker heap.
   Three attempts were rejected; matched original/extracted 1024 MiB runs pass
@@ -1454,6 +1564,12 @@ episode next/previous, startup channel restore, Start Over after a switch.
   `setupPlaylistNavigation` adds a focus listener per rebuild.
 - `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads.
 - Pre-existing JVM failure `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached`.
+- Phase-12 evidence found a timing-sensitive original Phase-1 guide test:
+  `TvGuideVisibilityCharacterizationTest.epgAiringReplayFutureAndExpiredRowsPinVisibilityAlphaAndProgressScale`
+  allows only 30 ms of real-clock binding drift. One concurrent full run
+  produced progress 32 outside 1..31; the unchanged isolated and quiet full
+  runs pass. Investigate clock control separately; no test window or
+  production change is included here.
 - Revisit the per-class R8 keep rules after the series.
 - `keyword_cache_screen_test.dart` uses a 150ms real async startup wait; one full run under concurrent gate workload missed it, while the isolated file and complete quiet retry passed unchanged. Investigate timing reliability separately; no test delay/allowlist or application fix here.
 - Independent post-review P3 coverage follow-up before phase 3: characterize
@@ -2679,3 +2795,127 @@ episode next/previous, startup channel restore, Start Over after a switch.
   Phase 11 complete; merged. **Lesson:** a first-sample kill rate below ~75 %
   triggers a systematic statement-level sweep and a second independent sample
   before moves.
+- 2026-10-09 — phase 12 design round 1 (Codex): **No P1s**; P2s folded
+  (constructor-receiver transformation with inner-`this` preservation;
+  `resources`/`currentFocus` getter audit; 20 reflective accesses / 5 names;
+  now/next fetch + enrichment characterization incl. after-destroy behaviour).
+  Phase 12 design approved.
+
+- 2026-10-09 — **Phase 12 Step T complete; no production moves.** Re-measured
+  `b870a16b1`: 39 selected members, 294 exact substitutions, 20 initializer
+  proofs, 13-member computed Host, eager fieldless overlay/pickers and all
+  seven whole-declaration patches (26 activity + five Host re-points). Original
+  self-comparison classifies all 2,139 declarations with zero differences; all
+  43 earlier destinations are frozen. The full production-config extraction
+  fixture compiles and passes all 77 before/after receiver pins (24 context /
+  constructor + 53 inherited), including both FragmentActivity Glide overloads.
+  The constructor-receiver rule permits exactly the reviewed EditText Activity
+  argument while preserving the single inner tint receiver; resources/currentFocus
+  getters have owner–descriptor–opcode pins and compiled negatives. All **298**
+  dispatcher self-tests pass (266 historical + 32 phase-12), including complete
+  extraction, all 20 missing-proof negatives and phase-11 at its merge. Evidence
+  `p12/`, including compiled original/extraction archives and raw self-test logs.
+  Production, lockfile and ProGuard remain unchanged. Step 0 follows.
+
+- 2026-10-09 — **Phase 12 Step 0 complete; stopped before production moves.**
+  Added **153** original characterization tests in 18 behavior classes plus
+  the bootstrap fixture: four separately cached guide styles, real adapter
+  and key/IME callbacks, pickers, jump dialog, EPG pane/header, Glide lifecycle
+  and request/model/listener/scaling, paired replies, exact freshness, the
+  45 s watchdog and 60 s retry including the existing after-destroy behavior.
+  Every new test has an original named assertion mutation proof. The systematic
+  sweep covers all 18 moved functions and **793** PSI sites; **540 accepted
+  assertion-killed proof records** across the final archives, three equivalent
+  removals explained, compile/crash-only variants excluded. The per-function
+  matrix and 153-row mutation table are in the dependency report; raw patches,
+  logs, XML and immutable fixture versions are in `p12/step0/`. Detached
+  original `b870a16b1` worktree removed after restoring and archiving.
+  Clean JVM `baseline-b870a16b1`: **1,137** identities, 1,136 passes and the
+  existing focus failure. Final quiet `p12-step0`: **1,290** identities,
+  1,289 passes and the same failure, **153 passing additions only**, no
+  removals/status changes/skips, stable fingerprint. A concurrent run's
+  unchanged live-clock guide failure was rejected and retained; isolated and
+  quiet full verification pass without test/allowlist edits. Original lint:
+  **1,352** identities (253 errors, 1,099 warnings), archived for the gate.
+  Rescan: **250** quoted references across **39** routes (21 fields, 18
+  functions); all moved functions have public unmangled members in the
+  internal destination classes. Five additional visibility substitutions
+  raise the manifest total from 294 to **299**; the regenerated future fixture
+  compiles and preserves all **77** receiver pins, **20** initializer proofs
+  and **43** earlier files. All **298** checker self-tests pass; original
+  self-comparison classifies **2,139** declarations with zero differences.
+  Production, prior tests/helpers, lockfile and ProGuard are unchanged; no
+  push, branch switch or device interaction. Claude's independent sample,
+  moves, helper retargets and production gates remain for their next steps.
+
+
+- 2026-10-09 — **Phase 12 Step 0b complete before moves.** Ten additional
+  original-surface tests close URL-prefix, deferred-current and numeric-input
+  boundary gaps. All ten named original mutation proofs fail assertions; exact
+  Claude o03/o06/o12 reruns against all **163** phase-12 tests are assertion-killed,
+  with a passing 163-test control and matched 1 GiB heap. Related guard sweep
+  and mutation rows appended to the dependency report. Preliminary nullable
+  test-error crashes are rejected, archived and replaced by null-safe assertions.
+  Quiet `p12-step0b`: **1,300** identities, 1,299 passes and the unchanged focus
+  failure; every prior 1,290 status is retained with **ten passing additions
+  only**, no missing/skipped/changed identities and a stable tree fingerprint.
+  Evidence `p12/step0b/`, `junit/p12-step0b/`. Detached original removed;
+  production, manifest, old tests/helpers, lockfile and ProGuard unchanged.
+  Approved Step 1 and gate follow.
+
+
+- 2026-10-09 — **Phase 12 Step 1 moves complete.** Materialized the approved
+  manifest exactly into the chrome owner and eager fieldless overlay/pickers
+  (**394/469/416** lines), with the owner at the first removed field slot.
+  Activity **11,458 → 10,297**; size baseline lowered with `--update`.
+  Seven whole-declaration patches include the phase-11 Host span and in-place
+  teardown. Shared test-helper owner map gains all **39** rescanned routes;
+  all prior/new test assertions and Dart files remain byte-identical. The
+  helper's 813-line scoped exception and pre-next-route split milestone are
+  recorded explicitly; no production exception. All **163** phase-12
+  characterizations pass. Current checker: **2,139** original declarations
+  classified, zero differences; all **77** compiled receiver pins, **20**
+  initializer proofs, lifecycle order, **43** earlier destination bytes and
+  protected inputs pass. Forced compile preserves all five warning identities.
+  Evidence `p12/step1/`, `p12/gate/`. Full integration gate follows on the
+  committed tree; no self independent review, bug fix or device interaction.
+
+
+- 2026-10-09 — **Phase 12 gate complete on `3d389848f`; decoder
+  pending-environment. STOPPED after Phase 12.** Step 0b `94f018032` adds ten
+  passing tests, ten named original assertion proofs and kills exact Claude
+  o03/o06/o12 against all 163 phase-12 cases; o08 remains invalid/excluded.
+  Clean `p12-gate` exactly matches all **1,300** Step-0b identities/statuses
+  (1,299 passes, unchanged focus failure), matched 1 GiB heap, no missing or
+  new skips and a stable clean tree. Checker classifies **2,139** originals
+  with zero differences; **298** self-tests and p1–p11 historical merge checks
+  pass. All **43** prior destinations remain byte-identical to `b870a16b1`.
+  Compiled audit **77/77** (24 constructor/context + 53 inherited, incl.
+  resources/currentFocus getters and EditText inner-this preservation), **20**
+  initializer proofs, full lifecycle/teardown order and exact test-retarget
+  reversal pass; five compiler warning identities unchanged. Size gate passes
+  at activity **10,297**, production **394/469/416**, with only the explicit
+  **813**-line test-helper exception and pre-next-route split milestone.
+  Lint exactly matches all **1,352** original identities (253 errors,
+  1,099 warnings; 175 existing opt-in errors); analyzer **1,758** unchanged.
+  Release APK succeeds; R8/DEX verifies **12 classes / 204 members**, including
+  all new controllers/collaborators/Host/anonymous objects and the activity
+  Host implementation, plus three mapping negative controls. Decoder failure
+  output, all three native library hashes and missing decoder/filter manifest
+  exactly match phase 1: pending-environment, no workaround. Affected Dart
+  source tests match all **45** prior statuses; full Flutter suite via
+  `suite_evidence.py` exactly matches all **12,855** phase-11 identities/statuses
+  (12,794 success, 13 failure, 28 error, 20 skipped), same SDK/flags and stable
+  clean committed tree. No Dart anchors changed. Evidence `p12/step0b/`,
+  `p12/step1/`, `p12/gate/`, `junit/p12-step0b/`, `junit/p12-gate/`. Detached
+  original removed; lockfile, ProGuard and earlier manifests unchanged.
+  No push, branch switch, self independent review, device/emulator or bug fix.
+- 2026-10-09 — phase 12 post-implementation reviews of `114731e76..25c66936c`.
+  Claude's independent sample 12/15 valid kills (80 %; o08 pattern absent;
+  two earlier invalid attempts caused by a test-list word-splitting bug in
+  Claude's shell, discarded); survivors o03/o06/o12 closed in 0b.
+  Independent Codex review (fresh session): **No P1s, no P2/P3**; the
+  813-line `TvPlayerOriginalAccess.kt` helper exception accepted (39 routing
+  rows, ratcheted, split before the next route is added — first item of
+  phase 13). Activity 11,458 → 10,297. Decoder verification remains
+  pending-environment. Phase 12 complete; merged.

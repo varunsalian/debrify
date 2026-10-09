@@ -1,7 +1,7 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 18106 lib/screens/video_player_screen.dart
-11458 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
+10297 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart
@@ -139,4 +139,5 @@
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart
 823 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
+813 android/app/src/test/kotlin/com/debrify/app/tv/TvPlayerOriginalAccess.kt
 804 lib/services/webdav_sync/webdav_sync_models.dart
