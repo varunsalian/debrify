@@ -2132,6 +2132,60 @@ playback start for VOD/IPTV/strict-TS/protected streams (buffering
 behaviour, headers), decoder fallback on a hard codec, episode metadata
 arriving after launch (titles, guide episodes, progress).
 
+## Phase 20 — routers decision, end-state exception and series completion
+
+Branch `refactor/tvplayer-p20` off the phase-19 merge. **Decision-only: no
+production code moves.** Evidence under `refactor-evidence/tvplayer/p20/`.
+Inputs: "Phase 20 assessment: the two routers" in the deps report and the
+phase-19 measurements.
+
+**Decision.** Both routers stay in the activity:
+- `dispatchKeyEvent` is the remote-control entry (`MainActivity` →
+  `ActivityTracker` → `targetActivity.dispatchKeyEvent`) with 18
+  `super.dispatchKeyEvent` fallbacks; moving its body is not a declaration
+  move and needs a new body-extraction + `invokespecial` forwarding mechanism.
+- `playbackListener` is mechanically movable (optional 20a, ≈ −480 lines) but
+  would only relocate a 50-member Host — the activity's playback-state
+  surface — which AGENTS forbids ("do not replace a giant screen with a giant
+  controller, expose its entire state"). The real improvement is a
+  non-verbatim policy split, outside this series' move-only rule.
+
+**Deliverables:**
+1. Re-measure the activity on the phase-19 merge (exact line count and the
+   composition table: imports/companion, controller properties + computed
+   Hosts, routers + ticker, lifecycle/entry, shared state, `bindViews`,
+   `parsePayload` + `initIptvMode`, unified-menu composition, small helpers).
+2. Record the **end-state exception** in this plan (path, exact size,
+   remaining responsibilities, why it cannot shrink further under move-only
+   rules, exit path (a)–(e) with the ≤ 2,000-line player-core target and its
+   milestone) and confirm `dev/tool/file_size_baseline.txt` holds the exact
+   shrink-only figure; the size check must fail if the file grows.
+3. **Completion audit** against the AGENTS "migrated slice complete" rule:
+   every original responsibility of the 22,221-line file traced to its
+   destination (phases 1–19 manifests) or to the documented exception; no
+   duplicate implementations, unused scaffolds or dead Host members (a
+   compiled check that every Host member has at least one reader); every new
+   file ≤ 800 lines; checker self-tests and historical `--at` checks p1–p19
+   pass on the final tree; the per-phase test helpers and owner maps are
+   organized (no file over 800, no stale routes).
+4. **Final gate** on the clean tree (commit message contains `gate`): full
+   JVM suite vs the phase-19 gate (identities, incl. the known focus NPE and
+   the documented EPG flake), lint vs the phase-19 gate and vs the series'
+   original base (no additions), release build + R8 mapping for all moved classes,
+   full Flutter suite vs phase 19, analyzer, format, size/architecture
+   checks; decoder verification reported as **pending-environment** (Linux
+   CI-only patched bundle).
+5. **End-of-series device checklist**: aggregate every phase's device items
+   (phases 1–19) into one ordered list for an Android TV run on a test device
+   (never install a debug build over a release device), plus the decoder
+   verification on Linux CI.
+
+### Review
+
+One independent Codex review of the completion audit and exception text
+(accuracy against the tree, the exit path's feasibility, nothing left
+half-moved). No Claude mutation sample (no code moves).
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 19 original outcomes, preserved by Step 0: Media3 1.8.0 stock
