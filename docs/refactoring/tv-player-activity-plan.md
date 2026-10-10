@@ -4376,3 +4376,22 @@ The unmodified size checker was run on a scratch copy outside the worktree using
 - 2026-10-10 — **Phase 20 deliverable 5 complete; STOP after the final phase.** Gate evidence committed as `c704ff20b`. Added the linked [end-of-series device checklist](tv-player-activity-device-checklist.md): twelve ordered steps for one physical Android TV session on a dedicated test device/profile, fresh instances for all seven controls skins/four guide styles, release artifact provenance, pass/fail/pending record, and all phases 1–19 mapped to session steps. A fresh plan-section scan verifies each of the **19 original device obligations is retained exactly**, with none omitted; raw inventory/map and validation in `p20/`. No device checks were performed, no debug install over a release device is permitted. **Local structural/audit/CI-tooling/gate/checklist deliverables are complete; series closure awaits Claude's passing every-push CI on the pushed final SHA. Decoder/artifact verification and the human TV session remain pending; device checks are not structural gates (rule 7).** Production remains identical to `076438d71`, Activity exactly 3,776, lockfile/ProGuard unchanged. No push, branch switch, production behavior edit, bug fix, device/emulator use or self independent review.
 
 - 2026-10-11 — **`tvp-rev20` P2/P3 fixed; STOP.** Boundary discovery is recursive across main Kotlin sources and uses PSI-declared package names for relocated TV-package files; classifications/exclusions unchanged. Nested/elsewhere CLI holes reproduced and now rejected; **12 boundary controls + final guard pass**. Fresh final classes confirm **51 setter-only properties**, correcting both count statements. All six exact empty-cache CI commands pass: five pins, **597 checker cases**, final-tree p19 **1,611 / zero**, three Host controls and twelve boundary controls; tool inputs unchanged. Evidence `p20/rev20-fixes/`. Production/lockfile/ProGuard unchanged, Activity 3,776; pushed-SHA CI/decoder still pending. No push, branch switch, device use or self independent review.
+- 2026-10-11 — phase 20 independent final review (Codex, fresh session):
+  **No P1s**; P2 (boundary guard missed nested / out-of-directory
+  `com.debrify.app.tv` files) and P3 (setter-only Host count 51, not 56)
+  fixed in `fdeb54cbd`; Claude re-verified the reviewer's exact nested
+  bypass now fails (exit 1) and the clean tree passes. **CI evidence:** GitHub
+  Actions does not start any job on the private remote ("recent account
+  payments have failed or your spending limit needs to be increased" — true
+  for every push of this series), so pushed-SHA CI is **pending the account
+  billing fix**. Substitute evidence: the `tvplayer-structure` job's six
+  commands replayed in a clean `ubuntu:22.04` container (linux/arm64,
+  OpenJDK 21.0.12, empty `GRADLE_USER_HOME`) at `fdeb54cbd` — bootstrap
+  downloaded all five pins; checker self-tests, final-tree p19 check (1,611
+  declarations, 0 differences), Host usage test, boundary self-test and
+  boundary guard all exit 0 (`p20/ci-replay/linux-arm64-jdk21.log`).
+  **Decoder verification remains pending**: the Android workflow cannot run
+  on the private remote (same billing block; no signing secrets there).
+  Series structurally complete; merged. Remaining: pushed-SHA CI once
+  Actions billing is restored, decoder verification, and the device
+  checklist (`tv-player-activity-device-checklist.md`).
