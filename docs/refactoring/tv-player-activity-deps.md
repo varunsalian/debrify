@@ -20037,3 +20037,23 @@ The final conservative rescan finds **445 quoted references to 36 moved names in
 Final manifest original self-comparison classifies **1,642 declarations / zero differences**; 59 earlier destinations and 17 earlier manifests stay frozen. The production extraction fixture compiles, with eight initializer proofs, source-bound ShowShuffle constructor/default proof, 20 current receiver sites, 346 retained receiver sites and 23 retained binding pins. Step-T 517 historical cases are retained; the final 38 phase-18 checker/auditor cases are rerun after the manifest rescan/labels. All 80 protected source hashes remain unchanged. Size checking runs without `--update` (no production shrink yet), and all helpers remain below 800.
 
 Evidence: `p18/step0/summary.json`, `junit-summary.json`, `owner-map-rescan.json`, `patched-row-tests.json`, `final-method-witnesses.json`, `statement-coverage-matrix.json`, control/proof XML and logs, final fixture/compiler/auditor logs, `junit/baseline-2f7b4ec27/` and `junit/p18-step0/`. The detached original is removed after archival. **STOP before production moves**; Claude's separate mutation sample/review follows. No bug fix, release/device interaction, push or branch switch.
+
+
+## Phase 18 step 0b — independent-sample navigation boundaries
+
+Claude's original sample killed 20/23 valid mutations; d13 is compile-invalid (removing the audioUrl null check loses its smart cast) and remains excluded. All three real survivors are now killed by the **exact original before/after strings**, each run against all **306 phase-18 + ShufflePlaybackFlowTest identities** on detached original `2f7b4ec27`; the unmutated control passes 306/306. Four new tests preserve all prior assertions. None is equivalent.
+
+| New test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::guideNextWithoutResolverOrImdbShowsEndToast` | `d15` / `playNext` | `java.lang.AssertionError: without a resolver, guide adjacency cannot request an in-player fetch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::guideNextWithoutResolverHandsBackToQuickPlayAndFinish` | `d15` / `playNext` | `java.lang.AssertionError: without a resolver, guide adjacency cannot request an in-player fetch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::explicitRandomClearsStaleAutoAdvanceAndSleepLatchBeforePlaying` | `d18` / `playRandom` | `java.lang.AssertionError: an explicit random pick clears the sleep stop latch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::twoPriorFailuresStillAllowTheThirdShuffleAttempt` | `d21` / `playShowShuffle` | `java.lang.AssertionError: two prior failures must still select the third target expected:<1> but was:<0>` |
+
+- **d15:** a direct typed call proves `guideAdjacent` returns `SeasonEpisode(1, 2)` with `hasPlaylistResolver == false`. `playNext` must still use quick-play plus the Activity `finish()` override when IMDB exists, or the exact End toast without IMDB; neither case requests in-player episode fetch.
+- **d18:** explicit random selection with both stale auto-advance and the sleep latch clears the latch and starts the seeded target fresh. Removing the explicit auto flag consume causes the real `playItem` sleep gate to suppress it.
+- **d21:** two prior failures still start the one eligible third target. The existing independent three-failure test continues to pin exhaustion/pill text; both sides of the cap remain observable.
+
+The updated 575-node matrix retains the original sweep and adds these witnesses to `playNext`, `playRandom`, `playShowShuffle`. Exact diffs, matching fixture hashes, raw XML/assertion stacks and Gradle logs are under `p18/step0b/proofs/{d15,d18,d21}/`; definitions in `proofs.json`, complete control in `control-original/`.
+
+Clean test-task `p18-step0b` **2826 identities / 2825 pass / same known focus NPE** exactly preserves all 2822 `p18-step0` statuses with **four passing additions only**. Stable tested tree, matched 1 GiB/JBR21, no new skip/missing identity/Gradle abort. EPG timing passes again; its earlier phase-17 original failure remains documented. All 80 protected hashes, production, lockfile and ProGuard unchanged. Detached original archived and removed after proofs. Approved Step 1/gates follow; no independent self-review or device interaction.
