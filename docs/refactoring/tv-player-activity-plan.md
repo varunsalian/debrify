@@ -2164,21 +2164,47 @@ phase-19 measurements.
    every original responsibility of the 22,221-line file traced to its
    destination (phases 1–19 manifests) or to the documented exception; no
    duplicate implementations, unused scaffolds or dead Host members (a
-   compiled check that every Host member has at least one reader); every new
-   file ≤ 800 lines; checker self-tests and historical `--at` checks p1–p19
-   pass on the final tree; the per-phase test helpers and owner maps are
-   organized (no file over 800, no stale routes).
+   compiled usage check: a property counts as used through either accessor,
+   so setter-only members such as `speechTap`, `offsetRenderersFactory` and
+   `iptvNetworkCallback` are valid; functions and generated `$default`
+   helpers must trace to a production caller; positives for setter-only and
+   default-argument calls, and a negative that removes the caller while
+   leaving the generated helper); every new file ≤ 800 lines; checker
+   self-tests pass; **final-tree evidence is separate from historical
+   evidence**: the p19 manifest check runs WITHOUT `--at` (with its
+   earlier-destination comparison) plus the compiled audits against the final
+   classes, and a mutation confined to a final destination must fail it,
+   while historical `--at` checks p1–p19 stay as history evidence; the
+   per-phase test helpers and owner maps are organized (no file over 800, no
+   stale routes).
+3a. **CI coverage (required by AGENTS before completion).** CI today runs the
+   native size ratchet but no Kotlin move checker or TV-player boundary
+   guard. Add a `checks.yml` job (every push, like the other structural
+   jobs) that runs the Kotlin move checker self-tests and the final-tree
+   manifest check, plus a small TV-player import/boundary guard over the
+   completed native source set (collaborators must not import Flutter UI or
+   each other's private implementations beyond the documented Hosts), with
+   documented exclusions. The job needs full Git history (`fetch-depth: 0`),
+   a pinned/cached `kotlin-compiler-embeddable` for the PSI helper and a
+   portable `JAVA_HOME` (the evidence helper's hard-coded macOS JBR path must
+   not be required). Passing CI evidence on the pushed final SHA is required
+   before closing the series.
 4. **Final gate** on the clean tree (commit message contains `gate`): full
    JVM suite vs the phase-19 gate (identities, incl. the known focus NPE and
    the documented EPG flake), lint vs the phase-19 gate and vs the series'
    original base (no additions), release build + R8 mapping for all moved classes,
    full Flutter suite vs phase 19, analyzer, format, size/architecture
-   checks; decoder verification reported as **pending-environment** (Linux
-   CI-only patched bundle).
+   checks. Decoder verification: the patched bundle builds only in the
+   Android workflow (`build.yml`, release/manual dispatch only — a `gate`
+   push does not run it). If a side-effect-free manual dispatch of the final
+   SHA is available (no release publish), run it and archive its decoder
+   result and artifact provenance; otherwise close only the structural work
+   and keep decoder verification explicitly **pending** on the checklist. The
+   reported status follows the actual outcome.
 5. **End-of-series device checklist**: aggregate every phase's device items
    (phases 1–19) into one ordered list for an Android TV run on a test device
    (never install a debug build over a release device), plus the decoder
-   verification on Linux CI.
+   verification if it is still pending.
 
 ### Review
 
@@ -4278,3 +4304,11 @@ half-moved). No Claude mutation sample (no code moves).
   ownership, lazy timing, receiver registration, metadata publication and
   teardown equivalent. Activity 4,472 → 3,776. Decoder verification remains
   pending-environment. Phase 19 complete; merged.
+- 2026-10-10 — phase 20 design review (Codex, `tvp-design`): one **P1**
+  folded — CI must run the Kotlin move checker and a TV-player boundary
+  guard before completion (new deliverable 3a). P2s folded: final-tree vs
+  historical checker evidence, precise Host usage definition (setter-only and
+  `$default` helpers), decoder verification via a side-effect-free manual
+  dispatch of the Android workflow or explicit pending. Router retention
+  confirmed (509/362-line bodies, 18 `super` fallbacks); activity exactly
+  3,776; 63 extracted files all under 800; all 19 phase device lists present.
