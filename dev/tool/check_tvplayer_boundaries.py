@@ -9,11 +9,22 @@ import check_kotlin_moves as k
 
 CONFIG = k.ROOT / 'dev/tool/tvplayer_boundaries.json'
 TV = 'android/app/src/main/kotlin/com/debrify/app/tv'
+MAIN = 'android/app/src/main'
+PACKAGE = 'com.debrify.app.tv'
 
 
 def completed_sources():
     return {p for phase in range(1, 20) for p in json.loads(
         (k.ROOT / f'dev/tool/kotlin_moves/tvplayer_p{phase}.json').read_text())['destinations']}
+
+
+def discover_sources(root=None):
+    """Include the whole TV subtree and main-source files declaring its package."""
+    root = k.ROOT if root is None else root
+    sources = {p.relative_to(root).as_posix(): p.read_text()
+               for p in sorted((root / MAIN).rglob('*.kt'))}
+    return sorted(path for path, unit in k.parse(sources).items()
+                  if path.startswith(TV + '/') or unit['package'] == PACKAGE)
 
 
 def import_ranges(tokens):
@@ -121,7 +132,7 @@ def main():
         return not result.wasSuccessful()
     config = json.loads(CONFIG.read_text())
     sources = {p: (k.ROOT / p).read_text() for p in config['source_set']}
-    all_paths = [str(p.relative_to(k.ROOT)) for p in (k.ROOT / TV).glob('*.kt')]
+    all_paths = discover_sources()
     errors = audit(sources, config, all_paths)
     for error in errors:
         print(error)

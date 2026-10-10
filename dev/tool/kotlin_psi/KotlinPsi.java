@@ -392,7 +392,8 @@ public final class KotlinPsi {
                     references.add(map("start", offset(ref.getTextRange().getStartOffset()), "end", offset(ref.getTextRange().getEndOffset()),
                         "callee", ref.getCallableReference().getText(), "receiver", ref.getReceiverExpression() == null ? "" : ref.getReceiverExpression().getText()));
                 }
-                files.add(map("declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
+                files.add(map("package", file.getPackageFqName().asString(),
+                    "declarations", declarations(file, ""), "tokens", tokens(), "this_sites", thisSites,
                     "all_this_sites", allThis, "context_aliases", aliases,
                     "implicit_inherited_sites", inheritedSites, "callable_references", references,
                     "preserved_receiver_sites", preserved, "find_view_assignments", findAssignments,

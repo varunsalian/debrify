@@ -2,10 +2,11 @@
 import copy
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
 import check_kotlin_moves as k
-from check_tvplayer_boundaries import audit, CONFIG, TV
+from check_tvplayer_boundaries import audit, CONFIG, TV, MAIN, discover_sources
 
 
 class TvBoundariesTest(unittest.TestCase):
@@ -13,7 +14,7 @@ class TvBoundariesTest(unittest.TestCase):
     def setUpClass(cls):
         cls.config = json.loads(CONFIG.read_text())
         cls.sources = {p: (k.ROOT / p).read_text() for p in cls.config['source_set']}
-        cls.paths = [str(p.relative_to(k.ROOT)) for p in (k.ROOT / TV).glob('*.kt')]
+        cls.paths = discover_sources()
         cls.path = TV + '/TvMediaPipelineController.kt'
 
     def check(self, sources=None, config=None, paths=None, reason=None):
@@ -71,6 +72,36 @@ class TvBoundariesTest(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config['legacy_exclusions'].append(self.path)
         self.check(config=config, reason='legacy exclusion overlaps')
+
+    def check_discovered_bypass(self, path):
+        folder = k.evidence_root(k.ROOT) / 'p20/boundary-selftests'
+        folder.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=folder) as directory:
+            root = Path(directory)
+            for name in self.paths:
+                destination = root / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text((k.ROOT / name).read_text())
+            bypass = root / path
+            bypass.parent.mkdir(parents=True, exist_ok=True)
+            bypass.write_text('package com.debrify.app.tv\n'
+                              'internal class Bypass(val peer: TvStartupGateController)\n')
+            decoy_path = MAIN + '/kotlin/other/Unrelated.kt'
+            decoy = root / decoy_path
+            decoy.parent.mkdir(parents=True, exist_ok=True)
+            decoy.write_text('package other\n// package com.debrify.app.tv\n'
+                             'val note = "package com.debrify.app.tv"\n')
+            paths = discover_sources(root)
+            self.assertIn(path, paths)
+            self.assertNotIn(decoy_path, paths)
+            self.assertEqual(set(self.paths) | {path}, set(paths))
+            self.check(paths=paths, reason='unclassified TV source')
+
+    def test_nested_peer_bypass_is_discovered_and_rejected(self):
+        self.check_discovered_bypass(TV + '/extra/Bypass.kt')
+
+    def test_out_of_directory_same_package_bypass_is_discovered_and_rejected(self):
+        self.check_discovered_bypass(MAIN + '/kotlin/elsewhere/Bypass.kt')
 
     def test_strings_and_comments_do_not_create_type_edges(self):
         self.check(self.append_member('\n// FlutterActivity TvStartupGateController\nval note = "FlutterEngine TvStartupGateController"\n'))

@@ -8,7 +8,7 @@ The job runs the full historical/current checker self-test dispatcher, the final
 
 ## Boundary contract
 
-`dev/tool/check_tvplayer_boundaries.py` uses real Kotlin PSI/lexer tokens. The explicit reviewed configuration is `dev/tool/tvplayer_boundaries.json`; the source set must equal the union of p1–p19 destinations. All 63 completed files are checked. The guard checks import-free same-package names, fully qualified references and import aliases, while ignoring comments and string literals. All Kotlin files in the TV directory must be either completed destinations or one of the exact legacy exclusions below; a new unclassified file fails.
+`dev/tool/check_tvplayer_boundaries.py` uses real Kotlin PSI/lexer tokens. The explicit reviewed configuration is `dev/tool/tvplayer_boundaries.json`; the source set must equal the union of p1–p19 destinations. All 63 completed files are checked. The guard checks import-free same-package names, fully qualified references and import aliases, while ignoring comments and string literals. Discovery recursively scans all Kotlin files under `android/app/src/main`. Every file in the TV directory (including nested directories), and every main-source file declaring `package com.debrify.app.tv` regardless of its directory, must be either a completed destination or one of the exact legacy exclusions below; a new unclassified file fails. The declared package comes from Kotlin PSI, so comments and strings do not classify unrelated packages. Test sources and tool fixtures are outside this production-source scope.
 
 - Flutter UI/engine types are forbidden: Flutter Activity/Fragment/FragmentActivity, Engine/EngineGroup/EngineCache, View/TextureView/SurfaceView, Renderer/JNI, DartExecutor and BinaryMessenger. MethodCall, BasicMessageChannel and EventChannel are also forbidden. Every `io.flutter` namespace reference must be the approved `io.flutter.plugin.common.MethodChannel` type (including its Result interface).
 - `MainActivity` is allowed only in the 18 exact files listed in the configuration, solely to import it and invoke `getAndroidTvPlayerChannel()`. Other accessors, concrete Activity references or generic engine access are rejected.
@@ -33,7 +33,7 @@ The job runs the full historical/current checker self-test dispatcher, the final
 | `TvSourceSwitchController` | `TvSourceSwitchApplier` |
 | `TvIptvZapBannerController` | `TvIptvZapBannerStyledRenderer` |
 
-The ten self-tests include the real completed tree, direct same-package and fully qualified peer bypasses, an alias bypass even when importing that peer for a legitimate Host, Flutter types/namespace access, an unapproved MainActivity accessor, an unapproved concrete Activity reference, a new Host peer edge, scope/exclusion widening and harmless comment/string controls. The three bypass controls must fail for their stated boundary reason.
+The twelve self-tests include the real completed tree, direct same-package and fully qualified peer bypasses, an alias bypass even when importing that peer for a legitimate Host, Flutter types/namespace access, an unapproved MainActivity accessor, an unapproved concrete Activity reference, a new Host peer edge, scope/exclusion widening, harmless comment/string controls, and discovery negatives for a nested peer bypass and an out-of-directory same-package file. The three reference-bypass controls must fail for their stated boundary reason; both discovery controls must fail the exact unclassified-source rule.
 
 ## Exact legacy file exclusions
 
