@@ -2134,6 +2134,13 @@ arriving after launch (titles, guide episodes, progress).
 
 ## Follow-ups (found while mapping; not fixed here)
 
+- Phase 19 original outcomes, preserved by Step 0: Media3 1.8.0 stock
+  startup/rebuffer thresholds are 1,000/2,000 ms, despite stale 2,500/5,000
+  comments beside the merged-source override. A negative late duration with
+  negative live duration retains -1; a valid metadata row can update the model
+  before a malformed later row suppresses UI publication. Any comment or
+  behavior correction is separate; none is included here.
+
 - Phase 18 original async outcomes, preserved by Step 0: a worker-thread lazy
   resolve reply reaches UI animation without Main dispatch; MethodChannel
   catches the off-Looper animation exception and leaves media unchanged.
@@ -4166,3 +4173,36 @@ arriving after launch (titles, guide episodes, progress).
   JUnit label under `junit/`. Size check without update. No production,
   lockfile or ProGuard change, bug fix, push, branch switch or device use.
   Step 0 Media3 configuration/worker prerequisites next.
+
+- 2026-10-10 — **Phase 19 Step 0 complete; STOP before production moves.**
+  Mandatory original Media3 1.8.0 read-back / SDK 28 real heap-getter /
+  bounded worker resolver-extractor prerequisites pass (six cases, before
+  widening). No 19a deferral. Complete original control: 158/158 pass,
+  including 150 new identities in 14 cohesive classes and eight unchanged
+  caller tests. Real VOD/IPTV bootstrap, installed configuration and all
+  mode/heap/time/language boundaries, live loader reads/snapshots, codec
+  order, connectivity/lazy timing, recording callback, listener/analytics
+  order, subtitle ownership and receiver/broadcast/staged/merge/worker/UI/
+  channel/destroy behavior are pinned. All 257 final original mutations:
+  255 named-assertion kills, two unreachable empty-language-variant branches
+  documented equivalent; no credited compile errors/crashes or unresolved
+  survivors. Every final new test has a preserved assertion witness. The
+  systematic matrix records 392 PSI obligations / 38 reviewed groups;
+  303 nodes overlap accepted mutations, composites and expression-body
+  callbacks are separately mapped. Post-test reflection rescan: all eight
+  moved-name routes / 28 literal accesses, real private/default dispatch and
+  original-owner fallback preserved. Clean original 2,826 statuses exact; final p19-step0 2,976 identities / 2,975 pass / same focus NPE, exactly 150 passing additions, no drops/status changes/new skips. EPG timing passes in all observed valid runs; historical flakiness remains recorded. The initial 1 GiB full worker OOM (no XML) is archived/excluded; matched evidence-only one-worker/25-class forks retain the same 1 GiB heap. A fresh clean baseline-a0d1be1a7-fork25 exactly matches baseline-a0d1be1a7; both Step 0 comparisons pass and every valid tree is stable.
+  Original lint remains archived at a0d1be1a7: 1,351 issues (252 Error /
+  1,099 Warning / 175 opt-in). Repeated self-comparison: 1,611 / zero;
+  61 frozen destinations / zero; Step T's 597 tool cases and all p1–p18
+  historical checks retained. All 560 protected hashes unchanged. Size:
+  2,982 files / 140 unchanged ratchets, no update. SDK 23 APK cannot load
+  at minSdk 24; the below-N branch uses a restored SDK_INT override on
+  SDK 28. Preserved stock-threshold/comment and late-negative-duration /
+  partial-write quirks recorded in Follow-ups. Evidence p19/step0/
+  (prerequisites/controls, exact patches/XML/stacks, matrix, provenance,
+  owner rescan, OOM attempt and matched-fork scripts/comparisons) and junit/.
+  Detached original removed after archiving. No production move, dependency,
+  lockfile or ProGuard edit, bug fix, push, branch switch, device/emulator
+  interaction or self independent review. Claude's separate sample next;
+  Step 1 not started.
