@@ -21282,3 +21282,25 @@ Six Activity edits remain in their original positions (`onCreate` ×2, `initIptv
 | `android_tv_mdblist_progress_source_test.dart`, native actual rows | Activity source / `private fun requestMetadataFromFlutter()` end marker | `TvEpisodeMetadataReceiver.kt` / `fun requestMetadataFromFlutter()` | Only path/end-marker strings change; all assertions unchanged |
 
 Claude's separate original-code sample (`p19/claude-mutations/`) killed **25/25 valid mutations**, each against 157 tests. No Step 0b is required. Codex did not conduct a self independent review. Focused post-move JVM: **184/184 pass** (150 new + eight unchanged callers + 26 native audio cases). Complete production fixture and checker match exactly over 1,611 declarations; teardown/protected/test-retarget checks pass. The size baseline was lowered using `--update`; 2,982 files / 140 ratchets, both new files below 800 lines. Gate evidence follows under `p19/gate/`.
+
+
+### Phase 19 gate — observed parity and remaining limitations
+
+The clean Step-1 checkpoint `9e279ddd2` is the tested tree. All **597** checker/auditor self-tests pass (555 historical + 42 phase-19); all 1,611 original declarations are classified with zero differences, p1–p18 historical manifest checks pass and 61 earlier destination files remain byte-identical. The compiled audit preserves 21 current / 366 historical receiver sites, 23 retained binding/type/cast pins, four loader-to-volatile chains per tree and distinct metadata writer owner maps. Actual `@Volatile` storage remains single in the Activity; Kotlin-generated captures have exactly the permitted final descriptor/role set, every loader read invokes its computed Host getter once, and the Host contains no snapshot field. Both inlined Context strings and retained lazy/identity/storage/ShowShuffle proofs pass. Lifecycle order and all test files except the exact documented retargets are unchanged. Zero initializer proofs apply to this phase.
+
+| Gate | Observed result / comparison |
+| --- | --- |
+| Final physical lines | Activity **3,776**; pipeline **535**; receiver **330** |
+| Focused JVM | **184/184 pass** |
+| Complete JVM `p19-gate` vs `p19-step0` | **2,976 identities exact**, 2,975 pass / same `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached` NPE; clean stable tree, matched evidence-only 1 GiB heap / one worker / fork every 25 classes |
+| EPG timing | All 93 EPG-named gate identities pass; phase-19 valid original/Step-0/gate outcomes pass. The earlier phase-17 timing failure remains historical flakiness, never an allowlist for a newly failing observed pass |
+| Kotlin compile | Forced `:app:compileDebugKotlin` succeeds; all **five** production warning identities unchanged |
+| Lint vs `a0d1be1a7` | Exact **1,351** issue multiset after PSI-symbol/line relocation: 252 Error / 1,099 Warning / 175 opt-in; raw lint exits nonzero for those original errors |
+| Release / R8 | `flutter build apk --release --no-pub` succeeds; all **63** historical/current destination sources, **231** classes / **4,271** members, both new Host implementations and three mapping/DEX negative controls pass |
+| Decoder script | Exit **1**, **pending-environment**: identical failure log, missing decoder/filter set and all three `libmpv.so` hashes versus phase 18 and phase 1 |
+| Full Flutter vs phase-18 gate | All **12,855** identities/statuses exact: 12,794 success / 13 failure / 28 error / 20 skipped; complete stable clean tree |
+| Affected Dart source tests | All **45** statuses exact; path/end-marker edits preserve assertions |
+| Dart format / analyzer | Changed Dart file already formatted; all **1,758** diagnostic occurrences exact against phase 18 (917 error / 113 warning / 728 info), so analyzer retains its original nonzero exit |
+| Size / protected inputs | `--update` lowers Activity ratchet; final **2,984** files / **140** ratchets. Both new production files remain below 800; lockfile/ProGuard, historical manifests and 559 other protected source hashes unchanged |
+
+Evidence: `p19/gate/summary.json`, complete checker/self-test/historical/compiled/lifecycle/retarget logs and JSON, canonical lint issue set plus raw reports, release mapping/DEX inventory and decoder provenance, Flutter/analyzer reports; complete XML/identity/provenance archive at `junit/p19-gate/`. Existing failures are recorded as preserved rather than described as passing suites. No source regression is accepted; no bug fix, dependency/ProGuard edit, push, branch switch, device/emulator interaction or self independent review occurred. Stop after phase 19.
