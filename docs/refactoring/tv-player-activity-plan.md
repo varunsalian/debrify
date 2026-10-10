@@ -1949,6 +1949,93 @@ twin, strict-TS providers, network drop and recovery (Wi-Fi off/on),
 backgrounding (Home) and resuming live TV, a stalling channel's reconnect
 pill.
 
+## Phase 18 — playback start, resolve, Stremio TV media start, navigation and shuffle
+
+Branch `refactor/tvplayer-p18` off the phase-17 merge. Evidence under
+`refactor-evidence/tvplayer/p18/`. Inventory: "Phase 18 inventory" in the deps
+report (measured at `df439aed1`, phase-16 design read from its branch;
+re-measure on the phase-17 merge). All collaborator rules from phases 3–17
+apply; statement-level coverage sweep from the start (84 `if`, 56 `return`).
+**High risk:** the playback-start path and shuffle protocol.
+
+**Selected (whole unit — splitting start and shuffle costs ≈ 23 temporary
+edits because they reference each other 9 and 18 times):**
+- `TvPlaybackStartController.kt` (≈ 650; reference name **`playbackStart`**):
+  `playItem` → `resolveAndPlay` → `startPlayback` → `buildMergedSource`,
+  `discoverProtectedMime`, `playPikPakVideoWithRetry`, the Stremio TV
+  media-start trio; owns `mediaPreparationScope`, `mediaPreparationGeneration`,
+  `pendingShufflePlayback`; class-level Media3 `@OptIn`.
+- eagerly constructs `TvPlaybackNavigator.kt` (≈ 385; reference name
+  **`navigator`** — `navigation`/`generation` collide with locals and
+  `ShufflePlaybackAttempt` properties): `playNext`/`playPrevious`,
+  `updateCatalogEpisodeControls`, random, the shuffle protocol and its 6
+  shuffle-only fields (`showShuffleGeneration`, `queued*`,
+  `shuffleWatchGeneration`).
+- Activity property `playbackStartController` at the unit's first owned slot;
+  one shared 43-member computed Host (12 var, 27 val, 4 fun); the
+  `protectedStreamClient` getter keeps running on the IO thread exactly as
+  the original field read did.
+- **Stay in the activity:** `ShufflePlaybackAttempt` (nested; three frozen
+  earlier files import `AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`
+  and four test sites look it up by binary name — no binary-name retargets),
+  `stremioResolutionToken`, `sleepStopLatched`, `@Volatile activeVodHeaders`,
+  `continuousShuffleEnabled`; startup/manual tokens stay with the gate
+  controller, the PikPak retry id with the PikPak controller.
+- 17 activity patches in 5 declarations (`playbackListener` 8, `onCreate` 2,
+  `handleMetadataUpdate` 1 — consumed by phase 19, `umPlaybackModel` 4,
+  in-place `onDestroy` 2: scope cancel then generation bump); 21 Host
+  re-points (22 token edits) in 8 properties (Up Next, playlist, dock, gate,
+  Stremio TV guide, PikPak, fetch, switcher), built on the phase-16 versions;
+  phase 16's 6 patches inside this unit become
+  `host.controlsOverlayController[.identity].…`.
+- 8 inert initializer proofs (new narrow form: `ShowShuffle()`, or keep
+  `showShuffle` in the activity); ≈ 265 substitutions; one braced template
+  (`${host.stremioResolutionToken}`); the three `player?.apply {}` receiver
+  blocks pinned; local functions inside `playShowShuffle` handled by the
+  checker (step-T fixture).
+- Audit: 11 receiver/constructor sites, 9 inherited sites; `finish()`
+  compiled `invokevirtual`.
+- Async: three shuffle posts on the borrowed `progressHandler` and the MIME
+  coroutine; no owned Handler/`Runnable`/Glide/`findViewById`/`runOnUiThread`;
+  teardown order unchanged.
+
+**Retargets.** 61 reflective sites over 20 names in 13 files: 14 owner-map
+routes plus one `when` branch in `ShufflePlaybackFlowTest`'s local `call`
+helper; 9 functions become public members (split the owner-map file before
+it passes 800 lines). Dart: `test/android_tv_auto_advance_resume_test.dart`
+reads the new controller file and its start marker becomes `'fun playItem('`
+(public for reflection) with an added uniqueness assertion;
+`test/manual_source_validation_contract_test.dart` only changes the file
+(both markers stay `private`); every asserted string and the `playItem` →
+`resolveAndPlay` → `startPlayback` order are preserved.
+
+### Step T
+
+Classifier form + negatives; extraction fixture (owner + navigator via
+`playbackStart`/`navigator`, local functions in `playShowShuffle`,
+`player?.apply {}` receivers) + negatives; compiled audit incl.
+`invokevirtual finish`; per-phase dispatcher keeping all historical suites;
+owner-map file split if needed; earlier destinations frozen at the phase-17
+merge.
+
+### Step 0 — characterization of the original
+
+The `playNext` ladder, `playPrevious`, the catalog-controls matrix, shuffle
+bag and eligibility (assert bag invariants after seeding `shuffleBag` —
+`Random.Default` is not seeded), every `playShowShuffle` branch, each resolve
+and MIME guard and generation/token supersession, merged-source fallback,
+PikPak start, the Stremio TV trio, `onDestroy` statements; coverage sweep +
+matrix. Mutation proofs on the original; Claude's independent sample (≥ 75 %,
+else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–17 additions. Device checklist (end of series):
+start a movie and a series episode from each source type (debrid, torrent,
+direct, PikPak, protected stream needing MIME discovery), resume position,
+next/previous episode, auto-advance at end, catalog episode controls, show
+shuffle (start, continue, exhaustion), Stremio TV channel next item.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 16 original runtime observations, preserved by Step 0: hidden dock

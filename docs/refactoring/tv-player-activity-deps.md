@@ -18930,3 +18930,630 @@ Release `flutter build apk --release --no-pub` succeeds without install. R8 mapp
 Full Flutter suite through `suite_evidence.py` on this clean gate tree **exactly matches all 12,855 phase-16 identities** across 1,232 suites: 12,794 success, 13 failure, 28 error, 20 skipped. All 45 affected source-text statuses match. Analyzer exactly matches 1,758 prior diagnostic identities (917 error/113 warning/728 info). Existing failures remain reported; no baseline acceptance or obsolete allowlist hides a regression. SDK/configuration and tested inputs are stable.
 
 Evidence `p17/step0b/`, `p17/step1/`, `p17/gate/summary.json` and raw archives, `junit/p17-step0b/`, `junit/p17-gate/`. Detached original removed after proof archival. Lockfile, ProGuard, earlier destinations/manifests and all test inputs unchanged. Heavy runners and Gradle/Kotlin workers niced. No production bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP; phase 18 is not started.**
+
+## Phase 18 inventory: playback start + navigation/shuffle + Stremio TV media trio (at `df439aed1`; re-measure on the phase-17 merge)
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`df439aed1` (phase-15 merge, **6,986 lines**, class header 136, companion 6973–6985). This is a read-only
+survey of the main checkout. Nothing was built and nothing under `../debrify-wt/` was read or touched. The
+phase-16 design (`6304087a7`, branch `refactor/tvplayer-p16`) was read through `git show` only, to learn which
+phase-16 patches land inside phase-18 members.
+
+**Tooling.** The scripts are in `scratchpad/p18/`:
+- `idx.py`: a brace/string/comment-aware masker and depth-1 member indexer (390 spans; ctor-parameter
+  pseudo-spans 3666–3672 merged into `ShufflePlaybackAttempt`);
+- `refs.py`: inbound word-boundary scan. Templates and `this@AndroidTvTorrentPlayerActivity.x` are counted;
+  other receivers and declarations are excluded. Host-object hits are attributed to their property;
+- `out.py`: outbound scan of activity members, plus inherited/`this` sites, used by moved bodies;
+- `cross.py`: the owner/collaborator cross-qualification matrix and the per-file Host counts.
+
+Counts were checked by hand against the source. The terms are the same as in the phase-11/13/14/15
+inventories:
+- **patch**: a token edit in a retained activity declaration;
+- **re-point**: an edited forwarder inside an existing controller property's Host object, which makes that
+  property a whole-property `patched` row;
+- **substitution**: a declared edit inside a moved body.
+
+**Phases 16 and 17 come first.** Their controllers are treated as existing:
+- `TvControlsOverlayController` (property `controlsOverlayController`), with the nested `identity`
+  (`TvDockIdentityPresenter`) and `seek` (`TvSeekScrubController`);
+- `TvIptvTuneController` / `TvIptvTwinTrial`.
+
+**Measured interplay with phase 17 (TUNE):** there are **0 references in either direction** between the TUNE
+members and any name in this unit. Phase 17 patches different statements of `playbackListener`, `setupPlayer`,
+`onStart`, `onStop` and `onDestroy`.
+
+**Phase 16 consumes nothing from this unit but leaves 6 patches inside it**, so re-measure on its merge:
+- `resolveAndPlay`: `setResolvingState(true/false)` becomes `controlsOverlayController.setResolvingState(…)` ×2;
+- `playMediaDirect`, `playPikPakVideoWithRetry` and `playStremioTvPlaybackMap`: `updateTitle(…)` becomes
+  `controlsOverlayController.identity.updateTitle(…)` ×3;
+- `replacePayloadWithStremioTvItem`: `ottShowName = null` becomes
+  `controlsOverlayController.identity.ottShowName = null` (a `@Volatile` field in phase 16).
+
+In phase 18 these six become `host.controlsOverlayController[.identity].…` substitutions.
+
+Phase 16 also re-points forwarders in six properties that phase 18 re-points too (`upNextController`,
+`playlistController`, `controlsDockController`, `startupGateController`, `stremioTvGuideController`,
+`sourceSwitchController`). They are different forwarders, so build the phase-18 rows on the phase-16/17
+versions. The phase-16 Host contains **no** forwarder to a phase-18 member (`sleepStopLatched` stays
+activity-owned).
+
+---
+
+### 1. Summary and recommendation
+
+**Move the whole START-A unit in one phase: one owner and one eagerly constructed collaborator with its own
+fields (the phase-13 shape).** Both halves are coupled in both directions: start→navigation has 9
+references and navigation→start has 18. Splitting start and shuffle across two phases would need
+≈ 18 temporary activity patches plus 5 temporary Host forwarders, all re-pointed later.
+
+- **`TvPlaybackStartController.kt`** (owner, 551 member lines, **≈ 650** with imports, header and Host
+  interface). It holds:
+  - `playItem`, `resolveAndPlay`, `discoverProtectedMime`, `startPlayback`, `playMediaDirect`,
+    `buildMergedSourceOrNull` and `buildMergedSource`;
+  - `playPikPakVideoWithRetry`;
+  - the Stremio TV trio `updateStremioSourcesFromPlaybackMap`, `replacePayloadWithStremioTvItem` and
+    `playStremioTvPlaybackMap`;
+  - the owned state `mediaPreparationScope`, `mediaPreparationGeneration` and `pendingShufflePlayback`.
+
+  The activity property is `playbackStartController`, at the `mediaPreparationScope` slot (824). The class
+  carries `@OptIn(UnstableApi::class)` at class level, because it uses `MergingMediaSource`,
+  `ProgressiveMediaSource`, `DefaultDataSource`, `DefaultHttpDataSource` and `setMediaSource`.
+- **`TvPlaybackNavigator.kt`** (nested `val navigator`, eagerly constructed by the owner; 351 member lines,
+  **≈ 385**). It holds:
+  - `playNext`, `playPrevious`, `updateCatalogEpisodeControls`, `playRandom` and `showRandomPlaybackDialog`;
+  - `resetShuffle`, `shuffleAttemptCurrent`, `shuffleAttemptOwned`, `restoreShufflePreparation`,
+    `failShufflePlayback`, `watchShufflePlayback`, `clearQueuedShuffle`, `yieldEpisodeFetchToQueuedShuffle`,
+    `canShuffleWholeShow`, `playShowShuffle`, `getShuffleEligibleIndices` and `pickShuffleIndex`;
+  - the navigator-only fields `shuffleBag`, `showShuffle`, `showShuffleGeneration`,
+    `queuedShuffleGeneration`, `queuedShuffleNavigation` and `shuffleWatchGeneration`.
+
+  It reaches the owner through a constructor reference named **`playbackStart`** and shares the owner's Host.
+  It needs no Media3 opt-in.
+- **`ShufflePlaybackAttempt` stays a nested `internal class` of the activity, unchanged and retained.** It is
+  already `internal` (phase 8). Moving it would force edits to **three frozen earlier destinations**:
+  `TvSourceFetchController.kt:7`, `TvSourceSwitchController.kt:23` and `TvSourceSwitchApplier.kt:23` each
+  `import com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`. It would also break:
+  - the `ShufflePlaybackFlowTest` nested-class lookup by simple name with its 7-parameter constructor order;
+  - `TvPhase8OriginalTest.attemptType` (`Class.forName("…AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt")`);
+  - `TvPhase3WiringCharacterizationTest`, which uses `TvPlayerOriginalAccess.type("AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt")`;
+  - the typed cast in `TvPlayerOriginalAccess.callTyped`.
+
+  Both new files import it exactly like the phase-8 files do. **Binary-name retargets: 0.** The
+  9-line type joins the documented end-state composition remainder; a later cleanup can relocate it
+  together with the three imports.
+
+| item | phase 18 |
+|---|---|
+| moved members / lines | **35 / ≈ 902** member lines. Owner: 11 functions + 3 fields, 551 + 3. Navigator: 17 functions + 6 fields, 351 |
+| retained in this range | `ShufflePlaybackAttempt` (3665–3673) |
+| activity patches | **17 in 5 declarations** (§4.1); none temporary |
+| Host re-points | **21 forwarders / 22 token edits in 8 properties** (§4.2) |
+| Host | one shared **43-member** computed Host: 12 `var`, 27 `val`, 4 `fun` (§5) |
+| initializer proofs | **8**, with 1 new narrow classifier form, `ShowShuffle()` (§3) |
+| cross-qualifications | owner→navigator `navigator.` **9**; navigator→owner `playbackStart.` **18** (compile-checked) |
+| receivers `this` → `activity` | **11**: Toast ×8, `AlertDialog.Builder(Context)` ×1, `DefaultDataSource.Factory(Context, …)` ×2; 0 excluded |
+| inherited pins | **9**: `isFinishing` ×4, `isDestroyed` ×4, `finish()` ×1 (must stay `invokevirtual`) |
+| substitutions | **≈ 265**: host ≈ 195, cross 27, `this` 11, inherited 9, visibility ≈ 22, 1 template brace |
+| reflective retargets | **61 quoted sites, 20 names, 13 test files**: 14 owner-map routes + 1 local `call` helper (`ShufflePlaybackFlowTest`); 0 binary-name |
+| Dart retargets | **2 anchors in 2 files** (file path; 1 marker loses `private`). Asserted text unchanged (§8) |
+| lifecycle | **2 in-place `onDestroy` patches** (scope cancel, generation bump); no `onStart`/`onStop`/`onPause`/`finish` edits |
+
+**Activity:** ≈ −902 + ≈ 75 (property + Host object) ≈ **−830**.
+
+**Risk: high.** Four guard protocols interleave across both files and three existing controllers:
+- `mediaPreparationGeneration`;
+- the shuffle attempt protocol;
+- the startup and manual source tokens;
+- the PikPak retry id.
+
+The bodies run lambdas from Flutter replies, a Main-dispatched coroutine with an IO hop, and `progressHandler`
+posts. Mitigations: there is no `Glide`, `findViewById`, `runOnUiThread` or object receiver; there is no new
+Handler; every guard keeps a single owner; existing suites already exercise most of the start path. See §11
+for the test gap.
+
+---
+
+### 2. Members (lines at `df439aed1`; attached comments included)
+
+**Owner `TvPlaybackStartController` (in original order):**
+
+| member | lines | notes |
+|---|---|---|
+| `mediaPreparationScope` | 824 | `CoroutineScope(Dispatchers.Main + SupervisorJob())`; **slot anchor** |
+| `mediaPreparationGeneration` | 825 | `0` |
+| `playItem` (+ `[suppressTrakt]` comment 3162–3164) | 3162–3256 | 4 params, 3 defaults |
+| `resolveAndPlay` | 3258–3344 | Flutter callback, guards |
+| `discoverProtectedMime` | 3346–3361 | coroutine with IO hop |
+| `startPlayback` | 3363–3404 | default `mimeDiscovered = false` |
+| `playMediaDirect` | 3406–3448 | |
+| `buildMergedSourceOrNull` (+ comment) | 3450–3479 | |
+| `buildMergedSource` (+ comment) | 3480–3497 | switcher Host forwarder |
+| `pendingShufflePlayback` | 3674 | `null`; shared with the navigator, so the owner keeps it |
+| `playPikPakVideoWithRetry` (+ section comment 4201–4203) | 4201–4258 | |
+| `updateStremioSourcesFromPlaybackMap` | 6810–6825 | |
+| `replacePayloadWithStremioTvItem` | 6827–6877 | |
+| `playStremioTvPlaybackMap` | 6879–6966 | |
+
+**Navigator `TvPlaybackNavigator`:**
+
+| member | lines |
+|---|---|
+| `shuffleBag`, `showShuffle`, `showShuffleGeneration` | 844–846 |
+| `playNext` | 3499–3549 |
+| `playPrevious` (KDoc) | 3551–3583 |
+| `updateCatalogEpisodeControls` (KDoc) | 3585–3601 |
+| `playRandom` | 3603–3614 |
+| `showRandomPlaybackDialog` | 3616–3654 |
+| `resetShuffle` | 3656–3663 |
+| `queuedShuffleGeneration`, `queuedShuffleNavigation` | 3675–3676 |
+| `shuffleAttemptCurrent`, `shuffleAttemptOwned`, `restoreShufflePreparation`, `failShufflePlayback` | 3678–3702 |
+| `shuffleWatchGeneration` | 3704 |
+| `watchShufflePlayback`, `clearQueuedShuffle` | 3706–3723 |
+| `yieldEpisodeFetchToQueuedShuffle` (+ comment) | 3725–3730 |
+| `canShuffleWholeShow` | 3732–3737 |
+| `playShowShuffle` (KDoc) | 3739–3819 |
+| `getShuffleEligibleIndices`, `pickShuffleIndex` | 3821–3858 |
+
+`playShowShuffle` has three local functions: `retryWhenIdle`, `fetchTarget` and `openPrepared(item)`. They
+move inside their body and are not members (§9, checker hazard 1).
+
+**Retained in the moved range:** `ShufflePlaybackAttempt` 3665–3673 (above).
+
+**Considered and kept activity-owned:**
+
+| field | why it stays |
+|---|---|
+| `protectedStreamClient` (823) | `setupPlayer` reads it twice; phase 19 decides; Host `val`, read on the IO thread |
+| `activeVodHeaders` (822, `@Volatile`) | a loader-thread reader is in `setupPlayer`; the Host `var` setter writes the same field (phase-8 precedent) |
+| `pendingSeekMs`, `percentSeekApplied`, `pendingItemTraktPercent` | resume machinery in `playbackListener` (6/6/6 reads) |
+| `isAutoAdvancing` | `playbackListener`, plus the Up Next and fetch Host `var`s |
+| `continuousShuffleEnabled` (843) | read by `onCreate`, `playbackListener`, `umPlaybackModel` ×5 and the Up Next Host. Moving it costs 7 patches + 1 re-point against 6 host substitutions; it is a launch/menu setting |
+| `customShuffleEpisodes` | written by `parsePayload` |
+| `sleepStopLatched` | plan rule; 8 outside readers/writers |
+| `stremioResolutionToken` | plan rule; bumped by the gate, switcher and fetch |
+| `hasEverBeenReady`, `maxStableDurationMs`, `lastRealPositionMs` | `playbackListener` and seek |
+| `currentIndex`, `payload` | everywhere |
+
+---
+
+### 3. Initializer timing (all-later-fields rule)
+
+The controller property sits at slot 824. The first initializer is `mediaPreparationScope` at its own slot,
+so it needs no proof.
+
+**Eager-construction position.** Pin the `val navigator = TvPlaybackNavigator(activity, host, this)` span in
+the owner after `pendingShufflePlayback`. That keeps the scope first.
+
+**Navigator construction contract:**
+- its constructor must not read `playbackStart` or `host`;
+- negative: a navigator initializer that reads the owner.
+
+Every other owned field now runs at slot 824. Each needs an exact inert proof:
+
+| field | original line | initializer | classifier form |
+|---|---|---|---|
+| `mediaPreparationGeneration` | 825 | `0` | literal (supported) |
+| `pendingShufflePlayback` | 3674 | `null` | literal (supported, phase 16) |
+| `shuffleBag` | 844 | `mutableListOf<Int>()` | typed empty factory (phase 5) |
+| `showShuffle` | 845 | `ShowShuffle()` | **new**, see below |
+| `showShuffleGeneration` | 846 | `0` | literal |
+| `queuedShuffleGeneration` | 3675 | `null` | literal |
+| `queuedShuffleNavigation` | 3676 | `null` | literal |
+| `shuffleWatchGeneration` | 3704 | `0` | literal |
+
+**New form: a zero-argument constructor of one reviewed project class, `ShowShuffle`** (`ShowShuffle.kt`, 29
+lines). Its default parameter reads the stdlib singleton `Random.Default`. Its only field initializer is
+`mutableSetOf<ShuffleEpisode>()`. It reads no app state and has no side effects.
+
+**Negatives:**
+- `ShowShuffle(Random(1))`;
+- another project class;
+- a class whose initializer reads state.
+
+**Alternative:** keep `showShuffle` activity-owned behind a Host `val` (2 host substitutions, 7 proofs). This
+is not recommended, because it leaves a shuffle-only object outside its owner.
+
+**Variant: borrowed scope.** Keep `mediaPreparationScope` in the activity. The slot is then 825, there are 7
+proofs, the `onDestroy` cancel needs no patch, and the Host gains a `val` (44 members). Recommended: **owned**.
+The scope has a single user, and owning it is the phase-3 skip-scope precedent. It costs 1 in-place patch and
+1 owner-map route (3 test cleanup sites).
+
+---
+
+### 4. Inbound references
+
+#### 4.1 Activity patches: 17 in 5 declarations
+
+Prefixes: `playbackStartController.` (owner) and `playbackStartController.navigator.` (navigator).
+
+| declaration (line) | lines | edits | later owner |
+|---|---|---|---|
+| `playbackListener` (1540) | 1557 ×2, 1780, 1781, 1787, 1799, 1858, 1859 (**8**) | `pendingShufflePlayback` ×3 (READY clear, `onPlayerError` probe) → owner; `playShowShuffle(autoAdvance = true)` (named argument kept), `pickShuffleIndex()`, `failShufflePlayback()` → navigator; `playItem(shuffleIndex)` / `playItem(nextIndex)` inside the 1500 ms `progressHandler.postDelayed` lambdas → owner | ROUTERS (permanent) |
+| `onCreate` (2055) | 2193, 2226 (**2**) | `updateCatalogEpisodeControls()` after `initStremioTvGuide` → navigator; final `playItem(currentIndex)` → owner | lifecycle (permanent) |
+| `handleMetadataUpdate` (2291) | 2366 (**1**) | `updateCatalogEpisodeControls()` inside `runOnUiThread` → navigator | phase 19 (START-B) |
+| `umPlaybackModel` (6031) | 6063 ×2, 6069, 6074 (**4**) | `resetShuffle()` ×2, `playRandom()` ×2 → navigator. `continuousShuffleEnabled` is unchanged (it stays) | UM remainder (permanent) |
+| `onDestroy` (6640) | 6644, 6645 (**2**) | `mediaPreparationScope.cancel()` and `mediaPreparationGeneration++` → owner, **in place**, in order, before `sourceBrowser?.destroy()` | lifecycle (permanent) |
+
+**Zero references from:** `dispatchKeyEvent`, `onStart`, `onStop`, `onPause`, `finish`, `sendFinished`,
+`parsePayload`, `initIptvMode`, `setupPlayer` and every TUNE member.
+
+#### 4.2 Host re-points: 21 forwarders, 22 token edits, 8 whole-property `patched` rows
+
+Each target becomes `this@AndroidTvTorrentPlayerActivity.playbackStartController[.navigator].x`. The frozen
+Host interfaces do not change.
+
+| line | property | forwarders → new target |
+|---|---|---|
+| 175, 176, 178 | `upNextController` | `canShuffleWholeShow()`, `pickShuffleIndex()` → navigator; `playItem(index)` → owner (**3**) |
+| 191 | `playlistController` | `playItem(index)` → owner (**1**) |
+| 303, 304, 311, 318 | `controlsDockController` | `playNext`, `playPrevious`, `showRandomPlaybackDialog`, `updateCatalogEpisodeControls` → navigator (**4**) |
+| 1127, 1132 | `startupGateController` | `mediaPreparationGeneration` (`val`, read **live** at fire time by the PikPak reprepare guard) → owner; `playItem(index, suppressTrakt)` → owner (**2**) |
+| 1243 | `stremioTvGuideController` | five-argument `playStremioTvPlaybackMap(…, hideGuideOnReady)` → owner (**1**) |
+| 1406, 1411 | `pikPakRetryController` | `failShufflePlayback()`, `playNext()` → navigator (**2**) |
+| 6196, 6197 | `sourceFetchController` | `watchShufflePlayback(attempt)`, `yieldEpisodeFetchToQueuedShuffle()` → navigator (**2**) |
+| 6209, 6217, 6238/6239, 6252, 6262, 6279 | `sourceSwitchController` | `buildMergedSource`, `discoverProtectedMime` → owner; `mediaPreparationGeneration` `var` get+set (**2 tokens**; the applier's `host.mediaPreparationGeneration++`) → owner; four-argument `playItem` → owner; `shuffleBag` → navigator; `updateCatalogEpisodeControls` → navigator (**6 forwarders / 7 tokens**) |
+
+**Unchanged in those Hosts:**
+- `continuousShuffleEnabled` (Up Next);
+- `isAutoAdvancing` (Up Next and fetch);
+- `stremioResolutionToken` (gate, fetch and switcher);
+- `activeVodHeaders` (switcher);
+- `percentSeekApplied`, `currentIndex` and `currentStremioSourceIndex`.
+
+The earlier destination files stay byte-identical.
+
+---
+
+### 5. Outbound Host (one shared 43-member Host, computed, explicitly qualified)
+
+Both classes use `TvPlaybackStartController.Host`. It is declared in the owner file and implemented by an
+`object` inside the activity property. Every forwarder is computed (`get() = this@AndroidTvTorrentPlayerActivity.x`).
+None is read during construction. Reference counts are owner / navigator.
+
+| kind | members (refs owner / navigator) |
+|---|---|
+| state `var` (12) | `currentIndex` (14/5; written by `playItem`, the `restorePreparation` lambda and `replacePayload…`), `isAutoAdvancing` (4/4), `sleepStopLatched` (4/1), `activeVodHeaders` (3/–; **@Volatile**, the setter writes the same field), `currentStremioSourceIndex` (6/–), `continuousShuffleEnabled` (–/6), `hasEverBeenReady` (2/–), `pendingSeekMs` (2/–), `pendingItemTraktPercent` (2/–), `maxStableDurationMs` (1/–), `lastRealPositionMs` (1/–), `percentSeekApplied` (1/–) |
+| state `val` (14) | `payload` (13/8), `stremioSources` (5/–; `clear`/`add` through the getter), `stremioResolutionToken` (4/–; captured, then read **live** in the callback and coroutine), `player` (4/–), `subtitleTrackReadiness` (4/–), `progressHandler` (–/4; borrowed), `isIptvMode` (1/2), `isStremioTvMode` (–/3), `hasPlaylistResolver` (–/5), `hasAdjacentEpisodeResolver` (–/2), `customShuffleEpisodes` (–/2), `stremioSourceBadge` (2/–), `ottSkinInstalled` (1/–), `protectedStreamClient` (1/–; **read inside `withContext(Dispatchers.IO)` → the getter runs on the IO thread, as the original field read did; it must not snapshot**) |
+| lateinit view `val` (1) | `subtitleOverlay` (1/–; `setCues(emptyList())` in the PikPak path, read at call time) |
+| cross-feature getters (12) | `startupGateController` (16/1), `pikPakRetryController` (8/1), `playlistController` (2/7), `subtitleSourcesController` (7/–), `sourceFetchController` (–/7), `stremioTvGuideController` (3/2), `sourceSwitchController` (3/–), `upNextController` (1/1), `controlsDockController` (1/1), `skipSegmentController` (1/–), `statusPillController` (–/1), **`controlsOverlayController`** (6/–: the phase-16 `setResolvingState` ×2, `.identity.updateTitle` ×3 and `.identity.ottShowName = null`) |
+| functions (4) | `releaseResumeHold()` (2/–), `restartProgressUpdates()` (2/–), `hideBufferingIndicator()` (1/–), `guideAdjacent(model, currentItem, direction)` (–/3). The last is a **three-parameter shape**: the activity default `allowResolverFallback = false` is still evaluated at the activity call. There is no interface default (plan rule) |
+
+**Must not be Host members** (negatives; a same-name member would let a missed qualification compile):
+- `playItem`, `updateCatalogEpisodeControls`, `pendingShufflePlayback`, `mediaPreparationGeneration`,
+  `mediaPreparationScope`;
+- `shuffleAttemptCurrent`, `watchShufflePlayback`, `restoreShufflePreparation`, `failShufflePlayback`,
+  `shuffleBag`.
+
+**Top-level calls resolve unchanged:** `requestStreamFromFlutter`, `requestQuickPlayNextEpisode`,
+`startupLog`, `isCurrentStartupGeneration`, `buildProtectedMediaOrigins`, `updateStremioTvGuideChannelData`,
+`ProtectedStreamHttp.*` and `PROVIDER_PIKPAK`.
+
+**Every collaborator member used is already non-private.** The frozen files need no edit. Examples:
+`pikPakRetryId`/`Count`/`isPikPakRetrying`/`attemptPikPakPlaybackLoop`/`hidePikPakRetryOverlay` are
+`internal`; `cancelPikPakRetry`, `dropStaleSourceSwitchFeedback`, `setupStremioSources`, `resetSubtitleState`,
+`fetchStremioSubtitles`, `clearStremioLoadingState`, `hideGuideWhenReady`, `stremioTvChannelAdapter` and
+`stremioTvChannels` are public.
+
+---
+
+### 6. Guards and tokens: owner after the move
+
+| guard | owner after phase 18 | writers | readers |
+|---|---|---|---|
+| `mediaPreparationGeneration` | **playback start (owner)** | `playItem` `++`, `discoverProtectedMime` `++`, applier via the switcher Host `var` (re-pointed), `onDestroy` `++` (in place) | `resolveAndPlay` capture + callback check; `discover` coroutine; navigator ×7 via `playbackStart.`; gate Host `val` at reprepare fire time; 13 test sites |
+| `pendingShufflePlayback` | **owner** (shared: owner 7, navigator 6, listener 3) | `playItem` (null), `startPlayback` (null on stale), navigator `watch`/`fail`/`reset`, listener READY (null) | `resolveAndPlay` capture, `discover` capture, `playMediaDirect`/PikPak `mediaStarted = true` (inside `player?.apply {}`, unqualified, owner-owned), listener `onPlayerError` |
+| `showShuffleGeneration` | **navigator** | `resetShuffle` `++` | `shuffleAttemptOwned`, `yield…`, `playShowShuffle` ×4; 5 test sites |
+| `shuffleWatchGeneration` | navigator (private) | `watchShufflePlayback` | its 15 s callback |
+| `queuedShuffleGeneration` / `…Navigation` | navigator | `playShowShuffle`, `clearQueuedShuffle`, `resetShuffle` (generation only) | `yield…` (fetch Host), the 50 ms `retryWhenIdle` poll |
+| `stremioResolutionToken` | **activity** (Host `val` here) | gate, switcher, fetch (their Host `var`s) | `resolveAndPlay` manual token (captured + live), `discover` source token (captured + live in the coroutine) |
+| startup generation (`startupFailoverGeneration`) | **gate controller** (phase 9) | gate | `resolveAndPlay` via `host.startupGateController.` (captured + live via `isCurrentStartupGeneration`) |
+| manual token (`manualSourceSwitchIndex`/`Snapshot`) | gate | gate | `resolveAndPlay` (captured index; snapshot/index/token re-checked in the callback) |
+| `sleepStopLatched` | **activity** (Host `var`) | `playItem` (`false` on a manual pick); sleep Host, `togglePlayPause`, `onStart` | `playItem`, `startPlayback` (last gate), `discover` coroutine, `shuffleAttemptOwned` |
+| `pikPakRetryId` | PikPak controller (phase 10) | `playPikPakVideoWithRetry` `++` through `host.pikPakRetryController.` | the attempt loop |
+| `activeVodHeaders` (`@Volatile`) | **activity** | `playItem` ×2 (incl. the restore lambda), `startPlayback`, applier | `setupPlayer` factory on the loader thread (unchanged field) |
+
+**Behaviours to preserve exactly:**
+
+1. **`playItem` order:** shuffle-attempt check, then restore-lambda capture, `pendingShufflePlayback = null`,
+   `++generation`, `attempt.navigation = …` + `watch`, sleep gate (auto: consume and return; manual: clear
+   latch), payload/bounds, `dropStaleSourceSwitchFeedback`, ready/duration/position resets,
+   `hideBufferingIndicator`, `hideUpNextCard`, `resetSkipSegmentState`, `cancelPikPakRetry`, `currentIndex`,
+   `updateCatalogEpisodeControls`, `activeVodHeaders`, auto-advance consume, `releaseResumeHold`,
+   `pendingSeekMs`/`pendingItemTraktPercent`, then resolve or start.
+2. **`discoverProtectedMime`** bumps the generation itself and rebinds the shuffle attempt's navigation.
+3. **`startPlayback`** writes `activeVodHeaders` before the sleep gate.
+4. **The PikPak path:**
+   - no `setMimeType` and no `playWhenReady`;
+   - it returns early on a null player, before `setCues`;
+   - it never uses the merged source.
+5. **Resolve failure ladder:** shuffle fail, then manual, then startup, then Toast.
+
+---
+
+### 7. Timers, handlers, coroutines and teardown
+
+**No owned Handler and no `Runnable` object.** All posts use the **borrowed** `progressHandler`:
+
+| post | site |
+|---|---|
+| `failShufflePlayback` `post { onUnavailable }` | navigator |
+| `watchShufflePlayback` `postDelayed(…, 15000)` | navigator |
+| `playShowShuffle` 50 ms `retryWhenIdle` polls (recursive local function) | navigator |
+
+These are Kotlin lambdas. There is no `this` self-receiver to exclude.
+
+**Coroutine.** `mediaPreparationScope.launch { withContext(Dispatchers.IO) { discoverMimeType(host.protectedStreamClient, …) }; guards…; ready(…) }`.
+
+**Teardown.** It is unchanged. Two `onDestroy` statements are patched in place:
+- 6644 `mediaPreparationScope.cancel()`;
+- 6645 `mediaPreparationGeneration++`.
+
+The wholesale `progressHandler.removeCallbacksAndMessages(null)` (activity, unchanged) still kills the shuffle
+watchdog and the queued polls.
+
+**Pinned as-is:**
+- `requestStreamFromFlutter` callbacks carry no lifecycle guard. They rely on the generation, shuffle and
+  token checks;
+- `stremioTvSwitchToken` is not bumped on destroy (phase-7 follow-up).
+
+**Lambda capture lifetime.** The `restorePreparation` lambda now captures the controller (`host`) instead of
+the activity. The two have equal lifetime.
+
+---
+
+### 8. Reflection and Dart anchors
+
+#### 8.1 Reflective sites: 61 quoted occurrences, 20 names, 13 files
+
+**Methods (25 sites):**
+
+| name | sites / files | access path | required visibility |
+|---|---|---|---|
+| `playItem` | 2: `TvPhase3WiringCharacterizationTest`, `TvPikPakRetryCharacterizationTest` | `callTyped` (4-argument types incl. `ShufflePlaybackAttempt`) | **public** (the activity calls it) |
+| `resolveAndPlay` | 1: `TvPhase9OriginalTest` (`lazyResolve`) | `callTyped` | private (unmangled) |
+| `playMediaDirect`, `playPikPakVideoWithRetry` | 1 each: `TvSubtitleSourcesLifecycleCharacterizationTest` | `callTyped` | private |
+| `playStremioTvPlaybackMap` | 1: `TvPikPakRetryCharacterizationTest` | `callTyped` | **public** |
+| `playNext` | 1: `TvStremioTvGuideWiringCharacterizationTest` (`invoke`) | `callTyped` | **public** |
+| `playShowShuffle` | 1: `TvEpisodeFetchCharacterizationTest` (`Set`, `boolean`) | `callTyped` | **public** |
+| `watchShufflePlayback` 6, `yieldEpisodeFetchToQueuedShuffle` 5, `clearQueuedShuffle` 3, `failShufflePlayback` 1, `shuffleAttemptCurrent` 1, `resetShuffle` 1 | 17: `ShufflePlaybackFlowTest` | **its own local `call` helper** (`activity.javaClass.declaredMethods.first { name && parameterCount }`) | public, except `clearQueuedShuffle`, which stays private |
+
+**Fields (36 sites).** All go through `TvPlayerOriginalAccess.field`/`set` and its owner map:
+- `mediaPreparationGeneration`: 13 sites in 7 files (Phase8 1, EpisodeFetch 2, StartupGateTiming 1 — it
+  appears dynamically in `listOf(guard…)`, PikPak 1, SwitchApply 3, UpNext 3, ShuffleFlow 2);
+- `queuedShuffleGeneration` 6 and `queuedShuffleNavigation` 5 (EpisodeFetch, ShuffleFlow);
+- `showShuffleGeneration`: 5 sites in 4 files;
+- `pendingShufflePlayback`: 3 sites (EpisodeFetch, PikPak);
+- `mediaPreparationScope`: 3 cleanup sites (Phase5, Phase8, SwitchMime);
+- `shuffleBag`: 1 (SwitchApply).
+
+`ShuffleFlow`'s `field()` already delegates to `TvPlayerOriginalAccess.set` (phase 10).
+
+**Routing.**
+- **14 owner-map routes in `TvPlayerControllerOwners`:**
+  - `playbackStartController`: `playItem`, `resolveAndPlay`, `playMediaDirect`, `playPikPakVideoWithRetry`,
+    `playStremioTvPlaybackMap`, `mediaPreparationGeneration`, `mediaPreparationScope`, `pendingShufflePlayback`;
+  - `playbackStartController.navigator`: `playNext`, `playShowShuffle`, `queuedShuffleGeneration`,
+    `queuedShuffleNavigation`, `showShuffleGeneration`, `shuffleBag`.
+- **`ShufflePlaybackFlowTest`'s local `call` helper** gains one `when` branch. The six shuffle names resolve
+  the owner through `TvPlayerOriginalAccess.field(activity, "playbackStartController")`, then `navigator`,
+  exactly like the watchdog test's helper.
+- **Its `attempt()` helper does not change** (`declaredClasses` on the activity, 7-parameter constructor),
+  because the type stays nested.
+
+**Public-function pins** (unmangled reflected members of an internal class): `playItem`,
+`playStremioTvPlaybackMap`, `playNext`, `playShowShuffle`, `watchShufflePlayback`,
+`yieldEpisodeFetchToQueuedShuffle`, `failShufflePlayback`, `shuffleAttemptCurrent` and `resetShuffle`
+(**9**). Private-and-reflected functions keep their names: `resolveAndPlay`, `playMediaDirect`,
+`playPikPakVideoWithRetry` and `clearQueuedShuffle`. Rescan after step 0 adds accesses.
+
+**The watchdog test (`StremioTvStartupWatchdogTest`) touches no phase-18 name: 0 sites.** Neither do the
+`TvPhase9BytecodeAccess` and `TvPlaylistBytecodeAccess` teardown readers: their filtered event streams ignore
+the scope and generation statements.
+
+**Helper size.** `TvPlayerControllerOwners.kt` is **650 lines** (643 routes, one per line) at `df439aed1`.
+Phases 16 (34+ names plus step-0 additions) and 17 will add routes first. Measure it at phase-18 step T. If
++14 (plus step-0 additions) would cross 800, split the route table first (phase-13 precedent: an exit
+milestone before any new route).
+
+#### 8.2 Dart anchors (2 retargets, 1 patched range)
+
+**`test/android_tv_auto_advance_resume_test.dart`**
+- Current anchor: `_between(nativePlayer, 'private fun playItem(', 'private fun resolveAndPlay(')`.
+- **Retarget:** set the file to `TvPlaybackStartController.kt` (the activity variable is used only here, so
+  change its path rather than adding a variable, or the analyzer reports an unused local). Change the start
+  marker to `'fun playItem('`, because `playItem` becomes public for reflection. The end marker
+  `'private fun resolveAndPlay('` is unchanged; it stays private.
+- **Asserted text is unchanged:**
+  - `if (autoAdvance || suppressResume) 0L else item.resumePositionMs`;
+  - `if (autoAdvance || suppressTrakt || suppressResume) 0.0`.
+
+  Both are RHS expressions of local/parameter names. Host qualification only touches `host.pendingSeekMs =` /
+  `host.pendingItemTraktPercent =` on the preceding line.
+- **Ordering is preserved** by the verbatim move: `playItem` comes before `resolveAndPlay`, which comes before
+  `startPlayback`.
+- **Strength:** to stay "equal-or-stronger" despite the shorter marker, add `expect(indexOf == lastIndexOf)`
+  for `'fun playItem('`, so the marker is unique. Otherwise the assertion is unchanged.
+
+**`test/manual_source_validation_contract_test.dart`**
+- Current anchor: `_between(nativePlayer, 'private fun resolveAndPlay(', 'private fun startPlayback(')`.
+- **Retarget:** add a `nativePlaybackStart` File. Both markers are unchanged, because both functions stay
+  private.
+- **Asserted text is unchanged:**
+  - `reason=stale_manual_token` (a string literal);
+  - `failManualSourceCandidate("initial-resolve")`, which is still a substring of
+    `host.startupGateController.failManualSourceCandidate("initial-resolve")`.
+
+  You may strengthen the second to the host-qualified form.
+- **The whole-file `nativePlayer` checks stay on the activity:** `result["startupSourcesExhausted"] = true`
+  (`sendFinished` 6128), `"sourcePersistenceSessionId" to sourcePersistenceSessionId` (2649/4186/6125,
+  incl. `reportValidatedSourceCommit` — retained) and `payloadCheck.optInt(…)` (2129). None of them is in moved
+  code.
+
+**`test/android_tv_mdblist_progress_source_test.dart`.** The `// Handle episode metadata updates` →
+`private fun requestMetadataFromFlutter()` range contains the 2366 patch. Its asserted texts
+(`hasWatchedUpdate`, `mergeLateMetadata*`, …) are unaffected, so there is **no retarget**.
+
+**No other Dart test** names a phase-18 member. `NativeAudioRoutingTest` (`setupPlayer`) and
+`profile_source_guard_test` (no `tv/` scans) are unaffected.
+
+---
+
+### 9. Hazards for step T
+
+1. **Local functions** inside `playShowShuffle` (`retryWhenIdle`, `fetchTarget`, `openPrepared`) must classify
+   as body content, not as members needing fates. Verify that the PSI adapter does this. Add a positive
+   fixture, plus a negative that substitutes inside one of them without declaring it.
+2. **Injected-reference names (naming-collision rule).**
+   - Moved locals and parameters include: `navigation` (resolveAndPlay, playShowShuffle), `generation`,
+     `current`, `model`, `item`, `index`, `attempt`, `target`, `map`, `title`, `url`, `channel`, `provider`,
+     `shuffleAttempt` and `startupGeneration`.
+   - `ShufflePlaybackAttempt` also has properties `navigation`, `generation`, `finished`, `mediaStarted` and
+     `restorePreparation`.
+   - So the references must **not** be called `navigation`/`generation`. **`navigator`** (owner→collaborator)
+     and **`playbackStart`** (collaborator→owner) are verified collision-free against every local, parameter
+     and Host member. Name the owner property `playbackStartController`. The owner-map paths
+     `playbackStartController[.navigator]` do not clash with `playlistController.navigator`.
+   - Negatives: a `navigation`-named reference captured by the `resolveAndPlay` local, and a missed
+     `playbackStart.` qualification compiled against a same-name Host member.
+3. **Receiver lambdas.** Pin `player?.apply { setMediaSource / setMediaItem / prepare() / playWhenReady =
+   true / play() }` ×3 (playMediaDirect, PikPak, trio). ExoPlayer members are never substituted. Inside them,
+   `host.subtitleTrackReadiness.onMediaReplacement()` is substituted, and the owner-owned
+   `pendingShufflePlayback?.mediaStarted = true` stays unqualified. The `payload?.let { model -> … }` block in
+   `replacePayload…` writes `host.currentIndex = 0`.
+4. **Templates.** One unbraced host reference: 3293
+   `current=$stremioResolutionToken` → `current=${host.stremioResolutionToken}`. Two already-braced inner
+   substitutions: 3301 and 3305 `${startupGateController.startupFailoverGeneration}` → `${host.startupGateController…}`.
+   All other templates use locals.
+5. **Labels.** `return@requestStreamFromFlutter` ×6 (5 in resolveAndPlay, 1 in playShowShuffle) and
+   `return@discoverProtectedMime` ×1 (startPlayback) stay unchanged. Negative: a label rewrite.
+6. **Default arguments are evaluated at call time:**
+   - `playItem`: 3 constants; the activity's 2 retained callers now dispatch `playItem$default` on the
+     controller;
+   - `startPlayback(mimeDiscovered = false)`;
+   - `playShowShuffle(emptySet(), false)`; the listener's named `autoAdvance = true` is kept;
+   - Host `guideAdjacent` 3-parameter shape.
+
+   Named-argument labels (`suppressResume =`, `shuffleAttempt =`, `onUnavailable =`, `direction = -1`, the
+   `PlaybackItem(title =, url =, index =, …)` labels) are never substituted.
+7. **Off-main Host read.** `host.protectedStreamClient` runs on `Dispatchers.IO`, the same thread as the
+   original field read. It must stay computed. Negative: a snapshotting forwarder.
+8. **Volatile write path.** `activeVodHeaders` is written through the Host setter to the same `@Volatile`
+   field. Re-use the phase-8 bytecode check (`ACC_VOLATILE`, setter target).
+9. **`finish()` in `playNext`** (quick-play hand-back) becomes `activity.finish()`. It must compile to
+   `invokevirtual` so the activity override runs (progress and `sendFinished`). This is the phase-9 pin.
+10. **Overload audit (11 sites):**
+    - `Toast.makeText(Context, CharSequence, int)` ×8, at resolveAndPlay 3328, playNext 3543/3546, playPrevious
+      3582, playRandom 3607, showRandom 3619/3643/3647; the dialog toasts are inside the `setItems` lambda,
+      whose `this` is the activity;
+    - `androidx.appcompat.app.AlertDialog.Builder(Context)` 3630;
+    - `DefaultDataSource.Factory(Context, DataSource.Factory)` 3464, 3487.
+
+    Inherited getters: `isFinishing`/`isDestroyed` ×4 each (3357, 3682, 3730, 3753); `finish()` 3541.
+11. **Media3 opt-in.** The owner needs class-level `@OptIn(UnstableApi::class)` (androidx). The navigator has
+    none. The lint `UnsafeOptInUsageError` set must be unchanged, with moved locations mapped back (phase-14/15
+    method).
+12. **Smart casts.** None of the moved code relies on smart-casting an activity property (it uses locals,
+    `!!`, `?.` and elvis). The compile confirms this.
+13. **Imports.** Both destinations pin
+    `import com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`. The activity's imports
+    stay frozen.
+
+---
+
+### 10. File split, sizes and counts
+
+| file | member lines | estimated file | contents |
+|---|---|---|---|
+| `TvPlaybackStartController.kt` | 554 | **≈ 650** (≈ 35 imports, header, 43-line Host interface, navigator construction) | start pipeline + PikPak start + Stremio TV trio; Host interface |
+| `TvPlaybackNavigator.kt` | 351 | **≈ 385** | next/prev/catalog controls/random dialog + the full shuffle protocol |
+
+Both are under 800, so no size exception is needed. A three-way split (Stremio TV trio as its own sibling,
+≈ 170) is possible but unnecessary.
+
+**Substitutions (≈ 265):**
+
+| kind | count |
+|---|---|
+| host | ≈ 195 (owner 125, navigator 70) |
+| cross-file | 27 (`navigator.` ×9: `shuffleAttemptCurrent` 4, `updateCatalogEpisodeControls` 2, `watch`, `restore`, `fail`; `playbackStart.` ×18: `mediaPreparationGeneration` 7, `pendingShufflePlayback` 6, `playItem` 5) |
+| `this` → `activity` | 11 |
+| inherited | 9 |
+| visibility | ≈ 22 (below) |
+| template brace | 1 |
+
+Visibility changes:
+- owner: `playItem`, `playStremioTvPlaybackMap` → public; `discoverProtectedMime`, `buildMergedSource` and
+  three fields → internal;
+- navigator: 7 public; `playPrevious`, `updateCatalogEpisodeControls`, `playRandom`,
+  `showRandomPlaybackDialog`, `restoreShufflePreparation`, `canShuffleWholeShow`, `pickShuffleIndex` and
+  `shuffleBag` → internal.
+
+**Other counts:**
+- activity: **17 patches / 5 declarations**, **22 Host token edits / 8 property rows**, 1 slot-anchored
+  `added` property (+ Host object, ≈ 75 lines), 0 readiness getters (no `::x.isInitialized` in moved code);
+- **8 inert proofs** (1 new form);
+- compiled audit: 11 receiver/constructor + 9 inherited sites;
+- reflective: 14 routes + 1 local helper branch + 9 public pins;
+- Dart: 2 file retargets (1 marker).
+
+---
+
+### 11. Risk, test gap and step-0 needs
+
+**Existing coverage (it exercises the path, but is not a characterization of this unit):**
+
+| suite | covers |
+|---|---|
+| `ShufflePlaybackFlowTest` (7) | timeout / fail / reset routing |
+| Phase-3 wiring | `playItem` reset order |
+| Phase-8 suites | switch apply ↔ shuffle, loopback MIME probe, `shuffleBag` clear |
+| Phase-9 `lazyResolve` | stale resolve callbacks |
+| Phase-10 PikPak and episode fetch | `playItem` cancels retry, queued shuffle yield, `playShowShuffle` one case |
+| Phase-7 | trio success, Next with no wait |
+| Phase-14 | subtitle lifecycle via `playMediaDirect` / PikPak |
+| Phase-15 dock click | "End/Beginning of playlist", "Shuffle Playback" dialog |
+| Up Next | auto-advance gate |
+
+**Gaps (medium-high):**
+- the `playNext` fallback ladder: shuffle → index → Stremio TV → guide fetch → adjacent → quick-play
+  `finish` → Toast;
+- `playPrevious` (`suppressResume`, guide/adjacent fetch, Toast);
+- the `updateCatalogEpisodeControls` visibility matrix;
+- `pickShuffleIndex` bag semantics and `getShuffleEligibleIndices` per `PlaylistMode` (SERIES / COLLECTION
+  "Main" group / fallback);
+- `canShuffleWholeShow`;
+- `playShowShuffle` branches: queued-while-fetching, 50 ms polls and their three cancel conditions, the
+  3-attempt cap pill, resolve-before-index, `openPrepared` / `fetchTarget` / `onUnavailable`;
+- `resolveAndPlay`: each guard independently, plus the failure ladder;
+- every `discoverProtectedMime` guard (generation, source token, shuffle, `isFinishing`, `isDestroyed`,
+  sleep) and its navigation rebind;
+- `startPlayback` (stale-shuffle restore, MIME re-entry with current-item URL check, PikPak detection by
+  provider case-insensitively vs URL substring, sleep gate after the header write);
+- `buildMergedSourceOrNull` / `buildMergedSource` (null inputs, exception fallback);
+- `replacePayload…` field mapping and `updateStremioSources…` index clamp + badge OTT/classic;
+- the two `onDestroy` statements in order.
+
+There are **84 `if` / 56 `return` / 1 `when` sites**, so run the statement-level coverage sweep from the start.
+
+**Prerequisites, each demonstrated on the original:**
+1. The existing fake Flutter messenger, with paired inline / queued / worker replies for
+   `requestTorrentStream`.
+2. The phase-8 bounded loopback MIME probe, with a scope barrier, to hold the coroutine between the IO return
+   and the guard check.
+3. A recording player probe that sees `setMediaSource` vs `setMediaItem`, `playWhenReady` and MIME.
+4. The phase-14 dialog harness for `showRandomPlaybackDialog`.
+5. **Shuffle randomness.** `shuffled()` and `ShowShuffle` use `Random.Default`. Assert the bag/visited
+   invariants (exhaustion before repeat, exclusion of current and attempted, a size-1 shortcut) by seeding
+   `shuffleBag` reflectively, rather than asserting an order. If a deterministic observation is impossible,
+   record that sub-feature's assertions as invariant-only before moving.
+
+**Sampling.** Claude's independent sample must reach ≥ 75 %, or the sweep and a second sample run first
+(phase-11 lesson).
+
+**Scope recommendation: proceed with the full START-A unit as phase 18** (owner + navigator, ≈ 902 lines).
+Do not split start and shuffle: it would add ≈ 23 temporary edits and a second re-point round. Keep
+`ShufflePlaybackAttempt`, `continuousShuffleEnabled`, `protectedStreamClient` and `activeVodHeaders` in the
+activity. Re-measure on the phase-17 merge, after phase 16's −1,161 / phase 17's −732 shifts. Phase 19
+(START-B) then inherits one patch: `handleMetadataUpdate`'s `updateCatalogEpisodeControls`. It also inherits
+the `protectedStreamClient` / `activeVodHeaders` ownership decision.
