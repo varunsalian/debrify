@@ -252,6 +252,8 @@ def receiver_lambda_transformations(manifest, original, unit, nodes, moved):
     expected, offsets = [], []
     for site in unit['all_this_sites']:
         constructors = ('EditText', 'ListView') if manifest['phase'] >= 14 else ('EditText',)
+        if manifest['phase'] >= 17:
+            constructors += ('TextView',)
         callee = next((c for c in constructors if site.get('lambda_receiver') == c + '(this)'), None)
         if callee is None:
             continue
@@ -329,8 +331,14 @@ def reference_inventory(manifest, original, unit, nodes, moved):
 
 
 def check_special_bindings(manifest, original, current, units, nodes, moved):
-    if manifest['phase'] >= 16:
+    for row in moved.values():
+        if row['destination'] in nodes and row['target'] not in nodes[row['destination']]:
+            raise ValueError('missing declaration: '+row['target'])
+    if manifest['phase'] == 16:
         from kotlin_overloads_phase16 import validate
+        validate(manifest, original, current, units, nodes, moved)
+    elif manifest['phase'] >= 17:
+        from kotlin_overloads_phase17 import validate
         validate(manifest, original, current, units, nodes, moved)
     if manifest['phase'] >= 15:
         find_assignment_inventory(manifest, original, current, units, nodes, moved)
@@ -588,16 +596,21 @@ def main():
         manifest = json.loads(args.manifest.read_text())
         original = subprocess.check_output(['git', '-C', str(k.ROOT), 'show', manifest['base'] + ':' + manifest['source']], text=True)
         current = {path: (args.tree / path).read_text() for path in manifest['destinations']}
+        if manifest['phase'] >= 17:
+            current[manifest['source']] = (args.tree / manifest['source']).read_text()
         results = audit(manifest, original, current, bytecode(args.original_classes), bytecode(args.moved_classes))
         view_results, constant_results = [], []
         if manifest['phase'] >= 15:
             before, after = typed_bytecode(args.original_classes), typed_bytecode(args.moved_classes)
             view_results = audit_view_bindings(manifest, original, current, before, after)
             constant_results = audit_constant_inlining(manifest, original, before, after)
-            if manifest['phase'] >= 16:
+            if manifest['phase'] == 16:
                 from kotlin_overloads_phase16 import audit as audit_retained, field_declarations
                 view_results += audit_retained(manifest, original, current, before, after,
                     field_declarations(args.original_classes), field_declarations(args.moved_classes))
+            elif manifest['phase'] >= 17:
+                from kotlin_overloads_phase17 import audit_compiled
+                view_results += audit_compiled(manifest, original, current, args.original_classes, args.moved_classes)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(dict(sites=len(results), preserved_receivers=len(manifest.get('preserved_receivers', [])), function_references=len(manifest.get('function_references', [])), listener_receivers=len(manifest.get('listener_receivers', [])), results=results, find_view_assignments=len(view_results), view_results=view_results, constant_inlining=constant_results), indent=2) + '\n')
         print(f'PASS: {len(results)} reviewed receiver call sites; pinned JVM invocations' +

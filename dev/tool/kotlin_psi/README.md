@@ -15,3 +15,11 @@ Unknown declaration types and PSI syntax errors fail closed. Comments and every
 line break outside literal/comment tokens are retained; literal contents are exact.
 The Python checker partitions only explicitly split class bodies. All other
 subtrees are compared whole and their descendant ownership is validated.
+
+Phase 17 also records exact property delegate text and the syntax of the
+standard trailing-lambda lazy allocation. Its receiver inventory adds the
+implicit Activity `addContentView` call inside `TextView.apply`; the view's
+inner `this` expressions remain separately inventoried and unchanged. The
+compiled auditor checks the inherited virtual owner, descriptor and opcode,
+borrowed volatile Host accessors, deferred constructors, and earlier binding
+and identity pins. Historical phase inventories retain their existing filters.

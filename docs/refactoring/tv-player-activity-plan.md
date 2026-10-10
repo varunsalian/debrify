@@ -1866,6 +1866,89 @@ controls dock show/hide/auto-hide while playing and paused in each skin,
 play/pause from the dock and remote, cinema scrub seeking (hold/release,
 cancel), title/OTT identity text, the Next overlay during auto-advance.
 
+## Phase 17 — IPTV tune pipeline, HLS→TS twin trial, strict-TS, live recovery wiring
+
+Branch `refactor/tvplayer-p17` off the phase-16 merge. Evidence under
+`refactor-evidence/tvplayer/p17/`. Inventory: "Phase 17 inventory" in the deps
+report (measured at `ce3ddfb06`; re-measure on the phase-16 merge). All
+collaborator rules from phases 3–16 apply; statement-level coverage sweep
+from the start; the ≥ 75 % first-sample rule applies. **High risk:** the twin trial, recovery wiring
+and strict-TS have no tests yet; phase-16 tests already cover parked
+restoration and lazy recovery timing and are reused in step 0.
+
+**Selected (whole unit; splitting would cost ≈ 30 throwaway edits and a second
+step 0 because owner and twin reference each other 28 times):**
+`TvIptvTuneController` (≈ 400: tune pipeline `setIptvMediaItem`, strict-TS
+sets, recovery wiring, reconnect pill) eagerly constructs field-bearing
+`TvIptvTwinTrial` (≈ 285; owns `iptvTwinTrialHandler`); property
+`iptvTuneController` at the unit's first owned slot; 41 members / ≈ 614 lines.
+Qualifiers **`tune.`/`trial.`** (`twin` collides with 8 local bindings and 1 parameter binding — 25
+code-token occurrences in moved code).
+
+**Deliberately left in the activity:** the two `@Volatile` loader-thread fields
+(`currentIptvHttpHeaders`, `iptvStrictTsActive`) — activity-owned with Host
+setters, as `activeVodHeaders` in phase 8, so the loader-thread code in
+`setupPlayer` is not edited at all (the decision moves to phase 19);
+`iptvTuneDiagnostics`, the diagnostic analytics listener (mostly VOD
+startup-gate commits), the codec selector and `iptvDecoderMode`,
+`reportDecoderFailure`, the network callback and the rejoin bookkeeping.
+
+- 28 activity patches in 6 declarations: `playbackListener` 14 (error-branch
+  order pinned), `progressRunnable` 3, `setupPlayer` 3 (`setOffline` calls
+  only), `onStart` 2, `onStop` 4, `onDestroy` 2 — all in place, order
+  unchanged.
+- 8 Host re-points (9 edits) in 4 properties: Start Over 1, channel start 3
+  (incl. the `currentIptvStreamUrl` get/set), recording actions 2, phase-16
+  controls overlay 2 (`iptvLiveRecovery`, `restoreParkedIptvTwinIfNeeded`).
+- 20-member Host (computed, explicitly qualified); ten names deliberately
+  not Host members so a missed `tune.`/`trial.` qualification fails to compile.
+- 21 initializer proofs; new narrow classifier forms: typed no-argument
+  `HashSet`/`HashMap`, and a `by lazy { … }` delegate (lazy first-access
+  timing preserved, incl. the VOD case where `onStop`/`onDestroy` builds the
+  recovery machine only to cancel it — pinned as-is).
+- ≈ 120 substitutions, no templates needing braces. Audit: 2 receiver sites
+  (`TextView(this)`, Toast) and 6 inherited pins incl. a **new kind**:
+  `addContentView` called implicitly inside `TextView.apply` must keep
+  dispatching to `AppCompatActivity`'s override while the inner `this` stays
+  the TextView. The owner needs `@OptIn(UnstableApi::class)` (Media3 javap
+  verified); the twin does not.
+- Retargets: 31 reflective sites over 7 routing keys (`currentIptvStreamUrl`
+  ×22, `iptvHlsForcedUrls` ×2, `iptvTwinPreferredUrls` ×1, both parked-restore
+  fields ×2 each, `iptvLiveRecovery$delegate` ×1 and the generated getter
+  `getIptvLiveRecovery` ×1 — `memberOwner` strips `$delegate` but does not
+  normalize getter names, so the getter is routed explicitly); no Dart anchors.
+
+### Step T
+
+Classifier forms + negatives; extraction fixture (owner + field-bearing twin,
+`tune.`/`trial.`) + negatives (missed qualification, snapshot of a volatile
+field, eager evaluation of the lazy recovery machine); compiled audit incl.
+the implicit `addContentView` inherited-dispatch pin; per-phase dispatcher
+keeping all historical suites; earlier destinations frozen at the phase-16
+merge.
+
+### Step 0 — characterization of the original
+
+Prerequisites demonstrated on the original (the phase stops if the
+loader-thread fixture cannot be made reliable): a PAUSED-looper clock fixture
+where `elapsedRealtime` advances with the looper; an extended player proxy
+(decoder counters, `playerError`); a real-pipeline loader-thread fixture
+reaching the Media3 1.8.0 factories by reflection with MockWebServer; a fake
+`ConnectivityManager` callback; error-chain fixtures; device-quirk instances.
+Then: tune pipeline (HLS/TS selection, headers, strict-TS), twin trial
+(arm/timeout/park/restore), recovery ladder (retune/backoff, error
+classification, reconnect pill), `onStart`/`onStop`/`onDestroy` parking and
+cancellation order; coverage sweep + matrix. Mutation proofs on the
+original; Claude's independent sample; 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–16 additions. Device checklist (end of series): IPTV
+live channels on HLS and TS, an Xtream HLS channel that needs the `.ts`
+twin, strict-TS providers, network drop and recovery (Wi-Fi off/on),
+backgrounding (Home) and resuming live TV, a stalling channel's reconnect
+pill.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 16 original runtime observations, preserved by Step 0: hidden dock
@@ -3803,3 +3886,29 @@ cancel), title/OTT identity text, the Next overlay during auto-advance.
   is byte-identical after reversals, and the back-navigation lint removal is
   detector scope only. Activity 6,986 → 5,891. Decoder verification remains
   pending-environment. Phase 16 complete; merged.
+- 2026-10-10 — phase 17 design review (Codex, `tvp-design`): **No P1s**.
+  P2 folded: reflective retargets are 31 sites over 7 routing keys incl.
+  the generated getter `getIptvLiveRecovery`; phase-16 tests already cover
+  parked restoration and lazy recovery timing. P3 folded: `twin` collision
+  count (8 local + 1 parameter bindings, 25 occurrences). Other counts
+  re-verified on `be5635fae`: 41 members / 614 lines, 28 activity patches,
+  8 Host re-points / 9 edits, 20 Host members, 21 initializer proofs.
+
+- 2026-10-10 — **Phase 17 Step T complete** on `refactor/tvplayer-p17`. Routed all 31 original reflective sites/seven keys first, including raw `getIptvLiveRecovery`; assertions unchanged. Re-measured at `be5635fae`: 1,676 declarations/zero self-comparison differences, 41 members/614 span lines, 28 in-place patches, eight Host re-points/nine edits, 120 substitutions. Complete production extraction fixture compiles offline (396/289 lines), all 21 initializer proofs and eight compiled receiver pins pass, including implicit AppCompat `addContentView` in TextView.apply with inner receivers preserved. Two Activity-owned volatile fields/Host accessors, deferred synchronized recovery/device lazies, all 23 phase-15 binding pins and volatile identity writers/reader verified. Fifty-seven earlier destinations and all sixteen earlier manifests frozen. Checker/auditor: 463 historical + 54 final Phase-17 cases pass (507-case dispatcher plus final 54-case focused run). Clean original baseline 2,342 identities/2,340 pass; helper-only run preserves every status, including the focus NPE and EPG progress timing assertion observed in this baseline. Lint archive 1,351 issues/175 opt-in errors. All 76 protected hashes unchanged. Evidence `p17/tools-result.json`, fixture/compiler/auditor/self-test logs, `lint-original/`, `junit/baseline-be5635fae`, `junit/p17-tools`. No production move, lockfile/ProGuard change, bug fix, push or device interaction. Step 0 prerequisites follow.
+
+- 2026-10-10 — **Phase 17 Step 0 complete; STOP before production moves.** Mandatory real-pipeline loader prerequisite passes on original `be5635fae`: installed Media3 1.8.0 resolver/extractor factories, two bounded worker/MockWebServer invocations, live header re-read, both aggressive/strict extractor overloads and Activity volatility. PAUSED clock, extended opt-in player proxy, fake network callbacks, error chains and device instances pass; no feature deferred. Added **183 original characterization identities in 16 cohesive classes**, plus eight reused controls/live cases; final control 191/191. **339 accepted mutations fail named assertions; every new identity has a witness.** Systematic matrix accounts for all 282 collected nodes across 21 moved/lazy units and five nested callbacks, including all state writes, guards, posts, calls and returns. Pure constructor/value aliases are explicit; one return-removal is equivalent (zero elapsed since the just-stored sample, pure comparison below 15000 ms), verified against all 191 cases. Type-invalid, ineffective, crash-only and interrupted attempts are archived/excluded and corrected alternatives credited. Real callers, repeated UI refresh counts, forced-HLS/device diagnostics, VOD subtitle-readiness before resumed dispatch, strict/twin boundaries, tee publication, ticker wiring, and stop/start/destroy/network ordering are pinned. Clean `baseline-be5635fae` 2342 (2340 pass/two observed failures) → `p17-step0` 2525 (2524 pass/one failure): 183 passing additions, no removals/new failures/skips; every old pass remains passing. Existing source-browser focus NPE remains; the previously observed EPG real-clock timing failure passes now, explicitly recorded as status variation rather than strict equality or a fix. Original lint remains archived: 1351 identities/175 opt-in errors. Ten patched manifest rows now name actual tests; structural patches unchanged. All 41 moved names + raw getter routed, both volatile fields Activity-owned; original self-comparison 1676/zero and 57 frozen earlier destinations pass. Step-T 463 historical cases retained; final 54-case Phase-17 checker/auditor recheck passes (517 distinct cases), with 21 initializer/eight receiver/23 binding pins retained. All 76 protected hashes and lockfile/ProGuard unchanged; size check without update, helper ≤800. Evidence `p17/step0/`, `lint-original/`, `junit/baseline-be5635fae`, `junit/p17-step0`. Detached original removed after archival. No bug fix, production move, push, branch switch, device/emulator interaction or self independent review. Claude's separate sample/review is next.
+
+- 2026-10-10 — **Phase 17 Step 0b complete.** Claude's independent sample 19/21; exact c08/c15 re-runs now fail named assertions. Added two original tests: real record-button TextWatcher callbacks before an injected prepare failure, and AUTH preference revocation through a later channel start plus loss of preferred-map strict demux. Both killed, neither equivalent. Updated corresponding witnesses in the 282-node matrix; original control 10/10. Clean matched-heap `p17-step0b` 2527/2526 pass/one existing focus NPE exactly preserves all `p17-step0` statuses with two passing additions. EPG passes at both steps; clean-base failure remains documented original timing flakiness. Evidence `p17/step0b/`, `junit/p17-step0b/`; no production, lockfile or ProGuard edit. Approved Step 1 and gates follow.
+
+- 2026-10-10 — **Phase 17 Step 1 complete; integration gate follows.** Extracted the 396-line tune owner and eagerly constructed 289-line field-bearing trial from the exact manifest; Activity 5891 → 5312, size ratchet updated. All 28 in-place patches and eight/nine Host re-point edits preserve order, 20 computed Host members/ten deliberate absences, 21 initializer proofs, lazy first-access timing, two Activity-owned volatile loader fields and the three-only `setupPlayer` patches verified. Zero checker differences across 1676 declarations; p1–p16 historical checks, 57 frozen destinations, teardown tokens, compiled eight receiver/23 earlier binding pins and volatile/identity storage audits pass. All five production Kotlin warnings unchanged. Focused 193/193 pass with all assertions/test files byte-identical; 42 preinstalled owner routes include raw getter, no Dart edits. Evidence `p17/step1/`, `p17/gate/`; full clean-tree integration gate next. No bug fix, dependency/ProGuard edit, push, device interaction or self independent review.
+
+- 2026-10-10 — **Phase 17 gate complete; STOP after Phase 17.** Clean `gate` checkpoint `9772e09e5`: 517 checker/auditor self-tests, 1676 declarations/zero differences, all p1–p16 historical `--at` checks, 57 frozen destinations, 21 initializer proofs, eight compiled receiver/23 retained view pins, volatile/lazy/identity and teardown-order checks pass. Owner/trial 396/289 lines, Activity 5891 → 5312, size ratchet lowered; 28 in-place patches, eight/nine Host re-point edits, 20 computed Host members/ten deliberate absences and 42 routes preserve scope. All 193 focused cases pass unchanged. Clean matched-heap JVM `p17-gate` exactly preserves all 2527 Step-0b statuses: 2526 pass, one known focus NPE. EPG fails only at the clean original baseline and passes at Step 0, Step 0b and gate; explicitly original real-clock flakiness, no hidden status change or test-window fix. Original lint exact: 1351 issues/175 opt-in errors; all five Kotlin warnings unchanged. Release build succeeds, R8/DEX five new/generated classes/132 members pass; decoder remains pending-environment with phase-16/1 identical failure/gaps/library hashes. Full Flutter suite exactly matches all 12855 phase-16 statuses (12794 success/13 failure/28 error/20 skipped), 45 source-text statuses and 1758 analyzer diagnostics unchanged. Evidence `p17/step0b/`, `step1/`, `gate/`, `junit/p17-step0b/`, `p17-gate/`; original detached worktree removed, protected files and all test inputs unchanged. Heavy processes niced; no bug fix, push, branch switch, device/emulator interaction or self independent review. Phase 18 not started.
+- 2026-10-10 — phase 17 post-implementation reviews of `be5635fae..710d3de9f`.
+  Claude's independent sample 19/21 (90 %); c08 (dropped record-button
+  refresh after finalize) and c15 (AUTH revoke keeps the original→twin
+  preference) closed in 0b by mutation-proved tests. Independent Codex review
+  (fresh session): **No P1s, no P2/P3**; volatile storage, lazy recovery
+  timing, implicit `addContentView` dispatch, error-branch priority and
+  teardown order preserved; EPG timing flakiness classification supported.
+  Activity 5,891 → 5,312. Decoder verification remains pending-environment.
+  Phase 17 complete; merged.

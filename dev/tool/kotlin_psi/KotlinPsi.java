@@ -133,6 +133,16 @@ public final class KotlinPsi {
                 KtPropertyAccessor getter = property.getGetter();
                 node.put("has_initializer", property.getInitializer() != null);
                 node.put("has_delegate", property.hasDelegate());
+                node.put("delegate_text", property.getDelegateExpression() == null ? null : property.getDelegateExpression().getText());
+                KtExpression delegate = property.getDelegateExpression();
+                boolean lazyAllocation = delegate instanceof KtCallExpression &&
+                    ((KtCallExpression)delegate).getCalleeExpression() != null &&
+                    ((KtCallExpression)delegate).getCalleeExpression().getText().equals("lazy") &&
+                    ((KtCallExpression)delegate).getValueArguments().size() == 1 &&
+                    ((KtCallExpression)delegate).getLambdaArguments().size() == 1 &&
+                    ((KtCallExpression)delegate).getValueArgumentList() == null &&
+                    ((KtCallExpression)delegate).getTypeArguments().isEmpty();
+                node.put("lazy_allocation", lazyAllocation);
                 node.put("declared_type", property.getTypeReference() == null ? null : property.getTypeReference().getText());
                 node.put("initializer_text", property.getInitializer() == null ? null : property.getInitializer().getText());
                 node.put("getter_only", getter != null && property.getSetter() == null && !property.isVar());
@@ -312,7 +322,7 @@ public final class KotlinPsi {
                 // are excluded; bytecode pins the actual inherited dispatch.
                 for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
                     String callee = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
-                    if (!callee.equals("finish") && !callee.equals("findViewById") && !callee.equals("runOnUiThread")) continue;
+                    if (!callee.equals("finish") && !callee.equals("findViewById") && !callee.equals("runOnUiThread") && !callee.equals("addContentView")) continue;
                     if (call.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)call.getParent()).getSelectorExpression() == call) continue;
                     PsiElement scope = call.getParent();
@@ -321,7 +331,7 @@ public final class KotlinPsi {
                     inheritedSites.add(map("start", offset(call.getTextRange().getStartOffset()),
                         "call_start", offset(call.getTextRange().getStartOffset()),
                         "call_end", offset(call.getTextRange().getEndOffset()), "callee", callee,
-                        "receiver", "implicit-inherited", "introduced_phase", callee.equals("runOnUiThread") ? 10 : 9,
+                        "receiver", "implicit-inherited", "introduced_phase", callee.equals("addContentView") ? 17 : callee.equals("runOnUiThread") ? 10 : 9,
                         "lexical_class", ((KtClass)scope).getName()));
                 }
                 // Java lifecycle Boolean properties compile to isFinishing()/isDestroyed().
