@@ -6,6 +6,7 @@ import subprocess
 import unittest
 
 import check_kotlin_moves as k
+from kotlin_toolchain import kotlin_jars
 from check_kotlin_overloads import typed_bytecode, audit_view_bindings, audit_constant_inlining
 
 
@@ -50,7 +51,7 @@ class Phase15OverloadsTest(unittest.TestCase):
         sources={'Fixture.kt':source,'View.kt':'package android.view\nopen class View { fun <T: View> findViewById(id: Int): T? = null }\n','Widgets.kt':'package android.widget\nopen class TextView: android.view.View()\n','Button.kt':'package androidx.appcompat.widget\nclass AppCompatButton: android.widget.TextView()\n','Compat.kt':'package androidx.appcompat.app\nopen class AppCompatActivity\n','Player.kt':'package androidx.media3.ui\nclass PlayerView: android.view.View()\n'}
         paths=[]
         for name,text in sources.items():p=folder/name;p.write_text(text);paths.append(str(p))
-        cache=Path.home()/'.gradle/caches/modules-2/files-2.1';jars=[next((cache/g/a/v).glob('*/*.jar')) for g,a,v in [('org.jetbrains.kotlin','kotlin-compiler-embeddable','2.2.20'),('org.jetbrains.kotlin','kotlin-stdlib','2.2.20'),('org.jetbrains.kotlin','kotlin-reflect','2.2.0'),('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),('org.jetbrains','annotations','13.0')]]
+        jars = kotlin_jars()
         result=subprocess.run([str(k.JBR/'bin/java'),'-cp',':'.join(map(str,jars)),'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-classpath',str(target)+':'+':'.join(map(str,jars)),'-d',str(target),*paths],capture_output=True,text=True)
         (folder/'compile.log').write_text(result.stdout+result.stderr);assert result.returncode==0,result.stdout+result.stderr
         flat=folder/'audit-classes';flat.mkdir(exist_ok=True)

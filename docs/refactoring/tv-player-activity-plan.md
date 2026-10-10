@@ -2132,6 +2132,133 @@ playback start for VOD/IPTV/strict-TS/protected streams (buffering
 behaviour, headers), decoder fallback on a hard codec, episode metadata
 arriving after launch (titles, guide episodes, progress).
 
+## Phase 20 — routers decision, end-state exception and series completion
+
+Branch `refactor/tvplayer-p20` off the phase-19 merge. **Decision-only: no
+production code moves.** Evidence under `refactor-evidence/tvplayer/p20/`.
+Inputs: "Phase 20 assessment: the two routers" in the deps report and the
+phase-19 measurements.
+
+**Decision.** Both routers stay in the activity:
+- `dispatchKeyEvent` is the remote-control entry (`MainActivity` →
+  `ActivityTracker` → `targetActivity.dispatchKeyEvent`) with 18
+  `super.dispatchKeyEvent` fallbacks; moving its body is not a declaration
+  move and needs a new body-extraction + `invokespecial` forwarding mechanism.
+- `playbackListener` is mechanically movable (optional 20a, ≈ −480 lines) but
+  would only relocate a 50-member Host — the activity's playback-state
+  surface — which AGENTS forbids ("do not replace a giant screen with a giant
+  controller, expose its entire state"). The real improvement is a
+  non-verbatim policy split, outside this series' move-only rule.
+
+**Deliverables:**
+1. Re-measure the activity on the phase-19 merge (exact line count and the
+   composition table: imports/companion, controller properties + computed
+   Hosts, routers + ticker, lifecycle/entry, shared state, `bindViews`,
+   `parsePayload` + `initIptvMode`, unified-menu composition, small helpers).
+2. Record the **end-state exception** in this plan (path, exact size,
+   remaining responsibilities, why it cannot shrink further under move-only
+   rules, exit path (a)–(e) with the ≤ 2,000-line player-core target and its
+   milestone) and confirm `dev/tool/file_size_baseline.txt` holds the exact
+   shrink-only figure; the size check must fail if the file grows.
+3. **Completion audit** against the AGENTS "migrated slice complete" rule:
+   every original responsibility of the 22,221-line file traced to its
+   destination (phases 1–19 manifests) or to the documented exception; no
+   duplicate implementations, unused scaffolds or dead Host members (a
+   compiled usage check: a property counts as used through either accessor,
+   so setter-only members such as `speechTap`, `offsetRenderersFactory` and
+   `iptvNetworkCallback` are valid; functions and generated `$default`
+   helpers must trace to a production caller; positives for setter-only and
+   default-argument calls, and a negative that removes the caller while
+   leaving the generated helper); every new file ≤ 800 lines; checker
+   self-tests pass; **final-tree evidence is separate from historical
+   evidence**: the p19 manifest check runs WITHOUT `--at` (with its
+   earlier-destination comparison) plus the compiled audits against the final
+   classes, and a mutation confined to a final destination must fail it,
+   while historical `--at` checks p1–p19 stay as history evidence; the
+   per-phase test helpers and owner maps are organized (no file over 800, no
+   stale routes).
+3a. **CI coverage (required by AGENTS before completion).** CI today runs the
+   native size ratchet but no Kotlin move checker or TV-player boundary
+   guard. Add a `checks.yml` job (every push, like the other structural
+   jobs) that runs the Kotlin move checker self-tests and the final-tree
+   manifest check, plus a small TV-player import/boundary guard over the
+   completed native source set (collaborators must not import Flutter UI or
+   each other's private implementations beyond the documented Hosts), with
+   documented exclusions. The job needs full Git history (`fetch-depth: 0`),
+   JDK 21 via `setup-java` (matching `build.yml`), and a **cold-cache
+   bootstrap**: on a cache miss it provisions all five pinned artifacts (the
+   four `check_kotlin_moves.py` needs plus `kotlin-reflect:2.2.0` for the
+   overload auditors) into one lookup location honouring `GRADLE_USER_HOME`
+   (the fixture helpers' hard-coded `~/.gradle` is unified); caching is an
+   optimization only, and the job is validated once with an empty cache. The
+   evidence helper's hard-coded macOS JBR path must not be required.
+   **Boundary guard rules are explicit:** forbidden types (Flutter UI / engine
+   types other than the approved `MainActivity` channel accessor and
+   `MethodChannel` uses), the approved Host interfaces and owner→child
+   (eager collaborator) edges, and exact legacy exclusions; it checks
+   same-package (import-free) and fully qualified references, not only
+   imports, with a negative control proving a direct peer bypass fails.
+   Rules and exact exclusions: [TV-player structural CI guard](tv-player-boundary-check.md).
+   Passing CI evidence on the pushed final SHA is required before closing
+   the series.
+4. **Final gate** on the clean tree (commit message contains `gate`): full
+   JVM suite vs the phase-19 gate (identities, incl. the known focus NPE and
+   the documented EPG flake), lint vs the phase-19 gate and vs the series'
+   original base (no additions), release build + R8 mapping for all moved classes,
+   full Flutter suite vs phase 19, analyzer, format, size/architecture
+   checks. Decoder verification: the patched bundle builds only in the
+   Android workflow (`build.yml`, release/manual dispatch only — a `gate`
+   push does not run it). If a side-effect-free manual dispatch of the final
+   SHA is available (no release publish), run it and archive its decoder
+   result and artifact provenance; otherwise close only the structural work
+   and keep decoder verification explicitly **pending** on the checklist. The
+   reported status follows the actual outcome.
+5. **End-of-series device checklist**: aggregate every phase's device items
+   (phases 1–19) into one ordered list for an Android TV run on a test device
+   (never install a debug build over a release device), plus the decoder
+   verification if it is still pending.
+   Aggregated session and complete phase map:
+   [TV-player end-of-series device checklist](tv-player-activity-device-checklist.md).
+
+### Review
+
+One independent Codex review of the completion audit and exception text
+(accuracy against the tree, the exit path's feasibility, nothing left
+half-moved). No Claude mutation sample (no code moves).
+
+### End-state exception — measured on `076438d71`
+
+`android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` is **exactly 3,776 physical lines**, including imports, comments and blank lines. The original series base is **`39c630303`**, pinned by the phase-1 manifest: **22,221** lines. This is a documented final exception to the 800-line limit. `dev/tool/file_size_baseline.txt` pins **3,776** as the maximum; the file may only shrink.
+
+| Composition (disjoint PSI spans, including trivia) | Physical lines |
+| --- | ---: |
+| imports/header/companion | 154 |
+| controller properties and computed Hosts | 920 |
+| routers and ticker | 907 |
+| lifecycle and entry | 542 |
+| shared state, views, readiness and skin configuration | 332 |
+| bindViews | 192 |
+| parsePayload and initIptvMode | 292 |
+| unified-menu composition | 218 |
+| small shared helpers and retained types | 219 |
+| **Total** | **3,776** |
+
+The table partitions every physical line using the real Kotlin PSI depth-1 spans; leading comments and blank lines belong to the following declaration. The 27 controller properties include their computed Hosts and borrowed-controller wiring. Router/ticker spans are 510 + 364 + 33 lines; body-only counts exclude attached trivia. The shared-state category includes view references, activity-owned readiness getters and skin configuration. Exact per-declaration membership is archived in `p20/measurement/composition.json`.
+
+The Activity remains the Android entry and lifecycle-order owner, the composition root, the single owner of shared playback state and all three volatile loader fields, the `Player.Listener`/remote-key router, and the owner of launch/view/IPTV bootstrap, unified-menu composition and small shared helpers. `dispatchKeyEvent` retains its 18 `super` fallbacks and the MainActivity remote-control entry contract. Moving its body requires a new body-extraction/invokespecial forwarding mechanism. Moving `playbackListener` would relocate a 50-member playback-state surface without establishing a cohesive owner. Computed Hosts also add wiring as code leaves. Further shrinkage therefore requires policy/ownership changes outside this series' verbatim-move rule.
+
+**Exit path and milestone:** a separately reviewed, behavior-preserving player-core series after this structural series, with characterization at each change:
+
+- **(a)** Own READY-resume, ENDED-advance and IPTV-error policies; leave a thin listener dispatcher and pure-test the policies.
+- **(b)** Consult per-controller key handlers from a small key dispatcher; retain the `super` fallback in the Activity override.
+- **(c)** Introduce a launch parser to avoid repeated payload decoding while preserving the four independent try-scope outcomes across `onCreate`/`parsePayload`/`initIptvMode`.
+- **(d)** Name the inline source-browser callbacks in `bindViews` and put unified-menu rows with their owners, including source rows with the fetch owner.
+- **(e)** Consolidate each state's writers before transferring single-owner state, then reduce the computed Hosts.
+
+The acceptance milestone after (a)–(e) is a **≤2,000-line player core Activity**, with the same launch, focus, timing and teardown contracts. ≤800 is not the target while the Activity remains the composition root. Reassess this exception whenever the file is extended; the exception grants no growth allowance. This phase schedules no production changes.
+
+The unmodified size checker was run on a scratch copy outside the worktree using an evidence-only alternate Git index. The 3,776-line control passes; adding one line fails with `3777 lines grew past its baseline (3776)`. Running `--update` with that growth still leaves the maximum at 3,776 and the subsequent check fails. No real source, index or ref was changed by the proof. Evidence: `p20/measurement/size-proof.json` and raw logs.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 19 original outcomes, preserved by Step 0: Media3 1.8.0 stock
@@ -4224,3 +4351,47 @@ arriving after launch (titles, guide episodes, progress).
   ownership, lazy timing, receiver registration, metadata publication and
   teardown equivalent. Activity 4,472 → 3,776. Decoder verification remains
   pending-environment. Phase 19 complete; merged.
+- 2026-10-10 — phase 20 design review (Codex, `tvp-design`): one **P1**
+  folded — CI must run the Kotlin move checker and a TV-player boundary
+  guard before completion (new deliverable 3a). P2s folded: final-tree vs
+  historical checker evidence, precise Host usage definition (setter-only and
+  `$default` helpers), decoder verification via a side-effect-free manual
+  dispatch of the Android workflow or explicit pending. Router retention
+  confirmed (509/362-line bodies, 18 `super` fallbacks); activity exactly
+  3,776; 63 extracted files all under 800; all 19 phase device lists present.
+- 2026-10-10 — phase 20 design re-review: **No P1s**. P2s folded: complete
+  cold-cache CI bootstrap (five pinned artifacts, unified lookup honouring
+  `GRADLE_USER_HOME`, JDK 21 via `setup-java`, validated with an empty
+  cache); explicit boundary-guard rules covering same-package and fully
+  qualified references with a peer-bypass negative control.
+
+- 2026-10-10 — **Phase 20 deliverables 1–2 complete.** Original base `39c630303` / 22,221 lines; final merge `076438d71` / exactly 3,776. Exhaustive nine-part physical-line composition table sums to 3,776; both routers retained, 27 controller/Host properties. Final shrink-only exception and separate (a)–(e) ≤2,000-line player-core milestone recorded. Exact size baseline confirmed; unmodified checker rejects scratch growth 3,776→3,777, including after `--update`, with an isolated alternate index and no ref/working-tree edits. Evidence `p20/measurement/`. No production edit. Completion audit next.
+
+- 2026-10-10 — **Phase 20 deliverable 3 completion audit.** Every one of the 3,477 original PSI declarations at `39c630303` is traced: 3,137 to 63 destinations, 340 to the measured Activity exception, including the explicit phase-2 `liveNow` callback replacement. All 337 new handwritten app/test files are ≤776 lines. Final-tree p19 WITHOUT `--at`: 1,611 declarations / zero differences and 61 frozen earlier files; a pipeline-only buffer-literal mutation fails that checker. Historical p1–p19 merge-SHA checks pass separately. Final-class receiver/volatile/writer audits retain 21 current / 366 earlier sites, 23 view/cast pins and all prior proofs. Compiled Host usage: 27 interfaces / 598 members, including 51 setter-only members and real default dispatch; all three compiled controls pass, including removed-caller rejection. All 597 existing checker/auditor self-tests pass with unchanged inputs. Reflection audit resolves 779 controller routes + 47 facades; 30 unused non-existent getter aliases alone removed, fields/assertions unchanged, helpers below 800. No duplicate moved implementation or unclassified scaffold. Evidence `p20/audit/`; detailed trace and limits in the deps report. No production edit, push, device use or self independent review. CI and final gate remain next.
+
+- 2026-10-10 — **Phase 20 deliverable 3a complete locally.** Added every-push structural CI with full history, Zulu JDK 21, runner-step GITHUB_ENV paths, optional artifact cache and checksum-pinned cold bootstrap of all five Kotlin jars. Unified all eleven fixture lookups; default local paths/versions and fixture assertions/bodies unchanged by AST comparison. From an initially empty evidence-only GRADLE_USER_HOME, every exact job check passes: 597 historical/current checker cases, final-tree p19 1,611 / zero with 61 earlier destinations, three compiled Host controls, ten boundary controls and real-tree guard (63 files, 27 Hosts, 14 owner/child pairs, 38 exact legacy exclusions). Tool inputs unchanged during validation; exact environment setup, workflow YAML and job semantics validated. The actual final-tree CLI rejects a destination-only buffer mutation including earlier checks; real sources unchanged. Rules/exclusions linked from the plan and detailed in the deps report. Evidence `p20/cold/`, `p20/cold-job/`, `p20/audit/`. **CI on the pushed final SHA remains pending for Claude; structural closure is conditional on that evidence.** No production move, push, device use or self independent review. Clean-tree final gate next.
+
+- 2026-10-10 — **Phase 20 deliverable 4 final gate complete locally.** Clean checkpoint `9e0334d07`, stable JVM/Flutter input trees and unchanged production/lockfile/ProGuard vs `076438d71`. JVM **2,976 exact identities / 2,975 pass / same one focus NPE**; all 93 EPG-named tests pass, historical phase-17 timing flakiness retained. Flutter **12,855 exact identities / 1,232 suites**, same 12,794 success / 13 failure / 28 error / 20 skipped. Analyzer exactly 1,758 occurrences and Kotlin warnings exactly five. Lint exactly 1,351 vs p19; fresh original `39c630303` run has 1,353, with no additions after the two exact reviewed phase-13 Overdraw inference correspondences and two diagnostic removals; raw strict differences and three correspondence negatives archived. Release APK builds; all 63 destinations / **256 classes / 4,973 members / 27 Host implementations** pass R8/DEX checks and three controls. Final p19 WITHOUT `--at` 1,611 / zero with 61 frozen files; compiled 21 current + 366 historical receivers, 23 view/cast pins, volatile/writer/lazy/identity proofs and Host usage pass. All lifecycle/finish statements unchanged. Format rerun with eleven globs expanded: **2,290 files / zero changes**; size/architecture/storage/native-boundary checks pass, Activity **exactly 3,776**. Evidence `p20/gate/`, `junit/p20-gate/`; existing nonzero suite/analyzer/lint exits preserved, no new regression. **Pushed-SHA CI, Claude's artifact-only Android decoder dispatch and the human TV session remain pending.** Gate commit records this evidence; aggregated device checklist is next. No production edit, bug fix, push, device use or self independent review.
+
+- 2026-10-10 — **Phase 20 deliverable 5 complete; STOP after the final phase.** Gate evidence committed as `c704ff20b`. Added the linked [end-of-series device checklist](tv-player-activity-device-checklist.md): twelve ordered steps for one physical Android TV session on a dedicated test device/profile, fresh instances for all seven controls skins/four guide styles, release artifact provenance, pass/fail/pending record, and all phases 1–19 mapped to session steps. A fresh plan-section scan verifies each of the **19 original device obligations is retained exactly**, with none omitted; raw inventory/map and validation in `p20/`. No device checks were performed, no debug install over a release device is permitted. **Local structural/audit/CI-tooling/gate/checklist deliverables are complete; series closure awaits Claude's passing every-push CI on the pushed final SHA. Decoder/artifact verification and the human TV session remain pending; device checks are not structural gates (rule 7).** Production remains identical to `076438d71`, Activity exactly 3,776, lockfile/ProGuard unchanged. No push, branch switch, production behavior edit, bug fix, device/emulator use or self independent review.
+
+- 2026-10-11 — **`tvp-rev20` P2/P3 fixed; STOP.** Boundary discovery is recursive across main Kotlin sources and uses PSI-declared package names for relocated TV-package files; classifications/exclusions unchanged. Nested/elsewhere CLI holes reproduced and now rejected; **12 boundary controls + final guard pass**. Fresh final classes confirm **51 setter-only properties**, correcting both count statements. All six exact empty-cache CI commands pass: five pins, **597 checker cases**, final-tree p19 **1,611 / zero**, three Host controls and twelve boundary controls; tool inputs unchanged. Evidence `p20/rev20-fixes/`. Production/lockfile/ProGuard unchanged, Activity 3,776; pushed-SHA CI/decoder still pending. No push, branch switch, device use or self independent review.
+- 2026-10-11 — phase 20 independent final review (Codex, fresh session):
+  **No P1s**; P2 (boundary guard missed nested / out-of-directory
+  `com.debrify.app.tv` files) and P3 (setter-only Host count 51, not 56)
+  fixed in `fdeb54cbd`; Claude re-verified the reviewer's exact nested
+  bypass now fails (exit 1) and the clean tree passes. **CI evidence:** GitHub
+  Actions does not start any job on the private remote ("recent account
+  payments have failed or your spending limit needs to be increased" — true
+  for every push of this series), so pushed-SHA CI is **pending the account
+  billing fix**. Substitute evidence: the `tvplayer-structure` job's six
+  commands replayed in a clean `ubuntu:22.04` container (linux/arm64,
+  OpenJDK 21.0.12, empty `GRADLE_USER_HOME`) at `fdeb54cbd` — bootstrap
+  downloaded all five pins; checker self-tests, final-tree p19 check (1,611
+  declarations, 0 differences), Host usage test, boundary self-test and
+  boundary guard all exit 0 (`p20/ci-replay/linux-arm64-jdk21.log`).
+  **Decoder verification remains pending**: the Android workflow cannot run
+  on the private remote (same billing block; no signing secrets there).
+  Series structurally complete; merged. Remaining: pushed-SHA CI once
+  Actions billing is restored, decoder verification, and the device
+  checklist (`tv-player-activity-device-checklist.md`).

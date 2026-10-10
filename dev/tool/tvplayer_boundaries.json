@@ -1,0 +1,563 @@
+{
+  "version": 1,
+  "source_set": [
+    "android/app/src/main/kotlin/com/debrify/app/tv/AutoSyncRingView.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvChannelAdapter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvEntryRules.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvEpgAdapter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvLoadErrorPolicy.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvPayloadParsing.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvPickerAdapters.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvRecordingUrlRules.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/PlaylistNavigationMaps.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/StremioTvGuideAdapter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/StremioTvGuideData.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleSearchQuery.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvAutoSyncController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsDockController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsOverlayController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvDockIdentityPresenter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvEpisodeMetadataReceiver.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelNavigator.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelStartController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideChromeController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideOverlayBuilder.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuidePickers.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvRecordingActionsController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvStartOverController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvTuneController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvTwinTrial.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerStyledRenderer.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapPager.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvLiveDockStyler.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvMoviePlaylistAdapter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPikPakRetryController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackDisplayController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackItem.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackNavigator.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackPayload.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlayerFlutterRequests.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlayerFormatting.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistAdapter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistFocusNavigator.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistGuideSkin.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistOverlayController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSeekScrubController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSkipSegmentController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSleepTimerController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupDiagnostics.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStatusPillController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioSource.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioTvGuideController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvTrackLabels.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvUpNextController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/UnifiedMenuRows.kt"
+  ],
+  "collaborator_types": [
+    "TvAutoSyncController",
+    "TvControlsDockController",
+    "TvControlsOverlayController",
+    "TvDockIdentityPresenter",
+    "TvEpisodeMetadataReceiver",
+    "TvIptvChannelNavigator",
+    "TvIptvChannelStartController",
+    "TvIptvGuideChromeController",
+    "TvIptvGuideController",
+    "TvIptvGuideOverlayBuilder",
+    "TvIptvGuidePickers",
+    "TvIptvRecordingActionsController",
+    "TvIptvStartOverController",
+    "TvIptvTuneController",
+    "TvIptvTwinTrial",
+    "TvIptvZapBannerController",
+    "TvIptvZapBannerStyledRenderer",
+    "TvIptvZapPager",
+    "TvLiveDockStyler",
+    "TvMediaPipelineController",
+    "TvPikPakRetryController",
+    "TvPlaybackDisplayController",
+    "TvPlaybackNavigator",
+    "TvPlaybackStartController",
+    "TvPlaylistFocusNavigator",
+    "TvPlaylistGuideSkin",
+    "TvPlaylistOverlayController",
+    "TvProgressReporter",
+    "TvSeekScrubController",
+    "TvSkipSegmentController",
+    "TvSleepTimerController",
+    "TvSourceFetchController",
+    "TvSourceSwitchApplier",
+    "TvSourceSwitchController",
+    "TvStartupGateController",
+    "TvStatusPillController",
+    "TvStremioTvGuideController",
+    "TvSubtitleController",
+    "TvSubtitleSearchDialogs",
+    "TvSubtitleSourcesController",
+    "TvUpNextController"
+  ],
+  "owner_child_edges": [
+    [
+      "TvControlsOverlayController",
+      "TvDockIdentityPresenter"
+    ],
+    [
+      "TvDockIdentityPresenter",
+      "TvControlsOverlayController"
+    ],
+    [
+      "TvControlsOverlayController",
+      "TvSeekScrubController"
+    ],
+    [
+      "TvSeekScrubController",
+      "TvControlsOverlayController"
+    ],
+    [
+      "TvPlaybackStartController",
+      "TvPlaybackNavigator"
+    ],
+    [
+      "TvPlaybackNavigator",
+      "TvPlaybackStartController"
+    ],
+    [
+      "TvIptvTuneController",
+      "TvIptvTwinTrial"
+    ],
+    [
+      "TvIptvTwinTrial",
+      "TvIptvTuneController"
+    ],
+    [
+      "TvControlsDockController",
+      "TvLiveDockStyler"
+    ],
+    [
+      "TvLiveDockStyler",
+      "TvControlsDockController"
+    ],
+    [
+      "TvSubtitleSourcesController",
+      "TvSubtitleSearchDialogs"
+    ],
+    [
+      "TvSubtitleSearchDialogs",
+      "TvSubtitleSourcesController"
+    ],
+    [
+      "TvPlaylistOverlayController",
+      "TvPlaylistFocusNavigator"
+    ],
+    [
+      "TvPlaylistFocusNavigator",
+      "TvPlaylistOverlayController"
+    ],
+    [
+      "TvPlaylistOverlayController",
+      "TvPlaylistGuideSkin"
+    ],
+    [
+      "TvPlaylistGuideSkin",
+      "TvPlaylistOverlayController"
+    ],
+    [
+      "TvIptvGuideChromeController",
+      "TvIptvGuideOverlayBuilder"
+    ],
+    [
+      "TvIptvGuideOverlayBuilder",
+      "TvIptvGuideChromeController"
+    ],
+    [
+      "TvIptvGuideChromeController",
+      "TvIptvGuidePickers"
+    ],
+    [
+      "TvIptvGuidePickers",
+      "TvIptvGuideChromeController"
+    ],
+    [
+      "TvIptvGuideController",
+      "TvIptvZapPager"
+    ],
+    [
+      "TvIptvZapPager",
+      "TvIptvGuideController"
+    ],
+    [
+      "TvIptvGuideController",
+      "TvIptvChannelNavigator"
+    ],
+    [
+      "TvIptvChannelNavigator",
+      "TvIptvGuideController"
+    ],
+    [
+      "TvSourceSwitchController",
+      "TvSourceSwitchApplier"
+    ],
+    [
+      "TvSourceSwitchApplier",
+      "TvSourceSwitchController"
+    ],
+    [
+      "TvIptvZapBannerController",
+      "TvIptvZapBannerStyledRenderer"
+    ],
+    [
+      "TvIptvZapBannerStyledRenderer",
+      "TvIptvZapBannerController"
+    ]
+  ],
+  "host_edges": {
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsDockController.kt": {
+      "property displayController": [
+        "TvPlaybackDisplayController"
+      ],
+      "property iptvGuideChromeController": [
+        "TvIptvGuideChromeController"
+      ],
+      "property iptvGuideController": [
+        "TvIptvGuideController"
+      ],
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ],
+      "property iptvStartOverController": [
+        "TvIptvStartOverController"
+      ],
+      "property playlistController": [
+        "TvPlaylistOverlayController"
+      ],
+      "property subtitleController": [
+        "TvSubtitleController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsOverlayController.kt": {
+      "property controlsDockController": [
+        "TvControlsDockController"
+      ],
+      "property iptvGuideController": [
+        "TvIptvGuideController"
+      ],
+      "property iptvZapBannerController": [
+        "TvIptvZapBannerController"
+      ],
+      "property playlistController": [
+        "TvPlaylistOverlayController"
+      ],
+      "property skipSegmentController": [
+        "TvSkipSegmentController"
+      ],
+      "property sourceSwitchController": [
+        "TvSourceSwitchController"
+      ],
+      "property stremioTvGuideController": [
+        "TvStremioTvGuideController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvEpisodeMetadataReceiver.kt": {
+      "property controlsOverlayController": [
+        "TvControlsOverlayController"
+      ],
+      "property playbackStartController": [
+        "TvPlaybackStartController"
+      ],
+      "property playlistController": [
+        "TvPlaylistOverlayController"
+      ],
+      "property subtitleSourcesController": [
+        "TvSubtitleSourcesController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelStartController.kt": {
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideChromeController.kt": {
+      "property iptvGuideController": [
+        "TvIptvGuideController"
+      ],
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ],
+      "property iptvStartOverController": [
+        "TvIptvStartOverController"
+      ],
+      "property iptvZapBannerController": [
+        "TvIptvZapBannerController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt": {
+      "property iptvChannelStartController": [
+        "TvIptvChannelStartController"
+      ],
+      "property iptvStartOverController": [
+        "TvIptvStartOverController"
+      ],
+      "property iptvZapBannerController": [
+        "TvIptvZapBannerController"
+      ],
+      "property sourceSwitchController": [
+        "TvSourceSwitchController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvTuneController.kt": {
+      "property controlsDockController": [
+        "TvControlsDockController"
+      ],
+      "property iptvChannelStartController": [
+        "TvIptvChannelStartController"
+      ],
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ],
+      "property iptvStartOverController": [
+        "TvIptvStartOverController"
+      ],
+      "property sleepTimerController": [
+        "TvSleepTimerController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerController.kt": {
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt": {
+      "property displayController": [
+        "TvPlaybackDisplayController"
+      ],
+      "property iptvRecordingActionsController": [
+        "TvIptvRecordingActionsController"
+      ],
+      "property iptvTuneController": [
+        "TvIptvTuneController"
+      ],
+      "property startupGateController": [
+        "TvStartupGateController"
+      ],
+      "property subtitleController": [
+        "TvSubtitleController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPikPakRetryController.kt": {
+      "property startupGateController": [
+        "TvStartupGateController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackDisplayController.kt": {
+      "property controlsDockController": [
+        "TvControlsDockController"
+      ],
+      "property iptvGuideController": [
+        "TvIptvGuideController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt": {
+      "property controlsDockController": [
+        "TvControlsDockController"
+      ],
+      "property controlsOverlayController": [
+        "TvControlsOverlayController"
+      ],
+      "property pikPakRetryController": [
+        "TvPikPakRetryController"
+      ],
+      "property playlistController": [
+        "TvPlaylistOverlayController"
+      ],
+      "property skipSegmentController": [
+        "TvSkipSegmentController"
+      ],
+      "property sourceFetchController": [
+        "TvSourceFetchController"
+      ],
+      "property sourceSwitchController": [
+        "TvSourceSwitchController"
+      ],
+      "property startupGateController": [
+        "TvStartupGateController"
+      ],
+      "property statusPillController": [
+        "TvStatusPillController"
+      ],
+      "property stremioTvGuideController": [
+        "TvStremioTvGuideController"
+      ],
+      "property subtitleSourcesController": [
+        "TvSubtitleSourcesController"
+      ],
+      "property upNextController": [
+        "TvUpNextController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistOverlayController.kt": {
+      "property sourceFetchController": [
+        "TvSourceFetchController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt": {
+      "property sourceSwitchController": [
+        "TvSourceSwitchController"
+      ],
+      "property startupGateController": [
+        "TvStartupGateController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt": {
+      "property iptvChannelStartController": [
+        "TvIptvChannelStartController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt": {
+      "property sourceSwitchController": [
+        "TvSourceSwitchController"
+      ]
+    },
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt": {
+      "property subtitleController": [
+        "TvSubtitleController"
+      ]
+    }
+  },
+  "legacy_exclusions": [
+    "android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/BadgeArtworkSize.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/DebrifyTvPlayerStyle.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/DockFormatTags.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvDeviceQuirks.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvGuideStyle.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvLiveRecovery.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvRecordingController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/IptvTuneDiagnostics.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/NullableJsonString.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/PlaybackReturnHandoff.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/ProtectedStreamHttp.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/RecordingDataSource.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SeekFeedbackManager.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/ShowShuffle.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SkipDbSegmentClient.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SourceAddonPresentation.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SourceQualityParser.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SpeechFeatureTap.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/StartupFailoverCursor.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/StreamBadgeSvg.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleAutoSelection.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleControlsLiftController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleLinePickerController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitlePanelController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SubtitleSyncOverlayController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/SwitchedEpisodeTitle.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsSkin.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvDisplayModeController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackRecoveryStore.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceBadgeResult.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceBadgeText.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceBrowserController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStreamBadgeStrip.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvTrailerTexturePlayer.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/UnifiedMenuController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/UnifiedMenuSections.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/VodHttpDataSource.kt"
+  ],
+  "host_interfaces": {
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvAutoSyncController.kt": "class TvAutoSyncController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsDockController.kt": "class TvControlsDockController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvControlsOverlayController.kt": "class TvControlsOverlayController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvEpisodeMetadataReceiver.kt": "class TvEpisodeMetadataReceiver/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelStartController.kt": "class TvIptvChannelStartController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideChromeController.kt": "class TvIptvGuideChromeController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt": "class TvIptvGuideController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvRecordingActionsController.kt": "class TvIptvRecordingActionsController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvStartOverController.kt": "class TvIptvStartOverController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvTuneController.kt": "class TvIptvTuneController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapBannerController.kt": "class TvIptvZapBannerController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt": "class TvMediaPipelineController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPikPakRetryController.kt": "class TvPikPakRetryController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackDisplayController.kt": "class TvPlaybackDisplayController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt": "class TvPlaybackStartController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaylistOverlayController.kt": "class TvPlaylistOverlayController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt": "class TvProgressReporter/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSkipSegmentController.kt": "class TvSkipSegmentController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSleepTimerController.kt": "class TvSleepTimerController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt": "class TvSourceFetchController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt": "class TvSourceSwitchController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt": "class TvStartupGateController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStatusPillController.kt": "class TvStatusPillController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioTvGuideController.kt": "class TvStremioTvGuideController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleController.kt": "class TvSubtitleController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSourcesController.kt": "class TvSubtitleSourcesController/class Host",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvUpNextController.kt": "class TvUpNextController/class Host"
+  },
+  "main_activity_channel_files": [
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvAutoSyncController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvEpisodeMetadataReceiver.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelNavigator.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvChannelStartController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuideOverlayBuilder.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvGuidePickers.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvStartOverController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvIptvZapPager.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlayerFlutterRequests.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvProgressReporter.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStartupGateController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvStremioTvGuideController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleController.kt",
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSubtitleSearchDialogs.kt"
+  ],
+  "activity_nested_type_imports": {
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackNavigator.kt": [
+      "ShufflePlaybackAttempt"
+    ],
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt": [
+      "ShufflePlaybackAttempt"
+    ],
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt": [
+      "ShufflePlaybackAttempt",
+      "TvSourceAddon"
+    ],
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchController.kt": [
+      "ShufflePlaybackAttempt"
+    ],
+    "android/app/src/main/kotlin/com/debrify/app/tv/TvSourceSwitchApplier.kt": [
+      "ShufflePlaybackAttempt"
+    ]
+  },
+  "forbidden_types": [
+    "FlutterActivity",
+    "FlutterFragment",
+    "FlutterFragmentActivity",
+    "FlutterEngine",
+    "FlutterEngineGroup",
+    "FlutterEngineCache",
+    "FlutterView",
+    "FlutterTextureView",
+    "FlutterSurfaceView",
+    "FlutterRenderer",
+    "FlutterJNI",
+    "DartExecutor",
+    "BinaryMessenger",
+    "MethodCall",
+    "BasicMessageChannel",
+    "EventChannel"
+  ]
+}

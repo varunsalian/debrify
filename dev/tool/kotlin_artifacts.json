@@ -1,0 +1,37 @@
+[
+  {
+    "group": "org.jetbrains.kotlin",
+    "artifact": "kotlin-compiler-embeddable",
+    "version": "2.2.20",
+    "sha256": "1c6c3f810bfe6a41abcbc34b3a2ef639f1e3f4aeed3a953a4b0974eea4f41889",
+    "sha1": "bb8331b7585e36ea311825b01a1c06860c055fd1"
+  },
+  {
+    "group": "org.jetbrains.kotlin",
+    "artifact": "kotlin-stdlib",
+    "version": "2.2.20",
+    "sha256": "8836ccffd3585fadda9901244b20d42901d2f3cd581058d8434e2ffabcf3a3e7",
+    "sha1": "5380b19fa1924399b62ce3a1faffebb2b4f82272"
+  },
+  {
+    "group": "org.jetbrains.kotlin",
+    "artifact": "kotlin-reflect",
+    "version": "2.2.0",
+    "sha256": "230d91c2e410e3cfca3a4dc73d255455f62ff52aac091a33397a6e30bde91bf7",
+    "sha1": "4258f471b10f4fce1b1c000b59495b7413e1af9a"
+  },
+  {
+    "group": "org.jetbrains.kotlinx",
+    "artifact": "kotlinx-coroutines-core-jvm",
+    "version": "1.8.0",
+    "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5",
+    "sha1": "ac1dc37a30a93150b704022f8d895ee1bd3a36b3"
+  },
+  {
+    "group": "org.jetbrains",
+    "artifact": "annotations",
+    "version": "13.0",
+    "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+    "sha1": "919f0dfe192fb4e063e7dacadee7f8bb9a2672a9"
+  }
+]

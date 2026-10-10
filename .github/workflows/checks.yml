@@ -5,8 +5,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main, 'refactor/**']
-    # Docs-only pushes need no app checks.
-    paths-ignore: ['docs/**', '**/*.md']
 
 # A newer push to the same branch supersedes an in-progress quick run
 # (private-repo Actions minutes are metered). A run that includes a gate or
@@ -29,6 +27,33 @@ jobs:
       - run: python3 dev/tool/check_file_sizes.py
       - run: python3 dev/tool/check_storage_keys.py
       - run: python3 dev/tool/check_storage_references.py --self-test
+
+  tvplayer-structure:
+    # Every push, including decision-only completion gates; no gate-message filter.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+      - name: Set Kotlin tool locations
+        run: |
+          echo "GRADLE_USER_HOME=$RUNNER_TEMP/tvplayer-gradle" >> "$GITHUB_ENV"
+          echo "TVPLAYER_EVIDENCE_ROOT=$RUNNER_TEMP/tvplayer-evidence" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.GRADLE_USER_HOME }}/caches/modules-2/files-2.1
+          key: tvplayer-kotlin-${{ runner.os }}-${{ hashFiles('dev/tool/kotlin_artifacts.json') }}
+      # Always verify/provision all five pins; a warm cache is optional.
+      - run: python3 dev/tool/bootstrap_kotlin_tools.py
+      - run: python3 dev/tool/check_kotlin_moves.py --manifest dev/tool/kotlin_moves/tvplayer_p19.json --self-test
+      - run: python3 dev/tool/check_kotlin_moves.py --manifest dev/tool/kotlin_moves/tvplayer_p19.json
+      - run: python3 dev/tool/test_tvplayer_host_usage.py
+      - run: python3 dev/tool/check_tvplayer_boundaries.py --self-test
+      - run: python3 dev/tool/check_tvplayer_boundaries.py
 
   search-architecture:
     runs-on: ubuntu-latest

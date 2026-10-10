@@ -254,7 +254,6 @@ internal object TvPlayerIptvOwners {
         "engineRecordableUrl" to "iptvRecordingActionsController",
         "engineTaskIdForCurrentChannel" to "iptvRecordingActionsController",
         "finalizeIptvRecordingIfActive" to "iptvRecordingActionsController",
-        "getNotificationPermissionRequestCode" to "iptvRecordingActionsController",
         "getRecordingEngineEnabled" to "iptvRecordingActionsController",
         "getRecordingRegistryListener" to "iptvRecordingActionsController",
         "isCurrentIptvSegmented" to "iptvRecordingActionsController",
