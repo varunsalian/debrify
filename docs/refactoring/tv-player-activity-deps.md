@@ -21304,3 +21304,42 @@ The clean Step-1 checkpoint `9e279ddd2` is the tested tree. All **597** checker/
 | Size / protected inputs | `--update` lowers Activity ratchet; final **2,984** files / **140** ratchets. Both new production files remain below 800; lockfile/ProGuard, historical manifests and 559 other protected source hashes unchanged |
 
 Evidence: `p19/gate/summary.json`, complete checker/self-test/historical/compiled/lifecycle/retarget logs and JSON, canonical lint issue set plus raw reports, release mapping/DEX inventory and decoder provenance, Flutter/analyzer reports; complete XML/identity/provenance archive at `junit/p19-gate/`. Existing failures are recorded as preserved rather than described as passing suites. No source regression is accepted; no bug fix, dependency/ProGuard edit, push, branch switch, device/emulator interaction or self independent review occurred. Stop after phase 19.
+
+
+### Phase 20 deliverable 3 — completion audit
+
+The original series base is **39c630303** (22,221 physical lines), as pinned by the phase-1 manifest, rather than a later controller-phase base. The real Kotlin PSI trace accounts for **all 3,477 original declarations**, including nested/local declarations: **3,137** trace to the 63 phase-1–19 destination files; **340** remain in the Activity end-state exception. These are declaration counts, not independent workflow counts. The trace records each original selector, manifest row/history and final selector/file. The phase-2 `IptvLiveLoadErrorPolicy.liveNow()` method is explicitly replaced by its injected constructor callback, as the approved substitutions specify; its two policy call sites and per-invocation behavior remain characterized. No original declaration is unaccounted for.
+
+| Phase | Original declarations traced to destinations | Final destinations |
+| --- | ---: | --- |
+| 1 | 638 | `TvPlaybackItem.kt`, `TvPlaybackPayload.kt`, `TvStremioSource.kt`, `TvPlaylistAdapter.kt`, `TvMoviePlaylistAdapter.kt`, `IptvChannelAdapter.kt`, `IptvEpgAdapter.kt`, `StremioTvGuideAdapter.kt`, `IptvPickerAdapters.kt`, `AutoSyncRingView.kt` |
+| 2 | 168 | `IptvLoadErrorPolicy.kt`, `IptvPayloadParsing.kt`, `IptvRecordingUrlRules.kt`, `IptvEntryRules.kt`, `StremioTvGuideData.kt`, `TvTrackLabels.kt`, `SubtitleSearchQuery.kt`, `TvPlayerFormatting.kt`, `UnifiedMenuRows.kt`, `TvStartupDiagnostics.kt`, `PlaylistNavigationMaps.kt`, `TvPlayerFlutterRequests.kt` |
+| 3 | 144 | `TvSleepTimerController.kt`, `TvSkipSegmentController.kt`, `TvUpNextController.kt`, `TvIptvRecordingActionsController.kt` |
+| 4 | 172 | `TvAutoSyncController.kt`, `TvSubtitleController.kt` |
+| 5 | 120 | `TvProgressReporter.kt`, `TvIptvChannelStartController.kt`, `TvIptvStartOverController.kt` |
+| 6 | 185 | `TvIptvZapBannerController.kt`, `TvIptvZapBannerStyledRenderer.kt` |
+| 7 | 103 | `TvStremioTvGuideController.kt` |
+| 8 | 74 | `TvSourceSwitchController.kt`, `TvSourceSwitchApplier.kt` |
+| 9 | 109 | `TvStartupGateController.kt` |
+| 10 | 93 | `TvStatusPillController.kt`, `TvPikPakRetryController.kt`, `TvSourceFetchController.kt` |
+| 11 | 206 | `TvIptvGuideController.kt`, `TvIptvZapPager.kt`, `TvIptvChannelNavigator.kt` |
+| 12 | 152 | `TvIptvGuideChromeController.kt`, `TvIptvGuideOverlayBuilder.kt`, `TvIptvGuidePickers.kt` |
+| 13 | 185 | `TvPlaylistOverlayController.kt`, `TvPlaylistFocusNavigator.kt`, `TvPlaylistGuideSkin.kt` |
+| 14 | 151 | `TvSubtitleSourcesController.kt`, `TvSubtitleSearchDialogs.kt` |
+| 15 | 157 | `TvControlsDockController.kt`, `TvLiveDockStyler.kt`, `TvPlaybackDisplayController.kt` |
+| 16 | 166 | `TvControlsOverlayController.kt`, `TvDockIdentityPresenter.kt`, `TvSeekScrubController.kt` |
+| 17 | 80 | `TvIptvTuneController.kt`, `TvIptvTwinTrial.kt` |
+| 18 | 127 | `TvPlaybackStartController.kt`, `TvPlaybackNavigator.kt` |
+| 19 | 107 | `TvMediaPipelineController.kt`, `TvEpisodeMetadataReceiver.kt` |
+
+The exhaustive manifests partition each moved subtree and every added structural span; historical checks preserve the original-to-destination relationship and the final-tree check freezes all 61 earlier destinations plus the two phase-19 files. This proves the moved implementations have replaced their Activity declarations, with no extra duplicate implementation or unclassified extraction scaffold. Slot-pinned construction and owner/child wiring remain checked. All **337** handwritten application/test files added since the original base are below 800 lines (tool fixtures use the AGENTS fixture exemption). The final 63-file destination set is **≤776 lines per file** (largest: `TvSubtitleController.kt`), hence every extracted file is below 800. The sole oversized Activity remains exactly 3,776 and has the final exception recorded in the plan.
+
+**Compiled Host usage.** `dev/tool/check_tvplayer_host_usage.py` inspects real final production class files with JVM descriptors. It follows invocation edges from concrete production callers; synthetic access/default helpers and Host/DefaultImpls declarations are not independent usage roots. A property needs either accessor. All **27 Host interfaces / 598 members** have production callers, including 56 setter-only properties. Three members are reached through a real `$default` chain. This is compiled call-site evidence, not a claim that every runtime path has been visited. Its three real Kotlin self-tests cover setter-only `speechTap`/`offsetRenderersFactory`/`iptvNetworkCallback`, default-argument dispatch and removal of the only production caller while the generated helper remains (rejected as an unused Host function). Ambiguous same-name compiled function overloads are rejected rather than credited by name alone.
+
+**Current tree and history are separate evidence.** The p19 checker ran **without `--at`**: **1,611 declarations classified / zero differences**, including its 61 earlier-destination comparison. A scratch mutation confined to the final `TvMediaPipelineController.kt` changes the merged-source maximum buffer from 50,000 to 50,001; the same checker rejects it with a token mismatch in `setupPlayer()`. No production file was tampered with. Historical `--at` p1–p19 checks separately pass at their merge SHAs, ending at `076438d71`; they do not substitute for final-tree evidence. The compiled p19 audit uses final production classes: 21 current receiver sites, all 366 historical receiver sites, 23 retained view/cast pins, four volatile read chains per tree, relocated OTT-name writer maps, the inlined Context values, lazy/storage/identity and source-bound ShowShuffle proofs. The three loader fields remain single volatile Activity fields with one computed Host getter call at each loader read.
+
+**Reflection helper organization.** The access helper and four cohesive owner maps remain below 800 lines. A compiled rescan resolves **779 controller-owner routes** (including internal JVM name mangling and lazy delegate/getter routes) and **47 top-level facade routes**, without duplicate routing keys or missing owners/members. Thirty unreferenced generated getter aliases for private properties had no real JVM accessor; those map entries alone were removed. Their field routes stay, and no assertion or call helper changed. The exact no-caller inventory and removed rows are archived. Original-owner fallbacks remain deliberate support for the original-code characterization/mutation harness, not alternate production implementations.
+
+All **597** existing checker/auditor self-tests pass (including all historical phase suites); the captured tool inputs stay unchanged through that run. The three new compiled Host controls pass separately.
+
+Evidence: `p20/audit/` contains the exhaustive responsibility trace/composition, all historical logs, final-tree positive/destination-negative, final compiled receiver/volatile/writer audit, Host member-to-caller paths and three compiled controls, reflection route inventory and helper measurements, plus full checker self-test logs. CI cold-cache coverage and the final behavior/build gate are separate deliverables below. No production move or behavior edit, bug fix, lockfile/ProGuard change, device/emulator use, push or self independent review.
