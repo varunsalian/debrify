@@ -19,6 +19,10 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 
 /** Production original bodies, binary replies and real view/player observations. */
+@org.robolectric.annotation.Config(instrumentedPackages = [
+    "com.debrify.app.tv.TvPlaybackStartController",
+    "com.debrify.app.tv.TvPlaybackNavigator",
+])
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal open class TvPhase18OriginalTest : TvPhase8OriginalTest() {
     protected val functionType = kotlin.jvm.functions.Function1::class.java

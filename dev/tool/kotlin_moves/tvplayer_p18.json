@@ -1695,7 +1695,7 @@
         },
         {
           "before": "\nprivate fun playPrevious() {",
-          "after": "\ninternal fun playPrevious() {",
+          "after": "\nfun playPrevious() {",
           "count": 1
         }
       ]
