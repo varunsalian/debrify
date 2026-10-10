@@ -18908,3 +18908,25 @@ Applied the complete approved phase-17 manifest to the actual production caller:
 Checker: 1,676 declarations / zero differences; all historical `--at` checks p1–p16 pass at their merge SHAs, plus original self-comparison and 57 byte-identical earlier destinations with no whitelist. All 21 initializer proofs and teardown tokens after only approved substitutions pass. Compiled audit passes eight receiver pins (including implicit AppCompat `addContentView` with TextView inner `this` preserved), 23 retained view/cast pins, frozen identity readers/writers, volatile Activity storage/Host setters, and no eager recovery construction. Debug compilation preserves all five existing Kotlin warning identities.
 
 All 193 focused cases pass (185 phase-17 additions + eight reused phase-16 cases), with unchanged assertions and test inputs. All 42 owner routes, including seven original routing keys and raw `getIptvLiveRecovery`, were installed before the moves; no further helper or Dart edits are needed. All native/Dart test files, sixteen earlier manifests, earlier destinations, lockfile and ProGuard are unchanged. Evidence `p17/step1/`, `p17/gate/`. Clean full JVM, lint, release/R8/decoder and Flutter integration gates follow on this checkpoint.
+
+
+## Phase 17 integration gate — STOP after tune extraction
+
+Gate checks ran on clean commit `9772e09e5` (message contains `gate`). All **517** checker/auditor self-tests pass, including every historical fixture suite and phase-17 negatives; current checker/original self-comparison classify 1,676 declarations with zero differences. Historical `--at` p1–p16 checks pass at their merge SHAs; 57 earlier destinations and all sixteen earlier manifests are unchanged, no whitelist. All 21 initializer proofs, eight compiled receiver pins, 23 retained view/cast pins, volatile storage/Host setters and lazy/identity checks pass. Lifecycle teardown tokens equal the original after only declared in-place patches. The two Activity-owned volatile loader fields and unchanged loader code are preserved; the complete real-pipeline loader characterization also passes after extraction. All native/Dart assertions and test inputs remain byte-identical to Step 0b; 42 owner routes include the seven original routing keys and raw getter. Five production Kotlin warnings remain unchanged. Size checks pass with Activity 5,312 / tune 396 / trial 289 lines and the Activity ratchet lowered.
+
+Clean, matched JBR/1 GiB `p17-gate` **exactly preserves all 2,527 `p17-step0b` identities/statuses: 2,526 pass, one unchanged source-browser focus NPE**, no missing/new failure/skip. All 193 phase-17/reused focused cases pass. EPG timing is classified against every observed run:
+
+| run | EPG timing status | overall JVM status |
+| --- | --- | --- |
+| `baseline-be5635fae` | failure | 2,340 pass / 2 failure |
+| `p17-step0` | pass | 2,524 pass / 1 failure |
+| `p17-step0b` | pass | 2,526 pass / 1 failure |
+| `p17-gate` | pass | 2,526 pass / 1 failure |
+
+The original real-clock flakiness is preserved honestly; the gate retains the observed passing identity. No time-window change, allowlist edit or bug fix. Full raw histories remain archived (`p17/gate/epg-observed-statuses.json`, `junit/`). Original lint comparison is exact after symbol relocation: **1,351 identities / 252 errors / 1,099 warnings / 175 opt-in errors**, no additions/removals.
+
+Release `flutter build apk --release --no-pub` succeeds without install. R8 mapping/DEX verification passes all **five new/generated classes and 132 members**, including tune, trial, Host, recovery callbacks and Activity Host implementation; three negative controls pass. Decoder verification remains **pending-environment**: same exit/log/missing-decoder/filter sets and all three unchanged library hashes as phase 16, also identical to phase 1; no native binary or rule fix.
+
+Full Flutter suite through `suite_evidence.py` on this clean gate tree **exactly matches all 12,855 phase-16 identities** across 1,232 suites: 12,794 success, 13 failure, 28 error, 20 skipped. All 45 affected source-text statuses match. Analyzer exactly matches 1,758 prior diagnostic identities (917 error/113 warning/728 info). Existing failures remain reported; no baseline acceptance or obsolete allowlist hides a regression. SDK/configuration and tested inputs are stable.
+
+Evidence `p17/step0b/`, `p17/step1/`, `p17/gate/summary.json` and raw archives, `junit/p17-step0b/`, `junit/p17-gate/`. Detached original removed after proof archival. Lockfile, ProGuard, earlier destinations/manifests and all test inputs unchanged. Heavy runners and Gradle/Kotlin workers niced. No production bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP; phase 18 is not started.**
