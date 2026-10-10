@@ -322,7 +322,8 @@ public final class KotlinPsi {
                 // are excluded; bytecode pins the actual inherited dispatch.
                 for (KtCallExpression call : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtCallExpression.class)) {
                     String callee = call.getCalleeExpression() == null ? "" : call.getCalleeExpression().getText();
-                    if (!callee.equals("finish") && !callee.equals("findViewById") && !callee.equals("runOnUiThread") && !callee.equals("addContentView")) continue;
+                    boolean pipelineInherited = callee.equals("getSystemService") || callee.equals("registerReceiver");
+                    if (!callee.equals("finish") && !callee.equals("findViewById") && !callee.equals("runOnUiThread") && !callee.equals("addContentView") && !pipelineInherited) continue;
                     if (call.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)call.getParent()).getSelectorExpression() == call) continue;
                     PsiElement scope = call.getParent();
@@ -331,7 +332,7 @@ public final class KotlinPsi {
                     inheritedSites.add(map("start", offset(call.getTextRange().getStartOffset()),
                         "call_start", offset(call.getTextRange().getStartOffset()),
                         "call_end", offset(call.getTextRange().getEndOffset()), "callee", callee,
-                        "receiver", "implicit-inherited", "introduced_phase", callee.equals("addContentView") ? 17 : callee.equals("runOnUiThread") ? 10 : 9,
+                        "receiver", "implicit-inherited", "introduced_phase", pipelineInherited ? 19 : callee.equals("addContentView") ? 17 : callee.equals("runOnUiThread") ? 10 : 9,
                         "lexical_class", ((KtClass)scope).getName()));
                 }
                 // Java lifecycle Boolean properties compile to isFinishing()/isDestroyed().
@@ -339,7 +340,7 @@ public final class KotlinPsi {
                 for (KtNameReferenceExpression ref : org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, KtNameReferenceExpression.class)) {
                     String name = ref.getReferencedName();
                     if (!name.equals("isFinishing") && !name.equals("isDestroyed") &&
-                        !name.equals("resources") && !name.equals("currentFocus") && !name.equals("layoutInflater")) continue;
+                        !name.equals("resources") && !name.equals("currentFocus") && !name.equals("layoutInflater") && !name.equals("cacheDir")) continue;
                     if (ref.getParent() instanceof KtQualifiedExpression &&
                         ((KtQualifiedExpression)ref.getParent()).getSelectorExpression() == ref) continue;
                     // A constructor's named argument is not an inherited getter.
@@ -347,11 +348,11 @@ public final class KotlinPsi {
                     PsiElement scope = ref.getParent();
                     while (scope != null && !(scope instanceof KtClass)) scope = scope.getParent();
                     if (!(scope instanceof KtClass)) continue;
-                    String getter = name.equals("layoutInflater") ? "getLayoutInflater" : name.equals("resources") ? "getResources" : name.equals("currentFocus") ? "getCurrentFocus" : name;
+                    String getter = name.equals("cacheDir") ? "getCacheDir" : name.equals("layoutInflater") ? "getLayoutInflater" : name.equals("resources") ? "getResources" : name.equals("currentFocus") ? "getCurrentFocus" : name;
                     inheritedSites.add(map("start", offset(ref.getTextRange().getStartOffset()),
                         "call_start", offset(ref.getTextRange().getStartOffset()),
                         "call_end", offset(ref.getTextRange().getEndOffset()), "callee", getter,
-                        "receiver", "implicit-inherited", "introduced_phase", name.equals("layoutInflater") ? 13 : getter.equals(name) ? 10 : 12,
+                        "receiver", "implicit-inherited", "introduced_phase", name.equals("cacheDir") ? 19 : name.equals("layoutInflater") ? 13 : getter.equals(name) ? 10 : 12,
                         "property_read", true, "property_name", name, "lexical_class", ((KtClass)scope).getName()));
                 }
                 List<Object> findAssignments = new ArrayList<>();

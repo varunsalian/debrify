@@ -2043,7 +2043,103 @@ direct, PikPak, protected stream needing MIME discovery), resume position,
 next/previous episode, auto-advance at end, catalog episode controls, show
 shuffle (start, continue, exhaustion), Stremio TV channel next item.
 
+## Phase 19 — media pipeline and episode-metadata receiver
+
+Branch `refactor/tvplayer-p19` off the phase-18 merge. Evidence under
+`refactor-evidence/tvplayer/p19/`. Inventory: "Phase 19 inventory + phase 20
+assessment" in the deps report (measured at `df439aed1` with phases 16–18
+treated as merged — re-measure on the phase-18 merge). All collaborator rules
+from phases 3–18 apply.
+
+**Selected (≈ 758 lines, two independent siblings, no cross references):**
+- `TvMediaPipelineController` (≈ 545; class-level `@OptIn(UnstableApi::class)`):
+  `setupPlayer` (factory, LoadControl/buffer presets, track selector, data
+  source factories and header resolvers, load-error policy install),
+  `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener`.
+- `TvEpisodeMetadataReceiver` (≈ 335): the broadcast receiver field,
+  `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`,
+  `requestMetadataFromFlutter`.
+- Every state field stays activity-owned and is borrowed through computed
+  Hosts (pipeline 30 members, receiver 8); each controller owns only its slot
+  field → **0 initializer proofs**, no new classifier form.
+- 6 activity patches in 3 declarations (`onCreate` ×2, `initIptvMode` ×2,
+  `onDestroy` ×2 in place — after the Up Next handler clear and before
+  `subtitleScope.cancel()`); 1 Host re-point (switcher's
+  `requestMetadataFromFlutter`); the 8 temporary patches left by phases
+  16–18 inside this unit become declared substitutions. ≈ 128 substitutions
+  (no template bracing).
+- **Threading:** the three `@Volatile` fields (`activeVodHeaders`,
+  `currentIptvHttpHeaders`, `iptvStrictTsActive`) stay single activity
+  fields; each loader-thread read becomes the declared substitution
+  `x` → `host.x`, a computed getter reading the same volatile field on every
+  loader call (only additional reads are of final fields) — still a verbatim
+  move. Non-volatile reads on loader/playback threads are kept as-is.
+
+**Hazards.** The receiver's `intent` parameter shadows the activity's launch
+intent (7 reads, not rewritten); the subtitle identity-provider owner key
+stays the activity (`onDestroy` clears it by that key); two lazy first
+accesses in `setupPlayer` keep their timing; two inherited calls inside the
+anonymous `NetworkCallback`.
+
+**Retargets.** 2 reflective sites / 1 name / 1 file:
+`TvControlsCallerCharacterizationTest` invokes `handleMetadataUpdate`
+(one site pins the worker-thread write before the queued UI publication —
+the receiver is NOT main-thread only); routed to `episodeMetadataReceiver`
+with the original-owner fallback during step 0, both tests unchanged.
+`NativeAudioRoutingTest` moves to the
+new pipeline file path (a stronger variant keeps a `(false)` check on the
+activity file); `test/android_tv_mdblist_progress_source_test.dart` changes
+file path and its end marker loses `private`; asserted text unchanged.
+
+### Step T
+
+Extraction fixture (two siblings, computed Host getters) + negatives; the
+existing compiled OTT-name writer audit gets separate before/after owner
+maps (replacement stays in `TvPlaybackStartController`; metadata moves from
+the activity to `TvEpisodeMetadataReceiver`) keeping the volatile
+descriptor, writer-dispatch and playlist-reader assertions, with relocation
+negatives; a new **compiled volatile read-chain check** (Kotlin-precise:
+permitted captures listed by descriptor and role — the extractor legitimately
+captures both factories — exactly one getter invocation per read site, and
+negatives using real Kotlin-generated snapshot fields such as `$strictTs`,
+not a `val$` prefix rule) proving every loader-thread read
+reaches the original `@Volatile` field through a computed getter, with
+negatives for a hoisted snapshot, a non-computed Host member and a removed
+`@Volatile`; compiled audit (10 `this` sites, 11 inherited incl. inside the
+`NetworkCallback`); per-phase dispatcher; earlier destinations frozen at the
+phase-18 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: a Robolectric harness reading back the built Media3 1.8.0
+configuration (heap budget via `ShadowSystemProperties.override(
+"dalvik.vm.heapsize", …)` on SDK 28 — Robolectric 4.15.1 has no
+large-memory-class setter — asserting the real `largeMemoryClass` getter
+before setup and restoring afterwards, or a custom shadow) (LoadControl/buffer presets, track selector parameters, data
+source factories, load-error policy, codec selector) plus a worker-thread
+resolver harness for header resolution — demonstrated on the original; if not
+deterministic, the receiver ships alone as phase 19a. Then: pipeline
+configuration per mode (VOD, IPTV, strict-TS, protected stream), header
+resolution on worker threads, decoder analytics callbacks, the metadata
+receiver (register/unregister, staged extras validation, metadata merge,
+guide episodes, IMDb id), `requestMetadataFromFlutter`; coverage sweep.
+Mutation proofs; Claude's independent sample (≥ 75 %); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–18 additions. Device checklist (end of series):
+playback start for VOD/IPTV/strict-TS/protected streams (buffering
+behaviour, headers), decoder fallback on a hard codec, episode metadata
+arriving after launch (titles, guide episodes, progress).
+
 ## Follow-ups (found while mapping; not fixed here)
+
+- Phase 19 original outcomes, preserved by Step 0: Media3 1.8.0 stock
+  startup/rebuffer thresholds are 1,000/2,000 ms, despite stale 2,500/5,000
+  comments beside the merged-source override. A negative late duration with
+  negative live duration retains -1; a valid metadata row can update the model
+  before a malformed later row suppresses UI publication. Any comment or
+  behavior correction is separate; none is included here.
 
 - Phase 18 original async outcomes, preserved by Step 0: a worker-thread lazy
   resolve reply reaches UI animation without Main dispatch; MethodChannel
@@ -4042,3 +4138,89 @@ shuffle (start, continue, exhaustion), Stremio TV channel next item.
   bindings and teardown order preserved; analyzer extras at the intermediate
   run were duplicate physical lines only. Activity 5,312 → 4,472. Decoder
   verification remains pending-environment. Phase 18 complete; merged.
+- 2026-10-10 — phase 19 design review (Codex, `tvp-design`): **No P1s**.
+  Four P2s folded: `handleMetadataUpdate` reflective retarget (2 sites, incl.
+  a worker-thread write pin); before/after owner maps for the existing
+  compiled OTT-name writer audit; Kotlin-precise capture rule for the
+  volatile read-chain check; heap-budget seam via `dalvik.vm.heapsize`
+  override. Counts re-verified on `a0d1be1a7` (758 moved lines, six activity
+  patches, one Host re-point, eight consumed patches, zero initializer
+  proofs); router exception and ≈ 3,775–3,785 final size confirmed.
+
+- 2026-10-10 — **Phase 19 Step T complete; no production moves.** Routed
+  the two existing metadata reflection sites first, with original-owner
+  fallback and unchanged assertions; all eight caller cases pass, including
+  worker-thread storage before UI publication. Re-measured `a0d1be1a7`:
+  1,611 declarations / zero self-comparison differences; eight members /
+  758 span lines / 128 substitutions; six in-place activity edits, one
+  whole-property Host re-point, eight consumed patches, 30 / 8 computed
+  Host members and zero initializer proofs. Complete fixture compiles:
+  pipeline 535 / receiver 330 / hypothetical Activity 3,776 lines. Compiled
+  audit passes 21 current and 366 historical receiver pins, 23 retained
+  view/cast pins, four volatile chains in both trees, distinct metadata
+  before/after writer maps, lazy/storage/identity and frozen ShowShuffle
+  proofs, and two inlined Context values. Real Kotlin Map/Pair/Boolean
+  snapshots, Host backing fields, alternate Host descriptor, duplicate
+  reads, missing volatile flags and writer relocations fail as stated.
+  All **597** checker/auditor cases pass (555 historical + 42 current:
+  594 in the full run, three added compiled controls in focused runs).
+  All p1–p18 merge-SHA checks and 61 earlier destinations pass; all 560
+  protected inputs unchanged. Clean matched-1-GiB JVM baseline
+  `baseline-a0d1be1a7`: 2,826 identities / 2,825 pass / same existing focus
+  NPE; observed EPG timing passes, historical flakiness retained. Original
+  lint archived: 1,351 issues / 175 opt-in issues. Evidence `p19/tools-result.json`,
+  compiler/auditor/self-test/historical/route logs and `lint-original/`;
+  JUnit label under `junit/`. Size check without update. No production,
+  lockfile or ProGuard change, bug fix, push, branch switch or device use.
+  Step 0 Media3 configuration/worker prerequisites next.
+
+- 2026-10-10 — **Phase 19 Step 0 complete; STOP before production moves.**
+  Mandatory original Media3 1.8.0 read-back / SDK 28 real heap-getter /
+  bounded worker resolver-extractor prerequisites pass (six cases, before
+  widening). No 19a deferral. Complete original control: 158/158 pass,
+  including 150 new identities in 14 cohesive classes and eight unchanged
+  caller tests. Real VOD/IPTV bootstrap, installed configuration and all
+  mode/heap/time/language boundaries, live loader reads/snapshots, codec
+  order, connectivity/lazy timing, recording callback, listener/analytics
+  order, subtitle ownership and receiver/broadcast/staged/merge/worker/UI/
+  channel/destroy behavior are pinned. All 257 final original mutations:
+  255 named-assertion kills, two unreachable empty-language-variant branches
+  documented equivalent; no credited compile errors/crashes or unresolved
+  survivors. Every final new test has a preserved assertion witness. The
+  systematic matrix records 392 PSI obligations / 38 reviewed groups;
+  303 nodes overlap accepted mutations, composites and expression-body
+  callbacks are separately mapped. Post-test reflection rescan: all eight
+  moved-name routes / 28 literal accesses, real private/default dispatch and
+  original-owner fallback preserved. Clean original 2,826 statuses exact; final p19-step0 2,976 identities / 2,975 pass / same focus NPE, exactly 150 passing additions, no drops/status changes/new skips. EPG timing passes in all observed valid runs; historical flakiness remains recorded. The initial 1 GiB full worker OOM (no XML) is archived/excluded; matched evidence-only one-worker/25-class forks retain the same 1 GiB heap. A fresh clean baseline-a0d1be1a7-fork25 exactly matches baseline-a0d1be1a7; both Step 0 comparisons pass and every valid tree is stable.
+  Original lint remains archived at a0d1be1a7: 1,351 issues (252 Error /
+  1,099 Warning / 175 opt-in). Repeated self-comparison: 1,611 / zero;
+  61 frozen destinations / zero; Step T's 597 tool cases and all p1–p18
+  historical checks retained. All 560 protected hashes unchanged. Size:
+  2,982 files / 140 unchanged ratchets, no update. SDK 23 APK cannot load
+  at minSdk 24; the below-N branch uses a restored SDK_INT override on
+  SDK 28. Preserved stock-threshold/comment and late-negative-duration /
+  partial-write quirks recorded in Follow-ups. Evidence p19/step0/
+  (prerequisites/controls, exact patches/XML/stacks, matrix, provenance,
+  owner rescan, OOM attempt and matched-fork scripts/comparisons) and junit/.
+  Detached original removed after archiving. No production move, dependency,
+  lockfile or ProGuard edit, bug fix, push, branch switch, device/emulator
+  interaction or self independent review. Claude's separate sample next;
+  Step 1 not started.
+
+
+- 2026-10-10 — **Phase 19 independent Claude sample: 25/25 valid original mutations killed (100%).** Each ran against 157 tests in Claude’s phase-19/caller/native-audio selection; raw patches, named assertion failures and logs at `p19/claude-mutations/`. No Step 0b required.
+- 2026-10-10 — **Phase 19 Step 1 moves complete.** Exact manifest extraction of eight members / 758 span lines / 128 substitutions into independent pipeline (535 lines, class-level Media3 opt-in, 30-member computed Host) and metadata receiver (330, eight-member computed Host) at their original slots. **Activity 4,472 → 3,776 physical lines.** Three volatile fields remain single Activity fields; loader reads use computed Host getters. Six in-place Activity patches, one whole-property Host re-point, eight consumed earlier patches and zero initializer proofs; receiver intent, Activity subtitle identity key, private/default dispatch and both lazy first accesses preserved. All eight moved-name routes were installed before Step 0; only NativeAudio path plus stronger Activity false check and Dart path/end marker change, all other test bytes/assertions unchanged. Focused 184/184 pass, checker 1,611 / zero differences, lifecycle order, 61 frozen earlier destinations and 559 protected inputs unchanged. Size baseline lowered with `--update` (2,982 files / 140 ratchets); Dart formatting unchanged. Evidence `p19/step1/`. Full gate next; no bug fix, lockfile/ProGuard edit, push, branch switch, device interaction or self independent review.
+
+
+- 2026-10-10 — **Phase 19 gate complete; STOP after Phase 19.** Tested clean checkpoint `9e279ddd2`: all **597** checker/auditor cases pass (555 historical + 42 phase-19), 1,611 original declarations / zero differences, all p1–p18 historical merge-SHA checks, 61 frozen earlier destinations and zero current initializer proofs. Compiled audit passes 21 current / 366 historical receiver sites, 23 retained view/cast pins, four volatile read chains in each tree (single computed getter at every loader read), relocated OTT-name writer before/after maps, two inlined Context values and the retained lazy/storage/identity/ShowShuffle proofs. Full lifecycle statement order and exact test retargets pass. **Final Activity: exactly 3,776 physical lines** (original 4,472); pipeline 535 / receiver 330, 30 / 8 computed Host members, eight moved members / 758 span lines / 128 substitutions, six in-place Activity edits, one whole-property Host re-point and eight consumed earlier patches. Three volatile fields remain single Activity fields; intent shadowing, identity-provider Activity key, private/default dispatch and lazy first-access timing preserved.
+  Focused JVM 184/184 pass. Clean matched-1-GiB / one-worker / 25-class-fork `p19-gate` exactly preserves all 2,976 `p19-step0` identities (2,975 pass / same focus NPE); no missing tests, changed statuses or new skips, stable tree. All 93 EPG-named identities pass in this gate; observed valid phase-19 baseline/Step-0/gate EPG outcomes pass, while the earlier phase-17 timing failure remains documented as historical flakiness. Lint exactly preserves the original 1,351 issues (252 Error / 1,099 Warning / 175 opt-in); forced Kotlin compile preserves all five production warning identities. Release APK succeeds; cumulative R8/DEX audit covers all 63 phase-1–19 destination sources, 231 classes / 4,271 members and both new Host implementations, with three negative controls. Decoder script exit 1 remains **pending-environment**, with identical log, missing capabilities and all three ABI library hashes versus phase 18 and phase 1.
+  Full Flutter via `suite_evidence.py` exactly preserves all 12,855 phase-18 statuses (12,794 success / 13 failure / 28 error / 20 skipped); 45 affected source-test statuses exact, Dart formatting unchanged, final analyzer Counter exact over 1,758 occurrences. Clean committed tree remains stable; lockfile, ProGuard, historical manifests and 559 other protected inputs unchanged. Size baseline lowered with `--update`; final check 2,984 files / 140 ratchets. Claude’s independent 25/25 original mutation sample recorded; no 0b required. Evidence `p19/step1/`, `p19/gate/summary.json` and `junit/p19-gate/`. All heavy drivers niced; no bug fix, dependency edit, push, branch switch, device/emulator interaction or self independent review. Phase 20 not started.
+- 2026-10-10 — phase 19 post-implementation reviews of `a0d1be1a7..8e3b710a0`.
+  Claude's independent sample 25/25 (100 %); no step 0b needed. Independent
+  Codex review (fresh session): **No P1s, no P2/P3**; compiled audits confirm
+  one volatile `GETFIELD` of the same activity field per loader call,
+  legitimate extractor captures only, unchanged non-volatile visibility and
+  activity-bound callbacks; configuration, heap boundary, listener/subtitle
+  ownership, lazy timing, receiver registration, metadata publication and
+  teardown equivalent. Activity 4,472 → 3,776. Decoder verification remains
+  pending-environment. Phase 19 complete; merged.

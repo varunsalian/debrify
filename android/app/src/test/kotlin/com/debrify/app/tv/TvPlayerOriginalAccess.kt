@@ -75,7 +75,7 @@ internal object TvPlayerOriginalAccess {
         val controller = controllerOwners[name.removeSuffix("\$delegate")] ?: return owner
         // Routes are installed before extraction; the original still owns this phase's members.
         val pendingOwner = controller.substringBefore('.')
-        if (pendingOwner in setOf("controlsOverlayController", "iptvTuneController", "playbackStartController") &&
+        if (pendingOwner in setOf("controlsOverlayController", "iptvTuneController", "playbackStartController", "episodeMetadataReceiver", "mediaPipelineController") &&
             owner.javaClass.declaredFields.none { it.name == pendingOwner }) return owner
         return controller.split('.').fold(owner as Any) { current, field ->
             current.javaClass.getDeclaredField(field).apply { isAccessible = true }.get(current)!!

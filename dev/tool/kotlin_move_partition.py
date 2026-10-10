@@ -254,7 +254,9 @@ def check_initializer_timing(manifest, inventory, original, errors):
             errors.append('duplicate nested construction destination')
         direct = {next(r['destination'] for r in manifest['declarations']
                        if r['original'] == row['slot']): row['slot']
-                  for row in manifest['added'] if row['slot'] in inventory}
+                  for row in manifest['added'] if row['slot'] in inventory
+                  and any(r['original'] == row['slot'] and r['fate'] == 'moved'
+                          for r in manifest['declarations'])}
         def effective(path, trail=()):
             if path in trail:
                 raise ValueError('nested construction cycle')

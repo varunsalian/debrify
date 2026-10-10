@@ -464,31 +464,55 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val IPTV_LIVE_REJOIN_AFTER_MS = 30_000L
 
     private var iptvNetworkCallback: ConnectivityManager.NetworkCallback? = null
-
-    private val iptvDiagAnalyticsListener = object : AnalyticsListener {
-        override fun onRenderedFirstFrame(
-            eventTime: AnalyticsListener.EventTime,
-            output: Any,
-            renderTimeMs: Long,
-        ) {
-            startupGateController.mediaServerPlaybackLog("first_frame")
-            iptvTuneDiagnostics.onFirstFrame()
-            if (startupGateController.manualSourceRestoreInProgress) {
-                startupGateController.manualSourceRestoreInProgress = false
-                restartProgressUpdates()
-            }
-            startupGateController.commitManualSourceCandidate()
-            startupGateController.commitStartupCandidate()
-        }
-
-        override fun onLoadCompleted(
-            eventTime: AnalyticsListener.EventTime,
-            loadEventInfo: androidx.media3.exoplayer.source.LoadEventInfo,
-            mediaLoadData: androidx.media3.exoplayer.source.MediaLoadData,
-        ) {
-            iptvTuneDiagnostics.onBytesLoaded(loadEventInfo.bytesLoaded)
-        }
-    }
+    private val mediaPipelineController: TvMediaPipelineController = TvMediaPipelineController(
+        this,
+        object : TvMediaPipelineController.Host {
+            override val activeVodHeaders: Pair<Set<String>, Map<String, String>> get() = this@AndroidTvTorrentPlayerActivity.activeVodHeaders
+            override val currentIptvHttpHeaders: Map<String, String> get() = this@AndroidTvTorrentPlayerActivity.currentIptvHttpHeaders
+            override val currentIptvIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIptvIndex
+            override val displayController: TvPlaybackDisplayController get() = this@AndroidTvTorrentPlayerActivity.displayController
+            override val iptvChannels: MutableList<IptvChannelEntry> get() = this@AndroidTvTorrentPlayerActivity.iptvChannels
+            override val iptvDecoderMode: String get() = this@AndroidTvTorrentPlayerActivity.iptvDecoderMode
+            override var iptvNetworkCallback: ConnectivityManager.NetworkCallback?
+                get() = this@AndroidTvTorrentPlayerActivity.iptvNetworkCallback
+                set(value) { this@AndroidTvTorrentPlayerActivity.iptvNetworkCallback = value }
+            override val iptvRecordingActionsController: TvIptvRecordingActionsController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingActionsController
+            override val iptvRecordingController: IptvRecordingController get() = this@AndroidTvTorrentPlayerActivity.iptvRecordingController
+            override val iptvStrictTsActive: Boolean get() = this@AndroidTvTorrentPlayerActivity.iptvStrictTsActive
+            override val iptvTuneController: TvIptvTuneController get() = this@AndroidTvTorrentPlayerActivity.iptvTuneController
+            override val iptvTuneDiagnostics: IptvTuneDiagnostics get() = this@AndroidTvTorrentPlayerActivity.iptvTuneDiagnostics
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val nativeAudioRouting: NativeAudioRouting get() = this@AndroidTvTorrentPlayerActivity.nativeAudioRouting
+            override val networkBuffer: String get() = this@AndroidTvTorrentPlayerActivity.networkBuffer
+            override val networkPatience: String get() = this@AndroidTvTorrentPlayerActivity.networkPatience
+            override var offsetRenderersFactory: OffsetRenderersFactory?
+                get() = this@AndroidTvTorrentPlayerActivity.offsetRenderersFactory
+                set(value) { this@AndroidTvTorrentPlayerActivity.offsetRenderersFactory = value }
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val playbackListener: Player.Listener get() = this@AndroidTvTorrentPlayerActivity.playbackListener
+            override var player: ExoPlayer?
+                get() = this@AndroidTvTorrentPlayerActivity.player
+                set(value) { this@AndroidTvTorrentPlayerActivity.player = value }
+            override val playerPreferences: com.debrify.app.profiles.NativePlayerPreferences get() = this@AndroidTvTorrentPlayerActivity.playerPreferences
+            override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
+            override var protectedStreamClient: okhttp3.OkHttpClient
+                get() = this@AndroidTvTorrentPlayerActivity.protectedStreamClient
+                set(value) { this@AndroidTvTorrentPlayerActivity.protectedStreamClient = value }
+            override var speechTap: SpeechFeatureTap?
+                get() = this@AndroidTvTorrentPlayerActivity.speechTap
+                set(value) { this@AndroidTvTorrentPlayerActivity.speechTap = value }
+            override val startupGateController: TvStartupGateController get() = this@AndroidTvTorrentPlayerActivity.startupGateController
+            override val subtitleController: TvSubtitleController get() = this@AndroidTvTorrentPlayerActivity.subtitleController
+            override var subtitleListener: Player.Listener?
+                get() = this@AndroidTvTorrentPlayerActivity.subtitleListener
+                set(value) { this@AndroidTvTorrentPlayerActivity.subtitleListener = value }
+            override val subtitleOverlay: SubtitleView get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlay
+            override var trackSelector: DefaultTrackSelector?
+                get() = this@AndroidTvTorrentPlayerActivity.trackSelector
+                set(value) { this@AndroidTvTorrentPlayerActivity.trackSelector = value }
+            override fun restartProgressUpdates(): Unit { return this@AndroidTvTorrentPlayerActivity.restartProgressUpdates() }
+        },
+    )
 
     // Subtitle auto-sync: taps the decoded PCM (created with the player, in
     // setupPlayer) so the aligner has audio history the moment it's asked.
@@ -1681,9 +1705,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
     }
-
-    // Broadcast receiver for async metadata updates from Flutter
-    private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null
+    private val episodeMetadataReceiver: TvEpisodeMetadataReceiver = TvEpisodeMetadataReceiver(
+        this,
+        object : TvEpisodeMetadataReceiver.Host {
+            override val controlsOverlayController: TvControlsOverlayController get() = this@AndroidTvTorrentPlayerActivity.controlsOverlayController
+            override val currentIndex: Int get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+            override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override val playbackStartController: TvPlaybackStartController get() = this@AndroidTvTorrentPlayerActivity.playbackStartController
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playlistController: TvPlaylistOverlayController get() = this@AndroidTvTorrentPlayerActivity.playlistController
+            override val subtitleSourcesController: TvSubtitleSourcesController get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController
+        },
+    )
 
     private lateinit var playerPreferences: com.debrify.app.profiles.NativePlayerPreferences
 
@@ -1812,7 +1846,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         bindViews()
         startupLog("event=player_setup_begin")
-        setupPlayer()
+        mediaPipelineController.setupPlayer()
         startupLog("event=player_setup_complete")
         controlsOverlayController.seek.setupSeekbar()
         playlistController.setupPlaylist()
@@ -1851,7 +1885,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Initialize seek feedback manager
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
         setupBackPressHandler()
-        setupMetadataReceiver()
+        episodeMetadataReceiver.setupMetadataReceiver()
 
         // Initialize Stremio subtitle service
         stremioSubtitleService = StremioSubtitleService(this)
@@ -1859,304 +1893,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Start playback
         startupGateController.beginStartupFailoverIfEligible()
         playbackStartController.playItem(currentIndex)
-    }
-
-    private fun setupMetadataReceiver() {
-        metadataUpdateReceiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                // Large JSON arrives as cacheDir file paths — inline extras
-                // over the binder limit get the process killed by the system
-                // ("can't deliver broadcast"). Inline extras remain as a
-                // fallback; a missing/unreadable file just skips the update.
-                val updatesJson = readStagedExtra(
-                    intent, "metadataUpdatesPath", "episode_metadata_",
-                ) ?: intent?.getStringExtra("metadataUpdates")
-                val imdbId = intent?.getStringExtra("imdbId")
-                val guideJson = readStagedExtra(
-                    intent, "guideEpisodesPath", "episode_guide_",
-                ) ?: intent?.getStringExtra("guideEpisodes")
-                val showName = intent?.getStringExtra("showName")
-                handleMetadataUpdate(updatesJson, imdbId, guideJson, showName)
-            }
-        }
-
-        val filter = android.content.IntentFilter("com.debrify.app.tv.UPDATE_EPISODE_METADATA")
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(metadataUpdateReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(metadataUpdateReceiver, filter)
-        }
-        android.util.Log.d("AndroidTvPlayer", "Metadata update receiver registered")
-
-        // Request metadata from Flutter now that receiver is ready
-        requestMetadataFromFlutter()
-    }
-
-    /** Reads a staged cacheDir JSON file whose path rides in [key].
-     *  Returns null when the extra is absent or the file can't be read.
-     *
-     *  Read-only on purpose: during an activity handoff two player instances
-     *  briefly have live receivers, and a delete-on-read would let the dying
-     *  one consume the file before the live one sees it. The sender sweeps
-     *  old staged files on each push instead.
-     *
-     *  Pre-33 the receiver is effectively exported, so never trust the path:
-     *  only files of the expected [prefix] directly inside our cacheDir. */
-    private fun readStagedExtra(
-        intent: android.content.Intent?,
-        key: String,
-        prefix: String,
-    ): String? {
-        val path = intent?.getStringExtra(key) ?: return null
-        return try {
-            val file = java.io.File(path).canonicalFile
-            if (file.parentFile?.canonicalPath != cacheDir.canonicalPath ||
-                !file.name.startsWith(prefix)
-            ) {
-                android.util.Log.e("TVMazeUpdate", "Rejected staged $key outside cacheDir")
-                return null
-            }
-            file.readText()
-        } catch (e: Exception) {
-            android.util.Log.e("TVMazeUpdate", "Failed to read staged $key: ${e.message}")
-            null
-        }
-    }
-
-    private fun handleMetadataUpdate(
-        updatesJson: String?,
-        imdbId: String?,
-        guideJson: String? = null,
-        showName: String? = null,
-    ) {
-        android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
-        android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
-
-        // TVMaze's official show title — the OTT dock's identity line reads
-        // it; the payload title (often a release filename) never renders.
-        if (!showName.isNullOrBlank()) {
-            controlsOverlayController.identity.ottShowName = showName.trim()
-            if (ottSkinInstalled) runOnUiThread { controlsOverlayController.identity.updateOttIdentity() }
-        }
-
-        val model = payload
-        if (model == null) {
-            android.util.Log.e("TVMazeUpdate", "payload is NULL - cannot update")
-            return
-        }
-
-        // Handle IMDB ID update for Stremio subtitles
-        if (!imdbId.isNullOrEmpty() && imdbId.startsWith("tt")) {
-            val previousImdbId = model.imdbId
-            if (previousImdbId.isNullOrEmpty()) {
-                android.util.Log.d("TVMazeUpdate", "Discovered IMDB ID from TVMaze: $imdbId (was: $previousImdbId)")
-                // Update payload with discovered IMDB ID
-                model.imdbId = imdbId
-                // Fetch Stremio subtitles now that we have IMDB ID
-                val currentItem = model.items.getOrNull(currentIndex)
-                if (currentItem != null) {
-                    android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")
-                    subtitleSourcesController.fetchStremioSubtitles(currentItem)
-                }
-            }
-        }
-
-        // Full-show episode guide: adopt it and rebuild the series playlist so
-        // absent episodes render as fetchable rows (this also enables the
-        // playlist overlay for single-stream launches).
-        if (!guideJson.isNullOrEmpty()) {
-            try {
-                val guideArray = JSONArray(guideJson)
-                val parsed = mutableListOf<GuideEpisode>()
-                for (i in 0 until guideArray.length()) {
-                    val g = guideArray.getJSONObject(i)
-                    val season = g.optInt("season", -1)
-                    val episode = g.optInt("episode", -1)
-                    if (season < 0 || episode < 0) continue
-                    parsed.add(
-                        GuideEpisode(
-                            season = season,
-                            episode = episode,
-                            title = if (g.has("title")) g.optString("title") else null,
-                            artwork = if (g.has("artwork")) g.optString("artwork") else null,
-                            description = if (g.has("description")) g.optString("description") else null,
-                            rating = if (g.has("rating")) g.optDouble("rating") else null,
-                            runtime = if (g.has("runtime")) g.optInt("runtime") else null,
-                            resumePositionMs = if (g.has("resumePositionMs")) g.optLong("resumePositionMs") else null,
-                            durationMs = if (g.has("durationMs")) g.optLong("durationMs") else null,
-                            trackerProgressPercent = if (g.has("trackerProgressPercent")) g.optDouble("trackerProgressPercent") else null,
-                            watched = g.optBoolean("watched", false),
-                            shuffleEligible = g.optBoolean("shuffleEligible", true),
-                        )
-                    )
-                }
-                if (parsed.isNotEmpty()) {
-                    model.guideEpisodes.clear()
-                    model.guideEpisodes.addAll(parsed)
-                    android.util.Log.d("TVMazeUpdate", "Adopted ${parsed.size} guide episodes")
-                    runOnUiThread {
-                        if (model.contentType.lowercase(Locale.US) == "series") {
-                            playlistController.rebuildPlaylistContent()
-                            playlistController.seriesPlaylistAdapter?.setActiveIndex(currentIndex)
-                            playbackStartController.navigator.updateCatalogEpisodeControls()
-                            model.items.getOrNull(currentIndex)?.let { controlsOverlayController.identity.updateTitle(it) }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("TVMazeUpdate", "Failed to parse guide episodes: ${e.message}", e)
-            }
-        }
-
-        // Handle episode metadata updates
-        if (updatesJson.isNullOrEmpty()) {
-            android.util.Log.d("TVMazeUpdate", "No episode metadata updates to process")
-            return
-        }
-
-        try {
-            val updatesArray = JSONArray(updatesJson)
-            android.util.Log.d("TVMazeUpdate", "Parsed ${updatesArray.length()} updates")
-            android.util.Log.d("TVMazeUpdate", "model.items.size=${model.items.size}")
-
-            var anyUpdated = false
-            var updatedCount = 0
-            var skippedCount = 0
-            for (i in 0 until updatesArray.length()) {
-                val update = updatesArray.getJSONObject(i)
-                val requestedIndex = update.optInt("originalIndex", -1)
-                val updateSeason = if (update.has("season")) update.optInt("season") else null
-                val updateEpisode = if (update.has("episode")) update.optInt("episode") else null
-                val originalIndex = if (updateSeason != null && updateEpisode != null) {
-                    val requestedItem = model.items.getOrNull(requestedIndex)
-                    if (requestedItem?.season == updateSeason && requestedItem.episode == updateEpisode) {
-                        requestedIndex
-                    } else {
-                        model.items.indexOfFirst {
-                            it.season == updateSeason && it.episode == updateEpisode
-                        }
-                    }
-                } else {
-                    requestedIndex
-                }
-                if (originalIndex < 0 || originalIndex >= model.items.size) {
-                    android.util.Log.w("TVMazeUpdate", "Skipping unmatched update index=$requestedIndex S${updateSeason}E${updateEpisode} (items.size=${model.items.size})")
-                    skippedCount++
-                    continue
-                }
-
-                val item = model.items[originalIndex]
-                val newTitle: String? = if (update.has("title")) update.optString("title") else null
-                val newDescription: String? = if (update.has("description")) update.optString("description") else null
-                val newArtwork: String? = if (update.has("artwork")) update.optString("artwork") else null
-                val newRating = if (update.has("rating")) update.optDouble("rating") else null
-                val newResumePositionMs = if (update.has("resumePositionMs")) update.optLong("resumePositionMs") else null
-                val newDurationMs = if (update.has("durationMs")) update.optLong("durationMs") else null
-                val hasWatchedUpdate = update.has("watched")
-                val watched = if (hasWatchedUpdate) update.optBoolean("watched", false) else item.watched
-                val newTrackerProgress = when {
-                    hasWatchedUpdate && watched -> 100.0
-                    update.has("trackerProgressPercent") -> update.optDouble("trackerProgressPercent")
-                    else -> null
-                }
-                val isCurrentItem = originalIndex == currentIndex
-                val livePositionMs = if (isCurrentItem) {
-                    (player?.currentPosition ?: 0L).coerceAtLeast(0L)
-                } else {
-                    0L
-                }
-                val liveDurationMs = if (isCurrentItem) {
-                    (player?.duration ?: 0L).coerceAtLeast(0L)
-                } else {
-                    0L
-                }
-
-                // Create updated item with new metadata
-                val updatedItem = item.copy(
-                    title = if (!newTitle.isNullOrEmpty()) newTitle else item.title,
-                    description = if (!newDescription.isNullOrEmpty()) newDescription else item.description,
-                    artwork = if (!newArtwork.isNullOrEmpty()) newArtwork else item.artwork,
-                    rating = newRating ?: item.rating,
-                    resumePositionMs = mergeLateMetadataResumePosition(
-                        existingPositionMs = item.resumePositionMs,
-                        incomingPositionMs = newResumePositionMs,
-                        livePositionMs = livePositionMs,
-                        isCurrentItem = isCurrentItem,
-                    ),
-                    durationMs = mergeLateMetadataDuration(
-                        existingDurationMs = item.durationMs,
-                        incomingDurationMs = newDurationMs,
-                        liveDurationMs = liveDurationMs,
-                        isCurrentItem = isCurrentItem,
-                    ),
-                    traktProgressPercent = newTrackerProgress ?: item.traktProgressPercent,
-                    watched = watched,
-                    allowLocalProgressDisplay = update.optBoolean("allowLocalProgressDisplay", item.allowLocalProgressDisplay),
-                )
-                model.items[originalIndex] = updatedItem
-                anyUpdated = true
-                updatedCount++
-            }
-
-            android.util.Log.d("TVMazeUpdate", "Updated $updatedCount items, skipped $skippedCount")
-
-            if (anyUpdated) {
-                android.util.Log.d("TVMazeUpdate", "Refreshing UI adapters...")
-                // Refresh playlist adapter if visible
-                runOnUiThread {
-                    // seriesPlaylistAdapter and moviePlaylistAdapter extend RecyclerView.Adapter
-                    val seriesAdapter = playlistController.seriesPlaylistAdapter
-                    val movieAdapter = playlistController.moviePlaylistAdapter
-                    android.util.Log.d("TVMazeUpdate", "seriesAdapter=${seriesAdapter != null}, movieAdapter=${movieAdapter != null}")
-                    seriesAdapter?.notifyDataSetChanged()
-                    movieAdapter?.notifyDataSetChanged()
-                    android.util.Log.d("TVMazeUpdate", "UI refresh done")
-
-                    // Also refresh title bar for currently playing episode
-                    val currentItem = model.items.getOrNull(currentIndex)
-                    if (currentItem != null) {
-                        android.util.Log.d("TVMazeUpdate", "Refreshing title for current episode: ${currentItem.title}")
-                        controlsOverlayController.identity.updateTitle(currentItem)
-                    }
-                }
-            } else {
-                android.util.Log.w("TVMazeUpdate", "No items updated - anyUpdated=false")
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("TVMazeUpdate", "Failed to parse metadata updates: ${e.message}", e)
-        }
-    }
-
-    private fun requestMetadataFromFlutter() {
-        android.util.Log.d("TVMazeUpdate", "requestMetadataFromFlutter CALLED")
-        val model = payload ?: return
-
-        // Only request metadata for series content
-        if (model.contentType != "series") {
-            android.util.Log.d("TVMazeUpdate", "Not requesting metadata - contentType=${model.contentType}")
-            return
-        }
-
-        try {
-            val channel = MainActivity.getAndroidTvPlayerChannel()
-            if (channel == null) {
-                android.util.Log.e("TVMazeUpdate", "Method channel is null, cannot request metadata")
-                return
-            }
-
-            android.util.Log.d("TVMazeUpdate", "Invoking requestEpisodeMetadata on method channel")
-            // Method channel calls MUST be on the main/UI thread
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    channel.invokeMethod("requestEpisodeMetadata", null)
-                    android.util.Log.d("TVMazeUpdate", "requestEpisodeMetadata invoked successfully")
-                } catch (e: Exception) {
-                    android.util.Log.e("TVMazeUpdate", "Failed to invoke requestEpisodeMetadata", e)
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("TVMazeUpdate", "Error requesting metadata from Flutter", e)
-        }
     }
 
     private fun bindViews() {
@@ -2349,438 +2085,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Stremio sources badge (opens the dedicated full-screen browser).
         stremioSourceBadge = findViewById(R.id.stremio_source_badge)
         stremioSourceBadgeText = findViewById(R.id.stremio_source_badge_text)
-    }
-
-    /**
-     * Video decoder order for IPTV, honouring the user's Playback setting.
-     *
-     * A frozen picture with running audio on live TV is the box's hardware
-     * decoder mishandling the stream (MediaTek/Amlogic boxes are the usual
-     * reports, and ExoPlayer issue #10369 is the same signature) — it can't
-     * be fixed from the app, only routed around, which is why every IPTV
-     * player exposes this switch. 'software' promotes Android's own software
-     * codecs; the rejected decoders stay in the list as fallbacks because
-     * setEnableDecoderFallback(true) can still reach them. Audio decoding and
-     * every non-IPTV playback keep the platform's own order.
-     */
-    private fun iptvMediaCodecSelector(): MediaCodecSelector {
-        return MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-            val infos = MediaCodecSelector.DEFAULT.getDecoderInfos(
-                mimeType,
-                requiresSecureDecoder,
-                requiresTunnelingDecoder,
-            )
-            if (!isIptvMode || iptvDecoderMode == "auto" || !MimeTypes.isVideo(mimeType)) {
-                infos
-            } else {
-                val preferSoftware = iptvDecoderMode == "software"
-                val preferred = infos.filter { it.softwareOnly == preferSoftware }
-                if (preferred.isEmpty()) {
-                    infos
-                } else {
-                    preferred + infos.filterNot { it.softwareOnly == preferSoftware }
-                }
-            }
-        }
-    }
-
-    private fun setupPlayer() {
-        trackSelector = DefaultTrackSelector(this)
-
-        // Get default language settings
-        val defaultAudioLang = playerPreferences.getString("player_default_audio_language", null)
-        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
-
-        // Build track selector parameters with robust language matching
-        val paramsBuilder = trackSelector?.buildUponParameters()
-            // HDMI can temporarily lose surround support during a display-mode
-            // switch. Reconsider PCM fallback when the capabilities return.
-            ?.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
-            ?.setPreferredAudioMimeType("audio/opus")
-            ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-
-        // Live IPTV: never adapt between video tracks in a way that forces a
-        // codec reconfigure. That switch — not the stream itself — is where
-        // strict decoders wedge into "frozen picture, audio still running"
-        // (ExoPlayer #10369, an ABR switch on an Amlogic STB with no
-        // MediaCodec error at all). Seamless adaptation within one codec
-        // configuration is untouched, so multi-variant channels still adapt.
-        if (isIptvMode) {
-            paramsBuilder?.setAllowVideoNonSeamlessAdaptiveness(false)
-        }
-
-        // Apply audio language preference
-        if (defaultAudioLang != null) {
-            val audioVariants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultAudioLang)
-            if (audioVariants.isNotEmpty()) {
-                paramsBuilder?.setPreferredAudioLanguages(*audioVariants.toTypedArray())
-            } else {
-                paramsBuilder?.setPreferredAudioLanguage(defaultAudioLang)
-            }
-        } else {
-            // Default to English if no preference set
-            val englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en")
-            paramsBuilder?.setPreferredAudioLanguages(*englishVariants.toTypedArray())
-        }
-
-        // Apply subtitle language preference
-        when {
-            defaultSubtitleLang == "off" -> {
-                paramsBuilder?.setPreferredTextLanguage("")
-                paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            }
-            defaultSubtitleLang != null -> {
-                // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
-                val variants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultSubtitleLang)
-                if (variants.isNotEmpty()) {
-                    paramsBuilder?.setPreferredTextLanguages(*variants.toTypedArray())
-                } else {
-                    paramsBuilder?.setPreferredTextLanguage(defaultSubtitleLang)
-                }
-            }
-            else -> {
-                // Default to English if no preference set
-                val englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en")
-                paramsBuilder?.setPreferredTextLanguages(*englishVariants.toTypedArray())
-            }
-        }
-
-        // Start with text off until the selected audio is known. This also
-        // prevents a file's default/forced track flashing before policy runs.
-        // Wait for exact regional matching; ExoPlayer can treat pt-PT as a
-        // partial match for pt-BR during its initial track selection.
-        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
-            playerPreferences.getBoolean("subtitle_forced_only", false) ||
-            defaultSubtitleLang?.equals("pt-BR", ignoreCase = true) == true) {
-            paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-        }
-        trackSelector?.parameters = paramsBuilder?.build()!!
-
-        // Subtitle auto-sync's PCM tap rides the audio sink as a user
-        // AudioProcessor: it sees every decoded sample the player plays, at
-        // media rate (user processors sit before the speed processors), for
-        // free. Created fresh per player build so a rebuild can't feed an old
-        // tap. Passthrough audio bypasses processors entirely — the tap then
-        // simply never fills and auto-sync declines instead of guessing.
-        val tap = SpeechFeatureTap(
-            mainPost = { action -> runOnUiThread(action) },
-            positionMs = { player?.currentPosition ?: 0L },
-        ).also { speechTap = it }
-        nativeAudioRouting.update(displayController.nightModeIndex > 0, displayController.systemAudioEffectsEnabled, displayController.playbackSpeeds[displayController.playbackSpeedIndex])
-        val baseRenderersFactory = NativeAudioRenderersFactory(
-            this, nativeAudioRouting, arrayOf(tap.processor),
-        )
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-            .setEnableDecoderFallback(true)
-            .setMediaCodecSelector(iptvMediaCodecSelector())
-        val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
-            .also { offsetRenderersFactory = it }
-
-        // Create HTTP data source factory with redirect support for HLS/live streams.
-        // The browser UA rides in defaultRequestProperties, NOT setUserAgent:
-        // media3 applies the userAgent field LAST in makeConnection, silently
-        // clobbering any per-request User-Agent — which would break IPTV
-        // channels that declare their own UA (injected via the resolver's
-        // dataSpec headers, which override defaults in the merge).
-        // Connection patience preset: longer connect/read timeouts for slow
-        // origins (Plex-backed addons can take >15s to first byte while the
-        // upstream server wakes). VOD only — IPTV's resilience ladder depends
-        // on failing fast enough to retry, so it keeps the stock 15s.
-        val networkTimeoutMs = if (!isIptvMode) when (networkPatience) {
-            "extended" -> 30_000
-            "patient" -> 60_000
-            else -> 15_000
-        } else 15_000
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(networkTimeoutMs)
-            .setReadTimeoutMs(networkTimeoutMs)
-            .setDefaultRequestProperties(
-                mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-            )
-
-        // Wrap with DefaultDataSource.Factory for local file/content URI support
-        protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)
-        val vodHttpFactory = VodHttpDataSource.Factory(
-            httpDataSourceFactory,
-            ProtectedStreamHttp.dataSourceFactory(protectedStreamClient),
-        )
-        val upstreamDataSourceFactory = DefaultDataSource.Factory(
-            this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory,
-        )
-        val dataSourceFactory = run {
-            ResolvingDataSource.Factory(
-                upstreamDataSourceFactory,
-                object : ResolvingDataSource.Resolver {
-                    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
-                        val (protectedMediaOrigins, playbackHeaders) = activeVodHeaders
-                        val origin = originKey(dataSpec.uri)
-                        return if (origin != null && protectedMediaOrigins.contains(origin)) {
-                            dataSpec.withAdditionalHeaders(playbackHeaders)
-                        } else {
-                            dataSpec
-                        }
-                    }
-
-                    override fun resolveReportedUri(uri: Uri): Uri = uri
-                }
-            )
-        }
-
-        // IPTV: inject the CURRENT channel's declared headers into every
-        // request (playlist + segments — CDNs enforce them on both). Read per
-        // request so channel zaps just update [currentIptvHttpHeaders]; the
-        // factory-level Chrome UA still applies when a channel names no UA.
-        // (Channel UA keys are canonicalized to "User-Agent" at parse time,
-        // so the dataSpec entry deterministically replaces the default.)
-        val finalDataSourceFactory = if (isIptvMode) {
-            ResolvingDataSource.Factory(
-                dataSourceFactory,
-                object : ResolvingDataSource.Resolver {
-                    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
-                        val headers = currentIptvHttpHeaders
-                        return if (headers.isEmpty()) dataSpec
-                        else dataSpec.withAdditionalHeaders(headers)
-                    }
-
-                    override fun resolveReportedUri(uri: Uri): Uri = uri
-                }
-            )
-        } else {
-            dataSourceFactory
-        }
-
-        // IPTV: tee the played bytes to a recording file on demand. Inert unless
-        // the user starts a recording (see IptvRecordingController); wraps the
-        // fully-resolved factory so recorded bytes carry the channel's headers.
-        val recordingDataSourceFactory = if (isIptvMode) {
-            // A write error (disk full, row revoked) ends the recording on the
-            // loader thread; without this the dock would keep saying "Stop".
-            iptvRecordingController.onAborted = {
-                iptvRecordingActionsController.updateRecordButtonState()
-                Toast.makeText(
-                    this,
-                    "Recording stopped — couldn't keep writing to storage",
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-            RecordingDataSource.Factory(finalDataSourceFactory, iptvRecordingController)
-        } else {
-            finalDataSourceFactory
-        }
-
-        // Create media source factory that uses the data source. IPTV gets
-        // two live-stream aids on top:
-        //  - TS extractor flags (Phase 3 of the resilience plan, marked
-        //    experimental there): ALLOW_NON_IDR_KEYFRAMES lets a mid-GOP
-        //    live join render before the next IDR arrives (broadcast streams
-        //    can go seconds between them), DETECT_ACCESS_UNITS lets H.264
-        //    parse when the container lies about access-unit boundaries.
-        //    Both are what dedicated IPTV players run with.
-        //  - the classified load-error policy (Phase 1): loader-level retries
-        //    UNDER an intact buffer for transient errors, so the common
-        //    connection drop heals without the player ever leaving READY.
-        val mediaSourceFactory = if (isIptvMode) {
-            val aggressiveTs = DefaultExtractorsFactory().setTsExtractorFlags(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
-                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
-            )
-            // The fallback the video-stall detector escalates to (see
-            // performIptvLiveRetune): stock demux — IDR-only sync points —
-            // for channels whose decoder wedges on mid-GOP joins. This is
-            // the pre-0.8.1 behavior, and what the browse screen's preview
-            // player runs with everywhere (which is why the same channel
-            // plays fine in the two-pane stage on those boxes).
-            val strictTs = DefaultExtractorsFactory()
-            val iptvExtractors = object : ExtractorsFactory {
-                override fun createExtractors(): Array<Extractor> =
-                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
-                        .createExtractors()
-
-                override fun createExtractors(
-                    uri: Uri,
-                    responseHeaders: Map<String, List<String>>,
-                ): Array<Extractor> =
-                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
-                        .createExtractors(uri, responseHeaders)
-            }
-            DefaultMediaSourceFactory(this, iptvExtractors)
-                .setDataSourceFactory(recordingDataSourceFactory)
-                .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true })
-        } else {
-            DefaultMediaSourceFactory(this)
-                .setDataSourceFactory(recordingDataSourceFactory)
-        }
-
-        val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
-            .setTrackSelector(trackSelector!!)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setHandleAudioBecomingNoisy(true)
-            // Hold CPU + Wi-Fi while playing over the network: TV boxes with
-            // aggressive Wi-Fi power-save can starve a live stream without
-            // this (downloads and recordings already take their own locks —
-            // playback was the only network consumer without one).
-            .setWakeMode(C.WAKE_MODE_NETWORK)
-
-        when (displayController.displayMatchMode) {
-            TvContentDisplayMatchMode.OFF -> playerBuilder.setVideoChangeFrameRateStrategy(
-                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,
-            )
-            TvContentDisplayMatchMode.FRAME_RATE,
-            TvContentDisplayMatchMode.FRAME_RATE_AND_RESOLUTION,
-            -> playerBuilder.setVideoChangeFrameRateStrategy(
-                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS,
-            )
-            TvContentDisplayMatchMode.SYSTEM -> Unit
-        }
-
-        // IPTV buffering: media3 1.8.0's stock DefaultLoadControl already
-        // resumes 2s after a rebuffer (the plan's audit assumed the old 5s
-        // default — codex review round 2 corrected it against the 1.8.0
-        // constants). Stock is the right call: no override.
-
-        // For YouTube (merged video-only + audio) ONLY, start after buffering
-        // ~1s instead of ExoPlayer's conservative 2.5s default — otherwise the
-        // two separate googlevideo streams take 20-30s to fill the buffer before
-        // the first frame. All other content keeps ExoPlayer's defaults so this
-        // can't regress torrent/IPTV/debrid playback.
-        val isYouTubeMerge = payload?.items?.any {
-            !it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()
-        } == true
-        if (isYouTubeMerge) {
-            playerBuilder.setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        15_000, // minBufferMs (default 50000)
-                        50_000, // maxBufferMs (default 50000)
-                        1_000,  // bufferForPlaybackMs (default 2500)
-                        2_000,  // bufferForPlaybackAfterRebufferMs (default 5000)
-                    )
-                    .setPrioritizeTimeOverSizeThresholds(true)
-                    .build()
-            )
-        } else if (!isIptvMode && networkBuffer != "standard") {
-            // Stream buffer preset: wider read-ahead rides over origin
-            // stalls. Start thresholds stay stock (only min/max grow), so
-            // start latency is unchanged; the byte target is the real memory
-            // guard (mirrors the mpv side's demuxer-max-bytes) — loading
-            // stops at whichever target hits first, exactly like stock.
-            val hugeBuffer = networkBuffer == "huge"
-            // Unlike mpv's native-memory demuxer cache, this target is JAVA
-            // heap (DefaultAllocator's byte[] segments) shared with the
-            // Flutter engine, image caches, and every profile/guide
-            // structure in this process. The original clamp — HALF the
-            // large-heap class — was a ceiling, not headroom: on a 256
-            // MiB-class TV box a high-bitrate stream drove the allocator to
-            // 128 MiB of live byte[] and the loader thread died with
-            // OutOfMemoryError, an Error no player plumbing catches →
-            // process death straight to the launcher, on exactly the
-            // hardware this preset serves (Mecool KM2+ field report,
-            // 2026-08-18: one high-bitrate episode "crashes the app", every
-            // source). Budget a QUARTER of the heap instead, cap the
-            // requests well below the old 256/512 MiB, and when even the
-            // quarter is too small to be worth overriding, keep stock —
-            // stock's own byte targets are what the device already
-            // survives. Long math throughout: largeMemoryClass is an Int MB
-            // count, and `mb / 2 * 1024 * 1024` overflows Int from a 4
-            // GiB heap class up.
-            val activityManager =
-                getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            val heapBudgetBytes =
-                activityManager.largeMemoryClass.toLong() * 1024L * 1024L / 4L
-            val requestedBytes = (if (hugeBuffer) 192L else 96L) * 1024L * 1024L
-            val targetBytes = minOf(requestedBytes, heapBudgetBytes)
-            if (targetBytes >= 48L * 1024L * 1024L) {
-                playerBuilder.setLoadControl(
-                    DefaultLoadControl.Builder()
-                        .setBufferDurationsMs(
-                            if (hugeBuffer) 300_000 else 120_000, // minBufferMs
-                            if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
-                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                        )
-                        .setTargetBufferBytes(targetBytes.toInt())
-                        .build()
-                )
-            }
-        }
-
-        player = playerBuilder.build()
-        player?.setPlaybackSpeed(displayController.playbackSpeeds[displayController.playbackSpeedIndex])
-
-        player?.addListener(playbackListener)
-        player?.addAnalyticsListener(displayController.decoderAnalyticsListener)
-        player?.addAnalyticsListener(iptvDiagAnalyticsListener)
-        playerView.player = player
-
-        // Hide internal subtitle view, use custom one
-        playerView.subtitleView?.visibility = View.GONE
-
-        // Connect subtitle output to custom view
-        subtitleListener = object : Player.Listener {
-            override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
-                // While an external subtitle is side-rendered, the overlay is
-                // owned by the ticker — ignore the player's (empty) cue events.
-                if (subtitleController.externalSubtitleActive) return
-                subtitleOverlay.setCues(cueGroup.cues)
-            }
-        }
-        player?.addListener(subtitleListener!!)
-
-        // Setup subtitle styling from saved preferences
-        subtitleOverlay.setApplyEmbeddedStyles(false)
-        subtitleOverlay.setApplyEmbeddedFontSizes(false)
-        SubtitleSettings.synchronizeProjectedAppearance(this)
-        SubtitleFontManager.synchronizeProjectedFont(this)
-        // The sync offset is per-subtitle and in-memory: start this session at 0
-        // and let SubtitleSettings scope it to whatever subtitle is on screen.
-        SubtitleSettings.resetSyncOffset()
-        SubtitleSettings.setActiveSubtitleIdentityProvider(this) { subtitleController.currentSubtitleIdentity() }
-        subtitleController.applySubtitleSettings()
-
-        playerView.setControllerAutoShow(false)
-        displayController.applyResizeMode()
-        playerView.requestFocus()
-
-        if (isIptvMode) {
-            // Phase 3: hold the last frame across a zap's player reset — the
-            // zap banner rides over the old channel's picture instead of a
-            // black flash. Cleared on surrender (a dead channel must not
-            // keep painting under the failure pill) and re-armed on READY.
-            playerView.setKeepContentOnPlayerReset(true)
-
-            // Phase 1: connectivity gate for the recovery ladder. While the
-            // OS reports no network there is nothing to hammer; the moment a
-            // network validates, the parked attempt fires immediately.
-            // API 24+ only (registerDefaultNetworkCallback); older boxes
-            // just keep the plain timed ladder.
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-                val callback = object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        runOnUiThread { iptvTuneController.iptvLiveRecovery.setOffline(false) }
-                    }
-
-                    override fun onLost(network: Network) {
-                        runOnUiThread { iptvTuneController.iptvLiveRecovery.setOffline(true) }
-                    }
-                }
-                try {
-                    cm.registerDefaultNetworkCallback(callback)
-                    iptvNetworkCallback = callback
-                    // Cold-start truth: registration alone reports nothing
-                    // until the network CHANGES — launched offline, the
-                    // ladder must know now, not at the first handover.
-                    iptvTuneController.iptvLiveRecovery.setOffline(cm.activeNetwork == null)
-                } catch (e: Exception) {
-                    // Some ROMs throw on registration limits; the ladder
-                    // works without the gate, just less politely offline.
-                    android.util.Log.w("AndroidTvPlayer", "network callback: $e")
-                }
-            }
-        }
     }
 
     internal class ShufflePlaybackAttempt(
@@ -3261,7 +2565,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Bind views and setup player
         bindViews()
-        setupPlayer()
+        mediaPipelineController.setupPlayer()
         controlsOverlayController.seek.setupSeekbar()
         controlsDockController.setupControls()
         controlsDockController.styler.setupIptvControls()
@@ -3277,7 +2581,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Initialize seek feedback manager
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
         setupBackPressHandler()
-        setupMetadataReceiver()
+        episodeMetadataReceiver.setupMetadataReceiver()
 
         // Initialize Stremio subtitle service
         stremioSubtitleService = StremioSubtitleService(this)
@@ -3899,7 +3203,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
             override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.playlistController.rebuildPlaylistContent()
-            override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.requestMetadataFromFlutter()
+            override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.episodeMetadataReceiver.requestMetadataFromFlutter()
             override var resumeHoldArmedAtMs: Long
                 get() = this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs
                 set(value) { this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs = value }
@@ -4366,14 +3670,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         upNextController.upNextHandler.removeCallbacksAndMessages(null)
 
         // Unregister broadcast receiver
-        metadataUpdateReceiver?.let {
+        episodeMetadataReceiver.metadataUpdateReceiver?.let {
             try {
                 unregisterReceiver(it)
             } catch (e: Exception) {
                 android.util.Log.w("AndroidTvPlayer", "Failed to unregister metadata receiver", e)
             }
         }
-        metadataUpdateReceiver = null
+        episodeMetadataReceiver.metadataUpdateReceiver = null
 
         // Cancel Stremio subtitle coroutine scope
         subtitleScope.cancel()

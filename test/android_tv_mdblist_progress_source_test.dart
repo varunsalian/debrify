@@ -195,12 +195,12 @@ void main() {
 
   test('native actual rows adopt refreshed guide watch state', () {
     final native = File(
-      'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
+      'android/app/src/main/kotlin/com/debrify/app/tv/TvEpisodeMetadataReceiver.kt',
     ).readAsStringSync();
     final handler = _between(
       native,
       '// Handle episode metadata updates',
-      'private fun requestMetadataFromFlutter()',
+      'fun requestMetadataFromFlutter()',
     );
 
     expect(handler, contains('hasWatchedUpdate'));

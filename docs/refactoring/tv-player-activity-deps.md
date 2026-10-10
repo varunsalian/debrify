@@ -20093,3 +20093,1214 @@ The JVM worker took longer than its baseline under concurrent gates, with observ
 Two analyzer attempts during the active full-suite fixtures reported 1,776 and 1,823 occurrences. Their physical diagnostic-line sets were exactly the original 1,758 lines, with 18 and 65 repeated occurrences only. The post-suite analyzer run matches the complete original Counter exactly. Both intermediate raw logs remain under `gate/analyze-concurrent/` and `gate/analyze-after-release/`; no allowlist or analyzer setting changed. The interrupted superseded tooling run and initial reflection-visibility/subset-metadata attempts also remain archived, and are not credited as final gates. The only additional reflection correction was public `playPrevious`, with its body unchanged and the manifest pin updated (14 public reflected functions).
 
 Raw evidence: `p18/gate/summary.json`, checker/self-test/historical logs, compiled audit, initializer/teardown/frozen-input proofs, JVM comparison and thread snapshot, lint XML/issue set, release APK provenance/R8 inventory/DEX controls, decoder log/provenance, full Flutter JSONL/clean-tree environment and analyzer attempts/physical-line comparison; JVM XML/identities under `junit/p18-step0b/` and `junit/p18-gate/`. Step-0b exact d15/d18/d21 proofs and the updated 575-node matrix remain under `p18/step0b/`; all three survivors killed, none equivalent. Detached original removed. Lockfile, ProGuard, borrowed resources, initializer timing and teardown order preserved; no bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP after phase 18; phase 19 not started.**
+
+## Phase 19 inventory: media pipeline + episode-metadata receiver (at `df439aed1`; phases 16–18 treated as merged; re-measure on the phase-18 merge). Includes the phase-20 router assessment and the end-state exception draft
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `df439aed1`
+(phase-15 merge, **6,986 lines**, class header 136, companion 6973–6985). This is a read-only survey of the main
+checkout. Nothing was built, and nothing under `../debrify-wt/` was read or touched.
+
+Inputs:
+- the plan, with the collaborator rules of phases 3–15 (checker/auditor extensions, the naming-collision rule,
+  the phase-11 sampling lesson);
+- deps report chunk A §C12/C13/C15, §4 candidates 4–5, §5 lifecycle, §6 test gaps; §B3 broadcast; §C1/C2
+  anchors;
+- the phase-16, -17 and -18 inventories (`scratchpad/tvp-p16/17/18-inventory.md`).
+
+**Tooling** (`scratchpad/p19/`):
+- `idx.py` (the p18 masker/indexer, re-run: 390 depth-1 spans);
+- `r19.py` (inbound word-boundary scan; Host objects are attributed to their property);
+- `o19.py` (outbound scan per member, including inherited names and `this`);
+- `routers.py` (router dependency sets, now and after the phase-16–19 renames);
+- `remain.py` (the remaining-activity breakdown).
+
+Every count was checked by hand against the source. Terms are as in phases 11–18: **patch** (a token edit in a
+retained activity declaration), **re-point** (an edited Host forwarder in an existing controller property, which
+makes that property a whole-property `patched` row), **substitution** (a declared edit inside a moved body).
+
+**Earlier phases leave 8 temporary patches inside this unit.** In phase 19 each becomes a host-qualified
+substitution:
+- phase 16 (`handleMetadataUpdate` ×4):
+  - `ottShowName = …` → `controlsOverlayController.identity.ottShowName` (a `@Volatile` write);
+  - `updateOttIdentity()` → `.identity.`;
+  - `updateTitle(…)` ×2 → `.identity.`;
+- phase 17 (`setupPlayer` ×3):
+  - `runOnUiThread { iptvLiveRecovery.setOffline(false/true) }` → `iptvTuneController.iptvLiveRecovery`;
+  - `iptvLiveRecovery.setOffline(cm.activeNetwork == null)` → `iptvTuneController.iptvLiveRecovery`;
+- phase 18 (`handleMetadataUpdate` ×1): `updateCatalogEpisodeControls()` → `playbackStartController.navigator.`.
+
+Build the manifest on the phase-18 versions of `handleMetadataUpdate`, `setupPlayer` and the `sourceSwitchController`
+property; phase 18 also re-points 6 forwarders there. Phases 16, 17 and 18 move nothing out of this unit and add
+no forwarder into it.
+
+**Already extracted, not moved again:**
+- the decoder analytics listener and `androidDecoderStatus` (phase 15, `TvPlaybackDisplayController`);
+- `IptvLiveLoadErrorPolicy`/`classifyIptvError` (phase 2);
+- `originKey`/`buildProtectedMediaOrigins` (`TvStartupDiagnostics.kt`, top-level `internal`);
+- `mergeLateMetadata*` (`TvPlaybackItem.kt`).
+
+These resolve unchanged from the new files (same package, no import). **`buildMergedSource[OrNull]` moves in
+phase 18** (owner `TvPlaybackStartController`), so it is not part of this unit. `reportDecoderFailure` stays with
+the routers (phase-17 decision).
+
+---
+
+### 1. Summary and recommendation
+
+**Two independent sibling collaborators, one phase, with per-feature deferral.** There are **0 references in
+either direction** between the pipeline and the receiver.
+
+- **`TvMediaPipelineController.kt`**: 3 members / 457 lines → **≈ 545** with imports (≈ 45), header and Host.
+  - It holds `setupPlayer` (the whole Media3 build, verbatim; a function body cannot be split under rule 1),
+    `iptvMediaCodecSelector` and `iptvDiagAnalyticsListener` (the anonymous `AnalyticsListener` that only
+    `setupPlayer` registers).
+  - The activity property is **`mediaPipelineController`**, at the `iptvDiagAnalyticsListener` slot (773–774).
+  - It needs class-level **`@OptIn(UnstableApi::class)`** (as the activity has today). The unit uses
+    `ResolvingDataSource`, `DataSpec.withAdditionalHeaders`, `DefaultExtractorsFactory`/
+    `DefaultTsPayloadReaderFactory`, `DefaultLoadControl.Builder`, `setVideoChangeFrameRateStrategy`,
+    `setMediaCodecSelector`, `AnalyticsListener` and `PlayerView.setKeepContentOnPlayerReset`. Confirm with
+    `javap` on the 1.8.0 AARs at step T, as phase 17 did.
+- **`TvEpisodeMetadataReceiver.kt`**: 5 members / 301 lines → **≈ 335**.
+  - It holds `metadataUpdateReceiver`, `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate` and
+    `requestMetadataFromFlutter`.
+  - The activity property is **`episodeMetadataReceiver`**, at the `metadataUpdateReceiver` slot (2049–2051).
+  - It needs no Media3 opt-in.
+
+| item | phase 19 (recommended configuration R19) |
+|---|---|
+| moved members / lines | **8 / 758** (pipeline 3 / 457, receiver 5 / 301), including leading trivia under the partition rule |
+| owned state | pipeline: `iptvDiagAnalyticsListener` (its slot field); receiver: `metadataUpdateReceiver` (its slot field). **Everything else stays activity-owned and is borrowed** (§1.2) |
+| activity patches | **6 in 3 declarations**: `onCreate` 2, `initIptvMode` 2, `onDestroy` 2 (in place). All permanent (lifecycle/bootstrap) |
+| Host re-points | **1 forwarder / 1 token edit in 1 property**: `sourceSwitchController` (`requestMetadataFromFlutter()`) |
+| consumed temporary patches | **8** (phase 16 ×4, phase 17 ×3, phase 18 ×1), now substitutions |
+| added activity declarations | 2 properties + 2 Host objects: pipeline **30** members, receiver **8**. No readiness getter (no `::x.isInitialized` in the unit) |
+| initializer proofs | **0** (each controller's only field is its slot field). **No new classifier form**; the phase-17 note about an anonymous-`AnalyticsListener` form is avoided by using that listener as the slot |
+| cross-qualifications | 0 between the siblings; existing controllers through Host getters (§5) |
+| substitutions | **≈ 128**: pipeline ≈ 99 (host 81, `this`→`activity` 10, inherited 5, static constant 2, visibility 1); receiver ≈ 29 (host 20, inherited 6, visibility 3). **0 braced templates** (every interpolated name is a local or parameter) |
+| reflective retargets | **0** (no moved name is reflected) |
+| source-text retargets | **2 files**: `NativeAudioRoutingTest` (Kotlin, file path) and `test/android_tv_mdblist_progress_source_test.dart` (file path + end marker loses `private`) (§8) |
+| lifecycle | 2 in-place `onDestroy` patches (unregister + null-out, same position); nothing in `onStart`/`onStop`/`onPause`/`finish` |
+
+**Activity:** ≈ −758 + ≈ 62 (2 properties + 38-member Hosts) ≈ **−697**. Starting from 6,986:
+- phase 16 ≈ −1,094 → ≈ 5,892;
+- phase 17 ≈ −580 → ≈ 5,312;
+- phase 18 ≈ −830 → ≈ 4,482;
+- phase 19 → **≈ 3,785** (band 3,700–3,900 until re-measured).
+
+**Risk.** Overall **medium-high**:
+- **Receiver: low-medium.** Main thread only. No Handler of its own except one uncancelled main post.
+- **Pipeline: high on configuration fidelity, low on control flow.** The code is linear construction: no
+  token, no coroutine, no owned Handler. But it carries:
+  - every Media3 configuration contract (the plan's unchanged list);
+  - four `@Volatile` loader-thread reads, plus five non-volatile reads on the loader and playback threads;
+  - essentially **no existing characterization** (deps §6: "NO test for … setupPlayer data-source/header
+    resolvers, iptvMediaCodecSelector, LoadControl presets"; covered today: `trackSelector` TEXT-disabled under
+    forced-only, the `NativeAudioRoutingTest` source flag and incidental audio-language params).
+
+**Per-feature deferral (the phase-4 rule).** Each sibling has its own step-0 prerequisites (§11). If the pipeline's
+Media3 read-back harness cannot be made deterministic on the original, the phase ships the receiver alone (19a).
+Its counts are then 4 patches in 3 declarations, 1 re-point, ≈ 29 substitutions and −289 lines. The pipeline gets
+a re-reviewed design.
+
+**Rejected alternative: one file.** `TvPlayerSetupController` with both units would be ≈ 870 lines (> 800) and
+mix two responsibilities.
+
+### 1.1 Sub-blocks of `setupPlayer` (one declaration, moved whole; lines at `df439aed1`)
+
+| lines | block | contract kept verbatim |
+|---|---|---|
+| 2753–2822 | `DefaultTrackSelector(this)` + parameters | `setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` (source-text anchor), opus preference, ignored DEFAULT text flag, IPTV `setAllowVideoNonSeamlessAdaptiveness(false)`, audio/text language variants (null → English), `"off"`, text disabled for foreign-only/forced-only/`pt-BR` |
+| 2824–2843 | `SpeechFeatureTap` → `speechTap`; `nativeAudioRouting.update(…)`; `NativeAudioRenderersFactory` (PREFER, decoder fallback, `iptvMediaCodecSelector()`); `OffsetRenderersFactory` → `offsetRenderersFactory` | |
+| 2845–2867 | HTTP factory | VOD timeouts by `networkPatience` (15/30/60 s), IPTV 15 s; cross-protocol redirects; Chrome UA in **default request properties** (not `setUserAgent`, an invariant comment) |
+| 2869–2877 | `protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)`; `VodHttpDataSource.Factory`; `DefaultDataSource.Factory(this, IPTV ? http : vod)` | |
+| 2878–2918 | VOD resolver (`activeVodHeaders`, origin match) → IPTV resolver (`currentIptvHttpHeaders`) | **loader thread** (§6) |
+| 2920–2937 | IPTV recording tee; `iptvRecordingController.onAborted = { … Toast(this) }` | the first access of the lazy for IPTV |
+| 2939–2980 | media source factory: IPTV aggressive/strict TS `ExtractorsFactory` on `iptvStrictTsActive`, plus `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` | **loader thread** |
+| 2982–3001 | `ExoPlayer.Builder(this, renderersFactory)`; noisy audio; `WAKE_MODE_NETWORK`; display-match → frame-rate strategy | |
+| 3003–3072 | LoadControl: YouTube merge 15/50/1/2 s; VOD `networkBuffer` presets with heap budget (¼ of `largeMemoryClass`, 96/192 MiB request, keep stock below 48 MiB); IPTV stock | |
+| 3074–3110 | build; speed; listeners (`playbackListener`, decoder, `iptvDiagAnalyticsListener`); `playerView.player`; subtitle view GONE; `subtitleListener`; `SubtitleSettings` sync / reset / identity provider (owner = activity); `applySubtitleSettings`; auto-show off; resize; focus | |
+| 3112–3148 | IPTV `setKeepContentOnPlayerReset(true)`; API ≥ 24 `registerDefaultNetworkCallback` (`runOnUiThread { …setOffline }`); `iptvNetworkCallback = callback`; initial `setOffline(cm.activeNetwork == null)`; registration failure logged | |
+
+### 1.2 Ownership decisions: what deliberately stays activity-owned (borrowed through Host)
+
+| name (decl) | decision | reason | delta if moved |
+|---|---|---|---|
+| `player` (374), `trackSelector` (376) | stay (Host `var`) | Used everywhere. `trackSelector` has 26 reflective sites in 11 test files, 5 Host forwarders and `onDestroy` | not viable |
+| `@Volatile activeVodHeaders` (822) | **stay** (Host `val`, computed) | 4 writers in 2 other owners: phase-18 `playItem`/`startPlayback` via its Host, the switcher Host (6204/6205). `TvSourceSwitchApplyCharacterizationTest:25–26` asserts `Modifier.isVolatile` on the **activity** field by direct `getDeclaredField` (not owner-map) | +3 re-points (phase-18 and switcher Hosts), 1 direct-reflection test edit, 1 proof needing a **new** `emptySet<String>() to emptyMap()` (`to`-pair) form |
+| `@Volatile currentIptvHttpHeaders` (945) | **stay** (Host `val`) | Writer: phase-17 tune Host (`setIptvMediaItem`). Main reader: recording Host 5545. Reflected by `TvRecordingCharacterizationTest:28` | +2 re-points, +1 route, +1 proof (new untyped `emptyMap()` form) |
+| `@Volatile iptvStrictTsActive` (963) | **stay** (Host `val`) | Written and read on main by the phase-17 tune Host (`setIptvMediaItem` 5719, `performIptvLiveRetune` 509) | +2 re-points, +1 proof |
+| `protectedStreamClient` (823) | stay (Host `var`) | Also read by phase-18 `discoverProtectedMime` on the IO thread through its Host. Its initializer `ProtectedStreamHttp.client(15_000)` allocates an `OkHttpClient`, so it is **not inert** and cannot run earlier | needs a slot or a new form |
+| `subtitleListener` (377), `iptvNetworkCallback` (421) | **stay** (Host `var`) | Written only by `setupPlayer`. **Torn down by `onDestroy`** (`removeListener` inside `player?.let` 6762, null-out 6772; unregister 6677–6683) | variant M: +4 in-place `onDestroy` patches, +2 `null` proofs (fields at 377/421 would then run at slot 773, i.e. **later**), −2 Host members. Not recommended: teardown stays with the lifecycle owner, as in phase 17's network-callback decision |
+| `offsetRenderersFactory` (398), `speechTap` (801) | stay (Host `var`) | Subtitle/sources/auto-sync Host forwarders, reflected (2 + 2 sites), `onDestroy` null-out | — |
+| `networkPatience`, `networkBuffer`, `iptvDecoderMode` (1201–1206), `isIptvMode`, `iptvChannels`, `currentIptvIndex` | stay (Host `val`) | Written by `parsePayload`/`initIptvMode` (launch config) | — |
+| `nativeAudioRouting`, `playerPreferences` (lateinit), `playerView`/`subtitleOverlay` (lateinit), `payload`, `playbackListener`, `iptvTuneDiagnostics`, the `iptvRecordingController` lazy | stay (Host `val`, computed) | multi-owner, or the router (phase 20) | — |
+| UM "sources" rows (`umSourcesModel` 46, `umSourceRows` 18, `umAddLoadMoreRow` 14 = 78 lines) | **not in phase 19** | The phase-13 table suggested "+ UM sources rows → fetch owner". The fetch owner `TvSourceFetchController.kt` is a frozen destination. The unit needs an 11-member Host for 1 inbound reference (`unifiedMenuCallbacks` 5892), and the "sources" section is **unreachable** (existing follow-up). Leave it with the UM remainder | — |
+
+**Supplier lambdas vs moving the volatile fields.** Under R19, each loader-thread read in the moved code is a
+declared substitution `x` → `host.x`. The Host member is a **computed** getter on the activity's Host object.
+`currentIptvHttpHeaders`, `iptvStrictTsActive` and `activeVodHeaders` therefore stay **one field each, on the
+activity, still `@Volatile`, with a volatile `GETFIELD` on every loader call** (§6). This is the phase-8/17
+precedent. Moving the three fields (option V) is semantically sound under the phase-17 §6.2 conditions, but it
+costs 7 re-points, 2 new classifier forms and a direct-reflection test edit. Its owner would also be arbitrary,
+because the writers live in three other controllers. Reject V.
+
+---
+
+### 2. Members (lines at `df439aed1`; spans include leading trivia under the partition rule)
+
+**Pipeline, `TvMediaPipelineController` (original order):**
+
+| span | decl | member | notes |
+|---|---|---|---|
+| 773–797 | 774 | `private val iptvDiagAnalyticsListener = object : AnalyticsListener { … }` | **slot field**. `onRenderedFirstFrame`: gate `mediaServerPlaybackLog("first_frame")` → `iptvTuneDiagnostics.onFirstFrame()` → manual-restore clear + `restartProgressUpdates()` → `commitManualSourceCandidate()` → `commitStartupCandidate()`. `onLoadCompleted`: bytes → diagnostics |
+| 2718–2750 | 2731 | `private fun iptvMediaCodecSelector(): MediaCodecSelector` (KDoc 2719–2730) | the lambda runs on the **playback thread** |
+| 2751–3149 | 2752 | `private fun setupPlayer()` → becomes **public** (called by `onCreate`, `initIptvMode`) | 399 lines; §1.1 |
+
+**Receiver, `TvEpisodeMetadataReceiver` (original order):**
+
+| span | decl | member | notes |
+|---|---|---|---|
+| 2049–2051 | 2051 | `private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null` (comment 2050) → **public `var`** (read and null-ed by `onDestroy`) | **slot field** |
+| 2228–2258 | 2229 | `private fun setupMetadataReceiver()` → **public** | anonymous `BroadcastReceiver`; register (API ≥ 33 `RECEIVER_NOT_EXPORTED`, else plain); then `requestMetadataFromFlutter()` (**register-then-request** order) |
+| 2259–2289 | 2270 | `private fun readStagedExtra(intent, key, prefix)` (KDoc 2259–2269) | stays private; canonical path must equal `cacheDir`, prefix check, read-only |
+| 2290–2493 | 2291 | `private fun handleMetadataUpdate(updatesJson, imdbId, guideJson = null, showName = null)` | stays private (called only from the anonymous receiver, through a synthetic accessor); contains the Dart-anchored range |
+| 2494–2525 | 2495 | `private fun requestMetadataFromFlutter()` → **public** (switcher Host forwarder) | `Handler(Looper.getMainLooper()).post { channel.invokeMethod("requestEpisodeMetadata", null) }` |
+
+**Retained between the moved spans** (relative order unchanged; compared as retained): `speechTap` 798–801,
+`autoSyncController` and its Host, …, `playbackListener` 1540–2048, `playerPreferences` 2052–2053, `onCreate`,
+`bindViews` 2526–2717, `setupSeekbar` (phase 16 moves it; build on the phase-16 tree).
+
+---
+
+### 3. Owned state and initializer proofs
+
+- **Pipeline slot = 773/774** (the `iptvDiagAnalyticsListener` span). The controller property is pinned there.
+  Its single field is the slot field, so it is constructed at the same moment as today. Construction allocates
+  the listener object, which now captures the controller rather than the activity. Inert: it reads nothing until
+  a callback runs. **Proofs: 0.**
+- **Receiver slot = 2049/2051.** Its single field `null` is the slot field. **Proofs: 0.**
+- **Construction contract:** no Host member is read during construction. Negative: a Host read inside the
+  listener's initializer, or in a controller `init`.
+- **Lazies whose first access must not move** (all through computed getters):
+  - `iptvRecordingController` (activity lazy): first access for IPTV sessions is `setupPlayer` 2926
+    (`onAborted = …`), now `host.iptvRecordingController.onAborted = …`;
+  - `iptvTuneController.iptvLiveRecovery` (the phase-17 lazy): first access for IPTV is the post-registration
+    `setOffline` in `setupPlayer`, now `host.iptvTuneController.iptvLiveRecovery…`.
+
+  Step 0 pins both first-access moments.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+#### 4.1 Activity patches: 6 in 3 declarations (all permanent)
+
+| declaration (decl) | line | before → after | note |
+|---|---|---|---|
+| `onCreate` (2055) | 2180 | `setupPlayer()` → `mediaPipelineController.setupPlayer()` | between `startupLog("event=player_setup_begin")` and `…_complete`; order `bindViews` → `setupPlayer` → `.seek.setupSeekbar` (phase 16) unchanged |
+| `onCreate` | 2219 | `setupMetadataReceiver()` → `episodeMetadataReceiver.setupMetadataReceiver()` | after `setupBackPressHandler()`, before `stremioSubtitleService = …` |
+| `initIptvMode` (5420) | 5470 | `setupPlayer()` → `mediaPipelineController.setupPlayer()` | order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` unchanged |
+| `initIptvMode` | 5486 | `setupMetadataReceiver()` → `episodeMetadataReceiver.setupMetadataReceiver()` | IPTV also registers; `requestMetadataFromFlutter` returns early when `payload == null` |
+| `onDestroy` (6640) | 6723 | `metadataUpdateReceiver?.let {` → `episodeMetadataReceiver.metadataUpdateReceiver?.let {` | **in place**, after `upNextController.upNextHandler.removeCallbacksAndMessages(null)` (6720), before `subtitleScope.cancel()` (6733). `unregisterReceiver(it)` stays the activity's inherited call |
+| `onDestroy` | 6730 | `metadataUpdateReceiver = null` → `episodeMetadataReceiver.metadataUpdateReceiver = null` | in place |
+
+**Zero references from:** `playbackListener`, `dispatchKeyEvent`, `onStart`/`onStop`/`onPause`/`onResume`,
+`finish`, `sendFinished`, `parsePayload`, `bindViews`, and every phase-16/17/18 member.
+
+**In-unit (no patch):**
+- `setupPlayer` → `iptvMediaCodecSelector()` 2840 and `iptvDiagAnalyticsListener` 3080;
+- `setupMetadataReceiver` → `readStagedExtra` 2236/2240, `handleMetadataUpdate` 2244,
+  `requestMetadataFromFlutter` 2257, and the field 2230/2250/2252.
+
+#### 4.2 Host re-points: 1 forwarder, 1 whole-property `patched` row
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 6256 | `sourceSwitchController` (phase 8; re-pointed again by phases 9/10/18) | `override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.episodeMetadataReceiver.requestMetadataFromFlutter()` (called by `TvSourceSwitchApplier.kt:294`) |
+
+`TvSourceSwitchController.kt`/`TvSourceSwitchApplier.kt` stay byte-identical. **No Host anywhere forwards to
+`setupPlayer`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener` or `handleMetadataUpdate`** (verified by
+grepping all `tv/*.kt`).
+
+---
+
+### 5. Outbound Hosts (computed, explicitly qualified `this@AndroidTvTorrentPlayerActivity.x`; none read at construction)
+
+**`TvMediaPipelineController.Host`: 30 members.** Reference counts are in parentheses.
+
+| kind | members |
+|---|---|
+| state `var` (7) | `player: ExoPlayer?` (8: the build assignment plus 7 reads), `trackSelector: DefaultTrackSelector?` (4), `speechTap` (1 w), `offsetRenderersFactory` (1 w), `protectedStreamClient: OkHttpClient` (2: w then r), `subtitleListener: Player.Listener?` (2), `iptvNetworkCallback` (1 w) |
+| state `val` (16) | `isIptvMode` (9; one on the playback thread), `iptvDecoderMode` (2, playback thread), `networkPatience` (1), `networkBuffer` (2), `payload` (1), `iptvChannels`/`currentIptvIndex` (1/1, **loader thread**), **`activeVodHeaders` (1, loader, volatile)**, **`currentIptvHttpHeaders` (1, loader, volatile)**, **`iptvStrictTsActive` (2, loader, volatile)**, `nativeAudioRouting` (2), `playerPreferences` (4, lateinit), `playerView` (5, lateinit), `subtitleOverlay` (3, lateinit), `playbackListener` (1), `iptvTuneDiagnostics` (2) |
+| cross-feature / lazy getters (6) | `displayController` (9), `subtitleController` (3), `startupGateController` (5), `iptvRecordingActionsController` (1), `iptvRecordingController` (2, activity lazy), `iptvTuneController` (3, phase 17) |
+| function (1) | `restartProgressUpdates()` (1) |
+
+That is 81 host substitutions.
+
+**Must not be Host members** (negatives): `setupPlayer`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener`. A
+same-name member would let a missed in-unit reference compile against the Host.
+
+**`TvEpisodeMetadataReceiver.Host`: 8 members**, 20 host substitutions:
+
+| kind | members |
+|---|---|
+| state `val` (4) | `payload` (2; the model is mutated in place: `imdbId`, `guideEpisodes`, `items[i]`), `currentIndex` (5, read only), `player` (2: live position/duration), `ottSkinInstalled` (1) |
+| cross-feature (4) | `playlistController` (4), `subtitleSourcesController` (1), `controlsOverlayController` (4 = the phase-16 `.identity.` ×4), `playbackStartController` (1 = the phase-18 `.navigator.updateCatalogEpisodeControls()`) |
+
+**Must not be Host members:** `handleMetadataUpdate`, `requestMetadataFromFlutter`, `readStagedExtra`,
+`metadataUpdateReceiver`, `setupMetadataReceiver`.
+
+**Every collaborator member used is already non-private**, because the activity calls each of them today. Frozen
+files need no edit. Top-level calls (`originKey`, `mergeLateMetadata*`, `LanguageMapper`, `ProtectedStreamHttp`,
+`MainActivity.getAndroidTvPlayerChannel()`) resolve unchanged.
+
+---
+
+### 6. Threading (answers the loader-thread question)
+
+| reader (moved code) | thread | before | after (R19) |
+|---|---|---|---|
+| VOD `ResolvingDataSource.Resolver.resolveDataSpec`: `val (protectedMediaOrigins, playbackHeaders) = activeVodHeaders` 2883 | **loader**, per request | the resolver class `this$0` (activity) → `access$getActiveVodHeaders$p` → **volatile `GETFIELD`** | `… = host.activeVodHeaders`: `this$0` (controller) → `access$getHost$p` (final) → `INVOKEINTERFACE Host.getActiveVodHeaders()` → the activity's Host impl `this$0` → `access$get…$p` → **the same volatile `GETFIELD`**. One read per call (the destructuring consumes a local `Pair`) |
+| IPTV resolver `val headers = currentIptvHttpHeaders` 2908 | **loader**, per request | volatile read | `host.currentIptvHttpHeaders`, same chain |
+| `ExtractorsFactory.createExtractors()` / `createExtractors(uri, headers)` `if (iptvStrictTsActive)` 2964, 2971 | **loader**, per extractor creation | volatile read | `host.iptvStrictTsActive` ×2, same chain |
+| `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` 2976 | **loader** | 2 non-volatile reads (existing follow-up) | `host.iptvChannels.getOrNull(host.currentIptvIndex)`: same fields, still non-volatile. **Unchanged; do not "fix"** |
+| `iptvMediaCodecSelector` lambda: `isIptvMode`, `iptvDecoderMode` ×2 | **playback thread** (`getDecoderInfos`) | non-volatile | Host getters, same fields, still non-volatile. Pin as-is; add a follow-up note next to the policy one |
+| `SpeechFeatureTap(positionMs = { player?.currentPosition ?: 0L })` | main (called inside `mainPost`) | — | `host.player` |
+| `NetworkCallback.onAvailable/onLost` → `runOnUiThread { …iptvLiveRecovery.setOffline(…) }` | ConnectivityThread → main | `this$0.runOnUiThread`; recovery read on main | `activity.runOnUiThread { host.iptvTuneController.iptvLiveRecovery.setOffline(…) }`: `activity` (final) read on ConnectivityThread; the `host` chain runs inside the posted Runnable on main |
+| `iptvRecordingController.onAborted` lambda | main (`mainHandler.post`, `IptvRecordingController.kt:164`) | — | `host.iptvRecordingActionsController…`, `Toast.makeText(activity, …)` |
+| `iptvDiagAnalyticsListener` callbacks | application looper (main) | — | Host getters |
+| receiver `onReceive` → `handleMetadataUpdate` | main (no scheduler Handler) | `runOnUiThread` ×3 run inline | `activity.runOnUiThread` ×3 (identical: `Activity.runOnUiThread` runs inline on the UI thread) |
+
+**Why this is still a verbatim move.** Each loader-thread read is a declared substitution with its exact token
+context and an occurrence count:
+- `activeVodHeaders` → `host.activeVodHeaders` ×1;
+- `currentIptvHttpHeaders` → `host.currentIptvHttpHeaders` ×1;
+- `iptvStrictTsActive` → `host.iptvStrictTsActive` ×2;
+- `iptvChannels`/`currentIptvIndex` ×1 each;
+- `isIptvMode`/`iptvDecoderMode` ×1/×2.
+
+Statement structure is unchanged, so the read still happens inside `resolveDataSpec`/`createExtractors`/the
+policy lambda on **every** call. Every hop added is a read of a **final** field:
+- the controller property on the activity;
+- `host` on the controller;
+- `this$0` on the Host object.
+
+All three are assigned during activity construction. The player and its loader threads start later, in
+`setupPlayer` from `onCreate`/`initIptvMode`, so final-field semantics plus thread-start happens-before mean the
+loader sees fully built objects. There is no new data race, and none is removed.
+
+**Required guards (step T):**
+1. Each Host member is a computed getter (`override val currentIptvHttpHeaders: Map<String, String> get() =
+   this@AndroidTvTorrentPlayerActivity.currentIptvHttpHeaders`), never an initialized `val`. The Host text is
+   pinned.
+2. The activity fields keep `@Volatile` (retained-declaration comparison). The existing `isVolatile` test on
+   `activeVodHeaders` stays unchanged and passing.
+3. **New compiled audit, the "volatile-read chain".** For each of the 4 sites, the compiled anonymous method
+   (`resolveDataSpec`, both `createExtractors`) must contain `INVOKEINTERFACE
+   TvMediaPipelineController$Host.get<X>()` and **no captured-value field** (`val$…`). The activity's Host
+   implementation `get<X>()` must reach a `GETFIELD AndroidTvTorrentPlayerActivity.<x>` whose field has
+   `ACC_VOLATILE`, directly or through one synthetic accessor.
+4. **Negatives:**
+   - a snapshot hoisted out of the resolver (`val h = host.currentIptvHttpHeaders` before `object :`);
+   - an initialized Host `val`;
+   - a Host `var` with a backing field;
+   - a removed `@Volatile`;
+   - a read through a different controller's Host.
+
+---
+
+### 7. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 10 sites, all in `setupPlayer`.** Each is pinned with exact context, an occurrence count
+and its before/after descriptor:
+
+| line | site | resolved overload to keep |
+|---|---|---|
+| 2753 | `DefaultTrackSelector(this)` | `<init>(Context)` |
+| 2836 | `NativeAudioRenderersFactory(this, nativeAudioRouting, arrayOf(tap.processor))` | `<init>(Context, NativeAudioRouting, AudioProcessor[])` |
+| 2876 | `DefaultDataSource.Factory(this, …)` | `<init>(Context, DataSource.Factory)` |
+| 2929 | `Toast.makeText(this, "Recording stopped — …", LENGTH_LONG)` inside the `onAborted` lambda (lambda without receiver, so `this` = activity) | `makeText(Context, CharSequence, int)` |
+| 2974 | `DefaultMediaSourceFactory(this, iptvExtractors)` | `<init>(Context, ExtractorsFactory)` |
+| 2978 | `DefaultMediaSourceFactory(this)` | `<init>(Context)`, **not** `(DataSource.Factory)` |
+| 2982 | `ExoPlayer.Builder(this, renderersFactory)` | `<init>(Context, RenderersFactory)` |
+| 3100 | `SubtitleSettings.synchronizeProjectedAppearance(this)` | `(Context)` |
+| 3101 | `SubtitleFontManager.synchronizeProjectedFont(this)` | `(Context)` |
+| 3105 | `SubtitleSettings.setActiveSubtitleIdentityProvider(this) { … }` | `(Any, Function0)`. **Identity key:** `onDestroy` calls `clearActiveSubtitleIdentityProvider(this)` with the activity, so the owner **must** stay the activity object. Negative: owner = the controller (`this@TvMediaPipelineController`) must fail the original-surface clear test |
+
+**Inherited implicit-receiver pins** (owner–descriptor–opcode before and after; omission and wrong-dispatch
+negatives):
+
+| unit | sites |
+|---|---|
+| pipeline (5) | `runOnUiThread` ×3: the tap `mainPost` lambda 2831, and inside the **anonymous `NetworkCallback`** at 3128/3132 (implicit outer receiver from an object method, the phase-17 `addContentView` kind). `getSystemService(String)` ×2 (3055, 3125): `Activity.getSystemService` override; pin `invokevirtual` |
+| receiver (6) | `registerReceiver` ×2 (2250: `(BroadcastReceiver, IntentFilter, int)`; 2252: `(BroadcastReceiver, IntentFilter)`), both called from the function body, not the anonymous object. `cacheDir` → `getCacheDir()` 2278. `runOnUiThread` ×3 (2304, 2362, 2471) |
+
+**Static inherited constants (2):** `ACTIVITY_SERVICE` → `Context.ACTIVITY_SERVICE` (3055) and
+`CONNECTIVITY_SERVICE` → `Context.CONNECTIVITY_SERVICE` (3125). This follows the phase-3 `MODE_PRIVATE`
+precedent. Both are compile-time constants, so the bytecode `LDC "activity"`/`"connectivity"` is pinned
+identical.
+
+**Reviewed non-substitution pins:**
+- **The shadowed `intent` parameter:** the `onReceive(context, intent)` parameter, read 6× at 2237–2243, and
+  `readStagedExtra`'s `intent` parameter (2275). These must **never** become `activity.intent` (the activity's
+  launch intent). Negative: rewrite one to `activity.intent`.
+- The unused `context` parameter.
+- Named arguments that are not member references: `SpeechFeatureTap(mainPost =, positionMs =)`,
+  `item.copy(title =, …)`, `GuideEpisode(season =, …)`, `mergeLateMetadata*(existingPositionMs =, …)`.
+- Locals `tap`, `cm`, `callback`, `model`, `item`, `update`, `currentItem`.
+- `android.content.Context.RECEIVER_NOT_EXPORTED`, which is already qualified.
+
+**Qualifier-name collisions** (blanked code, the whole file): `mediaPipelineController`, `episodeMetadataReceiver`,
+`host` and `pipeline`/`receiver` as identifiers all have **0** hits. `activity` has 3, all in `bindViews`
+(2577/2593/2608, not moved). There is no Runnable/listener `this`, so there is **no excluded receiver**.
+
+**Smart casts:** none of the moved code relies on a member smart cast (the only null-checks are on locals
+`model`, `currentItem`, `channel`). `trackSelector!!`/`subtitleListener!!` keep their NPE semantics through the
+getters.
+
+**Anonymous classes renamed (R8 mapping check):**
+- pipeline: the `AnalyticsListener` (diag), 2 `Resolver`s, the `ExtractorsFactory`, the subtitle
+  `Player.Listener`, the `NetworkCallback`;
+- receiver: the `BroadcastReceiver`.
+
+The `MediaCodecSelector` SAM lambda and the Kotlin lambdas compile through `invokedynamic`; record whatever
+classes are actually generated.
+
+---
+
+### 8. Timers, handlers, native resources, teardown
+
+| resource | owner after the move | lifetime (unchanged) |
+|---|---|---|
+| `BroadcastReceiver` (`com.debrify.app.tv.UPDATE_EPISODE_METADATA`) | receiver field | Registered once per launch, at the end of `onCreate` or in `initIptvMode`. Early `onCreate` exits never register, and `onDestroy` then sees `null` (`NativePlayerRejectedLaunchTest`). Unregistered **in place** in `onDestroy` (the try/catch log stays in the activity), then null-ed |
+| `requestEpisodeMetadata` post | none (fresh `Handler(mainLooper)`) | **never cancelled**: a destroy before the post runs still invokes the channel. Pin as-is (follow-up) |
+| `ConnectivityManager.NetworkCallback` | activity field (borrowed setter) | registered in `setupPlayer` (IPTV, API ≥ 24); unregistered in `onDestroy` 6677–6683 (unchanged) |
+| player listeners (`playbackListener`, decoder, diag, `subtitleListener`) | player | `onDestroy` removes `playbackListener` and `subtitleListener`; the analytics listeners are released with the player (unchanged) |
+| `SubtitleSettings` identity provider | singleton, owner = activity | cleared in `onDestroy` with `this` (unchanged); the provider lambda now captures the controller, which reaches the activity |
+| `iptvRecordingController.onAborted` | activity lazy | **never cleared** (pin as-is; deps §5) |
+| `SpeechFeatureTap` | `speechTap` (activity) | per build; null-ed in `onDestroy` |
+
+There is no owned Handler, coroutine or token, and nothing in `onStop`/`onPause`/`finish`.
+
+---
+
+### 9. Reflective tests, source-text anchors, Dart anchors
+
+- **Reflection:** **0** sites. `setupPlayer`, `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`,
+  `requestMetadataFromFlutter`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener` and
+  `metadataUpdateReceiver` are never quoted in `android/app/src/test`. The borrowed names keep their activity
+  routes: `trackSelector` 26, `activeVodHeaders` 4, `currentIptvHttpHeaders` 1, `offsetRenderersFactory` 2,
+  `speechTap` 2, `playerPreferences` 9, `nativeAudioRouting` 2.
+- **`NativeAudioRoutingTest.bothNativePlayersEnableCapabilityRecovery`** (66–79) reads the activity source file
+  and asserts `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` is present and `(false)` absent.
+  - The `appDir` discovery anchor (`…/AndroidTvTorrentPlayerActivity.kt` `isFile`) stays valid.
+  - **Retarget:** in the path list, replace the activity path with
+    `src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt` (same two assertions).
+  - **Stronger:** keep an `assertFalse((false))` on the activity file.
+  - The Torbox Java entry is unchanged.
+- **Dart `test/android_tv_mdblist_progress_source_test.dart`**, test "native actual rows adopt refreshed guide
+  watch state" (196–216):
+  - the file path changes to `…/tv/TvEpisodeMetadataReceiver.kt`;
+  - the start marker `'// Handle episode metadata updates'` is unchanged (unique in the new file);
+  - the end marker changes from `'private fun requestMetadataFromFlutter()'` to `'fun
+    requestMetadataFromFlutter()'` (the member becomes public). Order is preserved.
+
+  All 6 asserted literals (`hasWatchedUpdate`, `model.items.indexOfFirst`, `it.season == updateSeason`,
+  `mergeLateMetadataResumePosition`, `mergeLateMetadataDuration`, `traktProgressPercent = newTrackerProgress`)
+  are untouched by host substitutions (`model` is a local). The `TvPlaybackItem.kt` `if (watched) return 100`
+  assertion is unaffected.
+
+  Negative: the Host interface must not contain the end-marker text before the range. Place the Host above the
+  class body; it declares no `requestMetadataFromFlutter`.
+- `manual_source_validation_contract_test` (the `payloadCheck.optInt(…)` in `onCreate`) and
+  `android_tv_auto_advance_resume_test` are unaffected.
+
+---
+
+### 10. Hazards (each a step-T fixture or negative)
+
+1. **The `intent` parameter shadows** `Activity.getIntent()` (7 reads). No `activity.` substitution.
+2. **The identity-provider owner** must be the activity object (it is the `onDestroy` clear key).
+3. **Volatile loader-thread reads** go through computed Host getters, with no snapshot. This needs the new
+   compiled volatile-chain audit (§6).
+4. **Non-volatile loader/playback-thread reads** (policy supplier, codec selector) stay as-is. Do not
+   add `@Volatile` or synchronization.
+5. **First access of the lazies** `iptvRecordingController` and phase-17 `iptvLiveRecovery` stays in
+   `setupPlayer` (computed getters).
+6. **Inherited calls from an anonymous object** (`NetworkCallback` → `runOnUiThread`): the outer-receiver
+   pin.
+7. **Static inherited constants** → `Context.` qualification, with the `LDC` value pinned.
+8. **Register-then-request order** in `setupMetadataReceiver`: the `requestMetadataFromFlutter()` call
+   stays after registration.
+9. **`onDestroy` position** of the unregister (after the Up Next clear, before `subtitleScope.cancel()`). The
+   try/catch stays in the activity. A folded "`receiver.teardown()`" negative must fail.
+10. **Host-setter writes followed by getter re-reads:**
+    - `player = build()` then `player?.…` ×6;
+    - `playerView.player = player`;
+    - `protectedStreamClient = …` then `dataSourceFactory(protectedStreamClient)`;
+    - `subtitleListener = object …` then `addListener(subtitleListener!!)`.
+
+    Each re-read returns the just-written value on main. Negative: a forwarder that caches.
+11. **Default arguments of `handleMetadataUpdate`** (`guideJson = null, showName = null`) stay. The one caller
+    passes all four positionally.
+12. **The 8 consumed temporary patches** become `host.controlsOverlayController.identity.` (×4),
+    `host.playbackStartController.navigator.` (×1) and `host.iptvTuneController.` (×3) substitutions.
+    Negative: a missed qualification. It cannot compile, because the Host declares none of those names.
+13. **Two sibling controllers with no cross-reference.** A fixture proves neither file names the other.
+14. **The `@OptIn(UnstableApi::class)` class annotation** on the pipeline is pinned structurally. It is absent on
+    the receiver (an unnecessary opt-in negative).
+15. **The pipeline file is in the 501–800 band** (≈ 545). Record the responsibility review (§11.3).
+
+---
+
+### 11. File split, counts, risk and step-0 needs
+
+#### 11.1 Files
+
+| file | members | lines (≈) | band |
+|---|---|---|---|
+| `TvMediaPipelineController.kt` | 3 (+ 30-member Host) | 545 | 501–800: one responsibility (build and wire the player). It cannot be split further without rewriting `setupPlayer`; the exit path is in §11.3 |
+| `TvEpisodeMetadataReceiver.kt` | 5 (+ 8-member Host) | 335 | ≤ 500 |
+
+Both destination import lists are exact, reviewed lists in the manifest. The pipeline needs ≈ 45 imports: Media3
+`common`/`datasource`/`exoplayer`/`extractor`/`ui`, `androidx.annotation.OptIn`, `ConnectivityManager`/
+`Network`, `Toast`, `View`, `Uri`, `Context`, `AppCompatActivity`, `okhttp3.OkHttpClient`, `com.debrify.app.audio.*`,
+`com.debrify.app.util.SubtitleSettings`/`SubtitleFontManager`/`LanguageMapper`. The receiver needs ≈ 8:
+`AppCompatActivity`, `ExoPlayer`, `JSONArray`, `Locale`, `MainActivity`; the `android.*` names are fully
+qualified in the bodies.
+
+#### 11.2 Counts
+
+| | pipeline | receiver | total |
+|---|---|---|---|
+| moved lines | 457 | 301 | **758** |
+| activity patches | 2 (1 decl each in `onCreate`/`initIptvMode`) | 4 (`onCreate`, `initIptvMode`, `onDestroy` ×2) | **6 in 3 declarations** |
+| Host re-points | 0 | 1 | **1** |
+| Host members | 30 | 8 | 38 |
+| substitutions | ≈ 99 | ≈ 29 | **≈ 128** |
+| initializer proofs | 0 | 0 | **0** |
+| `this` audits / inherited pins / non-substitution pins | 10 / 5 + 2 constants / — | 0 / 6 / 7 `intent` + `context` | |
+| reflective / source-text / Dart retargets | 0 / 1 / 0 | 0 / 0 / 1 | **0 / 1 / 1** |
+| statement sweep (step 0) | 26 `if`, 3 `when`, 4 `return` (incl. selector + listener) | 42 `if`, 1 `when`, 8 `return` | |
+
+#### 11.3 Recorded follow-ups (pin as-is; do not fix)
+
+- `requestMetadataFromFlutter`'s uncancelled main post can invoke the channel after destroy.
+- The codec selector reads non-volatile `isIptvMode`/`iptvDecoderMode` on the playback thread. This is a sibling
+  of the existing `IptvLiveLoadErrorPolicy` note.
+- `onAborted` is never cleared.
+- `protectedStreamClient` is written on main and read on IO without `@Volatile`. This is pre-existing; phase 18
+  borrows it.
+- **Exit path for the 545-line pipeline file**, after the series, as a separate behavior-preserving (non-verbatim)
+  change with pure JVM tests:
+  - a track-selector parameter builder (deps §4 candidate 3);
+  - a LoadControl preset policy;
+  - an IPTV data-source chain factory (candidate 5).
+
+#### 11.4 Risk, test gap, step-T and step-0 needs
+
+**Step T (checker/auditor):**
+- **Volatile-read-chain audit (new kind, §6):** 4 sites, positives, and the 5 negatives.
+- A static-constant qualification form with an `LDC` pin.
+- Inherited pins: `getSystemService` ×2, `registerReceiver` (2-/3-arg), `getCacheDir`, `runOnUiThread` ×6,
+  including the anonymous-object outer receiver.
+- An identity-key `this` pin (`setActiveSubtitleIdentityProvider`).
+- Reviewed `intent`-parameter non-substitutions, with a rewrite negative.
+- A two-sibling extraction fixture (the phase-10 shape) in which each controller's single field is its slot field
+  (0 proofs).
+- A whole-property `patched` row for the switcher Host (1 forwarder) built on the phase-18 version.
+- The 8 consumed patches as substitutions.
+- An `onDestroy` in-place/fold negative.
+- The per-phase dispatcher keeps all historical suites; earlier destinations are frozen at the phase-18 merge;
+  R8 mapping covers the 7 renamed anonymous classes.
+
+**Step 0 prerequisites, per feature, each demonstrated on the original first. A failed prerequisite defers that
+feature.**
+
+**Pipeline:**
+1. **Media3 read-back harness pinned to 1.8.0.** Robolectric reflection into the built objects:
+   - `ExoPlayerImpl` → track selector parameters, load control (`DefaultLoadControl` buffer/target fields),
+     wake mode, noisy-audio handling, frame-rate strategy;
+   - `DefaultMediaSourceFactory` → data-source factory chain (`RecordingDataSource.Factory` →
+     `ResolvingDataSource.Factory` ×2 → `DefaultDataSource.Factory` → `VodHttpDataSource`/
+     `DefaultHttpDataSource.Factory` timeouts, redirects, default properties), extractors factory, load-error
+     policy;
+   - renderers factory (extension mode, decoder fallback, codec selector).
+
+   Mutation-prove each read-back.
+2. **Worker-thread resolver/extractor harness.** Pull the `Resolver`/`ExtractorsFactory`/policy instances out of
+   the chain and invoke them on a bounded worker thread. Change the activity's volatile field on main between
+   two calls; the **second call must observe the new value**. The mutation "snapshot hoisted before the object"
+   must fail. Cover:
+   - VOD origin match, including default-port normalization; a non-matching origin is untouched;
+   - IPTV: empty headers return the identity spec; channel headers override the default UA;
+   - strict vs aggressive TS flags;
+   - the policy's live/non-live answer.
+
+   Fallback seam: MockWebServer request headers (already a test dependency).
+3. **Codec selector** with `ShadowMediaCodecList` fake hardware/software video codecs: IPTV auto/hardware/
+   software ordering, non-IPTV passthrough and audio passthrough.
+4. **`ShadowConnectivityManager`:** registration, initial `setOffline`, callbacks posting to main, a registration
+   exception, and no registration below SDK 24.
+5. **`ShadowActivityManager.largeMemoryClass`** for the heap-budget boundaries:
+   - 128 MiB → stock;
+   - 192 MiB large → 48 MiB target (boundary);
+   - 1,024 MiB huge → 192 MiB cap;
+   - IPTV → never;
+   - YouTube merge → 15/50/1/2 s.
+
+**Then, from the first step-0 pass:**
+- the track-param matrix (audio null/variants/unmapped; text off/variants/null; foreign/forced/`pt-BR` disable;
+  IPTV non-seamless; opus; ignored DEFAULT; invalidate flag);
+- `networkPatience` timeouts;
+- the protected-client swap;
+- the recording tee, plus `onAborted` (button refresh + Toast) and the lazy first-access moments;
+- display match ×4;
+- speed;
+- listener attach order;
+- subtitle-listener external gate;
+- `SubtitleSettings` sync/reset/identity (cleared by `onDestroy`; the owner-mutation kill);
+- resize, focus and IPTV keep-content;
+- diag-listener first-frame order and bytes.
+
+**Receiver:** a broadcast harness (`sendBroadcast` with staged `cacheDir` files) on the main looper, at SDK 28 and
+SDK 33 configs. Cover:
+- registration flags;
+- the register-then-request order (fake channel; series only; null channel; invoke exception);
+- staged-path validation (outside `cacheDir`, wrong prefix, unreadable → inline fallback; file **not** deleted);
+- the show-name / OTT refresh gate;
+- payload null (IPTV) early return;
+- IMDb discovery only when empty → subtitle fetch for the current item;
+- guide adoption (invalid rows skipped, clear+addAll, series-only rebuild / active index / catalog controls /
+  title, malformed JSON);
+- update matching (season/episode re-match, out-of-range skip);
+- field merges, including `watched` → 100, tracker progress, live position/duration merge and
+  `allowLocalProgressDisplay`;
+- adapter notification and title refresh;
+- `anyUpdated = false`;
+- `onDestroy` unregister (including a throwing unregister) and null-out;
+- the pinned post-destroy request post.
+
+**For both:** the statement-level coverage sweep and matrix from the start (phase-11 lesson); Claude's independent
+sample needs ≥ 75 % kills, else a sweep and a second sample; then 0b.
+
+**Risk: medium-high.** There is no async protocol, but there is complete configuration coverage to build, there
+are loader-thread semantics, and the Robolectric Media3 read-back is the gating unknown.
+
+---
+
+## Phase 20 assessment: the two routers
+
+Measured with `routers.py` at `df439aed1`. "After" applies the phase-16–19 moved sets: each moved name becomes
+its owner's controller property.
+
+| | `playbackListener` (1540–2048, **511** lines incl. trivia; `object : Player.Listener`, 7 overrides) | `dispatchKeyEvent` (4261–4623, **363** lines; `override fun`) |
+|---|---|---|
+| references now / distinct activity members | 178 / 67 (13 controllers, 51 members, 3 inherited) | 132 / 40 (6 controllers, 32 members, 2 inherited) |
+| moved away by phases 16–19 | 16 names (→ `controlsOverlayController`, `iptvTuneController`, `playbackStartController`); phase 19 adds 0 | 16 names (all → `controlsOverlayController`; 27 prefixes) |
+| **after phase 19: distinct** | **54** = 16 controller getters + **35** members (8 written: `hasEverBeenReady`, `iptvStartOverActive`, `iptvStartOverTimelineVisible`, `isAutoAdvancing`, `pendingItemTraktPercent`, `pendingSeekMs`, `percentSeekApplied`, `sleepStopLatched`; 18 read; 9 functions) + 3 inherited (`finish`, `isFinishing`, `isDestroyed`) | **25** = 7 controller getters + 16 members + `currentFocus` + **`super` ×18** |
+| control-flow size (sweep) | 65 `if`, 1 `when`, 29 `return`, 2 `postDelayed` (1.5 s auto-advance) | 74 `if`, 5 `when`, 51 `return` |
+| special hazards | the `onEvents(player: Player, …)` parameter **shadows** `player`; 2 `this@Activity` Toasts; `reportDecoderFailure` (20 lines) is called only from here; reflected field `playbackListener` (**9 sites / 7 test files**); inbound `setupPlayer` (pipeline Host after 19) and `onDestroy` `removeListener` | **18 `super.dispatchKeyEvent(event)` calls**; the override is the **remote-control contract** (`MainActivity.kt:2569–2614` → `ActivityTracker` → `targetActivity.dispatchKeyEvent`) |
+
+**`dispatchKeyEvent`: documented exception (do not move).**
+- The override must remain on the activity.
+- Moving its body is not a declaration move. It needs a new checker mechanism ("body extraction": the retained
+  override becomes a pinned wrapper whose original body lives elsewhere).
+- 18 `super.` calls would become a Host forwarder implemented with `super@AndroidTvTorrentPlayerActivity.
+  dispatchKeyEvent(event)`. That is an `invokespecial` through a synthetic `access$…$s` accessor, a new auditor
+  kind. It must bind to `AppCompatActivity.dispatchKeyEvent`, which AppCompat overrides.
+- For ≈ −330 net lines, the key matrix (BACK/CENTER/DPAD/IPTV long-press/channel keys across 7 skins) would be
+  re-characterized again. Its remaining 16 member dependencies are mostly view/overlay state, which has no
+  better owner.
+
+**`playbackListener`: mechanically feasible, recommended as a documented exception for this series.**
+- *Feasible.* It is a whole property, so the existing checker moves it verbatim to a `TvPlaybackEventRouter` at
+  slot 1540 (its own field, 0 proofs), together with `reportDecoderFailure`. The cost:
+  - ≈ 176 host substitutions plus 3 inherited pins and 2 `this@` → `activity`;
+  - a **50-member Host** (8 `var`, 18 `val`, 8 functions, 16 controller getters);
+  - 1 `onDestroy` in-place patch and 1 pipeline-Host re-point;
+  - 9 reflective sites via one owner-map route;
+  - the shadowed-`player` exclusion.
+
+  Net ≈ −480 lines (553 out, ≈ 70 Host in).
+- *Why not.* The result is a router whose Host is essentially the activity's playback-state surface, which AGENTS
+  forbids ("do not replace a giant screen with a giant controller, expose its entire state"). It adds no cohesive
+  owner. The event-ordering contracts stay exactly as coupled.
+
+  The real improvement is a **non-verbatim** policy split:
+  - READY resume/seek policy (deps §4 candidate 1);
+  - ENDED auto-advance policy;
+  - the IPTV error-precedence ladder.
+
+  Each would be owned and pure-tested, with the listener left as a thin dispatcher. That is outside this series'
+  "move, don't rewrite" rule. It belongs to the separate player-core goal.
+- *If the user prefers the size reduction anyway*, run it as a phase 20a with the numbers above. Step 0 would
+  reuse the extensive existing listener characterization (watchdog, gate, sleep, Start Over, display, effects,
+  Stremio guide tests) plus a sweep of the 65 `if` / 29 `return` sites. Risk: medium (mechanical, but the widest
+  Host in the series).
+
+**Phase 20 recommendation:** a **decision-only phase**. No code moves; record the end-state exception below, lower
+the size baseline, and close the series.
+
+### Honest final activity size
+
+≈ **3,785 lines after phase 19** (band 3,700–3,900 pending re-measurement), with the routers retained. That is
+≈ 3,300 if `playbackListener` moved (20a), and would be ≈ 2,970 only if `dispatchKeyEvent` also moved (not
+recommended). This sits at the top of the phase-13 projection (3,450–3,750) because the four Host objects of
+phases 16–19 add ≈ 240 lines.
+
+The composition of the ≈ 3,785 (remaining depth-1 spans after the phase-16–19 moved sets, plus Hosts added by
+16–19):
+
+| block | lines (≈) |
+|---|---|
+| imports, header, companion | 150 |
+| controller properties + computed Host objects (≈ 30 controllers; 686 today + ≈ 240 from 16–19) | 925 |
+| routers + ticker: `playbackListener` 511, `dispatchKeyEvent` 363, `progressRunnable` 33 | 907 |
+| lifecycle/entry: `onCreate` 174 (launch parse, 4 independent try-scopes), `onDestroy` 170 (≈ 45 ordered steps), `onStart`/`onStop`/`onPause`/`onResume`/`finish`/`onRequestPermissionsResult`/`setupBackPressHandler`/`sendFinished` | 560 |
+| shared single-owner state fields | 400 |
+| `bindViews` (incl. ≈ 90-line inline `TvSourceBrowserController.Callbacks`) | 192 |
+| `parsePayload` 171 + `initIptvMode` 116 | 287 |
+| unified-menu composition (`umPlaybackModel`, `umSourcesModel`, `umSourceRows`, `umSectionRows`, `umAddLoadMoreRow`, `unifiedMenuCallbacks`) | ≈ 200 |
+| small shared helpers: resume hold (`armResumeHold`/`releaseResumeHold`/`heldResumePositionMs`), buffering indicator, screen hold, `dp`, `guideAdjacent`, `guideTypeface`, `recordPlaybackLifecycle`, `reportDecoderFailure`, `reportValidatedSourceCommit`, `isFocusInIptvChannelList`, `ShufflePlaybackAttempt` | ≈ 165 |
+
+### End-state exception (content to record in the plan and in `dev/tool/file_size_baseline.txt`)
+
+**Path:** `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`, ≈ 3,785 lines
+(exact after phase 19). This is above the 800 limit and is a documented exception: a shrink-only baseline, and
+it may not grow.
+
+**Remaining responsibilities:**
+1. The Android entry point and the owner of lifecycle order: launch/payload intake, rejected-launch exits, the
+   ordered `onStop` (12 steps) and `onDestroy` (≈ 45 steps) teardown, the `finish` override and progress
+   checkpoints.
+2. The composition root: ≈ 30 collaborators and their narrow computed Hosts. These are wiring only, with no logic.
+3. Single-owner shared playback state written by several collaborators: `player`, `trackSelector`, `payload`,
+   `currentIndex`, the three `@Volatile` loader-thread header/flag fields, resume/seek state, IPTV list state,
+   `sleepStopLatched`, `stremioResolutionToken`.
+4. The two routers: the `Player.Listener` event dispatcher with its priority-ordered READY/ENDED/error contracts,
+   and the `dispatchKeyEvent` key router (the remote-control entry, with 18 `super` fallbacks).
+5. Bootstrap code: `bindViews`, `parsePayload`, `initIptvMode`.
+6. Unified-menu composition and small shared helpers.
+
+**Why it cannot shrink further under this series' rules:**
+- verbatim moves need computed Hosts, so wiring grows as code leaves;
+- `dispatchKeyEvent` cannot leave without a body-extraction mechanism and `super` forwarding;
+- moving `playbackListener` only relocates a 50-member state surface.
+
+**Exit path and milestone**, as a separate player-core goal after this series (the memory's "core services +
+players = separate goal"; each item is its own reviewed, behavior-preserving change with characterization):
+- **(a)** Split the playback listener into owned READY-resume, ENDED-advance and IPTV-error policies, with pure
+  tests. Leave a thin dispatcher.
+- **(b)** Turn key routing into per-controller key handlers consulted by a small dispatcher. The `super` fallback
+  stays in the override.
+- **(c)** Add a launch parser (parse the payload once instead of 4×, keeping each try-scope's independence) to
+  absorb `parsePayload`/`onCreate` pre-scan/`initIptvMode` parsing.
+- **(d)** Name `bindViews`' inline source-browser callbacks and move unified-menu rows to their owning controllers
+  (the sources rows to the fetch owner).
+- **(e)** Move single-owner state into its owners once its writers consolidate, which shrinks the Hosts.
+
+Target after (a)–(e): **≤ 2,000 lines**. Reaching ≤ 800 is not a goal while the activity remains the composition
+root. Reassess the exception whenever the file is next extended. It is not permission to grow.
+
+## Phase 19 Step T — re-measured at `a0d1be1a7`
+
+The approved plan and its design-review fold supersede the inventory's earlier
+zero-reflection, main-thread-only, `val$`-capture and large-memory-class-setter
+wording. The activity has 4,472 physical lines and 1,611 PSI declarations.
+
+| Member | Original line | Leading-trivia span lines | Declared substitutions |
+| --- | ---: | ---: | ---: |
+| `iptvDiagAnalyticsListener` | 468 | 25 | 8 |
+| `iptvMediaCodecSelector` | 2354 | 33 | 3 |
+| `setupPlayer` | 2387 | 399 | 88 |
+| `metadataUpdateReceiver` | 1685 | 3 | 1 |
+| `setupMetadataReceiver` | 1864 | 31 | 3 |
+| `readStagedExtra` | 1895 | 31 | 1 |
+| `handleMetadataUpdate` | 1926 | 204 | 22 |
+| `requestMetadataFromFlutter` | 2130 | 32 | 2 |
+
+The total remains eight members / 758 span lines / 128 substitutions, with
+six in-place activity edits and one whole-property Host re-point. All eight
+consumed earlier patches are explicit substitutions. Computed Hosts have
+30 / 8 members; each sibling owns its single original-slot field, so there
+are zero initializer proofs. The complete production-config fixture has
+535 / 330 lines; the hypothetical activity has 3,776 lines. The pipeline's
+501–800 responsibility review and later pure-policy split remain as recorded
+in §11.3. No production extraction is included in Step T.
+
+The two existing `handleMetadataUpdate` reflection sites route through
+`episodeMetadataReceiver`, with an original-owner fallback. Their assertion
+files remain byte-identical; all eight caller tests pass on the original,
+including the worker-thread immediate volatile write before queued UI update.
+
+The compiled loader proof allows the VOD resolver's final `$this_run` Activity
+or pipeline capture, the IPTV resolver's final `this$0`, and the extractors'
+final `this$0` plus `$strictTs` / `$aggressiveTs` captures with exact
+`DefaultExtractorsFactory` descriptors. A Boolean `$strictTs`, captured Map
+or Pair, initialized Host val/var, other Host chain, duplicate read and missing
+volatile flag fail. Every read site invokes its getter once; the generated
+Host and owner accessors reach the same single Activity `ACC_VOLATILE` field
+through final fields. The VOD origin check also reads the immutable argument
+field `DataSpec.uri`; its public-final descriptor is confirmed from Media3
+1.8.0. These are descriptor/role checks, not capture-name-prefix heuristics.
+
+The OTT writer audit separately pins original and extracted owners: metadata
+Activity → receiver, payload replacement remains playback-start in both.
+The volatile String descriptor, both setter invocations and computed playlist
+reader remain required. Real Kotlin relocation negatives cover premature or
+missing metadata relocation and a wrongly returned replacement writer owner.
+The two inlined Context String constants are pinned by value and count;
+`ldc` / `ldc_w` are constant-pool-width variants of the same read.
+
+Compiled production fixture evidence passes all 21 current receiver sites
+(10 argument / 11 inherited, including both NetworkCallback UI calls),
+366 historical receiver sites, 23 retained view/cast pins, four volatile
+chains in each compiled tree, deferred lazies, retained ShowShuffle constructor
+and frozen OTT identity. All 61 prior destinations and phase 1–18 historical
+merge checks pass. Media3 1.8.0 annotations confirm the pipeline class opt-in;
+the receiver has none. Original self-comparison is 1,611 / zero differences.
+Raw evidence is under `p19/`: manifest re-measurement, fixture/compiler,
+bytecode, self-test, historical, route and protected-input logs.
+
+The clean original JVM archive `junit/baseline-a0d1be1a7` records 2,826
+identities: 2,825 passes and the existing
+`TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached`
+failure. The EPG timing test passes in this observed run; its historical
+flakiness remains recorded. Original lint archives 1,351 issues
+(252 errors / 1,099 warnings; 175 opt-in issues). The matched 1 GiB worker
+override is evidence-only. Lockfile, ProGuard and production sources are
+unchanged; size check runs without updating its baseline.
+
+## Phase 19 step 0 — original pipeline and metadata characterization
+
+Base **`a0d1be1a7`**. The production Activity, three volatile fields, all 61 earlier destinations, dependencies, lockfile and ProGuard remain unchanged. **No production moves.** There are **150 new passing identities in 14 classes** (13 scenario files; largest 378 physical lines), plus eight unchanged caller cases in the complete original control. The tests observe original bodies and actual platform/Media3 boundaries; no copied pipeline/receiver implementation replaces them.
+
+### Prerequisites and harness evidence
+
+- The mandatory prerequisite run passes all six cases before the broader characterization. Real Media3 **1.8.0** objects are read through `ExoPlayerImpl`, `DefaultLoadControl`, the real track selector, `DefaultMediaSourceFactory`, renderer and data-source factory chains. The SDK 28 heap fixture overrides `dalvik.vm.heapsize`, asserts the real `ActivityManager.largeMemoryClass` getter, and restores the property. The 128/192/1024 MiB inputs exercise stock, the exact 48 MiB target boundary and the 192 MiB cap; every configuration read-back has an assertion-killed mutation.
+- Installed resolvers/extractors/policy are invoked on bounded worker executors, with Main writes between calls. Changed VOD Pair, IPTV Map and strict-TS Boolean are observed on the next worker invocation, including both extractor overloads. Hoisted snapshots fail assertions. Header origin normalization/default ports, unmatched identity, precedence, empty IPTV maps and both reported-URI identity paths are pinned. The real protected factory receives the published client and rebuilt timeout settings.
+- Fake hardware/software capabilities seed `ShadowMediaCodecList` and the real codec cache is reset; selector return order, secure/tunnel operands, audio/non-IPTV passthrough and absent-preference identity are observed. The delegating connectivity shadow observes actual registration, injected ROM failure and stored callbacks. The registration observer sees the recovery lazy still uninitialized; onAvailable/onLost called off Main are queued and the initial online/offline state is pinned.
+- All four display strategies, track languages/settings, merged-source and enlarged buffer presets, night/effects/speed, native/offset renderer inputs, listener ordering, custom-cue suppression, subtitle appearance/font/reset/live identity and Activity owner key, resize/focus and IPTV keep-content have independent assertions. Analytics observers delegate to the real diagnostic/gate bodies and record first-frame/restore/ticker/manual/startup ordering and exact byte counts.
+- Real VOD onCreate and IPTV init bootstrap are observed at metadata registration before test cleanup releases the player. Removing either actual setupPlayer or setupMetadataReceiver caller fails a named assertion. No fake factory supplies those observations.
+- Broadcast tests send distinct intent extras through the actually registered receiver and pump the PAUSED looper/traversal barrier. Canonical staged files are read repeatedly without deletion; outside/prefix/nested/symlink/missing/directory cases exercise inline fallback. SDK 28 and 33 registration flags, worker-thread model/OTT-name writes before queued UI, guide validation/defaults/adoption, coordinate rematching, each metadata field, live progress and real adapter/title publication are pinned.
+- Binary channel tests preserve capture/post timing, series-only/null guards, null arguments, Main invocation and distinct lookup/invocation failures. A scoped delegating Companion shadow injects the lookup failure only at the borrowed boundary; the original receiver method executes. Real onDestroy observes Up Next removal before unregister, the held receiver and live subtitle scope during unregister, field null before scope cancellation, a throwing unregister, no later broadcast delivery and the original uncancelled post-destroy metadata request.
+- SDK 23 resource execution is unavailable because the app minSdk is 24. The below-N branch is exercised by a scoped SDK_INT override on the SDK 28 runtime, restored in finally; this is branch coverage, not a claim of an SDK 23 APK run. Both mandatory prerequisites are deterministic, so neither feature is deferred to 19a.
+
+### Systematic statement-level coverage matrix
+
+The sweep records **392 original Kotlin-PSI nodes**: 277 calls, 68 if expressions, 19 writes, 12 returns, ten Elvis expressions, four when expressions and two loops. It includes the nested resolver/extractor/cue/network bodies. `p19/step0/statement-coverage-matrix.json` preserves each node ID, original line/span/text, named assertion cases, reviewed behavioral contract and exact overlapping accepted mutation IDs. **303 nodes overlap an assertion-killed mutation**. Composite builders and nested value calls are observed through their installed configuration or resulting model/UI state; they are not falsely counted as separately executed mutations. The two expression-body reported-URI functions, retained bootstrap/Host callers and onDestroy positions have supplemental entries.
+
+| Original function / boundary | PSI nodes | Assertion contracts | Killed mutations |
+| --- | ---: | --- | ---: |
+| `onRenderedFirstFrame` | 7 | server log → diagnostics → clear manual restore/restart ticker → manual/startup commits; restore flag and queued ticker observed before commit | 7 |
+| `onLoadCompleted` | 1 | bytesLoaded passed unchanged to tune diagnostics | 1 |
+| `setupMetadataReceiver` | 16 | each intent/staged/inline argument, original intent shadowing, actual receiver/action, SDK 28/33 flags and register-before-post timing | 11 |
+| `readStagedExtra` | 11 | null/absent path; canonical parent/prefix/symlink rejection; read failure/fallback; two read-only deliveries and exact rejection/read diagnostics | 7 |
+| `handleMetadataUpdate` | 161 | show trim/classic/OTT/worker timing; payload-null; IMDb guard/current fetch; guide defaults/skip/clear/adopt/UI; coordinate/bounds/field/progress merge; immediate worker model writes, both adapters/title and every diagnostic | 98 |
+| `requestMetadataFromFlutter` | 18 | null model/type/channel, captured channel, Main post, null args, success, invocation failure and outer lookup failure; post survives destroy | 10 |
+| `iptvMediaCodecSelector` | 9 | mode/type/auto guard, preferred/fallback order and list identity, secure/tunnel inputs | 8 |
+| `setupPlayer` | 169 | installed track/native/offset/factory/source/player chain, all buffer and heap/time boundaries, worker volatile reads, policy reads, recording/lazy/callback, listeners, appearance/identity/view focus, network initial truth and callbacks | 106 |
+| `onCreate` | 0 | real VOD pipeline before registered receiver, both production calls | 2 |
+| `initIptvMode` | 0 | real IPTV tee pipeline before registered receiver, both production calls | 2 |
+| `sourceSwitchController Host` | 0 | real metadata forwarder dispatches series request | 1 |
+| `onDestroy` | 0 | Up Next → held receiver/unregister → null → subtitle cancel; unregister throws; no broadcast after destroy; posted request persists | 2 |
+
+The matrix has 38 reviewed contract groups. Diagnostic calls are explicitly distinguished. Every one of the **150 final new test methods** retains a named failing assertion from a proof on the original: 148 are checked against preserved literal assertion expressions, and two multiline/helper witnesses have byte-identical final fixture files. `assertion-provenance.json` records that validation. All 257 final outcomes are complete; there are no unresolved survivors or credited compile errors/crashes.
+
+### Original mutation table
+
+**255 distinct mutations fail on named assertions**. Two further mutations are equivalent because the affected branch is unreachable (below). Every mutation applies to a detached original **`a0d1be1a7` plus the test files**, never to the extraction fixture. `p19/step0/proofs.json` has exact offsets/before/after strings; each `proofs/p19-NNN/` stores its patch, definition, Gradle log and raw XML. `proofs/results.json` stores assertion messages/stacks and immutable source-fixture signatures/copies. Superseded compile/crash attempts are retained in `proofs/attempts/` and excluded; revised valid definitions are the final rows. All heavy runs are niced and use the evidence-only matched 1 GiB worker heap.
+
+Table aliases (the archive uses full class names):
+
+- `P`: `TvMediaPipelinePrerequisiteTest`
+- `C`: `TvMediaPipelineConfigurationTest`
+- `L`: `TvMediaPipelineLoaderTest`
+- `N`: `TvMediaPipelineConnectivityTest`
+- `K`: `TvMediaPipelineCodecTest`
+- `A`: `TvMediaPipelineAnalyticsTest`
+- `S`: `TvMediaPipelineSubtitleOwnershipTest`
+- `B`: `TvMediaPipelineBootstrapTest`
+- `I`: `TvIptvMediaPipelineBootstrapTest`
+- `M`: `TvEpisodeMetadataMergeTest`
+- `R`: `TvEpisodeMetadataReceiverTest`
+- `Q`: `TvEpisodeMetadataRequestTest`
+- `D`: `TvEpisodeMetadataLifecycleTest`
+- `W`: `TvEpisodeMetadataSweepTest`
+
+One named assertion witness for every new identity:
+
+| Test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `D::destroyUnregistersAndNullsReceiverBetweenUpNextAndSubtitleCancellation` | `p19-195` / `onDestroy`:4371 — `unregisterReceiver(it)` → `Unit` | `java.lang.AssertionError: expected:<[unregister, subtitle cancel]> but was:<[subtitle cancel]>` (`TvEpisodeMetadataLifecycleTest.kt:37`) |
+| `D::destroyedReceiverCannotConsumeLaterBroadcast` | `p19-195` / `onDestroy`:4371 — `unregisterReceiver(it)` → `Unit` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Late]>` (`TvEpisodeMetadataLifecycleTest.kt:50`) |
+| `D::postedRequestIntentionallySurvivesDestroy` | `p19-194` / `requestMetadataFromFlutter`:2151 — `channel.invokeMethod("requestEpisodeMetadata", null)` → `Unit` | `java.lang.AssertionError: uncancelled Handler post preserved expected:<1> but was:<0>` (`TvEpisodeMetadataLifecycleTest.kt:46`) |
+| `D::throwingUnregisterStillNullsAndCancelsSubtitleScope` | `p19-195` / `onDestroy`:4371 — `unregisterReceiver(it)` → `Unit` | `java.lang.AssertionError: expected:<[unregister, subtitle cancel]> but was:<[subtitle cancel]>` (`TvEpisodeMetadataLifecycleTest.kt:37`) |
+| `M::absentPlayerDoesNotEraseHistory` | `p19-213` / `handleMetadataUpdate`:2064 — `player?.currentPosition ?: 0L` → `player?.currentPosition ?: 100_000L` | `java.lang.AssertionError: expected:<9000> but was:<100000>` (`TvEpisodeMetadataMergeTest.kt:96`) |
+| `M::absentRequestedIndexCanRematchButCannotUpdateWithoutCoordinates` | `p19-156` / `handleMetadataUpdate`:2027 — `update.optInt("originalIndex", -1)` → `0` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:112`) |
+| `M::allowLocalDisplayAbsentAndExplicitFalseAreSeparate` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:72`) |
+| `M::artworkNonemptyUpdateAndEmptyFallback` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Replacemen]t> but was:<[ar]t>` (`TvEpisodeMetadataMergeTest.kt:36`) |
+| `M::currentResumeAndDurationProtectActualPlayback` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError: expected:<30000> but was:<9000>` (`TvEpisodeMetadataMergeTest.kt:79`) |
+| `M::defaultArgumentDispatchStillUpdatesWithoutGuideOrShow` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Default]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:179`) |
+| `M::descriptionNonemptyUpdateAndEmptyFallback` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Replacement]> but was:<[Description]>` (`TvEpisodeMetadataMergeTest.kt:28`) |
+| `M::incomingCurrentResumeAheadOfLivePlaybackIsPreserved` | `p19-177` / `handleMetadataUpdate`:2082 — `incomingPositionMs = newResumePositionMs` → `incomingPositionMs = null` | `java.lang.AssertionError: late snapshot is not moved behind live time expected:<60000> but was:<30000>` (`TvEpisodeMetadataMergeTest.kt:195`) |
+| `M::invalidAtSizeUpdateDoesNotNotify` | `p19-156` / `handleMetadataUpdate`:2027 — `update.optInt("originalIndex", -1)` → `0` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:127`) |
+| `M::invalidBeyondUpdateDoesNotNotify` | `p19-156` / `handleMetadataUpdate`:2027 — `update.optInt("originalIndex", -1)` → `0` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:132`) |
+| `M::invalidNegativeUpdateDoesNotNotify` | `p19-156` / `handleMetadataUpdate`:2027 — `update.optInt("originalIndex", -1)` → `0` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:122`) |
+| `M::matchingSeasonEpisodeKeepsRequestedIndex` | `p19-161` / `handleMetadataUpdate`:2049 — `if (update.has("title")) update.optString("title") else null` → `null` | `org.junit.ComparisonFailure: expected:<[Matche]d> but was:<[Secon]d>` (`TvEpisodeMetadataMergeTest.kt:101`) |
+| `M::mismatchedRequestedIndexRematchesSeasonEpisode` | `p19-158` / `handleMetadataUpdate`:2030 — `updateSeason != null && updateEpisode != null` → `updateSeason != null && updateEpisode != null && false` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Rematched]>` (`TvEpisodeMetadataMergeTest.kt:106`) |
+| `M::missingCurrentItemStillNotifiesBothAdapters` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Applied]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:167`) |
+| `M::negativeLiveValuesCannotOverwriteValidHistory` | `p19-177` / `handleMetadataUpdate`:2082 — `incomingPositionMs = newResumePositionMs` → `incomingPositionMs = null` | `java.lang.AssertionError: expected:<0> but was:<9000>` (`TvEpisodeMetadataMergeTest.kt:91`) |
+| `M::noncurrentResumeAndDurationAdoptIncoming` | `p19-177` / `handleMetadataUpdate`:2082 — `incomingPositionMs = newResumePositionMs` → `incomingPositionMs = null` | `java.lang.AssertionError: expected:<5000> but was:<9000>` (`TvEpisodeMetadataMergeTest.kt:85`) |
+| `M::oneCoordinateUsesRequestedIndex` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Index]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:117`) |
+| `M::ratingZeroIsARealUpdateAndAbsentFieldsArePreserved` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError: expected:<0.0> but was:<7.0>` (`TvEpisodeMetadataMergeTest.kt:44`) |
+| `M::sameEpisodeWrongSeasonRematchesInsteadOfOverwritingRequestedItem` | `p19-158` / `handleMetadataUpdate`:2030 — `updateSeason != null && updateEpisode != null` → `updateSeason != null && updateEpisode != null && false` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Season match]>` (`TvEpisodeMetadataMergeTest.kt:190`) |
+| `M::sameSeasonWrongEpisodeRematchesInsteadOfOverwritingRequestedItem` | `p19-158` / `handleMetadataUpdate`:2030 — `updateSeason != null && updateEpisode != null` → `updateSeason != null && updateEpisode != null && false` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Episode match]>` (`TvEpisodeMetadataMergeTest.kt:185`) |
+| `M::titleNonemptyUpdateAndEmptyFallback` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Replacement]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:20`) |
+| `M::unmatchedCoordinatesDoNotFallBackToWrongRequestedItem` | `p19-158` / `handleMetadataUpdate`:2030 — `updateSeason != null && updateEpisode != null` → `updateSeason != null && updateEpisode != null && false` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:137`) |
+| `M::updatesEmptyArrayLeaveAdaptersUntouched` | `p19-216` / `handleMetadataUpdate`:2022 — `var anyUpdated = false` → `var anyUpdated = true` | `java.lang.AssertionError: series adapter notifications expected:<0> but was:<1>` (`TvPhase19MetadataTest.kt:41`) |
+| `M::updatesEmptyLeaveAdaptersUntouched` | `p19-215` / `handleMetadataUpdate`:2012 — `if (updatesJson.isNullOrEmpty()) {` → `if (updatesJson.isNullOrEmpty()) {             model.items[0] = model.items[0].copy(title = "Unexpected publicatio…` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Unexpected publication]>` (`TvEpisodeMetadataMergeTest.kt:147`) |
+| `M::updatesMalformedLeaveAdaptersUntouched` | `p19-217` / `handleMetadataUpdate`:2126 — `android.util.Log.e("TVMazeUpdate", "Failed to parse metadata updates: ${e.message}", e)` → `model.items[0] = model.items[0].copy(title = "Unexpected publication")` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Unexpected publication]>` (`TvEpisodeMetadataMergeTest.kt:152`) |
+| `M::updatesNullLeaveAdaptersUntouched` | `p19-215` / `handleMetadataUpdate`:2012 — `if (updatesJson.isNullOrEmpty()) {` → `if (updatesJson.isNullOrEmpty()) {             model.items[0] = model.items[0].copy(title = "Unexpected publicatio…` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Unexpected publication]>` (`TvEpisodeMetadataMergeTest.kt:142`) |
+| `M::validUpdateFollowedByMalformedRowKeepsItsImmediateWrite` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[First applied]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:162`) |
+| `M::watchedAndTrackerAbsentKeepPreviousValues` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError: series adapter notifications expected:<1> but was:<0>` (`TvPhase19MetadataTest.kt:41`) |
+| `M::watchedFalseAndExplicitTrackerAreAdopted` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:59`) |
+| `M::watchedTrueDominatesTrackerAndPinsBothAdaptersAndTitle` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:52`) |
+| `M::workerWritesModelBeforeQueuedAdapterAndTitlePublication` | `p19-160` / `handleMetadataUpdate`:2042 — `if (originalIndex < 0 \|\| originalIndex >= model.items.size)` → `if (originalIndex <= 0 \|\| originalIndex >= model.items.size)` | `org.junit.ComparisonFailure: expected:<[Worker]> but was:<[Original]>` (`TvEpisodeMetadataMergeTest.kt:173`) |
+| `R::canonicalSymlinkOutsideCacheIsRejected` | `p19-112` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `null, imdbId, guideJson, showName` | `org.junit.ComparisonFailure: expected:<[Inline]> but was:<[Original]>` (`TvEpisodeMetadataReceiverTest.kt:82`) |
+| `R::classicShowNameDoesNotPublishOttDock` | `p19-124` / `handleMetadataUpdate`:1939 — `if (ottSkinInstalled)` → `if (true)` | `org.junit.ComparisonFailure: expected:<[Before]> but was:<[Canonical — Original]>` (`TvEpisodeMetadataReceiverTest.kt:99`) |
+| `R::guideEmptyPreservesExistingGuide` | `p19-149` / `handleMetadataUpdate`:1993 — `if (parsed.isNotEmpty())` → `if (true)` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:144`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-135` / `handleMetadataUpdate`:1980 — `if (g.has("title")) g.optString("title") else null` → `null` | `java.lang.AssertionError: expected:<Title> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:113`) |
+| `R::guideMalformedPreservesExistingGuide` | `p19-218` / `handleMetadataUpdate`:2007 — `android.util.Log.e("TVMazeUpdate", "Failed to parse guide episodes: ${e.message}", e)` → `model.guideEpisodes.clear()` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:159`) |
+| `R::guideMissingEpisodePreservesExistingGuide` | `p19-133` / `handleMetadataUpdate`:1974 — `g.optInt("episode", -1)` → `g.optInt("episode", 0)` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:126`) |
+| `R::guideMissingSeasonPreservesExistingGuide` | `p19-132` / `handleMetadataUpdate`:1973 — `g.optInt("season", -1)` → `g.optInt("season", 0)` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:120`) |
+| `R::guideNegativeEpisodePreservesExistingGuide` | `p19-134` / `handleMetadataUpdate`:1975 — `if (season < 0 \|\| episode < 0) continue` → `if (false) continue` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:138`) |
+| `R::guideNegativeSeasonPreservesExistingGuide` | `p19-134` / `handleMetadataUpdate`:1975 — `if (season < 0 \|\| episode < 0) continue` → `if (false) continue` | `java.lang.AssertionError: expected:<[GuideEpisode(shuffleEligible=true, season=9, episode=9, title=null, artwork=null, descr…` (`TvEpisodeMetadataReceiverTest.kt:132`) |
+| `R::guideZeroCoordinatesAndAbsentKeyDefaultsAreAdopted` | `p19-145` / `handleMetadataUpdate`:1988 — `g.optBoolean("watched", false)` → `g.optBoolean("watched", true)` | `java.lang.AssertionError` (`TvEpisodeMetadataReceiverTest.kt:107`) |
+| `R::imdbDiscoveryCallsCurrentItemSubtitleFetch` | `p19-233` / `handleMetadataUpdate`:1952 — `android.util.Log.d("TVMazeUpdate", "Discovered IMDB ID from TVMaze: $imdbId (was: $previousImdbId)")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: Discovered IMDB ID from TVMaze: tt1900 (was: null)` (`TvPhase19MetadataTest.kt:41`) |
+| `R::imdbDiscoveryGuard` | `p19-127` / `handleMetadataUpdate`:1949 — `imdbId.startsWith("tt")` → `imdbId.startsWith("TT")` | `java.lang.AssertionError: expected:<tt1900> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:172`) |
+| `R::imdbEmptyGuard` | `p19-127` / `handleMetadataUpdate`:1949 — `imdbId.startsWith("tt")` → `imdbId.startsWith("TT")` | `org.junit.ComparisonFailure: expected:<[tt1900]> but was:<[]>` (`TvEpisodeMetadataReceiverTest.kt:178`) |
+| `R::imdbEmptyIncomingGuard` | `p19-219` / `handleMetadataUpdate`:1949 — `!imdbId.isNullOrEmpty() && imdbId.startsWith("tt")` → `imdbId != null && imdbId.startsWith("")` | `java.lang.AssertionError: expected:<null> but was:<>` (`TvEpisodeMetadataReceiverTest.kt:214`) |
+| `R::imdbExistingGuard` | `p19-129` / `handleMetadataUpdate`:1951 — `previousImdbId.isNullOrEmpty()` → `true` | `org.junit.ComparisonFailure: expected:<tt[Old]> but was:<tt[1900]>` (`TvEpisodeMetadataReceiverTest.kt:184`) |
+| `R::imdbWrongCaseGuard` | `p19-127` / `handleMetadataUpdate`:1949 — `imdbId.startsWith("tt")` → `imdbId.startsWith("TT")` | `java.lang.AssertionError: expected:<null> but was:<TT1900>` (`TvEpisodeMetadataReceiverTest.kt:196`) |
+| `R::imdbWrongPrefixGuard` | `p19-219` / `handleMetadataUpdate`:1949 — `!imdbId.isNullOrEmpty() && imdbId.startsWith("tt")` → `imdbId != null && imdbId.startsWith("")` | `java.lang.AssertionError: expected:<null> but was:<id1900>` (`TvEpisodeMetadataReceiverTest.kt:202`) |
+| `R::mixedCaseSeriesGuideStillRebuildsButMovieDoesNot` | `p19-147` / `handleMetadataUpdate`:1994 — `model.guideEpisodes.clear()` → `Unit` | `java.lang.AssertionError: new movie guide replaces previous guide expected:<1> but was:<2>` (`TvEpisodeMetadataReceiverTest.kt:175`) |
+| `R::nullIntentAndAbsentPathCannotChangePayload` | `p19-220` / `readStagedExtra`:1910 — `intent?.getStringExtra(key) ?: return null` → `intent?.getStringExtra(key) ?: java.io.File(cacheDir, "episode_metadata_fallback.json").path` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Implicit scan]>` (`TvEpisodeMetadataReceiverTest.kt:92`) |
+| `R::registeredBroadcastReadsItsOwnIntentAndNotLaunchExtras` | `p19-112` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `null, imdbId, guideJson, showName` | `org.junit.ComparisonFailure: requestMetadataFromFlutter CALLED, Not requesting metadata - contentType=single, handleMetadata…` (`TvEpisodeMetadataReceiverTest.kt:21`) |
+| `R::seriesGuideRebuildsMissingRowsActivatesCurrentAndRefreshesTitle` | `p19-148` / `handleMetadataUpdate`:1995 — `model.guideEpisodes.addAll(parsed)` → `Unit` | `java.lang.AssertionError: expected:<2> but was:<0>` (`TvEpisodeMetadataReceiverTest.kt:155`) |
+| `R::showNameWritesEvenWithoutPayloadAndBlankDoesNotEraseIt` | `p19-232` / `handleMetadataUpdate`:1944 — `android.util.Log.e("TVMazeUpdate", "payload is NULL - cannot update")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: payload is NULL - cannot update` (`TvPhase19MetadataTest.kt:41`) |
+| `R::stagedGuideIsReadOnlyAndWinsOverInline` | `p19-110` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `updatesJson, imdbId, null, showName` | `java.lang.AssertionError: one staged guide episode expected:<1> but was:<0>` (`TvEpisodeMetadataReceiverTest.kt:40`) |
+| `R::stagedMissingFallsBackToInline` | `p19-229` / `readStagedExtra`:1921 — `android.util.Log.e("TVMazeUpdate", "Failed to read staged $key: ${e.message}")` → `Unit` | `java.lang.AssertionError: metadata diagnostic prefix: Failed to read staged metadataUpdatesPath:` (`TvPhase19MetadataTest.kt:43`) |
+| `R::stagedNestedFallsBackToInline` | `p19-228` / `readStagedExtra`:1916 — `android.util.Log.e("TVMazeUpdate", "Rejected staged $key outside cacheDir")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: Rejected staged metadataUpdatesPath outside cacheDir` (`TvPhase19MetadataTest.kt:41`) |
+| `R::stagedOutsideFallsBackToInline` | `p19-228` / `readStagedExtra`:1916 — `android.util.Log.e("TVMazeUpdate", "Rejected staged $key outside cacheDir")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: Rejected staged metadataUpdatesPath outside cacheDir` (`TvPhase19MetadataTest.kt:41`) |
+| `R::stagedPrefixFallsBackToInline` | `p19-228` / `readStagedExtra`:1916 — `android.util.Log.e("TVMazeUpdate", "Rejected staged $key outside cacheDir")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: Rejected staged metadataUpdatesPath outside cacheDir` (`TvPhase19MetadataTest.kt:41`) |
+| `R::stagedUnreadableDirectoryFallsBackToInline` | `p19-229` / `readStagedExtra`:1921 — `android.util.Log.e("TVMazeUpdate", "Failed to read staged $key: ${e.message}")` → `Unit` | `java.lang.AssertionError: metadata diagnostic prefix: Failed to read staged metadataUpdatesPath:` (`TvPhase19MetadataTest.kt:43`) |
+| `R::stagedUpdatesIsReadOnlyAndWinsOverInline` | `p19-112` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `null, imdbId, guideJson, showName` | `org.junit.ComparisonFailure: expected:<[Staged]> but was:<[Original]>` (`TvEpisodeMetadataReceiverTest.kt:28`) |
+| `Q::channelLookupExceptionIsCaughtBeforePosting` | `p19-257` / `requestMetadataFromFlutter`:2158 — `android.util.Log.e("TVMazeUpdate", "Error requesting metadata from Flutter", e)` → `Unit` | `java.lang.AssertionError: diagnostic: Error requesting metadata from Flutter` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::invokeExceptionIsCaughtInsidePostedRequest` | `p19-253` / `requestMetadataFromFlutter`:2154 — `android.util.Log.e("TVMazeUpdate", "Failed to invoke requestEpisodeMetadata", e)` → `Unit` | `java.lang.AssertionError` (`TvEpisodeMetadataRequestTest.kt:65`) |
+| `Q::movieRegistersWithoutRequestingMetadata` | `p19-115` / `setupMetadataReceiver`:1883 — `"com.debrify.app.tv.UPDATE_EPISODE_METADATA"` → `"com.debrify.app.tv.OTHER"` | `java.lang.AssertionError: expected:<[com.debrify.app.tv.UPDATE_EPISODE_METADATA]> but was:<[com.debrify.app.tv.OTHER]>` (`TvEpisodeMetadataRequestTest.kt:23`) |
+| `Q::nullPayloadNullChannelAndMixedCaseSeriesDoNotRequest` | `p19-249` / `requestMetadataFromFlutter`:2136 — `android.util.Log.d("TVMazeUpdate", "Not requesting metadata - contentType=${model.contentType}")` → `Unit` | `java.lang.AssertionError: diagnostic: Not requesting metadata - contentType=SeRiEs` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::pre33RegistersThenPostsSeriesRequestWithNullArguments` | `p19-227` / `setupMetadataReceiver`:1889 — `android.util.Log.d("AndroidTvPlayer", "Metadata update receiver registered")` → `Unit` | `java.lang.AssertionError: diagnostic: Metadata update receiver registered` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::sourceSwitcherComputedHostDispatchesTheRealMetadataRequest` | `p19-194` / `requestMetadataFromFlutter`:2151 — `channel.invokeMethod("requestEpisodeMetadata", null)` → `Unit` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvEpisodeMetadataRequestTest.kt:65`) |
+| `Q::tiramisuReceiverIsNotExported` | `p19-115` / `setupMetadataReceiver`:1883 — `"com.debrify.app.tv.UPDATE_EPISODE_METADATA"` → `"com.debrify.app.tv.OTHER"` | `java.lang.AssertionError: expected:<[com.debrify.app.tv.UPDATE_EPISODE_METADATA]> but was:<[com.debrify.app.tv.OTHER]>` (`TvEpisodeMetadataRequestTest.kt:23`) |
+| `Q::workerRequestUsesCapturedChannelAndRunsOnMainLater` | `p19-194` / `requestMetadataFromFlutter`:2151 — `channel.invokeMethod("requestEpisodeMetadata", null)` → `Unit` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvEpisodeMetadataRequestTest.kt:54`) |
+| `W::absentAndMalformedUpdatesAndGuideHaveDistinctDiagnostics` | `p19-231` / `handleMetadataUpdate`:1933 — `android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")` → `Unit` | `java.lang.AssertionError: diagnostic: updatesJson length=0, imdbId=null` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::guideRefreshesCatalogButtonsAndSelectsNonzeroCurrentIndex` | `p19-153` / `handleMetadataUpdate`:2000 — `playlistController.seriesPlaylistAdapter?.setActiveIndex(currentIndex)` → `Unit` | `java.lang.AssertionError` (`TvEpisodeMetadataSweepTest.kt:38`) |
+| `W::receiverBroadcastDispatchesAllInlineExtrasTogether` | `p19-109` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `updatesJson, null, guideJson, showName` | `java.lang.AssertionError: expected:<tt1900> but was:<null>` (`TvEpisodeMetadataSweepTest.kt:20`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-230` / `handleMetadataUpdate`:1932 — `android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")` → `Unit` | `java.lang.AssertionError: diagnostic: handleMetadataUpdate CALLED` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::workerGuideAdoptsImmediatelyThenRebuildsAndPublishesOnMain` | `p19-235` / `handleMetadataUpdate`:1996 — `android.util.Log.d("TVMazeUpdate", "Adopted ${parsed.size} guide episodes")` → `Unit` | `java.lang.AssertionError: diagnostic: Adopted 1 guide episodes` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `I::iptvBootstrapInstallsRecordingPipelineBeforeMetadataRegistration` | `p19-223` / `initIptvMode`:3264 — `setupPlayer()` → `Unit` | `org.junit.ComparisonFailure: expected:<[androidx.media3.exoplayer.ExoPlayerImpl]> but was:<[jdk.proxy4.$Proxy44]>` (`TvMediaPipelineBootstrapTest.kt:53`) |
+| `A::firstFrameClearsRestoreRestartsTickerThenCommitsBothGates` | `p19-102` / `onRenderedFirstFrame`:475 — `iptvTuneDiagnostics.onFirstFrame()` → `Unit` | `java.lang.AssertionError: expected:<[server:first_frame, diagnostic, manual commit, startup commit]> but was:<[server:first_…` (`TvMediaPipelineAnalyticsTest.kt:32`) |
+| `A::firstFrameWithoutRestoreDoesNotRestartAnAbsentTicker` | `p19-102` / `onRenderedFirstFrame`:475 — `iptvTuneDiagnostics.onFirstFrame()` → `Unit` | `java.lang.AssertionError: expected:<[server:first_frame, diagnostic, manual commit, startup commit]> but was:<[server:first_…` (`TvMediaPipelineAnalyticsTest.kt:41`) |
+| `A::loadCompletedForwardsTheExactByteCount` | `p19-108` / `onLoadCompleted`:489 — `onBytesLoaded(loadEventInfo.bytesLoaded)` → `onBytesLoaded(1)` | `java.lang.AssertionError: expected:<12345> but was:<1>` (`TvMediaPipelineAnalyticsTest.kt:49`) |
+| `A::playbackAndAnalyticsListenersAreAttachedInOrder` | `p19-065` / `setupPlayer`:2713 — `player?.addListener(playbackListener)` → `Unit` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:57`) |
+| `B::vodOnCreateInstallsPipelineBeforeMetadataRegistration` | `p19-221` / `onCreate`:1815 — `setupPlayer()` → `Unit` | `org.junit.ComparisonFailure: expected:<[androidx.media3.exoplayer.ExoPlayerImpl]> but was:<[jdk.proxy4.$Proxy44]>` (`TvMediaPipelineBootstrapTest.kt:31`) |
+| `K::absentPreferredClassKeepsAllDecoders` | `p19-099` / `iptvMediaCodecSelector`:2378 — `preferred.isEmpty()` → `false` | `java.lang.AssertionError: absent preferred class returns the cached platform list expected same:<[vendor.hardware]> was not:…` (`TvMediaPipelineCodecTest.kt:53`) |
+| `K::autoNonIptvAndAudioKeepPlatformOrder` | `p19-095` / `iptvMediaCodecSelector`:2373 — `!isIptvMode \|\|` → `false \|\|` | `java.lang.AssertionError: expected:<[vendor.hardware, c2.android.software]> but was:<[c2.android.software, vendor.hardware]>` (`TvMediaPipelineCodecTest.kt:45`) |
+| `K::hardwarePreferenceKeepsHardwareThenSoftware` | `p19-097` / `iptvMediaCodecSelector`:2376 — `iptvDecoderMode == "software"` → `iptvDecoderMode == "hardware"` | `java.lang.AssertionError: expected:<[vendor.hardware, c2.android.software]> but was:<[c2.android.software, vendor.hardware]>` (`TvMediaPipelineCodecTest.kt:41`) |
+| `K::secureAndTunnelingRequirementsAreForwarded` | `p19-100` / `iptvMediaCodecSelector`:2369 — `mimeType,                 requiresSecureDecoder,                 requiresTunnelingDecoder,` → `mimeType,                 false,                 requiresTunnelingDecoder,` | `java.lang.AssertionError` (`TvMediaPipelineCodecTest.kt:57`) |
+| `K::softwarePreferencePromotesSoftwareAndKeepsHardwareFallback` | `p19-094` / `iptvMediaCodecSelector`:2373 — `iptvDecoderMode == "auto"` → `iptvDecoderMode == "software"` | `java.lang.AssertionError: expected:<[c2.android.software, vendor.hardware]> but was:<[vendor.hardware, c2.android.software]>` (`TvMediaPipelineCodecTest.kt:38`) |
+| `C::audioDefaultPreferenceIsInstalled` | `p19-005` / `setupPlayer`:2391 — `getString("player_default_audio_language", null)` → `getString("player_default_audio_language", "fr")` | `java.lang.AssertionError: preferred audio languages expected:<[en, en, english, en-us, en-gb, en-au, en-ca, en-nz, en-ie, en…` (`TvMediaPipelineConfigurationTest.kt:41`) |
+| `C::audioFrenchPreferenceIsInstalled` | `p19-007` / `setupPlayer`:2414 — `getLanguageVariantsForExoPlayer(defaultAudioLang)` → `getLanguageVariantsForExoPlayer("en")` | `java.lang.AssertionError: preferred audio languages expected:<[fr, fr, fr, french, français, francais, fr-fr, fr-ca, fr-be, …` (`TvMediaPipelineConfigurationTest.kt:48`) |
+| `C::audioUnknownPreferenceIsInstalled` | `p19-007` / `setupPlayer`:2414 — `getLanguageVariantsForExoPlayer(defaultAudioLang)` → `getLanguageVariantsForExoPlayer("en")` | `java.lang.AssertionError: preferred audio languages expected:<[zz-custom]> but was:<[en, en, english, en-us, en-gb, en-au, e…` (`TvMediaPipelineConfigurationTest.kt:55`) |
+| `C::baseTrackAndIptvAdaptationParameters` | `p19-001` / `setupPlayer`:2398 — `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` → `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(false)` | `java.lang.AssertionError` (`TvMediaPipelineConfigurationTest.kt:107`) |
+| `C::bufferBelowBoundaryReadBack` | `p19-056` / `setupPlayer`:2692 — `* 1024L * 1024L / 4L` → `* 1024L * 1024L / 2L` | `java.lang.AssertionError: min buffer expected:<50000000> but was:<120000000>` (`TvMediaPipelineConfigurationTest.kt:244`) |
+| `C::bufferHugeQuarterReadBack` | `p19-053` / `setupPlayer`:2664 — `networkBuffer != "standard"` → `networkBuffer == "standard"` | `java.lang.AssertionError: min buffer expected:<300000000> but was:<50000000>` (`TvMediaPipelineConfigurationTest.kt:224`) |
+| `C::bufferLargeCapReadBack` | `p19-053` / `setupPlayer`:2664 — `networkBuffer != "standard"` → `networkBuffer == "standard"` | `java.lang.AssertionError: min buffer expected:<120000000> but was:<50000000>` (`TvMediaPipelineConfigurationTest.kt:214`) |
+| `C::bufferQuarterReadBack` | `p19-053` / `setupPlayer`:2664 — `networkBuffer != "standard"` → `networkBuffer == "standard"` | `java.lang.AssertionError: min buffer expected:<120000000> but was:<50000000>` (`TvMediaPipelineConfigurationTest.kt:204`) |
+| `C::bufferStandardReadBack` | `p19-053` / `setupPlayer`:2664 — `networkBuffer != "standard"` → `networkBuffer == "standard"` | `java.lang.AssertionError: min buffer expected:<50000000> but was:<120000000>` (`TvMediaPipelineConfigurationTest.kt:254`) |
+| `C::bufferUnknownPresetReadBack` | `p19-053` / `setupPlayer`:2664 — `networkBuffer != "standard"` → `networkBuffer == "standard"` | `java.lang.AssertionError: min buffer expected:<120000000> but was:<50000000>` (`TvMediaPipelineConfigurationTest.kt:234`) |
+| `C::displayMatchFRAME_RATEIsInstalled` | `p19-044` / `setupPlayer`:2634 — `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS,` → `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,` | `java.lang.AssertionError: frame rate strategy expected:<0> but was:<-2147483648>` (`TvMediaPipelineConfigurationTest.kt:314`) |
+| `C::displayMatchFRAME_RATE_AND_RESOLUTIONIsInstalled` | `p19-044` / `setupPlayer`:2634 — `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS,` → `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,` | `java.lang.AssertionError: frame rate strategy expected:<0> but was:<-2147483648>` (`TvMediaPipelineConfigurationTest.kt:320`) |
+| `C::displayMatchOFFIsInstalled` | `p19-043` / `setupPlayer`:2629 — `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,` → `C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS,` | `java.lang.AssertionError: frame rate strategy expected:<-2147483648> but was:<0>` (`TvMediaPipelineConfigurationTest.kt:308`) |
+| `C::displayMatchSYSTEMIsInstalled` | `p19-211` / `setupPlayer`:2636 — `TvContentDisplayMatchMode.SYSTEM -> Unit` → `TvContentDisplayMatchMode.SYSTEM -> playerBuilder.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATE…` | `java.lang.AssertionError: frame rate strategy expected:<0> but was:<-2147483648>` (`TvMediaPipelineConfigurationTest.kt:334`) |
+| `C::iptvExtendedTimeout` | `p19-018` / `setupPlayer`:2493 — `} else 15_000` → `} else 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:171`) |
+| `C::iptvKeepsContentAndNonIptvDoesNot` | `p19-084` / `setupPlayer`:2752 — `playerView.setKeepContentOnPlayerReset(true)` → `playerView.setKeepContentOnPlayerReset(false)` | `java.lang.AssertionError: expected:<true> but was:<false>` (`TvMediaPipelineConfigurationTest.kt:366`) |
+| `C::iptvOtherTimeout` | `p19-018` / `setupPlayer`:2493 — `} else 15_000` → `} else 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:193`) |
+| `C::iptvPatientTimeout` | `p19-018` / `setupPlayer`:2493 — `} else 15_000` → `} else 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:182`) |
+| `C::iptvStandardTimeout` | `p19-018` / `setupPlayer`:2493 — `} else 15_000` → `} else 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:160`) |
+| `C::mergedBothBufferGuard` | `p19-047` / `setupPlayer`:2649 — `payload?.items?.any {` → `payload?.items?.take(1)?.any {` | `java.lang.AssertionError: expected:<15000000> but was:<50000000>` (`TvMediaPipelineConfigurationTest.kt:267`) |
+| `C::mergedEmptyAudioBufferGuard` | `p19-046` / `setupPlayer`:2650 — `!it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()` → `!it.hdVideoUrl.isNullOrEmpty()` | `java.lang.AssertionError: single-track input keeps stock minimum expected:<50000000> but was:<15000000>` (`TvMediaPipelineConfigurationTest.kt:309`) |
+| `C::mergedEmptyVideoBufferGuard` | `p19-045` / `setupPlayer`:2650 — `!it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()` → `!it.audioUrl.isNullOrEmpty()` | `java.lang.AssertionError: single-track input keeps stock minimum expected:<50000000> but was:<15000000>` (`TvMediaPipelineConfigurationTest.kt:289`) |
+| `C::mergedNoAudioBufferGuard` | `p19-046` / `setupPlayer`:2650 — `!it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()` → `!it.hdVideoUrl.isNullOrEmpty()` | `java.lang.AssertionError: single-track input keeps stock minimum expected:<50000000> but was:<15000000>` (`TvMediaPipelineConfigurationTest.kt:299`) |
+| `C::mergedNoVideoBufferGuard` | `p19-045` / `setupPlayer`:2650 — `!it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()` → `!it.audioUrl.isNullOrEmpty()` | `java.lang.AssertionError: single-track input keeps stock minimum expected:<50000000> but was:<15000000>` (`TvMediaPipelineConfigurationTest.kt:279`) |
+| `C::nativeRoutingReadsEachIndependentPcmReason` | `p19-200` / `setupPlayer`:2469 — `nativeAudioRouting.update(displayController.nightModeIndex > 0, displayController.systemAudioEffectsEnabled, displ…` → `nativeAudioRouting.update(false, false, 1f)` | `java.lang.AssertionError: night mode needs PCM` (`TvMediaPipelineConfigurationTest.kt:372`) |
+| `C::playbackSpeedAndNativeRoutingAreInstalled` | `p19-064` / `setupPlayer`:2711 — `setPlaybackSpeed(displayController.playbackSpeeds[displayController.playbackSpeedIndex])` → `setPlaybackSpeed(1f)` | `java.lang.AssertionError: initial speed expected:<1.25> but was:<1.0>` (`TvMediaPipelineConfigurationTest.kt:340`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-069` / `setupPlayer`:2716 — `playerView.player = player` → `playerView.player = null` | `java.lang.AssertionError: expected same:<androidx.media3.exoplayer.ExoPlayerImpl@5fb64c64> was not:<null>` (`TvMediaPipelineConfigurationTest.kt:350`) |
+| `C::textDefaultPreferenceIsInstalled` | `p19-006` / `setupPlayer`:2392 — `getString("player_default_subtitle_language", null)` → `getString("player_default_subtitle_language", "fr")` | `java.lang.AssertionError: preferred text languages expected:<[en, en, english, en-us, en-gb, en-au, en-ca, en-nz, en-ie, en-…` (`TvMediaPipelineConfigurationTest.kt:60`) |
+| `C::textForcedStartsDisabled` | `p19-013` / `setupPlayer`:2453 — `getBoolean("subtitle_forced_only", false)` → `getBoolean("subtitle_forced_only", false) && false` | `java.lang.AssertionError: initial text selection disabled` (`TvMediaPipelineConfigurationTest.kt:94`) |
+| `C::textForeignStartsDisabled` | `p19-012` / `setupPlayer`:2452 — `getBoolean("subtitle_only_foreign_audio", false)` → `getBoolean("subtitle_only_foreign_audio", false) && false` | `java.lang.AssertionError: initial text selection disabled` (`TvMediaPipelineConfigurationTest.kt:88`) |
+| `C::textFrenchPreferenceIsInstalled` | `p19-009` / `setupPlayer`:2434 — `getLanguageVariantsForExoPlayer(defaultSubtitleLang)` → `getLanguageVariantsForExoPlayer("en")` | `java.lang.AssertionError: preferred text languages expected:<[fr, fr, fr, french, français, francais, fr-fr, fr-ca, fr-be, f…` (`TvMediaPipelineConfigurationTest.kt:67`) |
+| `C::textOffPreferenceIsInstalled` | `p19-011` / `setupPlayer`:2428 — `defaultSubtitleLang == "off"` → `defaultSubtitleLang == "disabled"` | `java.lang.AssertionError: preferred text languages expected:<[]> but was:<[off]>` (`TvMediaPipelineConfigurationTest.kt:81`) |
+| `C::textRegionalStartsDisabled` | `p19-014` / `setupPlayer`:2454 — `defaultSubtitleLang?.equals("pt-BR", ignoreCase = true) == true` → `defaultSubtitleLang?.equals("pt-BR", ignoreCase = false) == true` | `java.lang.AssertionError: initial text selection disabled` (`TvMediaPipelineConfigurationTest.kt:100`) |
+| `C::textUnknownPreferenceIsInstalled` | `p19-009` / `setupPlayer`:2434 — `getLanguageVariantsForExoPlayer(defaultSubtitleLang)` → `getLanguageVariantsForExoPlayer("en")` | `java.lang.AssertionError: preferred text languages expected:<[zz-custom]> but was:<[en, en, english, en-us, en-gb, en-au, en…` (`TvMediaPipelineConfigurationTest.kt:74`) |
+| `C::vodExtendedTimeout` | `p19-015` / `setupPlayer`:2490 — `"extended" -> 30_000` → `"extended" -> 30_001` | `java.lang.AssertionError: connect timeout expected:<30000> but was:<30001>` (`TvMediaPipelineConfigurationTest.kt:127`) |
+| `C::vodOtherTimeout` | `p19-017` / `setupPlayer`:2492 — `else -> 15_000` → `else -> 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:149`) |
+| `C::vodPatientTimeout` | `p19-016` / `setupPlayer`:2491 — `"patient" -> 60_000` → `"patient" -> 60_001` | `java.lang.AssertionError: connect timeout expected:<60000> but was:<60001>` (`TvMediaPipelineConfigurationTest.kt:138`) |
+| `C::vodStandardTimeout` | `p19-017` / `setupPlayer`:2492 — `else -> 15_000` → `else -> 15_001` | `java.lang.AssertionError: connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelineConfigurationTest.kt:116`) |
+| `N::connectedColdStartIsOnline` | `p19-089` / `setupPlayer`:2776 — `setOffline(cm.activeNetwork == null)` → `setOffline(cm.activeNetwork != null)` | `java.lang.AssertionError: cold start active network is online` (`TvMediaPipelineConnectivityTest.kt:55`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-087` / `setupPlayer`:2771 — `cm.registerDefaultNetworkCallback(callback)` → `Unit` | `java.lang.AssertionError: registered exact activity callback` (`TvMediaPipelineConnectivityTest.kt:27`) |
+| `N::nonIptvDoesNotRegisterOrInitializeRecovery` | `p19-086` / `setupPlayer`:2747 — `if (isIptvMode) {             // Phase 3: hold` → `if (true) {             // Phase 3: hold` | `java.lang.AssertionError: expected:<0> but was:<1>` (`TvMediaPipelineConnectivityTest.kt:41`) |
+| `N::preNBoxesKeepTheTimedLadderWithoutRegistration` | `p19-085` / `setupPlayer`:2759 — `android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N` → `android.os.Build.VERSION.SDK_INT >= 23` | `java.lang.AssertionError: expected:<0> but was:<1>` (`TvMediaPipelineConnectivityTest.kt:49`) |
+| `N::registrationFailureDoesNotStoreCallbackOrTouchLazyRecovery` | `p19-254` / `setupPlayer`:2780 — `android.util.Log.w("AndroidTvPlayer", "network callback: $e")` → `Unit` | `java.lang.AssertionError: registration failure diagnostic` (`TvMediaPipelineConnectivityTest.kt:37`) |
+| `L::installedLivePolicyReadsCurrentEntryAndIndexEachTime` | `p19-040` / `setupPlayer`:2611 — `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` → `IptvLiveLoadErrorPolicy { true }` | `java.lang.AssertionError: expected:<3> but was:<20>` (`TvMediaPipelineLoaderTest.kt:71`) |
+| `L::installedPlayerHoldsBothNetworkLocksAndNoisyAudioHandling` | `p19-041` / `setupPlayer`:2620 — `.setHandleAudioBecomingNoisy(true)` → `.setHandleAudioBecomingNoisy(false)` | `java.lang.AssertionError: expected:<true> but was:<false>` (`TvMediaPipelineLoaderTest.kt:107`) |
+| `L::iptvEmptyHeadersReturnIdentityAndChannelUaWins` | `p19-028` / `setupPlayer`:2545 — `dataSpec.withAdditionalHeaders(headers)` → `dataSpec` | `org.junit.ComparisonFailure: expected:<[Channel UA]> but was:<[old]>` (`TvMediaPipelineLoaderTest.kt:51`) |
+| `L::protectedFactoryUsesTheClientPublishedBySetup` | `p19-016` / `setupPlayer`:2491 — `"patient" -> 60_000` → `"patient" -> 60_001` | `java.lang.AssertionError: expected:<60000> but was:<60001>` (`TvMediaPipelineLoaderTest.kt:61`) |
+| `L::recordingFirstAccessAndAbortCallbackAreIptvOnly` | `p19-035` / `setupPlayer`:2562 — `iptvRecordingActionsController.updateRecordButtonState()` → `Unit` | `org.junit.ComparisonFailure: expected:<[Record]> but was:<[stale]>` (`TvMediaPipelineLoaderTest.kt:99`) |
+| `L::speechTapReadsLivePlayerAndPostsBackToMain` | `p19-204` / `setupPlayer`:2466 — `runOnUiThread(action)` → `action()` | `java.lang.AssertionError: expected:<Thread[#32,SDK 28 Main Thread,5,SDK 28]> but was:<Thread[#84,p19-loader-observer,5,SDK 2…` (`TvMediaPipelineLoaderTest.kt:83`) |
+| `L::vodAndIptvReportedUriAreIdentity` | `p19-032` / `setupPlayer`:2527 — `uri: Uri): Uri = uri` → `uri: Uri): Uri = Uri.EMPTY` | `java.lang.AssertionError: expected same:<https://p19.test/live> was not:<>` (`TvMediaPipelineLoaderTest.kt:40`) |
+| `L::vodDefaultPortsAndHeaderPrecedenceAreCanonical` | `p19-026` / `setupPlayer`:2520 — `protectedMediaOrigins.contains(origin)` → `!protectedMediaOrigins.contains(origin)` | `org.junit.ComparisonFailure: protected origin: https://p19.test/a expected:<[new]> but was:<[old]>` (`TvMediaPipelineLoaderTest.kt:33`) |
+| `L::vodUnmatchedAndAbsentOriginsReturnTheSameSpec` | `p19-026` / `setupPlayer`:2520 — `protectedMediaOrigins.contains(origin)` → `!protectedMediaOrigins.contains(origin)` | `java.lang.AssertionError: non-protected request: https://other.test/a expected same:<DataSpec[GET https://other.test/a, 0, -…` (`TvMediaPipelineLoaderTest.kt:24`) |
+| `P::bothExtractorOverloadsReadChangedVolatileFlagOnWorkerInvocations` | `p19-256` / `setupPlayer`:2619 — `.setMediaSourceFactory(mediaSourceFactory)` → `` | `java.lang.AssertionError: no-arg worker uses aggressive TS expected:<9> but was:<0>` (`TvMediaPipelinePrerequisiteTest.kt:116`) |
+| `P::builtIptvChainAndPolicyAreObservableOnTheOriginal` | `p19-256` / `setupPlayer`:2619 — `.setMediaSourceFactory(mediaSourceFactory)` → `` | `java.lang.AssertionError: expected:<class com.debrify.app.tv.RecordingDataSource$Factory> but was:<class androidx.media3.dat…` (`TvMediaPipelinePrerequisiteTest.kt:74`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-255` / `setupPlayer`:2618 — `.setTrackSelector(trackSelector!!)` → `` | `java.lang.AssertionError: installed selector is the activity selector expected same:<androidx.media3.exoplayer.trackselectio…` (`TvMediaPipelinePrerequisiteTest.kt:37`) |
+| `P::iptvResolverReadsChangedVolatileMapOnEachWorkerInvocation` | `p19-256` / `setupPlayer`:2619 — `.setMediaSourceFactory(mediaSourceFactory)` → `` | `java.lang.AssertionError: Media3 1.8.0 read-back field absent: androidx.media3.datasource.DefaultDataSource$Factory.upstream…` (`TvMediaPipelinePrerequisiteTest.kt:98`) |
+| `P::realHeapGetterControlsStockAndExactFortyEightMiBBoundary` | `p19-055` / `setupPlayer`:2670 — `networkBuffer == "huge"` → `networkBuffer == "large"` | `java.lang.AssertionError: exact boundary enables larger buffer expected:<120000000> but was:<300000000>` (`TvMediaPipelinePrerequisiteTest.kt:65`) |
+| `P::vodResolverReadsChangedVolatilePairOnEachWorkerInvocation` | `p19-256` / `setupPlayer`:2619 — `.setMediaSourceFactory(mediaSourceFactory)` → `` | `java.lang.AssertionError: Media3 1.8.0 read-back field absent: androidx.media3.datasource.DefaultDataSource$Factory.resolver` (`TvMediaPipelinePrerequisiteTest.kt:88`) |
+| `S::identityProviderReevaluatesTheActiveSubtitleOnEachRead` | `p19-079` / `setupPlayer`:2740 — `{ subtitleController.currentSubtitleIdentity() }` → `{ null }` | `java.lang.AssertionError: new subtitle invalidates the old identity offset expected:<0> but was:<1500>` (`TvMediaPipelineSubtitleOwnershipTest.kt:34`) |
+| `S::playerBuildResetsOffsetAndKeepsActivityAsTheProviderOwner` | `p19-077` / `setupPlayer`:2739 — `SubtitleSettings.resetSyncOffset()` → `Unit` | `java.lang.AssertionError: fresh session offset expected:<0> but was:<2000>` (`TvMediaPipelineSubtitleOwnershipTest.kt:23`) |
+| `S::projectedAppearanceAndFontAreSynchronizedBeforeApplication` | `p19-075` / `setupPlayer`:2735 — `SubtitleSettings.synchronizeProjectedAppearance(this)` → `Unit` | `java.lang.AssertionError: projected size expected:<4> but was:<2>` (`TvMediaPipelineSubtitleOwnershipTest.kt:48`) |
+| `S::resizeModeAndInitialFocusAreAppliedToTheRealPlayerView` | `p19-082` / `setupPlayer`:2744 — `displayController.applyResizeMode()` → `Unit` | `java.lang.AssertionError: expected:<4> but was:<0>` (`TvMediaPipelineSubtitleOwnershipTest.kt:60`) |
+
+Additional statement-sweep mutations (the exact definitions and all witnesses are also in the archive):
+
+| Test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `C::baseTrackAndIptvAdaptationParameters` | `p19-002` / `setupPlayer`:2399 — `.setPreferredAudioMimeType("audio/opus")` → `.setPreferredAudioMimeType("audio/aac")` | `java.lang.AssertionError: expected:<[audio/opus]> but was:<[audio/aac]>` (`TvMediaPipelineConfigurationTest.kt:105`) |
+| `C::baseTrackAndIptvAdaptationParameters` | `p19-003` / `setupPlayer`:2400 — `.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)` → `.setIgnoredTextSelectionFlags(0)` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvMediaPipelineConfigurationTest.kt:106`) |
+| `C::baseTrackAndIptvAdaptationParameters` | `p19-004` / `setupPlayer`:2409 — `.setAllowVideoNonSeamlessAdaptiveness(false)` → `.setAllowVideoNonSeamlessAdaptiveness(true)` | `java.lang.AssertionError: live video never non-seamlessly adapts` (`TvMediaPipelineConfigurationTest.kt:110`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-019` / `setupPlayer`:2496 — `.setConnectTimeoutMs(networkTimeoutMs)` → `.setConnectTimeoutMs(networkTimeoutMs + 1)` | `java.lang.AssertionError: installed connect timeout expected:<15000> but was:<15001>` (`TvMediaPipelinePrerequisiteTest.kt:53`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-020` / `setupPlayer`:2497 — `.setReadTimeoutMs(networkTimeoutMs)` → `.setReadTimeoutMs(networkTimeoutMs + 1)` | `java.lang.AssertionError: installed read timeout expected:<15000> but was:<15001>` (`TvMediaPipelinePrerequisiteTest.kt:54`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-021` / `setupPlayer`:2495 — `.setAllowCrossProtocolRedirects(true)` → `.setAllowCrossProtocolRedirects(false)` | `java.lang.AssertionError: installed cross-protocol redirects expected:<true> but was:<false>` (`TvMediaPipelinePrerequisiteTest.kt:55`) |
+| `C::iptvExtendedTimeout` | `p19-022` / `setupPlayer`:2500 — `Chrome/120.0.0.0` → `Chrome/121.0.0.0` | `org.junit.ComparisonFailure: expected:<...ike Gecko) Chrome/12[0].0.0.0 Safari/537.36> but was:<...ike Gecko) Chrome/12[1].0…` (`TvMediaPipelineConfigurationTest.kt:176`) |
+| `L::protectedFactoryUsesTheClientPublishedBySetup` | `p19-023` / `setupPlayer`:2505 — `protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)` → `protectedStreamClient = ProtectedStreamHttp.client(15_000)` | `java.lang.AssertionError: expected:<60000> but was:<15000>` (`TvMediaPipelineLoaderTest.kt:61`) |
+| `L::protectedFactoryUsesTheClientPublishedBySetup` | `p19-024` / `setupPlayer`:2508 — `ProtectedStreamHttp.dataSourceFactory(protectedStreamClient)` → `ProtectedStreamHttp.dataSourceFactory(ProtectedStreamHttp.client(1_000))` | `java.lang.AssertionError: same client handed to protected transport expected same:<okhttp3.OkHttpClient@1314b110> was not:<o…` (`TvMediaPipelineLoaderTest.kt:60`) |
+| `P::builtIptvChainAndPolicyAreObservableOnTheOriginal` | `p19-025` / `setupPlayer`:2511 — `this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory` → `this, vodHttpFactory` | `java.lang.AssertionError: expected:<class androidx.media3.datasource.DefaultHttpDataSource$Factory> but was:<class com.debri…` (`TvMediaPipelinePrerequisiteTest.kt:81`) |
+| `P::vodResolverReadsChangedVolatilePairOnEachWorkerInvocation` | `p19-027` / `setupPlayer`:2521 — `dataSpec.withAdditionalHeaders(playbackHeaders)` → `dataSpec` | `java.lang.AssertionError: first worker sees current VOD headers expected:<first> but was:<null>` (`TvMediaPipelinePrerequisiteTest.kt:91`) |
+| `P::vodResolverReadsChangedVolatilePairOnEachWorkerInvocation` | `p19-029` / `setupPlayer`:2513 — `val dataSourceFactory = run {             ResolvingDataSource.Factory(                 upstreamDataSourceFactory, …` → `val savedHeaders = activeVodHeaders         val dataSourceFactory = run {             ResolvingDataSource.Factory(…` | `java.lang.AssertionError: first worker sees current VOD headers expected:<first> but was:<null>` (`TvMediaPipelinePrerequisiteTest.kt:91`) |
+| `P::iptvResolverReadsChangedVolatileMapOnEachWorkerInvocation` | `p19-030` / `setupPlayer`:2538 — `val finalDataSourceFactory = if (isIptvMode) {             ResolvingDataSource.Factory(                 dataSource…` → `val savedHeaders = currentIptvHttpHeaders         val finalDataSourceFactory = if (isIptvMode) {             Resol…` | `java.lang.AssertionError: first worker sees current IPTV headers expected:<first> but was:<null>` (`TvMediaPipelinePrerequisiteTest.kt:101`) |
+| `P::bothExtractorOverloadsReadChangedVolatileFlagOnWorkerInvocations` | `p19-031` / `setupPlayer`:2597 — `val iptvExtractors = object : ExtractorsFactory {                 override fun createExtractors(): Array<Extractor…` → `val savedStrict = iptvStrictTsActive             val iptvExtractors = object : ExtractorsFactory {                …` | `java.lang.AssertionError: no-arg worker re-reads strict TS expected:<0> but was:<9>` (`TvMediaPipelinePrerequisiteTest.kt:119`) |
+| `L::vodAndIptvReportedUriAreIdentity` | `p19-033` / `setupPlayer`:2548 — `uri: Uri): Uri = uri` → `uri: Uri): Uri = Uri.EMPTY` | `java.lang.AssertionError: expected same:<https://p19.test/live> was not:<>` (`TvMediaPipelineLoaderTest.kt:42`) |
+| `L::iptvEmptyHeadersReturnIdentityAndChannelUaWins` | `p19-034` / `setupPlayer`:2544 — `if (headers.isEmpty()) dataSpec` → `if (false) dataSpec` | `java.lang.AssertionError: empty map retains the exact DataSpec expected same:<DataSpec[GET http://p19.test/live, 0, -1, null…` (`TvMediaPipelineLoaderTest.kt:48`) |
+| `L::recordingFirstAccessAndAbortCallbackAreIptvOnly` | `p19-036` / `setupPlayer`:2565 — `Recording stopped — couldn't keep writing to storage` → `Recording stopped` | `org.junit.ComparisonFailure: expected:<Recording stopped[ — couldn't keep writing to storage]> but was:<Recording stopped[]>` (`TvMediaPipelineLoaderTest.kt:100`) |
+| `L::recordingFirstAccessAndAbortCallbackAreIptvOnly` | `p19-037` / `setupPlayer`:2566 — `Toast.LENGTH_LONG` → `Toast.LENGTH_SHORT` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvMediaPipelineLoaderTest.kt:101`) |
+| `P::iptvResolverReadsChangedVolatileMapOnEachWorkerInvocation` | `p19-038` / `setupPlayer`:2558 — `if (isIptvMode) {             // A write error` → `if (false) {             // A write error` | `java.lang.AssertionError: first worker sees current IPTV headers expected:<first> but was:<null>` (`TvMediaPipelinePrerequisiteTest.kt:101`) |
+| `P::bothExtractorOverloadsReadChangedVolatileFlagOnWorkerInvocations` | `p19-039` / `setupPlayer`:2587 — `DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or                     DefaultTsPayloadReaderFactory.FL…` → `DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES` | `java.lang.AssertionError: no-arg worker uses aggressive TS expected:<9> but was:<1>` (`TvMediaPipelinePrerequisiteTest.kt:116`) |
+| `L::installedPlayerHoldsBothNetworkLocksAndNoisyAudioHandling` | `p19-042` / `setupPlayer`:2625 — `.setWakeMode(C.WAKE_MODE_NETWORK)` → `.setWakeMode(C.WAKE_MODE_LOCAL)` | `java.lang.AssertionError: expected:<true> but was:<false>` (`TvMediaPipelineLoaderTest.kt:106`) |
+| `C::mergedBothBufferGuard` | `p19-048` / `setupPlayer`:2656 — `15_000, // minBufferMs` → `15_001, // minBufferMs` | `java.lang.AssertionError: expected:<15000000> but was:<15001000>` (`TvMediaPipelineConfigurationTest.kt:267`) |
+| `C::mergedBothBufferGuard` | `p19-049` / `setupPlayer`:2657 — `50_000, // maxBufferMs` → `50_001, // maxBufferMs` | `java.lang.AssertionError: expected:<50000000> but was:<50001000>` (`TvMediaPipelineConfigurationTest.kt:268`) |
+| `C::mergedBothBufferGuard` | `p19-050` / `setupPlayer`:2658 — `1_000,  // bufferForPlaybackMs` → `1_001,  // bufferForPlaybackMs` | `java.lang.AssertionError: merge startup threshold expected:<1000000> but was:<1001000>` (`TvMediaPipelineConfigurationTest.kt:266`) |
+| `C::mergedBothBufferGuard` | `p19-051` / `setupPlayer`:2659 — `2_000,  // bufferForPlaybackAfterRebufferMs` → `2_001,  // bufferForPlaybackAfterRebufferMs` | `java.lang.AssertionError: expected:<2000000> but was:<2001000>` (`TvMediaPipelineConfigurationTest.kt:269`) |
+| `C::mergedBothBufferGuard` | `p19-052` / `setupPlayer`:2661 — `.setPrioritizeTimeOverSizeThresholds(true)` → `.setPrioritizeTimeOverSizeThresholds(false)` | `java.lang.AssertionError: expected:<true> but was:<false>` (`TvMediaPipelineConfigurationTest.kt:270`) |
+| `P::builtIptvChainAndPolicyAreObservableOnTheOriginal` | `p19-054` / `setupPlayer`:2664 — `else if (!isIptvMode && networkBuffer` → `else if (networkBuffer` | `java.lang.AssertionError: IPTV always keeps stock LoadControl expected:<50000000> but was:<300000000>` (`TvMediaPipelinePrerequisiteTest.kt:72`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-057` / `setupPlayer`:2693 — `(if (hugeBuffer) 192L else 96L)` → `(if (hugeBuffer) 193L else 97L)` | `java.lang.AssertionError: huge preset memory cap expected:<201326592> but was:<202375168>` (`TvMediaPipelinePrerequisiteTest.kt:33`) |
+| `P::realHeapGetterControlsStockAndExactFortyEightMiBBoundary` | `p19-058` / `setupPlayer`:2694 — `minOf(requestedBytes, heapBudgetBytes)` → `requestedBytes` | `java.lang.AssertionError: 32 MiB budget keeps stock expected:<50000000> but was:<120000000>` (`TvMediaPipelinePrerequisiteTest.kt:62`) |
+| `P::realHeapGetterControlsStockAndExactFortyEightMiBBoundary` | `p19-059` / `setupPlayer`:2695 — `targetBytes >= 48L` → `targetBytes > 48L` | `java.lang.AssertionError: exact boundary enables larger buffer expected:<120000000> but was:<50000000>` (`TvMediaPipelinePrerequisiteTest.kt:65`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-060` / `setupPlayer`:2699 — `if (hugeBuffer) 300_000 else 120_000, // minBufferMs` → `if (hugeBuffer) 299_999 else 119_999, // minBufferMs` | `java.lang.AssertionError: huge preset min buffer expected:<300000000> but was:<299999000>` (`TvMediaPipelinePrerequisiteTest.kt:31`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-061` / `setupPlayer`:2700 — `if (hugeBuffer) 300_000 else 120_000, // maxBufferMs` → `if (hugeBuffer) 300_001 else 120_001, // maxBufferMs` | `java.lang.AssertionError: huge preset max buffer expected:<300000000> but was:<300001000>` (`TvMediaPipelinePrerequisiteTest.kt:32`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-062` / `setupPlayer`:2701 — `DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,` → `DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS + 1,` | `java.lang.AssertionError: startup threshold remains stock expected:<1000000> but was:<1001000>` (`TvMediaPipelinePrerequisiteTest.kt:34`) |
+| `C::bufferUnknownPresetReadBack` | `p19-063` / `setupPlayer`:2702 — `DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,` → `DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS + 1,` | `java.lang.AssertionError: expected:<2000000> but was:<2001000>` (`TvMediaPipelineConfigurationTest.kt:238`) |
+| `A::playbackAndAnalyticsListenersAreAttachedInOrder` | `p19-066` / `setupPlayer`:2714 — `player?.addAnalyticsListener(displayController.decoderAnalyticsListener)` → `Unit` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:62`) |
+| `A::playbackAndAnalyticsListenersAreAttachedInOrder` | `p19-067` / `setupPlayer`:2715 — `player?.addAnalyticsListener(iptvDiagAnalyticsListener)` → `Unit` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:63`) |
+| `A::playbackAndAnalyticsListenersAreAttachedInOrder` | `p19-068` / `setupPlayer`:2730 — `player?.addListener(subtitleListener!!)` → `Unit` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:58`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-070` / `setupPlayer`:2719 — `playerView.subtitleView?.visibility = View.GONE` → `playerView.subtitleView?.visibility = View.INVISIBLE` | `java.lang.AssertionError: expected:<8> but was:<4>` (`TvMediaPipelineConfigurationTest.kt:351`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-071` / `setupPlayer`:2726 — `if (subtitleController.externalSubtitleActive) return` → `if (false) return` | `java.lang.AssertionError: external owner keeps existing cues expected:<1> but was:<0>` (`TvMediaPipelineConfigurationTest.kt:359`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-072` / `setupPlayer`:2727 — `subtitleOverlay.setCues(cueGroup.cues)` → `subtitleOverlay.setCues(emptyList())` | `java.lang.AssertionError: custom player cue count expected:<1> but was:<0>` (`TvMediaPipelineConfigurationTest.kt:358`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-073` / `setupPlayer`:2733 — `setApplyEmbeddedStyles(false)` → `setApplyEmbeddedStyles(true)` | `java.lang.AssertionError: expected:<false> but was:<true>` (`TvMediaPipelineConfigurationTest.kt:360`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-074` / `setupPlayer`:2734 — `setApplyEmbeddedFontSizes(false)` → `setApplyEmbeddedFontSizes(true)` | `java.lang.AssertionError: expected:<false> but was:<true>` (`TvMediaPipelineConfigurationTest.kt:360`) |
+| `S::projectedAppearanceAndFontAreSynchronizedBeforeApplication` | `p19-076` / `setupPlayer`:2736 — `SubtitleFontManager.synchronizeProjectedFont(this)` → `Unit` | `org.junit.ComparisonFailure: selected font expected:<[sourceserif]> but was:<[default]>` (`TvMediaPipelineSubtitleOwnershipTest.kt:54`) |
+| `S::playerBuildResetsOffsetAndKeepsActivityAsTheProviderOwner` | `p19-078` / `setupPlayer`:2740 — `SubtitleSettings.setActiveSubtitleIdentityProvider(this)` → `SubtitleSettings.setActiveSubtitleIdentityProvider(Any())` | `java.lang.AssertionError: provider ownership remains the Activity expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerAc…` (`TvMediaPipelineSubtitleOwnershipTest.kt:24`) |
+| `S::projectedAppearanceAndFontAreSynchronizedBeforeApplication` | `p19-080` / `setupPlayer`:2741 — `subtitleController.applySubtitleSettings()` → `Unit` | `java.lang.AssertionError: applied size uses synchronized settings expected:<24.0> but was:<0.0533>` (`TvMediaPipelineSubtitleOwnershipTest.kt:52`) |
+| `C::subtitleOutputIsCustomAndExternalRenderingOwnsItsCues` | `p19-081` / `setupPlayer`:2743 — `playerView.setControllerAutoShow(false)` → `playerView.setControllerAutoShow(true)` | `java.lang.AssertionError` (`TvMediaPipelineConfigurationTest.kt:352`) |
+| `S::resizeModeAndInitialFocusAreAppliedToTheRealPlayerView` | `p19-083` / `setupPlayer`:2745 — `playerView.requestFocus()` → `Unit` | `java.lang.AssertionError: player receives initial focus` (`TvMediaPipelineSubtitleOwnershipTest.kt:61`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-088` / `setupPlayer`:2772 — `iptvNetworkCallback = callback` → `iptvNetworkCallback = null` | `java.lang.AssertionError: registered callback is retained for teardown` (`TvMediaPipelineConnectivityTest.kt:26`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-090` / `setupPlayer`:2763 — `setOffline(false)` → `setOffline(true)` | `java.lang.AssertionError` (`TvMediaPipelineConnectivityTest.kt:29`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-091` / `setupPlayer`:2767 — `setOffline(true)` → `setOffline(false)` | `java.lang.AssertionError` (`TvMediaPipelineConnectivityTest.kt:30`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-092` / `setupPlayer`:2763 — `runOnUiThread { iptvTuneController.iptvLiveRecovery.setOffline(false) }` → `iptvTuneController.iptvLiveRecovery.setOffline(false)` | `java.lang.AssertionError: available waits for Main` (`TvMediaPipelineConnectivityTest.kt:29`) |
+| `N::initialOfflineAndWorkerCallbacksUseQueuedLiveRecovery` | `p19-093` / `setupPlayer`:2767 — `runOnUiThread { iptvTuneController.iptvLiveRecovery.setOffline(true) }` → `iptvTuneController.iptvLiveRecovery.setOffline(true)` | `java.lang.AssertionError: lost waits for Main` (`TvMediaPipelineConnectivityTest.kt:30`) |
+| `K::autoNonIptvAndAudioKeepPlatformOrder` | `p19-096` / `iptvMediaCodecSelector`:2373 — `!MimeTypes.isVideo(mimeType)` → `false` | `java.lang.AssertionError: expected:<[vendor.hardware, c2.android.software]> but was:<[c2.android.software, vendor.hardware]>` (`TvMediaPipelineCodecTest.kt:47`) |
+| `K::softwarePreferencePromotesSoftwareAndKeepsHardwareFallback` | `p19-098` / `iptvMediaCodecSelector`:2381 — `preferred + infos.filterNot { it.softwareOnly == preferSoftware }` → `preferred` | `java.lang.AssertionError: expected:<[c2.android.software, vendor.hardware]> but was:<[c2.android.software]>` (`TvMediaPipelineCodecTest.kt:38`) |
+| `K::secureAndTunnelingRequirementsAreForwarded` | `p19-101` / `iptvMediaCodecSelector`:2371 — `requiresTunnelingDecoder,` → `false,` | `java.lang.AssertionError` (`TvMediaPipelineCodecTest.kt:55`) |
+| `A::firstFrameClearsRestoreRestartsTickerThenCommitsBothGates` | `p19-103` / `onRenderedFirstFrame`:477 — `startupGateController.manualSourceRestoreInProgress = false` → `Unit` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:30`) |
+| `A::firstFrameClearsRestoreRestartsTickerThenCommitsBothGates` | `p19-104` / `onRenderedFirstFrame`:478 — `restartProgressUpdates()` → `Unit` | `java.lang.AssertionError: ticker restarted before manual commit` (`TvMediaPipelineAnalyticsTest.kt:30`) |
+| `A::firstFrameWithoutRestoreDoesNotRestartAnAbsentTicker` | `p19-105` / `onRenderedFirstFrame`:476 — `if (startupGateController.manualSourceRestoreInProgress)` → `if (true)` | `java.lang.AssertionError` (`TvMediaPipelineAnalyticsTest.kt:42`) |
+| `A::firstFrameWithoutRestoreDoesNotRestartAnAbsentTicker` | `p19-106` / `onRenderedFirstFrame`:480 — `startupGateController.commitManualSourceCandidate()` → `Unit` | `java.lang.AssertionError: expected:<[server:first_frame, diagnostic, manual commit, startup commit]> but was:<[server:first_…` (`TvMediaPipelineAnalyticsTest.kt:41`) |
+| `A::firstFrameWithoutRestoreDoesNotRestartAnAbsentTicker` | `p19-107` / `onRenderedFirstFrame`:481 — `startupGateController.commitStartupCandidate()` → `Unit` | `java.lang.AssertionError: expected:<[server:first_frame, diagnostic, manual commit, startup commit]> but was:<[server:first_…` (`TvMediaPipelineAnalyticsTest.kt:41`) |
+| `W::receiverBroadcastDispatchesAllInlineExtrasTogether` | `p19-111` / `setupMetadataReceiver`:1879 — `updatesJson, imdbId, guideJson, showName` → `updatesJson, imdbId, guideJson, null` | `java.lang.AssertionError: expected:<Show> but was:<null>` (`TvEpisodeMetadataSweepTest.kt:21`) |
+| `R::stagedUpdatesIsReadOnlyAndWinsOverInline` | `p19-113` / `setupMetadataReceiver`:1872 — `"metadataUpdatesPath", "episode_metadata_"` → `"missingUpdatesPath", "episode_metadata_"` | `org.junit.ComparisonFailure: expected:<[Staged]> but was:<[Original]>` (`TvEpisodeMetadataReceiverTest.kt:28`) |
+| `R::stagedGuideIsReadOnlyAndWinsOverInline` | `p19-114` / `setupMetadataReceiver`:1876 — `"guideEpisodesPath", "episode_guide_"` → `"missingGuidePath", "episode_guide_"` | `java.lang.AssertionError: one staged guide episode expected:<1> but was:<0>` (`TvEpisodeMetadataReceiverTest.kt:40`) |
+| `Q::tiramisuReceiverIsNotExported` | `p19-116` / `setupMetadataReceiver`:1885 — `android.content.Context.RECEIVER_NOT_EXPORTED` → `android.content.Context.RECEIVER_EXPORTED` | `java.lang.AssertionError: platform registration flags expected:<4> but was:<2>` (`TvEpisodeMetadataRequestTest.kt:24`) |
+| `Q::tiramisuReceiverIsNotExported` | `p19-117` / `setupMetadataReceiver`:1892 — `requestMetadataFromFlutter()` → `Unit` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvEpisodeMetadataRequestTest.kt:36`) |
+| `Q::tiramisuReceiverIsNotExported` | `p19-118` / `setupMetadataReceiver`:1884 — `android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU` → `android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.TIRAMISU` | `java.lang.AssertionError: platform registration flags expected:<4> but was:<0>` (`TvEpisodeMetadataRequestTest.kt:24`) |
+| `R::stagedOutsideFallsBackToInline` | `p19-119` / `readStagedExtra`:1913 — `file.parentFile?.canonicalPath != cacheDir.canonicalPath` → `false` | `org.junit.ComparisonFailure: expected:<[Inline]> but was:<[Rejected]>` (`TvEpisodeMetadataReceiverTest.kt:51`) |
+| `R::stagedPrefixFallsBackToInline` | `p19-120` / `readStagedExtra`:1914 — `!file.name.startsWith(prefix)` → `false` | `org.junit.ComparisonFailure: expected:<[Inline]> but was:<[Rejected]>` (`TvEpisodeMetadataReceiverTest.kt:57`) |
+| `R::stagedGuideIsReadOnlyAndWinsOverInline` | `p19-121` / `readStagedExtra`:1919 — `file.readText()` → `file.readText().also { file.delete() }` | `java.lang.AssertionError: handoff receivers share the staged file` (`TvEpisodeMetadataReceiverTest.kt:41`) |
+| `R::canonicalSymlinkOutsideCacheIsRejected` | `p19-122` / `readStagedExtra`:1912 — `java.io.File(path).canonicalFile` → `java.io.File(path).absoluteFile` | `org.junit.ComparisonFailure: expected:<[Inlin]e> but was:<[Outsid]e>` (`TvEpisodeMetadataReceiverTest.kt:82`) |
+| `R::showNameWritesEvenWithoutPayloadAndBlankDoesNotEraseIt` | `p19-123` / `handleMetadataUpdate`:1938 — `showName.trim()` → `showName` | `org.junit.ComparisonFailure: expected:<[Canonical]> but was:<[  Canonical  ]>` (`TvEpisodeMetadataReceiverTest.kt:93`) |
+| `R::showNameWritesEvenWithoutPayloadAndBlankDoesNotEraseIt` | `p19-125` / `handleMetadataUpdate`:1937 — `!showName.isNullOrBlank()` → `!showName.isNullOrEmpty()` | `org.junit.ComparisonFailure: expected:<[Canonical]> but was:<[]>` (`TvEpisodeMetadataReceiverTest.kt:94`) |
+| `TvControlsCallerCharacterizationTest::workerMetadataStoresShowNameBeforeItsQueuedIdentityPublication` | `p19-126` / `handleMetadataUpdate`:1939 — `controlsOverlayController.identity.updateOttIdentity()` → `Unit` | `org.junit.ComparisonFailure: expected:<[New] — Episode> but was:<[Old] — Episode>` (`TvControlsCallerCharacterizationTest.kt:59`) |
+| `R::imdbEmptyGuard` | `p19-128` / `handleMetadataUpdate`:1951 — `previousImdbId.isNullOrEmpty()` → `previousImdbId == null` | `org.junit.ComparisonFailure: expected:<[tt1900]> but was:<[]>` (`TvEpisodeMetadataReceiverTest.kt:178`) |
+| `R::imdbDiscoveryCallsCurrentItemSubtitleFetch` | `p19-130` / `handleMetadataUpdate`:1954 — `model.imdbId = imdbId` → `Unit` | `java.lang.AssertionError: expected:<tt1900> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:208`) |
+| `R::imdbDiscoveryCallsCurrentItemSubtitleFetch` | `p19-131` / `handleMetadataUpdate`:1959 — `subtitleSourcesController.fetchStremioSubtitles(currentItem)` → `Unit` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvEpisodeMetadataReceiverTest.kt:208`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-136` / `handleMetadataUpdate`:1981 — `if (g.has("artwork")) g.optString("artwork") else null` → `null` | `java.lang.AssertionError: expected:<Art> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:113`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-137` / `handleMetadataUpdate`:1982 — `if (g.has("description")) g.optString("description") else null` → `null` | `java.lang.AssertionError: expected:<Desc> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:113`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-138` / `handleMetadataUpdate`:1983 — `if (g.has("rating")) g.optDouble("rating") else null` → `null` | `java.lang.AssertionError: guide rating is present` (`TvEpisodeMetadataReceiverTest.kt:122`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-139` / `handleMetadataUpdate`:1984 — `if (g.has("runtime")) g.optInt("runtime") else null` → `null` | `java.lang.AssertionError: expected:<40> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:113`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-140` / `handleMetadataUpdate`:1985 — `if (g.has("resumePositionMs")) g.optLong("resumePositionMs") else null` → `null` | `java.lang.AssertionError: expected:<123> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:114`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-141` / `handleMetadataUpdate`:1986 — `if (g.has("durationMs")) g.optLong("durationMs") else null` → `null` | `java.lang.AssertionError: expected:<456> but was:<null>` (`TvEpisodeMetadataReceiverTest.kt:114`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-142` / `handleMetadataUpdate`:1987 — `if (g.has("trackerProgressPercent")) g.optDouble("trackerProgressPercent") else null` → `null` | `java.lang.AssertionError: guide tracker progress is present` (`TvEpisodeMetadataReceiverTest.kt:123`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-143` / `handleMetadataUpdate`:1988 — `g.optBoolean("watched", false)` → `false` | `java.lang.AssertionError` (`TvEpisodeMetadataReceiverTest.kt:114`) |
+| `R::guideEveryPresentMetadataFieldIsCopied` | `p19-144` / `handleMetadataUpdate`:1989 — `g.optBoolean("shuffleEligible", true)` → `true` | `java.lang.AssertionError` (`TvEpisodeMetadataReceiverTest.kt:114`) |
+| `R::guideZeroCoordinatesAndAbsentKeyDefaultsAreAdopted` | `p19-146` / `handleMetadataUpdate`:1989 — `g.optBoolean("shuffleEligible", true)` → `g.optBoolean("shuffleEligible", false)` | `java.lang.AssertionError` (`TvEpisodeMetadataReceiverTest.kt:107`) |
+| `R::mixedCaseSeriesGuideStillRebuildsButMovieDoesNot` | `p19-150` / `handleMetadataUpdate`:1998 — `model.contentType.lowercase(Locale.US) == "series"` → `model.contentType == "series"` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Before]>` (`TvEpisodeMetadataReceiverTest.kt:163`) |
+| `R::mixedCaseSeriesGuideStillRebuildsButMovieDoesNot` | `p19-151` / `handleMetadataUpdate`:1998 — `model.contentType.lowercase(Locale.US) == "series"` → `true` | `java.lang.AssertionError: expected same:<com.debrify.app.tv.PlaylistAdapter@760fb713> was not:<null>` (`TvEpisodeMetadataReceiverTest.kt:166`) |
+| `R::seriesGuideRebuildsMissingRowsActivatesCurrentAndRefreshesTitle` | `p19-152` / `handleMetadataUpdate`:1999 — `playlistController.rebuildPlaylistContent()` → `Unit` | `java.lang.AssertionError: missing guide row built` (`TvEpisodeMetadataReceiverTest.kt:156`) |
+| `W::guideRefreshesCatalogButtonsAndSelectsNonzeroCurrentIndex` | `p19-154` / `handleMetadataUpdate`:2001 — `playbackStartController.navigator.updateCatalogEpisodeControls()` → `Unit` | `java.lang.AssertionError: expected:<0> but was:<8>` (`TvEpisodeMetadataSweepTest.kt:40`) |
+| `R::mixedCaseSeriesGuideStillRebuildsButMovieDoesNot` | `p19-155` / `handleMetadataUpdate`:2002 — `controlsOverlayController.identity.updateTitle(it)` → `Unit` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Before]>` (`TvEpisodeMetadataReceiverTest.kt:163`) |
+| `M::absentRequestedIndexCanRematchButCannotUpdateWithoutCoordinates` | `p19-157` / `handleMetadataUpdate`:2027 — `update.optInt("originalIndex", -1)` → `update.optInt("originalIndex", 0)` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:112`) |
+| `M::absentRequestedIndexCanRematchButCannotUpdateWithoutCoordinates` | `p19-159` / `handleMetadataUpdate`:2036 — `it.season == updateSeason && it.episode == updateEpisode` → `it.season == updateSeason && it.episode == -1` | `org.junit.ComparisonFailure: expected:<[Rematche]d> but was:<[Secon]d>` (`TvEpisodeMetadataMergeTest.kt:111`) |
+| `M::descriptionNonemptyUpdateAndEmptyFallback` | `p19-162` / `handleMetadataUpdate`:2050 — `if (update.has("description")) update.optString("description") else null` → `null` | `org.junit.ComparisonFailure: expected:<[Replacement]> but was:<[Description]>` (`TvEpisodeMetadataMergeTest.kt:28`) |
+| `M::artworkNonemptyUpdateAndEmptyFallback` | `p19-163` / `handleMetadataUpdate`:2051 — `if (update.has("artwork")) update.optString("artwork") else null` → `null` | `org.junit.ComparisonFailure: expected:<[Replacemen]t> but was:<[ar]t>` (`TvEpisodeMetadataMergeTest.kt:36`) |
+| `M::ratingZeroIsARealUpdateAndAbsentFieldsArePreserved` | `p19-164` / `handleMetadataUpdate`:2052 — `if (update.has("rating")) update.optDouble("rating") else null` → `null` | `java.lang.AssertionError: expected:<0.0> but was:<7.0>` (`TvEpisodeMetadataMergeTest.kt:44`) |
+| `M::noncurrentResumeAndDurationAdoptIncoming` | `p19-165` / `handleMetadataUpdate`:2053 — `if (update.has("resumePositionMs")) update.optLong("resumePositionMs") else null` → `null` | `java.lang.AssertionError: expected:<5000> but was:<9000>` (`TvEpisodeMetadataMergeTest.kt:85`) |
+| `M::noncurrentResumeAndDurationAdoptIncoming` | `p19-166` / `handleMetadataUpdate`:2054 — `if (update.has("durationMs")) update.optLong("durationMs") else null` → `null` | `java.lang.AssertionError: expected:<20000> but was:<90000>` (`TvEpisodeMetadataMergeTest.kt:85`) |
+| `R::stagedMissingFallsBackToInline` | `p19-167` / `handleMetadataUpdate`:2076 — `if (!newTitle.isNullOrEmpty()) newTitle else item.title` → `item.title` | `org.junit.ComparisonFailure: expected:<[Inline]> but was:<[Original]>` (`TvEpisodeMetadataReceiverTest.kt:69`) |
+| `M::descriptionNonemptyUpdateAndEmptyFallback` | `p19-168` / `handleMetadataUpdate`:2077 — `if (!newDescription.isNullOrEmpty()) newDescription else item.description` → `item.description` | `org.junit.ComparisonFailure: expected:<[Replacement]> but was:<[Description]>` (`TvEpisodeMetadataMergeTest.kt:28`) |
+| `M::artworkNonemptyUpdateAndEmptyFallback` | `p19-169` / `handleMetadataUpdate`:2078 — `if (!newArtwork.isNullOrEmpty()) newArtwork else item.artwork` → `item.artwork` | `org.junit.ComparisonFailure: expected:<[Replacemen]t> but was:<[ar]t>` (`TvEpisodeMetadataMergeTest.kt:36`) |
+| `M::ratingZeroIsARealUpdateAndAbsentFieldsArePreserved` | `p19-170` / `handleMetadataUpdate`:2079 — `newRating ?: item.rating` → `item.rating` | `java.lang.AssertionError: expected:<0.0> but was:<7.0>` (`TvEpisodeMetadataMergeTest.kt:44`) |
+| `M::watchedTrueDominatesTrackerAndPinsBothAdaptersAndTitle` | `p19-171` / `handleMetadataUpdate`:2058 — `hasWatchedUpdate && watched -> 100.0` → `hasWatchedUpdate && watched -> 99.0` | `java.lang.AssertionError: expected:<100.0> but was:<99.0>` (`TvEpisodeMetadataMergeTest.kt:52`) |
+| `M::watchedFalseAndExplicitTrackerAreAdopted` | `p19-172` / `handleMetadataUpdate`:2059 — `update.optDouble("trackerProgressPercent")` → `0.0` | `java.lang.AssertionError: expected:<42.0> but was:<0.0>` (`TvEpisodeMetadataMergeTest.kt:59`) |
+| `M::watchedAndTrackerAbsentKeepPreviousValues` | `p19-173` / `handleMetadataUpdate`:2056 — `else item.watched` → `else false` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:65`) |
+| `M::watchedTrueDominatesTrackerAndPinsBothAdaptersAndTitle` | `p19-174` / `handleMetadataUpdate`:2056 — `update.optBoolean("watched", false)` → `false` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:52`) |
+| `M::negativeLiveValuesCannotOverwriteValidHistory` | `p19-175` / `handleMetadataUpdate`:2062 — `originalIndex == currentIndex` → `false` | `java.lang.AssertionError: expected:<0> but was:<-3>` (`TvEpisodeMetadataMergeTest.kt:91`) |
+| `M::noncurrentResumeAndDurationAdoptIncoming` | `p19-176` / `handleMetadataUpdate`:2062 — `originalIndex == currentIndex` → `true` | `java.lang.AssertionError: expected:<5000> but was:<99000>` (`TvEpisodeMetadataMergeTest.kt:85`) |
+| `M::currentResumeAndDurationProtectActualPlayback` | `p19-178` / `handleMetadataUpdate`:2083 — `livePositionMs = livePositionMs` → `livePositionMs = 0` | `java.lang.AssertionError: expected:<30000> but was:<5000>` (`TvEpisodeMetadataMergeTest.kt:79`) |
+| `M::noncurrentResumeAndDurationAdoptIncoming` | `p19-179` / `handleMetadataUpdate`:2088 — `incomingDurationMs = newDurationMs` → `incomingDurationMs = null` | `java.lang.AssertionError: expected:<20000> but was:<90000>` (`TvEpisodeMetadataMergeTest.kt:85`) |
+| `M::currentResumeAndDurationProtectActualPlayback` | `p19-180` / `handleMetadataUpdate`:2089 — `liveDurationMs = liveDurationMs` → `liveDurationMs = 0` | `java.lang.AssertionError: expected:<120000> but was:<20000>` (`TvEpisodeMetadataMergeTest.kt:79`) |
+| `M::watchedFalseAndExplicitTrackerAreAdopted` | `p19-181` / `handleMetadataUpdate`:2092 — `newTrackerProgress ?: item.traktProgressPercent` → `item.traktProgressPercent` | `java.lang.AssertionError: expected:<42.0> but was:<25.0>` (`TvEpisodeMetadataMergeTest.kt:59`) |
+| `M::allowLocalDisplayAbsentAndExplicitFalseAreSeparate` | `p19-182` / `handleMetadataUpdate`:2094 — `update.optBoolean("allowLocalProgressDisplay", item.allowLocalProgressDisplay)` → `item.allowLocalProgressDisplay` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:72`) |
+| `M::allowLocalDisplayAbsentAndExplicitFalseAreSeparate` | `p19-183` / `handleMetadataUpdate`:2094 — `update.optBoolean("allowLocalProgressDisplay", item.allowLocalProgressDisplay)` → `update.optBoolean("allowLocalProgressDisplay", false)` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:71`) |
+| `R::stagedMissingFallsBackToInline` | `p19-184` / `handleMetadataUpdate`:2096 — `model.items[originalIndex] = updatedItem` → `Unit` | `org.junit.ComparisonFailure: expected:<[Inline]> but was:<[Original]>` (`TvEpisodeMetadataReceiverTest.kt:69`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-185` / `handleMetadataUpdate`:2097 — `anyUpdated = true` → `anyUpdated = false` | `java.lang.AssertionError: diagnostic: Refreshing UI adapters...` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-186` / `handleMetadataUpdate`:2098 — `updatedCount++` → `Unit` | `java.lang.AssertionError: diagnostic: Updated 1 items, skipped 1` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-187` / `handleMetadataUpdate`:2044 — `skippedCount++` → `Unit` | `java.lang.AssertionError: diagnostic: Updated 1 items, skipped 1` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-188` / `handleMetadataUpdate`:2111 — `seriesAdapter?.notifyDataSetChanged()` → `Unit` | `java.lang.AssertionError: series adapter notifications expected:<1> but was:<0>` (`TvPhase19MetadataTest.kt:41`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-189` / `handleMetadataUpdate`:2112 — `movieAdapter?.notifyDataSetChanged()` → `Unit` | `java.lang.AssertionError: movie adapter notifications expected:<1> but was:<0>` (`TvPhase19MetadataTest.kt:42`) |
+| `M::workerWritesModelBeforeQueuedAdapterAndTitlePublication` | `p19-190` / `handleMetadataUpdate`:2119 — `controlsOverlayController.identity.updateTitle(currentItem)` → `Unit` | `org.junit.ComparisonFailure: expected:<[Worker]> but was:<[Before]>` (`TvEpisodeMetadataMergeTest.kt:174`) |
+| `R::imdbDiscoveryGuard` | `p19-191` / `handleMetadataUpdate`:1956 — `val currentItem = model.items.getOrNull(currentIndex)` → `val currentItem = model.items.getOrNull(0)` | `java.lang.AssertionError: no current item means no discovery-driven subtitle fetch` (`TvEpisodeMetadataReceiverTest.kt:182`) |
+| `Q::movieRegistersWithoutRequestingMetadata` | `p19-192` / `requestMetadataFromFlutter`:2135 — `model.contentType != "series"` → `false` | `java.lang.AssertionError` (`TvEpisodeMetadataRequestTest.kt:40`) |
+| `Q::pre33RegistersThenPostsSeriesRequestWithNullArguments` | `p19-193` / `requestMetadataFromFlutter`:2151 — `channel.invokeMethod("requestEpisodeMetadata", null)` → `channel.invokeMethod("requestEpisodeMetadata", "unexpected")` | `java.lang.AssertionError: expected null, but was:<unexpected>` (`TvEpisodeMetadataRequestTest.kt:30`) |
+| `D::destroyUnregistersAndNullsReceiverBetweenUpNextAndSubtitleCancellation` | `p19-196` / `onDestroy`:4376 — `metadataUpdateReceiver = null` → `Unit` | `java.lang.AssertionError: receiver cleared before subtitle cancel expected null, but was:<com.debrify.app.tv.AndroidTvTorren…` (`TvEpisodeMetadataLifecycleTest.kt:34`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-197` / `setupPlayer`:2473 — `.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)` → `.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)` | `java.lang.AssertionError: installed native renderer extension preference expected:<2> but was:<0>` (`TvMediaPipelinePrerequisiteTest.kt:41`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-198` / `setupPlayer`:2474 — `.setEnableDecoderFallback(true)` → `.setEnableDecoderFallback(false)` | `java.lang.AssertionError: installed renderer fallback expected:<true> but was:<false>` (`TvMediaPipelinePrerequisiteTest.kt:43`) |
+| `P::builtVodConfigurationCanBeReadBackFromRealMedia3` | `p19-199` / `setupPlayer`:2475 — `.setMediaCodecSelector(iptvMediaCodecSelector())` → `.setMediaCodecSelector(MediaCodecSelector.DEFAULT)` | `java.lang.AssertionError: custom codec selector is installed expected not same` (`TvMediaPipelinePrerequisiteTest.kt:44`) |
+| `C::nativeRoutingReadsEachIndependentPcmReason` | `p19-201` / `setupPlayer`:2469 — `displayController.nightModeIndex > 0` → `false` | `java.lang.AssertionError: night mode needs PCM` (`TvMediaPipelineConfigurationTest.kt:372`) |
+| `C::nativeRoutingReadsEachIndependentPcmReason` | `p19-202` / `setupPlayer`:2469 — `displayController.systemAudioEffectsEnabled` → `false` | `java.lang.AssertionError: effects need PCM` (`TvMediaPipelineConfigurationTest.kt:373`) |
+| `C::nativeRoutingReadsEachIndependentPcmReason` | `p19-203` / `setupPlayer`:2469 — `nativeAudioRouting.update(displayController.nightModeIndex > 0, displayController.systemAudioEffectsEnabled, displ…` → `nativeAudioRouting.update(displayController.nightModeIndex > 0, displayController.systemAudioEffectsEnabled, 1f)` | `java.lang.AssertionError: speed needs PCM` (`TvMediaPipelineConfigurationTest.kt:374`) |
+| `L::speechTapReadsLivePlayerAndPostsBackToMain` | `p19-205` / `setupPlayer`:2467 — `positionMs = { player?.currentPosition ?: 0L }` → `positionMs = { 0L }` | `java.lang.AssertionError: expected:<12345> but was:<0>` (`TvMediaPipelineLoaderTest.kt:81`) |
+| `Q::sourceSwitcherComputedHostDispatchesTheRealMetadataRequest` | `p19-206` / `sourceSwitchController Host`:3902 — `override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.requestMetadataFromFlutter()` → `override fun requestMetadataFromFlutter(): Unit = Unit` | `java.lang.AssertionError: expected:<1> but was:<0>` (`TvEpisodeMetadataRequestTest.kt:65`) |
+| `M::sameSeasonWrongEpisodeRematchesInsteadOfOverwritingRequestedItem` | `p19-207` / `handleMetadataUpdate`:2032 — `requestedItem?.season == updateSeason && requestedItem.episode == updateEpisode` → `requestedItem?.season == updateSeason` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Episode match]>` (`TvEpisodeMetadataMergeTest.kt:184`) |
+| `M::sameEpisodeWrongSeasonRematchesInsteadOfOverwritingRequestedItem` | `p19-208` / `handleMetadataUpdate`:2032 — `requestedItem?.season == updateSeason && requestedItem.episode == updateEpisode` → `requestedItem?.episode == updateEpisode` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Season match]>` (`TvEpisodeMetadataMergeTest.kt:189`) |
+| `A::firstFrameWithoutRestoreDoesNotRestartAnAbsentTicker` | `p19-209` / `onRenderedFirstFrame`:474 — `startupGateController.mediaServerPlaybackLog("first_frame")` → `Unit` | `java.lang.AssertionError: expected:<[server:first_frame, diagnostic, manual commit, startup commit]> but was:<[diagnostic, m…` (`TvMediaPipelineAnalyticsTest.kt:41`) |
+| `L::installedLivePolicyReadsCurrentEntryAndIndexEachTime` | `p19-210` / `setupPlayer`:2611 — `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` → `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(0)?.isLive == true }` | `java.lang.AssertionError: expected:<3> but was:<20>` (`TvMediaPipelineLoaderTest.kt:71`) |
+| `C::playbackSpeedAndNativeRoutingAreInstalled` | `p19-212` / `setupPlayer`:2471 — `arrayOf(tap.processor)` → `emptyArray()` | `java.lang.AssertionError: one user audio processor expected:<1> but was:<0>` (`TvMediaPipelineConfigurationTest.kt:344`) |
+| `M::unmatchedCoordinatesDoNotFallBackToWrongRequestedItem` | `p19-214` / `handleMetadataUpdate`:2035 — `model.items.indexOfFirst {                             it.season == updateSeason && it.episode == updateEpisode   …` → `model.items.indexOfFirst {                             it.season == updateSeason && it.episode == updateEpisode   …` | `org.junit.ComparisonFailure: expected:<[Original]> but was:<[Ignored]>` (`TvEpisodeMetadataMergeTest.kt:137`) |
+| `B::vodOnCreateInstallsPipelineBeforeMetadataRegistration` | `p19-222` / `onCreate`:1854 — `setupMetadataReceiver()` → `Unit` | `java.lang.AssertionError: expected:<androidx.media3.exoplayer.ExoPlayerImpl> but was:<null>` (`TvMediaPipelineBootstrapTest.kt:29`) |
+| `I::iptvBootstrapInstallsRecordingPipelineBeforeMetadataRegistration` | `p19-224` / `initIptvMode`:3280 — `setupMetadataReceiver()` → `Unit` | `java.lang.AssertionError: expected:<androidx.media3.exoplayer.ExoPlayerImpl> but was:<null>` (`TvMediaPipelineBootstrapTest.kt:53`) |
+| `M::defaultArgumentDispatchStillUpdatesWithoutGuideOrShow` | `p19-225` / `handleMetadataUpdate`:1929 — `guideJson: String? = null` → `guideJson: String? = "[{\"season\":9,\"episode\":9}]"` | `java.lang.AssertionError` (`TvEpisodeMetadataMergeTest.kt:180`) |
+| `M::defaultArgumentDispatchStillUpdatesWithoutGuideOrShow` | `p19-226` / `handleMetadataUpdate`:1930 — `showName: String? = null` → `showName: String? = "Default name"` | `org.junit.ComparisonFailure: expected:<[Old]> but was:<[Default name]>` (`TvEpisodeMetadataMergeTest.kt:180`) |
+| `R::imdbDiscoveryCallsCurrentItemSubtitleFetch` | `p19-234` / `handleMetadataUpdate`:1958 — `android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")` → `Unit` | `java.lang.AssertionError: metadata diagnostic: Fetching Stremio subtitles with discovered IMDB ID` (`TvPhase19MetadataTest.kt:41`) |
+| `W::absentAndMalformedUpdatesAndGuideHaveDistinctDiagnostics` | `p19-236` / `handleMetadataUpdate`:2007 — `android.util.Log.e("TVMazeUpdate", "Failed to parse guide episodes: ${e.message}", e)` → `Unit` | `java.lang.AssertionError` (`TvEpisodeMetadataSweepTest.kt:61`) |
+| `W::absentAndMalformedUpdatesAndGuideHaveDistinctDiagnostics` | `p19-237` / `handleMetadataUpdate`:2013 — `android.util.Log.d("TVMazeUpdate", "No episode metadata updates to process")` → `Unit` | `java.lang.AssertionError: diagnostic: No episode metadata updates to process` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-238` / `handleMetadataUpdate`:2019 — `android.util.Log.d("TVMazeUpdate", "Parsed ${updatesArray.length()} updates")` → `Unit` | `java.lang.AssertionError: diagnostic: Parsed 2 updates` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-239` / `handleMetadataUpdate`:2020 — `android.util.Log.d("TVMazeUpdate", "model.items.size=${model.items.size}")` → `Unit` | `java.lang.AssertionError: diagnostic: model.items.size=2` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-240` / `handleMetadataUpdate`:2043 — `android.util.Log.w("TVMazeUpdate", "Skipping unmatched update index=$requestedIndex S${updateSeason}E${updateEpiso…` → `Unit` | `java.lang.AssertionError: diagnostic: Skipping unmatched update index=-1 SnullEnull (items.size=2)` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-241` / `handleMetadataUpdate`:2101 — `android.util.Log.d("TVMazeUpdate", "Updated $updatedCount items, skipped $skippedCount")` → `Unit` | `java.lang.AssertionError: diagnostic: Updated 1 items, skipped 1` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-242` / `handleMetadataUpdate`:2104 — `android.util.Log.d("TVMazeUpdate", "Refreshing UI adapters...")` → `Unit` | `java.lang.AssertionError: diagnostic: Refreshing UI adapters...` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-243` / `handleMetadataUpdate`:2110 — `android.util.Log.d("TVMazeUpdate", "seriesAdapter=${seriesAdapter != null}, movieAdapter=${movieAdapter != null}")` → `Unit` | `java.lang.AssertionError: diagnostic: seriesAdapter=true, movieAdapter=true` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-244` / `handleMetadataUpdate`:2113 — `android.util.Log.d("TVMazeUpdate", "UI refresh done")` → `Unit` | `java.lang.AssertionError: diagnostic: UI refresh done` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::updateDiagnosticsCountValidAndSkippedRowsAndPublishBothAdapterStates` | `p19-245` / `handleMetadataUpdate`:2118 — `android.util.Log.d("TVMazeUpdate", "Refreshing title for current episode: ${currentItem.title}")` → `Unit` | `java.lang.AssertionError: diagnostic: Refreshing title for current episode: New` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::absentAndMalformedUpdatesAndGuideHaveDistinctDiagnostics` | `p19-246` / `handleMetadataUpdate`:2123 — `android.util.Log.w("TVMazeUpdate", "No items updated - anyUpdated=false")` → `Unit` | `java.lang.AssertionError: diagnostic: No items updated - anyUpdated=false` (`TvEpisodeMetadataSweepTest.kt:15`) |
+| `W::absentAndMalformedUpdatesAndGuideHaveDistinctDiagnostics` | `p19-247` / `handleMetadataUpdate`:2126 — `android.util.Log.e("TVMazeUpdate", "Failed to parse metadata updates: ${e.message}", e)` → `Unit` | `java.lang.AssertionError` (`TvEpisodeMetadataSweepTest.kt:62`) |
+| `Q::pre33RegistersThenPostsSeriesRequestWithNullArguments` | `p19-248` / `requestMetadataFromFlutter`:2131 — `android.util.Log.d("TVMazeUpdate", "requestMetadataFromFlutter CALLED")` → `Unit` | `java.lang.AssertionError: diagnostic: requestMetadataFromFlutter CALLED` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::nullPayloadNullChannelAndMixedCaseSeriesDoNotRequest` | `p19-250` / `requestMetadataFromFlutter`:2143 — `android.util.Log.e("TVMazeUpdate", "Method channel is null, cannot request metadata")` → `Unit` | `java.lang.AssertionError: diagnostic: Method channel is null, cannot request metadata` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::pre33RegistersThenPostsSeriesRequestWithNullArguments` | `p19-251` / `requestMetadataFromFlutter`:2147 — `android.util.Log.d("TVMazeUpdate", "Invoking requestEpisodeMetadata on method channel")` → `Unit` | `java.lang.AssertionError: diagnostic: Invoking requestEpisodeMetadata on method channel` (`TvEpisodeMetadataRequestTest.kt:19`) |
+| `Q::pre33RegistersThenPostsSeriesRequestWithNullArguments` | `p19-252` / `requestMetadataFromFlutter`:2152 — `android.util.Log.d("TVMazeUpdate", "requestEpisodeMetadata invoked successfully")` → `Unit` | `java.lang.AssertionError: diagnostic: requestEpisodeMetadata invoked successfully` (`TvEpisodeMetadataRequestTest.kt:19`) |
+
+| Mutation | Classification / evidence |
+| --- | --- |
+| `p19-008` — fallback `setPreferredAudioLanguage(defaultAudioLang)` → `"en"` | Equivalent/unreachable: `getLanguageVariantsForExoPlayer` returns a nonempty regional list, sorts one of 48 nonempty known sets, or returns the singleton `listOf(langCode)` (including an empty string). The empty-variant branch containing this setter cannot execute. |
+| `p19-010` — fallback `setPreferredTextLanguage(defaultSubtitleLang)` → `"en"` | Same unreachable empty-variant branch; unknown language preferences use the actual nonempty variant setter and are separately pinned. |
+
+`language-fallback-equivalence.json` and the frozen original LanguageMapper source record that reasoning; the final original runs also show both edits surviving. No fake mapper was introduced to manufacture coverage of an impossible branch.
+
+### Baselines, lint and owner routes
+
+Clean `baseline-a0d1be1a7`: **2,826 identities / 2,825 pass / one existing focus NPE**. The first unbounded 1 GiB Step 0 worker aborted with OutOfMemoryError after 2,928 tests and no XML; that attempt is archived and excluded. The evidence-only runner now restarts one 1 GiB worker every 25 classes. A second genuinely clean original run, `baseline-a0d1be1a7-fork25`, preserves every original identity/status. Final **`p19-step0`: 2,976 identities / 2,975 pass / the same focus NPE**. Both helper comparisons pass: all 2,826 statuses unchanged, exactly 150 passing additions, no new failures/skips or missing identities. All three valid input trees are stable. EPG timing passes in the observed clean original and Step 0 runs; its historical flakiness remains documented. The OOM is a disclosed worker-lifetime adjustment, not a baseline acceptance or repository build change.
+
+Original `./gradlew :app:lintDebug` is archived at `a0d1be1a7`: **1,351 issues** (252 Error / 1,099 Warning, including 175 UnsafeOptIn issues). The lint issue-set JSON and raw XML/HTML/text are under `p19/lint-original/`; the production tree is unchanged, so this baseline is reused for the later move gate.
+
+The post-test owner-map rescan records 28 literal accesses and all eight moved-name routes. `handleMetadataUpdate` retains private/four-String/default-mask dispatch and the original-owner fallback; setup/field/selector/listener routes are added without assertion edits. The original caller file remains byte-identical. All 560 protected hashes remain unchanged; self-comparison is 1,611 / zero differences and all 61 earlier destinations pass. Size check: 2,982 files / 140 unchanged ratchets, no baseline update. Step T evidence remains 597 passing checker/auditor cases (555 historical + 42 new), with all phase 1–18 historical checks passing.
+
+Observed original quirks are preserved: actual Media3 1.8.0 stock start/rebuffer thresholds are **1,000/2,000 ms**, despite stale 2,500/5,000 comments beside the merged-source override; negative late duration with negative live duration retains the original `-1`, and a parsed early row can update the model before a malformed later row suppresses UI publication. These are recorded in Follow-ups, not fixed.
+
+Raw summaries: `p19/step0/coverage-summary.json`, `statement-coverage-matrix.json`, `test-mutation-witnesses.json`, `assertion-provenance.json`, `all-control-v6/`, `proofs/`, `owner-rescan.json`, `protected-inputs.json` and JVM comparison. The detached original is removed after archiving. **STOP after Step 0; Step 1 has not started.**
+
+
+### Phase 19 Step 1 — exact extraction and test retargets
+
+At the phase-18 base `a0d1be1a7`, the reviewed manifest materializes two independent siblings: `TvMediaPipelineController` (535 physical lines, class-level Media3 opt-in, 30 computed Host members) and `TvEpisodeMetadataReceiver` (330 lines, eight computed Host members). Eight original declarations / 758 leading-trivia span lines move with exactly 128 declared substitutions, including the eight consumed earlier patches. The Activity falls from 4,472 to **3,776 physical lines**. Two controller properties occupy the original listener/receiver slots; zero initializer proofs are required. All three volatile fields remain single Activity fields, exposed through computed getters. Receiver intent shadowing, Activity identity-provider ownership, IO-time reads and the two lazy first accesses retain their original timing.
+
+Six Activity edits remain in their original positions (`onCreate` ×2, `initIptvMode` ×2, `onDestroy` ×2); receiver unregister/null follows the Up Next handler clear and precedes subtitle scope cancellation. The source-switcher whole-property patched row calls `episodeMetadataReceiver.requestMetadataFromFlutter()`. Original `handleMetadataUpdate` private/default dispatch is preserved; all eight moved-name reflection routes installed in Step 0 resolve to their new owners without changing assertions.
+
+| Test | Original anchor | New anchor | Assertion preservation |
+| --- | --- | --- | --- |
+| `TvControlsCallerCharacterizationTest` (two existing sites) and new phase-19 scenarios | Activity reflection, original-owner fallback | `episodeMetadataReceiver` / `mediaPipelineController` via the split owner maps | All scenario/caller test bytes unchanged; real private/default dispatch retained |
+| `NativeAudioRoutingTest.bothNativePlayersEnableCapabilityRecovery` | Activity Kotlin source | `TvMediaPipelineController.kt`; Torbox Java path unchanged | Both true/false assertions unchanged; additional Activity false assertion retained as a stronger check |
+| `android_tv_mdblist_progress_source_test.dart`, native actual rows | Activity source / `private fun requestMetadataFromFlutter()` end marker | `TvEpisodeMetadataReceiver.kt` / `fun requestMetadataFromFlutter()` | Only path/end-marker strings change; all assertions unchanged |
+
+Claude's separate original-code sample (`p19/claude-mutations/`) killed **25/25 valid mutations**, each against 157 tests. No Step 0b is required. Codex did not conduct a self independent review. Focused post-move JVM: **184/184 pass** (150 new + eight unchanged callers + 26 native audio cases). Complete production fixture and checker match exactly over 1,611 declarations; teardown/protected/test-retarget checks pass. The size baseline was lowered using `--update`; 2,982 files / 140 ratchets, both new files below 800 lines. Gate evidence follows under `p19/gate/`.
+
+
+### Phase 19 gate — observed parity and remaining limitations
+
+The clean Step-1 checkpoint `9e279ddd2` is the tested tree. All **597** checker/auditor self-tests pass (555 historical + 42 phase-19); all 1,611 original declarations are classified with zero differences, p1–p18 historical manifest checks pass and 61 earlier destination files remain byte-identical. The compiled audit preserves 21 current / 366 historical receiver sites, 23 retained binding/type/cast pins, four loader-to-volatile chains per tree and distinct metadata writer owner maps. Actual `@Volatile` storage remains single in the Activity; Kotlin-generated captures have exactly the permitted final descriptor/role set, every loader read invokes its computed Host getter once, and the Host contains no snapshot field. Both inlined Context strings and retained lazy/identity/storage/ShowShuffle proofs pass. Lifecycle order and all test files except the exact documented retargets are unchanged. Zero initializer proofs apply to this phase.
+
+| Gate | Observed result / comparison |
+| --- | --- |
+| Final physical lines | Activity **3,776**; pipeline **535**; receiver **330** |
+| Focused JVM | **184/184 pass** |
+| Complete JVM `p19-gate` vs `p19-step0` | **2,976 identities exact**, 2,975 pass / same `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached` NPE; clean stable tree, matched evidence-only 1 GiB heap / one worker / fork every 25 classes |
+| EPG timing | All 93 EPG-named gate identities pass; phase-19 valid original/Step-0/gate outcomes pass. The earlier phase-17 timing failure remains historical flakiness, never an allowlist for a newly failing observed pass |
+| Kotlin compile | Forced `:app:compileDebugKotlin` succeeds; all **five** production warning identities unchanged |
+| Lint vs `a0d1be1a7` | Exact **1,351** issue multiset after PSI-symbol/line relocation: 252 Error / 1,099 Warning / 175 opt-in; raw lint exits nonzero for those original errors |
+| Release / R8 | `flutter build apk --release --no-pub` succeeds; all **63** historical/current destination sources, **231** classes / **4,271** members, both new Host implementations and three mapping/DEX negative controls pass |
+| Decoder script | Exit **1**, **pending-environment**: identical failure log, missing decoder/filter set and all three `libmpv.so` hashes versus phase 18 and phase 1 |
+| Full Flutter vs phase-18 gate | All **12,855** identities/statuses exact: 12,794 success / 13 failure / 28 error / 20 skipped; complete stable clean tree |
+| Affected Dart source tests | All **45** statuses exact; path/end-marker edits preserve assertions |
+| Dart format / analyzer | Changed Dart file already formatted; all **1,758** diagnostic occurrences exact against phase 18 (917 error / 113 warning / 728 info), so analyzer retains its original nonzero exit |
+| Size / protected inputs | `--update` lowers Activity ratchet; final **2,984** files / **140** ratchets. Both new production files remain below 800; lockfile/ProGuard, historical manifests and 559 other protected source hashes unchanged |
+
+Evidence: `p19/gate/summary.json`, complete checker/self-test/historical/compiled/lifecycle/retarget logs and JSON, canonical lint issue set plus raw reports, release mapping/DEX inventory and decoder provenance, Flutter/analyzer reports; complete XML/identity/provenance archive at `junit/p19-gate/`. Existing failures are recorded as preserved rather than described as passing suites. No source regression is accepted; no bug fix, dependency/ProGuard edit, push, branch switch, device/emulator interaction or self independent review occurred. Stop after phase 19.

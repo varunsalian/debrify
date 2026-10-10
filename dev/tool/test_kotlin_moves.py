@@ -288,6 +288,13 @@ def run(manifest_path=k.MANIFEST):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase18.Phase18MovesTest))
         from test_kotlin_overloads_phase18 import Phase18OverloadsTest
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase18OverloadsTest))
+    if manifest['phase'] >= 19:
+        import test_kotlin_moves_phase19
+        test_kotlin_moves_phase19.MANIFEST = (manifest if manifest['phase'] == 19 else
+            json.loads((k.ROOT / 'dev/tool/kotlin_moves/tvplayer_p19.json').read_text()))
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_kotlin_moves_phase19.Phase19MovesTest))
+        from test_kotlin_overloads_phase19 import Phase19OverloadsTest
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Phase19OverloadsTest))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return not result.wasSuccessful()
 

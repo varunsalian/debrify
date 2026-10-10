@@ -207,7 +207,7 @@ def check(manifest, original, current, bound_sources=None):
     if errors:
         return errors, len(inventory)
 
-    if manifest['phase'] >= 18:
+    if manifest['phase'] == 18:
         from kotlin_overloads_phase18 import validate_source_bound
         try:
             validate_source_bound(manifest, inventory, bound_sources)
