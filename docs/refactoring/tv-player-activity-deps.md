@@ -18885,3 +18885,17 @@ Original clean lint archive from Step T remains valid: `p17/lint-original/`, 1,3
 All 41 moved names plus raw `getIptvLiveRecovery` have future owner routes; original fallback remains in effect. The two loader-thread fields remain Activity-owned, with no route. Final rescan and the protected 76 source/manifest/lockfile/ProGuard hashes are archived. Helpers remain below 800 lines; size checks pass without updating the baseline. The detached original is removed after evidence archival. No production moves, dependency/ProGuard changes, bug fixes, push or device interaction. **STOP before Step 1 and Claude's independent sample.**
 
 Preserved original quirks (follow-ups, no fixes): VOD stop/destroy first constructs recovery to cancel it; destroy retains the reconnect pill, parked pair and foreign trial-handler messages; queued network deliveries can run after unregister; fail guards finishing/destroyed while parked/accepted restoration retains its weaker checks. The existing HLS KDoc mismatch and non-volatile policy/codec-loader reads remain deferred as inventoried.
+
+
+## Phase 17 step 0b — independent survivor closures (`be5635fae`)
+
+Claude's independent 21-mutation sample killed 19; both survivors are now killed by exact re-runs on the original. Added two tests; all ten tests in their two classes pass in the original control. `c08` is observable through the stock AppCompatButton's real TextWatcher: finalization and the retune branch each emit a `Record` caption callback. An injected prepare exception exits before `setIptvMediaItem`'s trailing refresh; the original emits two callbacks and the mutant only one. It is not classified as equivalent. `c15` pins map removal, a later real channel-start using the original URL, and a direct tune to the revoked twin without preferred-map strict demux. No production behavior changed.
+
+| test | exact independent mutation | named failing assertion |
+| --- | --- | --- |
+| `TvIptvTuneRecordingCharacterizationTest::recordingRetuneRepeatsButtonRefreshBeforeAThrowingPrepare` | `c08`: remove `updateRecordButtonState()` after finalization in `performIptvLiveRetune` | real TextWatcher captions: expected `[Record, Record]`, actual `[Record]` |
+| `TvIptvTuneCallerCharacterizationTest::authRevocationMakesLaterChannelStartUseOriginalAndTwinLoseMapStrictness` | `c15`: remove `iptvTwinPreferredUrls.remove(original)` | `AUTH revokes the original-to-twin preference` |
+
+The matrix still accounts for all 282 original statement nodes; both corresponding call witnesses are strengthened in `p17/step0b/coverage-matrix.json`. Exact definitions, immutable test inputs, raw Gradle/XML assertions and the passing control are in `p17/step0b/claude-survivors/` and `control/`; no compile/crash is credited. The earlier setter-observer attempt and its baseline are retained separately, before the final stock-widget observer strengthened the test.
+
+Clean original `p17-step0b`: **2,527 identities / 2,526 pass / one existing source-browser focus failure**. Comparison against `p17-step0` passes: **two passing additions only**, every earlier identity/status unchanged, no removals/new failures/skips. EPG passes here as at Step 0; its failure at `baseline-be5635fae` remains reported as original flakiness. Matched JBR/1 GiB worker heap, stable original tree. Evidence `p17/step0b/jvm-comparison.json`, `junit/p17-step0b/`. Phase-17 characterization now has 185 new identities plus eight reused phase-16 cases. Production, lockfile and ProGuard unchanged. Step 1 and the integration gate follow.

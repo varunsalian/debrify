@@ -49,4 +49,35 @@ internal class TvIptvTuneRecordingCharacterizationTest : TvPhase17OriginalTest()
         probe.onEvent={if(it.startsWith("media:")){assertFalse(tee.isActive);assertTrue(provider.publications.isEmpty());assertEquals("Recording stopped — this channel is HLS",ShadowToast.getTextOfLatestToast())}}
         deliver(sniff());assertTrue(forced().contains(url));assertFalse(tee.isActive);assertFalse((field("iptvRecordButton") as AppCompatButton).isEnabled)
     }
+
+    @Test fun recordingRetuneRepeatsButtonRefreshBeforeAThrowingPrepare() {
+        val url = "http://h/live.ts"
+        iptv(channel(url))
+        val (tee, provider) = recording(url)
+        val recordButton = AppCompatButton(activity)
+        set("iptvRecordButton", recordButton)
+        invoke("updateRecordButtonState")
+        assertEquals("Stop", recordButton.text.toString())
+        val captions = mutableListOf<String>()
+        recordButton.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(text: android.text.Editable?) {
+                captions.add(text.toString())
+            }
+        })
+        probe.onEvent = { if (it == "prepare") throw IllegalStateException("retune prepare failed") }
+        try {
+            retune("ended", 1)
+            fail("prepare must throw before the trailing button refresh")
+        } catch (error: IllegalStateException) {
+            assertEquals("retune prepare failed", error.message)
+        }
+        assertFalse(tee.isActive)
+        assertEquals(1, provider.publications.size)
+        assertEquals("Record", recordButton.text.toString())
+        assertEquals("the real button's text observer sees finalization and the retune refresh",
+            listOf("Record", "Record"), captions)
+        assertFalse(field("iptvLiveRetuneInFlight") as Boolean)
+    }
 }

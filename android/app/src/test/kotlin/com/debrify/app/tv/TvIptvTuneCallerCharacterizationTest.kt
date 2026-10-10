@@ -42,6 +42,32 @@ internal class TvIptvTuneCallerCharacterizationTest : TvPhase17OriginalTest() {
         assertEquals(1,requests("requestIptvStreamUrls").size)
     }
 
+    @Test fun authRevocationMakesLaterChannelStartUseOriginalAndTwinLoseMapStrictness() {
+        val entry = iptv(channel(original))
+        pref()[original] = twin
+        invoke("beginIptvPlayback", entry)
+        quiet()
+        assertEquals(twin, field("currentIptvStreamUrl"))
+        assertTrue(field("iptvStrictTsActive") as Boolean)
+
+        val response = androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException(
+            403, "refused", null, emptyMap(),
+            androidx.media3.datasource.DataSpec(android.net.Uri.parse(twin)), byteArrayOf())
+        deliver(error(response))
+        quiet()
+        assertFalse("AUTH revokes the original-to-twin preference", pref().containsKey(original))
+        assertTrue(failed().contains(original))
+        probe.events.clear()
+        invoke("beginIptvPlayback", entry)
+        quiet()
+        assertEquals(listOf("media:$original"), tuning())
+        assertFalse(field("iptvStrictTsActive") as Boolean)
+
+        tune(entry, twin)
+        quiet()
+        assertFalse("a revoked twin alone no longer enables strict demux", field("iptvStrictTsActive") as Boolean)
+    }
+
     @Test @Config(sdk=[29]) fun recordingRefreshReReadsTuneUrlAndForcedHlsSetAtEachInvocation() {
         activity.getSharedPreferences("FlutterSharedPreferences",0).edit().putBoolean("flutter.recording_engine_enabled",false).commit()
         val record=androidx.appcompat.widget.AppCompatButton(activity);set("iptvRecordButton",record)
