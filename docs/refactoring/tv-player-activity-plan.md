@@ -2043,6 +2043,79 @@ direct, PikPak, protected stream needing MIME discovery), resume position,
 next/previous episode, auto-advance at end, catalog episode controls, show
 shuffle (start, continue, exhaustion), Stremio TV channel next item.
 
+## Phase 19 — media pipeline and episode-metadata receiver
+
+Branch `refactor/tvplayer-p19` off the phase-18 merge. Evidence under
+`refactor-evidence/tvplayer/p19/`. Inventory: "Phase 19 inventory + phase 20
+assessment" in the deps report (measured at `df439aed1` with phases 16–18
+treated as merged — re-measure on the phase-18 merge). All collaborator rules
+from phases 3–18 apply.
+
+**Selected (≈ 758 lines, two independent siblings, no cross references):**
+- `TvMediaPipelineController` (≈ 545; class-level `@OptIn(UnstableApi::class)`):
+  `setupPlayer` (factory, LoadControl/buffer presets, track selector, data
+  source factories and header resolvers, load-error policy install),
+  `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener`.
+- `TvEpisodeMetadataReceiver` (≈ 335): the broadcast receiver field,
+  `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`,
+  `requestMetadataFromFlutter`.
+- Every state field stays activity-owned and is borrowed through computed
+  Hosts (pipeline 30 members, receiver 8); each controller owns only its slot
+  field → **0 initializer proofs**, no new classifier form.
+- 6 activity patches in 3 declarations (`onCreate` ×2, `initIptvMode` ×2,
+  `onDestroy` ×2 in place — after the Up Next handler clear and before
+  `subtitleScope.cancel()`); 1 Host re-point (switcher's
+  `requestMetadataFromFlutter`); the 8 temporary patches left by phases
+  16–18 inside this unit become declared substitutions. ≈ 128 substitutions
+  (no template bracing).
+- **Threading:** the three `@Volatile` fields (`activeVodHeaders`,
+  `currentIptvHttpHeaders`, `iptvStrictTsActive`) stay single activity
+  fields; each loader-thread read becomes the declared substitution
+  `x` → `host.x`, a computed getter reading the same volatile field on every
+  loader call (only additional reads are of final fields) — still a verbatim
+  move. Non-volatile reads on loader/playback threads are kept as-is.
+
+**Hazards.** The receiver's `intent` parameter shadows the activity's launch
+intent (7 reads, not rewritten); the subtitle identity-provider owner key
+stays the activity (`onDestroy` clears it by that key); two lazy first
+accesses in `setupPlayer` keep their timing; two inherited calls inside the
+anonymous `NetworkCallback`.
+
+**Retargets.** No reflective sites. `NativeAudioRoutingTest` moves to the
+new pipeline file path (a stronger variant keeps a `(false)` check on the
+activity file); `test/android_tv_mdblist_progress_source_test.dart` changes
+file path and its end marker loses `private`; asserted text unchanged.
+
+### Step T
+
+Extraction fixture (two siblings, computed Host getters) + negatives; a new
+**compiled volatile read-chain check** proving every loader-thread read
+reaches the original `@Volatile` field through a computed getter, with
+negatives for a hoisted snapshot, a non-computed Host member and a removed
+`@Volatile`; compiled audit (10 `this` sites, 11 inherited incl. inside the
+`NetworkCallback`); per-phase dispatcher; earlier destinations frozen at the
+phase-18 merge.
+
+### Step 0 — characterization of the original
+
+Prerequisite: a Robolectric harness reading back the built Media3 1.8.0
+configuration (LoadControl/buffer presets, track selector parameters, data
+source factories, load-error policy, codec selector) plus a worker-thread
+resolver harness for header resolution — demonstrated on the original; if not
+deterministic, the receiver ships alone as phase 19a. Then: pipeline
+configuration per mode (VOD, IPTV, strict-TS, protected stream), header
+resolution on worker threads, decoder analytics callbacks, the metadata
+receiver (register/unregister, staged extras validation, metadata merge,
+guide episodes, IMDb id), `requestMetadataFromFlutter`; coverage sweep.
+Mutation proofs; Claude's independent sample (≥ 75 %); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–18 additions. Device checklist (end of series):
+playback start for VOD/IPTV/strict-TS/protected streams (buffering
+behaviour, headers), decoder fallback on a hard codec, episode metadata
+arriving after launch (titles, guide episodes, progress).
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 18 original async outcomes, preserved by Step 0: a worker-thread lazy

@@ -20093,3 +20093,712 @@ The JVM worker took longer than its baseline under concurrent gates, with observ
 Two analyzer attempts during the active full-suite fixtures reported 1,776 and 1,823 occurrences. Their physical diagnostic-line sets were exactly the original 1,758 lines, with 18 and 65 repeated occurrences only. The post-suite analyzer run matches the complete original Counter exactly. Both intermediate raw logs remain under `gate/analyze-concurrent/` and `gate/analyze-after-release/`; no allowlist or analyzer setting changed. The interrupted superseded tooling run and initial reflection-visibility/subset-metadata attempts also remain archived, and are not credited as final gates. The only additional reflection correction was public `playPrevious`, with its body unchanged and the manifest pin updated (14 public reflected functions).
 
 Raw evidence: `p18/gate/summary.json`, checker/self-test/historical logs, compiled audit, initializer/teardown/frozen-input proofs, JVM comparison and thread snapshot, lint XML/issue set, release APK provenance/R8 inventory/DEX controls, decoder log/provenance, full Flutter JSONL/clean-tree environment and analyzer attempts/physical-line comparison; JVM XML/identities under `junit/p18-step0b/` and `junit/p18-gate/`. Step-0b exact d15/d18/d21 proofs and the updated 575-node matrix remain under `p18/step0b/`; all three survivors killed, none equivalent. Detached original removed. Lockfile, ProGuard, borrowed resources, initializer timing and teardown order preserved; no bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP after phase 18; phase 19 not started.**
+
+## Phase 19 inventory: media pipeline + episode-metadata receiver (at `df439aed1`; phases 16–18 treated as merged; re-measure on the phase-18 merge). Includes the phase-20 router assessment and the end-state exception draft
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at `df439aed1`
+(phase-15 merge, **6,986 lines**, class header 136, companion 6973–6985). This is a read-only survey of the main
+checkout. Nothing was built, and nothing under `../debrify-wt/` was read or touched.
+
+Inputs:
+- the plan, with the collaborator rules of phases 3–15 (checker/auditor extensions, the naming-collision rule,
+  the phase-11 sampling lesson);
+- deps report chunk A §C12/C13/C15, §4 candidates 4–5, §5 lifecycle, §6 test gaps; §B3 broadcast; §C1/C2
+  anchors;
+- the phase-16, -17 and -18 inventories (`scratchpad/tvp-p16/17/18-inventory.md`).
+
+**Tooling** (`scratchpad/p19/`):
+- `idx.py` (the p18 masker/indexer, re-run: 390 depth-1 spans);
+- `r19.py` (inbound word-boundary scan; Host objects are attributed to their property);
+- `o19.py` (outbound scan per member, including inherited names and `this`);
+- `routers.py` (router dependency sets, now and after the phase-16–19 renames);
+- `remain.py` (the remaining-activity breakdown).
+
+Every count was checked by hand against the source. Terms are as in phases 11–18: **patch** (a token edit in a
+retained activity declaration), **re-point** (an edited Host forwarder in an existing controller property, which
+makes that property a whole-property `patched` row), **substitution** (a declared edit inside a moved body).
+
+**Earlier phases leave 8 temporary patches inside this unit.** In phase 19 each becomes a host-qualified
+substitution:
+- phase 16 (`handleMetadataUpdate` ×4):
+  - `ottShowName = …` → `controlsOverlayController.identity.ottShowName` (a `@Volatile` write);
+  - `updateOttIdentity()` → `.identity.`;
+  - `updateTitle(…)` ×2 → `.identity.`;
+- phase 17 (`setupPlayer` ×3):
+  - `runOnUiThread { iptvLiveRecovery.setOffline(false/true) }` → `iptvTuneController.iptvLiveRecovery`;
+  - `iptvLiveRecovery.setOffline(cm.activeNetwork == null)` → `iptvTuneController.iptvLiveRecovery`;
+- phase 18 (`handleMetadataUpdate` ×1): `updateCatalogEpisodeControls()` → `playbackStartController.navigator.`.
+
+Build the manifest on the phase-18 versions of `handleMetadataUpdate`, `setupPlayer` and the `sourceSwitchController`
+property; phase 18 also re-points 6 forwarders there. Phases 16, 17 and 18 move nothing out of this unit and add
+no forwarder into it.
+
+**Already extracted, not moved again:**
+- the decoder analytics listener and `androidDecoderStatus` (phase 15, `TvPlaybackDisplayController`);
+- `IptvLiveLoadErrorPolicy`/`classifyIptvError` (phase 2);
+- `originKey`/`buildProtectedMediaOrigins` (`TvStartupDiagnostics.kt`, top-level `internal`);
+- `mergeLateMetadata*` (`TvPlaybackItem.kt`).
+
+These resolve unchanged from the new files (same package, no import). **`buildMergedSource[OrNull]` moves in
+phase 18** (owner `TvPlaybackStartController`), so it is not part of this unit. `reportDecoderFailure` stays with
+the routers (phase-17 decision).
+
+---
+
+### 1. Summary and recommendation
+
+**Two independent sibling collaborators, one phase, with per-feature deferral.** There are **0 references in
+either direction** between the pipeline and the receiver.
+
+- **`TvMediaPipelineController.kt`**: 3 members / 457 lines → **≈ 545** with imports (≈ 45), header and Host.
+  - It holds `setupPlayer` (the whole Media3 build, verbatim; a function body cannot be split under rule 1),
+    `iptvMediaCodecSelector` and `iptvDiagAnalyticsListener` (the anonymous `AnalyticsListener` that only
+    `setupPlayer` registers).
+  - The activity property is **`mediaPipelineController`**, at the `iptvDiagAnalyticsListener` slot (773–774).
+  - It needs class-level **`@OptIn(UnstableApi::class)`** (as the activity has today). The unit uses
+    `ResolvingDataSource`, `DataSpec.withAdditionalHeaders`, `DefaultExtractorsFactory`/
+    `DefaultTsPayloadReaderFactory`, `DefaultLoadControl.Builder`, `setVideoChangeFrameRateStrategy`,
+    `setMediaCodecSelector`, `AnalyticsListener` and `PlayerView.setKeepContentOnPlayerReset`. Confirm with
+    `javap` on the 1.8.0 AARs at step T, as phase 17 did.
+- **`TvEpisodeMetadataReceiver.kt`**: 5 members / 301 lines → **≈ 335**.
+  - It holds `metadataUpdateReceiver`, `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate` and
+    `requestMetadataFromFlutter`.
+  - The activity property is **`episodeMetadataReceiver`**, at the `metadataUpdateReceiver` slot (2049–2051).
+  - It needs no Media3 opt-in.
+
+| item | phase 19 (recommended configuration R19) |
+|---|---|
+| moved members / lines | **8 / 758** (pipeline 3 / 457, receiver 5 / 301), including leading trivia under the partition rule |
+| owned state | pipeline: `iptvDiagAnalyticsListener` (its slot field); receiver: `metadataUpdateReceiver` (its slot field). **Everything else stays activity-owned and is borrowed** (§1.2) |
+| activity patches | **6 in 3 declarations**: `onCreate` 2, `initIptvMode` 2, `onDestroy` 2 (in place). All permanent (lifecycle/bootstrap) |
+| Host re-points | **1 forwarder / 1 token edit in 1 property**: `sourceSwitchController` (`requestMetadataFromFlutter()`) |
+| consumed temporary patches | **8** (phase 16 ×4, phase 17 ×3, phase 18 ×1), now substitutions |
+| added activity declarations | 2 properties + 2 Host objects: pipeline **30** members, receiver **8**. No readiness getter (no `::x.isInitialized` in the unit) |
+| initializer proofs | **0** (each controller's only field is its slot field). **No new classifier form**; the phase-17 note about an anonymous-`AnalyticsListener` form is avoided by using that listener as the slot |
+| cross-qualifications | 0 between the siblings; existing controllers through Host getters (§5) |
+| substitutions | **≈ 128**: pipeline ≈ 99 (host 81, `this`→`activity` 10, inherited 5, static constant 2, visibility 1); receiver ≈ 29 (host 20, inherited 6, visibility 3). **0 braced templates** (every interpolated name is a local or parameter) |
+| reflective retargets | **0** (no moved name is reflected) |
+| source-text retargets | **2 files**: `NativeAudioRoutingTest` (Kotlin, file path) and `test/android_tv_mdblist_progress_source_test.dart` (file path + end marker loses `private`) (§8) |
+| lifecycle | 2 in-place `onDestroy` patches (unregister + null-out, same position); nothing in `onStart`/`onStop`/`onPause`/`finish` |
+
+**Activity:** ≈ −758 + ≈ 62 (2 properties + 38-member Hosts) ≈ **−697**. Starting from 6,986:
+- phase 16 ≈ −1,094 → ≈ 5,892;
+- phase 17 ≈ −580 → ≈ 5,312;
+- phase 18 ≈ −830 → ≈ 4,482;
+- phase 19 → **≈ 3,785** (band 3,700–3,900 until re-measured).
+
+**Risk.** Overall **medium-high**:
+- **Receiver: low-medium.** Main thread only. No Handler of its own except one uncancelled main post.
+- **Pipeline: high on configuration fidelity, low on control flow.** The code is linear construction: no
+  token, no coroutine, no owned Handler. But it carries:
+  - every Media3 configuration contract (the plan's unchanged list);
+  - four `@Volatile` loader-thread reads, plus five non-volatile reads on the loader and playback threads;
+  - essentially **no existing characterization** (deps §6: "NO test for … setupPlayer data-source/header
+    resolvers, iptvMediaCodecSelector, LoadControl presets"; covered today: `trackSelector` TEXT-disabled under
+    forced-only, the `NativeAudioRoutingTest` source flag and incidental audio-language params).
+
+**Per-feature deferral (the phase-4 rule).** Each sibling has its own step-0 prerequisites (§11). If the pipeline's
+Media3 read-back harness cannot be made deterministic on the original, the phase ships the receiver alone (19a).
+Its counts are then 4 patches in 3 declarations, 1 re-point, ≈ 29 substitutions and −289 lines. The pipeline gets
+a re-reviewed design.
+
+**Rejected alternative: one file.** `TvPlayerSetupController` with both units would be ≈ 870 lines (> 800) and
+mix two responsibilities.
+
+### 1.1 Sub-blocks of `setupPlayer` (one declaration, moved whole; lines at `df439aed1`)
+
+| lines | block | contract kept verbatim |
+|---|---|---|
+| 2753–2822 | `DefaultTrackSelector(this)` + parameters | `setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` (source-text anchor), opus preference, ignored DEFAULT text flag, IPTV `setAllowVideoNonSeamlessAdaptiveness(false)`, audio/text language variants (null → English), `"off"`, text disabled for foreign-only/forced-only/`pt-BR` |
+| 2824–2843 | `SpeechFeatureTap` → `speechTap`; `nativeAudioRouting.update(…)`; `NativeAudioRenderersFactory` (PREFER, decoder fallback, `iptvMediaCodecSelector()`); `OffsetRenderersFactory` → `offsetRenderersFactory` | |
+| 2845–2867 | HTTP factory | VOD timeouts by `networkPatience` (15/30/60 s), IPTV 15 s; cross-protocol redirects; Chrome UA in **default request properties** (not `setUserAgent`, an invariant comment) |
+| 2869–2877 | `protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)`; `VodHttpDataSource.Factory`; `DefaultDataSource.Factory(this, IPTV ? http : vod)` | |
+| 2878–2918 | VOD resolver (`activeVodHeaders`, origin match) → IPTV resolver (`currentIptvHttpHeaders`) | **loader thread** (§6) |
+| 2920–2937 | IPTV recording tee; `iptvRecordingController.onAborted = { … Toast(this) }` | the first access of the lazy for IPTV |
+| 2939–2980 | media source factory: IPTV aggressive/strict TS `ExtractorsFactory` on `iptvStrictTsActive`, plus `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` | **loader thread** |
+| 2982–3001 | `ExoPlayer.Builder(this, renderersFactory)`; noisy audio; `WAKE_MODE_NETWORK`; display-match → frame-rate strategy | |
+| 3003–3072 | LoadControl: YouTube merge 15/50/1/2 s; VOD `networkBuffer` presets with heap budget (¼ of `largeMemoryClass`, 96/192 MiB request, keep stock below 48 MiB); IPTV stock | |
+| 3074–3110 | build; speed; listeners (`playbackListener`, decoder, `iptvDiagAnalyticsListener`); `playerView.player`; subtitle view GONE; `subtitleListener`; `SubtitleSettings` sync / reset / identity provider (owner = activity); `applySubtitleSettings`; auto-show off; resize; focus | |
+| 3112–3148 | IPTV `setKeepContentOnPlayerReset(true)`; API ≥ 24 `registerDefaultNetworkCallback` (`runOnUiThread { …setOffline }`); `iptvNetworkCallback = callback`; initial `setOffline(cm.activeNetwork == null)`; registration failure logged | |
+
+### 1.2 Ownership decisions: what deliberately stays activity-owned (borrowed through Host)
+
+| name (decl) | decision | reason | delta if moved |
+|---|---|---|---|
+| `player` (374), `trackSelector` (376) | stay (Host `var`) | Used everywhere. `trackSelector` has 26 reflective sites in 11 test files, 5 Host forwarders and `onDestroy` | not viable |
+| `@Volatile activeVodHeaders` (822) | **stay** (Host `val`, computed) | 4 writers in 2 other owners: phase-18 `playItem`/`startPlayback` via its Host, the switcher Host (6204/6205). `TvSourceSwitchApplyCharacterizationTest:25–26` asserts `Modifier.isVolatile` on the **activity** field by direct `getDeclaredField` (not owner-map) | +3 re-points (phase-18 and switcher Hosts), 1 direct-reflection test edit, 1 proof needing a **new** `emptySet<String>() to emptyMap()` (`to`-pair) form |
+| `@Volatile currentIptvHttpHeaders` (945) | **stay** (Host `val`) | Writer: phase-17 tune Host (`setIptvMediaItem`). Main reader: recording Host 5545. Reflected by `TvRecordingCharacterizationTest:28` | +2 re-points, +1 route, +1 proof (new untyped `emptyMap()` form) |
+| `@Volatile iptvStrictTsActive` (963) | **stay** (Host `val`) | Written and read on main by the phase-17 tune Host (`setIptvMediaItem` 5719, `performIptvLiveRetune` 509) | +2 re-points, +1 proof |
+| `protectedStreamClient` (823) | stay (Host `var`) | Also read by phase-18 `discoverProtectedMime` on the IO thread through its Host. Its initializer `ProtectedStreamHttp.client(15_000)` allocates an `OkHttpClient`, so it is **not inert** and cannot run earlier | needs a slot or a new form |
+| `subtitleListener` (377), `iptvNetworkCallback` (421) | **stay** (Host `var`) | Written only by `setupPlayer`. **Torn down by `onDestroy`** (`removeListener` inside `player?.let` 6762, null-out 6772; unregister 6677–6683) | variant M: +4 in-place `onDestroy` patches, +2 `null` proofs (fields at 377/421 would then run at slot 773, i.e. **later**), −2 Host members. Not recommended: teardown stays with the lifecycle owner, as in phase 17's network-callback decision |
+| `offsetRenderersFactory` (398), `speechTap` (801) | stay (Host `var`) | Subtitle/sources/auto-sync Host forwarders, reflected (2 + 2 sites), `onDestroy` null-out | — |
+| `networkPatience`, `networkBuffer`, `iptvDecoderMode` (1201–1206), `isIptvMode`, `iptvChannels`, `currentIptvIndex` | stay (Host `val`) | Written by `parsePayload`/`initIptvMode` (launch config) | — |
+| `nativeAudioRouting`, `playerPreferences` (lateinit), `playerView`/`subtitleOverlay` (lateinit), `payload`, `playbackListener`, `iptvTuneDiagnostics`, the `iptvRecordingController` lazy | stay (Host `val`, computed) | multi-owner, or the router (phase 20) | — |
+| UM "sources" rows (`umSourcesModel` 46, `umSourceRows` 18, `umAddLoadMoreRow` 14 = 78 lines) | **not in phase 19** | The phase-13 table suggested "+ UM sources rows → fetch owner". The fetch owner `TvSourceFetchController.kt` is a frozen destination. The unit needs an 11-member Host for 1 inbound reference (`unifiedMenuCallbacks` 5892), and the "sources" section is **unreachable** (existing follow-up). Leave it with the UM remainder | — |
+
+**Supplier lambdas vs moving the volatile fields.** Under R19, each loader-thread read in the moved code is a
+declared substitution `x` → `host.x`. The Host member is a **computed** getter on the activity's Host object.
+`currentIptvHttpHeaders`, `iptvStrictTsActive` and `activeVodHeaders` therefore stay **one field each, on the
+activity, still `@Volatile`, with a volatile `GETFIELD` on every loader call** (§6). This is the phase-8/17
+precedent. Moving the three fields (option V) is semantically sound under the phase-17 §6.2 conditions, but it
+costs 7 re-points, 2 new classifier forms and a direct-reflection test edit. Its owner would also be arbitrary,
+because the writers live in three other controllers. Reject V.
+
+---
+
+### 2. Members (lines at `df439aed1`; spans include leading trivia under the partition rule)
+
+**Pipeline, `TvMediaPipelineController` (original order):**
+
+| span | decl | member | notes |
+|---|---|---|---|
+| 773–797 | 774 | `private val iptvDiagAnalyticsListener = object : AnalyticsListener { … }` | **slot field**. `onRenderedFirstFrame`: gate `mediaServerPlaybackLog("first_frame")` → `iptvTuneDiagnostics.onFirstFrame()` → manual-restore clear + `restartProgressUpdates()` → `commitManualSourceCandidate()` → `commitStartupCandidate()`. `onLoadCompleted`: bytes → diagnostics |
+| 2718–2750 | 2731 | `private fun iptvMediaCodecSelector(): MediaCodecSelector` (KDoc 2719–2730) | the lambda runs on the **playback thread** |
+| 2751–3149 | 2752 | `private fun setupPlayer()` → becomes **public** (called by `onCreate`, `initIptvMode`) | 399 lines; §1.1 |
+
+**Receiver, `TvEpisodeMetadataReceiver` (original order):**
+
+| span | decl | member | notes |
+|---|---|---|---|
+| 2049–2051 | 2051 | `private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null` (comment 2050) → **public `var`** (read and null-ed by `onDestroy`) | **slot field** |
+| 2228–2258 | 2229 | `private fun setupMetadataReceiver()` → **public** | anonymous `BroadcastReceiver`; register (API ≥ 33 `RECEIVER_NOT_EXPORTED`, else plain); then `requestMetadataFromFlutter()` (**register-then-request** order) |
+| 2259–2289 | 2270 | `private fun readStagedExtra(intent, key, prefix)` (KDoc 2259–2269) | stays private; canonical path must equal `cacheDir`, prefix check, read-only |
+| 2290–2493 | 2291 | `private fun handleMetadataUpdate(updatesJson, imdbId, guideJson = null, showName = null)` | stays private (called only from the anonymous receiver, through a synthetic accessor); contains the Dart-anchored range |
+| 2494–2525 | 2495 | `private fun requestMetadataFromFlutter()` → **public** (switcher Host forwarder) | `Handler(Looper.getMainLooper()).post { channel.invokeMethod("requestEpisodeMetadata", null) }` |
+
+**Retained between the moved spans** (relative order unchanged; compared as retained): `speechTap` 798–801,
+`autoSyncController` and its Host, …, `playbackListener` 1540–2048, `playerPreferences` 2052–2053, `onCreate`,
+`bindViews` 2526–2717, `setupSeekbar` (phase 16 moves it; build on the phase-16 tree).
+
+---
+
+### 3. Owned state and initializer proofs
+
+- **Pipeline slot = 773/774** (the `iptvDiagAnalyticsListener` span). The controller property is pinned there.
+  Its single field is the slot field, so it is constructed at the same moment as today. Construction allocates
+  the listener object, which now captures the controller rather than the activity. Inert: it reads nothing until
+  a callback runs. **Proofs: 0.**
+- **Receiver slot = 2049/2051.** Its single field `null` is the slot field. **Proofs: 0.**
+- **Construction contract:** no Host member is read during construction. Negative: a Host read inside the
+  listener's initializer, or in a controller `init`.
+- **Lazies whose first access must not move** (all through computed getters):
+  - `iptvRecordingController` (activity lazy): first access for IPTV sessions is `setupPlayer` 2926
+    (`onAborted = …`), now `host.iptvRecordingController.onAborted = …`;
+  - `iptvTuneController.iptvLiveRecovery` (the phase-17 lazy): first access for IPTV is the post-registration
+    `setOffline` in `setupPlayer`, now `host.iptvTuneController.iptvLiveRecovery…`.
+
+  Step 0 pins both first-access moments.
+
+---
+
+### 4. Every inbound reference (outside the unit)
+
+#### 4.1 Activity patches: 6 in 3 declarations (all permanent)
+
+| declaration (decl) | line | before → after | note |
+|---|---|---|---|
+| `onCreate` (2055) | 2180 | `setupPlayer()` → `mediaPipelineController.setupPlayer()` | between `startupLog("event=player_setup_begin")` and `…_complete`; order `bindViews` → `setupPlayer` → `.seek.setupSeekbar` (phase 16) unchanged |
+| `onCreate` | 2219 | `setupMetadataReceiver()` → `episodeMetadataReceiver.setupMetadataReceiver()` | after `setupBackPressHandler()`, before `stremioSubtitleService = …` |
+| `initIptvMode` (5420) | 5470 | `setupPlayer()` → `mediaPipelineController.setupPlayer()` | order `bindViews` → `setupPlayer` → `setupSeekbar` → `setupControls` → `setupIptvControls` unchanged |
+| `initIptvMode` | 5486 | `setupMetadataReceiver()` → `episodeMetadataReceiver.setupMetadataReceiver()` | IPTV also registers; `requestMetadataFromFlutter` returns early when `payload == null` |
+| `onDestroy` (6640) | 6723 | `metadataUpdateReceiver?.let {` → `episodeMetadataReceiver.metadataUpdateReceiver?.let {` | **in place**, after `upNextController.upNextHandler.removeCallbacksAndMessages(null)` (6720), before `subtitleScope.cancel()` (6733). `unregisterReceiver(it)` stays the activity's inherited call |
+| `onDestroy` | 6730 | `metadataUpdateReceiver = null` → `episodeMetadataReceiver.metadataUpdateReceiver = null` | in place |
+
+**Zero references from:** `playbackListener`, `dispatchKeyEvent`, `onStart`/`onStop`/`onPause`/`onResume`,
+`finish`, `sendFinished`, `parsePayload`, `bindViews`, and every phase-16/17/18 member.
+
+**In-unit (no patch):**
+- `setupPlayer` → `iptvMediaCodecSelector()` 2840 and `iptvDiagAnalyticsListener` 3080;
+- `setupMetadataReceiver` → `readStagedExtra` 2236/2240, `handleMetadataUpdate` 2244,
+  `requestMetadataFromFlutter` 2257, and the field 2230/2250/2252.
+
+#### 4.2 Host re-points: 1 forwarder, 1 whole-property `patched` row
+
+| line | property | forwarder → new target |
+|---|---|---|
+| 6256 | `sourceSwitchController` (phase 8; re-pointed again by phases 9/10/18) | `override fun requestMetadataFromFlutter(): Unit = this@AndroidTvTorrentPlayerActivity.episodeMetadataReceiver.requestMetadataFromFlutter()` (called by `TvSourceSwitchApplier.kt:294`) |
+
+`TvSourceSwitchController.kt`/`TvSourceSwitchApplier.kt` stay byte-identical. **No Host anywhere forwards to
+`setupPlayer`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener` or `handleMetadataUpdate`** (verified by
+grepping all `tv/*.kt`).
+
+---
+
+### 5. Outbound Hosts (computed, explicitly qualified `this@AndroidTvTorrentPlayerActivity.x`; none read at construction)
+
+**`TvMediaPipelineController.Host`: 30 members.** Reference counts are in parentheses.
+
+| kind | members |
+|---|---|
+| state `var` (7) | `player: ExoPlayer?` (8: the build assignment plus 7 reads), `trackSelector: DefaultTrackSelector?` (4), `speechTap` (1 w), `offsetRenderersFactory` (1 w), `protectedStreamClient: OkHttpClient` (2: w then r), `subtitleListener: Player.Listener?` (2), `iptvNetworkCallback` (1 w) |
+| state `val` (16) | `isIptvMode` (9; one on the playback thread), `iptvDecoderMode` (2, playback thread), `networkPatience` (1), `networkBuffer` (2), `payload` (1), `iptvChannels`/`currentIptvIndex` (1/1, **loader thread**), **`activeVodHeaders` (1, loader, volatile)**, **`currentIptvHttpHeaders` (1, loader, volatile)**, **`iptvStrictTsActive` (2, loader, volatile)**, `nativeAudioRouting` (2), `playerPreferences` (4, lateinit), `playerView` (5, lateinit), `subtitleOverlay` (3, lateinit), `playbackListener` (1), `iptvTuneDiagnostics` (2) |
+| cross-feature / lazy getters (6) | `displayController` (9), `subtitleController` (3), `startupGateController` (5), `iptvRecordingActionsController` (1), `iptvRecordingController` (2, activity lazy), `iptvTuneController` (3, phase 17) |
+| function (1) | `restartProgressUpdates()` (1) |
+
+That is 81 host substitutions.
+
+**Must not be Host members** (negatives): `setupPlayer`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener`. A
+same-name member would let a missed in-unit reference compile against the Host.
+
+**`TvEpisodeMetadataReceiver.Host`: 8 members**, 20 host substitutions:
+
+| kind | members |
+|---|---|
+| state `val` (4) | `payload` (2; the model is mutated in place: `imdbId`, `guideEpisodes`, `items[i]`), `currentIndex` (5, read only), `player` (2: live position/duration), `ottSkinInstalled` (1) |
+| cross-feature (4) | `playlistController` (4), `subtitleSourcesController` (1), `controlsOverlayController` (4 = the phase-16 `.identity.` ×4), `playbackStartController` (1 = the phase-18 `.navigator.updateCatalogEpisodeControls()`) |
+
+**Must not be Host members:** `handleMetadataUpdate`, `requestMetadataFromFlutter`, `readStagedExtra`,
+`metadataUpdateReceiver`, `setupMetadataReceiver`.
+
+**Every collaborator member used is already non-private**, because the activity calls each of them today. Frozen
+files need no edit. Top-level calls (`originKey`, `mergeLateMetadata*`, `LanguageMapper`, `ProtectedStreamHttp`,
+`MainActivity.getAndroidTvPlayerChannel()`) resolve unchanged.
+
+---
+
+### 6. Threading (answers the loader-thread question)
+
+| reader (moved code) | thread | before | after (R19) |
+|---|---|---|---|
+| VOD `ResolvingDataSource.Resolver.resolveDataSpec`: `val (protectedMediaOrigins, playbackHeaders) = activeVodHeaders` 2883 | **loader**, per request | the resolver class `this$0` (activity) → `access$getActiveVodHeaders$p` → **volatile `GETFIELD`** | `… = host.activeVodHeaders`: `this$0` (controller) → `access$getHost$p` (final) → `INVOKEINTERFACE Host.getActiveVodHeaders()` → the activity's Host impl `this$0` → `access$get…$p` → **the same volatile `GETFIELD`**. One read per call (the destructuring consumes a local `Pair`) |
+| IPTV resolver `val headers = currentIptvHttpHeaders` 2908 | **loader**, per request | volatile read | `host.currentIptvHttpHeaders`, same chain |
+| `ExtractorsFactory.createExtractors()` / `createExtractors(uri, headers)` `if (iptvStrictTsActive)` 2964, 2971 | **loader**, per extractor creation | volatile read | `host.iptvStrictTsActive` ×2, same chain |
+| `IptvLiveLoadErrorPolicy { iptvChannels.getOrNull(currentIptvIndex)?.isLive == true }` 2976 | **loader** | 2 non-volatile reads (existing follow-up) | `host.iptvChannels.getOrNull(host.currentIptvIndex)`: same fields, still non-volatile. **Unchanged; do not "fix"** |
+| `iptvMediaCodecSelector` lambda: `isIptvMode`, `iptvDecoderMode` ×2 | **playback thread** (`getDecoderInfos`) | non-volatile | Host getters, same fields, still non-volatile. Pin as-is; add a follow-up note next to the policy one |
+| `SpeechFeatureTap(positionMs = { player?.currentPosition ?: 0L })` | main (called inside `mainPost`) | — | `host.player` |
+| `NetworkCallback.onAvailable/onLost` → `runOnUiThread { …iptvLiveRecovery.setOffline(…) }` | ConnectivityThread → main | `this$0.runOnUiThread`; recovery read on main | `activity.runOnUiThread { host.iptvTuneController.iptvLiveRecovery.setOffline(…) }`: `activity` (final) read on ConnectivityThread; the `host` chain runs inside the posted Runnable on main |
+| `iptvRecordingController.onAborted` lambda | main (`mainHandler.post`, `IptvRecordingController.kt:164`) | — | `host.iptvRecordingActionsController…`, `Toast.makeText(activity, …)` |
+| `iptvDiagAnalyticsListener` callbacks | application looper (main) | — | Host getters |
+| receiver `onReceive` → `handleMetadataUpdate` | main (no scheduler Handler) | `runOnUiThread` ×3 run inline | `activity.runOnUiThread` ×3 (identical: `Activity.runOnUiThread` runs inline on the UI thread) |
+
+**Why this is still a verbatim move.** Each loader-thread read is a declared substitution with its exact token
+context and an occurrence count:
+- `activeVodHeaders` → `host.activeVodHeaders` ×1;
+- `currentIptvHttpHeaders` → `host.currentIptvHttpHeaders` ×1;
+- `iptvStrictTsActive` → `host.iptvStrictTsActive` ×2;
+- `iptvChannels`/`currentIptvIndex` ×1 each;
+- `isIptvMode`/`iptvDecoderMode` ×1/×2.
+
+Statement structure is unchanged, so the read still happens inside `resolveDataSpec`/`createExtractors`/the
+policy lambda on **every** call. Every hop added is a read of a **final** field:
+- the controller property on the activity;
+- `host` on the controller;
+- `this$0` on the Host object.
+
+All three are assigned during activity construction. The player and its loader threads start later, in
+`setupPlayer` from `onCreate`/`initIptvMode`, so final-field semantics plus thread-start happens-before mean the
+loader sees fully built objects. There is no new data race, and none is removed.
+
+**Required guards (step T):**
+1. Each Host member is a computed getter (`override val currentIptvHttpHeaders: Map<String, String> get() =
+   this@AndroidTvTorrentPlayerActivity.currentIptvHttpHeaders`), never an initialized `val`. The Host text is
+   pinned.
+2. The activity fields keep `@Volatile` (retained-declaration comparison). The existing `isVolatile` test on
+   `activeVodHeaders` stays unchanged and passing.
+3. **New compiled audit, the "volatile-read chain".** For each of the 4 sites, the compiled anonymous method
+   (`resolveDataSpec`, both `createExtractors`) must contain `INVOKEINTERFACE
+   TvMediaPipelineController$Host.get<X>()` and **no captured-value field** (`val$…`). The activity's Host
+   implementation `get<X>()` must reach a `GETFIELD AndroidTvTorrentPlayerActivity.<x>` whose field has
+   `ACC_VOLATILE`, directly or through one synthetic accessor.
+4. **Negatives:**
+   - a snapshot hoisted out of the resolver (`val h = host.currentIptvHttpHeaders` before `object :`);
+   - an initialized Host `val`;
+   - a Host `var` with a backing field;
+   - a removed `@Volatile`;
+   - a read through a different controller's Host.
+
+---
+
+### 7. Receivers, inherited members, overload audit
+
+**`this` → `activity`: 10 sites, all in `setupPlayer`.** Each is pinned with exact context, an occurrence count
+and its before/after descriptor:
+
+| line | site | resolved overload to keep |
+|---|---|---|
+| 2753 | `DefaultTrackSelector(this)` | `<init>(Context)` |
+| 2836 | `NativeAudioRenderersFactory(this, nativeAudioRouting, arrayOf(tap.processor))` | `<init>(Context, NativeAudioRouting, AudioProcessor[])` |
+| 2876 | `DefaultDataSource.Factory(this, …)` | `<init>(Context, DataSource.Factory)` |
+| 2929 | `Toast.makeText(this, "Recording stopped — …", LENGTH_LONG)` inside the `onAborted` lambda (lambda without receiver, so `this` = activity) | `makeText(Context, CharSequence, int)` |
+| 2974 | `DefaultMediaSourceFactory(this, iptvExtractors)` | `<init>(Context, ExtractorsFactory)` |
+| 2978 | `DefaultMediaSourceFactory(this)` | `<init>(Context)`, **not** `(DataSource.Factory)` |
+| 2982 | `ExoPlayer.Builder(this, renderersFactory)` | `<init>(Context, RenderersFactory)` |
+| 3100 | `SubtitleSettings.synchronizeProjectedAppearance(this)` | `(Context)` |
+| 3101 | `SubtitleFontManager.synchronizeProjectedFont(this)` | `(Context)` |
+| 3105 | `SubtitleSettings.setActiveSubtitleIdentityProvider(this) { … }` | `(Any, Function0)`. **Identity key:** `onDestroy` calls `clearActiveSubtitleIdentityProvider(this)` with the activity, so the owner **must** stay the activity object. Negative: owner = the controller (`this@TvMediaPipelineController`) must fail the original-surface clear test |
+
+**Inherited implicit-receiver pins** (owner–descriptor–opcode before and after; omission and wrong-dispatch
+negatives):
+
+| unit | sites |
+|---|---|
+| pipeline (5) | `runOnUiThread` ×3: the tap `mainPost` lambda 2831, and inside the **anonymous `NetworkCallback`** at 3128/3132 (implicit outer receiver from an object method, the phase-17 `addContentView` kind). `getSystemService(String)` ×2 (3055, 3125): `Activity.getSystemService` override; pin `invokevirtual` |
+| receiver (6) | `registerReceiver` ×2 (2250: `(BroadcastReceiver, IntentFilter, int)`; 2252: `(BroadcastReceiver, IntentFilter)`), both called from the function body, not the anonymous object. `cacheDir` → `getCacheDir()` 2278. `runOnUiThread` ×3 (2304, 2362, 2471) |
+
+**Static inherited constants (2):** `ACTIVITY_SERVICE` → `Context.ACTIVITY_SERVICE` (3055) and
+`CONNECTIVITY_SERVICE` → `Context.CONNECTIVITY_SERVICE` (3125). This follows the phase-3 `MODE_PRIVATE`
+precedent. Both are compile-time constants, so the bytecode `LDC "activity"`/`"connectivity"` is pinned
+identical.
+
+**Reviewed non-substitution pins:**
+- **The shadowed `intent` parameter:** the `onReceive(context, intent)` parameter, read 6× at 2237–2243, and
+  `readStagedExtra`'s `intent` parameter (2275). These must **never** become `activity.intent` (the activity's
+  launch intent). Negative: rewrite one to `activity.intent`.
+- The unused `context` parameter.
+- Named arguments that are not member references: `SpeechFeatureTap(mainPost =, positionMs =)`,
+  `item.copy(title =, …)`, `GuideEpisode(season =, …)`, `mergeLateMetadata*(existingPositionMs =, …)`.
+- Locals `tap`, `cm`, `callback`, `model`, `item`, `update`, `currentItem`.
+- `android.content.Context.RECEIVER_NOT_EXPORTED`, which is already qualified.
+
+**Qualifier-name collisions** (blanked code, the whole file): `mediaPipelineController`, `episodeMetadataReceiver`,
+`host` and `pipeline`/`receiver` as identifiers all have **0** hits. `activity` has 3, all in `bindViews`
+(2577/2593/2608, not moved). There is no Runnable/listener `this`, so there is **no excluded receiver**.
+
+**Smart casts:** none of the moved code relies on a member smart cast (the only null-checks are on locals
+`model`, `currentItem`, `channel`). `trackSelector!!`/`subtitleListener!!` keep their NPE semantics through the
+getters.
+
+**Anonymous classes renamed (R8 mapping check):**
+- pipeline: the `AnalyticsListener` (diag), 2 `Resolver`s, the `ExtractorsFactory`, the subtitle
+  `Player.Listener`, the `NetworkCallback`;
+- receiver: the `BroadcastReceiver`.
+
+The `MediaCodecSelector` SAM lambda and the Kotlin lambdas compile through `invokedynamic`; record whatever
+classes are actually generated.
+
+---
+
+### 8. Timers, handlers, native resources, teardown
+
+| resource | owner after the move | lifetime (unchanged) |
+|---|---|---|
+| `BroadcastReceiver` (`com.debrify.app.tv.UPDATE_EPISODE_METADATA`) | receiver field | Registered once per launch, at the end of `onCreate` or in `initIptvMode`. Early `onCreate` exits never register, and `onDestroy` then sees `null` (`NativePlayerRejectedLaunchTest`). Unregistered **in place** in `onDestroy` (the try/catch log stays in the activity), then null-ed |
+| `requestEpisodeMetadata` post | none (fresh `Handler(mainLooper)`) | **never cancelled**: a destroy before the post runs still invokes the channel. Pin as-is (follow-up) |
+| `ConnectivityManager.NetworkCallback` | activity field (borrowed setter) | registered in `setupPlayer` (IPTV, API ≥ 24); unregistered in `onDestroy` 6677–6683 (unchanged) |
+| player listeners (`playbackListener`, decoder, diag, `subtitleListener`) | player | `onDestroy` removes `playbackListener` and `subtitleListener`; the analytics listeners are released with the player (unchanged) |
+| `SubtitleSettings` identity provider | singleton, owner = activity | cleared in `onDestroy` with `this` (unchanged); the provider lambda now captures the controller, which reaches the activity |
+| `iptvRecordingController.onAborted` | activity lazy | **never cleared** (pin as-is; deps §5) |
+| `SpeechFeatureTap` | `speechTap` (activity) | per build; null-ed in `onDestroy` |
+
+There is no owned Handler, coroutine or token, and nothing in `onStop`/`onPause`/`finish`.
+
+---
+
+### 9. Reflective tests, source-text anchors, Dart anchors
+
+- **Reflection:** **0** sites. `setupPlayer`, `setupMetadataReceiver`, `readStagedExtra`, `handleMetadataUpdate`,
+  `requestMetadataFromFlutter`, `iptvMediaCodecSelector`, `iptvDiagAnalyticsListener` and
+  `metadataUpdateReceiver` are never quoted in `android/app/src/test`. The borrowed names keep their activity
+  routes: `trackSelector` 26, `activeVodHeaders` 4, `currentIptvHttpHeaders` 1, `offsetRenderersFactory` 2,
+  `speechTap` 2, `playerPreferences` 9, `nativeAudioRouting` 2.
+- **`NativeAudioRoutingTest.bothNativePlayersEnableCapabilityRecovery`** (66–79) reads the activity source file
+  and asserts `.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)` is present and `(false)` absent.
+  - The `appDir` discovery anchor (`…/AndroidTvTorrentPlayerActivity.kt` `isFile`) stays valid.
+  - **Retarget:** in the path list, replace the activity path with
+    `src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt` (same two assertions).
+  - **Stronger:** keep an `assertFalse((false))` on the activity file.
+  - The Torbox Java entry is unchanged.
+- **Dart `test/android_tv_mdblist_progress_source_test.dart`**, test "native actual rows adopt refreshed guide
+  watch state" (196–216):
+  - the file path changes to `…/tv/TvEpisodeMetadataReceiver.kt`;
+  - the start marker `'// Handle episode metadata updates'` is unchanged (unique in the new file);
+  - the end marker changes from `'private fun requestMetadataFromFlutter()'` to `'fun
+    requestMetadataFromFlutter()'` (the member becomes public). Order is preserved.
+
+  All 6 asserted literals (`hasWatchedUpdate`, `model.items.indexOfFirst`, `it.season == updateSeason`,
+  `mergeLateMetadataResumePosition`, `mergeLateMetadataDuration`, `traktProgressPercent = newTrackerProgress`)
+  are untouched by host substitutions (`model` is a local). The `TvPlaybackItem.kt` `if (watched) return 100`
+  assertion is unaffected.
+
+  Negative: the Host interface must not contain the end-marker text before the range. Place the Host above the
+  class body; it declares no `requestMetadataFromFlutter`.
+- `manual_source_validation_contract_test` (the `payloadCheck.optInt(…)` in `onCreate`) and
+  `android_tv_auto_advance_resume_test` are unaffected.
+
+---
+
+### 10. Hazards (each a step-T fixture or negative)
+
+1. **The `intent` parameter shadows** `Activity.getIntent()` (7 reads). No `activity.` substitution.
+2. **The identity-provider owner** must be the activity object (it is the `onDestroy` clear key).
+3. **Volatile loader-thread reads** go through computed Host getters, with no snapshot. This needs the new
+   compiled volatile-chain audit (§6).
+4. **Non-volatile loader/playback-thread reads** (policy supplier, codec selector) stay as-is. Do not
+   add `@Volatile` or synchronization.
+5. **First access of the lazies** `iptvRecordingController` and phase-17 `iptvLiveRecovery` stays in
+   `setupPlayer` (computed getters).
+6. **Inherited calls from an anonymous object** (`NetworkCallback` → `runOnUiThread`): the outer-receiver
+   pin.
+7. **Static inherited constants** → `Context.` qualification, with the `LDC` value pinned.
+8. **Register-then-request order** in `setupMetadataReceiver`: the `requestMetadataFromFlutter()` call
+   stays after registration.
+9. **`onDestroy` position** of the unregister (after the Up Next clear, before `subtitleScope.cancel()`). The
+   try/catch stays in the activity. A folded "`receiver.teardown()`" negative must fail.
+10. **Host-setter writes followed by getter re-reads:**
+    - `player = build()` then `player?.…` ×6;
+    - `playerView.player = player`;
+    - `protectedStreamClient = …` then `dataSourceFactory(protectedStreamClient)`;
+    - `subtitleListener = object …` then `addListener(subtitleListener!!)`.
+
+    Each re-read returns the just-written value on main. Negative: a forwarder that caches.
+11. **Default arguments of `handleMetadataUpdate`** (`guideJson = null, showName = null`) stay. The one caller
+    passes all four positionally.
+12. **The 8 consumed temporary patches** become `host.controlsOverlayController.identity.` (×4),
+    `host.playbackStartController.navigator.` (×1) and `host.iptvTuneController.` (×3) substitutions.
+    Negative: a missed qualification. It cannot compile, because the Host declares none of those names.
+13. **Two sibling controllers with no cross-reference.** A fixture proves neither file names the other.
+14. **The `@OptIn(UnstableApi::class)` class annotation** on the pipeline is pinned structurally. It is absent on
+    the receiver (an unnecessary opt-in negative).
+15. **The pipeline file is in the 501–800 band** (≈ 545). Record the responsibility review (§11.3).
+
+---
+
+### 11. File split, counts, risk and step-0 needs
+
+#### 11.1 Files
+
+| file | members | lines (≈) | band |
+|---|---|---|---|
+| `TvMediaPipelineController.kt` | 3 (+ 30-member Host) | 545 | 501–800: one responsibility (build and wire the player). It cannot be split further without rewriting `setupPlayer`; the exit path is in §11.3 |
+| `TvEpisodeMetadataReceiver.kt` | 5 (+ 8-member Host) | 335 | ≤ 500 |
+
+Both destination import lists are exact, reviewed lists in the manifest. The pipeline needs ≈ 45 imports: Media3
+`common`/`datasource`/`exoplayer`/`extractor`/`ui`, `androidx.annotation.OptIn`, `ConnectivityManager`/
+`Network`, `Toast`, `View`, `Uri`, `Context`, `AppCompatActivity`, `okhttp3.OkHttpClient`, `com.debrify.app.audio.*`,
+`com.debrify.app.util.SubtitleSettings`/`SubtitleFontManager`/`LanguageMapper`. The receiver needs ≈ 8:
+`AppCompatActivity`, `ExoPlayer`, `JSONArray`, `Locale`, `MainActivity`; the `android.*` names are fully
+qualified in the bodies.
+
+#### 11.2 Counts
+
+| | pipeline | receiver | total |
+|---|---|---|---|
+| moved lines | 457 | 301 | **758** |
+| activity patches | 2 (1 decl each in `onCreate`/`initIptvMode`) | 4 (`onCreate`, `initIptvMode`, `onDestroy` ×2) | **6 in 3 declarations** |
+| Host re-points | 0 | 1 | **1** |
+| Host members | 30 | 8 | 38 |
+| substitutions | ≈ 99 | ≈ 29 | **≈ 128** |
+| initializer proofs | 0 | 0 | **0** |
+| `this` audits / inherited pins / non-substitution pins | 10 / 5 + 2 constants / — | 0 / 6 / 7 `intent` + `context` | |
+| reflective / source-text / Dart retargets | 0 / 1 / 0 | 0 / 0 / 1 | **0 / 1 / 1** |
+| statement sweep (step 0) | 26 `if`, 3 `when`, 4 `return` (incl. selector + listener) | 42 `if`, 1 `when`, 8 `return` | |
+
+#### 11.3 Recorded follow-ups (pin as-is; do not fix)
+
+- `requestMetadataFromFlutter`'s uncancelled main post can invoke the channel after destroy.
+- The codec selector reads non-volatile `isIptvMode`/`iptvDecoderMode` on the playback thread. This is a sibling
+  of the existing `IptvLiveLoadErrorPolicy` note.
+- `onAborted` is never cleared.
+- `protectedStreamClient` is written on main and read on IO without `@Volatile`. This is pre-existing; phase 18
+  borrows it.
+- **Exit path for the 545-line pipeline file**, after the series, as a separate behavior-preserving (non-verbatim)
+  change with pure JVM tests:
+  - a track-selector parameter builder (deps §4 candidate 3);
+  - a LoadControl preset policy;
+  - an IPTV data-source chain factory (candidate 5).
+
+#### 11.4 Risk, test gap, step-T and step-0 needs
+
+**Step T (checker/auditor):**
+- **Volatile-read-chain audit (new kind, §6):** 4 sites, positives, and the 5 negatives.
+- A static-constant qualification form with an `LDC` pin.
+- Inherited pins: `getSystemService` ×2, `registerReceiver` (2-/3-arg), `getCacheDir`, `runOnUiThread` ×6,
+  including the anonymous-object outer receiver.
+- An identity-key `this` pin (`setActiveSubtitleIdentityProvider`).
+- Reviewed `intent`-parameter non-substitutions, with a rewrite negative.
+- A two-sibling extraction fixture (the phase-10 shape) in which each controller's single field is its slot field
+  (0 proofs).
+- A whole-property `patched` row for the switcher Host (1 forwarder) built on the phase-18 version.
+- The 8 consumed patches as substitutions.
+- An `onDestroy` in-place/fold negative.
+- The per-phase dispatcher keeps all historical suites; earlier destinations are frozen at the phase-18 merge;
+  R8 mapping covers the 7 renamed anonymous classes.
+
+**Step 0 prerequisites, per feature, each demonstrated on the original first. A failed prerequisite defers that
+feature.**
+
+**Pipeline:**
+1. **Media3 read-back harness pinned to 1.8.0.** Robolectric reflection into the built objects:
+   - `ExoPlayerImpl` → track selector parameters, load control (`DefaultLoadControl` buffer/target fields),
+     wake mode, noisy-audio handling, frame-rate strategy;
+   - `DefaultMediaSourceFactory` → data-source factory chain (`RecordingDataSource.Factory` →
+     `ResolvingDataSource.Factory` ×2 → `DefaultDataSource.Factory` → `VodHttpDataSource`/
+     `DefaultHttpDataSource.Factory` timeouts, redirects, default properties), extractors factory, load-error
+     policy;
+   - renderers factory (extension mode, decoder fallback, codec selector).
+
+   Mutation-prove each read-back.
+2. **Worker-thread resolver/extractor harness.** Pull the `Resolver`/`ExtractorsFactory`/policy instances out of
+   the chain and invoke them on a bounded worker thread. Change the activity's volatile field on main between
+   two calls; the **second call must observe the new value**. The mutation "snapshot hoisted before the object"
+   must fail. Cover:
+   - VOD origin match, including default-port normalization; a non-matching origin is untouched;
+   - IPTV: empty headers return the identity spec; channel headers override the default UA;
+   - strict vs aggressive TS flags;
+   - the policy's live/non-live answer.
+
+   Fallback seam: MockWebServer request headers (already a test dependency).
+3. **Codec selector** with `ShadowMediaCodecList` fake hardware/software video codecs: IPTV auto/hardware/
+   software ordering, non-IPTV passthrough and audio passthrough.
+4. **`ShadowConnectivityManager`:** registration, initial `setOffline`, callbacks posting to main, a registration
+   exception, and no registration below SDK 24.
+5. **`ShadowActivityManager.largeMemoryClass`** for the heap-budget boundaries:
+   - 128 MiB → stock;
+   - 192 MiB large → 48 MiB target (boundary);
+   - 1,024 MiB huge → 192 MiB cap;
+   - IPTV → never;
+   - YouTube merge → 15/50/1/2 s.
+
+**Then, from the first step-0 pass:**
+- the track-param matrix (audio null/variants/unmapped; text off/variants/null; foreign/forced/`pt-BR` disable;
+  IPTV non-seamless; opus; ignored DEFAULT; invalidate flag);
+- `networkPatience` timeouts;
+- the protected-client swap;
+- the recording tee, plus `onAborted` (button refresh + Toast) and the lazy first-access moments;
+- display match ×4;
+- speed;
+- listener attach order;
+- subtitle-listener external gate;
+- `SubtitleSettings` sync/reset/identity (cleared by `onDestroy`; the owner-mutation kill);
+- resize, focus and IPTV keep-content;
+- diag-listener first-frame order and bytes.
+
+**Receiver:** a broadcast harness (`sendBroadcast` with staged `cacheDir` files) on the main looper, at SDK 28 and
+SDK 33 configs. Cover:
+- registration flags;
+- the register-then-request order (fake channel; series only; null channel; invoke exception);
+- staged-path validation (outside `cacheDir`, wrong prefix, unreadable → inline fallback; file **not** deleted);
+- the show-name / OTT refresh gate;
+- payload null (IPTV) early return;
+- IMDb discovery only when empty → subtitle fetch for the current item;
+- guide adoption (invalid rows skipped, clear+addAll, series-only rebuild / active index / catalog controls /
+  title, malformed JSON);
+- update matching (season/episode re-match, out-of-range skip);
+- field merges, including `watched` → 100, tracker progress, live position/duration merge and
+  `allowLocalProgressDisplay`;
+- adapter notification and title refresh;
+- `anyUpdated = false`;
+- `onDestroy` unregister (including a throwing unregister) and null-out;
+- the pinned post-destroy request post.
+
+**For both:** the statement-level coverage sweep and matrix from the start (phase-11 lesson); Claude's independent
+sample needs ≥ 75 % kills, else a sweep and a second sample; then 0b.
+
+**Risk: medium-high.** There is no async protocol, but there is complete configuration coverage to build, there
+are loader-thread semantics, and the Robolectric Media3 read-back is the gating unknown.
+
+---
+
+## Phase 20 assessment: the two routers
+
+Measured with `routers.py` at `df439aed1`. "After" applies the phase-16–19 moved sets: each moved name becomes
+its owner's controller property.
+
+| | `playbackListener` (1540–2048, **511** lines incl. trivia; `object : Player.Listener`, 7 overrides) | `dispatchKeyEvent` (4261–4623, **363** lines; `override fun`) |
+|---|---|---|
+| references now / distinct activity members | 178 / 67 (13 controllers, 51 members, 3 inherited) | 132 / 40 (6 controllers, 32 members, 2 inherited) |
+| moved away by phases 16–19 | 16 names (→ `controlsOverlayController`, `iptvTuneController`, `playbackStartController`); phase 19 adds 0 | 16 names (all → `controlsOverlayController`; 27 prefixes) |
+| **after phase 19: distinct** | **54** = 16 controller getters + **35** members (8 written: `hasEverBeenReady`, `iptvStartOverActive`, `iptvStartOverTimelineVisible`, `isAutoAdvancing`, `pendingItemTraktPercent`, `pendingSeekMs`, `percentSeekApplied`, `sleepStopLatched`; 18 read; 9 functions) + 3 inherited (`finish`, `isFinishing`, `isDestroyed`) | **25** = 7 controller getters + 16 members + `currentFocus` + **`super` ×18** |
+| control-flow size (sweep) | 65 `if`, 1 `when`, 29 `return`, 2 `postDelayed` (1.5 s auto-advance) | 74 `if`, 5 `when`, 51 `return` |
+| special hazards | the `onEvents(player: Player, …)` parameter **shadows** `player`; 2 `this@Activity` Toasts; `reportDecoderFailure` (20 lines) is called only from here; reflected field `playbackListener` (**9 sites / 7 test files**); inbound `setupPlayer` (pipeline Host after 19) and `onDestroy` `removeListener` | **18 `super.dispatchKeyEvent(event)` calls**; the override is the **remote-control contract** (`MainActivity.kt:2569–2614` → `ActivityTracker` → `targetActivity.dispatchKeyEvent`) |
+
+**`dispatchKeyEvent`: documented exception (do not move).**
+- The override must remain on the activity.
+- Moving its body is not a declaration move. It needs a new checker mechanism ("body extraction": the retained
+  override becomes a pinned wrapper whose original body lives elsewhere).
+- 18 `super.` calls would become a Host forwarder implemented with `super@AndroidTvTorrentPlayerActivity.
+  dispatchKeyEvent(event)`. That is an `invokespecial` through a synthetic `access$…$s` accessor, a new auditor
+  kind. It must bind to `AppCompatActivity.dispatchKeyEvent`, which AppCompat overrides.
+- For ≈ −330 net lines, the key matrix (BACK/CENTER/DPAD/IPTV long-press/channel keys across 7 skins) would be
+  re-characterized again. Its remaining 16 member dependencies are mostly view/overlay state, which has no
+  better owner.
+
+**`playbackListener`: mechanically feasible, recommended as a documented exception for this series.**
+- *Feasible.* It is a whole property, so the existing checker moves it verbatim to a `TvPlaybackEventRouter` at
+  slot 1540 (its own field, 0 proofs), together with `reportDecoderFailure`. The cost:
+  - ≈ 176 host substitutions plus 3 inherited pins and 2 `this@` → `activity`;
+  - a **50-member Host** (8 `var`, 18 `val`, 8 functions, 16 controller getters);
+  - 1 `onDestroy` in-place patch and 1 pipeline-Host re-point;
+  - 9 reflective sites via one owner-map route;
+  - the shadowed-`player` exclusion.
+
+  Net ≈ −480 lines (553 out, ≈ 70 Host in).
+- *Why not.* The result is a router whose Host is essentially the activity's playback-state surface, which AGENTS
+  forbids ("do not replace a giant screen with a giant controller, expose its entire state"). It adds no cohesive
+  owner. The event-ordering contracts stay exactly as coupled.
+
+  The real improvement is a **non-verbatim** policy split:
+  - READY resume/seek policy (deps §4 candidate 1);
+  - ENDED auto-advance policy;
+  - the IPTV error-precedence ladder.
+
+  Each would be owned and pure-tested, with the listener left as a thin dispatcher. That is outside this series'
+  "move, don't rewrite" rule. It belongs to the separate player-core goal.
+- *If the user prefers the size reduction anyway*, run it as a phase 20a with the numbers above. Step 0 would
+  reuse the extensive existing listener characterization (watchdog, gate, sleep, Start Over, display, effects,
+  Stremio guide tests) plus a sweep of the 65 `if` / 29 `return` sites. Risk: medium (mechanical, but the widest
+  Host in the series).
+
+**Phase 20 recommendation:** a **decision-only phase**. No code moves; record the end-state exception below, lower
+the size baseline, and close the series.
+
+### Honest final activity size
+
+≈ **3,785 lines after phase 19** (band 3,700–3,900 pending re-measurement), with the routers retained. That is
+≈ 3,300 if `playbackListener` moved (20a), and would be ≈ 2,970 only if `dispatchKeyEvent` also moved (not
+recommended). This sits at the top of the phase-13 projection (3,450–3,750) because the four Host objects of
+phases 16–19 add ≈ 240 lines.
+
+The composition of the ≈ 3,785 (remaining depth-1 spans after the phase-16–19 moved sets, plus Hosts added by
+16–19):
+
+| block | lines (≈) |
+|---|---|
+| imports, header, companion | 150 |
+| controller properties + computed Host objects (≈ 30 controllers; 686 today + ≈ 240 from 16–19) | 925 |
+| routers + ticker: `playbackListener` 511, `dispatchKeyEvent` 363, `progressRunnable` 33 | 907 |
+| lifecycle/entry: `onCreate` 174 (launch parse, 4 independent try-scopes), `onDestroy` 170 (≈ 45 ordered steps), `onStart`/`onStop`/`onPause`/`onResume`/`finish`/`onRequestPermissionsResult`/`setupBackPressHandler`/`sendFinished` | 560 |
+| shared single-owner state fields | 400 |
+| `bindViews` (incl. ≈ 90-line inline `TvSourceBrowserController.Callbacks`) | 192 |
+| `parsePayload` 171 + `initIptvMode` 116 | 287 |
+| unified-menu composition (`umPlaybackModel`, `umSourcesModel`, `umSourceRows`, `umSectionRows`, `umAddLoadMoreRow`, `unifiedMenuCallbacks`) | ≈ 200 |
+| small shared helpers: resume hold (`armResumeHold`/`releaseResumeHold`/`heldResumePositionMs`), buffering indicator, screen hold, `dp`, `guideAdjacent`, `guideTypeface`, `recordPlaybackLifecycle`, `reportDecoderFailure`, `reportValidatedSourceCommit`, `isFocusInIptvChannelList`, `ShufflePlaybackAttempt` | ≈ 165 |
+
+### End-state exception (content to record in the plan and in `dev/tool/file_size_baseline.txt`)
+
+**Path:** `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt`, ≈ 3,785 lines
+(exact after phase 19). This is above the 800 limit and is a documented exception: a shrink-only baseline, and
+it may not grow.
+
+**Remaining responsibilities:**
+1. The Android entry point and the owner of lifecycle order: launch/payload intake, rejected-launch exits, the
+   ordered `onStop` (12 steps) and `onDestroy` (≈ 45 steps) teardown, the `finish` override and progress
+   checkpoints.
+2. The composition root: ≈ 30 collaborators and their narrow computed Hosts. These are wiring only, with no logic.
+3. Single-owner shared playback state written by several collaborators: `player`, `trackSelector`, `payload`,
+   `currentIndex`, the three `@Volatile` loader-thread header/flag fields, resume/seek state, IPTV list state,
+   `sleepStopLatched`, `stremioResolutionToken`.
+4. The two routers: the `Player.Listener` event dispatcher with its priority-ordered READY/ENDED/error contracts,
+   and the `dispatchKeyEvent` key router (the remote-control entry, with 18 `super` fallbacks).
+5. Bootstrap code: `bindViews`, `parsePayload`, `initIptvMode`.
+6. Unified-menu composition and small shared helpers.
+
+**Why it cannot shrink further under this series' rules:**
+- verbatim moves need computed Hosts, so wiring grows as code leaves;
+- `dispatchKeyEvent` cannot leave without a body-extraction mechanism and `super` forwarding;
+- moving `playbackListener` only relocates a 50-member state surface.
+
+**Exit path and milestone**, as a separate player-core goal after this series (the memory's "core services +
+players = separate goal"; each item is its own reviewed, behavior-preserving change with characterization):
+- **(a)** Split the playback listener into owned READY-resume, ENDED-advance and IPTV-error policies, with pure
+  tests. Leave a thin dispatcher.
+- **(b)** Turn key routing into per-controller key handlers consulted by a small dispatcher. The `super` fallback
+  stays in the override.
+- **(c)** Add a launch parser (parse the payload once instead of 4×, keeping each try-scope's independence) to
+  absorb `parsePayload`/`onCreate` pre-scan/`initIptvMode` parsing.
+- **(d)** Name `bindViews`' inline source-browser callbacks and move unified-menu rows to their owning controllers
+  (the sources rows to the fetch owner).
+- **(e)** Move single-owner state into its owners once its writers consolidate, which shrinks the Hosts.
+
+Target after (a)–(e): **≤ 2,000 lines**. Reaching ≤ 800 is not a goal while the activity remains the composition
+root. Reassess the exception whenever the file is next extended. It is not permission to grow.
