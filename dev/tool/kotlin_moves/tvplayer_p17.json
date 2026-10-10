@@ -256,7 +256,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvControlsLiveCharacterizationTest::parkedTwinIsRestoredBeforeOrdinaryPlayAndLabelStillRefreshes; TvControlsLiveCharacterizationTest::endedLiveConstructsItsLazyRecoveryAfterSettingPlaybackIntent"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property startupGateViewReady",
@@ -1003,7 +1003,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvTuneCallerCharacterizationTest::catchupReplyUsesTunePipelineWithArchiveFlagsAndCurrentHeaders"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property iptvGuideController",
@@ -1262,7 +1262,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvTuneCallerCharacterizationTest::channelStartReadsSessionPreferredTwinThenUsesTunePipeline; TvIptvTuneCallerCharacterizationTest::asynchronousChannelStartClearsOutgoingTuneIdentityBeforeStop"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property iptvBrowseHandler",
@@ -1646,7 +1646,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvClockCharacterizationTest::realProgressTickerAcceptsOnlyFifteenSecondsOfAdvancingFrames; TvIptvTickerCharacterizationTest::tuneWatchdogUsesPlaybackIntentEvenWhileIsPlayingIsFalse"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property playbackListener",
@@ -1715,7 +1715,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvErrorCharacterizationTest::activeTrialClaimsSniffFailureBeforeTheGenericHlsRetry; TvIptvErrorCharacterizationTest::acceptedTwinAuthRevokesPreferenceAndRestoresBeforeSurrender; TvIptvClockCharacterizationTest::readyCallbackRearmsTheDeadlineForThirtySeconds"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property metadataUpdateReceiver",
@@ -1784,7 +1784,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvNetworkCharacterizationTest::offlineBootstrapParksEndedUntilWorkerAvailableHopsToMain; TvIptvNetworkCharacterizationTest::lostCallbackAlsoHopsAndDestroyOnlyUnregistersAlreadyQueuedDelivery; TvIptvLoaderCharacterizationTest::bootstrapFactoriesReadCurrentHeadersAndStrictModeOnEveryWorkerInvocation"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun playItem(Int,Boolean,Boolean,ShufflePlaybackAttempt?)",
@@ -1988,7 +1988,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvTuneCallerCharacterizationTest::recordingRefreshReReadsTuneUrlAndForcedHlsSetAtEachInvocation"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property iptvZapBannerController",
@@ -2285,7 +2285,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvLifecycleCharacterizationTest::resumeConsumesParkedRestoreBeforeLongAbsenceOrOrdinaryPlay"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun onStop()",
@@ -2309,7 +2309,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvLifecycleCharacterizationTest::stopParksTrialCancelsRecoveryThenHidesPillAndOnlyThenPauses"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun setupBackPressHandler()",
@@ -2363,7 +2363,7 @@
         }
       ],
       "reason": "Retarget tune/trial ownership in place; bootstrap, loader callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvIptvLifecycleCharacterizationTest::destroyClearsTrialBeforeRecoveryCancellationAndNetworkUnregister"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun updateStremioSourcesFromPlaybackMap(Map<*, *>)",

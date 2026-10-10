@@ -121,6 +121,12 @@ internal open class TvPhase5OriginalTest : TvPhase3OriginalTest() {
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal class TvPhase5PlayerProbe(var position: Long = 25_000L, var duration: Long = 100_000L,
                                   var state: Int = Player.STATE_READY, var playing: Boolean = true) {
+    // Phase 17 opts in; all older fixtures retain their original fake semantics.
+    var extended = false
+    var playIntent = true
+    var videoFormat: androidx.media3.common.Format? = null
+    var counters = androidx.media3.exoplayer.DecoderCounters()
+    val mediaItems = mutableListOf<MediaItem>()
     val events = mutableListOf<String>()
     var failPosition = false
     var error: androidx.media3.exoplayer.ExoPlaybackException? = null
@@ -132,13 +138,18 @@ internal class TvPhase5PlayerProbe(var position: Long = 25_000L, var duration: L
             "getDuration", "getContentDuration" -> duration
             "getPlaybackState" -> state
             "getPlayerError" -> error
-            "isPlaying", "getPlayWhenReady" -> playing
-            "pause" -> { event("pause"); playing = false; null }
-            "play" -> { event("play"); playing = true; null }
+            "isPlaying" -> playing
+            "getPlayWhenReady" -> if (extended) playIntent else playing
+            "setPlayWhenReady" -> { if (extended) { playIntent = args!![0] as Boolean; event("intent:$playIntent") }; null }
+            "getVideoFormat" -> if (extended) videoFormat else null
+            "getVideoDecoderCounters" -> if (extended) counters else null
+            "pause" -> { event("pause"); playing = false; if (extended) playIntent = false; null }
+            "play" -> { event("play"); playing = true; if (extended) playIntent = true; null }
             "stop" -> { event("stop"); state = Player.STATE_IDLE; null }
             "prepare" -> { event("prepare"); null }
             "release" -> { event("release"); null }
-            "setMediaItem" -> { event("media:" + (args!![0] as MediaItem).localConfiguration!!.uri + if (args.size > 1) ":${args[1]}" else ""); null }
+            "setMediaItem" -> { if (extended) mediaItems.add(args!![0] as MediaItem); event("media:" + (args!![0] as MediaItem).localConfiguration!!.uri + if (args.size > 1) ":${args[1]}" else ""); null }
+            "seekToDefaultPosition" -> { if (extended) event("seek-default"); null }
             "getApplicationLooper" -> Looper.getMainLooper()
             "getCurrentTracks" -> androidx.media3.common.Tracks.EMPTY
             "getVideoSize" -> androidx.media3.common.VideoSize.UNKNOWN
