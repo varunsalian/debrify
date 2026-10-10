@@ -2223,6 +2223,39 @@ One independent Codex review of the completion audit and exception text
 (accuracy against the tree, the exit path's feasibility, nothing left
 half-moved). No Claude mutation sample (no code moves).
 
+### End-state exception — measured on `076438d71`
+
+`android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` is **exactly 3,776 physical lines**, including imports, comments and blank lines. The original series base is **`39c630303`**, pinned by the phase-1 manifest: **22,221** lines. This is a documented final exception to the 800-line limit. `dev/tool/file_size_baseline.txt` pins **3,776** as the maximum; the file may only shrink.
+
+| Composition (disjoint PSI spans, including trivia) | Physical lines |
+| --- | ---: |
+| imports/header/companion | 154 |
+| controller properties and computed Hosts | 920 |
+| routers and ticker | 907 |
+| lifecycle and entry | 542 |
+| shared state, views, readiness and skin configuration | 332 |
+| bindViews | 192 |
+| parsePayload and initIptvMode | 292 |
+| unified-menu composition | 218 |
+| small shared helpers and retained types | 219 |
+| **Total** | **3,776** |
+
+The table partitions every physical line using the real Kotlin PSI depth-1 spans; leading comments and blank lines belong to the following declaration. The 27 controller properties include their computed Hosts and borrowed-controller wiring. Router/ticker spans are 510 + 364 + 33 lines; body-only counts exclude attached trivia. The shared-state category includes view references, activity-owned readiness getters and skin configuration. Exact per-declaration membership is archived in `p20/measurement/composition.json`.
+
+The Activity remains the Android entry and lifecycle-order owner, the composition root, the single owner of shared playback state and all three volatile loader fields, the `Player.Listener`/remote-key router, and the owner of launch/view/IPTV bootstrap, unified-menu composition and small shared helpers. `dispatchKeyEvent` retains its 18 `super` fallbacks and the MainActivity remote-control entry contract. Moving its body requires a new body-extraction/invokespecial forwarding mechanism. Moving `playbackListener` would relocate a 50-member playback-state surface without establishing a cohesive owner. Computed Hosts also add wiring as code leaves. Further shrinkage therefore requires policy/ownership changes outside this series' verbatim-move rule.
+
+**Exit path and milestone:** a separately reviewed, behavior-preserving player-core series after this structural series, with characterization at each change:
+
+- **(a)** Own READY-resume, ENDED-advance and IPTV-error policies; leave a thin listener dispatcher and pure-test the policies.
+- **(b)** Consult per-controller key handlers from a small key dispatcher; retain the `super` fallback in the Activity override.
+- **(c)** Introduce a launch parser to avoid repeated payload decoding while preserving the four independent try-scope outcomes across `onCreate`/`parsePayload`/`initIptvMode`.
+- **(d)** Name the inline source-browser callbacks in `bindViews` and put unified-menu rows with their owners, including source rows with the fetch owner.
+- **(e)** Consolidate each state's writers before transferring single-owner state, then reduce the computed Hosts.
+
+The acceptance milestone after (a)–(e) is a **≤2,000-line player core Activity**, with the same launch, focus, timing and teardown contracts. ≤800 is not the target while the Activity remains the composition root. Reassess this exception whenever the file is extended; the exception grants no growth allowance. This phase schedules no production changes.
+
+The unmodified size checker was run on a scratch copy outside the worktree using an evidence-only alternate Git index. The 3,776-line control passes; adding one line fails with `3777 lines grew past its baseline (3776)`. Running `--update` with that growth still leaves the maximum at 3,776 and the subsequent check fails. No real source, index or ref was changed by the proof. Evidence: `p20/measurement/size-proof.json` and raw logs.
+
 ## Follow-ups (found while mapping; not fixed here)
 
 - Phase 19 original outcomes, preserved by Step 0: Media3 1.8.0 stock
@@ -4328,3 +4361,5 @@ half-moved). No Claude mutation sample (no code moves).
   `GRADLE_USER_HOME`, JDK 21 via `setup-java`, validated with an empty
   cache); explicit boundary-guard rules covering same-package and fully
   qualified references with a peer-bypass negative control.
+
+- 2026-10-10 — **Phase 20 deliverables 1–2 complete.** Original base `39c630303` / 22,221 lines; final merge `076438d71` / exactly 3,776. Exhaustive nine-part physical-line composition table sums to 3,776; both routers retained, 27 controller/Host properties. Final shrink-only exception and separate (a)–(e) ≤2,000-line player-core milestone recorded. Exact size baseline confirmed; unmodified checker rejects scratch growth 3,776→3,777, including after `--update`, with an isolated alternate index and no ref/working-tree edits. Evidence `p20/measurement/`. No production edit. Completion audit next.
