@@ -5,6 +5,7 @@ import subprocess
 import unittest
 
 import check_kotlin_moves as k
+from kotlin_toolchain import kotlin_jars
 from check_kotlin_overloads import typed_bytecode, resolve
 from kotlin_volatile_chains import reviewed_chains, audit_read_chains, declarations
 from kotlin_overloads_phase16 import audit_identity, field_declarations
@@ -47,13 +48,7 @@ class DefaultExtractorsFactory : ExtractorsFactory {
             p = folder / name
             p.write_text(text)
             paths.append(str(p))
-        cache = Path.home() / '.gradle/caches/modules-2/files-2.1'
-        jars = [next((cache / g / a / v).glob('*/*.jar')) for g, a, v in [
-            ('org.jetbrains.kotlin', 'kotlin-compiler-embeddable', '2.2.20'),
-            ('org.jetbrains.kotlin', 'kotlin-stdlib', '2.2.20'),
-            ('org.jetbrains.kotlin', 'kotlin-reflect', '2.2.0'),
-            ('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm', '1.8.0'),
-            ('org.jetbrains', 'annotations', '13.0')]]
+        jars = kotlin_jars()
         result = subprocess.run([str(k.JBR / 'bin/java'), '-cp', ':'.join(map(str, jars)),
             'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-no-stdlib', '-no-reflect',
             '-classpath', ':'.join(map(str, jars)), '-d', str(folder / 'classes'), *paths],

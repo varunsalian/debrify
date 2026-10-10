@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 
-from android_junit_evidence import evidence_root, JBR
+from kotlin_toolchain import evidence_root, JBR, kotlin_jars
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = 'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt'
@@ -27,17 +27,7 @@ def parse(sources, *, lexer_only=False):
     missing = {key: value for key, value in sources.items() if (value, lexer_only) not in PARSE_CACHE}
     if not missing:
         return {key: PARSE_CACHE[value, lexer_only] for key, value in sources.items()}
-    cache = Path(os.environ.get('GRADLE_USER_HOME', str(Path.home() / '.gradle'))) / 'caches/modules-2/files-2.1'
-    coordinates = [('org.jetbrains.kotlin', 'kotlin-compiler-embeddable', '2.2.20'),
-                   ('org.jetbrains.kotlin', 'kotlin-stdlib', '2.2.20'),
-                   ('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm', '1.8.0'),
-                   ('org.jetbrains', 'annotations', '13.0')]
-    jars = []
-    for group, artifact, version in coordinates:
-        matches = list((cache / group / artifact / version).glob('*/*.jar'))
-        if len(matches) != 1:
-            raise ValueError(f'offline PSI artifact unavailable/ambiguous: {artifact}:{version}')
-        jars.append(matches[0])
+    jars = kotlin_jars(include_reflect=False)
     cp = os.pathsep.join(map(str, jars))
     folder = evidence_root(ROOT) / 'p1/psi'
     folder.mkdir(parents=True, exist_ok=True)
