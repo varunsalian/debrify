@@ -2185,10 +2185,21 @@ phase-19 measurements.
    completed native source set (collaborators must not import Flutter UI or
    each other's private implementations beyond the documented Hosts), with
    documented exclusions. The job needs full Git history (`fetch-depth: 0`),
-   a pinned/cached `kotlin-compiler-embeddable` for the PSI helper and a
-   portable `JAVA_HOME` (the evidence helper's hard-coded macOS JBR path must
-   not be required). Passing CI evidence on the pushed final SHA is required
-   before closing the series.
+   JDK 21 via `setup-java` (matching `build.yml`), and a **cold-cache
+   bootstrap**: on a cache miss it provisions all five pinned artifacts (the
+   four `check_kotlin_moves.py` needs plus `kotlin-reflect:2.2.0` for the
+   overload auditors) into one lookup location honouring `GRADLE_USER_HOME`
+   (the fixture helpers' hard-coded `~/.gradle` is unified); caching is an
+   optimization only, and the job is validated once with an empty cache. The
+   evidence helper's hard-coded macOS JBR path must not be required.
+   **Boundary guard rules are explicit:** forbidden types (Flutter UI / engine
+   types other than the approved `MainActivity` channel accessor and
+   `MethodChannel` uses), the approved Host interfaces and owner→child
+   (eager collaborator) edges, and exact legacy exclusions; it checks
+   same-package (import-free) and fully qualified references, not only
+   imports, with a negative control proving a direct peer bypass fails.
+   Passing CI evidence on the pushed final SHA is required before closing
+   the series.
 4. **Final gate** on the clean tree (commit message contains `gate`): full
    JVM suite vs the phase-19 gate (identities, incl. the known focus NPE and
    the documented EPG flake), lint vs the phase-19 gate and vs the series'
@@ -4312,3 +4323,8 @@ half-moved). No Claude mutation sample (no code moves).
   dispatch of the Android workflow or explicit pending. Router retention
   confirmed (509/362-line bodies, 18 `super` fallbacks); activity exactly
   3,776; 63 extracted files all under 800; all 19 phase device lists present.
+- 2026-10-10 — phase 20 design re-review: **No P1s**. P2s folded: complete
+  cold-cache CI bootstrap (five pinned artifacts, unified lookup honouring
+  `GRADLE_USER_HOME`, JDK 21 via `setup-java`, validated with an empty
+  cache); explicit boundary-guard rules covering same-package and fully
+  qualified references with a peer-bypass negative control.
