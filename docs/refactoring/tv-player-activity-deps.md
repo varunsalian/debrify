@@ -20802,3 +20802,72 @@ players = separate goal"; each item is its own reviewed, behavior-preserving cha
 
 Target after (a)–(e): **≤ 2,000 lines**. Reaching ≤ 800 is not a goal while the activity remains the composition
 root. Reassess the exception whenever the file is next extended. It is not permission to grow.
+
+## Phase 19 Step T — re-measured at `a0d1be1a7`
+
+The approved plan and its design-review fold supersede the inventory's earlier
+zero-reflection, main-thread-only, `val$`-capture and large-memory-class-setter
+wording. The activity has 4,472 physical lines and 1,611 PSI declarations.
+
+| Member | Original line | Leading-trivia span lines | Declared substitutions |
+| --- | ---: | ---: | ---: |
+| `iptvDiagAnalyticsListener` | 468 | 25 | 8 |
+| `iptvMediaCodecSelector` | 2354 | 33 | 3 |
+| `setupPlayer` | 2387 | 399 | 88 |
+| `metadataUpdateReceiver` | 1685 | 3 | 1 |
+| `setupMetadataReceiver` | 1864 | 31 | 3 |
+| `readStagedExtra` | 1895 | 31 | 1 |
+| `handleMetadataUpdate` | 1926 | 204 | 22 |
+| `requestMetadataFromFlutter` | 2130 | 32 | 2 |
+
+The total remains eight members / 758 span lines / 128 substitutions, with
+six in-place activity edits and one whole-property Host re-point. All eight
+consumed earlier patches are explicit substitutions. Computed Hosts have
+30 / 8 members; each sibling owns its single original-slot field, so there
+are zero initializer proofs. The complete production-config fixture has
+535 / 330 lines; the hypothetical activity has 3,776 lines. The pipeline's
+501–800 responsibility review and later pure-policy split remain as recorded
+in §11.3. No production extraction is included in Step T.
+
+The two existing `handleMetadataUpdate` reflection sites route through
+`episodeMetadataReceiver`, with an original-owner fallback. Their assertion
+files remain byte-identical; all eight caller tests pass on the original,
+including the worker-thread immediate volatile write before queued UI update.
+
+The compiled loader proof allows the VOD resolver's final `$this_run` Activity
+or pipeline capture, the IPTV resolver's final `this$0`, and the extractors'
+final `this$0` plus `$strictTs` / `$aggressiveTs` captures with exact
+`DefaultExtractorsFactory` descriptors. A Boolean `$strictTs`, captured Map
+or Pair, initialized Host val/var, other Host chain, duplicate read and missing
+volatile flag fail. Every read site invokes its getter once; the generated
+Host and owner accessors reach the same single Activity `ACC_VOLATILE` field
+through final fields. The VOD origin check also reads the immutable argument
+field `DataSpec.uri`; its public-final descriptor is confirmed from Media3
+1.8.0. These are descriptor/role checks, not capture-name-prefix heuristics.
+
+The OTT writer audit separately pins original and extracted owners: metadata
+Activity → receiver, payload replacement remains playback-start in both.
+The volatile String descriptor, both setter invocations and computed playlist
+reader remain required. Real Kotlin relocation negatives cover premature or
+missing metadata relocation and a wrongly returned replacement writer owner.
+The two inlined Context String constants are pinned by value and count;
+`ldc` / `ldc_w` are constant-pool-width variants of the same read.
+
+Compiled production fixture evidence passes all 21 current receiver sites
+(10 argument / 11 inherited, including both NetworkCallback UI calls),
+366 historical receiver sites, 23 retained view/cast pins, four volatile
+chains in each compiled tree, deferred lazies, retained ShowShuffle constructor
+and frozen OTT identity. All 61 prior destinations and phase 1–18 historical
+merge checks pass. Media3 1.8.0 annotations confirm the pipeline class opt-in;
+the receiver has none. Original self-comparison is 1,611 / zero differences.
+Raw evidence is under `p19/`: manifest re-measurement, fixture/compiler,
+bytecode, self-test, historical, route and protected-input logs.
+
+The clean original JVM archive `junit/baseline-a0d1be1a7` records 2,826
+identities: 2,825 passes and the existing
+`TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached`
+failure. The EPG timing test passes in this observed run; its historical
+flakiness remains recorded. Original lint archives 1,351 issues
+(252 errors / 1,099 warnings; 175 opt-in issues). The matched 1 GiB worker
+override is evidence-only. Lockfile, ProGuard and production sources are
+unchanged; size check runs without updating its baseline.

@@ -201,7 +201,11 @@ def resolve(calls, site, start, end):
             named = target.endswith('/' + callee + '.<init>') or target.endswith('$' + callee + '.<init>')
         else:
             named = target.split('.')[-1] in (callee, callee + '$default')
-        return named and any(argument in descriptor.split(')')[0] for argument in ACTIVITY_ARGUMENTS)
+        identity_owner = (callee == 'setActiveSubtitleIdentityProvider'
+            and target == 'com/debrify/app/util/SubtitleSettings.setActiveSubtitleIdentityProvider'
+            and descriptor == '(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;)V')
+        return named and (identity_owner or any(argument in descriptor.split(')')[0]
+                                              for argument in ACTIVITY_ARGUMENTS))
     found = [x for x in calls if start <= x['line'] <= end and matches(x['call'])]
     signatures = {x['call'] for x in found}
     if len(signatures) != 1:
@@ -337,7 +341,10 @@ def check_special_bindings(manifest, original, current, units, nodes, moved):
     if manifest['phase'] == 16:
         from kotlin_overloads_phase16 import validate
         validate(manifest, original, current, units, nodes, moved)
-    elif manifest['phase'] >= 18:
+    elif manifest['phase'] == 19:
+        from kotlin_overloads_phase19 import validate
+        validate(manifest, original, current, units, nodes, moved)
+    elif manifest['phase'] == 18:
         from kotlin_overloads_phase18 import validate
         validate(manifest, original, current, units, nodes, moved)
     elif manifest['phase'] == 17:
@@ -611,7 +618,10 @@ def main():
                 from kotlin_overloads_phase16 import audit as audit_retained, field_declarations
                 view_results += audit_retained(manifest, original, current, before, after,
                     field_declarations(args.original_classes), field_declarations(args.moved_classes))
-            elif manifest['phase'] >= 18:
+            elif manifest['phase'] == 19:
+                from kotlin_overloads_phase19 import audit_compiled
+                view_results += audit_compiled(manifest, original, current, args.original_classes, args.moved_classes)
+            elif manifest['phase'] == 18:
                 from kotlin_overloads_phase18 import audit_compiled
                 view_results += audit_compiled(manifest, original, current, args.original_classes, args.moved_classes)
             elif manifest['phase'] == 17:

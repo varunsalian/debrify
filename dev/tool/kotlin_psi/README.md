@@ -23,3 +23,14 @@ inner `this` expressions remain separately inventoried and unchanged. The
 compiled auditor checks the inherited virtual owner, descriptor and opcode,
 borrowed volatile Host accessors, deferred constructors, and earlier binding
 and identity pins. Historical phase inventories retain their existing filters.
+
+Phase 19 adds implicit `getSystemService`, both `registerReceiver` overloads,
+and the `cacheDir` getter, including calls inside anonymous callbacks. These
+sites carry `introduced_phase: 19`, so historical audit inventories stay exact.
+The compiled pipeline audit separately follows all four volatile loader reads,
+with descriptor/role checks for Kotlin's final owner and extractor-factory
+captures. It rejects real captured Map/Pair/Boolean values and Host backing
+fields; every computed getter must reach the original Activity volatile field.
+Metadata writer pins have distinct before/after owner maps. Complete extraction,
+compiled controls and every historical fixture run through
+`check_kotlin_moves.py --manifest dev/tool/kotlin_moves/tvplayer_p19.json --self-test`.

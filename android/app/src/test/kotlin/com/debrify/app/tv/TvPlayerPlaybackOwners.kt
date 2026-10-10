@@ -3,6 +3,7 @@ package com.debrify.app.tv
 /** Original-surface reflection routes for playback responsibilities. */
 internal object TvPlayerPlaybackOwners {
     val routes = mapOf(
+        "handleMetadataUpdate" to "episodeMetadataReceiver",
         "applyNightMode" to "displayController",
         "applyPlaybackSpeed" to "displayController",
         "applyResizeMode" to "displayController",

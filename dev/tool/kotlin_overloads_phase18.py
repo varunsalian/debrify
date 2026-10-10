@@ -39,7 +39,7 @@ def validate_source_bound(manifest, inventory, sources=None):
 
 def historical_receivers(manifest):
     expected = []
-    for phase in range(3, 18):
+    for phase in range(3, manifest['phase']):
         previous = json.loads(subprocess.check_output(['git', '-C', str(k.ROOT), 'show',
             manifest['base'] + f':dev/tool/kotlin_moves/tvplayer_p{phase}.json'], text=True))
         expected.extend(dict(phase=phase, site=site) for site in previous['overload_audit'])

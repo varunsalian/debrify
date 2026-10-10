@@ -4139,3 +4139,30 @@ arriving after launch (titles, guide episodes, progress).
   override. Counts re-verified on `a0d1be1a7` (758 moved lines, six activity
   patches, one Host re-point, eight consumed patches, zero initializer
   proofs); router exception and ≈ 3,775–3,785 final size confirmed.
+
+- 2026-10-10 — **Phase 19 Step T complete; no production moves.** Routed
+  the two existing metadata reflection sites first, with original-owner
+  fallback and unchanged assertions; all eight caller cases pass, including
+  worker-thread storage before UI publication. Re-measured `a0d1be1a7`:
+  1,611 declarations / zero self-comparison differences; eight members /
+  758 span lines / 128 substitutions; six in-place activity edits, one
+  whole-property Host re-point, eight consumed patches, 30 / 8 computed
+  Host members and zero initializer proofs. Complete fixture compiles:
+  pipeline 535 / receiver 330 / hypothetical Activity 3,776 lines. Compiled
+  audit passes 21 current and 366 historical receiver pins, 23 retained
+  view/cast pins, four volatile chains in both trees, distinct metadata
+  before/after writer maps, lazy/storage/identity and frozen ShowShuffle
+  proofs, and two inlined Context values. Real Kotlin Map/Pair/Boolean
+  snapshots, Host backing fields, alternate Host descriptor, duplicate
+  reads, missing volatile flags and writer relocations fail as stated.
+  All **597** checker/auditor cases pass (555 historical + 42 current:
+  594 in the full run, three added compiled controls in focused runs).
+  All p1–p18 merge-SHA checks and 61 earlier destinations pass; all 560
+  protected inputs unchanged. Clean matched-1-GiB JVM baseline
+  `baseline-a0d1be1a7`: 2,826 identities / 2,825 pass / same existing focus
+  NPE; observed EPG timing passes, historical flakiness retained. Original
+  lint archived: 1,351 issues / 175 opt-in issues. Evidence `p19/tools-result.json`,
+  compiler/auditor/self-test/historical/route logs and `lint-original/`;
+  JUnit label under `junit/`. Size check without update. No production,
+  lockfile or ProGuard change, bug fix, push, branch switch or device use.
+  Step 0 Media3 configuration/worker prerequisites next.

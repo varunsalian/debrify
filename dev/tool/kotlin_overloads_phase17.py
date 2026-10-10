@@ -102,7 +102,8 @@ def audit_reflected_lazy_getter(instructions):
         raise ValueError('reflected lazy getter must retain the unmangled getIptvLiveRecovery name')
 
 
-def audit_compiled(manifest, original, current, before_folder, after_folder, identity_writer_owners=None):
+def audit_compiled(manifest, original, current, before_folder, after_folder,
+                   identity_writer_owners=None, identity_writer_owners_before=None):
     from check_kotlin_overloads import typed_bytecode
     before, after = typed_bytecode(before_folder), typed_bytecode(after_folder)
     before_fields, after_fields = field_declarations(before_folder), field_declarations(after_folder)
@@ -139,5 +140,6 @@ def audit_compiled(manifest, original, current, before_folder, after_folder, ide
         raise ValueError('frozen identity must retain ACC_VOLATILE and descriptor')
     for fields, instructions in ((before_fields,before),(after_fields,after)):
         audit_identity(manifest['retained_identity'], fields, fields, instructions,
-                       before_owner=identity[0], writer_owners=identity_writer_owners if instructions is after else None)
+                       before_owner=identity[0], writer_owners=(identity_writer_owners if instructions is after
+                                                             else identity_writer_owners_before))
     return results
