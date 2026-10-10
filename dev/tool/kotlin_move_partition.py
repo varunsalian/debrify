@@ -136,6 +136,9 @@ def extraction(manifest, original):
 def initializer_kind(expression):
     """Recognize only the reviewed inert forms; calls with arguments stay rejected."""
     import re
+    if expression == 'ShowShuffle()':
+        # Phase 18 additionally requires a frozen source and constructor proof.
+        return 'allocation'
     if re.fullmatch(r'(?:null|false|true|[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?)', expression):
         return 'constant'
     if re.fullmatch(r'-[0-9]+(?:_[0-9]+)*(?:L|[uU]L?)?', expression):
@@ -292,6 +295,8 @@ def check_initializer_timing(manifest, inventory, original, errors):
                        not node.get('has_initializer') and not node.get('has_delegate') and
                        node.get('getter_effect_free'))
         kind = 'none' if getter_only else initializer_kind(expression)
+        if expression == 'ShowShuffle()' and manifest['phase'] < 18:
+            kind = None
         if manifest['phase'] >= 17 and expression.startswith('lazy {') and not node.get('has_delegate'):
             kind = None
         if manifest['phase'] >= 15:

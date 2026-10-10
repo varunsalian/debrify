@@ -19557,3 +19557,57 @@ Do not split start and shuffle: it would add ≈ 23 temporary edits and a second
 activity. Re-measure on the phase-17 merge, after phase 16's −1,161 / phase 17's −732 shifts. Phase 19
 (START-B) then inherits one patch: `handleMetadataUpdate`'s `updateCatalogEpisodeControls`. It also inherits
 the `protectedStreamClient` / `activeVodHeaders` ownership decision.
+
+## Phase 18 Step T — re-measured tooling and reflection boundary
+
+The approved design (including its review fold) supersedes the older Phase 18 inventory counts: **37 moved members, 64 original reflective sites / 21 names / 14 files, and 15 initial owner-map routes**. Re-measured on `2f7b4ec27`, Activity 5,312 physical lines; the complete production fixture has a 635-line start owner and 372-line navigator, at the original `mediaPreparationScope` slot (518). Production remains unchanged. `ShufflePlaybackAttempt` remains nested in the Activity; all three frozen imports and four binary-name test uses remain intact.
+
+| member | owner | original lines |
+|---|---|---|
+| `mediaPreparationScope` | playbackStart | 518–518 |
+| `mediaPreparationGeneration` | playbackStart | 519–519 |
+| `playItem` | playbackStart | 2719–2813 |
+| `resolveAndPlay` | playbackStart | 2815–2901 |
+| `discoverProtectedMime` | playbackStart | 2903–2918 |
+| `startPlayback` | playbackStart | 2920–2961 |
+| `playMediaDirect` | playbackStart | 2963–3005 |
+| `buildMergedSourceOrNull` | playbackStart | 3007–3035 |
+| `buildMergedSource` | playbackStart | 3037–3054 |
+| `pendingShufflePlayback` | playbackStart | 3231–3231 |
+| `playPikPakVideoWithRetry` | playbackStart | 3444–3497 |
+| `updateStremioSourcesFromPlaybackMap` | playbackStart | 5137–5152 |
+| `replacePayloadWithStremioTvItem` | playbackStart | 5154–5204 |
+| `playStremioTvPlaybackMap` | playbackStart | 5206–5294 |
+| `shuffleBag` | navigator | 534–534 |
+| `showShuffle` | navigator | 535–535 |
+| `showShuffleGeneration` | navigator | 536–536 |
+| `playNext` | navigator | 3056–3106 |
+| `playPrevious` | navigator | 3108–3140 |
+| `updateCatalogEpisodeControls` | navigator | 3142–3158 |
+| `playRandom` | navigator | 3160–3171 |
+| `showRandomPlaybackDialog` | navigator | 3173–3211 |
+| `resetShuffle` | navigator | 3213–3220 |
+| `queuedShuffleGeneration` | navigator | 3232–3232 |
+| `queuedShuffleNavigation` | navigator | 3233–3233 |
+| `shuffleAttemptCurrent` | navigator | 3235–3236 |
+| `shuffleAttemptOwned` | navigator | 3238–3241 |
+| `restoreShufflePreparation` | navigator | 3243–3247 |
+| `failShufflePlayback` | navigator | 3249–3259 |
+| `shuffleWatchGeneration` | navigator | 3261–3261 |
+| `watchShufflePlayback` | navigator | 3263–3273 |
+| `clearQueuedShuffle` | navigator | 3275–3280 |
+| `yieldEpisodeFetchToQueuedShuffle` | navigator | 3282–3287 |
+| `canShuffleWholeShow` | navigator | 3289–3294 |
+| `playShowShuffle` | navigator | 3296–3376 |
+| `getShuffleEligibleIndices` | navigator | 3378–3400 |
+| `pickShuffleIndex` | navigator | 3402–3416 |
+
+The manifest pins 265 moved-token substitutions (195 Host reads, 27 cross-qualifications: nine `navigator.` and 18 `playbackStart.`, eleven Activity receivers, nine inherited reads/calls, visibility and one braced template), 17 in-place Activity patches in five declarations, and 21 Host re-points / 22 edits in eight whole-property rows. The shared Host has 43 computed members (12 var / 27 val / four fun); `protectedStreamClient` stays a computed IO-time read. All eight earlier-running initializers have proofs; the navigator is eagerly constructed after `pendingShufflePlayback`, with the scope first. `ShowShuffle()` is bound to the exact original source SHA, original revision and resolved default constructor; changing its default or adding an effectful init while retaining the call fails. Three ExoPlayer apply blocks, local shuffle functions, labels, inherited virtual finish dispatch and Activity volatile storage are pinned.
+
+The owner table is split into playback, IPTV, subtitle and UI test helpers. All 765 existing route key/value pairs are preserved, with the 15 planned routes added; the largest helper is 314 lines. The original-owner fallback includes `playbackStartController`; `callDefault` remains byte-identical and invokes the real Kotlin `$default` dispatcher. `ShufflePlaybackFlowTest` changes only its local owner selection branch. No assertion or nested-class lookup changes. The correction-added `replacePayloadWithStremioTvItem` route preserves its private destination visibility.
+
+The complete fixture compiles using Kotlin 2.2.20/Media3 1.8.0, without production moves. Compiled audit: 20 current sites (11 receiver/constructor, nine inherited including invokevirtual finish), all 346 earlier receiver sites, and all 23 phase-15 binding pins (12 cast / 11 no cast); the volatile identity writer is explicitly mapped from Activity to the future start owner. Fifty-nine earlier destinations and seventeen earlier manifests remain frozen at `2f7b4ec27`; the source-bound ShowShuffle file is also frozen. Original self-comparison classifies all 1,642 declarations with zero differences. Evidence: `p18/original-reflective-sites.json`, `remeasured-inventory.json`, `owner-retargets.json`, `protected-source-hashes.json`, fixture/compiler/auditor logs and `overload-audit.json`.
+
+Clean `baseline-2f7b4ec27` and helper-only `p18-tools` each archive 2,527 complete identities: 2,526 passes and the same source-browser focus NPE. Every identity/status is preserved; input trees stable, matched 1 GiB workers/JBR21. The known EPG real-clock timing case passes in both runs; its prior phase-17 baseline failure remains historical evidence, not hidden or fixed. Original lint is archived: 1,351 identities (252 Error / 1,099 Warning; 175 opt-in errors). All 80 protected file hashes are unchanged. Size check passes without baseline update.
+
+All **555 checker/auditor self-tests pass**: all 517 historical cases are retained and 38 phase-18 cases add the complete extraction and required negative/compiled controls. All seventeen historical manifests pass at their approved merge revisions. Raw logs and input hashes: `p18/checker-self-tests.log`, `selftests-result.json`, `historical-checks/`, `tools-result.json`.
