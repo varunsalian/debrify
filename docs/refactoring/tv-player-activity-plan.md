@@ -1988,8 +1988,11 @@ edits because they reference each other 9 and 18 times):**
   Stremio TV guide, PikPak, fetch, switcher), built on the phase-16 versions;
   phase 16's 6 patches inside this unit become
   `host.controlsOverlayController[.identity].…`.
-- 8 inert initializer proofs (new narrow form: `ShowShuffle()`, or keep
-  `showShuffle` in the activity); ≈ 265 substitutions; one braced template
+- 8 inert initializer proofs (new narrow form: `ShowShuffle()`, source-bound:
+  the resolved constructor is pinned and `ShowShuffle.kt` is frozen against
+  the phase-17 merge, with negatives that change that class's default
+  argument or add an effectful `init` while the calling expression stays
+  unchanged); ≈ 265 substitutions; one braced template
   (`${host.stremioResolutionToken}`); the three `player?.apply {}` receiver
   blocks pinned; local functions inside `playShowShuffle` handled by the
   checker (step-T fixture).
@@ -1999,8 +2002,12 @@ edits because they reference each other 9 and 18 times):**
   coroutine; no owned Handler/`Runnable`/Glide/`findViewById`/`runOnUiThread`;
   teardown order unchanged.
 
-**Retargets.** 61 reflective sites over 20 names in 13 files: 14 owner-map
-routes plus one `when` branch in `ShufflePlaybackFlowTest`'s local `call`
+**Retargets.** 64 reflective sites over 21 names in 14 files: 15 owner-map
+routes (incl. `replacePayloadWithStremioTvItem` from
+`TvControlsCallerCharacterizationTest`, routed to `playbackStartController`
+keeping private visibility; `playItem` keeps its real `$default` dispatch;
+if routes are installed before step 0, the original-owner fallback in
+`TvPlayerOriginalAccess` is extended) plus one `when` branch in `ShufflePlaybackFlowTest`'s local `call`
 helper; 9 functions become public members (split the owner-map file before
 it passes 800 lines). Dart: `test/android_tv_auto_advance_resume_test.dart`
 reads the new controller file and its start marker becomes `'fun playItem('`
@@ -3999,3 +4006,9 @@ shuffle (start, continue, exhaustion), Stremio TV channel next item.
   teardown order preserved; EPG timing flakiness classification supported.
   Activity 5,891 → 5,312. Decoder verification remains pending-environment.
   Phase 17 complete; merged.
+- 2026-10-10 — phase 18 design review (Codex, `tvp-design`): **No P1s**.
+  P2 folded: reflective retargets are 64 sites / 21 names / 14 files, 15
+  routes incl. `replacePayloadWithStremioTvItem`; `ShowShuffle()` initializer
+  proof made source-bound (constructor pinned, `ShowShuffle.kt` frozen,
+  default-argument/`init` negatives). P3 folded: 37 moved members (owner 11
+  functions + 3 fields, navigator 17 functions + 6 fields).

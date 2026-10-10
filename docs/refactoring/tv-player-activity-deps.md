@@ -19025,7 +19025,7 @@ references and navigation→start has 18. Splitting start and shuffle across two
 
 | item | phase 18 |
 |---|---|
-| moved members / lines | **35 / ≈ 902** member lines. Owner: 11 functions + 3 fields, 551 + 3. Navigator: 17 functions + 6 fields, 351 |
+| moved members / lines | **37 / ≈ 902** member lines. Owner: 11 functions + 3 fields, 551 + 3. Navigator: 17 functions + 6 fields, 351 |
 | retained in this range | `ShufflePlaybackAttempt` (3665–3673) |
 | activity patches | **17 in 5 declarations** (§4.1); none temporary |
 | Host re-points | **21 forwarders / 22 token edits in 8 properties** (§4.2) |
