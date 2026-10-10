@@ -107,7 +107,7 @@ def audit_binding_site(pin, line, before, after):
 
 
 def audit_identity(pin, before_fields, after_fields, after,
-                   before_owner='com.debrify.app.tv.AndroidTvTorrentPlayerActivity'):
+                   before_owner='com.debrify.app.tv.AndroidTvTorrentPlayerActivity', writer_owners=None):
     for fields,owner in ((before_fields,before_owner),(after_fields,'com.debrify.app.tv.TvDockIdentityPresenter')):
         if fields.get((owner,'ottShowName')) != dict(descriptor=pin['descriptor'],volatile=True):
             raise ValueError('identity field must retain ACC_VOLATILE and descriptor')
@@ -115,7 +115,7 @@ def audit_identity(pin, before_fields, after_fields, after,
     # to the new identity owner, with exact String descriptors.
     activity='com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
     for method in pin['writers']:
-        scope=[i for i in after if i['owner']==activity and re.search(r'\b'+method+r'\(',i['method'])]
+        scope=[i for i in after if i['owner']==(writer_owners or {}).get(method,activity) and re.search(r'\b'+method+r'\(',i['method'])]
         setters=[i for i in scope if i['opcode']=='invokevirtual' and re.search(r'TvDockIdentityPresenter\.setOttShowName(?:\$[\w]+)?:\(Ljava/lang/String;\)V$',i['operand'])]
         if len(setters)!=1:
             raise ValueError('volatile identity writer dispatch differs: '+method)

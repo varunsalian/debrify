@@ -144,7 +144,7 @@ def spans(unit, split):
     return result, structure
 
 
-def check(manifest, original, current):
+def check(manifest, original, current, bound_sources=None):
     """Subtree ownership assigns every descendant exactly once, explicitly."""
     errors = []
     all_sources = {'original': original, **current}
@@ -207,6 +207,12 @@ def check(manifest, original, current):
     if errors:
         return errors, len(inventory)
 
+    if manifest['phase'] >= 18:
+        from kotlin_overloads_phase18 import validate_source_bound
+        try:
+            validate_source_bound(manifest, inventory, bound_sources)
+        except ValueError as error:
+            errors.append(str(error))
     if manifest['phase'] >= 4:
         from kotlin_move_partition import check_initializer_timing
         check_initializer_timing(manifest, inventory, original, errors)
@@ -360,7 +366,10 @@ def main():
         current = {p: (subprocess.check_output(['git', '-C', str(ROOT), 'show', args.at + ':' + p]).decode()
                        if args.at else (ROOT / p).read_text())
                    for p in [manifest['source'], *manifest['destinations']]}
-    errors, count = check(manifest, original, current)
+    bound_sources = ({row['source']: subprocess.check_output(['git', '-C', str(ROOT),
+        'show', args.at + ':' + row['source']], text=True)
+        for row in manifest.get('source_bound_initializers', [])} if args.at else None)
+    errors, count = check(manifest, original, current, bound_sources=bound_sources)
     if manifest.get('earlier_destinations') and not args.self_compare_original and not args.at:
         from kotlin_move_partition import check_earlier
         errors.extend(check_earlier(manifest, ROOT))

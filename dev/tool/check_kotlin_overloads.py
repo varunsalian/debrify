@@ -337,7 +337,10 @@ def check_special_bindings(manifest, original, current, units, nodes, moved):
     if manifest['phase'] == 16:
         from kotlin_overloads_phase16 import validate
         validate(manifest, original, current, units, nodes, moved)
-    elif manifest['phase'] >= 17:
+    elif manifest['phase'] >= 18:
+        from kotlin_overloads_phase18 import validate
+        validate(manifest, original, current, units, nodes, moved)
+    elif manifest['phase'] == 17:
         from kotlin_overloads_phase17 import validate
         validate(manifest, original, current, units, nodes, moved)
     if manifest['phase'] >= 15:
@@ -608,7 +611,10 @@ def main():
                 from kotlin_overloads_phase16 import audit as audit_retained, field_declarations
                 view_results += audit_retained(manifest, original, current, before, after,
                     field_declarations(args.original_classes), field_declarations(args.moved_classes))
-            elif manifest['phase'] >= 17:
+            elif manifest['phase'] >= 18:
+                from kotlin_overloads_phase18 import audit_compiled
+                view_results += audit_compiled(manifest, original, current, args.original_classes, args.moved_classes)
+            elif manifest['phase'] == 17:
                 from kotlin_overloads_phase17 import audit_compiled
                 view_results += audit_compiled(manifest, original, current, args.original_classes, args.moved_classes)
         args.output.parent.mkdir(parents=True, exist_ok=True)

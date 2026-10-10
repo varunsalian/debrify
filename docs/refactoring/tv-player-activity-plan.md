@@ -1949,7 +1949,111 @@ twin, strict-TS providers, network drop and recovery (Wi-Fi off/on),
 backgrounding (Home) and resuming live TV, a stalling channel's reconnect
 pill.
 
+## Phase 18 — playback start, resolve, Stremio TV media start, navigation and shuffle
+
+Branch `refactor/tvplayer-p18` off the phase-17 merge. Evidence under
+`refactor-evidence/tvplayer/p18/`. Inventory: "Phase 18 inventory" in the deps
+report (measured at `df439aed1`, phase-16 design read from its branch;
+re-measure on the phase-17 merge). All collaborator rules from phases 3–17
+apply; statement-level coverage sweep from the start (84 `if`, 56 `return`).
+**High risk:** the playback-start path and shuffle protocol.
+
+**Selected (whole unit — splitting start and shuffle costs ≈ 23 temporary
+edits because they reference each other 9 and 18 times):**
+- `TvPlaybackStartController.kt` (≈ 650; reference name **`playbackStart`**):
+  `playItem` → `resolveAndPlay` → `startPlayback` → `buildMergedSource`,
+  `discoverProtectedMime`, `playPikPakVideoWithRetry`, the Stremio TV
+  media-start trio; owns `mediaPreparationScope`, `mediaPreparationGeneration`,
+  `pendingShufflePlayback`; class-level Media3 `@OptIn`.
+- eagerly constructs `TvPlaybackNavigator.kt` (≈ 385; reference name
+  **`navigator`** — `navigation`/`generation` collide with locals and
+  `ShufflePlaybackAttempt` properties): `playNext`/`playPrevious`,
+  `updateCatalogEpisodeControls`, random, the shuffle protocol and its 6
+  shuffle-only fields (`showShuffleGeneration`, `queued*`,
+  `shuffleWatchGeneration`).
+- Activity property `playbackStartController` at the unit's first owned slot;
+  one shared 43-member computed Host (12 var, 27 val, 4 fun); the
+  `protectedStreamClient` getter keeps running on the IO thread exactly as
+  the original field read did.
+- **Stay in the activity:** `ShufflePlaybackAttempt` (nested; three frozen
+  earlier files import `AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`
+  and four test sites look it up by binary name — no binary-name retargets),
+  `stremioResolutionToken`, `sleepStopLatched`, `@Volatile activeVodHeaders`,
+  `continuousShuffleEnabled`; startup/manual tokens stay with the gate
+  controller, the PikPak retry id with the PikPak controller.
+- 17 activity patches in 5 declarations (`playbackListener` 8, `onCreate` 2,
+  `handleMetadataUpdate` 1 — consumed by phase 19, `umPlaybackModel` 4,
+  in-place `onDestroy` 2: scope cancel then generation bump); 21 Host
+  re-points (22 token edits) in 8 properties (Up Next, playlist, dock, gate,
+  Stremio TV guide, PikPak, fetch, switcher), built on the phase-16 versions;
+  phase 16's 6 patches inside this unit become
+  `host.controlsOverlayController[.identity].…`.
+- 8 inert initializer proofs (new narrow form: `ShowShuffle()`, source-bound:
+  the resolved constructor is pinned and `ShowShuffle.kt` is frozen against
+  the phase-17 merge, with negatives that change that class's default
+  argument or add an effectful `init` while the calling expression stays
+  unchanged); ≈ 265 substitutions; one braced template
+  (`${host.stremioResolutionToken}`); the three `player?.apply {}` receiver
+  blocks pinned; local functions inside `playShowShuffle` handled by the
+  checker (step-T fixture).
+- Audit: 11 receiver/constructor sites, 9 inherited sites; `finish()`
+  compiled `invokevirtual`.
+- Async: three shuffle posts on the borrowed `progressHandler` and the MIME
+  coroutine; no owned Handler/`Runnable`/Glide/`findViewById`/`runOnUiThread`;
+  teardown order unchanged.
+
+**Retargets.** 64 reflective sites over 21 names in 14 files: 15 owner-map
+routes (incl. `replacePayloadWithStremioTvItem` from
+`TvControlsCallerCharacterizationTest`, routed to `playbackStartController`
+keeping private visibility; `playItem` keeps its real `$default` dispatch;
+if routes are installed before step 0, the original-owner fallback in
+`TvPlayerOriginalAccess` is extended) plus one `when` branch in `ShufflePlaybackFlowTest`'s local `call`
+helper; 9 functions become public members (split the owner-map file before
+it passes 800 lines). Dart: `test/android_tv_auto_advance_resume_test.dart`
+reads the new controller file and its start marker becomes `'fun playItem('`
+(public for reflection) with an added uniqueness assertion;
+`test/manual_source_validation_contract_test.dart` only changes the file
+(both markers stay `private`); every asserted string and the `playItem` →
+`resolveAndPlay` → `startPlayback` order are preserved.
+
+### Step T
+
+Classifier form + negatives; extraction fixture (owner + navigator via
+`playbackStart`/`navigator`, local functions in `playShowShuffle`,
+`player?.apply {}` receivers) + negatives; compiled audit incl.
+`invokevirtual finish`; per-phase dispatcher keeping all historical suites;
+owner-map file split if needed; earlier destinations frozen at the phase-17
+merge.
+
+### Step 0 — characterization of the original
+
+The `playNext` ladder, `playPrevious`, the catalog-controls matrix, shuffle
+bag and eligibility (assert bag invariants after seeding `shuffleBag` —
+`Random.Default` is not seeded), every `playShowShuffle` branch, each resolve
+and MIME guard and generation/token supersession, merged-source fallback,
+PikPak start, the Stremio TV trio, `onDestroy` statements; coverage sweep +
+matrix. Mutation proofs on the original; Claude's independent sample (≥ 75 %,
+else sweep + second sample); 0b.
+
+### Gate, review, device checks
+
+As rule 6 plus phases 3–17 additions. Device checklist (end of series):
+start a movie and a series episode from each source type (debrid, torrent,
+direct, PikPak, protected stream needing MIME discovery), resume position,
+next/previous episode, auto-advance at end, catalog episode controls, show
+shuffle (start, continue, exhaustion), Stremio TV channel next item.
+
 ## Follow-ups (found while mapping; not fixed here)
+
+- Phase 18 original async outcomes, preserved by Step 0: a worker-thread lazy
+  resolve reply reaches UI animation without Main dispatch; MethodChannel
+  catches the off-Looper animation exception and leaves media unchanged.
+  Nonempty whitespace is accepted by the resolver; whole-show shuffle then
+  re-resolves it through playItem's blank check. Busy queued shuffle retains
+  its command while episode fetch is busy and resolver availability changes.
+  Any threading/URL-normalization/queue-policy correction is a separate
+  behavior change; none is included in this extraction.
+
 
 - Phase 16 original runtime observations, preserved by Step 0: hidden dock
   scheduling leaves a pre-existing callback and deadline intact; queued focus
@@ -3912,3 +4016,29 @@ pill.
   teardown order preserved; EPG timing flakiness classification supported.
   Activity 5,891 → 5,312. Decoder verification remains pending-environment.
   Phase 17 complete; merged.
+- 2026-10-10 — phase 18 design review (Codex, `tvp-design`): **No P1s**.
+  P2 folded: reflective retargets are 64 sites / 21 names / 14 files, 15
+  routes incl. `replacePayloadWithStremioTvItem`; `ShowShuffle()` initializer
+  proof made source-bound (constructor pinned, `ShowShuffle.kt` frozen,
+  default-argument/`init` negatives). P3 folded: 37 moved members (owner 11
+  functions + 3 fields, navigator 17 functions + 6 fields).
+
+- 2026-10-10 — **Phase 18 Step T complete; no production moves.** Routed all 64 original reflective sites / 21 names / 14 files first: 15 initial owner routes, the ShufflePlaybackFlowTest local branch, original-owner fallback; real playItem `$default` dispatch and private payload replacement retained. Split 765 prior routes into four cohesive helpers (largest 314 lines), assertions unchanged. Re-measured `2f7b4ec27`: 37 members, 265 substitutions, 17 in-place patches in five declarations, 21 Host re-points / 22 edits in eight properties, 43 computed Host members. Complete fixture compiles (635/372 lines); zero differences across 1642 original declarations. Eight initializer proofs, source-bound ShowShuffle exact source/default constructor (default/init negatives), eager navigator after pendingShufflePlayback, local functions/three ExoPlayer apply blocks, 20 new compiled receiver sites incl. virtual finish, all 346 earlier receiver sites/23 view-binding pins and volatile storage/identity writer verified. All 555 checker/auditor cases (517 historical + 38 new), all p1..p17 historical merge checks and 59 frozen destinations pass; 80 protected hashes unchanged. Clean baseline and helper-only JVM each 2527 identities / 2526 passes / same focus NPE, exact statuses and stable matched 1 GiB/JBR input. EPG timing case passes both, prior phase-17 baseline failure remains documented. Original lint archived: 1351 issues / 175 opt-in errors. Evidence `p18/tools-result.json`, fixture/compiler/auditor/self-test/historical logs, `lint-original/`, `junit/baseline-2f7b4ec27`, `junit/p18-tools`. Size check without update; no lockfile/ProGuard edit, bug fix, push, branch switch or device interaction. Step 0 prerequisites next.
+
+- 2026-10-10 — **Phase 18 Step 0 complete; STOP before production moves.** All prerequisites run on original `2f7b4ec27`: real binary inline/queued/worker replies (worker off-Looper exception preserved), bounded real MIME HEAD with separate IO/Main continuation, recording player/media ordering, real dialogs, unseeded shuffle invariants, scoped merge-failure/readiness reentry. Added **295 passing original identities in 19 cohesive classes**; **293 distinct mutations killed on named assertions**, every final test method has an archived matching witness. The systematic matrix accounts for all 575 PSI obligations across 28 moved functions plus teardown, with expression-body guards/local callbacks explicit; 347 nodes overlap exact mutations, composite observations distinguished. Each resolve/MIME ownership operand, real default dispatch, bag/eligibility, every whole-show branch, token supersession/late blank failure, merged fallback, PikPak start, all Stremio TV fields/metadata/readiness and cancellation order pinned. Clean JVM `baseline-2f7b4ec27` 2527/2526 pass/one focus NPE → stable matched-heap `p18-step0` 2822/2821 pass/same NPE: 295 additions only, every old status unchanged. EPG timing passes original/helper/Step 0; historical phase-17 baseline failure remains documented flakiness. Lint archived 1351 issues/175 opt-in errors; full analyzer exactly matches 1758 prior diagnostics, affected Dart tests pass with equal assertions plus unique playItem anchor and temporary original-owner fallback. Final rescan installs 36 moved-name routes (445 conservative quoted references/34 files), four additional public reflection pins (13 total), private replacement/default dispatcher/binary attempt owner retained; 13 patched rows now name actual tests. Final original checker 1642/zero, 59 frozen destinations/17 manifests, eight initializer proofs, compiled 20 current + 346 earlier receiver/23 binding pins and final 38 phase-18 cases pass; 517 historical cases retained. All 80 protected hashes, lockfile/ProGuard unchanged; size check without update. Raw matrix/mutation/input logs `p18/step0/`, lint archive and both JUnit labels. Invalid preliminary runs/proofs archived and excluded; detached original removed after archival. No production move, bug fix, push, branch switch, device/emulator interaction or self independent review. Claude's separate sample is next.
+
+- 2026-10-10 — **Phase 18 Step 0b complete.** Claude's sample 20/23 valid (d13 compile-invalid excluded); exact d15/d18/d21 re-runs all killed on named assertions against 306 original cases, control 306/306. Four new tests prove guide adjacency without a resolver still hands back/finishes or toasts (no episode fetch), explicit random consumes stale auto-advance with a sleep latch, and two prior failures permit the third shuffle attempt; the existing independent three-failure cap remains pinned. None equivalent. Updated 575-node matrix and mutation table, raw evidence `p18/step0b/`. Stable matched-heap `p18-step0b` 2826/2825 pass/same focus NPE exactly preserves all 2822 Step-0 statuses with four additions. EPG passes again; historical timing variation retained. All protected hashes, production/lockfile/ProGuard unchanged, detached original removed after archival. Approved Step 1 and full gates follow; no self independent review, push or device interaction.
+
+- 2026-10-10 — **Phase 18 Step 1 complete; clean-tree gate follows.** Manifest extraction: 37 members, start owner 635 lines / eager navigator 372, Activity 5312 → 4472, size ratchet lowered. Shared 43-member computed Host, eight initializer proofs/source-bound ShowShuffle, 17 in-place patches and 21/22 Host edits preserve order; nested attempt binary name and volatile/IO-time reads unchanged. All 36 routes and real default dispatch retained; post-move direct playPrevious reflection requires one additional public pin (14 total), body unchanged. Only helper clock-owner instrumentation and two strict Dart file/marker retargets, all assertions preserved. Final focused 306/306, checker 1642/zero, compiled 20 current + 346 earlier receiver / 23 view pins, all five Kotlin warnings, teardown and frozen destinations/manifests pass. Affected Dart 45 statuses exactly match prior gate (44 success/one existing profile guard failure). Initial visibility/subset-metadata attempts archived and excluded. Raw `p18/step1/`, `p18/gate/`; full final tooling and clean JVM/lint/release/Flutter gates follow on a commit containing gate. No bug fix, lockfile/ProGuard change, push or device interaction.
+
+- 2026-10-10 — **Phase 18 gate complete; STOP after Phase 18.** Clean tested gate checkpoint `ea57c1a2e`: all 555 checker/auditor cases (517 historical + 38 current), 1642 declarations/zero differences, all p1..p17 historical merge-SHA checks, 59 frozen destinations including ShowShuffle, eight initializer proofs, compiled 20 current + 346 retained receiver / 23 binding pins, and all five lifecycle token/order checks pass. Owner/navigator 635/372, Activity 5312 → 4472, 37 moved members, 43 computed Host members, 17 in-place patches / 21 repoints (22 edits), 36 routes and unchanged private/default/binary contracts retained. Final focused 306/306 pass. Clean matched-heap JVM `p18-gate` exactly preserves all 2826 `p18-step0b` statuses (2825 pass / same focus NPE); EPG passes in all observed phase-18 runs, its earlier phase-17 original timing failure remains documented. Lint exact 1351 issues / 175 opt-in errors, all five Kotlin warnings unchanged. Release build succeeds; R8/DEX six affected classes / 208 members and three negative controls pass. Decoder remains pending-environment with phase-17/phase-1 identical failure, gaps and ABI hashes. Full Flutter exactly preserves all 12855 phase-17 statuses (12794 success / 13 failure / 28 error / 20 skipped); 45 affected source-test statuses and final 1758 analyzer occurrences exact. Two concurrent analyzer reports contained repeated existing physical diagnostic lines only (18 / 65 extras); final post-suite Counter exact, all attempts archived. Public playPrevious reflection pin corrected with body unchanged; initial superseded attempts excluded. Evidence `p18/step0b/`, `step1/`, `gate/summary.json`, `junit/p18-step0b/`, `p18-gate/`; size check 2964 files / 140 ratchets, protected inputs/assertions unchanged. All heavy runs niced; detached original removed. No bug fix, dependency/ProGuard edit, push, branch switch, device/emulator interaction or self independent review. Phase 19 not started.
+- 2026-10-10 — phase 18 post-implementation reviews of `2f7b4ec27..3a5904c9c`.
+  Claude's independent sample 20/23 valid (87 %; d13 did not compile and is
+  excluded); d15 (playNext guide target without a resolver), d18 (playRandom
+  clears a stale auto-advance flag) and d21 (three-attempt whole-show budget)
+  closed in 0b by mutation-proved tests. Independent Codex review (fresh
+  session): **No P1s, no P2/P3**; all 37 moved members match an independent
+  normalization, IO-time client reads, shuffle timing/identity, receiver
+  bindings and teardown order preserved; analyzer extras at the intermediate
+  run were duplicate physical lines only. Activity 5,312 → 4,472. Decoder
+  verification remains pending-environment. Phase 18 complete; merged.

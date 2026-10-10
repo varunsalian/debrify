@@ -12,13 +12,16 @@ String _between(String source, String start, String end) {
 
 void main() {
   final nativePlayer = File(
-    'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt',
   ).readAsStringSync();
 
   test('native TV auto-advance ignores every saved resume position', () {
+    final start = 'fun playItem(';
+    expect(nativePlayer.indexOf(start), isNonNegative);
+    expect(nativePlayer.indexOf(start), nativePlayer.lastIndexOf(start));
     final playItem = _between(
       nativePlayer,
-      'private fun playItem(',
+      start,
       'private fun resolveAndPlay(',
     );
 

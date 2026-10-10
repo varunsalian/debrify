@@ -18930,3 +18930,1166 @@ Release `flutter build apk --release --no-pub` succeeds without install. R8 mapp
 Full Flutter suite through `suite_evidence.py` on this clean gate tree **exactly matches all 12,855 phase-16 identities** across 1,232 suites: 12,794 success, 13 failure, 28 error, 20 skipped. All 45 affected source-text statuses match. Analyzer exactly matches 1,758 prior diagnostic identities (917 error/113 warning/728 info). Existing failures remain reported; no baseline acceptance or obsolete allowlist hides a regression. SDK/configuration and tested inputs are stable.
 
 Evidence `p17/step0b/`, `p17/step1/`, `p17/gate/summary.json` and raw archives, `junit/p17-step0b/`, `junit/p17-gate/`. Detached original removed after proof archival. Lockfile, ProGuard, earlier destinations/manifests and all test inputs unchanged. Heavy runners and Gradle/Kotlin workers niced. No production bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP; phase 18 is not started.**
+
+## Phase 18 inventory: playback start + navigation/shuffle + Stremio TV media trio (at `df439aed1`; re-measure on the phase-17 merge)
+
+Source: `android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt` at
+`df439aed1` (phase-15 merge, **6,986 lines**, class header 136, companion 6973–6985). This is a read-only
+survey of the main checkout. Nothing was built and nothing under `../debrify-wt/` was read or touched. The
+phase-16 design (`6304087a7`, branch `refactor/tvplayer-p16`) was read through `git show` only, to learn which
+phase-16 patches land inside phase-18 members.
+
+**Tooling.** The scripts are in `scratchpad/p18/`:
+- `idx.py`: a brace/string/comment-aware masker and depth-1 member indexer (390 spans; ctor-parameter
+  pseudo-spans 3666–3672 merged into `ShufflePlaybackAttempt`);
+- `refs.py`: inbound word-boundary scan. Templates and `this@AndroidTvTorrentPlayerActivity.x` are counted;
+  other receivers and declarations are excluded. Host-object hits are attributed to their property;
+- `out.py`: outbound scan of activity members, plus inherited/`this` sites, used by moved bodies;
+- `cross.py`: the owner/collaborator cross-qualification matrix and the per-file Host counts.
+
+Counts were checked by hand against the source. The terms are the same as in the phase-11/13/14/15
+inventories:
+- **patch**: a token edit in a retained activity declaration;
+- **re-point**: an edited forwarder inside an existing controller property's Host object, which makes that
+  property a whole-property `patched` row;
+- **substitution**: a declared edit inside a moved body.
+
+**Phases 16 and 17 come first.** Their controllers are treated as existing:
+- `TvControlsOverlayController` (property `controlsOverlayController`), with the nested `identity`
+  (`TvDockIdentityPresenter`) and `seek` (`TvSeekScrubController`);
+- `TvIptvTuneController` / `TvIptvTwinTrial`.
+
+**Measured interplay with phase 17 (TUNE):** there are **0 references in either direction** between the TUNE
+members and any name in this unit. Phase 17 patches different statements of `playbackListener`, `setupPlayer`,
+`onStart`, `onStop` and `onDestroy`.
+
+**Phase 16 consumes nothing from this unit but leaves 6 patches inside it**, so re-measure on its merge:
+- `resolveAndPlay`: `setResolvingState(true/false)` becomes `controlsOverlayController.setResolvingState(…)` ×2;
+- `playMediaDirect`, `playPikPakVideoWithRetry` and `playStremioTvPlaybackMap`: `updateTitle(…)` becomes
+  `controlsOverlayController.identity.updateTitle(…)` ×3;
+- `replacePayloadWithStremioTvItem`: `ottShowName = null` becomes
+  `controlsOverlayController.identity.ottShowName = null` (a `@Volatile` field in phase 16).
+
+In phase 18 these six become `host.controlsOverlayController[.identity].…` substitutions.
+
+Phase 16 also re-points forwarders in six properties that phase 18 re-points too (`upNextController`,
+`playlistController`, `controlsDockController`, `startupGateController`, `stremioTvGuideController`,
+`sourceSwitchController`). They are different forwarders, so build the phase-18 rows on the phase-16/17
+versions. The phase-16 Host contains **no** forwarder to a phase-18 member (`sleepStopLatched` stays
+activity-owned).
+
+---
+
+### 1. Summary and recommendation
+
+**Move the whole START-A unit in one phase: one owner and one eagerly constructed collaborator with its own
+fields (the phase-13 shape).** Both halves are coupled in both directions: start→navigation has 9
+references and navigation→start has 18. Splitting start and shuffle across two phases would need
+≈ 18 temporary activity patches plus 5 temporary Host forwarders, all re-pointed later.
+
+- **`TvPlaybackStartController.kt`** (owner, 551 member lines, **≈ 650** with imports, header and Host
+  interface). It holds:
+  - `playItem`, `resolveAndPlay`, `discoverProtectedMime`, `startPlayback`, `playMediaDirect`,
+    `buildMergedSourceOrNull` and `buildMergedSource`;
+  - `playPikPakVideoWithRetry`;
+  - the Stremio TV trio `updateStremioSourcesFromPlaybackMap`, `replacePayloadWithStremioTvItem` and
+    `playStremioTvPlaybackMap`;
+  - the owned state `mediaPreparationScope`, `mediaPreparationGeneration` and `pendingShufflePlayback`.
+
+  The activity property is `playbackStartController`, at the `mediaPreparationScope` slot (824). The class
+  carries `@OptIn(UnstableApi::class)` at class level, because it uses `MergingMediaSource`,
+  `ProgressiveMediaSource`, `DefaultDataSource`, `DefaultHttpDataSource` and `setMediaSource`.
+- **`TvPlaybackNavigator.kt`** (nested `val navigator`, eagerly constructed by the owner; 351 member lines,
+  **≈ 385**). It holds:
+  - `playNext`, `playPrevious`, `updateCatalogEpisodeControls`, `playRandom` and `showRandomPlaybackDialog`;
+  - `resetShuffle`, `shuffleAttemptCurrent`, `shuffleAttemptOwned`, `restoreShufflePreparation`,
+    `failShufflePlayback`, `watchShufflePlayback`, `clearQueuedShuffle`, `yieldEpisodeFetchToQueuedShuffle`,
+    `canShuffleWholeShow`, `playShowShuffle`, `getShuffleEligibleIndices` and `pickShuffleIndex`;
+  - the navigator-only fields `shuffleBag`, `showShuffle`, `showShuffleGeneration`,
+    `queuedShuffleGeneration`, `queuedShuffleNavigation` and `shuffleWatchGeneration`.
+
+  It reaches the owner through a constructor reference named **`playbackStart`** and shares the owner's Host.
+  It needs no Media3 opt-in.
+- **`ShufflePlaybackAttempt` stays a nested `internal class` of the activity, unchanged and retained.** It is
+  already `internal` (phase 8). Moving it would force edits to **three frozen earlier destinations**:
+  `TvSourceFetchController.kt:7`, `TvSourceSwitchController.kt:23` and `TvSourceSwitchApplier.kt:23` each
+  `import com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`. It would also break:
+  - the `ShufflePlaybackFlowTest` nested-class lookup by simple name with its 7-parameter constructor order;
+  - `TvPhase8OriginalTest.attemptType` (`Class.forName("…AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt")`);
+  - `TvPhase3WiringCharacterizationTest`, which uses `TvPlayerOriginalAccess.type("AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt")`;
+  - the typed cast in `TvPlayerOriginalAccess.callTyped`.
+
+  Both new files import it exactly like the phase-8 files do. **Binary-name retargets: 0.** The
+  9-line type joins the documented end-state composition remainder; a later cleanup can relocate it
+  together with the three imports.
+
+| item | phase 18 |
+|---|---|
+| moved members / lines | **37 / ≈ 902** member lines. Owner: 11 functions + 3 fields, 551 + 3. Navigator: 17 functions + 6 fields, 351 |
+| retained in this range | `ShufflePlaybackAttempt` (3665–3673) |
+| activity patches | **17 in 5 declarations** (§4.1); none temporary |
+| Host re-points | **21 forwarders / 22 token edits in 8 properties** (§4.2) |
+| Host | one shared **43-member** computed Host: 12 `var`, 27 `val`, 4 `fun` (§5) |
+| initializer proofs | **8**, with 1 new narrow classifier form, `ShowShuffle()` (§3) |
+| cross-qualifications | owner→navigator `navigator.` **9**; navigator→owner `playbackStart.` **18** (compile-checked) |
+| receivers `this` → `activity` | **11**: Toast ×8, `AlertDialog.Builder(Context)` ×1, `DefaultDataSource.Factory(Context, …)` ×2; 0 excluded |
+| inherited pins | **9**: `isFinishing` ×4, `isDestroyed` ×4, `finish()` ×1 (must stay `invokevirtual`) |
+| substitutions | **≈ 265**: host ≈ 195, cross 27, `this` 11, inherited 9, visibility ≈ 22, 1 template brace |
+| reflective retargets | **61 quoted sites, 20 names, 13 test files**: 14 owner-map routes + 1 local `call` helper (`ShufflePlaybackFlowTest`); 0 binary-name |
+| Dart retargets | **2 anchors in 2 files** (file path; 1 marker loses `private`). Asserted text unchanged (§8) |
+| lifecycle | **2 in-place `onDestroy` patches** (scope cancel, generation bump); no `onStart`/`onStop`/`onPause`/`finish` edits |
+
+**Activity:** ≈ −902 + ≈ 75 (property + Host object) ≈ **−830**.
+
+**Risk: high.** Four guard protocols interleave across both files and three existing controllers:
+- `mediaPreparationGeneration`;
+- the shuffle attempt protocol;
+- the startup and manual source tokens;
+- the PikPak retry id.
+
+The bodies run lambdas from Flutter replies, a Main-dispatched coroutine with an IO hop, and `progressHandler`
+posts. Mitigations: there is no `Glide`, `findViewById`, `runOnUiThread` or object receiver; there is no new
+Handler; every guard keeps a single owner; existing suites already exercise most of the start path. See §11
+for the test gap.
+
+---
+
+### 2. Members (lines at `df439aed1`; attached comments included)
+
+**Owner `TvPlaybackStartController` (in original order):**
+
+| member | lines | notes |
+|---|---|---|
+| `mediaPreparationScope` | 824 | `CoroutineScope(Dispatchers.Main + SupervisorJob())`; **slot anchor** |
+| `mediaPreparationGeneration` | 825 | `0` |
+| `playItem` (+ `[suppressTrakt]` comment 3162–3164) | 3162–3256 | 4 params, 3 defaults |
+| `resolveAndPlay` | 3258–3344 | Flutter callback, guards |
+| `discoverProtectedMime` | 3346–3361 | coroutine with IO hop |
+| `startPlayback` | 3363–3404 | default `mimeDiscovered = false` |
+| `playMediaDirect` | 3406–3448 | |
+| `buildMergedSourceOrNull` (+ comment) | 3450–3479 | |
+| `buildMergedSource` (+ comment) | 3480–3497 | switcher Host forwarder |
+| `pendingShufflePlayback` | 3674 | `null`; shared with the navigator, so the owner keeps it |
+| `playPikPakVideoWithRetry` (+ section comment 4201–4203) | 4201–4258 | |
+| `updateStremioSourcesFromPlaybackMap` | 6810–6825 | |
+| `replacePayloadWithStremioTvItem` | 6827–6877 | |
+| `playStremioTvPlaybackMap` | 6879–6966 | |
+
+**Navigator `TvPlaybackNavigator`:**
+
+| member | lines |
+|---|---|
+| `shuffleBag`, `showShuffle`, `showShuffleGeneration` | 844–846 |
+| `playNext` | 3499–3549 |
+| `playPrevious` (KDoc) | 3551–3583 |
+| `updateCatalogEpisodeControls` (KDoc) | 3585–3601 |
+| `playRandom` | 3603–3614 |
+| `showRandomPlaybackDialog` | 3616–3654 |
+| `resetShuffle` | 3656–3663 |
+| `queuedShuffleGeneration`, `queuedShuffleNavigation` | 3675–3676 |
+| `shuffleAttemptCurrent`, `shuffleAttemptOwned`, `restoreShufflePreparation`, `failShufflePlayback` | 3678–3702 |
+| `shuffleWatchGeneration` | 3704 |
+| `watchShufflePlayback`, `clearQueuedShuffle` | 3706–3723 |
+| `yieldEpisodeFetchToQueuedShuffle` (+ comment) | 3725–3730 |
+| `canShuffleWholeShow` | 3732–3737 |
+| `playShowShuffle` (KDoc) | 3739–3819 |
+| `getShuffleEligibleIndices`, `pickShuffleIndex` | 3821–3858 |
+
+`playShowShuffle` has three local functions: `retryWhenIdle`, `fetchTarget` and `openPrepared(item)`. They
+move inside their body and are not members (§9, checker hazard 1).
+
+**Retained in the moved range:** `ShufflePlaybackAttempt` 3665–3673 (above).
+
+**Considered and kept activity-owned:**
+
+| field | why it stays |
+|---|---|
+| `protectedStreamClient` (823) | `setupPlayer` reads it twice; phase 19 decides; Host `val`, read on the IO thread |
+| `activeVodHeaders` (822, `@Volatile`) | a loader-thread reader is in `setupPlayer`; the Host `var` setter writes the same field (phase-8 precedent) |
+| `pendingSeekMs`, `percentSeekApplied`, `pendingItemTraktPercent` | resume machinery in `playbackListener` (6/6/6 reads) |
+| `isAutoAdvancing` | `playbackListener`, plus the Up Next and fetch Host `var`s |
+| `continuousShuffleEnabled` (843) | read by `onCreate`, `playbackListener`, `umPlaybackModel` ×5 and the Up Next Host. Moving it costs 7 patches + 1 re-point against 6 host substitutions; it is a launch/menu setting |
+| `customShuffleEpisodes` | written by `parsePayload` |
+| `sleepStopLatched` | plan rule; 8 outside readers/writers |
+| `stremioResolutionToken` | plan rule; bumped by the gate, switcher and fetch |
+| `hasEverBeenReady`, `maxStableDurationMs`, `lastRealPositionMs` | `playbackListener` and seek |
+| `currentIndex`, `payload` | everywhere |
+
+---
+
+### 3. Initializer timing (all-later-fields rule)
+
+The controller property sits at slot 824. The first initializer is `mediaPreparationScope` at its own slot,
+so it needs no proof.
+
+**Eager-construction position.** Pin the `val navigator = TvPlaybackNavigator(activity, host, this)` span in
+the owner after `pendingShufflePlayback`. That keeps the scope first.
+
+**Navigator construction contract:**
+- its constructor must not read `playbackStart` or `host`;
+- negative: a navigator initializer that reads the owner.
+
+Every other owned field now runs at slot 824. Each needs an exact inert proof:
+
+| field | original line | initializer | classifier form |
+|---|---|---|---|
+| `mediaPreparationGeneration` | 825 | `0` | literal (supported) |
+| `pendingShufflePlayback` | 3674 | `null` | literal (supported, phase 16) |
+| `shuffleBag` | 844 | `mutableListOf<Int>()` | typed empty factory (phase 5) |
+| `showShuffle` | 845 | `ShowShuffle()` | **new**, see below |
+| `showShuffleGeneration` | 846 | `0` | literal |
+| `queuedShuffleGeneration` | 3675 | `null` | literal |
+| `queuedShuffleNavigation` | 3676 | `null` | literal |
+| `shuffleWatchGeneration` | 3704 | `0` | literal |
+
+**New form: a zero-argument constructor of one reviewed project class, `ShowShuffle`** (`ShowShuffle.kt`, 29
+lines). Its default parameter reads the stdlib singleton `Random.Default`. Its only field initializer is
+`mutableSetOf<ShuffleEpisode>()`. It reads no app state and has no side effects.
+
+**Negatives:**
+- `ShowShuffle(Random(1))`;
+- another project class;
+- a class whose initializer reads state.
+
+**Alternative:** keep `showShuffle` activity-owned behind a Host `val` (2 host substitutions, 7 proofs). This
+is not recommended, because it leaves a shuffle-only object outside its owner.
+
+**Variant: borrowed scope.** Keep `mediaPreparationScope` in the activity. The slot is then 825, there are 7
+proofs, the `onDestroy` cancel needs no patch, and the Host gains a `val` (44 members). Recommended: **owned**.
+The scope has a single user, and owning it is the phase-3 skip-scope precedent. It costs 1 in-place patch and
+1 owner-map route (3 test cleanup sites).
+
+---
+
+### 4. Inbound references
+
+#### 4.1 Activity patches: 17 in 5 declarations
+
+Prefixes: `playbackStartController.` (owner) and `playbackStartController.navigator.` (navigator).
+
+| declaration (line) | lines | edits | later owner |
+|---|---|---|---|
+| `playbackListener` (1540) | 1557 ×2, 1780, 1781, 1787, 1799, 1858, 1859 (**8**) | `pendingShufflePlayback` ×3 (READY clear, `onPlayerError` probe) → owner; `playShowShuffle(autoAdvance = true)` (named argument kept), `pickShuffleIndex()`, `failShufflePlayback()` → navigator; `playItem(shuffleIndex)` / `playItem(nextIndex)` inside the 1500 ms `progressHandler.postDelayed` lambdas → owner | ROUTERS (permanent) |
+| `onCreate` (2055) | 2193, 2226 (**2**) | `updateCatalogEpisodeControls()` after `initStremioTvGuide` → navigator; final `playItem(currentIndex)` → owner | lifecycle (permanent) |
+| `handleMetadataUpdate` (2291) | 2366 (**1**) | `updateCatalogEpisodeControls()` inside `runOnUiThread` → navigator | phase 19 (START-B) |
+| `umPlaybackModel` (6031) | 6063 ×2, 6069, 6074 (**4**) | `resetShuffle()` ×2, `playRandom()` ×2 → navigator. `continuousShuffleEnabled` is unchanged (it stays) | UM remainder (permanent) |
+| `onDestroy` (6640) | 6644, 6645 (**2**) | `mediaPreparationScope.cancel()` and `mediaPreparationGeneration++` → owner, **in place**, in order, before `sourceBrowser?.destroy()` | lifecycle (permanent) |
+
+**Zero references from:** `dispatchKeyEvent`, `onStart`, `onStop`, `onPause`, `finish`, `sendFinished`,
+`parsePayload`, `initIptvMode`, `setupPlayer` and every TUNE member.
+
+#### 4.2 Host re-points: 21 forwarders, 22 token edits, 8 whole-property `patched` rows
+
+Each target becomes `this@AndroidTvTorrentPlayerActivity.playbackStartController[.navigator].x`. The frozen
+Host interfaces do not change.
+
+| line | property | forwarders → new target |
+|---|---|---|
+| 175, 176, 178 | `upNextController` | `canShuffleWholeShow()`, `pickShuffleIndex()` → navigator; `playItem(index)` → owner (**3**) |
+| 191 | `playlistController` | `playItem(index)` → owner (**1**) |
+| 303, 304, 311, 318 | `controlsDockController` | `playNext`, `playPrevious`, `showRandomPlaybackDialog`, `updateCatalogEpisodeControls` → navigator (**4**) |
+| 1127, 1132 | `startupGateController` | `mediaPreparationGeneration` (`val`, read **live** at fire time by the PikPak reprepare guard) → owner; `playItem(index, suppressTrakt)` → owner (**2**) |
+| 1243 | `stremioTvGuideController` | five-argument `playStremioTvPlaybackMap(…, hideGuideOnReady)` → owner (**1**) |
+| 1406, 1411 | `pikPakRetryController` | `failShufflePlayback()`, `playNext()` → navigator (**2**) |
+| 6196, 6197 | `sourceFetchController` | `watchShufflePlayback(attempt)`, `yieldEpisodeFetchToQueuedShuffle()` → navigator (**2**) |
+| 6209, 6217, 6238/6239, 6252, 6262, 6279 | `sourceSwitchController` | `buildMergedSource`, `discoverProtectedMime` → owner; `mediaPreparationGeneration` `var` get+set (**2 tokens**; the applier's `host.mediaPreparationGeneration++`) → owner; four-argument `playItem` → owner; `shuffleBag` → navigator; `updateCatalogEpisodeControls` → navigator (**6 forwarders / 7 tokens**) |
+
+**Unchanged in those Hosts:**
+- `continuousShuffleEnabled` (Up Next);
+- `isAutoAdvancing` (Up Next and fetch);
+- `stremioResolutionToken` (gate, fetch and switcher);
+- `activeVodHeaders` (switcher);
+- `percentSeekApplied`, `currentIndex` and `currentStremioSourceIndex`.
+
+The earlier destination files stay byte-identical.
+
+---
+
+### 5. Outbound Host (one shared 43-member Host, computed, explicitly qualified)
+
+Both classes use `TvPlaybackStartController.Host`. It is declared in the owner file and implemented by an
+`object` inside the activity property. Every forwarder is computed (`get() = this@AndroidTvTorrentPlayerActivity.x`).
+None is read during construction. Reference counts are owner / navigator.
+
+| kind | members (refs owner / navigator) |
+|---|---|
+| state `var` (12) | `currentIndex` (14/5; written by `playItem`, the `restorePreparation` lambda and `replacePayload…`), `isAutoAdvancing` (4/4), `sleepStopLatched` (4/1), `activeVodHeaders` (3/–; **@Volatile**, the setter writes the same field), `currentStremioSourceIndex` (6/–), `continuousShuffleEnabled` (–/6), `hasEverBeenReady` (2/–), `pendingSeekMs` (2/–), `pendingItemTraktPercent` (2/–), `maxStableDurationMs` (1/–), `lastRealPositionMs` (1/–), `percentSeekApplied` (1/–) |
+| state `val` (14) | `payload` (13/8), `stremioSources` (5/–; `clear`/`add` through the getter), `stremioResolutionToken` (4/–; captured, then read **live** in the callback and coroutine), `player` (4/–), `subtitleTrackReadiness` (4/–), `progressHandler` (–/4; borrowed), `isIptvMode` (1/2), `isStremioTvMode` (–/3), `hasPlaylistResolver` (–/5), `hasAdjacentEpisodeResolver` (–/2), `customShuffleEpisodes` (–/2), `stremioSourceBadge` (2/–), `ottSkinInstalled` (1/–), `protectedStreamClient` (1/–; **read inside `withContext(Dispatchers.IO)` → the getter runs on the IO thread, as the original field read did; it must not snapshot**) |
+| lateinit view `val` (1) | `subtitleOverlay` (1/–; `setCues(emptyList())` in the PikPak path, read at call time) |
+| cross-feature getters (12) | `startupGateController` (16/1), `pikPakRetryController` (8/1), `playlistController` (2/7), `subtitleSourcesController` (7/–), `sourceFetchController` (–/7), `stremioTvGuideController` (3/2), `sourceSwitchController` (3/–), `upNextController` (1/1), `controlsDockController` (1/1), `skipSegmentController` (1/–), `statusPillController` (–/1), **`controlsOverlayController`** (6/–: the phase-16 `setResolvingState` ×2, `.identity.updateTitle` ×3 and `.identity.ottShowName = null`) |
+| functions (4) | `releaseResumeHold()` (2/–), `restartProgressUpdates()` (2/–), `hideBufferingIndicator()` (1/–), `guideAdjacent(model, currentItem, direction)` (–/3). The last is a **three-parameter shape**: the activity default `allowResolverFallback = false` is still evaluated at the activity call. There is no interface default (plan rule) |
+
+**Must not be Host members** (negatives; a same-name member would let a missed qualification compile):
+- `playItem`, `updateCatalogEpisodeControls`, `pendingShufflePlayback`, `mediaPreparationGeneration`,
+  `mediaPreparationScope`;
+- `shuffleAttemptCurrent`, `watchShufflePlayback`, `restoreShufflePreparation`, `failShufflePlayback`,
+  `shuffleBag`.
+
+**Top-level calls resolve unchanged:** `requestStreamFromFlutter`, `requestQuickPlayNextEpisode`,
+`startupLog`, `isCurrentStartupGeneration`, `buildProtectedMediaOrigins`, `updateStremioTvGuideChannelData`,
+`ProtectedStreamHttp.*` and `PROVIDER_PIKPAK`.
+
+**Every collaborator member used is already non-private.** The frozen files need no edit. Examples:
+`pikPakRetryId`/`Count`/`isPikPakRetrying`/`attemptPikPakPlaybackLoop`/`hidePikPakRetryOverlay` are
+`internal`; `cancelPikPakRetry`, `dropStaleSourceSwitchFeedback`, `setupStremioSources`, `resetSubtitleState`,
+`fetchStremioSubtitles`, `clearStremioLoadingState`, `hideGuideWhenReady`, `stremioTvChannelAdapter` and
+`stremioTvChannels` are public.
+
+---
+
+### 6. Guards and tokens: owner after the move
+
+| guard | owner after phase 18 | writers | readers |
+|---|---|---|---|
+| `mediaPreparationGeneration` | **playback start (owner)** | `playItem` `++`, `discoverProtectedMime` `++`, applier via the switcher Host `var` (re-pointed), `onDestroy` `++` (in place) | `resolveAndPlay` capture + callback check; `discover` coroutine; navigator ×7 via `playbackStart.`; gate Host `val` at reprepare fire time; 13 test sites |
+| `pendingShufflePlayback` | **owner** (shared: owner 7, navigator 6, listener 3) | `playItem` (null), `startPlayback` (null on stale), navigator `watch`/`fail`/`reset`, listener READY (null) | `resolveAndPlay` capture, `discover` capture, `playMediaDirect`/PikPak `mediaStarted = true` (inside `player?.apply {}`, unqualified, owner-owned), listener `onPlayerError` |
+| `showShuffleGeneration` | **navigator** | `resetShuffle` `++` | `shuffleAttemptOwned`, `yield…`, `playShowShuffle` ×4; 5 test sites |
+| `shuffleWatchGeneration` | navigator (private) | `watchShufflePlayback` | its 15 s callback |
+| `queuedShuffleGeneration` / `…Navigation` | navigator | `playShowShuffle`, `clearQueuedShuffle`, `resetShuffle` (generation only) | `yield…` (fetch Host), the 50 ms `retryWhenIdle` poll |
+| `stremioResolutionToken` | **activity** (Host `val` here) | gate, switcher, fetch (their Host `var`s) | `resolveAndPlay` manual token (captured + live), `discover` source token (captured + live in the coroutine) |
+| startup generation (`startupFailoverGeneration`) | **gate controller** (phase 9) | gate | `resolveAndPlay` via `host.startupGateController.` (captured + live via `isCurrentStartupGeneration`) |
+| manual token (`manualSourceSwitchIndex`/`Snapshot`) | gate | gate | `resolveAndPlay` (captured index; snapshot/index/token re-checked in the callback) |
+| `sleepStopLatched` | **activity** (Host `var`) | `playItem` (`false` on a manual pick); sleep Host, `togglePlayPause`, `onStart` | `playItem`, `startPlayback` (last gate), `discover` coroutine, `shuffleAttemptOwned` |
+| `pikPakRetryId` | PikPak controller (phase 10) | `playPikPakVideoWithRetry` `++` through `host.pikPakRetryController.` | the attempt loop |
+| `activeVodHeaders` (`@Volatile`) | **activity** | `playItem` ×2 (incl. the restore lambda), `startPlayback`, applier | `setupPlayer` factory on the loader thread (unchanged field) |
+
+**Behaviours to preserve exactly:**
+
+1. **`playItem` order:** shuffle-attempt check, then restore-lambda capture, `pendingShufflePlayback = null`,
+   `++generation`, `attempt.navigation = …` + `watch`, sleep gate (auto: consume and return; manual: clear
+   latch), payload/bounds, `dropStaleSourceSwitchFeedback`, ready/duration/position resets,
+   `hideBufferingIndicator`, `hideUpNextCard`, `resetSkipSegmentState`, `cancelPikPakRetry`, `currentIndex`,
+   `updateCatalogEpisodeControls`, `activeVodHeaders`, auto-advance consume, `releaseResumeHold`,
+   `pendingSeekMs`/`pendingItemTraktPercent`, then resolve or start.
+2. **`discoverProtectedMime`** bumps the generation itself and rebinds the shuffle attempt's navigation.
+3. **`startPlayback`** writes `activeVodHeaders` before the sleep gate.
+4. **The PikPak path:**
+   - no `setMimeType` and no `playWhenReady`;
+   - it returns early on a null player, before `setCues`;
+   - it never uses the merged source.
+5. **Resolve failure ladder:** shuffle fail, then manual, then startup, then Toast.
+
+---
+
+### 7. Timers, handlers, coroutines and teardown
+
+**No owned Handler and no `Runnable` object.** All posts use the **borrowed** `progressHandler`:
+
+| post | site |
+|---|---|
+| `failShufflePlayback` `post { onUnavailable }` | navigator |
+| `watchShufflePlayback` `postDelayed(…, 15000)` | navigator |
+| `playShowShuffle` 50 ms `retryWhenIdle` polls (recursive local function) | navigator |
+
+These are Kotlin lambdas. There is no `this` self-receiver to exclude.
+
+**Coroutine.** `mediaPreparationScope.launch { withContext(Dispatchers.IO) { discoverMimeType(host.protectedStreamClient, …) }; guards…; ready(…) }`.
+
+**Teardown.** It is unchanged. Two `onDestroy` statements are patched in place:
+- 6644 `mediaPreparationScope.cancel()`;
+- 6645 `mediaPreparationGeneration++`.
+
+The wholesale `progressHandler.removeCallbacksAndMessages(null)` (activity, unchanged) still kills the shuffle
+watchdog and the queued polls.
+
+**Pinned as-is:**
+- `requestStreamFromFlutter` callbacks carry no lifecycle guard. They rely on the generation, shuffle and
+  token checks;
+- `stremioTvSwitchToken` is not bumped on destroy (phase-7 follow-up).
+
+**Lambda capture lifetime.** The `restorePreparation` lambda now captures the controller (`host`) instead of
+the activity. The two have equal lifetime.
+
+---
+
+### 8. Reflection and Dart anchors
+
+#### 8.1 Reflective sites: 61 quoted occurrences, 20 names, 13 files
+
+**Methods (25 sites):**
+
+| name | sites / files | access path | required visibility |
+|---|---|---|---|
+| `playItem` | 2: `TvPhase3WiringCharacterizationTest`, `TvPikPakRetryCharacterizationTest` | `callTyped` (4-argument types incl. `ShufflePlaybackAttempt`) | **public** (the activity calls it) |
+| `resolveAndPlay` | 1: `TvPhase9OriginalTest` (`lazyResolve`) | `callTyped` | private (unmangled) |
+| `playMediaDirect`, `playPikPakVideoWithRetry` | 1 each: `TvSubtitleSourcesLifecycleCharacterizationTest` | `callTyped` | private |
+| `playStremioTvPlaybackMap` | 1: `TvPikPakRetryCharacterizationTest` | `callTyped` | **public** |
+| `playNext` | 1: `TvStremioTvGuideWiringCharacterizationTest` (`invoke`) | `callTyped` | **public** |
+| `playShowShuffle` | 1: `TvEpisodeFetchCharacterizationTest` (`Set`, `boolean`) | `callTyped` | **public** |
+| `watchShufflePlayback` 6, `yieldEpisodeFetchToQueuedShuffle` 5, `clearQueuedShuffle` 3, `failShufflePlayback` 1, `shuffleAttemptCurrent` 1, `resetShuffle` 1 | 17: `ShufflePlaybackFlowTest` | **its own local `call` helper** (`activity.javaClass.declaredMethods.first { name && parameterCount }`) | public, except `clearQueuedShuffle`, which stays private |
+
+**Fields (36 sites).** All go through `TvPlayerOriginalAccess.field`/`set` and its owner map:
+- `mediaPreparationGeneration`: 13 sites in 7 files (Phase8 1, EpisodeFetch 2, StartupGateTiming 1 — it
+  appears dynamically in `listOf(guard…)`, PikPak 1, SwitchApply 3, UpNext 3, ShuffleFlow 2);
+- `queuedShuffleGeneration` 6 and `queuedShuffleNavigation` 5 (EpisodeFetch, ShuffleFlow);
+- `showShuffleGeneration`: 5 sites in 4 files;
+- `pendingShufflePlayback`: 3 sites (EpisodeFetch, PikPak);
+- `mediaPreparationScope`: 3 cleanup sites (Phase5, Phase8, SwitchMime);
+- `shuffleBag`: 1 (SwitchApply).
+
+`ShuffleFlow`'s `field()` already delegates to `TvPlayerOriginalAccess.set` (phase 10).
+
+**Routing.**
+- **14 owner-map routes in `TvPlayerControllerOwners`:**
+  - `playbackStartController`: `playItem`, `resolveAndPlay`, `playMediaDirect`, `playPikPakVideoWithRetry`,
+    `playStremioTvPlaybackMap`, `mediaPreparationGeneration`, `mediaPreparationScope`, `pendingShufflePlayback`;
+  - `playbackStartController.navigator`: `playNext`, `playShowShuffle`, `queuedShuffleGeneration`,
+    `queuedShuffleNavigation`, `showShuffleGeneration`, `shuffleBag`.
+- **`ShufflePlaybackFlowTest`'s local `call` helper** gains one `when` branch. The six shuffle names resolve
+  the owner through `TvPlayerOriginalAccess.field(activity, "playbackStartController")`, then `navigator`,
+  exactly like the watchdog test's helper.
+- **Its `attempt()` helper does not change** (`declaredClasses` on the activity, 7-parameter constructor),
+  because the type stays nested.
+
+**Public-function pins** (unmangled reflected members of an internal class): `playItem`,
+`playStremioTvPlaybackMap`, `playNext`, `playShowShuffle`, `watchShufflePlayback`,
+`yieldEpisodeFetchToQueuedShuffle`, `failShufflePlayback`, `shuffleAttemptCurrent` and `resetShuffle`
+(**9**). Private-and-reflected functions keep their names: `resolveAndPlay`, `playMediaDirect`,
+`playPikPakVideoWithRetry` and `clearQueuedShuffle`. Rescan after step 0 adds accesses.
+
+**The watchdog test (`StremioTvStartupWatchdogTest`) touches no phase-18 name: 0 sites.** Neither do the
+`TvPhase9BytecodeAccess` and `TvPlaylistBytecodeAccess` teardown readers: their filtered event streams ignore
+the scope and generation statements.
+
+**Helper size.** `TvPlayerControllerOwners.kt` is **650 lines** (643 routes, one per line) at `df439aed1`.
+Phases 16 (34+ names plus step-0 additions) and 17 will add routes first. Measure it at phase-18 step T. If
++14 (plus step-0 additions) would cross 800, split the route table first (phase-13 precedent: an exit
+milestone before any new route).
+
+#### 8.2 Dart anchors (2 retargets, 1 patched range)
+
+**`test/android_tv_auto_advance_resume_test.dart`**
+- Current anchor: `_between(nativePlayer, 'private fun playItem(', 'private fun resolveAndPlay(')`.
+- **Retarget:** set the file to `TvPlaybackStartController.kt` (the activity variable is used only here, so
+  change its path rather than adding a variable, or the analyzer reports an unused local). Change the start
+  marker to `'fun playItem('`, because `playItem` becomes public for reflection. The end marker
+  `'private fun resolveAndPlay('` is unchanged; it stays private.
+- **Asserted text is unchanged:**
+  - `if (autoAdvance || suppressResume) 0L else item.resumePositionMs`;
+  - `if (autoAdvance || suppressTrakt || suppressResume) 0.0`.
+
+  Both are RHS expressions of local/parameter names. Host qualification only touches `host.pendingSeekMs =` /
+  `host.pendingItemTraktPercent =` on the preceding line.
+- **Ordering is preserved** by the verbatim move: `playItem` comes before `resolveAndPlay`, which comes before
+  `startPlayback`.
+- **Strength:** to stay "equal-or-stronger" despite the shorter marker, add `expect(indexOf == lastIndexOf)`
+  for `'fun playItem('`, so the marker is unique. Otherwise the assertion is unchanged.
+
+**`test/manual_source_validation_contract_test.dart`**
+- Current anchor: `_between(nativePlayer, 'private fun resolveAndPlay(', 'private fun startPlayback(')`.
+- **Retarget:** add a `nativePlaybackStart` File. Both markers are unchanged, because both functions stay
+  private.
+- **Asserted text is unchanged:**
+  - `reason=stale_manual_token` (a string literal);
+  - `failManualSourceCandidate("initial-resolve")`, which is still a substring of
+    `host.startupGateController.failManualSourceCandidate("initial-resolve")`.
+
+  You may strengthen the second to the host-qualified form.
+- **The whole-file `nativePlayer` checks stay on the activity:** `result["startupSourcesExhausted"] = true`
+  (`sendFinished` 6128), `"sourcePersistenceSessionId" to sourcePersistenceSessionId` (2649/4186/6125,
+  incl. `reportValidatedSourceCommit` — retained) and `payloadCheck.optInt(…)` (2129). None of them is in moved
+  code.
+
+**`test/android_tv_mdblist_progress_source_test.dart`.** The `// Handle episode metadata updates` →
+`private fun requestMetadataFromFlutter()` range contains the 2366 patch. Its asserted texts
+(`hasWatchedUpdate`, `mergeLateMetadata*`, …) are unaffected, so there is **no retarget**.
+
+**No other Dart test** names a phase-18 member. `NativeAudioRoutingTest` (`setupPlayer`) and
+`profile_source_guard_test` (no `tv/` scans) are unaffected.
+
+---
+
+### 9. Hazards for step T
+
+1. **Local functions** inside `playShowShuffle` (`retryWhenIdle`, `fetchTarget`, `openPrepared`) must classify
+   as body content, not as members needing fates. Verify that the PSI adapter does this. Add a positive
+   fixture, plus a negative that substitutes inside one of them without declaring it.
+2. **Injected-reference names (naming-collision rule).**
+   - Moved locals and parameters include: `navigation` (resolveAndPlay, playShowShuffle), `generation`,
+     `current`, `model`, `item`, `index`, `attempt`, `target`, `map`, `title`, `url`, `channel`, `provider`,
+     `shuffleAttempt` and `startupGeneration`.
+   - `ShufflePlaybackAttempt` also has properties `navigation`, `generation`, `finished`, `mediaStarted` and
+     `restorePreparation`.
+   - So the references must **not** be called `navigation`/`generation`. **`navigator`** (owner→collaborator)
+     and **`playbackStart`** (collaborator→owner) are verified collision-free against every local, parameter
+     and Host member. Name the owner property `playbackStartController`. The owner-map paths
+     `playbackStartController[.navigator]` do not clash with `playlistController.navigator`.
+   - Negatives: a `navigation`-named reference captured by the `resolveAndPlay` local, and a missed
+     `playbackStart.` qualification compiled against a same-name Host member.
+3. **Receiver lambdas.** Pin `player?.apply { setMediaSource / setMediaItem / prepare() / playWhenReady =
+   true / play() }` ×3 (playMediaDirect, PikPak, trio). ExoPlayer members are never substituted. Inside them,
+   `host.subtitleTrackReadiness.onMediaReplacement()` is substituted, and the owner-owned
+   `pendingShufflePlayback?.mediaStarted = true` stays unqualified. The `payload?.let { model -> … }` block in
+   `replacePayload…` writes `host.currentIndex = 0`.
+4. **Templates.** One unbraced host reference: 3293
+   `current=$stremioResolutionToken` → `current=${host.stremioResolutionToken}`. Two already-braced inner
+   substitutions: 3301 and 3305 `${startupGateController.startupFailoverGeneration}` → `${host.startupGateController…}`.
+   All other templates use locals.
+5. **Labels.** `return@requestStreamFromFlutter` ×6 (5 in resolveAndPlay, 1 in playShowShuffle) and
+   `return@discoverProtectedMime` ×1 (startPlayback) stay unchanged. Negative: a label rewrite.
+6. **Default arguments are evaluated at call time:**
+   - `playItem`: 3 constants; the activity's 2 retained callers now dispatch `playItem$default` on the
+     controller;
+   - `startPlayback(mimeDiscovered = false)`;
+   - `playShowShuffle(emptySet(), false)`; the listener's named `autoAdvance = true` is kept;
+   - Host `guideAdjacent` 3-parameter shape.
+
+   Named-argument labels (`suppressResume =`, `shuffleAttempt =`, `onUnavailable =`, `direction = -1`, the
+   `PlaybackItem(title =, url =, index =, …)` labels) are never substituted.
+7. **Off-main Host read.** `host.protectedStreamClient` runs on `Dispatchers.IO`, the same thread as the
+   original field read. It must stay computed. Negative: a snapshotting forwarder.
+8. **Volatile write path.** `activeVodHeaders` is written through the Host setter to the same `@Volatile`
+   field. Re-use the phase-8 bytecode check (`ACC_VOLATILE`, setter target).
+9. **`finish()` in `playNext`** (quick-play hand-back) becomes `activity.finish()`. It must compile to
+   `invokevirtual` so the activity override runs (progress and `sendFinished`). This is the phase-9 pin.
+10. **Overload audit (11 sites):**
+    - `Toast.makeText(Context, CharSequence, int)` ×8, at resolveAndPlay 3328, playNext 3543/3546, playPrevious
+      3582, playRandom 3607, showRandom 3619/3643/3647; the dialog toasts are inside the `setItems` lambda,
+      whose `this` is the activity;
+    - `androidx.appcompat.app.AlertDialog.Builder(Context)` 3630;
+    - `DefaultDataSource.Factory(Context, DataSource.Factory)` 3464, 3487.
+
+    Inherited getters: `isFinishing`/`isDestroyed` ×4 each (3357, 3682, 3730, 3753); `finish()` 3541.
+11. **Media3 opt-in.** The owner needs class-level `@OptIn(UnstableApi::class)` (androidx). The navigator has
+    none. The lint `UnsafeOptInUsageError` set must be unchanged, with moved locations mapped back (phase-14/15
+    method).
+12. **Smart casts.** None of the moved code relies on smart-casting an activity property (it uses locals,
+    `!!`, `?.` and elvis). The compile confirms this.
+13. **Imports.** Both destinations pin
+    `import com.debrify.app.tv.AndroidTvTorrentPlayerActivity.ShufflePlaybackAttempt`. The activity's imports
+    stay frozen.
+
+---
+
+### 10. File split, sizes and counts
+
+| file | member lines | estimated file | contents |
+|---|---|---|---|
+| `TvPlaybackStartController.kt` | 554 | **≈ 650** (≈ 35 imports, header, 43-line Host interface, navigator construction) | start pipeline + PikPak start + Stremio TV trio; Host interface |
+| `TvPlaybackNavigator.kt` | 351 | **≈ 385** | next/prev/catalog controls/random dialog + the full shuffle protocol |
+
+Both are under 800, so no size exception is needed. A three-way split (Stremio TV trio as its own sibling,
+≈ 170) is possible but unnecessary.
+
+**Substitutions (≈ 265):**
+
+| kind | count |
+|---|---|
+| host | ≈ 195 (owner 125, navigator 70) |
+| cross-file | 27 (`navigator.` ×9: `shuffleAttemptCurrent` 4, `updateCatalogEpisodeControls` 2, `watch`, `restore`, `fail`; `playbackStart.` ×18: `mediaPreparationGeneration` 7, `pendingShufflePlayback` 6, `playItem` 5) |
+| `this` → `activity` | 11 |
+| inherited | 9 |
+| visibility | ≈ 22 (below) |
+| template brace | 1 |
+
+Visibility changes:
+- owner: `playItem`, `playStremioTvPlaybackMap` → public; `discoverProtectedMime`, `buildMergedSource` and
+  three fields → internal;
+- navigator: 7 public; `playPrevious`, `updateCatalogEpisodeControls`, `playRandom`,
+  `showRandomPlaybackDialog`, `restoreShufflePreparation`, `canShuffleWholeShow`, `pickShuffleIndex` and
+  `shuffleBag` → internal.
+
+**Other counts:**
+- activity: **17 patches / 5 declarations**, **22 Host token edits / 8 property rows**, 1 slot-anchored
+  `added` property (+ Host object, ≈ 75 lines), 0 readiness getters (no `::x.isInitialized` in moved code);
+- **8 inert proofs** (1 new form);
+- compiled audit: 11 receiver/constructor + 9 inherited sites;
+- reflective: 14 routes + 1 local helper branch + 9 public pins;
+- Dart: 2 file retargets (1 marker).
+
+---
+
+### 11. Risk, test gap and step-0 needs
+
+**Existing coverage (it exercises the path, but is not a characterization of this unit):**
+
+| suite | covers |
+|---|---|
+| `ShufflePlaybackFlowTest` (7) | timeout / fail / reset routing |
+| Phase-3 wiring | `playItem` reset order |
+| Phase-8 suites | switch apply ↔ shuffle, loopback MIME probe, `shuffleBag` clear |
+| Phase-9 `lazyResolve` | stale resolve callbacks |
+| Phase-10 PikPak and episode fetch | `playItem` cancels retry, queued shuffle yield, `playShowShuffle` one case |
+| Phase-7 | trio success, Next with no wait |
+| Phase-14 | subtitle lifecycle via `playMediaDirect` / PikPak |
+| Phase-15 dock click | "End/Beginning of playlist", "Shuffle Playback" dialog |
+| Up Next | auto-advance gate |
+
+**Gaps (medium-high):**
+- the `playNext` fallback ladder: shuffle → index → Stremio TV → guide fetch → adjacent → quick-play
+  `finish` → Toast;
+- `playPrevious` (`suppressResume`, guide/adjacent fetch, Toast);
+- the `updateCatalogEpisodeControls` visibility matrix;
+- `pickShuffleIndex` bag semantics and `getShuffleEligibleIndices` per `PlaylistMode` (SERIES / COLLECTION
+  "Main" group / fallback);
+- `canShuffleWholeShow`;
+- `playShowShuffle` branches: queued-while-fetching, 50 ms polls and their three cancel conditions, the
+  3-attempt cap pill, resolve-before-index, `openPrepared` / `fetchTarget` / `onUnavailable`;
+- `resolveAndPlay`: each guard independently, plus the failure ladder;
+- every `discoverProtectedMime` guard (generation, source token, shuffle, `isFinishing`, `isDestroyed`,
+  sleep) and its navigation rebind;
+- `startPlayback` (stale-shuffle restore, MIME re-entry with current-item URL check, PikPak detection by
+  provider case-insensitively vs URL substring, sleep gate after the header write);
+- `buildMergedSourceOrNull` / `buildMergedSource` (null inputs, exception fallback);
+- `replacePayload…` field mapping and `updateStremioSources…` index clamp + badge OTT/classic;
+- the two `onDestroy` statements in order.
+
+There are **84 `if` / 56 `return` / 1 `when` sites**, so run the statement-level coverage sweep from the start.
+
+**Prerequisites, each demonstrated on the original:**
+1. The existing fake Flutter messenger, with paired inline / queued / worker replies for
+   `requestTorrentStream`.
+2. The phase-8 bounded loopback MIME probe, with a scope barrier, to hold the coroutine between the IO return
+   and the guard check.
+3. A recording player probe that sees `setMediaSource` vs `setMediaItem`, `playWhenReady` and MIME.
+4. The phase-14 dialog harness for `showRandomPlaybackDialog`.
+5. **Shuffle randomness.** `shuffled()` and `ShowShuffle` use `Random.Default`. Assert the bag/visited
+   invariants (exhaustion before repeat, exclusion of current and attempted, a size-1 shortcut) by seeding
+   `shuffleBag` reflectively, rather than asserting an order. If a deterministic observation is impossible,
+   record that sub-feature's assertions as invariant-only before moving.
+
+**Sampling.** Claude's independent sample must reach ≥ 75 %, or the sweep and a second sample run first
+(phase-11 lesson).
+
+**Scope recommendation: proceed with the full START-A unit as phase 18** (owner + navigator, ≈ 902 lines).
+Do not split start and shuffle: it would add ≈ 23 temporary edits and a second re-point round. Keep
+`ShufflePlaybackAttempt`, `continuousShuffleEnabled`, `protectedStreamClient` and `activeVodHeaders` in the
+activity. Re-measure on the phase-17 merge, after phase 16's −1,161 / phase 17's −732 shifts. Phase 19
+(START-B) then inherits one patch: `handleMetadataUpdate`'s `updateCatalogEpisodeControls`. It also inherits
+the `protectedStreamClient` / `activeVodHeaders` ownership decision.
+
+## Phase 18 Step T — re-measured tooling and reflection boundary
+
+The approved design (including its review fold) supersedes the older Phase 18 inventory counts: **37 moved members, 64 original reflective sites / 21 names / 14 files, and 15 initial owner-map routes**. Re-measured on `2f7b4ec27`, Activity 5,312 physical lines; the complete production fixture has a 635-line start owner and 372-line navigator, at the original `mediaPreparationScope` slot (518). Production remains unchanged. `ShufflePlaybackAttempt` remains nested in the Activity; all three frozen imports and four binary-name test uses remain intact.
+
+| member | owner | original lines |
+|---|---|---|
+| `mediaPreparationScope` | playbackStart | 518–518 |
+| `mediaPreparationGeneration` | playbackStart | 519–519 |
+| `playItem` | playbackStart | 2719–2813 |
+| `resolveAndPlay` | playbackStart | 2815–2901 |
+| `discoverProtectedMime` | playbackStart | 2903–2918 |
+| `startPlayback` | playbackStart | 2920–2961 |
+| `playMediaDirect` | playbackStart | 2963–3005 |
+| `buildMergedSourceOrNull` | playbackStart | 3007–3035 |
+| `buildMergedSource` | playbackStart | 3037–3054 |
+| `pendingShufflePlayback` | playbackStart | 3231–3231 |
+| `playPikPakVideoWithRetry` | playbackStart | 3444–3497 |
+| `updateStremioSourcesFromPlaybackMap` | playbackStart | 5137–5152 |
+| `replacePayloadWithStremioTvItem` | playbackStart | 5154–5204 |
+| `playStremioTvPlaybackMap` | playbackStart | 5206–5294 |
+| `shuffleBag` | navigator | 534–534 |
+| `showShuffle` | navigator | 535–535 |
+| `showShuffleGeneration` | navigator | 536–536 |
+| `playNext` | navigator | 3056–3106 |
+| `playPrevious` | navigator | 3108–3140 |
+| `updateCatalogEpisodeControls` | navigator | 3142–3158 |
+| `playRandom` | navigator | 3160–3171 |
+| `showRandomPlaybackDialog` | navigator | 3173–3211 |
+| `resetShuffle` | navigator | 3213–3220 |
+| `queuedShuffleGeneration` | navigator | 3232–3232 |
+| `queuedShuffleNavigation` | navigator | 3233–3233 |
+| `shuffleAttemptCurrent` | navigator | 3235–3236 |
+| `shuffleAttemptOwned` | navigator | 3238–3241 |
+| `restoreShufflePreparation` | navigator | 3243–3247 |
+| `failShufflePlayback` | navigator | 3249–3259 |
+| `shuffleWatchGeneration` | navigator | 3261–3261 |
+| `watchShufflePlayback` | navigator | 3263–3273 |
+| `clearQueuedShuffle` | navigator | 3275–3280 |
+| `yieldEpisodeFetchToQueuedShuffle` | navigator | 3282–3287 |
+| `canShuffleWholeShow` | navigator | 3289–3294 |
+| `playShowShuffle` | navigator | 3296–3376 |
+| `getShuffleEligibleIndices` | navigator | 3378–3400 |
+| `pickShuffleIndex` | navigator | 3402–3416 |
+
+The manifest pins 265 moved-token substitutions (195 Host reads, 27 cross-qualifications: nine `navigator.` and 18 `playbackStart.`, eleven Activity receivers, nine inherited reads/calls, visibility and one braced template), 17 in-place Activity patches in five declarations, and 21 Host re-points / 22 edits in eight whole-property rows. The shared Host has 43 computed members (12 var / 27 val / four fun); `protectedStreamClient` stays a computed IO-time read. All eight earlier-running initializers have proofs; the navigator is eagerly constructed after `pendingShufflePlayback`, with the scope first. `ShowShuffle()` is bound to the exact original source SHA, original revision and resolved default constructor; changing its default or adding an effectful init while retaining the call fails. Three ExoPlayer apply blocks, local shuffle functions, labels, inherited virtual finish dispatch and Activity volatile storage are pinned.
+
+The owner table is split into playback, IPTV, subtitle and UI test helpers. All 765 existing route key/value pairs are preserved, with the 15 planned routes added; the largest helper is 314 lines. The original-owner fallback includes `playbackStartController`; `callDefault` remains byte-identical and invokes the real Kotlin `$default` dispatcher. `ShufflePlaybackFlowTest` changes only its local owner selection branch. No assertion or nested-class lookup changes. The correction-added `replacePayloadWithStremioTvItem` route preserves its private destination visibility.
+
+The complete fixture compiles using Kotlin 2.2.20/Media3 1.8.0, without production moves. Compiled audit: 20 current sites (11 receiver/constructor, nine inherited including invokevirtual finish), all 346 earlier receiver sites, and all 23 phase-15 binding pins (12 cast / 11 no cast); the volatile identity writer is explicitly mapped from Activity to the future start owner. Fifty-nine earlier destinations and seventeen earlier manifests remain frozen at `2f7b4ec27`; the source-bound ShowShuffle file is also frozen. Original self-comparison classifies all 1,642 declarations with zero differences. Evidence: `p18/original-reflective-sites.json`, `remeasured-inventory.json`, `owner-retargets.json`, `protected-source-hashes.json`, fixture/compiler/auditor logs and `overload-audit.json`.
+
+Clean `baseline-2f7b4ec27` and helper-only `p18-tools` each archive 2,527 complete identities: 2,526 passes and the same source-browser focus NPE. Every identity/status is preserved; input trees stable, matched 1 GiB workers/JBR21. The known EPG real-clock timing case passes in both runs; its prior phase-17 baseline failure remains historical evidence, not hidden or fixed. Original lint is archived: 1,351 identities (252 Error / 1,099 Warning; 175 opt-in errors). All 80 protected file hashes are unchanged. Size check passes without baseline update.
+
+All **555 checker/auditor self-tests pass**: all 517 historical cases are retained and 38 phase-18 cases add the complete extraction and required negative/compiled controls. All seventeen historical manifests pass at their approved merge revisions. Raw logs and input hashes: `p18/checker-self-tests.log`, `selftests-result.json`, `historical-checks/`, `tools-result.json`.
+
+
+## Phase 18 step 0 — original playback start and shuffle characterization
+
+Base **`2f7b4ec27`**; production Activity, ShowShuffle, all 59 earlier destinations, dependencies, lockfile and ProGuard remain unchanged. Step 1 has not started. The complete original control has **295 passing new identities in 19 cohesive classes**; the largest new test file is 304 physical lines. Test-only seams observe the real Activity bodies, bound views, Media3 inputs, binary MethodChannel requests/replies and lifecycle callbacks. No copied start/shuffle implementation or seeded production Random replaces the original.
+
+### Harness prerequisites and preserved quirks
+
+- Real binary reply delivery is pinned inline, queued on the PAUSED Main looper, and on a worker thread. The existing ViewRoot traversal barrier is cleared through `TvPlaylistUiQueue`, so queued cases actually execute. Worker delivery preserves the original MethodChannel behavior: resolving UI animation throws `Animators may only be run on Looper threads`, the bridge logs/catches it, and neither payload URL nor player media changes. This is an original quirk, not a successful worker media start.
+- The MIME fixture performs bounded real HEAD IO with recorded headers against a closeable localhost server. Only Main dispatch is queued: launch, IO response and the returned Main continuation are independently latched; every generation/token/liveness guard is tested without a shuffle attempt masking the ordinary navigation guard. `protectedStreamClient` is re-read at IO time. Scope cancellation and a returned continuation after destroy are separate cases.
+- The player probe distinguishes plain MediaItem, merged source, MIME/metadata, preparation, play intent, play, listener removal and release. Scoped constructor-failure injection exercises both real merge catch/fallback paths. A scoped borrowed-readiness observer calls the real reset, then simulates an old READY event during preparation; the final reset must clear it before media install in all four paths. Neither seam replaces a moved body.
+- Real dialogs and actual dock/unified-menu/guide/source Host callbacks are exercised. Shuffle asserts explicitly seeded bag pops and noncurrent/distinct/exhaustion invariants; it never assumes an ordering from unseeded `Random.Default`. The 50 ms poll and 15,000 ms watch boundaries, fresh watch generation on the same attempt, queued fetch supersession and each independent ownership operand are pinned.
+- Nonempty whitespace resolution is accepted by `resolveAndPlay`. Whole-show shuffle first accepts it into the item, then `playItem`'s `isBlank` check requests a second resolution. A stale blank failure must not fail a newer globally pending attempt. Busy queued shuffle polls keep their command while the resolver is temporarily disabled. These original outcomes are preserved and listed in Follow-ups.
+
+### Coverage matrix
+
+The systematic sweep retains **575 individual Kotlin-PSI obligations**: 340 calls (including nested builder/value calls), 84 if expressions, 66 state writes, 56 returns, 27 Elvis expressions, one when and one loop. All 28 moved functions plus the retained phase-specific `onDestroy` statements have behavioral contracts below. Expression-body guards (`shuffleAttemptOwned`, `yieldEpisodeFetchToQueuedShuffle`) are separately covered even though they have no if-expression nodes. Local functions and callback bodies stay associated with their enclosing moved function.
+
+`p18/step0/statement-coverage-matrix.json` contains every original node ID/line/span/text, its function's named assertion cases, and exact overlapping mutation IDs. **347 nodes overlap an accepted source mutation**; composite builders, nested calls and other path observations are mapped to their behavioral contract rather than falsely counted as separate mutation proofs. Media order/fields, state, callbacks, bound strings/visibility, clock boundaries and diagnostics provide those observations. Diagnostics are distinguished in the node archive. The compact matrix is a per-function index into that full statement inventory and the raw test fixtures.
+
+| Original function | PSI obligations | Observable contract / assertions | Accepted mutations |
+| --- | ---: | --- | ---: |
+| `playItem` | 57 | Invalid/stale/sleep/bounds returns; restore outgoing selection and headers; pending/generation/watch sequence; source feedback, buffering, Up Next, skip and retry reset before media; selection/headers; auto flag and resume hold; real default dispatcher and each resume/tracker mask; blank-vs-present URL routing. (22 named cases) | 29 |
+| `resolveAndPlay` | 46 | Inline/queued/off-looper worker delivery; resolving animation state; separate navigation, shuffle, manual snapshot/index/token and startup-generation rejection; failure priority shuffle/manual/startup/Toast and exact reasons; selected payload slot/provider fallback/manual candidate URL before start. (21 named cases) | 17 |
+| `discoverProtectedMime` | 8 | Real bounded HEAD/headers and response MIME; launch versus returned IO/Main barrier; IO-time client read; generation bump/attempt navigation rebind; each navigation/source-token/shuffle/lifecycle/sleep guard and post-destroy continuation. (8 named cases) | 9 |
+| `startPlayback` | 31 | Stale-attempt restoration and pending clear; each discovery bypass operand; current-item missing/changed URL rejection after IO; MIME persistence/re-entry once; protected headers before sleep; provider case-insensitivity versus case-sensitive URL substring. (14 named cases) | 15 |
+| `playMediaDirect` | 29 | Subtitle reset; title/artist/description/URI/MIME metadata; merged versus muxed media; pending attempt/readiness before player install; prepare/play-intent/play order; title, playlist highlight, progress ticker and subtitle fetching. (15 named cases) | 15 |
+| `buildMergedSourceOrNull` | 18 | Each absent/empty track; real ordered child URIs and video metadata/MIME; both merge tolerance flags; cross-protocol redirect setting; constructor failure returns muxed fallback and diagnostic. (7 named cases) | 5 |
+| `buildMergedSource` | 12 | Real ordered video/audio URIs, flags and redirect setting; factory failure returns null and diagnostic for caller single-URL fallback. (3 named cases) | 4 |
+| `playNext` | 32 | Whole-show shuffle -> seeded pack shuffle -> playlist -> current Stremio TV -> guide -> adjacent resolver -> quick-play Activity.finish override -> exact End toast; automatic resume suppression and real callback arguments. (13 named cases) | 11 |
+| `playPrevious` | 17 | Null model; loaded previous suppresses resume; full-guide/adjacent (-1) requests; exact Beginning toast. (5 named cases) | 6 |
+| `updateCatalogEpisodeControls` | 9 | Independent IPTV early return; movie/series and Stremio-TV gates; loaded predecessor; guide predecessor; resolver/adjacent gates; season/episode 1/2/null boundaries; VISIBLE/GONE/unchanged-INVISIBLE distinctions. (11 named cases) | 4 |
+| `playRandom` | 15 | Whole-show priority; null/empty model; exact No items toast; seeded/eligible pack choice; explicit auto flag consume and suppressed resume. (3 named cases) | 3 |
+| `showRandomPlaybackDialog` | 25 | Real dialog title/choice labels; null/empty model; each choice, live-at-click toggle, reset and manual-start behavior; exact on/off text. (7 named cases) | 7 |
+| `resetShuffle` | 7 | Outgoing preparation restore; pending/bag/visited clear; show-generation bump and queue generation clear; seeded visited invariant. (2 named cases) | 6 |
+| `shuffleAttemptCurrent` | 1 | Finished boundary separately from ownership; each owned guard below; fail marks finished but its owned delayed retry remains eligible. (1 named cases) | 1 |
+| `shuffleAttemptOwned` | 0 | Independent finishing/destroyed/show generation/navigation/automatic-sleep blockers; manual sleep remains owned. (12 named cases) | 7 |
+| `restoreShufflePreparation` | 2 | Unstarted/current navigation invokes exactly once; started or superseded navigation does not invoke. (3 named cases) | 2 |
+| `failShufflePlayback` | 12 | No pending false; clear/restore/current evaluation/finished then post order; current versus already-finished; delayed retry independently rejects each ownership change. (8 named cases) | 6 |
+| `watchShufflePlayback` | 9 | 15,000 ms boundary; replacement identity and same-identity newer watch generation; each media-started/PikPak/retrying/current operand; rearm while cold-storage retry active, failure otherwise. (8 named cases) | 10 |
+| `clearQueuedShuffle` | 3 | Matching generation clears both keys; a newer queue remains unchanged. (2 named cases) | 4 |
+| `yieldEpisodeFetchToQueuedShuffle` | 0 | Both identity keys and each lifecycle condition; real older episode-fetch reply yields to queued shuffle before media replacement. (6 named cases) | 5 |
+| `canShuffleWholeShow` | 5 | Null model; resolver/IPTV/Stremio TV/type ignore-case; no guide; custom empty list overrides missing guide. (9 named cases) | 9 |
+| `playShowShuffle` | 73 | Non-whole-show false; busy automatic/already-queued/new manual; exact 50 ms polls, repeated busy polls and each cancellation; current identity requires both fields; each eligibility boundary/custom override; 3-attempt cap/pill; missing/in-pack target; exact season AND episode; resolve before index; stale replies; fetch callbacks, auto suppression and retries excluding attempted/current; Up Next hide. (40 named cases) | 29 |
+| `getShuffleEligibleIndices` | 26 | Null/empty; SERIES complete identity or fallback; COLLECTION Main ignore-case/first-group/null/empty fallback, invalid bounds and duplicates; NONE all items. (10 named cases) | 9 |
+| `pickShuffleIndex` | 20 | Empty/null, singleton shortcut retains bag; distinct eligibility; remove current/ineligible; seeded last pop; exhaustion before repeats, complete noncurrent unseeded cycles. (5 named cases) | 5 |
+| `playPikPakVideoWithRetry` | 34 | Reset subtitle/retry id/count/flag/overlay before player-null return; null keeps cues; nonnull clears cues; metadata fallbacks; no MIME, merged source or playWhenReady; readiness/pending then set/prepare/play; title/highlight/ticker/subtitle and attempt 0. (16 named cases) | 18 |
+| `updateStremioSourcesFromPlaybackMap` | 13 | Absent list preserves list/index; clear/empty; skip malformed entries while source indices retain original enumeration; default/lower/upper index clamp; real setup/quality badge refresh. (7 named cases) | 5 |
+| `replacePayloadWithStremioTvItem` | 22 | Each installed-item field and metadata fallback; source title; virtual timestamp; single-item replacement; content type/IMDB; both navigation maps/groups/per-item cache reset; nonzero index reset; stale OTT show-name clear. (26 named cases) | 27 |
+| `playStremioTvPlaybackMap` | 49 | Real guide metadata/header/adapter refresh; source replacement/index/quality and OTT/classic badge visibility; subtitle loading/retry cleanup before install; start percent and every resume flag/hold reset; real media order/readiness/title/subtitle; switching clear and hideGuideOnReady true/false. (13 named cases) | 21 |
+| `onDestroy` | 0 | Cancellation observer sees old preparation generation; browser and player release see cancelled scope/new generation; borrowed progress posts/polls removed; returned MIME continuation cannot publish. (3 named cases) | 3 |
+
+### Original mutation table
+
+**293 distinct source mutations are killed by named assertions**, with a witness for every one of the 295 new identities. Each row below is a current-test-method witness: Kotlin-PSI tokens were compared against its archived proof fixture, and proofs lacking a final-method witness were rerun against the final original control. This avoids crediting a removed/changed assertion. Some tests have multiple proofs and some mutations kill multiple tests.
+
+Every mutation applies to detached **original `2f7b4ec27`**, with the phase-18 test files installed; it does not mutate an extraction fixture. `all-proofs.json` records exact original offsets/before/after strings. For each ID, `p18/step0/proofs/<ID>/` contains `definition.json`, `mutation.patch`, `gradle.log` and raw `xml/`; `results.json` contains named exception/stack witnesses and test input signatures. Complete hashed source fixtures are archived alongside those logs. The table abbreviates long snippets; the exact diff and complete failing stack are in that ID's archive.
+
+Earlier compile-invalid, crash-only, surviving, interrupted or masked proof attempts are retained under `proofs/attempts/` and excluded from the 293 accepted results. Accepted results all have test XML and AssertionError/ComparisonFailure witnesses, never a compile failure or an unasserted crash. Final original control `control-final-v12` passes all 295 tests.
+
+| Named test | Original mutation (ID and line) | Failing assertion |
+| --- | --- | --- |
+| `TvPlaybackItemStartCharacterizationTest::blankUrlUsesResolverInsteadOfMedia` | `sc52e4c98da` / `playItem`:2805: ``if (item.url.isBlank()) {`` → ``if (item.url.isEmpty()) {`` | ``expected:<1> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:152`) |
+| `TvPlaybackItemStartCharacterizationTest::defaultDispatcherUsesRealFalseAndNullArguments` | `s7e428eece5` / `playItem`:2725: ``suppressResume: Boolean = false`` → ``suppressResume: Boolean = true`` | ``expected:<321> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:58`) |
+| `TvPlaybackItemStartCharacterizationTest::existingRestoreClosureIsNotOverwritten` | `s42ea943a36` / `playItem`:2730: ``shuffleAttempt.restorePreparation == null`` → ``true`` | ``expected same:<com.debrify.app.tv.TvPlaybackItemStartCharacterizationTest$$Lambda/0x0000000800b5cf68@4185fa94> was not:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$$Lambda/0x0000000800b5d410@17af3586>`` (`TvPlaybackItemStartCharacterizationTest.kt:147`) |
+| `TvPlaybackItemStartCharacterizationTest::missingPayloadStillInvalidatesPreparation` | `s8d23d2fdce` / `playItem`:2739: ``pendingShufflePlayback = null`` → ``pendingShufflePlayback = pendingShufflePlayback`` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@65f95af9>`` (`TvPlaybackItemStartCharacterizationTest.kt:96`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemCancelsRetryAndSkipAndUpNextBeforePlayer` | `s7c87f18d9e` / `playItem`:2781: ``pikPakRetryController.cancelPikPakRetry()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackItemStartCharacterizationTest.kt:124`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemCancelsRetryAndSkipAndUpNextBeforePlayer` | `sa544fbc8f7` / `playItem`:2778: ``skipSegmentController.resetSkipSegmentState()`` → ``Unit`` | ``expected null, but was:<TvSkipSegment(type=INTRO, startMs=1000, endMs=5000)>`` (`TvPlaybackItemStartCharacterizationTest.kt:124`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemCancelsRetryAndSkipAndUpNextBeforePlayer` | `sa731d1b5a8` / `playItem`:2777: ``upNextController.hideUpNextCard()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackItemStartCharacterizationTest.kt:124`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemResetshasEverBeenReady` | `se720c58d40` / `playItem`:2773: ``hasEverBeenReady = false`` → ``hasEverBeenReady = true`` | ``expected:<false> but was:<true>`` (`TvPlaybackItemStartCharacterizationTest.kt:106`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemResetslastRealPositionMs` | `s0f1087ed9d` / `playItem`:2775: ``lastRealPositionMs = 0L`` → ``lastRealPositionMs = 999L`` | ``expected:<0> but was:<999>`` (`TvPlaybackItemStartCharacterizationTest.kt:114`) |
+| `TvPlaybackItemStartCharacterizationTest::newItemResetsmaxStableDurationMs` | `s7a71ad478f` / `playItem`:2774: ``maxStableDurationMs = 0L`` → ``maxStableDurationMs = 999L`` | ``expected:<0> but was:<999>`` (`TvPlaybackItemStartCharacterizationTest.kt:110`) |
+| `TvPlaybackItemStartCharacterizationTest::outOfRangeNegative` | `s7c22735e12` / `playItem`:2740: ``mediaPreparationGeneration++`` → ``mediaPreparationGeneration += 2`` | ``expected:<1> but was:<2>`` (`TvPlaybackItemStartCharacterizationTest.kt:84`) |
+| `TvPlaybackItemStartCharacterizationTest::outOfRangeUpperBoundary` | `s7c22735e12` / `playItem`:2740: ``mediaPreparationGeneration++`` → ``mediaPreparationGeneration += 2`` | ``expected:<1> but was:<2>`` (`TvPlaybackItemStartCharacterizationTest.kt:91`) |
+| `TvPlaybackItemStartCharacterizationTest::restoreClosureReturnsOutgoingIndexHeadersAndControls` | `s15a35d08e0` / `playItem`:2736: ``updateCatalogEpisodeControls()`` → ``Unit`` | ``expected:<8> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:141`) |
+| `TvPlaybackItemStartCharacterizationTest::restoreClosureReturnsOutgoingIndexHeadersAndControls` | `s9d36557eea` / `playItem`:2742: ``shuffleAttempt.navigation = mediaPreparationGeneration`` → ``shuffleAttempt.navigation = -1`` | ``expected:<1> but was:<-1>`` (`TvPlaybackItemStartCharacterizationTest.kt:138`) |
+| `TvPlaybackItemStartCharacterizationTest::restoreClosureReturnsOutgoingIndexHeadersAndControls` | `saefa8db810` / `playItem`:2734: ``activeVodHeaders = buildProtectedMediaOrigins(listOf(it)) to it.httpHeaders`` → ``activeVodHeaders = emptySet<String>() to emptyMap()`` | ``expected:<{X-Old=old}> but was:<{}>`` (`TvPlaybackItemStartCharacterizationTest.kt:140`) |
+| `TvPlaybackItemStartCharacterizationTest::restoreClosureReturnsOutgoingIndexHeadersAndControls` | `sf0beaafdcc` / `playItem`:2732: ``currentIndex = outgoingIndex`` → ``currentIndex = index`` | ``expected:<0> but was:<1>`` (`TvPlaybackItemStartCharacterizationTest.kt:139`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeAuto` | `s11a4b6cb46` / `playItem`:2795: ``isAutoAdvancing = false`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackItemStartCharacterizationTest.kt:33`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeAuto` | `s134f17c1a5` / `playItem`:2800: ``if (autoAdvance \|\| suppressResume) 0L else item.resumePositionMs`` → ``item.resumePositionMs`` | ``expected:<0> but was:<43210>`` (`TvPlaybackItemStartCharacterizationTest.kt:32`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeManual` | `s2cf65bb192` / `playItem`:2798: ``releaseResumeHold()`` → ``Unit`` | ``expected:<0> but was:<999>`` (`TvPlaybackItemStartCharacterizationTest.kt:24`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeManual` | `s6228745e22` / `playItem`:2800: ``if (autoAdvance \|\| suppressResume) 0L else item.resumePositionMs`` → ``0L`` | ``expected:<43210> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:23`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeResumeSuppressed` | `s134f17c1a5` / `playItem`:2800: ``if (autoAdvance \|\| suppressResume) 0L else item.resumePositionMs`` → ``item.resumePositionMs`` | ``expected:<0> but was:<43210>`` (`TvPlaybackItemStartCharacterizationTest.kt:50`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeTraktSuppressed` | `s1515b667c9` / `playItem`:2802: ``if (autoAdvance \|\| suppressTrakt \|\| suppressResume) 0.0`` → ``if (autoAdvance \|\| suppressResume) 0.0`` | ``expected:<0.0> but was:<62.0>`` (`TvPlaybackItemStartCharacterizationTest.kt:41`) |
+| `TvPlaybackItemStartCharacterizationTest::resumeTraktSuppressed` | `s6228745e22` / `playItem`:2800: ``if (autoAdvance \|\| suppressResume) 0L else item.resumePositionMs`` → ``0L`` | ``expected:<43210> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:41`) |
+| `TvPlaybackItemStartCharacterizationTest::selectionAndProtectedHeadersPrecedeMedia` | `s5cb81ab0ae` / `playItem`:2783: ``currentIndex = index`` → ``currentIndex = 0`` | ``expected:<1> but was:<0>`` (`TvPlaybackItemStartCharacterizationTest.kt:134`) |
+| `TvPlaybackItemStartCharacterizationTest::selectionAndProtectedHeadersPrecedeMedia` | `sf6df54834b` / `playItem`:2786: ``activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders`` → ``activeVodHeaders = emptySet<String>() to emptyMap()`` | ``headers selected before asynchronous resolution expected:<{Authorization=fixture}> but was:<{}>`` (`TvPlaybackItemStartCharacterizationTest.kt:134`) |
+| `TvPlaybackItemStartCharacterizationTest::sleepLatchAutomatic` | `sdd08a3d913` / `playItem`:2751: ``if (isAutoAdvancing) {`` → ``if (false) {`` | ``expected:<true> but was:<false>`` (`TvPlaybackItemStartCharacterizationTest.kt:65`) |
+| `TvPlaybackItemStartCharacterizationTest::sleepLatchManual` | `sb5b6bc3de4` / `playItem`:2757: ``sleepStopLatched = false`` → ``sleepStopLatched = true`` | ``expected:<false> but was:<true>`` (`TvPlaybackItemStartCharacterizationTest.kt:74`) |
+| `TvPlaybackItemStartCharacterizationTest::sleepLatchManual` | `sf575450a5a` / `playItem`:2751: ``if (isAutoAdvancing) {`` → ``if (true) {`` | ``expected:<false> but was:<true>`` (`TvPlaybackItemStartCharacterizationTest.kt:74`) |
+| `TvPlaybackItemStartCharacterizationTest::staleAttemptReturnsBeforeAnyNavigationReset` | `sc6fcb36ffd` / `playItem`:2728: ``if (shuffleAttempt != null && !shuffleAttemptCurrent(shuffleAttempt)) return`` → ``if (false) return`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@441f477a> was not:<null>`` (`TvPlaybackItemStartCharacterizationTest.kt:102`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionDirectEmptyItem` | `s2bbf54c382` / `playMediaDirect`:2970: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:67`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionDirectItem` | `s2bbf54c382` / `playMediaDirect`:2970: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Item description]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:37`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionDirectSubtitle` | `s2bbf54c382` / `playMediaDirect`:2970: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Payload subtitle]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:47`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionDirectTitle` | `s2bbf54c382` / `playMediaDirect`:2970: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Payload title]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:57`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionPikPakEmptyItem` | `sa61d6adcbd` / `playPikPakVideoWithRetry`:3472: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:72`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionPikPakItem` | `sa61d6adcbd` / `playPikPakVideoWithRetry`:3472: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Item description]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:42`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionPikPakSubtitle` | `sa61d6adcbd` / `playPikPakVideoWithRetry`:3472: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Payload subtitle]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:52`) |
+| `TvPlaybackMediaCharacterizationTest::descriptionPikPakTitle` | `sa61d6adcbd` / `playPikPakVideoWithRetry`:3472: ``.setDescription(item.description ?: payload?.subtitle ?: payload?.title)`` → ``.setDescription("mutated")`` | ``expected:<[Payload title]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:62`) |
+| `TvPlaybackMediaCharacterizationTest::directInstallsExplicitMimeAndPlayOrder` | `s3debcdec81` / `playMediaDirect`:2969: ``.setArtist(item.seasonEpisodeLabel())`` → ``.setArtist(null)`` | ``expected:<[S02E03]> but was:<[null]>`` (`TvPlaybackMediaCharacterizationTest.kt:114`) |
+| `TvPlaybackMediaCharacterizationTest::directInstallsExplicitMimeAndPlayOrder` | `s424ad1da71` / `playMediaDirect`:2968: ``.setTitle(item.title)`` → ``.setTitle("mutated")`` | ``expected:<[Film]> but was:<[mutated]>`` (`TvPlaybackMediaCharacterizationTest.kt:114`) |
+| `TvPlaybackMediaCharacterizationTest::directInstallsExplicitMimeAndPlayOrder` | `s9f49e6a40c` / `playMediaDirect`:2996: ``play()`` → ``Unit`` | ``expected:<[media:https://example.test/a, prepare, playWhenReady:true, play]> but was:<[media:https://example.test/a, prepare, playWhenReady:true]>`` (`TvPlaybackMediaCharacterizationTest.kt:114`) |
+| `TvPlaybackMediaCharacterizationTest::directInstallsExplicitMimeAndPlayOrder` | `sc95dae2fd9` / `playMediaDirect`:2975: ``.setMimeType(item.mimeType)`` → ``.setMimeType(null)`` | ``expected:<video/mp4> but was:<null>`` (`TvPlaybackMediaCharacterizationTest.kt:114`) |
+| `TvPlaybackMediaCharacterizationTest::directInstallsExplicitMimeAndPlayOrder` | `se3e2805701` / `playMediaDirect`:2994: ``prepare()`` → ``Unit`` | ``expected:<[media:https://example.test/a, prepare, playWhenReady:true, play]> but was:<[media:https://example.test/a, playWhenReady:true, play]>`` (`TvPlaybackMediaCharacterizationTest.kt:114`) |
+| `TvPlaybackMediaCharacterizationTest::mediaFetchesAddonSubtitleDirect` | `sf812007fc2` / `playMediaDirect`:3004: ``subtitleSourcesController.fetchStremioSubtitles(item)`` → ``Unit`` | ``production fetch discovers subtitle availability for newly installed item`` (`TvPlaybackMediaCharacterizationTest.kt:91`) |
+| `TvPlaybackMediaCharacterizationTest::mediaFetchesAddonSubtitlePikPak` | `s7a16cd337e` / `playPikPakVideoWithRetry`:3493: ``subtitleSourcesController.fetchStremioSubtitles(item)`` → ``Unit`` | ``production fetch discovers subtitle availability for newly installed item`` (`TvPlaybackMediaCharacterizationTest.kt:110`) |
+| `TvPlaybackMediaCharacterizationTest::mediaReadinessAndAttemptBeforePlayerDirect` | `s0d7df59479` / `playMediaDirect`:2986: ``pendingShufflePlayback?.mediaStarted = true`` → ``pendingShufflePlayback?.mediaStarted = false`` | ``expected:<true> but was:<false>`` (`TvPlaybackMediaCharacterizationTest.kt:77`) |
+| `TvPlaybackMediaCharacterizationTest::mediaReadinessAndAttemptBeforePlayerPikPak` | `sf04c120437` / `playPikPakVideoWithRetry`:3481: ``pendingShufflePlayback?.mediaStarted = true`` → ``pendingShufflePlayback?.mediaStarted = false`` | ``expected:<true> but was:<false>`` (`TvPlaybackMediaCharacterizationTest.kt:96`) |
+| `TvPlaybackMediaCharacterizationTest::mediaResetsSubtitleDirect` | `sdd1e5e675b` / `playMediaDirect`:2965: ``subtitleSourcesController.resetSubtitleState()`` → ``Unit`` | ``expected null, but was:<tt99>`` (`TvPlaybackMediaCharacterizationTest.kt:81`) |
+| `TvPlaybackMediaCharacterizationTest::mediaResetsSubtitlePikPak` | `s36d6638f40` / `playPikPakVideoWithRetry`:3448: ``subtitleSourcesController.resetSubtitleState()`` → ``Unit`` | ``expected null, but was:<tt99>`` (`TvPlaybackMediaCharacterizationTest.kt:100`) |
+| `TvPlaybackMediaCharacterizationTest::mediaRestartsProgressTickerDirect` | `s4393f26263` / `playMediaDirect`:3001: ``restartProgressUpdates()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackMediaCharacterizationTest.kt:86`) |
+| `TvPlaybackMediaCharacterizationTest::mediaRestartsProgressTickerPikPak` | `sa21630a66a` / `playPikPakVideoWithRetry`:3490: ``restartProgressUpdates()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackMediaCharacterizationTest.kt:105`) |
+| `TvPlaybackMediaCharacterizationTest::mergeChildUrisMetadataAndToleranceFlags` | `s8f9729c3ad` / `buildMergedSourceOrNull`:3030: ``MergingMediaSource(true, true, videoSource, audioSource)`` → ``MergingMediaSource(false, true, videoSource, audioSource)`` | ``java.lang.AssertionError`` (`TvPlaybackMediaCharacterizationTest.kt:150`) |
+| `TvPlaybackMediaCharacterizationTest::mergeChildUrisMetadataAndToleranceFlags` | `sd71ce7c2fd` / `buildMergedSourceOrNull`:3030: ``MergingMediaSource(true, true, videoSource, audioSource)`` → ``MergingMediaSource(true, false, videoSource, audioSource)`` | ``java.lang.AssertionError`` (`TvPlaybackMediaCharacterizationTest.kt:150`) |
+| `TvPlaybackMediaCharacterizationTest::mergeMissingaudioUrlEmpty` | `s1b2f426e2a` / `buildMergedSourceOrNull`:3015: ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return null`` → ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return MergingMediaSource(true, true, ProgressiveMediaSource.Factor…`` | ``expected:<1> but was:<0>`` (`TvPlaybackMediaCharacterizationTest.kt:142`) |
+| `TvPlaybackMediaCharacterizationTest::mergeMissingaudioUrlNull` | `s1b2f426e2a` / `buildMergedSourceOrNull`:3015: ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return null`` → ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return MergingMediaSource(true, true, ProgressiveMediaSource.Factor…`` | ``expected:<1> but was:<0>`` (`TvPlaybackMediaCharacterizationTest.kt:137`) |
+| `TvPlaybackMediaCharacterizationTest::mergeMissinghdVideoUrlEmpty` | `s1b2f426e2a` / `buildMergedSourceOrNull`:3015: ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return null`` → ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return MergingMediaSource(true, true, ProgressiveMediaSource.Factor…`` | ``expected:<1> but was:<0>`` (`TvPlaybackMediaCharacterizationTest.kt:132`) |
+| `TvPlaybackMediaCharacterizationTest::mergeMissinghdVideoUrlNull` | `s1b2f426e2a` / `buildMergedSourceOrNull`:3015: ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return null`` → ``if (hdVideoUrl.isNullOrEmpty() \|\| audioUrl.isNullOrEmpty()) return MergingMediaSource(true, true, ProgressiveMediaSource.Factor…`` | ``expected:<1> but was:<0>`` (`TvPlaybackMediaCharacterizationTest.kt:127`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakKeepsMimeUnsetAndNeverMergesOrSetsPlayIntent` | `s129e65b02b` / `playPikPakVideoWithRetry`:3484: ``prepare()`` → ``Unit`` | ``expected:<[media:https://example.test/a, prepare, play]> but was:<[media:https://example.test/a, play]>`` (`TvPlaybackMediaCharacterizationTest.kt:118`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakKeepsMimeUnsetAndNeverMergesOrSetsPlayIntent` | `sb10bf65758` / `playPikPakVideoWithRetry`:3485: ``play()`` → ``playWhenReady = true; play()`` | ``expected:<[media:https://example.test/a, prepare, play]> but was:<[media:https://example.test/a, prepare, playWhenReady:true, play]>`` (`TvPlaybackMediaCharacterizationTest.kt:118`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakNullPlayerCancelsRetryBeforeLeavingCues` | `s26e0af3948` / `playPikPakVideoWithRetry`:3455: ``pikPakRetryController.pikPakRetryCount = 0`` → ``pikPakRetryController.pikPakRetryCount = 1`` | ``expected:<0> but was:<1>`` (`TvPlaybackMediaCharacterizationTest.kt:122`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakRouteOrdinary` | `sf7005daffa` / `startPlayback`:2951: ``item.url.contains("mypikpak.com")`` → ``true`` | ``expected:<true> but was:<false>`` (`TvPlaybackMediaCharacterizationTest.kt:32`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakRouteProviderCase` | `sc588e8496e` / `startPlayback`:2950: ``ignoreCase = true`` → ``ignoreCase = false`` | ``expected:<false> but was:<true>`` (`TvPlaybackMediaCharacterizationTest.kt:20`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakRouteUrlCase` | `sf7005daffa` / `startPlayback`:2951: ``item.url.contains("mypikpak.com")`` → ``true`` | ``expected:<true> but was:<false>`` (`TvPlaybackMediaCharacterizationTest.kt:28`) |
+| `TvPlaybackMediaCharacterizationTest::pikpakRouteUrlSubstring` | `sc6df7bced2` / `startPlayback`:2951: ``item.url.contains("mypikpak.com")`` → ``false`` | ``expected:<false> but was:<true>`` (`TvPlaybackMediaCharacterizationTest.kt:24`) |
+| `TvPlaybackMediaCharacterizationTest::switchMergeKeepsOrderedUrisAndClipFlags` | `s86ccb485a4` / `buildMergedSource`:3049: ``MergingMediaSource(true, true, videoSource, audioSource)`` → ``MergingMediaSource(true, false, videoSource, audioSource)`` | ``java.lang.AssertionError`` (`TvPlaybackMediaCharacterizationTest.kt:156`) |
+| `TvPlaybackMergeFallbackCharacterizationTest::initialMergeFactoryFailureUsesMuxedFallback` | `se166787199` / `buildMergedSourceOrNull`:3032: ``android.util.Log.w("AndroidTvPlayer", "merge build failed, using muxed fallback", e) null`` → ``throw e`` | ``merge construction failure must fall back: java.lang.IllegalStateException: phase18 bounded merge-factory failure`` (`TvPlaybackMergeFallbackCharacterizationTest.kt:21`) |
+| `TvPlaybackMergeFallbackCharacterizationTest::qualitySwitchFactoryFailureReturnsNullForSingleUrlFallback` | `s175da8c9cc` / `buildMergedSource`:3051: ``android.util.Log.w("AndroidTvPlayer", "switch merge build failed, using single url", e)`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackMergeFallbackCharacterizationTest.kt:28`) |
+| `TvPlaybackMergeFallbackCharacterizationTest::qualitySwitchFactoryFailureReturnsNullForSingleUrlFallback` | `sff8aa1e16c` / `buildMergedSource`:3051: ``android.util.Log.w("AndroidTvPlayer", "switch merge build failed, using single url", e) null`` → ``throw e`` | ``quality merge construction failure must return fallback: java.lang.IllegalStateException: phase18 bounded merge-factory failure`` (`TvPlaybackMergeFallbackCharacterizationTest.kt:27`) |
+| `TvPlaybackMimeCharacterizationTest::discoveryBypassAlreadyDiscovered` | `s407f56f551` / `startPlayback`:2928: ``!mimeDiscovered`` → ``true`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:127`) |
+| `TvPlaybackMimeCharacterizationTest::discoveryBypassExplicitMime` | `se318123ac4` / `startPlayback`:2928: ``item.mimeType == null`` → ``true`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:132`) |
+| `TvPlaybackMimeCharacterizationTest::discoveryBypassIptv` | `s2139fea92e` / `startPlayback`:2928: ``!isIptvMode`` → ``true`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:122`) |
+| `TvPlaybackMimeCharacterizationTest::discoveryBypassNoHeaders` | `s2fc25b2d75` / `startPlayback`:2929: ``ProtectedStreamHttp.needsDiscovery(item.url, item.httpHeaders)`` → ``true`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:137`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReadsCurrentClientAtIoEvaluation` | `se350b675ef` / `discoverProtectedMime`:2910: ``ProtectedStreamHttp.discoverMimeType(protectedStreamClient, url, headers)`` → ``ProtectedStreamHttp.discoverMimeType(okhttp3.OkHttpClient(), url, headers)`` | ``java.lang.AssertionError`` (`TvPlaybackMimeCharacterizationTest.kt:84`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReentryPersistsDiscoveredTypeWithoutSecondProbe` | `s803b934092` / `startPlayback`:2933: ``val prepared = current.copy(mimeType = mimeType)`` → ``val prepared = current.copy(mimeType = null)`` | ``expected:<application/x-mpegURL> but was:<null>`` (`TvPlaybackMimeCharacterizationTest.kt:116`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReentryPersistsDiscoveredTypeWithoutSecondProbe` | `sa71274e6c0` / `startPlayback`:2934: ``payload?.items?.set(currentIndex, prepared)`` → ``Unit`` | ``expected:<application/x-mpegURL> but was:<null>`` (`TvPlaybackMimeCharacterizationTest.kt:116`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReentryRejectsChangedUrl` | `s93095398d0` / `startPlayback`:2932: ``if (current == null \|\| current.url != item.url) return@discoverProtectedMime`` → ``if (current == null) return@discoverProtectedMime`` | ``java.lang.AssertionError`` (`TvPlaybackMimeCharacterizationTest.kt:108`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReentryRejectsMissingPayload` | `s795f46ef9b` / `startPlayback`:2932: ``if (current == null \|\| current.url != item.url) return@discoverProtectedMime`` → ``if (current == null) { playMediaDirect(item); return@discoverProtectedMime }`` | ``java.lang.AssertionError`` (`TvPlaybackMimeCharacterizationTest.kt:92`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReentryRejectsMissingSlot` | `s795f46ef9b` / `startPlayback`:2932: ``if (current == null \|\| current.url != item.url) return@discoverProtectedMime`` → ``if (current == null) { playMediaDirect(item); return@discoverProtectedMime }`` | ``java.lang.AssertionError`` (`TvPlaybackMimeCharacterizationTest.kt:100`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsDestroyed` | `s122638c48f` / `discoverProtectedMime`:2914: ``!isDestroyed`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:65`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsFinishing` | `s7cc466fca8` / `discoverProtectedMime`:2914: ``!isFinishing`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:55`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsNavigation` | `s469dc5820c` / `discoverProtectedMime`:2912: ``generation == mediaPreparationGeneration`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:25`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsShuffleFinished` | `s5ea749ad6a` / `discoverProtectedMime`:2913: ``(shuffleAttempt == null \|\| shuffleAttemptCurrent(shuffleAttempt))`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:45`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsShuffleFinished` | `sf1aa19a5c7` / `discoverProtectedMime`:2906: ``shuffleAttempt?.navigation = generation`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:45`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsSleep` | `s19443dac36` / `discoverProtectedMime`:2914: ``!sleepStopLatched`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:75`) |
+| `TvPlaybackMimeCharacterizationTest::mimeReturnedIoRejectsSourceToken` | `se7d3c58858` / `discoverProtectedMime`:2912: ``sourceToken == stremioResolutionToken`` → ``true`` | ``expected:<0> but was:<1>`` (`TvPlaybackMimeCharacterizationTest.kt:35`) |
+| `TvPlaybackMimeCharacterizationTest::staleStartRestoresPreparationAndClearsPending` | `s1322b0d544` / `startPlayback`:2924: ``pendingShufflePlayback = null`` → ``Unit`` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@4a48c8ed>`` (`TvPlaybackMimeCharacterizationTest.kt:147`) |
+| `TvPlaybackMimeCharacterizationTest::staleStartRestoresPreparationAndClearsPending` | `s1cb8fa2598` / `startPlayback`:2923: ``restoreShufflePreparation(it)`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackMimeCharacterizationTest.kt:147`) |
+| `TvPlaybackMimeCharacterizationTest::startSleepGateFollowsProtectedHeaderWrite` | `s31f1f071b0` / `startPlayback`:2939: ``activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders`` → ``activeVodHeaders = emptySet<String>() to emptyMap()`` | ``expected:<{X-Night=night}> but was:<{}>`` (`TvPlaybackMimeCharacterizationTest.kt:142`) |
+| `TvPlaybackMimeCharacterizationTest::startSleepGateFollowsProtectedHeaderWrite` | `s68da729a5e` / `startPlayback`:2944: ``if (sleepStopLatched) {`` → ``if (false) {`` | ``java.lang.AssertionError`` (`TvPlaybackMimeCharacterizationTest.kt:142`) |
+| `TvPlaybackNavigatorCharacterizationTest::adjacentNext` | `s7d0f9a00a9` / `playNext`:3091: ``sourceFetchController.requestAdjacentEpisodeFetch( model.imdbId, currentItem.season, currentItem.episode, )`` → ``Unit`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:55`) |
+| `TvPlaybackNavigatorCharacterizationTest::adjacentNext` | `s87d96897e4` / `playNext`:3090: ``hasPlaylistResolver`` → ``false`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:55`) |
+| `TvPlaybackNavigatorCharacterizationTest::adjacentPrevious` | `s637c32044a` / `playPrevious`:3134: ``direction = -1`` → ``direction = 1`` | ``expected:<-1> but was:<1>`` (`TvPlaybackNavigatorCharacterizationTest.kt:62`) |
+| `TvPlaybackNavigatorCharacterizationTest::adjacentPrevious` | `s66d7fabf25` / `playPrevious`:3122: ``hasPlaylistResolver`` → ``false`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:61`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogEpisodeBoundary` | `sff795c47eb` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``View.GONE`` | ``expected:<0> but was:<8>`` (`TvPlaybackNavigatorCharacterizationTest.kt:152`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogFirst` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:140`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogIptvUntouched` | `s23df49709f` / `updateCatalogEpisodeControls`:3146: ``if (isIptvMode) return`` → ``if (false) return`` | ``expected:<4> but was:<0>`` (`TvPlaybackNavigatorCharacterizationTest.kt:134`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogLoadedPrevious` | `sff795c47eb` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``View.GONE`` | ``expected:<0> but was:<8>`` (`TvPlaybackNavigatorCharacterizationTest.kt:122`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogMovie` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:116`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogNoAdjacent` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:164`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogNoResolver` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:158`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogNullIdentity` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:170`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogSeasonBoundary` | `sff795c47eb` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``View.GONE`` | ``expected:<0> but was:<8>`` (`TvPlaybackNavigatorCharacterizationTest.kt:146`) |
+| `TvPlaybackNavigatorCharacterizationTest::catalogTv` | `sa195f36f51` / `updateCatalogEpisodeControls`:3157: ``if (hasPrevious) View.VISIBLE else View.GONE`` → ``if (hasPrevious) View.VISIBLE else View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvPlaybackNavigatorCharacterizationTest.kt:128`) |
+| `TvPlaybackNavigatorCharacterizationTest::continuousShuffleBagWinsOverNextIndex` | `s9464dea27d` / `playNext`:3057: ``if (continuousShuffleEnabled) {`` → ``if (false) {`` | ``expected:<2> but was:<1>`` (`TvPlaybackNavigatorCharacterizationTest.kt:26`) |
+| `TvPlaybackNavigatorCharacterizationTest::continuousShuffleBagWinsOverNextIndex` | `sb4e2861769` / `playNext`:3061: ``isAutoAdvancing = true`` → ``Unit`` | ``expected:<0> but was:<321>`` (`TvPlaybackNavigatorCharacterizationTest.kt:26`) |
+| `TvPlaybackNavigatorCharacterizationTest::guideNext` | `sb664c62560` / `playNext`:3087: ``sourceFetchController.requestEpisodeFetch(nextTarget.season, nextTarget.episode)`` → ``Unit`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:44`) |
+| `TvPlaybackNavigatorCharacterizationTest::guidePrevious` | `s2fd3b99424` / `playPrevious`:3125: ``sourceFetchController.requestEpisodeFetch(previousTarget.season, previousTarget.episode)`` → ``Unit`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:50`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndMissingItem` | `s35d4b13540` / `playNext`:3103: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:92`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndMissingPayload` | `s35d4b13540` / `playNext`:3103: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:97`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndMovie` | `s35d4b13540` / `playNext`:3103: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:72`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndNoEpisode` | `s35d4b13540` / `playNext`:3103: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:87`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndNoImdb` | `s85f394805b` / `playNext`:3100: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:77`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextEndNoSeason` | `s35d4b13540` / `playNext`:3103: ``"End of playlist"`` → ``"End"`` | ``expected:<End[ of playlist]> but was:<End[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:82`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextLiveChannelRequestsTvBeforeGuide` | `sbdbca0a2de` / `playNext`:3073: ``stremioTvGuideController.requestStremioTvNext()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackNavigatorCharacterizationTest.kt:38`) |
+| `TvPlaybackNavigatorCharacterizationTest::nextPlaylistIndexWinsAndSuppressesSavedResume` | `s1595830361` / `playNext`:3069: ``isAutoAdvancing = true`` → ``isAutoAdvancing = false`` | ``expected:<0> but was:<400>`` (`TvPlaybackNavigatorCharacterizationTest.kt:21`) |
+| `TvPlaybackNavigatorCharacterizationTest::previousAtBeginningShowsExactToast` | `sa8b198002f` / `playPrevious`:3139: ``"Beginning of playlist"`` → ``"Beginning"`` | ``expected:<Beginning[ of playlist]> but was:<Beginning[]>`` (`TvPlaybackNavigatorCharacterizationTest.kt:106`) |
+| `TvPlaybackNavigatorCharacterizationTest::previousLoadedEpisodeStartsFresh` | `sd966f849aa` / `playPrevious`:3118: ``suppressResume = true`` → ``suppressResume = false`` | ``expected:<0> but was:<400>`` (`TvPlaybackNavigatorCharacterizationTest.kt:102`) |
+| `TvPlaybackNavigatorCharacterizationTest::previousMissingPayloadHasNoEffects` | `sbd9edf6475` / `playPrevious`:3112: ``val model = payload ?: return`` → ``val model = payload ?: run { Toast.makeText(this, "unexpected", Toast.LENGTH_SHORT).show(); return }`` | ``expected null, but was:<unexpected>`` (`TvPlaybackNavigatorCharacterizationTest.kt:110`) |
+| `TvPlaybackNavigatorCharacterizationTest::quickPlayHandsBackThroughActivityFinishOverride` | `s5ebc4ac02d` / `playNext`:3098: ``finish()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackNavigatorCharacterizationTest.kt:67`) |
+| `TvPlaybackNavigatorCharacterizationTest::wholeShowShuffleWinsOverPackShuffle` | `s227e0344c4` / `playNext`:3058: ``if (playShowShuffle()) return`` → ``if (false) return`` | ``expected production request requestEpisodeFetch`` (`TvPlaybackNavigatorCharacterizationTest.kt:32`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogRandomOnce` | `sebe448fea2` / `showRandomPlaybackDialog`:3193: ``resetShuffle()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:24`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogReadsToggleAtClickTime` | `s4c5a916a3e` / `showRandomPlaybackDialog`:3197: ``if (continuousShuffleEnabled) {`` → ``if (false) {`` | ``java.lang.AssertionError`` (`TvPlaybackRandomDialogCharacterizationTest.kt:48`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogReadsToggleAtClickTime` | `sc20d8fe99c` / `showRandomPlaybackDialog`:3198: ``continuousShuffleEnabled = false`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackRandomDialogCharacterizationTest.kt:48`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogTurnOff` | `s872955ccae` / `showRandomPlaybackDialog`:3200: ``"Continuous shuffle off"`` → ``"Off"`` | ``expected:<[Continuous shuffle o]ff> but was:<[O]ff>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:34`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogTurnOff` | `se36ee32d5b` / `showRandomPlaybackDialog`:3199: ``resetShuffle()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:33`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogTurnOn` | `s773dd374ec` / `showRandomPlaybackDialog`:3203: ``resetShuffle()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:42`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogUnavailableEmpty` | `s5fc5e1f4db` / `showRandomPlaybackDialog`:3176: ``"No items in playlist"`` → ``"No items"`` | ``expected:<No items[ in playlist]> but was:<No items[]>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:56`) |
+| `TvPlaybackRandomDialogCharacterizationTest::dialogUnavailableNull` | `s5fc5e1f4db` / `showRandomPlaybackDialog`:3176: ``"No items in playlist"`` → ``"No items"`` | ``expected:<No items[ in playlist]> but was:<No items[]>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:52`) |
+| `TvPlaybackRandomDialogCharacterizationTest::randomEmptyShowsExactToast` | `sa3654f7ecb` / `playRandom`:3164: ``"No items in playlist"`` → ``"No items"`` | ``expected:<No items[ in playlist]> but was:<No items[]>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:64`) |
+| `TvPlaybackRandomDialogCharacterizationTest::randomManualClearsAutoAndSuppressesResume` | `s39814d6ceb` / `playRandom`:3170: ``suppressResume = true`` → ``suppressResume = false`` | ``expected:<0> but was:<99>`` (`TvPlaybackRandomDialogCharacterizationTest.kt:60`) |
+| `TvPlaybackReadinessReentryCharacterizationTest::oldReadyDuringPreparationIsClearedBeforeInstallMerged` | `sfa5f8fea5a` / `playMediaDirect`:2988: ``subtitleTrackReadiness.onMediaReplacement()`` → ``Unit`` | ``expected:<2> but was:<1>`` (`TvPlaybackReadinessReentryCharacterizationTest.kt:30`) |
+| `TvPlaybackReadinessReentryCharacterizationTest::oldReadyDuringPreparationIsClearedBeforeInstallPikPak` | `s8102ff7f45` / `playPikPakVideoWithRetry`:3482: ``subtitleTrackReadiness.onMediaReplacement()`` → ``Unit`` | ``expected:<2> but was:<1>`` (`TvPlaybackReadinessReentryCharacterizationTest.kt:36`) |
+| `TvPlaybackReadinessReentryCharacterizationTest::oldReadyDuringPreparationIsClearedBeforeInstallPlain` | `s357446eca7` / `playMediaDirect`:2991: ``subtitleTrackReadiness.onMediaReplacement()`` → ``Unit`` | ``expected:<2> but was:<1>`` (`TvPlaybackReadinessReentryCharacterizationTest.kt:24`) |
+| `TvPlaybackReadinessReentryCharacterizationTest::oldReadyDuringPreparationIsClearedBeforeInstallTrio` | `s40f9bbda89` / `playStremioTvPlaybackMap`:5261: ``subtitleTrackReadiness.onMediaReplacement()`` → ``Unit`` | ``expected:<2> but was:<1>`` (`TvPlaybackReadinessReentryCharacterizationTest.kt:42`) |
+| `TvPlaybackResolveCharacterizationTest::failedResolutionEmpty` | `s21a2fab5a5` / `resolveAndPlay`:2885: ``"Unable to load stream"`` → ``"Unable to load"`` | ``expected:<Unable to load[ stream]> but was:<Unable to load[]>`` (`TvPlaybackResolveCharacterizationTest.kt:97`) |
+| `TvPlaybackResolveCharacterizationTest::failedResolutionEmpty` | `sca2f687474` / `resolveAndPlay`:2819: ``controlsOverlayController.setResolvingState(true)`` → ``Unit`` | ``expected:<160> but was:<300>`` (`TvPlaybackResolveCharacterizationTest.kt:98`) |
+| `TvPlaybackResolveCharacterizationTest::failedResolutionMalformed` | `s21a2fab5a5` / `resolveAndPlay`:2885: ``"Unable to load stream"`` → ``"Unable to load"`` | ``expected:<Unable to load[ stream]> but was:<Unable to load[]>`` (`TvPlaybackResolveCharacterizationTest.kt:109`) |
+| `TvPlaybackResolveCharacterizationTest::failedResolutionNull` | `s21a2fab5a5` / `resolveAndPlay`:2885: ``"Unable to load stream"`` → ``"Unable to load"`` | ``expected:<Unable to load[ stream]> but was:<Unable to load[]>`` (`TvPlaybackResolveCharacterizationTest.kt:91`) |
+| `TvPlaybackResolveCharacterizationTest::failedResolutionWrongType` | `s21a2fab5a5` / `resolveAndPlay`:2885: ``"Unable to load stream"`` → ``"Unable to load"`` | ``expected:<Unable to load[ stream]> but was:<Unable to load[]>`` (`TvPlaybackResolveCharacterizationTest.kt:103`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsManualIndex` | `s658dbc2171` / `resolveAndPlay`:2845: ``startupGateController.manualSourceSwitchIndex != manualSourceIndex`` → ``false`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:49`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsManualSnapshot` | `s565e8e720e` / `resolveAndPlay`:2844: ``startupGateController.manualSourceSwitchSnapshot == null`` → ``false`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:40`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsManualToken` | `s16d63a8de6` / `resolveAndPlay`:2846: ``stremioResolutionToken != manualResolutionToken`` → ``false`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:58`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsNavigation` | `s3b0695f9f5` / `resolveAndPlay`:2840: ``navigation != mediaPreparationGeneration`` → ``false`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:23`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsShuffleFinished` | `s7a710eef81` / `resolveAndPlay`:2841: ``!shuffleAttemptCurrent(shuffleAttempt)`` → ``false`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:31`) |
+| `TvPlaybackResolveCharacterizationTest::lateReplyRejectsStartupGeneration` | `s80d58ec4ec` / `resolveAndPlay`:2857: ``current = startupGateController.startupFailoverGeneration`` → ``current = startupGeneration ?: startupGateController.startupFailoverGeneration`` | ``expected:<[]> but was:<[https://resolved.invalid/new.mp4]>`` (`TvPlaybackResolveCharacterizationTest.kt:67`) |
+| `TvPlaybackResolveCharacterizationTest::manualSuccessWritesCandidateUrlAndSelectedPayloadSlot` | `sb79aead639` / `resolveAndPlay`:2893: ``startupGateController.manualSourceCandidateUrl = url`` → ``startupGateController.manualSourceCandidateUrl = null`` | ``expected:<https://resolve.invalid/selected.mp4> but was:<null>`` (`TvPlaybackResolveCharacterizationTest.kt:123`) |
+| `TvPlaybackResolveCharacterizationTest::nullResolutionUsesShuffleFailureBeforeToast` | `se1767f7a7c` / `resolveAndPlay`:2881: ``if (failShufflePlayback()) return@requestStreamFromFlutter`` → ``if (false) return@requestStreamFromFlutter`` | ``expected null, but was:<Unable to load stream>`` (`TvPlaybackResolveCharacterizationTest.kt:116`) |
+| `TvPlaybackResolveCharacterizationTest::providerEmpty` | `s504a3f4ad0` / `resolveAndPlay`:2891: ``provider = provider ?: item.provider`` → ``provider = item.provider`` | ``expected:<[]> but was:<[Original]>`` (`TvPlaybackResolveCharacterizationTest.kt:85`) |
+| `TvPlaybackResolveCharacterizationTest::providerExplicit` | `s504a3f4ad0` / `resolveAndPlay`:2891: ``provider = provider ?: item.provider`` → ``provider = item.provider`` | ``expected:<[Fetched]> but was:<[Original]>`` (`TvPlaybackResolveCharacterizationTest.kt:79`) |
+| `TvPlaybackResolveCharacterizationTest::providerExplicit` | `s97989f2f49` / `resolveAndPlay`:2892: ``payload?.items?.set(index, updatedItem)`` → ``Unit`` | ``expected:<[Fetched]> but was:<[Original]>`` (`TvPlaybackResolveCharacterizationTest.kt:79`) |
+| `TvPlaybackResolveCharacterizationTest::providerMissing` | `s7161e3bc2e` / `resolveAndPlay`:2891: ``provider = provider ?: item.provider`` → ``provider = provider`` | ``expected:<Original> but was:<null>`` (`TvPlaybackResolveCharacterizationTest.kt:73`) |
+| `TvPlaybackStartEffectsCharacterizationTest::alreadyFinishedFailureDoesNotPostUnavailable` | `s0217ed7e7f` / `failShufflePlayback`:3255: ``if (current) {`` → ``if (true) {`` | ``expected:<0> but was:<1>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:69`) |
+| `TvPlaybackStartEffectsCharacterizationTest::manualResolveFailureRestoresBeforeStartupAndKeepsReason` | `s349d0e37a7` / `resolveAndPlay`:2882: ``startupGateController.failManualSourceCandidate("initial-resolve")`` → ``startupGateController.failManualSourceCandidate("resolve")`` | ``java.lang.AssertionError`` (`TvPlaybackStartEffectsCharacterizationTest.kt:48`) |
+| `TvPlaybackStartEffectsCharacterizationTest::playItemDropsOldSourceFeedbackBeforeStartingMedia` | `sddce56930a` / `playItem`:2770: ``sourceSwitchController.dropStaleSourceSwitchFeedback()`` → ``Unit`` | ``expected null, but was:<com.debrify.app.tv.TvSourceSwitchController$watchSourceSwitchOutcome$listener$1@6b15cde>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:21`) |
+| `TvPlaybackStartEffectsCharacterizationTest::playlistHighlightDirect` | `saf8d086ea9` / `playMediaDirect`:3000: ``playlistController.playlistAdapter?.setActiveIndex(currentIndex)`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStartEffectsCharacterizationTest.kt:25`) |
+| `TvPlaybackStartEffectsCharacterizationTest::playlistHighlightPikPak` | `s4cbde5ce62` / `playPikPakVideoWithRetry`:3489: ``playlistController.playlistAdapter?.setActiveIndex(currentIndex)`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStartEffectsCharacterizationTest.kt:33`) |
+| `TvPlaybackStartEffectsCharacterizationTest::sourceMapRefreshesQualityBadge` | `sa7f2b54862` / `updateStremioSourcesFromPlaybackMap`:5150: ``sourceSwitchController.setupStremioSources()`` → ``Unit`` | ``expected:<[Sources]> but was:<[old]>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:59`) |
+| `TvPlaybackStartEffectsCharacterizationTest::startupResolveFailureExhaustsGateBeforeToastAndKeepsReason` | `s209935c88e` / `resolveAndPlay`:2883: ``startupGateController.failStartupResolution(currentStremioSourceIndex, "initial-resolve")`` → ``false`` | ``java.lang.AssertionError`` (`TvPlaybackStartEffectsCharacterizationTest.kt:54`) |
+| `TvPlaybackStartEffectsCharacterizationTest::titleRefreshDirect` | `se8eac15d95` / `playMediaDirect`:2999: ``controlsOverlayController.identity.updateTitle(item)`` → ``Unit`` | ``expected:<[Film]> but was:<[Outgoing]>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:29`) |
+| `TvPlaybackStartEffectsCharacterizationTest::titleRefreshPikPak` | `s95a628cc0d` / `playPikPakVideoWithRetry`:3488: ``controlsOverlayController.identity.updateTitle(item)`` → ``Unit`` | ``expected:<[Film]> but was:<[Outgoing]>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:37`) |
+| `TvPlaybackStartEffectsCharacterizationTest::unifiedMenuRandomChoiceUsesResetAndManualStart` | `s6f5342fb29` / `umPlaybackModel`:4390: ``resetShuffle(); playRandom();`` → ``resetShuffle();`` | ``expected:<1> but was:<0>`` (`TvPlaybackStartEffectsCharacterizationTest.kt:65`) |
+| `TvPlaybackStartEffectsCharacterizationTest::wholeShowHidesUpNextBeforeFetch` | `s90d2137ca5` / `playShowShuffle`:3337: ``upNextController.hideUpNextCard()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStartEffectsCharacterizationTest.kt:41`) |
+| `TvPlaybackStartLifecycleCharacterizationTest::destroyCancelsScopeBeforeGenerationBeforeBrowserAndPlayer` | `s2911bb646a` / `onDestroy`:4971: ``mediaPreparationScope.cancel() mediaPreparationGeneration++`` → ``mediaPreparationGeneration++ mediaPreparationScope.cancel()`` | ``expected:<0> but was:<1>`` (`TvPlaybackStartLifecycleCharacterizationTest.kt:23`) |
+| `TvPlaybackStartLifecycleCharacterizationTest::destroyInvalidatesAlreadyReturnedMimeContinuation` | `s6c8121c712` / `onDestroy`:4972: ``mediaPreparationGeneration++`` → ``mediaPreparationGeneration += 0`` | ``expected:<2> but was:<1>`` (`TvPlaybackStartLifecycleCharacterizationTest.kt:35`) |
+| `TvPlaybackStartLifecycleCharacterizationTest::destroyRemovesShufflePostsAndPolls` | `s0bac2c6f4b` / `onDestroy`:5073: ``progressHandler.removeCallbacksAndMessages(null)`` → ``Unit`` | ``expected:<false> but was:<true>`` (`TvPlaybackStartLifecycleCharacterizationTest.kt:29`) |
+| `TvPlaybackStartPrerequisiteTest::originalMimeCoroutineCanPauseAfterIoBeforeItsMainGuard` | `sff16f6b8c5` / `discoverProtectedMime`:2905: ``val generation = ++mediaPreparationGeneration`` → ``val generation = mediaPreparationGeneration`` | ``expected:<1> but was:<0>`` (`TvPlaybackStartPrerequisiteTest.kt:64`) |
+| `TvPlaybackStartPrerequisiteTest::originalPlayerProbeDistinguishesMergedPlainMimeAndPlayIntent` | `s94804a5fdd` / `playMediaDirect`:2995: ``playWhenReady = true`` → ``playWhenReady = false`` | ``expected:<[merged, prepare, playWhenReady:true, play]> but was:<[merged, prepare, playWhenReady:false, play]>`` (`TvPlaybackStartPrerequisiteTest.kt:75`) |
+| `TvPlaybackStartPrerequisiteTest::originalRandomDialogRunsItsRealChoiceCallback` | `sebe448fea2` / `showRandomPlaybackDialog`:3193: ``resetShuffle()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackStartPrerequisiteTest.kt:98`) |
+| `TvPlaybackStartPrerequisiteTest::realResolveObservesInlineBinaryReply` | `s504a3f4ad0` / `resolveAndPlay`:2891: ``provider = provider ?: item.provider`` → ``provider = item.provider`` | ``provider survives inline binary decoding expected:<[Resolved]> but was:<[Original]>`` (`TvPlaybackStartPrerequisiteTest.kt:18`) |
+| `TvPlaybackStartPrerequisiteTest::realResolveObservesQueuedBinaryReply` | `s504a3f4ad0` / `resolveAndPlay`:2891: ``provider = provider ?: item.provider`` → ``provider = item.provider`` | ``provider survives queued binary decoding expected:<[Resolved]> but was:<[Original]>`` (`TvPlaybackStartPrerequisiteTest.kt:19`) |
+| `TvPlaybackStartPrerequisiteTest::realResolvePinsOffLooperWorkerReplyQuirk` | `sfbe5fd532e` / `resolveAndPlay`:2872: ``controlsOverlayController.setResolvingState(false)`` → ``Unit`` | ``worker callback reaches resolving UI before payload replacement expected:<[]> but was:<[https://phase18.invalid/worker.mp4]>`` (`TvPlaybackStartPrerequisiteTest.kt:20`) |
+| `TvPlaybackStartPrerequisiteTest::unseededShuffleIsObservableThroughSeededBagAndCycleInvariants` | `se3089bf767` / `pickShuffleIndex`:3415: ``return shuffleBag.removeAt(shuffleBag.lastIndex)`` → ``return shuffleBag.removeAt(0)`` | ``explicit bag seed gives an observable pop expected:<2> but was:<1>`` (`TvPlaybackStartPrerequisiteTest.kt:107`) |
+| `TvPlaybackStateEdgesCharacterizationTest::bufferingFeedbackIsHiddenBeforeMedia` | `sa10e88cfd8` / `playItem`:2776: ``hideBufferingIndicator()`` → ``Unit`` | ``expected:<200> but was:<999>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:20`) |
+| `TvPlaybackStateEdgesCharacterizationTest::mergedFactoriesFollowCrossProtocolRedirects` | `s4396e1796e` / `buildMergedSourceOrNull`:3020: ``.setAllowCrossProtocolRedirects(true)`` → ``.setAllowCrossProtocolRedirects(false)`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:45`) |
+| `TvPlaybackStateEdgesCharacterizationTest::mergedFactoriesFollowCrossProtocolRedirects` | `s881ee3cc4e` / `buildMergedSource`:3043: ``.setAllowCrossProtocolRedirects(true)`` → ``.setAllowCrossProtocolRedirects(false)`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:45`) |
+| `TvPlaybackStateEdgesCharacterizationTest::mergedPlayerClearsReadinessBeforeSourceInstall` | `s0d7df59479` / `playMediaDirect`:2986: ``pendingShufflePlayback?.mediaStarted = true`` → ``pendingShufflePlayback?.mediaStarted = false`` | ``expected:<true> but was:<false>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:28`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakClearsPreviousCuesBeforeInstallingMedia` | `sad85d542fd` / `playPikPakVideoWithRetry`:3466: ``subtitleOverlay.setCues(emptyList())`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:32`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakNullPlayerPreservesOutgoingCues` | `s66bfb8f123` / `playPikPakVideoWithRetry`:3460: ``if (player == null) {`` → ``if (false) {`` | ``expected:<[androidx.media3.common.text.Cue@2c3f182b]> but was:<[]>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:36`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakStartCancelsOldRetryIdAndShowsColdStorageLoop` | `s05e4e47487` / `playPikPakVideoWithRetry`:3496: ``pikPakRetryController.attemptPikPakPlaybackLoop(item, 0, myRetryId)`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:40`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakStartCancelsOldRetryIdAndShowsColdStorageLoop` | `s0f815d1f5d` / `playPikPakVideoWithRetry`:3451: ``pikPakRetryController.pikPakRetryId++`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:40`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakStartCancelsOldRetryIdAndShowsColdStorageLoop` | `s4cf3743145` / `playPikPakVideoWithRetry`:3496: ``pikPakRetryController.attemptPikPakPlaybackLoop(item, 0, myRetryId)`` → ``pikPakRetryController.attemptPikPakPlaybackLoop(item, 1, myRetryId)`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:40`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakStartCancelsOldRetryIdAndShowsColdStorageLoop` | `s54237bcf13` / `playPikPakVideoWithRetry`:3457: ``pikPakRetryController.hidePikPakRetryOverlay()`` → ``Unit`` | ``expected:<8> but was:<0>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:40`) |
+| `TvPlaybackStateEdgesCharacterizationTest::pikpakStartCancelsOldRetryIdAndShowsColdStorageLoop` | `sb95938ac10` / `playPikPakVideoWithRetry`:3456: ``pikPakRetryController.isPikPakRetrying = false`` → ``Unit`` | ``java.lang.AssertionError`` (`TvPlaybackStateEdgesCharacterizationTest.kt:40`) |
+| `TvPlaybackStateEdgesCharacterizationTest::selectedEpisodeRecomputesPreviousControl` | `s8320ba1d2d` / `playItem`:2784: ``updateCatalogEpisodeControls()`` → ``Unit`` | ``expected:<0> but was:<4>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:24`) |
+| `TvPlaybackStateEdgesCharacterizationTest::sourceTrioRefreshesQualityAfterRetainedSources` | `s6b0c310381` / `playStremioTvPlaybackMap`:5219: ``sourceSwitchController.updateStremioQualityBadge()`` → ``Unit`` | ``expected:<[Sources]> but was:<[Outgoing]>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:57`) |
+| `TvPlaybackStateEdgesCharacterizationTest::trioNotifiesRowsClearsRetryAndFetchesCaptions` | `s80bfc84011` / `playStremioTvPlaybackMap`:5287: ``subtitleSourcesController.fetchStremioSubtitles(playbackItem)`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:53`) |
+| `TvPlaybackStateEdgesCharacterizationTest::trioNotifiesRowsClearsRetryAndFetchesCaptions` | `s991a6f9ba4` / `playStremioTvPlaybackMap`:5229: ``subtitleSourcesController.resetSubtitleState()`` → ``Unit`` | ``expected null, but was:<ttold>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:53`) |
+| `TvPlaybackStateEdgesCharacterizationTest::trioNotifiesRowsClearsRetryAndFetchesCaptions` | `sde41828c10` / `playStremioTvPlaybackMap`:5231: ``pikPakRetryController.cancelPikPakRetry()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:53`) |
+| `TvPlaybackStateEdgesCharacterizationTest::trioUpdatesGuideChannelMetadataBeforeTitle` | `sfeb7da0924` / `playStremioTvPlaybackMap`:5215: ``updateStremioTvGuideChannelData(channel, map)`` → ``Unit`` | ``expected:<New programme> but was:<null>`` (`TvPlaybackStateEdgesCharacterizationTest.kt:61`) |
+| `TvShowShuffleCharacterizationTest::blankResolutionFailureFetchesSameIdentityThenRetriesAnother` | `s42eea2502c` / `playShowShuffle`:3357: ``onUnavailable = { fetchTarget() }`` → ``onUnavailable = {}`` | ``expected production request requestEpisodeFetch`` (`TvShowShuffleCharacterizationTest.kt:164`) |
+| `TvShowShuffleCharacterizationTest::blankTargetLateReplyRejectedDestroyed` | `s5e94267490` / `shuffleAttemptOwned`:3239: ``!isDestroyed`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShowShuffleCharacterizationTest.kt:154`) |
+| `TvShowShuffleCharacterizationTest::blankTargetLateReplyRejectedFinishing` | `sf6e4ebe5cd` / `shuffleAttemptOwned`:3239: ``!isFinishing`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShowShuffleCharacterizationTest.kt:149`) |
+| `TvShowShuffleCharacterizationTest::blankTargetLateReplyRejectedGeneration` | `sf772cee469` / `shuffleAttemptOwned`:3239: ``attempt.generation == showShuffleGeneration`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShowShuffleCharacterizationTest.kt:139`) |
+| `TvShowShuffleCharacterizationTest::blankTargetLateReplyRejectedNavigation` | `sf15c6656b1` / `shuffleAttemptOwned`:3240: ``attempt.navigation == mediaPreparationGeneration`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShowShuffleCharacterizationTest.kt:144`) |
+| `TvShowShuffleCharacterizationTest::blankTargetLateReplyRejectedSleepAutomatic` | `sebff6753ec` / `shuffleAttemptOwned`:3241: ``(!attempt.autoAdvance \|\| !sleepStopLatched)`` → ``true`` | ``expected:<[]> but was:<[https://shuffle.invalid/late.mp4]>`` (`TvShowShuffleCharacterizationTest.kt:159`) |
+| `TvShowShuffleCharacterizationTest::blankTargetResolvesBeforeChangingIndexAndProvider` | `sb0ce009747` / `playShowShuffle`:3372: ``provider = provider ?: item.provider`` → ``provider = item.provider`` | ``expected:<[Fetche]d> but was:<[Ol]d>`` (`TvShowShuffleCharacterizationTest.kt:134`) |
+| `TvShowShuffleCharacterizationTest::busyFetchDoesNotDuplicateAlreadyQueued` | `sfb29a8250b` / `playShowShuffle`:3303: ``if (autoAdvance \|\| queuedShuffleGeneration == showShuffleGeneration) return true`` → ``if (false) return true`` | ``expected:<123> but was:<0>`` (`TvShowShuffleCharacterizationTest.kt:70`) |
+| `TvShowShuffleCharacterizationTest::busyFetchDoesNotDuplicateAutomatic` | `sfb29a8250b` / `playShowShuffle`:3303: ``if (autoAdvance \|\| queuedShuffleGeneration == showShuffleGeneration) return true`` → ``if (false) return true`` | ``expected:<null> but was:<0>`` (`TvShowShuffleCharacterizationTest.kt:65`) |
+| `TvShowShuffleCharacterizationTest::canShuffleCaseInsensitive` | `saac70999ff` / `canShuffleWholeShow`:3292: ``ignoreCase = true`` → ``ignoreCase = false`` | ``expected:<true> but was:<false>`` (`TvShowShuffleCharacterizationTest.kt:41`) |
+| `TvShowShuffleCharacterizationTest::canShuffleCustomEmpty` | `s79e623c845` / `canShuffleWholeShow`:3293: ``customShuffleEpisodes != null`` → ``false`` | ``expected:<true> but was:<false>`` (`TvShowShuffleCharacterizationTest.kt:56`) |
+| `TvShowShuffleCharacterizationTest::canShuffleEnabled` | `s68716e5f39` / `canShuffleWholeShow`:3291: ``hasPlaylistResolver`` → ``false`` | ``expected:<true> but was:<false>`` (`TvShowShuffleCharacterizationTest.kt:21`) |
+| `TvShowShuffleCharacterizationTest::canShuffleIptv` | `s13eec1992e` / `canShuffleWholeShow`:3291: ``!isIptvMode`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShowShuffleCharacterizationTest.kt:31`) |
+| `TvShowShuffleCharacterizationTest::canShuffleMovie` | `s51fac92743` / `canShuffleWholeShow`:3292: ``model.contentType.equals("series", ignoreCase = true)`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShowShuffleCharacterizationTest.kt:46`) |
+| `TvShowShuffleCharacterizationTest::canShuffleNoGuide` | `s749728bc97` / `canShuffleWholeShow`:3293: ``(customShuffleEpisodes != null \|\| model.guideEpisodes.isNotEmpty())`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShowShuffleCharacterizationTest.kt:51`) |
+| `TvShowShuffleCharacterizationTest::canShuffleNoResolver` | `s663e516538` / `canShuffleWholeShow`:3291: ``hasPlaylistResolver`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShowShuffleCharacterizationTest.kt:26`) |
+| `TvShowShuffleCharacterizationTest::canShuffleTv` | `sdd689345ae` / `canShuffleWholeShow`:3291: ``!isStremioTvMode`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShowShuffleCharacterizationTest.kt:36`) |
+| `TvShowShuffleCharacterizationTest::currentIdentityRequiresBothEpisodeOnly` | `s8a9a1d9367` / `playShowShuffle`:3327: ``if (season != null && episode != null) ShuffleEpisode(season, episode) else null`` → ``if (season != null \|\| episode != null) ShuffleEpisode(season ?: 1, episode ?: 1) else null`` | ``expected production request requestEpisodeFetch`` (`TvShowShuffleCharacterizationTest.kt:175`) |
+| `TvShowShuffleCharacterizationTest::currentIdentityRequiresBothSeasonOnly` | `s8a9a1d9367` / `playShowShuffle`:3327: ``if (season != null && episode != null) ShuffleEpisode(season, episode) else null`` → ``if (season != null \|\| episode != null) ShuffleEpisode(season ?: 1, episode ?: 1) else null`` | ``expected production request requestEpisodeFetch`` (`TvShowShuffleCharacterizationTest.kt:170`) |
+| `TvShowShuffleCharacterizationTest::customEligibilityOverridesGuideAndExcludesCurrentAttempted` | `s3e0e5fd4bd` / `playShowShuffle`:3329: ``val eligible = customShuffleEpisodes ?:`` → ``val eligible = null ?:`` | ``expected:<{season=2, episode=2}> but was:<{season=3, episode=3}>`` (`TvShowShuffleCharacterizationTest.kt:123`) |
+| `TvShowShuffleCharacterizationTest::guideExcludesDisabled` | `sbd37e5d2fd` / `playShowShuffle`:3330: ``it.shuffleEligible`` → ``true`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:118`) |
+| `TvShowShuffleCharacterizationTest::guideExcludesZeroEpisode` | `s1528c3e706` / `playShowShuffle`:3330: ``it.episode > 0`` → ``true`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:114`) |
+| `TvShowShuffleCharacterizationTest::guideExcludesZeroSeason` | `s300a1b9a6f` / `playShowShuffle`:3330: ``it.season > 0`` → ``true`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:110`) |
+| `TvShowShuffleCharacterizationTest::inPackResolvedTargetUsesSuppressedResumeAndAttempt` | `s81c6e6b9f8` / `playShowShuffle`:3362: ``playItem(index, suppressResume = true, shuffleAttempt = attempt)`` → ``playItem(index, suppressResume = false, shuffleAttempt = attempt)`` | ``expected:<0> but was:<600>`` (`TvShowShuffleCharacterizationTest.kt:128`) |
+| `TvShowShuffleCharacterizationTest::manualBusyFetchQueuesAtExactFiftyMsThenStarts` | `s09468550c0` / `playShowShuffle`:3320: ``progressHandler.postDelayed({ retryWhenIdle() }, 50)`` → ``progressHandler.postDelayed({ retryWhenIdle() }, 49)`` | ``expected:<1> but was:<0>`` (`TvShowShuffleCharacterizationTest.kt:76`) |
+| `TvShowShuffleCharacterizationTest::manualBusyFetchQueuesAtExactFiftyMsThenStarts` | `sbf1d5e9070` / `playShowShuffle`:3307: ``queuedShuffleNavigation = navigation`` → ``Unit`` | ``expected:<0> but was:<null>`` (`TvShowShuffleCharacterizationTest.kt:75`) |
+| `TvShowShuffleCharacterizationTest::manualBusyFetchQueuesAtExactFiftyMsThenStarts` | `se5a08319e7` / `playShowShuffle`:3305: ``queuedShuffleGeneration = generation`` → ``Unit`` | ``expected:<0> but was:<null>`` (`TvShowShuffleCharacterizationTest.kt:75`) |
+| `TvShowShuffleCharacterizationTest::notWholeShowReturnsFalseWithoutEffects` | `sed4db293f2` / `playShowShuffle`:3301: ``if (!canShuffleWholeShow()) return false`` → ``if (!canShuffleWholeShow()) return true`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:60`) |
+| `TvShowShuffleCharacterizationTest::queuedBusyFetchPollsAgainBeforeStarting` | `s77eec0ebae` / `playShowShuffle`:3314: ``if (sourceFetchController.episodeFetchInFlight) progressHandler.postDelayed({ retryWhenIdle() }, 50)`` → ``if (false) progressHandler.postDelayed({ retryWhenIdle() }, 50)`` | ``expected:<0> but was:<null>`` (`TvShowShuffleCharacterizationTest.kt:81`) |
+| `TvShowShuffleCharacterizationTest::queuedPollCancelsDestroyed` | `s4ff1f0a62a` / `playShowShuffle`:3310: ``isDestroyed`` → ``false`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:101`) |
+| `TvShowShuffleCharacterizationTest::queuedPollCancelsFinishing` | `sdd17d15699` / `playShowShuffle`:3310: ``isFinishing`` → ``false`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:96`) |
+| `TvShowShuffleCharacterizationTest::queuedPollCancelsGeneration` | `sb868175158` / `playShowShuffle`:3309: ``generation != showShuffleGeneration`` → ``false`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:86`) |
+| `TvShowShuffleCharacterizationTest::queuedPollCancelsNavigation` | `s8881494871` / `playShowShuffle`:3309: ``navigation != mediaPreparationGeneration`` → ``false`` | ``java.lang.AssertionError`` (`TvShowShuffleCharacterizationTest.kt:91`) |
+| `TvShowShuffleCharacterizationTest::threeAttemptCapShowsExactPill` | `s902659f1fb` / `playShowShuffle`:3332: ``attempted.size < 3`` → ``attempted.size <= 3`` | ``expected:<[No other playable episode found for shuffle]> but was:<[Fetching S01E04…]>`` (`TvShowShuffleCharacterizationTest.kt:106`) |
+| `TvShuffleBagCharacterizationTest::bagCycleExhaustsDistinctEligibleBeforeRepeat` | `sc630e7bd6b` / `pickShuffleIndex`:3403: ``getShuffleEligibleIndices().distinct()`` → ``getShuffleEligibleIndices()`` | ``java.lang.AssertionError`` (`TvShuffleBagCharacterizationTest.kt:82`) |
+| `TvShuffleBagCharacterizationTest::bagRemovesCurrentAndIneligibleThenPopsLast` | `s4f77551a55` / `pickShuffleIndex`:3408: ``it !in eligibleSet \|\| it == currentIndex`` → ``it !in eligibleSet`` | ``expected:<[1]> but was:<[0, 1]>`` (`TvShuffleBagCharacterizationTest.kt:77`) |
+| `TvShuffleBagCharacterizationTest::eligibleEmptyPayload` | `s33dc3d0718` / `getShuffleEligibleIndices`:3380: ``if (model.items.isEmpty()) return emptyList()`` → ``if (model.items.isEmpty()) return listOf(0)`` | ``expected:<[]> but was:<[0]>`` (`TvShuffleBagCharacterizationTest.kt:64`) |
+| `TvShuffleBagCharacterizationTest::eligibleFirstGroupFallback` | `s59384417a0` / `getShuffleEligibleIndices`:3392: ``?: playlistController.movieGroups?.groups?.firstOrNull()`` → ``?: null`` | ``expected:<[1]> but was:<[0, 1]>`` (`TvShuffleBagCharacterizationTest.kt:41`) |
+| `TvShuffleBagCharacterizationTest::eligibleGroupBoundsDuplicates` | `s5aaf3ea25a` / `getShuffleEligibleIndices`:3394: ``.filter { it in model.items.indices }`` → ``.filter { it >= 0 }`` | ``expected:<[0, 1, 1]> but was:<[0, 1, 1, 2]>`` (`TvShuffleBagCharacterizationTest.kt:51`) |
+| `TvShuffleBagCharacterizationTest::eligibleInvalidGroupFallback` | `s4a626cb3c1` / `getShuffleEligibleIndices`:3396: ``if (indices.isNotEmpty())`` → ``if (true)`` | ``expected:<[0, 1]> but was:<[]>`` (`TvShuffleBagCharacterizationTest.kt:46`) |
+| `TvShuffleBagCharacterizationTest::eligibleMainIgnoreCase` | `sb60a0b3027` / `getShuffleEligibleIndices`:3391: ``ignoreCase = true`` → ``ignoreCase = false`` | ``expected:<[1]> but was:<[0]>`` (`TvShuffleBagCharacterizationTest.kt:36`) |
+| `TvShuffleBagCharacterizationTest::eligibleMissingPayload` | `sa43b23a141` / `getShuffleEligibleIndices`:3379: ``payload ?: return emptyList()`` → ``payload ?: return listOf(0)`` | ``expected:<[]> but was:<[0]>`` (`TvShuffleBagCharacterizationTest.kt:60`) |
+| `TvShuffleBagCharacterizationTest::eligibleNone` | `s5b611da47d` / `getShuffleEligibleIndices`:3399: ``return model.items.indices.toList()`` → ``return emptyList()`` | ``expected:<[0, 1]> but was:<[]>`` (`TvShuffleBagCharacterizationTest.kt:21`) |
+| `TvShuffleBagCharacterizationTest::eligibleNullGroupFallback` | `s5b611da47d` / `getShuffleEligibleIndices`:3399: ``return model.items.indices.toList()`` → ``return emptyList()`` | ``expected:<[0, 1]> but was:<[]>`` (`TvShuffleBagCharacterizationTest.kt:56`) |
+| `TvShuffleBagCharacterizationTest::eligibleSeriesCompleteOnly` | `sd8275561d4` / `getShuffleEligibleIndices`:3384: ``item.season != null && item.episode != null`` → ``item.season != null`` | ``expected:<[0, 3]> but was:<[0, 1, 3]>`` (`TvShuffleBagCharacterizationTest.kt:26`) |
+| `TvShuffleBagCharacterizationTest::eligibleSeriesFallback` | `s91ff353c32` / `getShuffleEligibleIndices`:3386: ``if (episodeIndices.isNotEmpty())`` → ``if (true)`` | ``expected:<[0, 1]> but was:<[]>`` (`TvShuffleBagCharacterizationTest.kt:31`) |
+| `TvShuffleBagCharacterizationTest::emptyEligibilityReturnsNull` | `s325a7a1176` / `pickShuffleIndex`:3404: ``if (eligible.isEmpty()) return null`` → ``if (eligible.isEmpty()) return 0`` | ``expected null, but was:<0>`` (`TvShuffleBagCharacterizationTest.kt:72`) |
+| `TvShuffleBagCharacterizationTest::singleEligibleShortcutLeavesBagUntouched` | `s316519669c` / `pickShuffleIndex`:3405: ``if (eligible.size == 1) return eligible.first()`` → ``if (false) return eligible.first()`` | ``expected:<0> but was:<null>`` (`TvShuffleBagCharacterizationTest.kt:68`) |
+| `TvShuffleCallbackSupersessionCharacterizationTest::manualWholeShowSelectionClearsSleepBeforeOpening` | `s542281d758` / `playShowShuffle`:3361: ``isAutoAdvancing = autoAdvance`` → ``isAutoAdvancing = true`` | ``java.lang.AssertionError`` (`TvShuffleCallbackSupersessionCharacterizationTest.kt:35`) |
+| `TvShuffleCallbackSupersessionCharacterizationTest::resolveAcceptsNonemptyWhitespaceUrl` | `sac05ca796c` / `resolveAndPlay`:2874: ``if (url.isNullOrEmpty()) {`` → ``if (url.isNullOrBlank()) {`` | ``expected:<[ ]> but was:<[]>`` (`TvShuffleCallbackSupersessionCharacterizationTest.kt:26`) |
+| `TvShuffleCallbackSupersessionCharacterizationTest::shuffleResolveAcceptsNonemptyWhitespaceUrl` | `sb8bae917e2` / `playShowShuffle`:3371: ``if (url.isNullOrEmpty()) failShufflePlayback()`` → ``if (url.isNullOrBlank()) failShufflePlayback()`` | ``expected:<1> but was:<0>`` (`TvShuffleCallbackSupersessionCharacterizationTest.kt:30`) |
+| `TvShuffleCallbackSupersessionCharacterizationTest::staleBlankFailureCannotFailNewerPendingAttempt` | `sb3e4525e9c` / `playShowShuffle`:3370: ``if (!shuffleAttemptCurrent(attempt)) return@requestStreamFromFlutter`` → ``if (false) return@requestStreamFromFlutter`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@5ba0ab61> was not:<null>`` (`TvShuffleCallbackSupersessionCharacterizationTest.kt:22`) |
+| `TvShuffleFetchCharacterizationTest::episodeFetchRejectsAutomaticSleep` | `sc4b0b80314` / `playShowShuffle`:3346: ``shouldContinue = { shuffleAttemptCurrent(fetchAttempt) }`` → ``shouldContinue = { true }`` | ``expected:<https://[example.test/a]> but was:<https://[shuffle.invalid/new.mp4]>`` (`TvShuffleFetchCharacterizationTest.kt:46`) |
+| `TvShuffleFetchCharacterizationTest::episodeFetchRejectsDestroyed` | `sc4b0b80314` / `playShowShuffle`:3346: ``shouldContinue = { shuffleAttemptCurrent(fetchAttempt) }`` → ``shouldContinue = { true }`` | ``expected:<https://[example.test/a]> but was:<https://[shuffle.invalid/new.mp4]>`` (`TvShuffleFetchCharacterizationTest.kt:40`) |
+| `TvShuffleFetchCharacterizationTest::episodeFetchRejectsFinishing` | `sc4b0b80314` / `playShowShuffle`:3346: ``shouldContinue = { shuffleAttemptCurrent(fetchAttempt) }`` → ``shouldContinue = { true }`` | ``expected:<https://[example.test/a]> but was:<https://[shuffle.invalid/new.mp4]>`` (`TvShuffleFetchCharacterizationTest.kt:34`) |
+| `TvShuffleFetchCharacterizationTest::episodeFetchRejectsNavigation` | `sc4b0b80314` / `playShowShuffle`:3346: ``shouldContinue = { shuffleAttemptCurrent(fetchAttempt) }`` → ``shouldContinue = { true }`` | ``expected:<https://[example.test/a]> but was:<https://[shuffle.invalid/new.mp4]>`` (`TvShuffleFetchCharacterizationTest.kt:28`) |
+| `TvShuffleFetchCharacterizationTest::episodeFetchRejectsShowGeneration` | `sc4b0b80314` / `playShowShuffle`:3346: ``shouldContinue = { shuffleAttemptCurrent(fetchAttempt) }`` → ``shouldContinue = { true }`` | ``expected:<https://[example.test/a]> but was:<https://[shuffle.invalid/new.mp4]>`` (`TvShuffleFetchCharacterizationTest.kt:22`) |
+| `TvShuffleFetchCharacterizationTest::queuedShuffleMakesOlderFetchYieldBeforeItsMediaStart` | `sa51a4aa524` / `yieldEpisodeFetchToQueuedShuffle`:3285: ``queuedShuffleGeneration == showShuffleGeneration`` → ``false`` | ``java.lang.AssertionError`` (`TvShuffleFetchCharacterizationTest.kt:64`) |
+| `TvShuffleFetchCharacterizationTest::resetClearsShowVisitedSoPreviouslyVisitedCanBePicked` | `s164c265e37` / `resetShuffle`:3217: ``showShuffle.clear()`` → ``Unit`` | ``explicit reset starts a fresh visited cycle`` (`TvShuffleFetchCharacterizationTest.kt:71`) |
+| `TvShuffleFetchCharacterizationTest::successfulFetchCarriesAutoSuppressionAndAttempt` | `s14e73b701d` / `playShowShuffle`:3345: ``shuffleAttempt = fetchAttempt`` → ``shuffleAttempt = null`` | ``expected:<true> but was:<null>`` (`TvShuffleFetchCharacterizationTest.kt:58`) |
+| `TvShuffleFetchCharacterizationTest::unavailableFetchRetriesAnotherIdentityWithoutRepeatingAttempt` | `sbfbad1cee3` / `playShowShuffle`:3341: ``attempted + target`` → ``attempted`` | ``expected:<2> but was:<3>`` (`TvShuffleFetchCharacterizationTest.kt:52`) |
+| `TvShuffleGuardEdgesCharacterizationTest::catalogGuidePreviousVisibleWithoutAdjacentResolver` | `s790a3acbf4` / `updateCatalogEpisodeControls`:3153: ``guideAdjacent(model, currentItem, -1) != null`` → ``false`` | ``expected:<0> but was:<8>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:60`) |
+| `TvShuffleGuardEdgesCharacterizationTest::fetchAttemptAlreadyUnownedAutomaticSleep` | `s09c9e89425` / `playShowShuffle`:3342: ``if (!shuffleAttemptCurrent(fetchAttempt)) return`` → ``if (false) return`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:56`) |
+| `TvShuffleGuardEdgesCharacterizationTest::fetchAttemptAlreadyUnownedDestroyed` | `s09c9e89425` / `playShowShuffle`:3342: ``if (!shuffleAttemptCurrent(fetchAttempt)) return`` → ``if (false) return`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:52`) |
+| `TvShuffleGuardEdgesCharacterizationTest::fetchAttemptAlreadyUnownedFinishing` | `s09c9e89425` / `playShowShuffle`:3342: ``if (!shuffleAttemptCurrent(fetchAttempt)) return`` → ``if (false) return`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:48`) |
+| `TvShuffleGuardEdgesCharacterizationTest::inPackIdentityMustMatchDifferentEpisode` | `s69b5b64c77` / `playShowShuffle`:3350: ``it.episode == target.episode`` → ``true`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:44`) |
+| `TvShuffleGuardEdgesCharacterizationTest::inPackIdentityMustMatchDifferentSeason` | `sdaa9461088` / `playShowShuffle`:3350: ``it.season == target.season &&`` → ```` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:40`) |
+| `TvShuffleGuardEdgesCharacterizationTest::missingPayloadCannotShuffleWholeShow` | `s03c8b39a00` / `canShuffleWholeShow`:3290: ``payload ?: return false`` → ``payload ?: return true`` | ``expected:<false> but was:<true>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:68`) |
+| `TvShuffleGuardEdgesCharacterizationTest::pikpakWatchRejectsNotCurrent` | `s26c05d3276` / `watchShufflePlayback`:3269: ``shuffleAttemptCurrent(attempt)) watchShufflePlayback(attempt)`` → ``true) watchShufflePlayback(attempt)`` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@d28286c>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:36`) |
+| `TvShuffleGuardEdgesCharacterizationTest::pikpakWatchRejectsNotPikPak` | `sb8c335e6c0` / `watchShufflePlayback`:3268: ``startupGateController.currentPlaybackItemIsPikPak() &&`` → ```` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@78273d98>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:28`) |
+| `TvShuffleGuardEdgesCharacterizationTest::pikpakWatchRejectsNotRetrying` | `sb472711a06` / `watchShufflePlayback`:3268: ``pikPakRetryController.isPikPakRetrying &&`` → ```` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@1aa3a12e>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:32`) |
+| `TvShuffleGuardEdgesCharacterizationTest::pikpakWatchRejectsNotStarted` | `s61e8ef28a5` / `watchShufflePlayback`:3268: ``attempt.mediaStarted &&`` → ```` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@37f120ef>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:24`) |
+| `TvShuffleGuardEdgesCharacterizationTest::replacePayloadResetsNonzeroCurrentIndex` | `s2e9532bfc9` / `replacePayloadWithStremioTvItem`:5202: ``currentIndex = 0`` → ``Unit`` | ``expected:<0> but was:<1>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:80`) |
+| `TvShuffleGuardEdgesCharacterizationTest::sameAttemptNewWatchGenerationSuppressesOldTimeout` | `s6934c18e86` / `watchShufflePlayback`:3267: ``pendingShufflePlayback === attempt && watchGeneration == shuffleWatchGeneration`` → ``pendingShufflePlayback === attempt`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@1502824e> was not:<null>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:20`) |
+| `TvShuffleGuardEdgesCharacterizationTest::trioClearsBorrowedLoadingStateBeforePlayerInstall` | `sbaad95435e` / `playStremioTvPlaybackMap`:5230: ``subtitleSourcesController.clearStremioLoadingState()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:84`) |
+| `TvShuffleGuardEdgesCharacterizationTest::trioUpdatesRealGuideHeaderAndNotifiesAdapter` | `s7145bb6d3b` / `playStremioTvPlaybackMap`:5218: ``stremioTvGuideController.updateStremioTvGuideHeader()`` → ``Unit`` | ``expected:<[New programme]> but was:<[]>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:76`) |
+| `TvShuffleGuardEdgesCharacterizationTest::trioUpdatesRealGuideHeaderAndNotifiesAdapter` | `sc2a8fafaf9` / `playStremioTvPlaybackMap`:5290: ``stremioTvGuideController.stremioTvChannelAdapter?.notifyDataSetChanged()`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvShuffleGuardEdgesCharacterizationTest.kt:76`) |
+| `TvShuffleGuardEdgesCharacterizationTest::wholeShowRandomWinsOverPackRandom` | `sca94ac16bf` / `playRandom`:3161: ``if (playShowShuffle()) return`` → ``if (false) return`` | ``java.lang.AssertionError`` (`TvShuffleGuardEdgesCharacterizationTest.kt:64`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentAutomaticSleep` | `sebff6753ec` / `shuffleAttemptOwned`:3241: ``(!attempt.autoAdvance \|\| !sleepStopLatched)`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:51`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentDestroyed` | `s5e94267490` / `shuffleAttemptOwned`:3239: ``!isDestroyed`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:36`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentFinished` | `s8093b667be` / `shuffleAttemptCurrent`:3236: ``!attempt.finished`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:26`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentFinishing` | `sf6e4ebe5cd` / `shuffleAttemptOwned`:3239: ``!isFinishing`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:31`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentGeneration` | `sf772cee469` / `shuffleAttemptOwned`:3239: ``attempt.generation == showShuffleGeneration`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:41`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentLive` | `s3fcb9607fb` / `shuffleAttemptOwned`:3239: ``!isFinishing`` → ``false`` | ``expected:<true> but was:<false>`` (`TvShuffleProtocolCharacterizationTest.kt:21`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentManualSleep` | `s037ac79fed` / `shuffleAttemptOwned`:3241: ``(!attempt.autoAdvance \|\| !sleepStopLatched)`` → ``!sleepStopLatched`` | ``expected:<true> but was:<false>`` (`TvShuffleProtocolCharacterizationTest.kt:56`) |
+| `TvShuffleProtocolCharacterizationTest::attemptCurrentNavigation` | `sf15c6656b1` / `shuffleAttemptOwned`:3240: ``attempt.navigation == mediaPreparationGeneration`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:46`) |
+| `TvShuffleProtocolCharacterizationTest::clearQueuedMatches` | `s11cb25b1ff` / `clearQueuedShuffle`:3277: ``queuedShuffleGeneration = null`` → ``Unit`` | ``expected:<null> but was:<3>`` (`TvShuffleProtocolCharacterizationTest.kt:105`) |
+| `TvShuffleProtocolCharacterizationTest::clearQueuedMatches` | `s13ca822e1f` / `clearQueuedShuffle`:3278: ``queuedShuffleNavigation = null`` → ``Unit`` | ``expected:<null> but was:<7>`` (`TvShuffleProtocolCharacterizationTest.kt:105`) |
+| `TvShuffleProtocolCharacterizationTest::clearQueuedMatches` | `sa660bd7595` / `clearQueuedShuffle`:3276: ``if (queuedShuffleGeneration == generation)`` → ``if (false)`` | ``expected:<null> but was:<3>`` (`TvShuffleProtocolCharacterizationTest.kt:105`) |
+| `TvShuffleProtocolCharacterizationTest::clearQueuedNewerQueue` | `s95c78c129c` / `clearQueuedShuffle`:3276: ``if (queuedShuffleGeneration == generation)`` → ``if (true)`` | ``expected:<3> but was:<null>`` (`TvShuffleProtocolCharacterizationTest.kt:110`) |
+| `TvShuffleProtocolCharacterizationTest::failRestoresClearsFinishesThenPostsOnce` | `s1b7388b313` / `failShufflePlayback`:3252: ``restoreShufflePreparation(attempt)`` → ``Unit`` | ``expected:<[restore]> but was:<[]>`` (`TvShuffleProtocolCharacterizationTest.kt:80`) |
+| `TvShuffleProtocolCharacterizationTest::failRestoresClearsFinishesThenPostsOnce` | `s3251e713f3` / `failShufflePlayback`:3251: ``pendingShufflePlayback = null`` → ``Unit`` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@7da9c3de>`` (`TvShuffleProtocolCharacterizationTest.kt:80`) |
+| `TvShuffleProtocolCharacterizationTest::failRestoresClearsFinishesThenPostsOnce` | `s6d3ddb670b` / `failShufflePlayback`:3254: ``attempt.finished = true`` → ``attempt.finished = false`` | ``expected:<true> but was:<false>`` (`TvShuffleProtocolCharacterizationTest.kt:80`) |
+| `TvShuffleProtocolCharacterizationTest::failWithoutPendingIsFalse` | `s07a0d92bfa` / `failShufflePlayback`:3250: ``pendingShufflePlayback ?: return false`` → ``pendingShufflePlayback ?: return true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:75`) |
+| `TvShuffleProtocolCharacterizationTest::oldWatchdogCannotFailReplacement` | `sb123c701aa` / `watchShufflePlayback`:3267: ``pendingShufflePlayback === attempt && watchGeneration == shuffleWatchGeneration`` → ``true`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@156e51c7> was not:<null>`` (`TvShuffleProtocolCharacterizationTest.kt:146`) |
+| `TvShuffleProtocolCharacterizationTest::postedFailureRejectsDestroyed` | `s55b2355921` / `failShufflePlayback`:3256: ``if (shuffleAttemptOwned(attempt))`` → ``if (true)`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:96`) |
+| `TvShuffleProtocolCharacterizationTest::postedFailureRejectsFinishing` | `s55b2355921` / `failShufflePlayback`:3256: ``if (shuffleAttemptOwned(attempt))`` → ``if (true)`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:92`) |
+| `TvShuffleProtocolCharacterizationTest::postedFailureRejectsGeneration` | `s55b2355921` / `failShufflePlayback`:3256: ``if (shuffleAttemptOwned(attempt))`` → ``if (true)`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:84`) |
+| `TvShuffleProtocolCharacterizationTest::postedFailureRejectsNavigation` | `s55b2355921` / `failShufflePlayback`:3256: ``if (shuffleAttemptOwned(attempt))`` → ``if (true)`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:88`) |
+| `TvShuffleProtocolCharacterizationTest::postedFailureRejectsSleep` | `s55b2355921` / `failShufflePlayback`:3256: ``if (shuffleAttemptOwned(attempt))`` → ``if (true)`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:100`) |
+| `TvShuffleProtocolCharacterizationTest::resetRestoresClearsBagVisitedAndQueuedGeneration` | `s6192b2a5cf` / `resetShuffle`:3216: ``shuffleBag.clear()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvShuffleProtocolCharacterizationTest.kt:157`) |
+| `TvShuffleProtocolCharacterizationTest::resetRestoresClearsBagVisitedAndQueuedGeneration` | `s953b4121ef` / `resetShuffle`:3219: ``queuedShuffleGeneration = null`` → ``Unit`` | ``expected null, but was:<0>`` (`TvShuffleProtocolCharacterizationTest.kt:157`) |
+| `TvShuffleProtocolCharacterizationTest::resetRestoresClearsBagVisitedAndQueuedGeneration` | `sc62dba72eb` / `resetShuffle`:3215: ``pendingShufflePlayback = null`` → ``Unit`` | ``expected null, but was:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@665309b6>`` (`TvShuffleProtocolCharacterizationTest.kt:157`) |
+| `TvShuffleProtocolCharacterizationTest::resetRestoresClearsBagVisitedAndQueuedGeneration` | `sc6543ad3f6` / `resetShuffle`:3214: ``restoreShufflePreparation(it)`` → ``Unit`` | ``expected:<1> but was:<0>`` (`TvShuffleProtocolCharacterizationTest.kt:157`) |
+| `TvShuffleProtocolCharacterizationTest::resetRestoresClearsBagVisitedAndQueuedGeneration` | `sfe34b5a91f` / `resetShuffle`:3218: ``showShuffleGeneration++`` → ``showShuffleGeneration += 0`` | ``expected:<1> but was:<0>`` (`TvShuffleProtocolCharacterizationTest.kt:157`) |
+| `TvShuffleProtocolCharacterizationTest::restoreStarted` | `sc4d50001cc` / `restoreShufflePreparation`:3244: ``!attempt.mediaStarted && attempt.navigation == mediaPreparationGeneration`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:66`) |
+| `TvShuffleProtocolCharacterizationTest::restoreSuperseded` | `sc4d50001cc` / `restoreShufflePreparation`:3244: ``!attempt.mediaStarted && attempt.navigation == mediaPreparationGeneration`` → ``true`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:71`) |
+| `TvShuffleProtocolCharacterizationTest::restoreUnstarted` | `s670cce2ac0` / `restoreShufflePreparation`:3244: ``!attempt.mediaStarted && attempt.navigation == mediaPreparationGeneration`` → ``false`` | ``expected:<1> but was:<0>`` (`TvShuffleProtocolCharacterizationTest.kt:61`) |
+| `TvShuffleProtocolCharacterizationTest::watchdogHasExactFifteenSecondBoundary` | `s37546ae2ed` / `watchShufflePlayback`:3272: ``15000`` → ``14999`` | ``expected:<0> but was:<1>`` (`TvShuffleProtocolCharacterizationTest.kt:140`) |
+| `TvShuffleProtocolCharacterizationTest::watchdogHasExactFifteenSecondBoundary` | `s377dfa4933` / `watchShufflePlayback`:3265: ``pendingShufflePlayback = attempt`` → ``Unit`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@1e568a70> was not:<null>`` (`TvShuffleProtocolCharacterizationTest.kt:140`) |
+| `TvShuffleProtocolCharacterizationTest::watchdogPikPakRetryRearmsWithoutUnavailable` | `s3139484989` / `watchShufflePlayback`:3264: ``++shuffleWatchGeneration`` → ``shuffleWatchGeneration`` | ``expected:<2> but was:<0>`` (`TvShuffleProtocolCharacterizationTest.kt:151`) |
+| `TvShuffleProtocolCharacterizationTest::watchdogPikPakRetryRearmsWithoutUnavailable` | `s88cfd6db74` / `watchShufflePlayback`:3268: ``pikPakRetryController.isPikPakRetrying &&`` → ``false &&`` | ``expected same:<com.debrify.app.tv.AndroidTvTorrentPlayerActivity$ShufflePlaybackAttempt@7f2db247> was not:<null>`` (`TvShuffleProtocolCharacterizationTest.kt:151`) |
+| `TvShuffleProtocolCharacterizationTest::yieldDestroyed` | `sfef381e6cb` / `yieldEpisodeFetchToQueuedShuffle`:3287: ``!isDestroyed`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:135`) |
+| `TvShuffleProtocolCharacterizationTest::yieldFinishing` | `s19f739475f` / `yieldEpisodeFetchToQueuedShuffle`:3287: ``!isFinishing`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:130`) |
+| `TvShuffleProtocolCharacterizationTest::yieldGeneration` | `sf040e23dfc` / `yieldEpisodeFetchToQueuedShuffle`:3285: ``queuedShuffleGeneration == showShuffleGeneration`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:120`) |
+| `TvShuffleProtocolCharacterizationTest::yieldLive` | `sa51a4aa524` / `yieldEpisodeFetchToQueuedShuffle`:3285: ``queuedShuffleGeneration == showShuffleGeneration`` → ``false`` | ``expected:<true> but was:<false>`` (`TvShuffleProtocolCharacterizationTest.kt:115`) |
+| `TvShuffleProtocolCharacterizationTest::yieldNavigation` | `s405dbd42cf` / `yieldEpisodeFetchToQueuedShuffle`:3286: ``queuedShuffleNavigation == mediaPreparationGeneration`` → ``true`` | ``expected:<false> but was:<true>`` (`TvShuffleProtocolCharacterizationTest.kt:125`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceAbsentMetadataUsesPreviousPosterRatingAndEmptyType` | `s7a2431dde5` / `replacePayloadWithStremioTvItem`:5195: ``contentType ?: ""`` → ``contentType ?: "movie"`` | ``expected:<[]> but was:<[movie]>`` (`TvStremioTvMediaStartCharacterizationTest.kt:236`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceDescription` | `s43bc85aac6` / `replacePayloadWithStremioTvItem`:5181: ``description = previousItem?.description`` → ``description = null`` | ``expected:<old description> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:97`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceDuration` | `sa9e75188ea` / `replacePayloadWithStremioTvItem`:5183: ``durationMs = 0L`` → ``durationMs = 5L`` | ``expected:<0> but was:<5>`` (`TvStremioTvMediaStartCharacterizationTest.kt:124`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceEpisode` | `seb5ed520b9` / `replacePayloadWithStremioTvItem`:5179: ``episode = contentEpisode`` → ``episode = null`` | ``expected:<3> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:70`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceGroups` | `s9abd2ef113` / `replacePayloadWithStremioTvItem`:5199: ``model.collectionGroups = null`` → ``Unit`` | ``expected null, but was:<[{}]>`` (`TvStremioTvMediaStartCharacterizationTest.kt:214`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceIdentity` | `s33d2d3c5a0` / `replacePayloadWithStremioTvItem`:5174: ``id = "stremio_tv:${channel.id}"`` → ``id = "mutated"`` | ``expected:<[stremio_tv:i]d> but was:<[mutate]d>`` (`TvStremioTvMediaStartCharacterizationTest.kt:25`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceImdb` | `s56abc1801c` / `replacePayloadWithStremioTvItem`:5196: ``model.imdbId = contentImdbId`` → ``model.imdbId = null`` | ``expected:<ttnew> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:187`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceImdbCache` | `s0a777c5363` / `replacePayloadWithStremioTvItem`:5201: ``model.perItemImdbIds[0] = contentImdbId`` → ``Unit`` | ``expected:<{0=ttnew}> but was:<{}>`` (`TvStremioTvMediaStartCharacterizationTest.kt:223`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceImdbCache` | `sd3d1cd9c5f` / `replacePayloadWithStremioTvItem`:5200: ``model.perItemImdbIds.clear()`` → ``Unit`` | ``expected:<{0=ttnew}> but was:<{1=ttold, 0=ttnew}>`` (`TvStremioTvMediaStartCharacterizationTest.kt:223`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceIndex` | `sf1254f68c0` / `replacePayloadWithStremioTvItem`:5177: ``index = 0`` → ``index = 1`` | ``expected:<0> but was:<1>`` (`TvStremioTvMediaStartCharacterizationTest.kt:52`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceNextMap` | `sc40a9410eb` / `replacePayloadWithStremioTvItem`:5197: ``model.nextEpisodeMap = emptyMap()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:196`) |
+| `TvStremioTvMediaStartCharacterizationTest::replacePoster` | `s487d4f081e` / `replacePayloadWithStremioTvItem`:5180: ``artwork = channel.nowPlayingPoster ?: previousItem?.artwork`` → ``artwork = previousItem?.artwork`` | ``expected:<[channel] poster> but was:<[old] poster>`` (`TvStremioTvMediaStartCharacterizationTest.kt:79`) |
+| `TvStremioTvMediaStartCharacterizationTest::replacePrevMap` | `s2d3a5b18c9` / `replacePayloadWithStremioTvItem`:5198: ``model.prevEpisodeMap = emptyMap()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:205`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceProvider` | `sa82f8dff47` / `replacePayloadWithStremioTvItem`:5188: ``provider = previousItem?.provider`` → ``provider = null`` | ``expected:<Previous provider> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:106`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceRating` | `s0206ed59f2` / `replacePayloadWithStremioTvItem`:5187: ``rating = channel.nowPlayingRating ?: previousItem?.rating`` → ``rating = previousItem?.rating`` | ``expected:<8.5> but was:<7.1>`` (`TvStremioTvMediaStartCharacterizationTest.kt:88`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceResume` | `s35d5918c63` / `replacePayloadWithStremioTvItem`:5182: ``resumePositionMs = 0L`` → ``resumePositionMs = 5L`` | ``expected:<0> but was:<5>`` (`TvStremioTvMediaStartCharacterizationTest.kt:115`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceResumeId` | `s50305c1ccc` / `replacePayloadWithStremioTvItem`:5185: ``resumeId = null`` → ``resumeId = "wrong"`` | ``expected null, but was:<wrong>`` (`TvStremioTvMediaStartCharacterizationTest.kt:133`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceSeason` | `s08a1ece623` / `replacePayloadWithStremioTvItem`:5178: ``season = contentSeason`` → ``season = null`` | ``expected:<2> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:61`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceShowCaption` | `s8383dec8b8` / `replacePayloadWithStremioTvItem`:5169: ``controlsOverlayController.identity.ottShowName = null`` → ``Unit`` | ``expected null, but was:<Old show>`` (`TvStremioTvMediaStartCharacterizationTest.kt:232`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceShowType` | `s8c16b61e6f` / `replacePayloadWithStremioTvItem`:5195: ``model.contentType = contentType ?: ""`` → ``model.contentType = "movie"`` | ``expected:<[series]> but was:<[movie]>`` (`TvStremioTvMediaStartCharacterizationTest.kt:178`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceSingleItem` | `s09b2051653` / `replacePayloadWithStremioTvItem`:5193: ``model.items.clear()`` → ``Unit`` | ``expected:<1> but was:<3>`` (`TvStremioTvMediaStartCharacterizationTest.kt:169`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceSize` | `s5cf30ae697` / `replacePayloadWithStremioTvItem`:5186: ``sizeBytes = null`` → ``sizeBytes = 9L`` | ``expected null, but was:<9>`` (`TvStremioTvMediaStartCharacterizationTest.kt:142`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceSourceTitle` | `s3744df49b4` / `replacePayloadWithStremioTvItem`:5191: ``sourceTitle = title`` → ``sourceTitle = null`` | ``expected:<Release title> but was:<null>`` (`TvStremioTvMediaStartCharacterizationTest.kt:160`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceTimestamp` | `sbb0cd2c10b` / `replacePayloadWithStremioTvItem`:5184: ``updatedAt = System.currentTimeMillis()`` → ``updatedAt = 0L`` | ``expected:<132> but was:<0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:151`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceTitle` | `sa9dc502499` / `replacePayloadWithStremioTvItem`:5175: ``title = title`` → ``title = "mutated"`` | ``expected:<[Release title]> but was:<[mutated]>`` (`TvStremioTvMediaStartCharacterizationTest.kt:34`) |
+| `TvStremioTvMediaStartCharacterizationTest::replaceUrl` | `se8d98b665d` / `replacePayloadWithStremioTvItem`:5176: ``url = url`` → ``url = "https://wrong.invalid"`` | ``expected:<https://[tv.invalid/new.mp4]> but was:<https://[wrong.invalid]>`` (`TvStremioTvMediaStartCharacterizationTest.kt:43`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesAbsentKeepsListAndSelection` | `sebe0a9d21f` / `updateStremioSourcesFromPlaybackMap`:5140: ``if (newSources != null) {`` → ``if (newSources == null) { currentStremioSourceIndex = 0 }; if (newSources != null) {`` | ``expected:<1> but was:<0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:260`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesEmptyClearsAndClampsToZero` | `s0dcf6eb7fa` / `updateStremioSourcesFromPlaybackMap`:5141: ``stremioSources.clear()`` → ``Unit`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:264`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesIndexDefault` | `s3878cc3c30` / `updateStremioSourcesFromPlaybackMap`:5139: ``val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0`` → ``val newSourceIndex = 1`` | ``expected:<0> but was:<1>`` (`TvStremioTvMediaStartCharacterizationTest.kt:256`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesIndexHigh` | `s1956e6bf1f` / `updateStremioSourcesFromPlaybackMap`:5139: ``val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0`` → ``val newSourceIndex = 0`` | ``expected:<1> but was:<0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:246`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesIndexNegative` | `s3878cc3c30` / `updateStremioSourcesFromPlaybackMap`:5139: ``val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0`` → ``val newSourceIndex = 1`` | ``expected:<0> but was:<1>`` (`TvStremioTvMediaStartCharacterizationTest.kt:241`) |
+| `TvStremioTvMediaStartCharacterizationTest::sourcesIndexSelected` | `s1956e6bf1f` / `updateStremioSourcesFromPlaybackMap`:5139: ``val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0`` → ``val newSourceIndex = 0`` | ``expected:<1> but was:<0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:251`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioBadgeClassicEmpty` | `s20a47b478e` / `playStremioTvPlaybackMap`:5226: ``stremioSourceBadge?.visibility = View.GONE`` → ``stremioSourceBadge?.visibility = View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvStremioTvMediaStartCharacterizationTest.kt:276`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioBadgeClassicWithSources` | `sa18bf4238e` / `playStremioTvPlaybackMap`:5224: ``stremioSourceBadge?.visibility = View.VISIBLE`` → ``stremioSourceBadge?.visibility = View.INVISIBLE`` | ``expected:<0> but was:<4>`` (`TvStremioTvMediaStartCharacterizationTest.kt:270`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioBadgeOttEmpty` | `s4173dd525a` / `playStremioTvPlaybackMap`:5222: ``if (stremioSources.isEmpty()) View.GONE else View.VISIBLE`` → ``View.INVISIBLE`` | ``expected:<8> but was:<4>`` (`TvStremioTvMediaStartCharacterizationTest.kt:288`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioBadgeOttWithSources` | `s4173dd525a` / `playStremioTvPlaybackMap`:5222: ``if (stremioSources.isEmpty()) View.GONE else View.VISIBLE`` → ``View.INVISIBLE`` | ``expected:<0> but was:<4>`` (`TvStremioTvMediaStartCharacterizationTest.kt:282`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioReadyWaitFalse` | `se713876697` / `playStremioTvPlaybackMap`:5291: ``if (hideGuideOnReady) {`` → ``if (true) {`` | ``expected:<false> but was:<true>`` (`TvStremioTvMediaStartCharacterizationTest.kt:302`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioReadyWaitTrue` | `sb502f47fb5` / `playStremioTvPlaybackMap`:5291: ``if (hideGuideOnReady) {`` → ``if (false) {`` | ``expected:<true> but was:<false>`` (`TvStremioTvMediaStartCharacterizationTest.kt:298`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `s2a3a70437b` / `playStremioTvPlaybackMap`:5238: ``percentSeekApplied = false`` → ``percentSeekApplied = true`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `s4c42777c76` / `playStremioTvPlaybackMap`:5239: ``pendingSeekMs = 0`` → ``pendingSeekMs = 9`` | ``expected:<0> but was:<9>`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `s7e14c9aa3f` / `playStremioTvPlaybackMap`:5243: ``pendingItemTraktPercent = 0.0`` → ``pendingItemTraktPercent = 99.0`` | ``expected:<0.0> but was:<99.0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `s97e99fb62e` / `playStremioTvPlaybackMap`:5250: ``hasEverBeenReady = false`` → ``hasEverBeenReady = true`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `sc6d6b4206e` / `playStremioTvPlaybackMap`:5249: ``releaseResumeHold()`` → ``Unit`` | ``expected:<0> but was:<999>`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `se259747a3f` / `playStremioTvPlaybackMap`:5237: ``payload?.startAtPercent = startAtPercent`` → ``Unit`` | ``expected:<0.4> but was:<0.0>`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+| `TvStremioTvMediaStartCharacterizationTest::trioResumeResetAndReadySeekSignal` | `sec3385f0fb` / `playStremioTvPlaybackMap`:5289: ``channel.isSwitchingChannel = false`` → ``channel.isSwitchingChannel = true`` | ``java.lang.AssertionError`` (`TvStremioTvMediaStartCharacterizationTest.kt:294`) |
+
+### Identity baselines, retargets and remaining work
+
+Clean `baseline-2f7b4ec27` archives **2,527 identities / 2,526 passes / one known failure**. Clean test-task `p18-step0` archives **2,822 identities / 2,821 passes / the same failure**: exactly 295 passing additions, no missing identity, changed old status, new skip or Gradle abort; input tree unchanged during each run. Both use Android Studio JBR21 and the evidence-only matched 1 GiB worker init. The test revision for Step 0 is `20420c5f6` plus the archived dirty test inputs. The later change to patched-row named-test labels is metadata only and does not change those executed Kotlin bodies. Post-run cleanup removes only test trailing spaces and one EOF blank line; final PSI witness checks preserve all final test-method tokens.
+
+The remaining failure is `TvSourceBrowserFocusTest::dpadAndRailFocusKeepRowsAndImportedArtworkAttached` (original NPE). `TvGuideVisibilityCharacterizationTest::epgAiringReplayFutureAndExpiredRowsPinVisibilityAlphaAndProgressScale` passes in this phase's clean original, helper-only and Step-0 runs; it failed in the earlier phase-17 original baseline. That is documented timing-status variation, not a fix or an allowlist override. Preliminary `p18-step0-interim` changed tree during execution and was discarded; stable `p18-step0-pre-mutation-sweep` preceded eight final additions and is not the final baseline. Neither substitutes for `p18-step0`.
+
+Original lint remains archived at `p18/lint-original/`: **1,351 issue identities (252 Error / 1,099 Warning, including 175 opt-in errors)**; its nonzero exit is pre-existing. Full Flutter analysis exactly preserves the phase-17 gate's **1,758 diagnostic identities**; both affected Dart files pass formatting, scoped analysis and their tests. Those source-text tests retain every asserted string; the auto-advance marker adds a uniqueness assertion. Since Step 0 precedes production extraction, the new-file path temporarily falls back to the original Activity; removing that fallback is the planned Step-1 anchor retarget.
+
+The final conservative rescan finds **445 quoted references to 36 moved names in 34 files**, including route-table/config/Host references; this is not inflated into a count of reflective invocation sites. Twenty-one additional owner-map routes supplement the initial 15, covering every needed moved name; `shuffleAttemptOwned` is exercised through `shuffleAttemptCurrent`, not direct reflection. Four newly directly reflected functions (`canShuffleWholeShow`, `pickShuffleIndex`, `playRandom`, `restoreShufflePreparation`) add public destination pins, giving 13 public reflected functions without JVM name mangling. Private `replacePayloadWithStremioTvItem`, real `playItem$default` and Activity-nested ShufflePlaybackAttempt binary lookup remain intact. Thirteen patched manifest rows now name actual old/new test identities instead of the generic Step-T label. Future clock instrumentation must follow the moved owners in the existing test harness during Step 1.
+
+Final manifest original self-comparison classifies **1,642 declarations / zero differences**; 59 earlier destinations and 17 earlier manifests stay frozen. The production extraction fixture compiles, with eight initializer proofs, source-bound ShowShuffle constructor/default proof, 20 current receiver sites, 346 retained receiver sites and 23 retained binding pins. Step-T 517 historical cases are retained; the final 38 phase-18 checker/auditor cases are rerun after the manifest rescan/labels. All 80 protected source hashes remain unchanged. Size checking runs without `--update` (no production shrink yet), and all helpers remain below 800.
+
+Evidence: `p18/step0/summary.json`, `junit-summary.json`, `owner-map-rescan.json`, `patched-row-tests.json`, `final-method-witnesses.json`, `statement-coverage-matrix.json`, control/proof XML and logs, final fixture/compiler/auditor logs, `junit/baseline-2f7b4ec27/` and `junit/p18-step0/`. The detached original is removed after archival. **STOP before production moves**; Claude's separate mutation sample/review follows. No bug fix, release/device interaction, push or branch switch.
+
+
+## Phase 18 step 0b — independent-sample navigation boundaries
+
+Claude's original sample killed 20/23 valid mutations; d13 is compile-invalid (removing the audioUrl null check loses its smart cast) and remains excluded. All three real survivors are now killed by the **exact original before/after strings**, each run against all **306 phase-18 + ShufflePlaybackFlowTest identities** on detached original `2f7b4ec27`; the unmutated control passes 306/306. Four new tests preserve all prior assertions. None is equivalent.
+
+| New test | Original mutation | Failing assertion |
+| --- | --- | --- |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::guideNextWithoutResolverOrImdbShowsEndToast` | `d15` / `playNext` | `java.lang.AssertionError: without a resolver, guide adjacency cannot request an in-player fetch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::guideNextWithoutResolverHandsBackToQuickPlayAndFinish` | `d15` / `playNext` | `java.lang.AssertionError: without a resolver, guide adjacency cannot request an in-player fetch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::explicitRandomClearsStaleAutoAdvanceAndSleepLatchBeforePlaying` | `d18` / `playRandom` | `java.lang.AssertionError: an explicit random pick clears the sleep stop latch` |
+| `TvPlaybackNavigationBoundaryCharacterizationTest::twoPriorFailuresStillAllowTheThirdShuffleAttempt` | `d21` / `playShowShuffle` | `java.lang.AssertionError: two prior failures must still select the third target expected:<1> but was:<0>` |
+
+- **d15:** a direct typed call proves `guideAdjacent` returns `SeasonEpisode(1, 2)` with `hasPlaylistResolver == false`. `playNext` must still use quick-play plus the Activity `finish()` override when IMDB exists, or the exact End toast without IMDB; neither case requests in-player episode fetch.
+- **d18:** explicit random selection with both stale auto-advance and the sleep latch clears the latch and starts the seeded target fresh. Removing the explicit auto flag consume causes the real `playItem` sleep gate to suppress it.
+- **d21:** two prior failures still start the one eligible third target. The existing independent three-failure test continues to pin exhaustion/pill text; both sides of the cap remain observable.
+
+The updated 575-node matrix retains the original sweep and adds these witnesses to `playNext`, `playRandom`, `playShowShuffle`. Exact diffs, matching fixture hashes, raw XML/assertion stacks and Gradle logs are under `p18/step0b/proofs/{d15,d18,d21}/`; definitions in `proofs.json`, complete control in `control-original/`.
+
+Clean test-task `p18-step0b` **2826 identities / 2825 pass / same known focus NPE** exactly preserves all 2822 `p18-step0` statuses with **four passing additions only**. Stable tested tree, matched 1 GiB/JBR21, no new skip/missing identity/Gradle abort. EPG timing passes again; its earlier phase-17 original failure remains documented. All 80 protected hashes, production, lockfile and ProGuard unchanged. Detached original archived and removed after proofs. Approved Step 1/gates follow; no independent self-review or device interaction.
+
+
+## Phase 18 step 1 — playback start owner and navigator
+
+Extracted the manifest's **37 members** into **635-line `TvPlaybackStartController`** and its eagerly constructed **372-line `TvPlaybackNavigator`**. Activity **5312 → 4472**; size ratchet lowered. Scope stays first at its original initializer slot; navigator follows pendingShufflePlayback. Eight initializer proofs retain source-bound ShowShuffle source/default constructor. The shared 43-member computed Host, AppCompat injection, all 17 in-place patches and 21/22 Host re-point edits preserve order. Scope cancellation then generation bump remain in-place in onDestroy. Activity-nested ShufflePlaybackAttempt, loader volatility, IO-time protected client read, braced token template and all three ExoPlayer apply receivers are retained.
+
+All 36 preinstalled moved-name routes work with unchanged assertions and real playItem default dispatch. Focused extraction testing exposed two direct calls to playPrevious's mangled internal JVM name; its visibility substitution is now public, bringing the reflected public member set to **14**. This is a reflection-retarget correction, with the body unchanged and the exact manifest updated. The first incomplete visibility run is archived at `step1/focused-internal-visibility/`; the superseded tooling run was interrupted and archived before rerunning final inputs.
+
+Only helper retarget: the Phase-18 base adds both destination names to the existing Robolectric clock instrumentation. Both Dart anchors now require the new owner file; temporary original-file fallbacks are removed. Every Kotlin assertion remains byte-identical, and all Dart asserted strings/unique-marker checks remain. Reverse exact retarget patches reproduce pre-move test hashes.
+
+Final focused **306/306 pass**, checker **1642 declarations / zero differences**, compiled **20 current receiver sites + 346 retained receiver sites / 23 view pins**, all five production Kotlin warnings unchanged. Fifty-nine destinations and all 17 earlier manifests remain frozen; protected hashes and all five lifecycle-body token/order comparisons pass. Four affected Dart suites preserve **45 statuses (44 success, one existing profile SharedPreferences source-guard failure)**. A CLI comparison without scoped-run metadata was discarded because it treated the four-suite run as a full run; explicit same-suite identity comparison is exact. The clean-tree suite_evidence gate follows.
+
+Evidence `p18/step1/`, `p18/gate/overload-audit.json`, `initializer-timing.json`, `teardown-order.json`, `kotlin-warnings-comparison.json`. The full 555-case tooling run and clean integration gates are pending at this checkpoint; no production bug fix, lockfile/ProGuard edit, push, branch switch or device interaction.
+
+## Phase 18 gate — completed extraction, observed parity
+
+The clean tested `gate` checkpoint is `ea57c1a2e`. All **555 checker/auditor self-tests** pass (517 historical + 38 phase-18), with unchanged tool/manifest inputs. Live extraction and original self-comparison classify **1,642 declarations / zero differences**; all **17 historical merge-SHA checks**, **59 frozen destinations** (including source-bound ShowShuffle), eight initializer proofs, **20 current receiver sites + 346 retained receiver sites / 23 retained view-binding pins**, and all five lifecycle token/order comparisons pass. The shared computed Host and IO-time protected client getter remain live; Activity-nested ShufflePlaybackAttempt retains its binary name. The 36 routes, real default dispatcher, private payload replacement and all Kotlin/Dart assertions remain intact. Size check: 2,964 files / 140 ratchets, Activity 5,312 → 4,472, owner/navigator 635/372.
+
+| Gate | Observed result |
+| --- | --- |
+| Focused JVM | 306/306 pass on final extracted code |
+| Clean full JVM `p18-gate` vs `p18-step0b` | Exact 2,826 identities: 2,825 pass / same one focus NPE; no missing, changed or skipped identity; stable clean tree / matched JBR21 and 1 GiB heap |
+| Android lint vs original `2f7b4ec27` | Exact 1,351 issue identities, including all 175 existing opt-in errors; pre-existing nonzero exit |
+| Production Kotlin warnings | Same five identities |
+| `flutter build apk --release --no-pub` | Succeeds, no installation; APK and build provenance archived |
+| R8 mapping / DEX | Six affected classes, including shared Host, Activity anonymous implementation and both MIME coroutine classes; all 208 members preserved (132 explicit mappings / 76 implicit identities verified in DEX); three negative controls pass |
+| Full Flutter via `suite_evidence.py` vs phase-17 gate | Exact 12,855 identities: 12,794 success / 13 failure / 28 error / 20 skipped; stable clean tested tree |
+| Four affected Dart suites, derived from the full gate | Exact 45 statuses: 44 success / one existing profile SharedPreferences source-guard failure |
+| Full analyzer vs phase-17 gate | Exact 1,758 diagnostic occurrences (917 error / 113 warning / 728 info), with no added/removed diagnostic |
+| Decoder verification | **Pending-environment**: same failure as phase 17 and phase 1, identical missing-decoder manifest and all three ABI library hashes |
+
+The JVM worker took longer than its baseline under concurrent gates, with observed Robolectric setup/GC activity; its thread snapshot is archived and the complete run finished with exact statuses. The EPG timing case passes in every observed phase-18 original/helper/Step-0/0b/gate run; its failure at the earlier phase-17 original baseline remains documented as timing flakiness, with no test-window or production fix.
+
+Two analyzer attempts during the active full-suite fixtures reported 1,776 and 1,823 occurrences. Their physical diagnostic-line sets were exactly the original 1,758 lines, with 18 and 65 repeated occurrences only. The post-suite analyzer run matches the complete original Counter exactly. Both intermediate raw logs remain under `gate/analyze-concurrent/` and `gate/analyze-after-release/`; no allowlist or analyzer setting changed. The interrupted superseded tooling run and initial reflection-visibility/subset-metadata attempts also remain archived, and are not credited as final gates. The only additional reflection correction was public `playPrevious`, with its body unchanged and the manifest pin updated (14 public reflected functions).
+
+Raw evidence: `p18/gate/summary.json`, checker/self-test/historical logs, compiled audit, initializer/teardown/frozen-input proofs, JVM comparison and thread snapshot, lint XML/issue set, release APK provenance/R8 inventory/DEX controls, decoder log/provenance, full Flutter JSONL/clean-tree environment and analyzer attempts/physical-line comparison; JVM XML/identities under `junit/p18-step0b/` and `junit/p18-gate/`. Step-0b exact d15/d18/d21 proofs and the updated 575-node matrix remain under `p18/step0b/`; all three survivors killed, none equivalent. Detached original removed. Lockfile, ProGuard, borrowed resources, initializer timing and teardown order preserved; no bug fix, push, branch switch, device/emulator interaction or self independent review. **STOP after phase 18; phase 19 not started.**

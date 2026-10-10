@@ -172,10 +172,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 get() = this@AndroidTvTorrentPlayerActivity.isAutoAdvancing
                 set(value) { this@AndroidTvTorrentPlayerActivity.isAutoAdvancing = value }
             override fun isCleanPlaybackState(): Boolean = this@AndroidTvTorrentPlayerActivity.controlsOverlayController.isCleanPlaybackState()
-            override fun canShuffleWholeShow(): Boolean = this@AndroidTvTorrentPlayerActivity.canShuffleWholeShow()
-            override fun pickShuffleIndex(): Int? = this@AndroidTvTorrentPlayerActivity.pickShuffleIndex()
+            override fun canShuffleWholeShow(): Boolean = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.canShuffleWholeShow()
+            override fun pickShuffleIndex(): Int? = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.pickShuffleIndex()
             override fun getNextPlayableIndex(i: Int): Int? = this@AndroidTvTorrentPlayerActivity.playlistController.getNextPlayableIndex(i)
-            override fun playItem(index: Int) = this@AndroidTvTorrentPlayerActivity.playItem(index)
+            override fun playItem(index: Int) = this@AndroidTvTorrentPlayerActivity.playbackStartController.playItem(index)
         },
     )
     private lateinit var skipSegmentButton: AppCompatButton
@@ -188,7 +188,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val hasPlaylistResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasPlaylistResolver
             override val ottShowName: String? get() = this@AndroidTvTorrentPlayerActivity.controlsOverlayController.identity.ottShowName
             override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
-            override fun playItem(index: Int): Unit { return this@AndroidTvTorrentPlayerActivity.playItem(index) }
+            override fun playItem(index: Int): Unit { return this@AndroidTvTorrentPlayerActivity.playbackStartController.playItem(index) }
             override val playlistOverlay: View get() = this@AndroidTvTorrentPlayerActivity.playlistOverlay
             override val playlistView: RecyclerView get() = this@AndroidTvTorrentPlayerActivity.playlistView
             override val seasonTabsContainer: LinearLayout get() = this@AndroidTvTorrentPlayerActivity.seasonTabsContainer
@@ -361,22 +361,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var pauseButton: AppCompatButton?
                 get() = this@AndroidTvTorrentPlayerActivity.controlsOverlayController.pauseButton
                 set(value) { this@AndroidTvTorrentPlayerActivity.controlsOverlayController.pauseButton = value }
-            override fun playNext(): Unit { return this@AndroidTvTorrentPlayerActivity.playNext() }
-            override fun playPrevious(): Unit { return this@AndroidTvTorrentPlayerActivity.playPrevious() }
+            override fun playNext(): Unit { return this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.playNext() }
+            override fun playPrevious(): Unit { return this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.playPrevious() }
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
             override val playlistController: TvPlaylistOverlayController get() = this@AndroidTvTorrentPlayerActivity.playlistController
             override fun scheduleHideControlsMenu(): Unit { return this@AndroidTvTorrentPlayerActivity.controlsOverlayController.scheduleHideControlsMenu() }
             override fun seekBy(offsetMs: Long): Unit { return this@AndroidTvTorrentPlayerActivity.controlsOverlayController.seek.seekBy(offsetMs) }
             override fun setupCinemaProgressBar(): Unit { return this@AndroidTvTorrentPlayerActivity.controlsOverlayController.seek.setupCinemaProgressBar() }
-            override fun showRandomPlaybackDialog(): Unit { return this@AndroidTvTorrentPlayerActivity.showRandomPlaybackDialog() }
+            override fun showRandomPlaybackDialog(): Unit { return this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.showRandomPlaybackDialog() }
             override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
             override fun startSeekbarProgressUpdates(): Unit { return this@AndroidTvTorrentPlayerActivity.controlsOverlayController.seek.startSeekbarProgressUpdates() }
             override val subtitleController: TvSubtitleController get() = this@AndroidTvTorrentPlayerActivity.subtitleController
             override val subtitleControlsLift: SubtitleControlsLiftController get() = this@AndroidTvTorrentPlayerActivity.subtitleControlsLift
             override fun togglePlayPause(): Unit { return this@AndroidTvTorrentPlayerActivity.controlsOverlayController.togglePlayPause() }
             override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
-            override fun updateCatalogEpisodeControls(): Unit { return this@AndroidTvTorrentPlayerActivity.updateCatalogEpisodeControls() }
+            override fun updateCatalogEpisodeControls(): Unit { return this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.updateCatalogEpisodeControls() }
         },
     )
     // Tees the live progressive stream to a MediaStore file while playing.
@@ -515,8 +515,78 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var currentIndex = 0
     @Volatile private var activeVodHeaders: Pair<Set<String>, Map<String, String>> = emptySet<String>() to emptyMap()
     private var protectedStreamClient = ProtectedStreamHttp.client(15_000)
-    private val mediaPreparationScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var mediaPreparationGeneration = 0
+    private val playbackStartController: TvPlaybackStartController = TvPlaybackStartController(
+        this,
+        object : TvPlaybackStartController.Host {
+            override var activeVodHeaders: Pair<Set<String>, Map<String, String>>
+                get() = this@AndroidTvTorrentPlayerActivity.activeVodHeaders
+                set(value) { this@AndroidTvTorrentPlayerActivity.activeVodHeaders = value }
+            override var continuousShuffleEnabled: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.continuousShuffleEnabled
+                set(value) { this@AndroidTvTorrentPlayerActivity.continuousShuffleEnabled = value }
+            override val controlsDockController: TvControlsDockController get() = this@AndroidTvTorrentPlayerActivity.controlsDockController
+            override val controlsOverlayController: TvControlsOverlayController get() = this@AndroidTvTorrentPlayerActivity.controlsOverlayController
+            override var currentIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentIndex = value }
+            override var currentStremioSourceIndex: Int
+                get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
+                set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex = value }
+            override val customShuffleEpisodes: List<ShuffleEpisode>? get() = this@AndroidTvTorrentPlayerActivity.customShuffleEpisodes
+            override fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int): SeasonEpisode? { return this@AndroidTvTorrentPlayerActivity.guideAdjacent(model, currentItem, direction) }
+            override val hasAdjacentEpisodeResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasAdjacentEpisodeResolver
+            override var hasEverBeenReady: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.hasEverBeenReady
+                set(value) { this@AndroidTvTorrentPlayerActivity.hasEverBeenReady = value }
+            override val hasPlaylistResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasPlaylistResolver
+            override fun hideBufferingIndicator(): Unit { return this@AndroidTvTorrentPlayerActivity.hideBufferingIndicator() }
+            override var isAutoAdvancing: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.isAutoAdvancing
+                set(value) { this@AndroidTvTorrentPlayerActivity.isAutoAdvancing = value }
+            override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
+            override val isStremioTvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isStremioTvMode
+            override var lastRealPositionMs: Long
+                get() = this@AndroidTvTorrentPlayerActivity.lastRealPositionMs
+                set(value) { this@AndroidTvTorrentPlayerActivity.lastRealPositionMs = value }
+            override var maxStableDurationMs: Long
+                get() = this@AndroidTvTorrentPlayerActivity.maxStableDurationMs
+                set(value) { this@AndroidTvTorrentPlayerActivity.maxStableDurationMs = value }
+            override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
+            override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
+            override var pendingItemTraktPercent: Double
+                get() = this@AndroidTvTorrentPlayerActivity.pendingItemTraktPercent
+                set(value) { this@AndroidTvTorrentPlayerActivity.pendingItemTraktPercent = value }
+            override var pendingSeekMs: Long
+                get() = this@AndroidTvTorrentPlayerActivity.pendingSeekMs
+                set(value) { this@AndroidTvTorrentPlayerActivity.pendingSeekMs = value }
+            override var percentSeekApplied: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.percentSeekApplied
+                set(value) { this@AndroidTvTorrentPlayerActivity.percentSeekApplied = value }
+            override val pikPakRetryController: TvPikPakRetryController get() = this@AndroidTvTorrentPlayerActivity.pikPakRetryController
+            override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
+            override val playlistController: TvPlaylistOverlayController get() = this@AndroidTvTorrentPlayerActivity.playlistController
+            override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
+            override val protectedStreamClient: okhttp3.OkHttpClient get() = this@AndroidTvTorrentPlayerActivity.protectedStreamClient
+            override fun releaseResumeHold(): Unit { return this@AndroidTvTorrentPlayerActivity.releaseResumeHold() }
+            override fun restartProgressUpdates(): Unit { return this@AndroidTvTorrentPlayerActivity.restartProgressUpdates() }
+            override val skipSegmentController: TvSkipSegmentController get() = this@AndroidTvTorrentPlayerActivity.skipSegmentController
+            override var sleepStopLatched: Boolean
+                get() = this@AndroidTvTorrentPlayerActivity.sleepStopLatched
+                set(value) { this@AndroidTvTorrentPlayerActivity.sleepStopLatched = value }
+            override val sourceFetchController: TvSourceFetchController get() = this@AndroidTvTorrentPlayerActivity.sourceFetchController
+            override val sourceSwitchController: TvSourceSwitchController get() = this@AndroidTvTorrentPlayerActivity.sourceSwitchController
+            override val startupGateController: TvStartupGateController get() = this@AndroidTvTorrentPlayerActivity.startupGateController
+            override val statusPillController: TvStatusPillController get() = this@AndroidTvTorrentPlayerActivity.statusPillController
+            override val stremioResolutionToken: Int get() = this@AndroidTvTorrentPlayerActivity.stremioResolutionToken
+            override val stremioSourceBadge: View? get() = this@AndroidTvTorrentPlayerActivity.stremioSourceBadge
+            override val stremioSources: MutableList<StremioSource> get() = this@AndroidTvTorrentPlayerActivity.stremioSources
+            override val stremioTvGuideController: TvStremioTvGuideController get() = this@AndroidTvTorrentPlayerActivity.stremioTvGuideController
+            override val subtitleOverlay: SubtitleView get() = this@AndroidTvTorrentPlayerActivity.subtitleOverlay
+            override val subtitleSourcesController: TvSubtitleSourcesController get() = this@AndroidTvTorrentPlayerActivity.subtitleSourcesController
+            override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
+            override val upNextController: TvUpNextController get() = this@AndroidTvTorrentPlayerActivity.upNextController
+        },
+    )
     private var pendingSeekMs: Long = 0
     private var percentSeekApplied = false
     // Per-item Trakt resume (0-100) for the item currently loading, applied on
@@ -531,9 +601,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var skipSegmentsEnabled = true
     private var skipSegmentProviderId = TvSkipSegmentClients.AUTO
     private var continuousShuffleEnabled = false
-    private val shuffleBag = mutableListOf<Int>()
-    private val showShuffle = ShowShuffle()
-    private var showShuffleGeneration = 0
     private var lastBackPressTime: Long = 0
 
     // IPTV mode state
@@ -709,12 +776,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun hideStatusPill(): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.hideStatusPill()
             override val isIptvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isIptvMode
             override val isStremioTvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isStremioTvMode
-            override val mediaPreparationGeneration: Int get() = this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration
+            override val mediaPreparationGeneration: Int get() = this@AndroidTvTorrentPlayerActivity.playbackStartController.mediaPreparationGeneration
             override val moreSourcesLoadingMode: String? get() = this@AndroidTvTorrentPlayerActivity.moreSourcesLoadingMode
             override val movieMoreSources: Boolean get() = this@AndroidTvTorrentPlayerActivity.movieMoreSources
             override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
             override val pikPakRetryId: Int get() = this@AndroidTvTorrentPlayerActivity.pikPakRetryController.pikPakRetryId
-            override fun playItem(index: Int, suppressTrakt: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playItem(index, suppressTrakt)
+            override fun playItem(index: Int, suppressTrakt: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.playItem(index, suppressTrakt)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
             override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.playlistController.rebuildPlaylistContent()
@@ -825,7 +892,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 set(value) { this@AndroidTvTorrentPlayerActivity.isStremioTvMode = value }
             override val nextSubtext: TextView get() = this@AndroidTvTorrentPlayerActivity.nextSubtext
             override val nextText: TextView get() = this@AndroidTvTorrentPlayerActivity.nextText
-            override fun playStremioTvPlaybackMap(channel: StremioTvGuideChannel, map: Map<*, *>, url: String, title: String, hideGuideOnReady: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playStremioTvPlaybackMap(channel, map, url, title, hideGuideOnReady)
+            override fun playStremioTvPlaybackMap(channel: StremioTvGuideChannel, map: Map<*, *>, url: String, title: String, hideGuideOnReady: Boolean): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.playStremioTvPlaybackMap(channel, map, url, title, hideGuideOnReady)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val playerView: PlayerView get() = this@AndroidTvTorrentPlayerActivity.playerView
             override val playlistMode: PlaylistMode get() = this@AndroidTvTorrentPlayerActivity.playlistController.playlistMode
@@ -986,12 +1053,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val pikPakRetryController: TvPikPakRetryController = TvPikPakRetryController(
         this,
         object : TvPikPakRetryController.Host {
-            override fun failShufflePlayback(): Boolean = this@AndroidTvTorrentPlayerActivity.failShufflePlayback()
+            override fun failShufflePlayback(): Boolean = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.failShufflePlayback()
             override val isStremioTvMode: Boolean get() = this@AndroidTvTorrentPlayerActivity.isStremioTvMode
             override val pikPakReactivationIndicator: View get() = this@AndroidTvTorrentPlayerActivity.pikPakReactivationIndicator
             override val pikPakReactivationIndicatorReady: Boolean get() = this@AndroidTvTorrentPlayerActivity.pikPakReactivationIndicatorReady
             override val pikPakReactivationText: TextView get() = this@AndroidTvTorrentPlayerActivity.pikPakReactivationText
-            override fun playNext(): Unit = this@AndroidTvTorrentPlayerActivity.playNext()
+            override fun playNext(): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.playNext()
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val startupGateController: TvStartupGateController get() = this@AndroidTvTorrentPlayerActivity.startupGateController
             override val startupGateStatus: TextView get() = this@AndroidTvTorrentPlayerActivity.startupGateStatus
@@ -1122,7 +1189,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (nativeAudioRouting.reprepareIfPending(player, displayController.playbackSpeeds[displayController.playbackSpeedIndex])) return
             when (playbackState) {
                 Player.STATE_READY -> {
-                    if (pendingShufflePlayback?.mediaStarted == true) pendingShufflePlayback = null
+                    if (playbackStartController.pendingShufflePlayback?.mediaStarted == true) playbackStartController.pendingShufflePlayback = null
                     hasEverBeenReady = true
                     iptvTuneDiagnostics.onReady(player?.currentPosition ?: 0L)
                     if (isIptvMode) {
@@ -1345,14 +1412,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                     val model = payload ?: return
                     if (continuousShuffleEnabled) {
-                        if (playShowShuffle(autoAdvance = true)) return
-                        val shuffleIndex = pickShuffleIndex()
+                        if (playbackStartController.navigator.playShowShuffle(autoAdvance = true)) return
+                        val shuffleIndex = playbackStartController.navigator.pickShuffleIndex()
                         if (shuffleIndex != null) {
                             controlsOverlayController.showNextOverlay(model.items[shuffleIndex])
                             progressHandler.postDelayed({
                                 controlsOverlayController.hideNextOverlay()
                                 isAutoAdvancing = true
-                                playItem(shuffleIndex)
+                                playbackStartController.playItem(shuffleIndex)
                             }, 1500)
                             return
                         }
@@ -1364,7 +1431,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         progressHandler.postDelayed({
                             controlsOverlayController.hideNextOverlay()
                             isAutoAdvancing = true
-                            playItem(nextIndex)
+                            playbackStartController.playItem(nextIndex)
                         }, 1500)
                     } else {
                         if (isStremioTvMode && stremioTvGuideController.stremioTvChannels.any { it.isCurrent }) {
@@ -1423,8 +1490,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 generateSequence<Throwable>(error) { it.cause }.take(8)
                     .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
                     .firstOrNull()?.responseCode)
-            if (pendingShufflePlayback?.mediaStarted == true &&
-                !startupGateController.currentPlaybackItemIsPikPak() && failShufflePlayback()) return
+            if (playbackStartController.pendingShufflePlayback?.mediaStarted == true &&
+                !startupGateController.currentPlaybackItemIsPikPak() && playbackStartController.navigator.failShufflePlayback()) return
             if (!isIptvMode && startupGateController.manualSourceRestoreInProgress) {
                 startupGateController.manualSourceRestoreInProgress = false
                 statusPillController.showStatusPillTransient("Previous source could not be restored")
@@ -1758,7 +1825,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val guideJson = payloadJson.optJSONObject("stremioTvGuide")
             if (guideJson != null) {
                 stremioTvGuideController.initStremioTvGuide(guideJson)
-                updateCatalogEpisodeControls()
+                playbackStartController.navigator.updateCatalogEpisodeControls()
             }
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Stremio TV guide init failed", e)
@@ -1791,7 +1858,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Start playback
         startupGateController.beginStartupFailoverIfEligible()
-        playItem(currentIndex)
+        playbackStartController.playItem(currentIndex)
     }
 
     private fun setupMetadataReceiver() {
@@ -1931,7 +1998,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (model.contentType.lowercase(Locale.US) == "series") {
                             playlistController.rebuildPlaylistContent()
                             playlistController.seriesPlaylistAdapter?.setActiveIndex(currentIndex)
-                            updateCatalogEpisodeControls()
+                            playbackStartController.navigator.updateCatalogEpisodeControls()
                             model.items.getOrNull(currentIndex)?.let { controlsOverlayController.identity.updateTitle(it) }
                         }
                     }
@@ -2716,509 +2783,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    // [suppressTrakt]: a source switch resumes the captured live position and
-    // must not let the per-episode tracker percent override it. The parameter
-    // retains its legacy name because the payload field does too.
-    private fun playItem(
-        index: Int,
-        suppressTrakt: Boolean = false,
-        suppressResume: Boolean = false,
-        shuffleAttempt: ShufflePlaybackAttempt? = null,
-    ) {
-        if (shuffleAttempt != null && !shuffleAttemptCurrent(shuffleAttempt)) return
-        val outgoingIndex = currentIndex
-        if (shuffleAttempt != null && shuffleAttempt.restorePreparation == null) {
-            shuffleAttempt.restorePreparation = {
-                currentIndex = outgoingIndex
-                payload?.items?.getOrNull(outgoingIndex)?.let {
-                    activeVodHeaders = buildProtectedMediaOrigins(listOf(it)) to it.httpHeaders
-                }
-                updateCatalogEpisodeControls()
-            }
-        }
-        pendingShufflePlayback = null
-        mediaPreparationGeneration++
-        if (shuffleAttempt != null) {
-            shuffleAttempt.navigation = mediaPreparationGeneration
-            watchShufflePlayback(shuffleAttempt)
-        }
-        // A sleep stop wins over anything already queued: the auto-advance
-        // arms a 1.5s postDelayed before starting the next item, and a
-        // countdown expiring inside that window would otherwise be undone by
-        // its own handoff. Only automatic starts are gated — an explicit pick
-        // clears the latch first (isAutoAdvancing is set by the auto paths).
-        if (sleepStopLatched) {
-            if (isAutoAdvancing) {
-                android.util.Log.d("AndroidTvPlayer", "playItem suppressed by sleep timer")
-                isAutoAdvancing = false
-                return
-            }
-            // Picking something by hand means the viewer is awake.
-            sleepStopLatched = false
-        }
-        val model = payload ?: return
-        android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
-        if (index < 0 || index >= model.items.size) {
-            android.util.Log.e("AndroidTvPlayer", "playItem - index out of bounds! index: $index, size: ${model.items.size}")
-            return
-        }
-
-        // Navigating to an item invalidates any in-flight source-switch
-        // feedback — without this, the pending watcher would report the NEW
-        // item's READY/IDLE as the OLD switch's outcome. (switchToSourcePlaylist
-        // registers its watcher AFTER calling playItem, so it's unaffected.)
-        sourceSwitchController.dropStaleSourceSwitchFeedback()
-
-        // Reset buffering state for new content
-        hasEverBeenReady = false
-        maxStableDurationMs = 0L
-        lastRealPositionMs = 0L
-        hideBufferingIndicator()
-        upNextController.hideUpNextCard()
-        skipSegmentController.resetSkipSegmentState()
-
-        // Cancel any ongoing PikPak retry before starting new item
-        pikPakRetryController.cancelPikPakRetry()
-
-        currentIndex = index
-        updateCatalogEpisodeControls()
-        val item = model.items[index]
-        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
-        android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
-        // Keep BOTH the local position and the remote tracker percent (the
-        // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
-        // the FURTHER of the two (never backward). Suppress every saved position
-        // during auto-advance (binge starts the next episode fresh), and suppress
-        // trackers during a source switch on the same content (which must honour
-        // the captured live position).
-        val autoAdvance = isAutoAdvancing
-        isAutoAdvancing = false
-        // A new item starts: any hold belongs to the outgoing one. (A
-        // suppressed resume then simply never re-arms — pendingSeekMs stays 0.)
-        releaseResumeHold()
-        pendingSeekMs =
-            if (autoAdvance || suppressResume) 0L else item.resumePositionMs
-        pendingItemTraktPercent =
-            if (autoAdvance || suppressTrakt || suppressResume) 0.0 else (item.traktProgressPercent ?: 0.0)
-
-        // Check if URL needs to be resolved (lazy loading)
-        if (item.url.isBlank()) {
-            android.util.Log.d("AndroidTvPlayer", "playItem - URL is blank, resolving...")
-            resolveAndPlay(index, item)
-            return
-        }
-
-        android.util.Log.d("AndroidTvPlayer", "playItem - URL available, starting playback")
-        startPlayback(item)
-    }
-
-    private fun resolveAndPlay(index: Int, item: PlaybackItem) {
-        android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - index: $index, resumeId: ${item.resumeId}, id: ${item.id}")
-        val navigation = mediaPreparationGeneration
-        val shuffleAttempt = pendingShufflePlayback
-        controlsOverlayController.setResolvingState(true)
-        val startupGeneration = if (startupGateController.startupFailoverCursor?.committed == false) {
-            startupGateController.startupFailoverGeneration
-        } else {
-            null
-        }
-        val manualSourceIndex = startupGateController.manualSourceSwitchIndex
-        val manualResolutionToken = if (manualSourceIndex != null) {
-            stremioResolutionToken
-        } else {
-            null
-        }
-        if (startupGeneration != null) {
-            startupLog(
-                "event=resolve route=initial_lazy generation=$startupGeneration " +
-                    startupGateController.startupSourceFields(currentStremioSourceIndex),
-            )
-        }
-
-        // Request stream from Flutter with async callback
-        requestStreamFromFlutter(item, index) { url, provider ->
-            if (navigation != mediaPreparationGeneration ||
-                (shuffleAttempt != null && !shuffleAttemptCurrent(shuffleAttempt))) return@requestStreamFromFlutter
-            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
-            if (manualSourceIndex != null &&
-                (startupGateController.manualSourceSwitchSnapshot == null ||
-                    startupGateController.manualSourceSwitchIndex != manualSourceIndex ||
-                    stremioResolutionToken != manualResolutionToken)
-            ) {
-                startupLog(
-                    "event=resolve_result ok=false reason=stale_manual_token " +
-                        "captured=$manualResolutionToken current=$stremioResolutionToken " +
-                        startupGateController.startupSourceFields(manualSourceIndex),
-                )
-                return@requestStreamFromFlutter
-            }
-            if (!isCurrentStartupGeneration(
-                    captured = startupGeneration,
-                    current = startupGateController.startupFailoverGeneration,
-                )
-            ) {
-                startupLog(
-                    "event=resolve_result ok=false reason=stale_generation " +
-                        "captured=$startupGeneration current=${startupGateController.startupFailoverGeneration} " +
-                        startupGateController.startupSourceFields(currentStremioSourceIndex),
-                )
-                android.util.Log.d(
-                    "AndroidTvPlayer",
-                    "resolveAndPlay - stale startup generation $startupGeneration " +
-                        "(current: ${startupGateController.startupFailoverGeneration}), discarding",
-                )
-                return@requestStreamFromFlutter
-            }
-            controlsOverlayController.setResolvingState(false)
-
-            if (url.isNullOrEmpty()) {
-                startupLog(
-                    "event=resolve_result ok=false reason=empty_initial_resolution " +
-                        startupGateController.startupSourceFields(currentStremioSourceIndex),
-                    warning = true,
-                )
-                android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
-                if (failShufflePlayback()) return@requestStreamFromFlutter
-                if (!startupGateController.failManualSourceCandidate("initial-resolve") &&
-                    !startupGateController.failStartupResolution(currentStremioSourceIndex, "initial-resolve")
-                ) {
-                    Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
-                }
-                return@requestStreamFromFlutter
-            }
-
-            // Update the item with resolved URL and provider
-            val updatedItem = item.copy(url = url, provider = provider ?: item.provider)
-            payload?.items?.set(index, updatedItem)
-            if (manualSourceIndex != null) startupGateController.manualSourceCandidateUrl = url
-            startupLog(
-                "event=resolve_result ok=true route=initial_lazy " +
-                    startupGateController.startupSourceFields(currentStremioSourceIndex),
-            )
-            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL, provider: $provider")
-            startPlayback(payload!!.items[index])
-        }
-    }
-
-    private fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit) {
-        val shuffleAttempt = pendingShufflePlayback
-        val generation = ++mediaPreparationGeneration
-        shuffleAttempt?.navigation = generation
-        val sourceToken = stremioResolutionToken
-        mediaPreparationScope.launch {
-            val mimeType = withContext(Dispatchers.IO) {
-                ProtectedStreamHttp.discoverMimeType(protectedStreamClient, url, headers)
-            }
-            if (generation == mediaPreparationGeneration && sourceToken == stremioResolutionToken &&
-                (shuffleAttempt == null || shuffleAttemptCurrent(shuffleAttempt)) &&
-                !isFinishing && !isDestroyed && !sleepStopLatched) {
-                ready(mimeType)
-            }
-        }
-    }
-
-    private fun startPlayback(item: PlaybackItem, mimeDiscovered: Boolean = false) {
-        pendingShufflePlayback?.let {
-            if (!shuffleAttemptCurrent(it)) {
-                restoreShufflePreparation(it)
-                pendingShufflePlayback = null
-                return
-            }
-        }
-        if (!isIptvMode && !mimeDiscovered && item.mimeType == null &&
-            ProtectedStreamHttp.needsDiscovery(item.url, item.httpHeaders)) {
-            discoverProtectedMime(item.url, item.httpHeaders) { mimeType ->
-                val current = payload?.items?.getOrNull(currentIndex)
-                if (current == null || current.url != item.url) return@discoverProtectedMime
-                val prepared = current.copy(mimeType = mimeType)
-                payload?.items?.set(currentIndex, prepared)
-                startPlayback(prepared, mimeDiscovered = true)
-            }
-            return
-        }
-        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
-        // Last gate before ExoPlayer actually starts. playItem's check happens
-        // before URL resolution, and that round trip can outlast the countdown
-        // — without rechecking here, a resolve that was already in flight would
-        // start the night up again and re-take both screen holds.
-        if (sleepStopLatched) {
-            android.util.Log.d("AndroidTvPlayer", "startPlayback suppressed by sleep timer")
-            return
-        }
-
-        // Check if this is a PikPak provider - use retry logic for cold storage handling
-        val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
-            item.url.contains("mypikpak.com")
-        android.util.Log.d("AndroidTvPlayer", "startPlayback - provider: ${item.provider}, isPikPak: $isPikPak, url contains mypikpak: ${item.url.contains("mypikpak.com")}")
-
-        if (isPikPak) {
-            android.util.Log.d("AndroidTvPlayer", "startPlayback - using PikPak retry logic")
-            playPikPakVideoWithRetry(item)
-        } else {
-            android.util.Log.d("AndroidTvPlayer", "startPlayback - using direct playback")
-            playMediaDirect(item)
-        }
-    }
-
-    private fun playMediaDirect(item: PlaybackItem) {
-        // Clear subtitle state when switching content
-        subtitleSourcesController.resetSubtitleState()
-
-        val metadata = MediaMetadata.Builder()
-            .setTitle(item.title)
-            .setArtist(item.seasonEpisodeLabel())
-            .setDescription(item.description ?: payload?.subtitle ?: payload?.title)
-            .build()
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(item.url)
-            .setMimeType(item.mimeType)
-            .setMediaMetadata(metadata)
-            .build()
-
-        // High-res YouTube: video and audio are separate streams. Merge a
-        // video-only track with its audio track. If anything goes wrong we fall
-        // back to [item.url], a muxed stream that already contains audio, so we
-        // never end up with silent video.
-        val mergedSource = buildMergedSourceOrNull(item, mediaItem)
-
-        player?.apply {
-            pendingShufflePlayback?.mediaStarted = true
-            if (mergedSource != null) {
-                subtitleTrackReadiness.onMediaReplacement()
-                setMediaSource(mergedSource)
-            } else {
-                subtitleTrackReadiness.onMediaReplacement()
-                setMediaItem(mediaItem)
-            }
-            prepare()
-            playWhenReady = true
-            play()
-        }
-
-        controlsOverlayController.identity.updateTitle(item)
-        playlistController.playlistAdapter?.setActiveIndex(currentIndex)
-        restartProgressUpdates()
-
-        // Fetch Stremio subtitles for this item
-        subtitleSourcesController.fetchStremioSubtitles(item)
-    }
-
-    // Build a MergingMediaSource (video-only + audio) for high-res YouTube,
-    // or null when the item has no separate audio track / on any error.
-    private fun buildMergedSourceOrNull(
-        item: PlaybackItem,
-        baseMediaItem: MediaItem,
-    ): MergingMediaSource? {
-        val hdVideoUrl = item.hdVideoUrl
-        val audioUrl = item.audioUrl
-        if (hdVideoUrl.isNullOrEmpty() || audioUrl.isNullOrEmpty()) return null
-        return try {
-            // Use an HTTP data source that follows cross-protocol redirects
-            // (googlevideo may redirect) — matching the app's main playback path.
-            val httpFactory = DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true)
-            val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
-            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(
-                    baseMediaItem.buildUpon().setUri(hdVideoUrl).build()
-                )
-            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(audioUrl))
-            // adjustPeriodTimeOffsets + clipDurations tolerate the tiny
-            // duration mismatch between YouTube's video/audio tracks.
-            MergingMediaSource(true, true, videoSource, audioSource)
-        } catch (e: Exception) {
-            android.util.Log.w("AndroidTvPlayer", "merge build failed, using muxed fallback", e)
-            null
-        }
-    }
-
-    // Merge an arbitrary video-only URL with a separate audio URL — used on a
-    // YouTube quality switch, where only the video changes and the audio stays
-    // the same. Null on error so the caller falls back to the single URL.
-    private fun buildMergedSource(videoUrl: String, audioUrl: String): MergingMediaSource? {
-        return try {
-            val httpFactory = DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true)
-            val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
-            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(videoUrl))
-            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(MediaItem.fromUri(audioUrl))
-            MergingMediaSource(true, true, videoSource, audioSource)
-        } catch (e: Exception) {
-            android.util.Log.w("AndroidTvPlayer", "switch merge build failed, using single url", e)
-            null
-        }
-    }
-
-    private fun playNext() {
-        if (continuousShuffleEnabled) {
-            if (playShowShuffle()) return
-            val shuffleIndex = pickShuffleIndex()
-            if (shuffleIndex != null) {
-                isAutoAdvancing = true
-                playItem(shuffleIndex)
-                return
-            }
-        }
-
-        val nextIndex = playlistController.getNextPlayableIndex(currentIndex)
-        if (nextIndex != null) {
-            isAutoAdvancing = true
-            playItem(nextIndex)
-        } else {
-            if (isStremioTvMode && stremioTvGuideController.stremioTvChannels.any { it.isCurrent }) {
-                stremioTvGuideController.requestStremioTvNext()
-                return
-            }
-
-            // No next in playlist — fetch the next episode IN-PLAYER when the
-            // guide + resolver allow it, else fall back to the quick-play
-            // relaunch hand-back.
-            val model = payload
-            val currentItem = model?.items?.getOrNull(currentIndex)
-            if (model != null && currentItem != null &&
-                model.contentType == "series" && currentItem.season != null &&
-                currentItem.episode != null) {
-                val nextTarget = guideAdjacent(model, currentItem, 1)
-                if (nextTarget != null && hasPlaylistResolver) {
-                    sourceFetchController.requestEpisodeFetch(nextTarget.season, nextTarget.episode)
-                    return
-                }
-                if (hasPlaylistResolver) {
-                    sourceFetchController.requestAdjacentEpisodeFetch(
-                        model.imdbId,
-                        currentItem.season,
-                        currentItem.episode,
-                    )
-                } else if (model.imdbId != null) {
-                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                    finish()
-                } else {
-                    Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /** Previous for catalog series, including a single direct-link episode.
-     * Existing playlist navigation wins; at its boundary the full guide names
-     * the adjacent episode and Flutter resolves it in place. */
-    private fun playPrevious() {
-        val model = payload ?: return
-        val prevIndex = playlistController.getPrevPlayableIndex(currentIndex)
-        if (prevIndex != null) {
-            // Match the Dart player's manual Previous semantics: selecting an
-            // already-present episode starts it fresh. Guide-fetched Previous
-            // remains resumable, as it does in Dart.
-            playItem(prevIndex, suppressResume = true)
-            return
-        }
-        val currentItem = model.items.getOrNull(currentIndex)
-        if (model.contentType == "series" && hasPlaylistResolver) {
-            val previousTarget = guideAdjacent(model, currentItem, -1)
-            if (previousTarget != null) {
-                sourceFetchController.requestEpisodeFetch(previousTarget.season, previousTarget.episode)
-                return
-            }
-            if (hasAdjacentEpisodeResolver &&
-                currentItem?.season != null && currentItem.episode != null) {
-                sourceFetchController.requestAdjacentEpisodeFetch(
-                    model.imdbId,
-                    currentItem.season,
-                    currentItem.episode,
-                    direction = -1,
-                )
-                return
-            }
-        }
-        Toast.makeText(this, "Beginning of playlist", Toast.LENGTH_SHORT).show()
-    }
-
-    /** The IPTV Previous control is shared by catalog playback. Keep it hidden
-     * for movies/first episodes, and reveal it when either the current source
-     * or the asynchronously delivered full-show guide has a predecessor. */
-    private fun updateCatalogEpisodeControls() {
-        if (isIptvMode) return
-        val model = payload
-        val currentItem = model?.items?.getOrNull(currentIndex)
-        val hasPrevious = model != null && model.contentType == "series" &&
-            !isStremioTvMode &&
-            (playlistController.getPrevPlayableIndex(currentIndex) != null ||
-                (hasPlaylistResolver &&
-                    (guideAdjacent(model, currentItem, -1) != null ||
-                        (hasAdjacentEpisodeResolver &&
-                            ((currentItem?.season ?: 0) > 1 ||
-                                (currentItem?.episode ?: 0) > 1)))))
-        controlsDockController.iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
-    }
-
-    private fun playRandom() {
-        if (playShowShuffle()) return
-        val model = payload ?: return
-        if (model.items.isEmpty()) {
-            Toast.makeText(this, "No items in playlist", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val randomIndex = pickShuffleIndex() ?: return
-        isAutoAdvancing = false
-        playItem(randomIndex, suppressResume = true)
-    }
-
-    private fun showRandomPlaybackDialog() {
-        val model = payload
-        if (model == null || model.items.isEmpty()) {
-            Toast.makeText(this, "No items in playlist", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val shuffleLabel = if (continuousShuffleEnabled) {
-            "Turn Off Continuous Shuffle"
-        } else {
-            "Shuffle Continuously"
-        }
-        val choices = arrayOf("Play Random Once", shuffleLabel)
-
-        AlertDialog.Builder(this)
-            .setTitle("Shuffle Playback")
-            .setItems(choices) { _, which ->
-                when (which) {
-                    0 -> {
-                        continuousShuffleEnabled = false
-                        resetShuffle()
-                        playRandom()
-                    }
-                    1 -> {
-                        if (continuousShuffleEnabled) {
-                            continuousShuffleEnabled = false
-                            resetShuffle()
-                            Toast.makeText(this, "Continuous shuffle off", Toast.LENGTH_SHORT).show()
-                        } else {
-                            continuousShuffleEnabled = true
-                            resetShuffle()
-                            Toast.makeText(this, "Continuous shuffle on", Toast.LENGTH_SHORT).show()
-                            playRandom()
-                        }
-                    }
-                }
-            }
-            .show()
-    }
-
-    private fun resetShuffle() {
-        pendingShufflePlayback?.let { restoreShufflePreparation(it) }
-        pendingShufflePlayback = null
-        shuffleBag.clear()
-        showShuffle.clear()
-        showShuffleGeneration++
-        queuedShuffleGeneration = null
-    }
-
     internal class ShufflePlaybackAttempt(
         var navigation: Int,
         val generation: Int,
@@ -3228,192 +2792,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         var restorePreparation: (() -> Unit)? = null,
         var finished: Boolean = false,
     )
-    private var pendingShufflePlayback: ShufflePlaybackAttempt? = null
-    private var queuedShuffleGeneration: Int? = null
-    private var queuedShuffleNavigation: Int? = null
-
-    private fun shuffleAttemptCurrent(attempt: ShufflePlaybackAttempt): Boolean =
-        !attempt.finished && shuffleAttemptOwned(attempt)
-
-    private fun shuffleAttemptOwned(attempt: ShufflePlaybackAttempt): Boolean =
-        !isFinishing && !isDestroyed && attempt.generation == showShuffleGeneration &&
-            attempt.navigation == mediaPreparationGeneration &&
-            (!attempt.autoAdvance || !sleepStopLatched)
-
-    private fun restoreShufflePreparation(attempt: ShufflePlaybackAttempt) {
-        if (!attempt.mediaStarted && attempt.navigation == mediaPreparationGeneration) {
-            attempt.restorePreparation?.invoke()
-        }
-    }
-
-    private fun failShufflePlayback(): Boolean {
-        val attempt = pendingShufflePlayback ?: return false
-        pendingShufflePlayback = null
-        restoreShufflePreparation(attempt)
-        val current = shuffleAttemptCurrent(attempt)
-        attempt.finished = true
-        if (current) {
-            progressHandler.post { if (shuffleAttemptOwned(attempt)) attempt.onUnavailable() }
-        }
-        return true
-    }
-
-    private var shuffleWatchGeneration = 0
-
-    private fun watchShufflePlayback(attempt: ShufflePlaybackAttempt) {
-        val watchGeneration = ++shuffleWatchGeneration
-        pendingShufflePlayback = attempt
-        progressHandler.postDelayed({
-            if (pendingShufflePlayback === attempt && watchGeneration == shuffleWatchGeneration) {
-                if (attempt.mediaStarted && startupGateController.currentPlaybackItemIsPikPak() && pikPakRetryController.isPikPakRetrying &&
-                    shuffleAttemptCurrent(attempt)) watchShufflePlayback(attempt)
-                else failShufflePlayback()
-            }
-        }, 15000)
-    }
-
-    private fun clearQueuedShuffle(generation: Int) {
-        if (queuedShuffleGeneration == generation) {
-            queuedShuffleGeneration = null
-            queuedShuffleNavigation = null
-        }
-    }
-
-    // The explicit shuffle supersedes the older fetch. Do not let that fetch's
-    // playItem advance navigation and accidentally cancel the queued command.
-    private fun yieldEpisodeFetchToQueuedShuffle(): Boolean =
-        queuedShuffleGeneration == showShuffleGeneration &&
-            queuedShuffleNavigation == mediaPreparationGeneration &&
-            !isFinishing && !isDestroyed
-
-    private fun canShuffleWholeShow(): Boolean {
-        val model = payload ?: return false
-        return hasPlaylistResolver && !isIptvMode && !isStremioTvMode &&
-            model.contentType.equals("series", ignoreCase = true) &&
-            (customShuffleEpisodes != null || model.guideEpisodes.isNotEmpty())
-    }
-
-    /** Resolve outside the pack only when catalog playback supplies a resolver. */
-    private fun playShowShuffle(
-        attempted: Set<ShuffleEpisode> = emptySet(),
-        autoAdvance: Boolean = false,
-    ): Boolean {
-        if (!canShuffleWholeShow()) return false
-        if (sourceFetchController.episodeFetchInFlight) {
-            if (autoAdvance || queuedShuffleGeneration == showShuffleGeneration) return true
-            val generation = showShuffleGeneration
-            queuedShuffleGeneration = generation
-            val navigation = mediaPreparationGeneration
-            queuedShuffleNavigation = navigation
-            fun retryWhenIdle() {
-                if (generation != showShuffleGeneration || navigation != mediaPreparationGeneration ||
-                    isFinishing || isDestroyed) {
-                    clearQueuedShuffle(generation)
-                    return
-                }
-                if (sourceFetchController.episodeFetchInFlight) progressHandler.postDelayed({ retryWhenIdle() }, 50)
-                else {
-                    clearQueuedShuffle(generation)
-                    playShowShuffle(attempted, autoAdvance)
-                }
-            }
-            progressHandler.postDelayed({ retryWhenIdle() }, 50)
-            return true
-        }
-        val model = payload ?: return false
-        val current = model.items.getOrNull(currentIndex)?.let { item ->
-            val season = item.season
-            val episode = item.episode
-            if (season != null && episode != null) ShuffleEpisode(season, episode) else null
-        }
-        val eligible = customShuffleEpisodes ?: model.guideEpisodes.filter {
-            it.season > 0 && it.episode > 0 && it.shuffleEligible
-        }.map { ShuffleEpisode(it.season, it.episode) }
-        val target = if (attempted.size < 3) showShuffle.pick(eligible, current, attempted) else null
-        if (target == null) {
-            statusPillController.showStatusPillTransient("No other playable episode found for shuffle")
-            return true
-        }
-        upNextController.hideUpNextCard()
-        val generation = showShuffleGeneration
-        fun fetchTarget() {
-            val fetchAttempt = ShufflePlaybackAttempt(mediaPreparationGeneration, generation, autoAdvance,
-                onUnavailable = { playShowShuffle(attempted + target, autoAdvance) })
-            if (!shuffleAttemptCurrent(fetchAttempt)) return
-            sourceFetchController.requestEpisodeFetch(target.season, target.episode, autoAdvance = autoAdvance,
-                suppressResume = true,
-                shuffleAttempt = fetchAttempt,
-                shouldContinue = { shuffleAttemptCurrent(fetchAttempt) },
-                onUnavailable = { if (shuffleAttemptCurrent(fetchAttempt)) fetchAttempt.onUnavailable() })
-        }
-        val index = model.items.indexOfFirst {
-            it.season == target.season && it.episode == target.episode
-        }
-        if (index < 0) {
-            fetchTarget()
-            return true
-        }
-        val attempt = ShufflePlaybackAttempt(mediaPreparationGeneration, generation, autoAdvance,
-            onUnavailable = { fetchTarget() })
-        fun openPrepared(item: PlaybackItem) {
-            if (!shuffleAttemptCurrent(attempt)) return
-            model.items[index] = item
-            isAutoAdvancing = autoAdvance
-            playItem(index, suppressResume = true, shuffleAttempt = attempt)
-        }
-        val item = model.items[index]
-        if (item.url.isBlank()) {
-            // Resolve before changing currentIndex, so cancellation/failure
-            // leaves the outgoing stream associated with its own episode.
-            watchShufflePlayback(attempt)
-            requestStreamFromFlutter(item, index) { url, provider ->
-                if (!shuffleAttemptCurrent(attempt)) return@requestStreamFromFlutter
-                if (url.isNullOrEmpty()) failShufflePlayback()
-                else openPrepared(item.copy(url = url, provider = provider ?: item.provider))
-            }
-        } else openPrepared(item)
-        return true
-    }
-
-    private fun getShuffleEligibleIndices(): List<Int> {
-        val model = payload ?: return emptyList()
-        if (model.items.isEmpty()) return emptyList()
-
-        if (playlistController.playlistMode == PlaylistMode.SERIES) {
-            val episodeIndices = model.items.mapIndexedNotNull { index, item ->
-                if (item.season != null && item.episode != null) index else null
-            }
-            if (episodeIndices.isNotEmpty()) return episodeIndices
-        }
-
-        if (playlistController.playlistMode == PlaylistMode.COLLECTION) {
-            val preferredGroup = playlistController.movieGroups?.groups?.firstOrNull {
-                it.name.equals("Main", ignoreCase = true)
-            } ?: playlistController.movieGroups?.groups?.firstOrNull()
-            val indices = preferredGroup?.fileIndices
-                ?.filter { it in model.items.indices }
-                ?: emptyList()
-            if (indices.isNotEmpty()) return indices
-        }
-
-        return model.items.indices.toList()
-    }
-
-    private fun pickShuffleIndex(): Int? {
-        val eligible = getShuffleEligibleIndices().distinct()
-        if (eligible.isEmpty()) return null
-        if (eligible.size == 1) return eligible.first()
-
-        val eligibleSet = eligible.toSet()
-        shuffleBag.removeAll { it !in eligibleSet || it == currentIndex }
-
-        if (shuffleBag.isEmpty()) {
-            shuffleBag.addAll(eligible.filter { it != currentIndex }.shuffled())
-        }
-
-        if (shuffleBag.isEmpty()) return null
-        return shuffleBag.removeAt(shuffleBag.lastIndex)
-    }
 
     private fun reportValidatedSourceCommit(sourceIndex: Int) {
         if (sourceIndex !in stremioSources.indices) return
@@ -3435,65 +2813,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
-    }
-
-    // PikPak Cold Storage Retry Logic
-    // PikPak uses "cold storage" where files that haven't been accessed recently need 10-30 seconds
-    // to reactivate. This implements retry logic with exponential backoff.
-
-    private fun playPikPakVideoWithRetry(item: PlaybackItem) {
-        android.util.Log.d("AndroidTvPlayer", "PikPak: Starting retry logic for cold storage handling")
-
-        // Clear subtitle state when switching content
-        subtitleSourcesController.resetSubtitleState()
-
-        // Cancel any previous retry loops
-        pikPakRetryController.pikPakRetryId++
-        val myRetryId = pikPakRetryController.pikPakRetryId
-
-        // Reset retry state
-        pikPakRetryController.pikPakRetryCount = 0
-        pikPakRetryController.isPikPakRetrying = false
-        pikPakRetryController.hidePikPakRetryOverlay()
-
-        // Null safety check for player
-        if (player == null) {
-            android.util.Log.e("AndroidTvPlayer", "PikPak: Player is null, cannot attempt playback")
-            return
-        }
-
-        // Clear previous video's subtitles
-        subtitleOverlay.setCues(emptyList())
-
-        // Prepare and play the media ONCE before retry loop
-        val metadata = MediaMetadata.Builder()
-            .setTitle(item.title)
-            .setArtist(item.seasonEpisodeLabel())
-            .setDescription(item.description ?: payload?.subtitle ?: payload?.title)
-            .build()
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(item.url)
-            .setMediaMetadata(metadata)
-            .build()
-
-        player?.apply {
-            pendingShufflePlayback?.mediaStarted = true
-            subtitleTrackReadiness.onMediaReplacement()
-            setMediaItem(mediaItem)
-            prepare()
-            play()
-        }
-
-        controlsOverlayController.identity.updateTitle(item)
-        playlistController.playlistAdapter?.setActiveIndex(currentIndex)
-        restartProgressUpdates()
-
-        // Fetch Stremio subtitles for this item (same as playMediaDirect)
-        subtitleSourcesController.fetchStremioSubtitles(item)
-
-        // Start retry loop with attempt 0
-        pikPakRetryController.attemptPikPakPlaybackLoop(item, 0, myRetryId)
     }
 
     // D-pad navigation
@@ -4387,18 +3706,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else if (tag == "shuffle") {
             "Shuffle & autoplay" to listOf(
                 mrow("Play random once", accent = true, onOk = {
-                    continuousShuffleEnabled = false; resetShuffle(); playRandom(); unifiedMenu?.hide()
+                    continuousShuffleEnabled = false; playbackStartController.navigator.resetShuffle(); playbackStartController.navigator.playRandom(); unifiedMenu?.hide()
                 }),
                 mrow("Shuffle continuously", value = if (continuousShuffleEnabled) "On" else "Off",
                     selected = continuousShuffleEnabled, onOk = {
                         val turningOn = !continuousShuffleEnabled
                         continuousShuffleEnabled = turningOn
-                        resetShuffle()
+                        playbackStartController.navigator.resetShuffle()
                         Toast.makeText(
                             this, if (turningOn) "Continuous shuffle on" else "Continuous shuffle off",
                             Toast.LENGTH_SHORT
                         ).show()
-                        if (turningOn) { playRandom(); unifiedMenu?.hide() }   // jump to a random item now
+                        if (turningOn) { playbackStartController.navigator.playRandom(); unifiedMenu?.hide() }   // jump to a random item now
                     })
             )
         } else {
@@ -4520,8 +3839,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 set(value) { this@AndroidTvTorrentPlayerActivity.stremioResolutionToken = value }
             override val stremioSources: MutableList<StremioSource> get() = this@AndroidTvTorrentPlayerActivity.stremioSources
             override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
-            override fun watchShufflePlayback(attempt: ShufflePlaybackAttempt): Unit = this@AndroidTvTorrentPlayerActivity.watchShufflePlayback(attempt)
-            override fun yieldEpisodeFetchToQueuedShuffle(): Boolean = this@AndroidTvTorrentPlayerActivity.yieldEpisodeFetchToQueuedShuffle()
+            override fun watchShufflePlayback(attempt: ShufflePlaybackAttempt): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.watchShufflePlayback(attempt)
+            override fun yieldEpisodeFetchToQueuedShuffle(): Boolean = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.yieldEpisodeFetchToQueuedShuffle()
         },
     )
     private val sourceSwitchController: TvSourceSwitchController = TvSourceSwitchController(
@@ -4533,7 +3852,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun armStartupCandidate(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.startupGateController.armStartupCandidate(sourceIndex)
             override fun attemptPikPakPlaybackLoop(item: PlaybackItem, attemptNumber: Int, retryId: Int): Unit = this@AndroidTvTorrentPlayerActivity.pikPakRetryController.attemptPikPakPlaybackLoop(item, attemptNumber, retryId)
             override fun beginManualSourceCandidate(sourceIndex: Int): Unit = this@AndroidTvTorrentPlayerActivity.startupGateController.beginManualSourceCandidate(sourceIndex)
-            override fun buildMergedSource(videoUrl: String, audioUrl: String): MergingMediaSource? = this@AndroidTvTorrentPlayerActivity.buildMergedSource(videoUrl, audioUrl)
+            override fun buildMergedSource(videoUrl: String, audioUrl: String): MergingMediaSource? = this@AndroidTvTorrentPlayerActivity.playbackStartController.buildMergedSource(videoUrl, audioUrl)
             override fun cancelPikPakRetry(): Unit = this@AndroidTvTorrentPlayerActivity.pikPakRetryController.cancelPikPakRetry()
             override var currentIndex: Int
                 get() = this@AndroidTvTorrentPlayerActivity.currentIndex
@@ -4541,7 +3860,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var currentStremioSourceIndex: Int
                 get() = this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex
                 set(value) { this@AndroidTvTorrentPlayerActivity.currentStremioSourceIndex = value }
-            override fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit): Unit = this@AndroidTvTorrentPlayerActivity.discoverProtectedMime(url, headers, ready)
+            override fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.discoverProtectedMime(url, headers, ready)
             override fun failManualSourceCandidate(reason: String): Boolean = this@AndroidTvTorrentPlayerActivity.startupGateController.failManualSourceCandidate(reason)
             override fun failStartupResolution(sourceIndex: Int, reason: String): Boolean = this@AndroidTvTorrentPlayerActivity.startupGateController.failStartupResolution(sourceIndex, reason)
             override val hasPlaylistResolver: Boolean get() = this@AndroidTvTorrentPlayerActivity.hasPlaylistResolver
@@ -4562,8 +3881,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 set(value) { this@AndroidTvTorrentPlayerActivity.startupGateController.manualSourceMediaReplaced = value }
             override val manualSourceSwitchSnapshot: ManualSourceSwitchSnapshot? get() = this@AndroidTvTorrentPlayerActivity.startupGateController.manualSourceSwitchSnapshot
             override var mediaPreparationGeneration: Int
-                get() = this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration
-                set(value) { this@AndroidTvTorrentPlayerActivity.mediaPreparationGeneration = value }
+                get() = this@AndroidTvTorrentPlayerActivity.playbackStartController.mediaPreparationGeneration
+                set(value) { this@AndroidTvTorrentPlayerActivity.playbackStartController.mediaPreparationGeneration = value }
             override val ottSkinInstalled: Boolean get() = this@AndroidTvTorrentPlayerActivity.ottSkinInstalled
             override val ottSourcesButton: AppCompatButton? get() = this@AndroidTvTorrentPlayerActivity.controlsDockController.ottSourcesButton
             override val payload: PlaybackPayload? get() = this@AndroidTvTorrentPlayerActivity.payload
@@ -4576,7 +3895,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override var pikPakRetryId: Int
                 get() = this@AndroidTvTorrentPlayerActivity.pikPakRetryController.pikPakRetryId
                 set(value) { this@AndroidTvTorrentPlayerActivity.pikPakRetryController.pikPakRetryId = value }
-            override fun playItem(index: Int, suppressTrakt: Boolean, suppressResume: Boolean, shuffleAttempt: ShufflePlaybackAttempt?): Unit = this@AndroidTvTorrentPlayerActivity.playItem(index, suppressTrakt, suppressResume, shuffleAttempt)
+            override fun playItem(index: Int, suppressTrakt: Boolean, suppressResume: Boolean, shuffleAttempt: ShufflePlaybackAttempt?): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.playItem(index, suppressTrakt, suppressResume, shuffleAttempt)
             override val player: ExoPlayer? get() = this@AndroidTvTorrentPlayerActivity.player
             override val progressHandler: Handler get() = this@AndroidTvTorrentPlayerActivity.progressHandler
             override fun rebuildPlaylistContent(): Unit = this@AndroidTvTorrentPlayerActivity.playlistController.rebuildPlaylistContent()
@@ -4586,7 +3905,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 set(value) { this@AndroidTvTorrentPlayerActivity.resumeHoldArmedAtMs = value }
             override fun showStatusPill(text: String): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.showStatusPill(text)
             override fun showStatusPillTransient(text: String): Unit = this@AndroidTvTorrentPlayerActivity.statusPillController.showStatusPillTransient(text)
-            override val shuffleBag: MutableList<Int> get() = this@AndroidTvTorrentPlayerActivity.shuffleBag
+            override val shuffleBag: MutableList<Int> get() = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.shuffleBag
             override val sourceBrowser: TvSourceBrowserController? get() = this@AndroidTvTorrentPlayerActivity.sourceBrowser
             override var startupFailoverCursor: StartupFailoverCursor?
                 get() = this@AndroidTvTorrentPlayerActivity.startupGateController.startupFailoverCursor
@@ -4603,7 +3922,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override val subtitleTrackReadiness: SubtitleTrackReadiness get() = this@AndroidTvTorrentPlayerActivity.subtitleTrackReadiness
             override val titleView: TextView get() = this@AndroidTvTorrentPlayerActivity.titleView
             override val unifiedMenu: UnifiedMenuController? get() = this@AndroidTvTorrentPlayerActivity.unifiedMenu
-            override fun updateCatalogEpisodeControls(): Unit = this@AndroidTvTorrentPlayerActivity.updateCatalogEpisodeControls()
+            override fun updateCatalogEpisodeControls(): Unit = this@AndroidTvTorrentPlayerActivity.playbackStartController.navigator.updateCatalogEpisodeControls()
         },
     )
 
@@ -4968,8 +4287,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvStartOverController.cancelPendingIptvCatchupRequest()
         displayController.displayModeController?.clear()
         displayController.displayModeController = null
-        mediaPreparationScope.cancel()
-        mediaPreparationGeneration++
+        playbackStartController.mediaPreparationScope.cancel()
+        playbackStartController.mediaPreparationGeneration++
         sourceBrowser?.destroy()
         sourceBrowser = null
         recordPlaybackLifecycle("activity_destroy_begin")
@@ -5132,165 +4451,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sendFinished()
         super.onDestroy()
         recordPlaybackLifecycle("activity_destroy_complete")
-    }
-
-    private fun updateStremioSourcesFromPlaybackMap(map: Map<*, *>) {
-        val newSources = map["stremioSources"] as? List<*>
-        val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0
-        if (newSources != null) {
-            stremioSources.clear()
-            for ((idx, src) in newSources.withIndex()) {
-                val srcMap = src as? Map<*, *> ?: continue
-                stremioSources.add(StremioSource.fromMap(srcMap, idx))
-            }
-            currentStremioSourceIndex = newSourceIndex.coerceIn(
-                0,
-                stremioSources.lastIndex.coerceAtLeast(0)
-            )
-            sourceSwitchController.setupStremioSources()
-        }
-    }
-
-    private fun replacePayloadWithStremioTvItem(
-        channel: StremioTvGuideChannel,
-        map: Map<*, *>,
-        title: String,
-        url: String
-    ) {
-        val contentImdbId = map["contentImdbId"] as? String
-        val contentType = map["contentType"] as? String
-        val contentSeason = (map["contentSeason"] as? Number)?.toInt()
-        val contentEpisode = (map["contentEpisode"] as? Number)?.toInt()
-
-        // This is the one same-activity path that can change SHOW, and the
-        // zap closures never re-run the TVMaze pipeline — a kept name would
-        // caption the new show's episodes with the old show for the rest of
-        // the session. Episode-only is honest until a fresh push arrives.
-        controlsOverlayController.identity.ottShowName = null
-
-        payload?.let { model ->
-            val previousItem = model.items.getOrNull(currentIndex)
-            val switchedItem = PlaybackItem(
-                id = "stremio_tv:${channel.id}",
-                title = title,
-                url = url,
-                index = 0,
-                season = contentSeason,
-                episode = contentEpisode,
-                artwork = channel.nowPlayingPoster ?: previousItem?.artwork,
-                description = previousItem?.description,
-                resumePositionMs = 0L,
-                durationMs = 0L,
-                updatedAt = System.currentTimeMillis(),
-                resumeId = null,
-                sizeBytes = null,
-                rating = channel.nowPlayingRating ?: previousItem?.rating,
-                provider = previousItem?.provider,
-                // Keep the release name parseable for the quality chips even
-                // if a later metadata copy() overwrites title.
-                sourceTitle = title,
-            )
-            model.items.clear()
-            model.items.add(switchedItem)
-            model.contentType = contentType ?: ""
-            model.imdbId = contentImdbId
-            model.nextEpisodeMap = emptyMap()
-            model.prevEpisodeMap = emptyMap()
-            model.collectionGroups = null
-            model.perItemImdbIds.clear()
-            model.perItemImdbIds[0] = contentImdbId
-            currentIndex = 0
-        }
-    }
-
-    private fun playStremioTvPlaybackMap(
-        channel: StremioTvGuideChannel,
-        map: Map<*, *>,
-        url: String,
-        title: String,
-        hideGuideOnReady: Boolean
-    ) {
-        val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble() ?: 0.0
-
-        updateStremioTvGuideChannelData(channel, map)
-        replacePayloadWithStremioTvItem(channel, map, title, url)
-        updateStremioSourcesFromPlaybackMap(map)
-        stremioTvGuideController.updateStremioTvGuideHeader()
-        sourceSwitchController.updateStremioQualityBadge()
-        if (ottSkinInstalled) {
-            controlsDockController.ottSourcesButton?.visibility =
-                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
-        } else if (stremioSources.isNotEmpty()) {
-            stremioSourceBadge?.visibility = View.VISIBLE
-        } else {
-            stremioSourceBadge?.visibility = View.GONE
-        }
-
-        subtitleSourcesController.resetSubtitleState()
-        subtitleSourcesController.clearStremioLoadingState()
-        pikPakRetryController.cancelPikPakRetry()
-
-        // Route the channel's slot-progress seek through the shared resume
-        // machinery instead of an isolated inline listener. The main
-        // playbackListener applies the seek on STATE_READY. (Subtitle loads are
-        // side-rendered and never seek, so they can't clobber it.)
-        payload?.startAtPercent = startAtPercent
-        percentSeekApplied = false
-        pendingSeekMs = 0
-        // Clear any leftover per-episode tracker percent from a torrent item whose
-        // READY never fired (rapid switch mid-buffer) — the resume branch now
-        // arms on it, and a live channel must never seek to a stale tracker offset.
-        pendingItemTraktPercent = 0.0
-        // This path replaces the payload WITHOUT passing playItem, so the
-        // item-change release there never runs. A slot with no resume signal
-        // would otherwise inherit the previous item's hold and file its stale
-        // position against the new content. (A slot WITH a signal re-arms at
-        // READY — armResumeHold supersedes unconditionally.)
-        releaseResumeHold()
-        hasEverBeenReady = false
-
-        val metadata = MediaMetadata.Builder()
-            .setTitle(title)
-            .build()
-        val mediaItem = MediaItem.Builder()
-            .setUri(url)
-            .setMediaMetadata(metadata)
-            .build()
-
-        player?.apply {
-            subtitleTrackReadiness.onMediaReplacement()
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
-            play()
-        }
-
-        val playbackItem = payload?.items?.getOrNull(currentIndex) ?: PlaybackItem(
-            id = "stremio_tv:${channel.id}",
-            title = title,
-            url = url,
-            index = 0,
-            season = (map["contentSeason"] as? Number)?.toInt(),
-            episode = (map["contentEpisode"] as? Number)?.toInt(),
-            artwork = null,
-            description = null,
-            resumePositionMs = 0L,
-            durationMs = 0L,
-            updatedAt = System.currentTimeMillis(),
-            resumeId = null,
-            sizeBytes = null,
-            rating = null,
-            provider = null,
-        )
-
-        controlsOverlayController.identity.updateTitle(playbackItem)
-        subtitleSourcesController.fetchStremioSubtitles(playbackItem)
-
-        channel.isSwitchingChannel = false
-        stremioTvGuideController.stremioTvChannelAdapter?.notifyDataSetChanged()
-        if (hideGuideOnReady) {
-            stremioTvGuideController.hideGuideWhenReady()
-        }
     }
 
     // ═══════════════════════════════════════════════════════════════

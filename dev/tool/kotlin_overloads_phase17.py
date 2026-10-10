@@ -74,9 +74,9 @@ def audit_borrowed(pins, fields, instructions):
         # setter. A shadow copy in either controller must not become another field.
 
 
-def audit_host_setters(pins, instructions):
+def audit_host_setters(pins, instructions, property_name="iptvTuneController"):
     owner = 'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'
-    host = owner+'$iptvTuneController$1'
+    host = owner+'$'+property_name+'$1'
     for pin in pins:
         suffix = pin['name'][0].upper()+pin['name'][1:]
         descriptor = pin['descriptor']
@@ -102,14 +102,14 @@ def audit_reflected_lazy_getter(instructions):
         raise ValueError('reflected lazy getter must retain the unmangled getIptvLiveRecovery name')
 
 
-def audit_compiled(manifest, original, current, before_folder, after_folder):
+def audit_compiled(manifest, original, current, before_folder, after_folder, identity_writer_owners=None):
     from check_kotlin_overloads import typed_bytecode
     before, after = typed_bytecode(before_folder), typed_bytecode(after_folder)
     before_fields, after_fields = field_declarations(before_folder), field_declarations(after_folder)
     for instructions, fields in ((before, before_fields), (after, after_fields)):
         audit_deferred(instructions)
         audit_borrowed(manifest['borrowed_volatile'], fields, instructions)
-    audit_host_setters(manifest['borrowed_volatile'], after)
+    audit_host_setters([pin for pin in manifest['borrowed_volatile'] if pin['name'] in ('currentIptvHttpHeaders','iptvStrictTsActive')], after)
     audit_reflected_lazy_getter(after)
     previous, pins = historical_pins(manifest)
     old_source = subprocess.check_output(['git', '-C', str(k.ROOT), 'show',
@@ -139,5 +139,5 @@ def audit_compiled(manifest, original, current, before_folder, after_folder):
         raise ValueError('frozen identity must retain ACC_VOLATILE and descriptor')
     for fields, instructions in ((before_fields,before),(after_fields,after)):
         audit_identity(manifest['retained_identity'], fields, fields, instructions,
-                       before_owner=identity[0])
+                       before_owner=identity[0], writer_owners=identity_writer_owners if instructions is after else None)
     return results
