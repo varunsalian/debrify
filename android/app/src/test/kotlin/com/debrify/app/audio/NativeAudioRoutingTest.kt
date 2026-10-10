@@ -69,13 +69,15 @@ class NativeAudioRoutingTest {
             .flatMap { sequenceOf(it, File(it, "app"), File(it, "android/app")) }
             .first { File(it, "src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt").isFile }
         for (relative in listOf(
-            "src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt",
+            "src/main/kotlin/com/debrify/app/tv/TvMediaPipelineController.kt",
             "src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java",
         )) {
             val source = File(appDir, relative).readText()
             assertTrue(relative, source.contains(".setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)"))
             assertFalse(relative, source.contains(".setAllowInvalidateSelectionsOnRendererCapabilitiesChange(false)"))
         }
+        val activity = File(appDir, "src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt").readText()
+        assertFalse("activity", activity.contains(".setAllowInvalidateSelectionsOnRendererCapabilitiesChange(false)"))
     }
 
     @Test fun restoredHdmiCapabilitiesRespectEffectsPolicy() {

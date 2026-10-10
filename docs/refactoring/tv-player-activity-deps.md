@@ -21267,3 +21267,18 @@ The post-test owner-map rescan records 28 literal accesses and all eight moved-n
 Observed original quirks are preserved: actual Media3 1.8.0 stock start/rebuffer thresholds are **1,000/2,000 ms**, despite stale 2,500/5,000 comments beside the merged-source override; negative late duration with negative live duration retains the original `-1`, and a parsed early row can update the model before a malformed later row suppresses UI publication. These are recorded in Follow-ups, not fixed.
 
 Raw summaries: `p19/step0/coverage-summary.json`, `statement-coverage-matrix.json`, `test-mutation-witnesses.json`, `assertion-provenance.json`, `all-control-v6/`, `proofs/`, `owner-rescan.json`, `protected-inputs.json` and JVM comparison. The detached original is removed after archiving. **STOP after Step 0; Step 1 has not started.**
+
+
+### Phase 19 Step 1 — exact extraction and test retargets
+
+At the phase-18 base `a0d1be1a7`, the reviewed manifest materializes two independent siblings: `TvMediaPipelineController` (535 physical lines, class-level Media3 opt-in, 30 computed Host members) and `TvEpisodeMetadataReceiver` (330 lines, eight computed Host members). Eight original declarations / 758 leading-trivia span lines move with exactly 128 declared substitutions, including the eight consumed earlier patches. The Activity falls from 4,472 to **3,776 physical lines**. Two controller properties occupy the original listener/receiver slots; zero initializer proofs are required. All three volatile fields remain single Activity fields, exposed through computed getters. Receiver intent shadowing, Activity identity-provider ownership, IO-time reads and the two lazy first accesses retain their original timing.
+
+Six Activity edits remain in their original positions (`onCreate` ×2, `initIptvMode` ×2, `onDestroy` ×2); receiver unregister/null follows the Up Next handler clear and precedes subtitle scope cancellation. The source-switcher whole-property patched row calls `episodeMetadataReceiver.requestMetadataFromFlutter()`. Original `handleMetadataUpdate` private/default dispatch is preserved; all eight moved-name reflection routes installed in Step 0 resolve to their new owners without changing assertions.
+
+| Test | Original anchor | New anchor | Assertion preservation |
+| --- | --- | --- | --- |
+| `TvControlsCallerCharacterizationTest` (two existing sites) and new phase-19 scenarios | Activity reflection, original-owner fallback | `episodeMetadataReceiver` / `mediaPipelineController` via the split owner maps | All scenario/caller test bytes unchanged; real private/default dispatch retained |
+| `NativeAudioRoutingTest.bothNativePlayersEnableCapabilityRecovery` | Activity Kotlin source | `TvMediaPipelineController.kt`; Torbox Java path unchanged | Both true/false assertions unchanged; additional Activity false assertion retained as a stronger check |
+| `android_tv_mdblist_progress_source_test.dart`, native actual rows | Activity source / `private fun requestMetadataFromFlutter()` end marker | `TvEpisodeMetadataReceiver.kt` / `fun requestMetadataFromFlutter()` | Only path/end-marker strings change; all assertions unchanged |
+
+Claude's separate original-code sample (`p19/claude-mutations/`) killed **25/25 valid mutations**, each against 157 tests. No Step 0b is required. Codex did not conduct a self independent review. Focused post-move JVM: **184/184 pass** (150 new + eight unchanged callers + 26 native audio cases). Complete production fixture and checker match exactly over 1,611 declarations; teardown/protected/test-retarget checks pass. The size baseline was lowered using `--update`; 2,982 files / 140 ratchets, both new files below 800 lines. Gate evidence follows under `p19/gate/`.

@@ -6,10 +6,10 @@
 5475 lib/services/remote_control/remote_command_router.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
-4472 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 4182 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3858 lib/services/stremio_service.dart
+3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
