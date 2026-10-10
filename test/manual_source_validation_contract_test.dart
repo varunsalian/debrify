@@ -17,6 +17,13 @@ void main() {
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
+  final playbackStartFile = File(
+    'android/app/src/main/kotlin/com/debrify/app/tv/TvPlaybackStartController.kt',
+  );
+  // Original-owner fallback is used only until the phase-18 move commit.
+  final nativePlaybackStart = playbackStartFile.existsSync()
+      ? playbackStartFile.readAsStringSync()
+      : nativePlayer;
   final nativeSourceFetch = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/TvSourceFetchController.kt',
   ).readAsStringSync();
@@ -348,7 +355,7 @@ void main() {
 
   test('Android TV gates progress and invalidates late manual resolution', () {
     final resolver = _between(
-      nativePlayer,
+      nativePlaybackStart,
       'private fun resolveAndPlay(',
       'private fun startPlayback(',
     );

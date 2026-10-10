@@ -212,7 +212,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvUpNextCharacterizationTest::tickerTriggersAtSevenHundredFiftyMillisecondsAndExplicitTriggerHonoursSleepLatch"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property skipSegmentButton",
@@ -231,7 +231,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartEffectsCharacterizationTest::playlistHighlightDirect"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property seekbarOverlay",
@@ -305,7 +305,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartPrerequisiteTest::originalRandomDialogRunsItsRealChoiceCallback"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property iptvRecordingController",
@@ -652,7 +652,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartEffectsCharacterizationTest::startupResolveFailureExhaustsGateBeforeToastAndKeepsReason"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property sourcePersistenceSessionId",
@@ -786,7 +786,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvStremioTvGuidePlaybackCharacterizationTest::switchSuccessUsesRealTrioAndWaitsForReadyAfterAdapterUpdate"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property subtitleSettingsRoot",
@@ -910,7 +910,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPikPakRetryCharacterizationTest::exhaustionManualFailureRestoresInsteadOfAdvancing"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property startupGateStatusReady",
@@ -1034,7 +1034,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvControlsCallerCharacterizationTest::endedPlaybackShowsTheNextItemThenHidesAndPlaysItAtFifteenHundredMs"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property metadataUpdateReceiver",
@@ -1063,7 +1063,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackItemStartCharacterizationTest::defaultDispatcherUsesRealFalseAndNullArguments"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun setupMetadataReceiver()",
@@ -1087,7 +1087,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvControlsCallerCharacterizationTest::metadataWritesTrimmedShowNameAndRefreshesTheDockWithoutRevealingTopTitle"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun requestMetadataFromFlutter()",
@@ -1783,7 +1783,7 @@
         },
         {
           "before": "\nprivate fun playRandom() {",
-          "after": "\ninternal fun playRandom() {",
+          "after": "\nfun playRandom() {",
           "count": 1
         },
         {
@@ -1963,7 +1963,7 @@
         },
         {
           "before": "\nprivate fun restoreShufflePreparation(attempt: ShufflePlaybackAttempt) {",
-          "after": "\ninternal fun restoreShufflePreparation(attempt: ShufflePlaybackAttempt) {",
+          "after": "\nfun restoreShufflePreparation(attempt: ShufflePlaybackAttempt) {",
           "count": 1
         }
       ]
@@ -2090,7 +2090,7 @@
         },
         {
           "before": "\nprivate fun canShuffleWholeShow(): Boolean {",
-          "after": "\ninternal fun canShuffleWholeShow(): Boolean {",
+          "after": "\nfun canShuffleWholeShow(): Boolean {",
           "count": 1
         },
         {
@@ -2247,7 +2247,7 @@
         },
         {
           "before": "\nprivate fun pickShuffleIndex(): Int? {",
-          "after": "\ninternal fun pickShuffleIndex(): Int? {",
+          "after": "\nfun pickShuffleIndex(): Int? {",
           "count": 1
         }
       ]
@@ -2473,7 +2473,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartEffectsCharacterizationTest::unifiedMenuRandomChoiceUsesResetAndManualStart"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun restartProgressUpdates()",
@@ -2527,7 +2527,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvShuffleFetchCharacterizationTest::successfulFetchCarriesAutoSuppressionAndAttempt"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/property sourceSwitchController",
@@ -2571,7 +2571,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartPrerequisiteTest::originalMimeCoroutineCanPauseAfterIoBeforeItsMainGuard"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun parsePayload(String)",
@@ -2640,7 +2640,7 @@
         }
       ],
       "reason": "Retarget playback start/navigation ownership in place; bootstrap callbacks and ordered lifecycle teardown remain activity-owned.",
-      "test": "Phase-17 original characterization and complete extraction fixture"
+      "test": "TvPlaybackStartLifecycleCharacterizationTest::destroyCancelsScopeBeforeGenerationBeforeBrowserAndPlayer"
     },
     {
       "original": "class AndroidTvTorrentPlayerActivity/fun updateStremioSourcesFromPlaybackMap(Map<*, *>)",
