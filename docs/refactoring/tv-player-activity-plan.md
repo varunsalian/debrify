@@ -2081,15 +2081,28 @@ stays the activity (`onDestroy` clears it by that key); two lazy first
 accesses in `setupPlayer` keep their timing; two inherited calls inside the
 anonymous `NetworkCallback`.
 
-**Retargets.** No reflective sites. `NativeAudioRoutingTest` moves to the
+**Retargets.** 2 reflective sites / 1 name / 1 file:
+`TvControlsCallerCharacterizationTest` invokes `handleMetadataUpdate`
+(one site pins the worker-thread write before the queued UI publication —
+the receiver is NOT main-thread only); routed to `episodeMetadataReceiver`
+with the original-owner fallback during step 0, both tests unchanged.
+`NativeAudioRoutingTest` moves to the
 new pipeline file path (a stronger variant keeps a `(false)` check on the
 activity file); `test/android_tv_mdblist_progress_source_test.dart` changes
 file path and its end marker loses `private`; asserted text unchanged.
 
 ### Step T
 
-Extraction fixture (two siblings, computed Host getters) + negatives; a new
-**compiled volatile read-chain check** proving every loader-thread read
+Extraction fixture (two siblings, computed Host getters) + negatives; the
+existing compiled OTT-name writer audit gets separate before/after owner
+maps (replacement stays in `TvPlaybackStartController`; metadata moves from
+the activity to `TvEpisodeMetadataReceiver`) keeping the volatile
+descriptor, writer-dispatch and playlist-reader assertions, with relocation
+negatives; a new **compiled volatile read-chain check** (Kotlin-precise:
+permitted captures listed by descriptor and role — the extractor legitimately
+captures both factories — exactly one getter invocation per read site, and
+negatives using real Kotlin-generated snapshot fields such as `$strictTs`,
+not a `val$` prefix rule) proving every loader-thread read
 reaches the original `@Volatile` field through a computed getter, with
 negatives for a hoisted snapshot, a non-computed Host member and a removed
 `@Volatile`; compiled audit (10 `this` sites, 11 inherited incl. inside the
@@ -2099,7 +2112,10 @@ phase-18 merge.
 ### Step 0 — characterization of the original
 
 Prerequisite: a Robolectric harness reading back the built Media3 1.8.0
-configuration (LoadControl/buffer presets, track selector parameters, data
+configuration (heap budget via `ShadowSystemProperties.override(
+"dalvik.vm.heapsize", …)` on SDK 28 — Robolectric 4.15.1 has no
+large-memory-class setter — asserting the real `largeMemoryClass` getter
+before setup and restoring afterwards, or a custom shadow) (LoadControl/buffer presets, track selector parameters, data
 source factories, load-error policy, codec selector) plus a worker-thread
 resolver harness for header resolution — demonstrated on the original; if not
 deterministic, the receiver ships alone as phase 19a. Then: pipeline
@@ -4115,3 +4131,11 @@ arriving after launch (titles, guide episodes, progress).
   bindings and teardown order preserved; analyzer extras at the intermediate
   run were duplicate physical lines only. Activity 5,312 → 4,472. Decoder
   verification remains pending-environment. Phase 18 complete; merged.
+- 2026-10-10 — phase 19 design review (Codex, `tvp-design`): **No P1s**.
+  Four P2s folded: `handleMetadataUpdate` reflective retarget (2 sites, incl.
+  a worker-thread write pin); before/after owner maps for the existing
+  compiled OTT-name writer audit; Kotlin-precise capture rule for the
+  volatile read-chain check; heap-budget seam via `dalvik.vm.heapsize`
+  override. Counts re-verified on `a0d1be1a7` (758 moved lines, six activity
+  patches, one Host re-point, eight consumed patches, zero initializer
+  proofs); router exception and ≈ 3,775–3,785 final size confirmed.
