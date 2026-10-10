@@ -18589,3 +18589,61 @@ Start Over/channel-start/recording controllers and the phase-16 play/pause path)
   phase 19.
 - `iptvMediaCodecSelector` reads non-volatile `isIptvMode`/`iptvDecoderMode` on the playback thread;
   `IptvLiveLoadErrorPolicy` reads non-volatile `iptvChannels` on loader threads (existing follow-up).
+
+## Phase 17 step T — re-measured at `be5635fae`
+
+This section supersedes the old inventory line numbers and reflective-site counts above. Activity: 5,891 physical lines; 1,676 PSI declarations, all classified. Scope remains the tune owner and its eagerly constructed field-bearing `trial`; production is unchanged.
+
+| Member | Original span including leading trivia | Destination |
+| --- | --- | --- |
+| `iptvLiveRetuneInFlight` | 430–432 | `TvIptvTuneController` |
+| `iptvReconnectPill` | 443–445 | `TvIptvTuneController` |
+| `iptvLiveRecovery` | 447–482 | `TvIptvTuneController` |
+| `iptvLiveRecoveryEligible` | 484–496 | `TvIptvTuneController` |
+| `performIptvLiveRetune` | 498–565 | `TvIptvTuneController` |
+| `showIptvReconnectPill` | 761–785 | `TvIptvTuneController` |
+| `hideIptvReconnectPill` | 787–789 | `TvIptvTuneController` |
+| `dpToPx` | 791–792 | `TvIptvTuneController` |
+| `iptvHlsForcedUrls` | 959–962 | `TvIptvTuneController` |
+| `iptvStrictTsUrls` | 964–971 | `TvIptvTuneController` |
+| `iptvStartsWithStrictTs` | 977–986 | `TvIptvTuneController` |
+| `currentIptvStreamUrl` | 1066–1066 | `TvIptvTuneController` |
+| `setIptvMediaItem` | 4585–4689 | `TvIptvTuneController` |
+| `retryIptvAsHlsIfUnrecognized` | 4733–4773 | `TvIptvTuneController` |
+| `iptvTwinTrialOriginalUrl` | 1001–1002 | `TvIptvTwinTrial` |
+| `iptvTwinTrialUrl` | 1004–1010 | `TvIptvTwinTrial` |
+| `iptvTwinFailedUrls` | 1012–1013 | `TvIptvTwinTrial` |
+| `iptvTwinPreferredUrls` | 1015–1018 | `TvIptvTwinTrial` |
+| `iptvTwinTrialTimeout` | 1020–1020 | `TvIptvTwinTrial` |
+| `iptvTwinTrialHandler` | 1021–1021 | `TvIptvTwinTrial` |
+| `iptvTwinTrialRestoreOriginal` | 1023–1029 | `TvIptvTwinTrial` |
+| `iptvTwinTrialRestoreTwin` | 1031–1033 | `TvIptvTwinTrial` |
+| `iptvTwinTrialLastFrames` | 1035–1038 | `TvIptvTwinTrial` |
+| `iptvTwinTrialAdvanceSince` | 1039–1039 | `TvIptvTwinTrial` |
+| `iptvTwinTrialStartedRealtime` | 1040–1040 | `TvIptvTwinTrial` |
+| `IPTV_TWIN_TRIAL_STABLE_MS` | 1042–1046 | `TvIptvTwinTrial` |
+| `IPTV_TWIN_TRIAL_TIMEOUT_MS` | 1048–1053 | `TvIptvTwinTrial` |
+| `IPTV_TWIN_TRIAL_POST_READY_MS` | 1055–1060 | `TvIptvTwinTrial` |
+| `IPTV_TWIN_TRIAL_MAX_MS` | 1062–1064 | `TvIptvTwinTrial` |
+| `beginIptvTwinTrial` | 567–586 | `TvIptvTwinTrial` |
+| `judgeIptvTwinTrial` | 588–613 | `TvIptvTwinTrial` |
+| `acceptIptvTwinTrial` | 615–629 | `TvIptvTwinTrial` |
+| `failIptvTwinTrial` | 631–653 | `TvIptvTwinTrial` |
+| `onIptvTwinTrialTimeout` | 655–665 | `TvIptvTwinTrial` |
+| `scheduleIptvTwinTrialTimeout` | 667–672 | `TvIptvTwinTrial` |
+| `rearmIptvTwinTrialDeadline` | 674–691 | `TvIptvTwinTrial` |
+| `parkIptvTwinTrialRestore` | 693–704 | `TvIptvTwinTrial` |
+| `restoreParkedIptvTwinIfNeeded` | 706–717 | `TvIptvTwinTrial` |
+| `clearParkedIptvTwinRestore` | 719–722 | `TvIptvTwinTrial` |
+| `clearIptvTwinTrial` | 724–736 | `TvIptvTwinTrial` |
+| `restoreAcceptedIptvTwinAfterAuth` | 738–759 | `TvIptvTwinTrial` |
+
+Counts: 41 moved members / 614 physical span lines (owner 14/342; trial 27/272), 28 in-place patches in six retained declarations, and eight Host re-points / nine edits in four whole-property patched rows. Shared Host has 20 computed explicitly Activity-qualified members; both volatile fields and all five Host `var` storage locations remain Activity-owned. No Host reads during construction. Twenty-one initializer proofs preserve allocation order and synchronized lazy first-access timing. Cross substitutions: owner→`trial` 11, trial→`tune` 17; Host substitutions 49/12; visibility 23, receivers two, inherited six: 120 total. Getter `getIptvLiveRecovery` remains public/unmangled.
+
+Routing first: 31 original quoted sites over seven routing keys (22 stream URL, two forced-HLS, one twin preference, two each parked field, one lazy delegate, one generated getter). Original-owner compatibility permits tests before moves; assertions unchanged. No Dart anchors.
+
+Complete production-config fixture compiles offline at 396/289 controller lines and 5,312 Activity lines. Eight compiled receiver sites include implicit AppCompat `addContentView` inside `TextView.apply` with both inner TextView references preserved. Retains all 23 phase-15 view bindings (12 casts/11 absent), volatile identity writers/reader, two Activity `ACC_VOLATILE` fields and Host setters reaching their exact storage. Constructor bytecode excludes eager recovery/quirk evaluation. Media3 1.8.0 re-derived opt-in set: tune owner required, trial none. Fifty-seven earlier destination files and all sixteen prior manifests are frozen.
+
+Evidence: `p17/remeasured-inventory.json`, `reflective-routes-before.json`, `original-self-comparison.log`, `earlier-check.log`, `compiled-original/`, `compiled-fixture/`, `overload-audit.json`, `media3/`, checker/self-test logs, `tools-jvm-compare.json`, `lint-original/`; clean JVM `junit/baseline-be5635fae` and helper-only `junit/p17-tools`. Original JVM: 2,342 identities, 2,340 pass, two observed failures; helper run strictly preserves every status. Failures are `TvSourceBrowserFocusTest.dpadAndRailFocusKeepRowsAndImportedArtworkAttached` (NPE) and `TvGuideVisibilityCharacterizationTest.epgAiringReplayFutureAndExpiredRowsPinVisibilityAlphaAndProgressScale` (position 5 progress 33 timing assertion). Original lint: 1,351 issue identities (252 errors / 1,099 warnings), 175 opt-in errors; exit 1 archived. These are baseline evidence, not bug fixes or accepted new regressions.
+
+Checker/auditor result: 463 historical cases plus all 54 final Phase-17 cases pass (507-case dispatcher, then a complete final focused 54-case run); no negative accepted for the wrong reason. All-retained original self-comparison: 1,676 declarations, zero differences. Details: `p17/tools-result.json`.

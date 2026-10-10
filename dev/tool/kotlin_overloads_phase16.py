@@ -106,8 +106,9 @@ def audit_binding_site(pin, line, before, after):
     return evidence
 
 
-def audit_identity(pin, before_fields, after_fields, after):
-    for fields,owner in ((before_fields,'com.debrify.app.tv.AndroidTvTorrentPlayerActivity'),(after_fields,'com.debrify.app.tv.TvDockIdentityPresenter')):
+def audit_identity(pin, before_fields, after_fields, after,
+                   before_owner='com.debrify.app.tv.AndroidTvTorrentPlayerActivity'):
+    for fields,owner in ((before_fields,before_owner),(after_fields,'com.debrify.app.tv.TvDockIdentityPresenter')):
         if fields.get((owner,'ottShowName')) != dict(descriptor=pin['descriptor'],volatile=True):
             raise ValueError('identity field must retain ACC_VOLATILE and descriptor')
     # Two receiver-path writers and the computed playlist Host read must dispatch

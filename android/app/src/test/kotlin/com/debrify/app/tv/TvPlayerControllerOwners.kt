@@ -3,6 +3,13 @@ package com.debrify.app.tv
 /** Immutable owner routes used only by the original-surface reflection fixture. */
 internal object TvPlayerControllerOwners {
     val routes = mapOf(
+        "currentIptvStreamUrl" to "iptvTuneController",
+        "getIptvLiveRecovery" to "iptvTuneController",
+        "iptvHlsForcedUrls" to "iptvTuneController",
+        "iptvLiveRecovery" to "iptvTuneController",
+        "iptvTwinPreferredUrls" to "iptvTuneController.trial",
+        "iptvTwinTrialRestoreOriginal" to "iptvTuneController.trial",
+        "iptvTwinTrialRestoreTwin" to "iptvTuneController.trial",
         "cinemaLastAnimatedProgress" to "controlsOverlayController.seek",
         "cinemaProgressAnimator" to "controlsOverlayController.seek",
         "cinemaProgressTrackWidth" to "controlsOverlayController.seek",

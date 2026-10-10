@@ -161,6 +161,18 @@ def initializer_kind(expression):
                     return 'allocation'
         except ValueError:
             pass
+    # Phase 17: typed stdlib empty set, and the synchronized stdlib lazy
+    # allocation. The deferred lambda is pinned as part of the entire property.
+    if re.fullmatch(r'HashSet<[A-Za-z_][\w.]*(?:\?)?>\(\)', expression):
+        return 'allocation'
+    if expression.startswith('lazy {'):
+        try:
+            wrapper = 'class Proof { val deferred by ' + expression + '\n}'
+            node = k.parse({'lazy-proof': wrapper})['lazy-proof']['declarations'][0]['children'][0]
+            if node.get('lazy_allocation') and node.get('delegate_text') == expression:
+                return 'allocation'
+        except ValueError:
+            pass
     if expression == 'PlaylistMode.NONE':
         return 'constant'
     if expression == 'Any()':
@@ -274,14 +286,25 @@ def check_initializer_timing(manifest, inventory, original, errors):
         expression = text.split(' = ', 1)[-1].split(' //', 1)[0].strip()
         if manifest['phase'] >= 15 and node.get('has_initializer'):
             expression = node['initializer_text']
+        if manifest['phase'] >= 17 and node.get('has_delegate'):
+            expression = node['delegate_text']
         getter_only = (manifest['phase'] >= 13 and node.get('getter_only') and
                        not node.get('has_initializer') and not node.get('has_delegate') and
                        node.get('getter_effect_free'))
         kind = 'none' if getter_only else initializer_kind(expression)
+        if manifest['phase'] >= 17 and expression.startswith('lazy {') and not node.get('has_delegate'):
+            kind = None
         if manifest['phase'] >= 15:
             bindings = {}
             if expression.startswith('HashMap<'):
                 bindings['HashMap'] = {'kotlin.collections.HashMap', 'java.util.HashMap'}
+            if manifest['phase'] >= 17:
+                if expression.startswith('HashSet<'):
+                    bindings['HashSet'] = {'kotlin.collections.HashSet'}
+                if expression.startswith('HashMap<'):
+                    bindings['HashMap'] = {'kotlin.collections.HashMap'}
+                if node.get('has_delegate'):
+                    bindings['lazy'] = {'kotlin.lazy'}
             if expression.startswith('arrayOf('):
                 bindings['arrayOf'] = {'kotlin.arrayOf'}
                 if 'AspectRatioFrameLayout.' in expression:
@@ -307,6 +330,10 @@ def check_initializer_timing(manifest, inventory, original, errors):
                         parts = imported.strip().split(' as ')
                         name = parts[-1] if len(parts) == 2 else parts[0].rsplit('.', 1)[-1]
                         if name == binding and parts[0] not in allowed:
+                            shadow = True
+                        if (manifest['phase'] >= 17 and binding in ('HashSet', 'HashMap', 'lazy')
+                                and parts[0].endswith('.*')
+                                and parts[0] not in {value.rsplit('.', 1)[0]+'.*' for value in allowed}):
                             shadow = True
                     if shadow:
                         errors.append('phase-15 initializer binding is shadowed: ' + binding + ': ' + row['original'])
