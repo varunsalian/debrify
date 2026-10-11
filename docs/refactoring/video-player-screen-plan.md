@@ -714,6 +714,9 @@ matrix; Claude sample.
 Sleep timer 15 min countdown on phone + Android TV (Flutter player) +
 tvOS + desktop: label counts down, pauses at expiry, position saved,
 next episode does not start; "end of episode" stops at EOF.
+After sleep stop, check Android renderer replacement during a suspended resume
+save and Android/iOS Start Over/background playback intent; the intent write
+remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
 
 ## Follow-ups
 
@@ -1067,6 +1070,27 @@ next episode does not start; "end of episode" stops at EOF.
   Android replacement/player-created-false during suspended save, and
   mobile intent consumers remain explicitly pending under rule 4. No new
   platform seam, bug fixes, production moves or device commands.
+
+### 2026-10-11 — Phase 2 Step 0b addendum (independent sample accepted)
+
+- **Original/sample.** Application `31a347ad2` is byte-identical to sample
+  revision `61fac9315`. Claude: 18/21 compile-valid mutations killed;
+  `e2` zero-boundary change equivalent, reported 18/20 = 90%, meets the bar.
+  Full sample and both survivor resolutions are in the deps tables.
+- **Survivors.** `e11` is caller-equivalent: off mode already has null
+  deadline/zero preset, and removing the return adds only identical-value
+  `setState` (or identical unmounted assignments). `e14` intent deletion
+  remains device-pending, not equivalent: raw Android renderer fallback
+  and Android/iOS Start Over/background consumers. Fallback also rejects
+  resume via the already-set sleep latch. All reads inventoried.
+- **Checks/baseline.** Original control plus exact `e11`/`e14` reruns pass
+  all 76 executable characterization tests in the detached original,
+  nice 19, serialized, with the hook define. Initial source-guard rejections
+  are archived and earn no behavior credit. Evidence:
+  `p2/step0b/runs.json`, `survivor-analysis.json`, `source-guard-attempt/`.
+  No new tests/application changes; accepted `step0-suite-final.jsonl` at
+  `5b2b62c3b` is unchanged and remains the step-0b observed baseline.
+  Original mounted/disposed behavior is preserved; no bug fixes or seams.
 
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format

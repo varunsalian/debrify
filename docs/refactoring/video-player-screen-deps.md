@@ -1797,3 +1797,67 @@ documented in `step0/root-analyzer-delta.json`. The scoped video-player comparat
 and diagnostic negatives pass with 74 occurrences and zero additions.
 Platform/clock limitations above remain pending; no production move, new seam,
 CI transition, application/dependency change or bug fix is included.
+
+## Phase 2 Step 0b addendum — independent original sample (2026-10-11)
+
+Claude sampled the original application at `61fac9315`, using all 76
+video-player characterization tests. Evidence is in `p2/claude-sample/`:
+`p2-claude-muts.json`, `p2-claude-run.log`, `results.json` and per-mutation
+logs. Eighteen of 21 compile-valid mutations were assertion-killed. Excluding
+`e2` (zero falls through to `ceil(0) == 0`) gives the reported **18/20 = 90%**,
+meeting the independent-sample threshold. The remaining two were audited
+before extraction; neither is silently counted as a kill.
+
+| Sample | Original declaration / change | Original outcome / resolution |
+|---|---|---|
+| `e1` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03 |
+| `e2` | minutes-left `<= 0` → `< 0` | Equivalent: `remaining == 0` returns zero either way (sweep `g-edge`). |
+| `e3` | Exact mutation in sample manifest | Assertion-killed: C04, C08 |
+| `e4` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03 |
+| `e5` | Exact mutation in sample manifest | Assertion-killed: C10, C21 |
+| `e6` | Exact mutation in sample manifest | Assertion-killed: C05, C06 |
+| `e7` | Exact mutation in sample manifest | Assertion-killed: C08 |
+| `e8` | Exact mutation in sample manifest | Assertion-killed: C07 |
+| `e9` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C05 |
+| `e10` | Exact mutation in sample manifest | Assertion-killed: C07 |
+| `e11` | cancel off-mode early return removed | Caller-equivalent: off invariant and identical-value `setState`, as detailed below (sweep `cancel-off-return`). |
+| `e12` | Exact mutation in sample manifest | Assertion-killed: C05, C06, C07, C08 |
+| `e13` | Exact mutation in sample manifest | Assertion-killed: C18, C19, C20 |
+| `e14` | fire playback-intent write deleted | Device-pending: mobile playback intent, as detailed below (sweep `fire-wanted`; not equivalent). |
+| `e15` | Exact mutation in sample manifest | Assertion-killed: C13, C15, C16 |
+| `e16` | Exact mutation in sample manifest | Assertion-killed: C13, C07, C14, C18 |
+| `e17` | Exact mutation in sample manifest | Assertion-killed: C13 |
+| `e18` | Exact mutation in sample manifest | Assertion-killed: C21 |
+| `e19` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C12 |
+| `e20` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C05 |
+| `e21` | Exact mutation in sample manifest | Assertion-killed: C01, C02 |
+
+**`e11` equivalence.** Both versions cancel and clear the timer before the
+return. While mounted, off mode implies null deadline and zero armed minutes:
+initializers start there; cancellation resets all three together; arming sets
+countdown/deadline/preset together; end-mode selection first cancels. Removing
+the return only adds `setState` assigning the same values. Subsequent selection,
+arming and toast work runs in the same synchronous caller stack; menu, dock,
+player calls, writes and timers are identical. After disposal the same
+mode/deadline values are reassigned, without changing the retained preset.
+The performance cost of redundant invalidation is not a behavior-test kill.
+
+**`e14` pending evidence.** All 11 occurrences of `_activeMediaShouldPlay`
+were inventoried in `step0b/survivor-analysis.json`. Functional reads are
+renderer fallback (`_fallbackExplicitRendererToAutomatic`, 4321), guarded by
+raw `Platform.isAndroid`, and opening Start Over/background handling
+(`_pauseForBackground`, 11796), guarded by raw Android/iOS. Fallback's resume
+predicate also requires `!_sleepStopLatched`, so the latch alone rejects resume
+immediately after a sleep stop. The remaining read (10505) snapshots the value
+for rejection rollback at 10527; it adds no independent player/UI effect.
+The mobile intent write remains preserved and **device-pending**, not equivalent.
+No raw Platform seam or private-State access is introduced to force coverage.
+
+Exact `e11` and `e14` mutations and an original control were rerun with all
+76 public-caller characterization tests in the detached original evidence
+worktree, nice 19, serialized, hook flag true; all three runs pass and restore
+original source. Commands/results: `step0b/runs.json`. No new tests were needed
+for the proven-equivalent point; the device-only point remains a listed limit.
+The addendum changes documentation/evidence only, so the accepted clean
+`step0-suite-final.jsonl` at `5b2b62c3b` remains the observed **step-0b baseline**,
+with zero additions, identical test/application/dependency inputs and SDK.
