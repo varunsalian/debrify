@@ -91,3 +91,6 @@ warning | unused_field | lib/screens/video_player_screen.dart | The value of the
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it
 warning | invalid_use_of_visible_for_testing_member | lib/screens/video_player_screen.dart | The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test
+
+# 2026-10-12 P3: original facade import retained by frozen import list; unused identity recorded in the Step T receiver probe.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive

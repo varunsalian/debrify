@@ -718,6 +718,153 @@ After sleep stop, check Android renderer replacement during a suspended resume
 save and Android/iOS Start Over/background playback intent; the intent write
 remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
 
+## Phase 3 — skip segments
+
+Branch `refactor/vplayer-p3` off the phase-2 merge `fc24e32ae`. Evidence
+`refactor-evidence/vplayer/p3/`. Line numbers at `7775198f5` (phase-2
+gate); re-measure at the phase base by name.
+
+### Moves → `presentation/legacy_video_player/vp_skip_segment_controller.dart`
+
+`class VpSkipSegmentController` + `abstract interface class VpSkipSegmentHost`
+(≈ 260 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| comment 1282–1284 + `_skipSegmentSettingsLoaded` 1285 | field `false` | moved → `skipSegmentSettingsLoaded` |
+| `_skipSegmentsEnabled` 1286 | field `false` | moved |
+| `_skipSegmentProviderId` 1287 | field `SkipSegmentProviders.auto` (a `static const` String — verify) | moved |
+| `_skipSegmentProvider` 1288 | field `null` | moved |
+| `_skipSegments` 1289 | field `SkipSegments.empty` (const — verify) | moved |
+| `_loadedSkipSegmentsKey` 1290, `_loadingSkipSegmentsKey` 1291 | fields `null` | moved |
+| `_skipSegmentsFetchGeneration` 1292 | field `0` | moved |
+| `_skipSegmentsCache` 1293 | `final` map literal | moved |
+| `_skipSegmentsMediaReady` 1304 (doc) | field `true` | moved |
+| `_loadSkipSegmentSettings` 1714 | method | moved |
+| `_currentSkipSegmentRequest` 1789 | method (record return type) | moved |
+| `_syncSkipSegmentsForCurrentContent` 1854 | method | moved |
+| `_resetSkipSegmentState` 1923 | method | moved |
+| `_activeSkipSegment` 1932 | getter | moved |
+| `_syncActiveSkipSegmentUi` 1938 | method | moved |
+| `_skipActiveSegment` 1942 | method | moved |
+
+Relocation changes initializer timing (State slots 1285–1304 → State
+constructor body); every initializer above is a literal, a `static const`
+(`SkipSegmentProviders.auto`, `SkipSegments.empty` — confirmed) or an empty
+map literal; recorded proof per field. **`_activeSkipSegmentUi` (1394)
+stays State-owned**: its `SkipSegmentUiController()` → `ValueNotifier(null)`
+constructor dispatches a debug memory-allocation event
+(`change_notifier.dart:544`, `:235`), so moving the allocation would change
+that event's order relative to later notifier allocations (1433). The
+controller reaches the same instance through the Host.
+
+**Stays State-owned:** `_isTransitioning`, `_duration`, `_position`,
+`_playbackUiClock`, `_player`, `_playerCreated`, effective content
+identity getters, `_seriesPlaylist`, `_findSeriesEpisodeForCurrentIndex`,
+`_traktSeasonEpisode`, the tracker seek methods (phase 5 re-points them),
+`_activeSkipSegmentUi` (see above),
+`_skipButtonBottom` (dock layout, not skip logic).
+
+**Host** `VpSkipSegmentHost` (exact, every member used; 19 names / 20
+declarations, signatures frozen): `bool get mounted`,
+`void setState(VoidCallback fn)` (→ `_vpSetState`),
+`String? get effectiveContentImdbId`, `String? get effectiveContentType`,
+`int? get effectiveContentSeason`, `int? get effectiveContentEpisode`,
+`bool get isTransitioning`, `Duration get duration`,
+`Duration get position` + `set position(Duration v)`,
+`SeriesPlaylist? get seriesPlaylist`,
+`SeriesEpisode? findSeriesEpisodeForCurrentIndex(SeriesPlaylist sp)`,
+`({int? season, int? episode}) traktSeasonEpisode()` (non-null outer
+record), `bool get playerCreated`,
+`PlaybackUiClockController get playbackUiClock`, `mk.Player get player`,
+`SkipSegmentUiController get activeSkipSegmentUi`, and
+`void traktScrobbleSeek(Duration)`, `void simklScrobbleSeek(Duration)`,
+`void mdblistScrobbleSeek(Duration)` (exact types verified at step T).
+The moved request method keeps its nullable five-field named-record return
+type (1788). Destination imports (frozen at step T): `dart:async`, Flutter
+foundation/services, media_kit, custom series identity, series playlist,
+skip segment service + storage, playback UI clock, skip segment UI
+controller. `HapticFeedback`, `SkipSegmentsStorage`,
+`SkipSegmentProviders`, `CustomSeriesIdentity`, `RegExp` are imports.
+`debugPrint` stays a top-level call.
+
+**Retained substitutions** (`_skip` = controller): `initState` 1668
+`_loadSkipSegmentSettings()` → `_skip.loadSkipSegmentSettings()`; player
+subscriptions 3815/3816/3861–3863 (`_skipSegmentsMediaReady = true` →
+`_skip.skipSegmentsMediaReady = true`, sync calls → `_skip.`); 4665
+`_activeSkipSegmentUi.clear()` stays as is (State-owned); playlist load
+10459 and 10651; dispose 11954–11956 (generation bump and provider close
+**in place**, each statement individually, not via a new method); 11998
+`_activeSkipSegmentUi.dispose()` unchanged; TV key handler 13315/13316; build 15527 (`valueListenable:`)
+and 15560 (`onPressed: _skip.skipActiveSegment` — tear-off;
+`SkipSegmentButton` is stateless and the dock compares geometry, not
+callbacks — confirmed). 15527 `valueListenable: _activeSkipSegmentUi`
+unchanged.
+
+**Scaffolding:** the existing State constructor is now a **patched**
+declaration (keeps the `_sleep` assignment, appends the `_skip` one);
+`late final VpSkipSegmentController _skip;` at the old slot 1285;
+`_VpSkipSegmentHostAdapter` after the State class.
+
+**Step T / CI transition:** materialize the complete P3 manifest before
+moving code (owned fields, map subscripts, nullable record selectors,
+interpolation, generation increments, the Host position write); switch
+both current/self-test move commands (`checks.yml:77`) to P3, keep P1
+`--at 31a347ad2` and add P2 `--at fc24e32ae`; switch **both** the analyzer
+manifest and inventory (`checks.yml:95`; historical mappings compose via
+`check_vplayer_analyzer.py:45`); history protection covers the ten P1
+files plus the sleep controller; register the new tests and extend the
+three theme lists (`theme_surface_manifest.txt:26`,
+`theme_rendered_set.py:68`, `source_guard_test.dart:50`).
+
+### Step 0 — characterization of the original
+
+Settings load (enabled/disabled, unavailable stored provider → auto,
+provider closed/replaced); request gating (custom identity, settings not
+loaded, disabled, media not ready after a playlist switch, transitioning,
+zero duration, non-series, invalid/fallback IMDb id via the series
+playlist, season/episode from the playlist, from the effective content,
+from the Trakt parse, negative season/episode < 1) and the exact key
+(provider:imdb:season:episode:seconds); fetch: cache hit, in-flight
+dedupe by key, generation/stale-request rejection when the key changes
+mid-fetch, profile switch or dispose during the fetch, error → cached
+empty + debug log; UI: button appears only inside a segment of the
+loaded key, skip seeks to `min(end, duration)`, updates the clock
+immediately, tracker seeks in order, haptic; TV key path; reset on
+playlist switch; dispose closes the provider. Fake provider transport: **no application seam** —
+`SkipSegmentProviders.create` builds `http.Client()` internally, which
+reaches the harness's existing `VideoPlayerHttp` `MockClient` override
+(`video_player_environment.dart:83`, `:189`); held replies/errors and a
+test-only client-close trace drive the races (close-aborted requests and
+late replies surviving close). Use a stored single-provider choice to
+reach the facade's error handler (auto swallows child errors,
+`skip_segment_service.dart:148`). **Classified:** provider replacement in
+`_loadSkipSegmentSettings` is dormant (only caller is `initState`, provider
+initially null); the unavailable-provider branch is web-only (storage
+normalises unknown ids, `skip_segments_storage.dart:37`) → web-pending.
+
+**Races and boundaries (pin existing behaviour, defects included, never
+corrected):** held A→B→A requests releasing the older A first, then a
+position tick — success and error (the handlers write the cache before the
+generation/mounted check, and `whenComplete` clears loading by key alone,
+1885/1898/1911); the engine media-boundary clear (4665) independently of
+the playlist reset; the failed-load re-arm (10459) with no incoming
+duration event. **Profile:** the original guards are `mounted`,
+generation and request key only — no profile/session identity (1719,
+1844, 1886); characterize separately (a) completion while the outgoing
+route is still mounted during the picker's exit animation
+(`profile_gate.dart:360`), (b) completion after disposal, (c) an incoming
+route with a different profile's enabled/provider settings. Pin the actual
+outcomes; any profile-isolation gap goes to Follow-ups, unchanged by the
+move. Mutation
+proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+Skip intro / Skip credits button on a series with segments (phone, Android TV
+Flutter player, tvOS, desktop): appears, skips to the segment end, TV
+Select skips; switching episode does not flash the button.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
@@ -742,6 +889,17 @@ remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
 - A live recovery open already issued before sleep pause can complete playing
   afterward under a delayed-open fake contract. The latch prevents subsequent
   recovery attempts; verify the real native behavior before a separate fix.
+- Skip fetches have no profile/session guard: an outgoing route still mounted
+  during profile handoff can publish its held result. Disposal rejects it;
+  an incoming route independently reads its own settings. Phase-3 tests pin
+  these three outcomes; add profile isolation only in a separate change.
+- An older A→B→A skip completion writes the session cache before checking
+  generation and clears loading by key alone. It can expose stale data on a
+  tick or poison a later cache return while newer displayed data stays intact.
+  Both success and error outcomes are preserved by Phase-3 characterization.
+- Shortening duration within the same whole-second skip key can clamp a skip
+  seek below the cached segment end and leave its button visible. Phase-3
+  characterization records this existing result without changing it.
 
 
 ## Progress
@@ -1161,6 +1319,177 @@ moves + 14 retained substitutions, P1 `--at`, protection of the ten P1 destinati
 bare-access negatives, 24 focused tests, e2/e11 equivalence and e14 device-pending, raw
 suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merged.
 
+### 2026-10-11 — Phase 3 Step T (complete; draft only)
+
+- **Revision/scope.** `c1d4cb51b`, approved design `de55d9987`, original
+  `fc24e32ae` re-measured by name: 882 classified spans, 17 moves, 14
+  substituted retained occurrences and three preserved notifier references.
+  Raw/formatted complete evidence materializations compare with zero
+  differences; existing State constructor is patched after its sleep assignment.
+  All ten initializer inertness proofs and the State-owned notifier are recorded.
+- **Checks.** All 26 existing Dart manifest self-tests, complete video-player
+  universal/real-config self-test, P1 `--at 31a347ad2`, P2 `--at fc24e32ae`,
+  and Kotlin historical/compiled self-test pass. All 11 earlier destinations
+  protected. Analyzer root/strict/raw/formatted probe: 75/142/78/81 scoped
+  diagnostics, zero additions to frozen maxima; async-context identities
+  unchanged. Format idempotent, zero inserted/deleted optional commas; three
+  brace infos exposed by formatting recorded. Size/architecture pass.
+- **Evidence/deviation.** `p3/tooling/completion.json`, accepted 30-command
+  ledger and parser audit. Initial new constructor negative used an invalid
+  no-op edit; corrected fixture and complete universal rerun pass. No shared
+  guard behavior change. Every Dart manifest has an explicit isolated parser
+  package, copied kernels deleted; both evidence overrides active, nice 19.
+- **Constraints.** Application/pubspec unchanged, P3 manifest draft, no
+  production destination or CI transition. Creation commit must select P3
+  current/self-test and analyzer manifest/inventory, retain both historical
+  phases, register tests and extend all three theme lists. Step 0 continues
+  on the original; no bug fixes, new seams or device commands.
+
+### 2026-10-11 — Phase 3 Step 0 characterization checkpoint
+
+- **Scope/revision.** `55ac577e6`, following Step T `c1d4cb51b`; original
+  application
+  `fc24e32ae` unchanged. Six new behavior files, two support helpers and the
+  existing HTTP fixture's held/close trace. No new production seam or moves.
+- **Behavior.** All 58 tests pass on the detached original. Settings/request
+  gates, exact identity/key partitioning, cache/dedupe, held A→B→A success/error,
+  cached returns without generation changes, media/reset/failed-load boundaries,
+  all three profile cases, dispose, seek/clock/save/haptic, tracker heartbeat
+  order and TV Select are pinned through original callers. Existing race and
+  profile gaps recorded in Follow-ups without fixing them.
+- **Sweep/proofs.** All 17 moved declarations and 17 retained occurrences:
+  148 points, 119 assertion kills, 26 equivalents with caller/source arguments,
+  three dormant/web/device classifications. Every new test has an assertion
+  witness with final input hashes. First-pass survivors closed systematically;
+  Claude's independent P3 sample remains pending. Deps report has complete
+  coverage, mutation, equivalence and per-test witness tables.
+- **Commands/evidence.** Serialized `nice -n 19 flutter test` with `--no-pub`,
+  hook define and JSON reporter; `p3/step0/coverage.json`, `mutation-results.json`,
+  `points.json`, raw/replay logs and detached worktree. Changed tests analyze
+  cleanly; root `flutter analyze --no-pub`: 1,771, zero added/removed identities.
+  Reusable P2 gate inputs/SDK equal the original (`baseline-reuse.json`).
+- **Deviations.** Initial mutation file selection missed dynamically named
+  tests; final runner discovers all six files. TV missing-seek exceptions
+  excluded until explicit seek-count assertions killed both mutants. Initial
+  clock callback's guarded test assertion corrected to post-pump trace assertion;
+  original control/replays pass. Attempts retained, no allowlist additions.
+- **Next/constraints.** Clean-tree additions-only full-suite baseline is recorded
+  below. CI remains P2; P3 creation must register the six files and
+  perform the documented transition. Provider replacement dormant; unavailable
+  provider web-pending; player-created-false Android path and end-of-series
+  device checklist pending. Pubspec unchanged; no device/build/run commands.
+
+### 2026-10-12 — Phase 3 Step T / Step 0 final evidence (stop before moves)
+
+- **Tested revision.** Clean `55ac577e6`; application remains byte-identical
+  to `fc24e32ae`. `nice -n 19 python3 dev/tool/suite_evidence.py run
+  vplayer/p3/step0-suite-final --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`.
+- **Suite.** 12,931 successes / 13 failures / 28 errors / 20 skips. Strict
+  identity equality against the reusable clean P2 gate: exactly 58 added
+  successes; zero missing, changed, newly failing or newly skipped identities.
+  Official comparison PASS; no allowlist changes. SDK Flutter 3.44.8 / Dart
+  3.12.2; tree unchanged during the complete run.
+- **Checks/evidence.** Root analyzer 1,771 before/after, zero identity additions
+  or removals; changed tests clean; format, size (2,995 / 140 ratchets) and
+  architecture (1,663 migrated files) pass. Step T's 30-command precedent
+  ledger and Kotlin compiled self-test remain valid. `p3/step0/suite-delta.json`,
+  `suite-comparison.txt`, `completion.json`; final-input 58-test witnesses and
+  exhaustive 148-point tables in the deps report. Parser audit: 185 unique
+  isolated invocation packages, 555 copied kernels deleted, 32 explicit
+  manifest invocations, all nested parses routed under `vplayer_parser`.
+- **Stop/remaining.** No production moves, CI transition, pubspec change,
+  bug fixes, pushes/merges, branch switches, device/emulator/run/install or
+  application builds. P3 independent Claude sample and the classified web/device
+  checks remain pending. Stop at Step 0 for review.
+
+### 2026-10-12 — Phase 3 Step-0b independent-sample addendum
+
+- **Revision.** `682d86812`; tested original `55ac577e6`; application `55ac577e6` / `fc24e32ae`
+  unchanged; documentation/evidence only.
+- **Sample.** Claude 20/21 (95.2%). f9–f13/f20 false COMPILE-ERR labels
+  corrected to assertion kills; saved tails lack assertion sections, so six
+  complete original replays verify them. f2 replay passes all 134 tests.
+- **Equivalence.** f2 strengthens sweep E11: skip preferences register before
+  initialization's sequential defaults reads on the same cached future; positive
+  duration cannot exist at the trailing sync. Paused late-settings case is
+  unreachable through original callers. Preserve call unchanged; no new seam.
+- **Commands/evidence.** Serialized `nice -n 19 flutter test` original behavior
+  files, no-pub, concurrency 1, hook define, JSON. `p3/addendum/` contains full
+  replay logs, normalized kill table, hashed caller/dependency proof and reuse
+  NOTE. Systematic sweep unchanged (119 killed / 26 equivalent / 3 classified).
+- **Baseline/constraints.** Reuse clean `55ac577e6` full suite; no test/app/input
+  changes, no allowlist or pubspec edits, no device/run/install commands. Proceed
+  to frozen Step 1 production moves and the clean-tree gate.
+
+### 2026-10-12 — Phase 3 Step 1 production creation
+
+- **Revision.** `575ead0ca`, following `682d86812`; tested source hashes in
+  `p3/step1/materialization-application.json`; clean-tree gate follows.
+- **Move.** 17 declarations, patched State constructor (sleep then skip),
+  frozen Host/adapter, 14 retained substitutions + three unchanged notifier
+  references; individual dispose positions and State-owned allocation retained.
+  Controller 260 lines; facade 17,932 → 17,766. P3 manifest applied, zero diffs.
+- **CI/source guards.** P3 current/self and analyzer manifest+inventory;
+  P1/P2 historical checks retained; six test files and three theme lists added.
+  Reader already chains live P3 declarations; no moved legacy anchor/weakening.
+- **Commands/results.** `nice -n 19` ownership, format, size `--update`,
+  architecture/negatives, root/CI analyze, scoped comparator and affected suite
+  with hook define/no-pub: all 150 pass. Root 1,777 vs 1,771; six frozen-probe
+  additions only, every outside identity unchanged; 81 scoped diagnostics pass.
+- **Deviations/evidence.** Theme helper's one-occurrence assertion stopped;
+  resumed for all three fixture lists after byte validation. Size updater's
+  dated comments restored; no tree change during affected run. `p3/step1/`
+  contains attempts, commands, inputs and results; no application bug fixes,
+  pubspec changes, device/run/install, push/merge or branch switch.
+- **Pending.** Clean-tree gate suite/builds/all self-tests/historical phases;
+  classified web/Android paths and end-of-series device checklist remain pending.
+
+### 2026-10-12 — Phase 3 clean-tree gate (stop)
+
+- **Revision.** Tested clean production `575ead0ca`; gate commit follows it.
+  Step-0b baseline remains clean `55ac577e6`, SDK/inputs pinned.
+- **Suite.** Serialized `nice -n 19 python3 dev/tool/suite_evidence.py run
+  vplayer/p3/p3-gate-suite --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`:
+  12,931 success / 13 failure / 28 error / 20 skip. Exact baseline identities
+  and outcomes; official comparator PASS; no new failures/skips/allowlisting.
+- **Checks.** Root/CI scoped analyzer 81, zero beyond frozen P3 inventory;
+  root 1,777 with expected probe-only +6 and unchanged outside identities.
+  CI format list, 2,996-file size check (140 ratchets), 1,664-file architecture
+  and negatives pass. All 31 Dart/Kotlin self/current/history commands pass;
+  P1/P2 historical revisions retained and earlier destinations protected.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`: both pass on clean creation;
+  hashes/logs in `p3/gate/build-results.json`. No install/run/device commands.
+- **Evidence/constraints.** `p3/gate/completion.json`, full suite/strict delta,
+  analyzer/format/size/boundary logs, accepted checker ledger and parser audit.
+  Every manifest uses an isolated VPlayer parser with copied kernels deleted;
+  only declared application paths changed, pubspec unchanged, trailers checked.
+  No pushes, merges, branch switches or bug fixes. Original mutations restored.
+- **Pending/stop.** Web unavailable-provider and Android player-created-false
+  paths; human end-of-series checklist on phone, Android TV Flutter, tvOS,
+  desktop: button timing, seek end, TV Select and no old-button episode flash.
+  Existing race/profile gaps remain unchanged in Follow-ups. Stop at Phase 3.
+
+### 2026-10-12 — Phase 3 `vp-rev3` test-only review closure (stop)
+
+- **Revision/review.** Closure follows `d6e91c62a`. Independent review:
+  no P1s/P2s; the P3 incoming-provider coverage gap is closed by C59 while
+  preserving the disabled incoming-profile case unchanged.
+- **Original witness.** Exact detached `55ac577e6`: new behavior test passes;
+  forcing the provider factory to keep SkipDB fails its IntroDB-request
+  assertion (expected one, actual zero). Completed assertion kill, no
+  compile/load errors; original application restored.
+- **Commands/results.** Serialized `nice -n 19 flutter test` across all six
+  skip files, `--no-pub --concurrency=1` and hook define: 59 pass on moved code.
+  `check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p3.json` with
+  explicit isolated parser: zero differences; copied kernels deleted.
+  Changed-file `dart format` and `flutter analyze --no-pub` pass.
+- **Evidence/scope.** `p3/review-closure/` records commands, hashes, mutation
+  logs and completion; deps coverage/mutation addendum records C59. Existing
+  CI registration covers the same file. Test/docs only, pubspec unchanged;
+  no deviations, production changes, device commands or push/merge/branch
+  switch. Stop after this review closure.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -1197,3 +1526,13 @@ anchor asserted non-negative; disposal during an in-flight fire and the
 latch against queued advance / live recovery. P3: line numbers, comment
 span, latch inventory (4321, 14317), "every member used", frozen `_host`/`_s`
 fields, exact imports.
+
+## Phase 3 design review resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: profile-switch outcomes characterized as-is (no profile guard
+exists); A→B→A same-key overlap, media-boundary clear and failed-load
+re-arm; `_activeSkipSegmentUi` stays State-owned (debug allocation event
+order); HTTP harness transport, dormant replacement, web-only
+unavailable provider. P3s: concrete CI/manifest transition, patched State
+constructor, theme lists; line/label wording; frozen Host signatures and
+imports.
