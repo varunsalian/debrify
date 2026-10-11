@@ -1347,7 +1347,8 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 
 ### 2026-10-11 — Phase 3 Step 0 characterization checkpoint
 
-- **Scope/revision.** Follows Step T `c1d4cb51b`; original application
+- **Scope/revision.** `55ac577e6`, following Step T `c1d4cb51b`; original
+  application
   `fc24e32ae` unchanged. Six new behavior files, two support helpers and the
   existing HTTP fixture's held/close trace. No new production seam or moves.
 - **Behavior.** All 58 tests pass on the detached original. Settings/request
@@ -1372,11 +1373,34 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   excluded until explicit seek-count assertions killed both mutants. Initial
   clock callback's guarded test assertion corrected to post-pump trace assertion;
   original control/replays pass. Attempts retained, no allowlist additions.
-- **Next/constraints.** Clean-tree additions-only full-suite baseline follows
-  this checkpoint. CI remains P2; P3 creation must register the six files and
+- **Next/constraints.** Clean-tree additions-only full-suite baseline is recorded
+  below. CI remains P2; P3 creation must register the six files and
   perform the documented transition. Provider replacement dormant; unavailable
   provider web-pending; player-created-false Android path and end-of-series
   device checklist pending. Pubspec unchanged; no device/build/run commands.
+
+### 2026-10-12 — Phase 3 Step T / Step 0 final evidence (stop before moves)
+
+- **Tested revision.** Clean `55ac577e6`; application remains byte-identical
+  to `fc24e32ae`. `nice -n 19 python3 dev/tool/suite_evidence.py run
+  vplayer/p3/step0-suite-final --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`.
+- **Suite.** 12,931 successes / 13 failures / 28 errors / 20 skips. Strict
+  identity equality against the reusable clean P2 gate: exactly 58 added
+  successes; zero missing, changed, newly failing or newly skipped identities.
+  Official comparison PASS; no allowlist changes. SDK Flutter 3.44.8 / Dart
+  3.12.2; tree unchanged during the complete run.
+- **Checks/evidence.** Root analyzer 1,771 before/after, zero identity additions
+  or removals; changed tests clean; format, size (2,995 / 140 ratchets) and
+  architecture (1,663 migrated files) pass. Step T's 30-command precedent
+  ledger and Kotlin compiled self-test remain valid. `p3/step0/suite-delta.json`,
+  `suite-comparison.txt`, `completion.json`; final-input 58-test witnesses and
+  exhaustive 148-point tables in the deps report. Parser audit: 185 unique
+  isolated invocation packages, 555 copied kernels deleted, 32 explicit
+  manifest invocations, all nested parses routed under `vplayer_parser`.
+- **Stop/remaining.** No production moves, CI transition, pubspec change,
+  bug fixes, pushes/merges, branch switches, device/emulator/run/install or
+  application builds. P3 independent Claude sample and the classified web/device
+  checks remain pending. Stop at Step 0 for review.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

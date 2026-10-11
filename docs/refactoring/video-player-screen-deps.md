@@ -2017,8 +2017,9 @@ No production move, new seam, bug fix, dependency change or device command.
 ## Phase 3 original characterization checkpoint (2026-10-11)
 
 Application base `fc24e32ae` re-measured by declaration name; Step T
-`c1d4cb51b`. **No production moves or CI transition.** All 58 new behavior
-tests pass on the original with the existing H1 seam. The original application,
+`c1d4cb51b`, characterization `55ac577e6`. **No production moves or CI
+transition.** All 58 new behavior tests pass on the original with the existing
+H1 seam. The original application,
 pubspec and analyzer allowlists are unchanged. Every new test has an
 assertion-failing original mutation with the final test-input hashes.
 
@@ -2404,7 +2405,34 @@ Root analyzer remains 1,771 identities/occurrences, zero additions/removals
 versus the reusable P2 gate; changed tests analyze cleanly. Original application,
 dependency/configuration and pre-existing test inputs at `fc24e32ae` are
 identical to the clean P2 gate `b0533aac5`; `baseline-reuse.json` records SDK,
-revision and hashes. The clean-tree additions-only full-suite baseline follows
-this characterization checkpoint and will be appended with its tested revision.
+revision and hashes. The clean-tree additions-only full-suite baseline is
+recorded below with its tested revision.
 CI stays on P2 until the production creation commit, which must register all
 six new test files and perform the exact P3 transition documented above.
+
+## Phase 3 clean original baseline (2026-10-12)
+
+Tested clean characterization revision `55ac577e6`, original application
+`fc24e32ae`. Complete run `p3/step0-suite-final.jsonl` pins Flutter 3.44.8 /
+Dart 3.12.2, hook define, no pub resolution and unchanged tree during the run.
+The accepted reusable baseline is `p2/p2-gate-suite.jsonl` at clean
+`b0533aac5`, with original application/dependency/configuration/test inputs
+verified identical at the phase base.
+
+| Check | Result / evidence |
+|---|---|
+| Full suite | 12,931 successes / 13 failures / 28 errors / 20 skips; exactly 58 added passing identities, every pre-existing identity/outcome unchanged (`step0/suite-delta.json`) |
+| Official comparison | PASS, zero new failures, missing, newly skipped or fixed identities (`step0/suite-comparison.txt`); no allowlist additions |
+| Original mutation control | All 58 pass; all 58 have final-input assertion witnesses; 148 points = 119 killed / 26 equivalent / three classified (`step0/coverage.json`) |
+| Analyzer | 1,771 before/after by identity/multiplicity; zero additions/removals; changed tests clean (`analyzer-checkpoint-delta.json`, `test-analyze-post-control.log`) |
+| Format / boundaries | PASS; 2,995 files / 140 size ratchets; 1,663 migrated files; no baseline raise or production changes |
+| Parser routing | 185 unique isolated invocation packages / 555 copied kernels deleted / 32 explicit manifest invocations; 2,488 nested routes; all under `.dart_tool/vplayer_parser/` (`step0/parser-routing-audit.json`) |
+
+Step T's complete precedent self-tests/historical checks, analyzer probe and
+materialization remain valid; only tests/support/docs changed at Step 0.
+The slow final IPTV settings fixture self-test completed successfully with
+isolated parser packages. No overlapping Flutter suites or application builds.
+`step0/completion.json` ties the results to revisions, input hashes and hard
+constraints. CI remains P2, P3 manifest draft. Independent Claude P3 sample,
+web-unavailable-provider and Android player-created-false paths, plus the
+end-of-series device checklist, remain pending. Stop before production moves.
