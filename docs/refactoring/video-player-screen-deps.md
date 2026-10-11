@@ -1506,3 +1506,469 @@ entry without TorBox/PikPak identifiers resumes at its saved position. No
 device commands, installation, run, push, merge or branch switch occurred.
 Phase 1 stops here; independent gated-range review and integration remain
 with the user/Claude.
+
+## Phase 2 Step T — original merge-base inventory (2026-10-11)
+
+Original application revision `31a347ad2`, re-measured by declaration name:
+889 exhaustive spans; 12 moved declarations (four fields, two getters, six
+methods), and 14 retained reference occurrences in six declarations. The
+complete draft is `dev/tool/dart_moves/vplayer_p2.json`; it is not applied.
+The destination, controller/Host constructors, live adapter, eager State
+constructor, `_vpSetState`, imports and declaration order are frozen. Direct
+cancel-and-clear in `dispose` stays in place. All ten historical P1 destinations
+are derived from the P1 manifest at the phase base and protected in the current
+working tree.
+
+The four initializers are individually inert: enum constant `SleepTimerMode.off`,
+implicit `null` deadline, integer literal `0`, implicit `null` timer. The new
+constructors only assign `_host`/`_s`; no Host reads, timers or service calls run
+in construction. State assigns its initializer-free `late final _sleep` eagerly
+in one constructor body after all original field initializers. `saveResume`
+forwards zero arguments to the original `Future<void> _saveResume` (defaults
+`debounced: false`, `positionOverride: null`). Context acquisitions remain
+`SleepTimerSheet.show(context, …)` and `ScaffoldMessenger.of(context)`; the moved
+code has no builder-local context. Counts: mounted 3, context 2, setState 3.
+
+Owner-scoped bare field access is an explicit per-field binding opt-in, restricted
+to the field's exact destination file and controller. Binding-only real-config
+negatives reject another physical class, a same-named local, an owned field
+through `_host`, a wrong owner declaration, and an attempted declared Host
+binding. The opt-in also rejects globally disabling or class-narrowing mandatory
+qualification; the capture fixture keeps occurrence counts equal on both sides. Removing the opt-in restores mandatory qualification. Existing manifest
+behavior is preserved. Analyzer mapping now derives P1 identities from historical
+manifests as well as the current P2 manifest; it cannot lose P1 mappings on the CI
+transition.
+
+Evidence under `<git-common-dir>/refactor-evidence/vplayer/p2/tooling/`:
+`probe/remeasured.json`, `construction-and-inventory.json`, complete raw/formatted
+materializations, `optional-commas.json`, `format-diagnostics.json`, analyzer
+logs and `async-context-identities.json`. The formatted split compares with zero
+differences, is idempotent, inserts/deletes zero optional commas and introduces
+zero diagnostics. Original root: 74 scoped occurrences; byte-identical strict
+original: 141; complete compiling receiver/rename probe: 75. Maximum inventory:
+142 occurrences across 34 identities, preserving P1 maxima. The sole probe delta
+is the destination's `directives_ordering` info. All three original
+`use_build_context_synchronously` declaration identities and their counts remain
+unchanged (`_switchToSourcePlaylist`: 1, `_toggleRecording`: 4, `build`: 1).
+
+CI current-tree/analyzer selection stays at P1 until the production creation
+commit switches it to P2 and adds P1 `--at 31a347ad2`. The strengthened, validating
+EOF sleep-anchor retarget and theme path additions belong to that creation
+commit. Application code, app dependencies and size baseline are unchanged.
+
+## Phase 2 Step 0 — original sleep-timer characterization (2026-10-11)
+
+Application original: `31a347ad2`; no production moves or new seams. Twenty-one
+behavior tests mount and dispose the original deterministically. Calls use the
+public Controls/TvControls, unified menu and channel-guide callbacks, player
+events and existing preference transport; no test accesses private State.
+The storage barrier suspends the real `_saveResume`, not a replacement helper.
+All 21 new tests have assertion-failing original mutation witnesses using the
+final frozen test/support inputs. Both controls layouts assert the sleep label;
+desktop uses the configured styled dock tooltip and TV uses its rendered text.
+
+The sweep enumerates **81** statement/branch/literal points across all 12 moved
+declarations and 14 retained reference occurrences: **68/68 reachable
+non-equivalent mutations assertion-killed**, **9 caller-equivalent**, **4
+platform/clock pending**. One pending mobile-intent mutation was executed and
+survived the complete macOS control; it is not classified as equivalent.
+Compilation failures and uncaught exceptions earn no kill credit. First-pass
+logs and input snapshots remain in `step0/campaign-v1/`, `campaign-v2/` and
+`characterization-inputs/`; all accepted results are in `mutation-results.json`.
+The ledger pins each run's input hashes: 52 valid kills used earlier campaign
+inputs, and 16 final-input mutation reruns provide assertion-failing witnesses
+for all 21 final tests. The final control and full suite use the committed inputs.
+An independent Claude sample remains the next review checkpoint.
+
+### Behavior coverage and final-input mutation witnesses
+
+| ID | Original caller behavior | Assertion-failing mutation(s) |
+|---|---|---|
+| C01 | sleep menu and desktop dock preserve mode, preset and ceil label | `g-round` |
+| C02 | sleep menu and TV dock preserve mode, preset and ceil label | `g-round` |
+| C03 | selection callback immediately rebuilds countdown menu and dock | `g-round`, `r11-menu-mode` |
+| C04 | selection callback immediately rebuilds endOfItem menu and dock | `r11-menu-mode` |
+| C05 | off callback immediately rebuilds an armed menu and dock | `cancel-render` |
+| C06 | off cancels countdown and clears mode, preset and dock label | `cancel-native` |
+| C07 | re-arm replaces old countdown and fires only at the new expiry | `start-cancel` |
+| C08 | end-of-item cancels countdown and EOF stops before playlist advance | `cancel-native` |
+| C09 | end-of-item EOF returns before Xtream series channel advance | `eof-return` |
+| C10 | IPTV live menu gates end-of-item through the original caller | `live-menu-gate`, `dispose-nullguard` |
+| C11 | IPTV VOD menu gates end-of-item through the original caller | `live-menu-gate`, `dispose-nullguard` |
+| C12 | disposal cancels the armed countdown without firing later | `r05-dispose-cancel` |
+| C13 | expiry awaits the real resume write before pause and clears the timer | `fire-save` |
+| C14 | expiry awaits native pause before displaying its toast | `fire-pause-await` |
+| C15 | in-flight expiry after dispose still calls disposed pause and reports its error without toast | `fire-late-pause` |
+| C16 | in-flight expiry after dispose suppresses toast when native pause succeeds | `fire-late-pause`, `toast-mounted` |
+| C17 | late overlapping EOF after disposal clears end mode before the next callback | `cancel-unmounted-mode` |
+| C18 | sleep latch cancels an already queued automatic adjacent episode | `fire-latch` |
+| C19 | sleep latch outranks a pending live IPTV recovery retry | `fire-latch` |
+| C20 | sleep latch blocks further recovery after an in-flight live open completes late | `fire-latch` |
+| C21 | end-of-item carried from VOD to live blocks recovery without treating live EOF as completion | `r01-recovery-mode` |
+
+### Per-declaration coverage matrix
+
+Lines are AST declaration starts at the merge base, measured by name; attached
+comments start earlier. T inventories the exact frozen token spans separately.
+
+| Original declaration (line) | Caller coverage / boundary | Sweep points |
+|---|---|---|
+| `_iptvRecoveryEligible` (683) | C19–C21: latch and carried end-mode reject recovery (1 site) | `r01-recovery-mode` |
+| `_sleepTimerMode` (1454) | C01–C04, C10–C11: default and selected menu modes | `f-mode`, `f-mode-countdown` |
+| `_sleepTimerDeadline` (1456) | C01–C04, C07, C13: null default masked by off; arm/ceil/expiry | `f-deadline` |
+| `_sleepTimerArmedMinutes` (1461) | C01–C07, C13: zero default, preset and reset | `f-preset` |
+| `_sleepTimer` (1464) | C06–C09, C12–C16: cancellation, replacement and suspended expiry | `f-timer` |
+| `_onPlaybackEnded` (5207) | C08–C09, C17, C21: end-mode/cancel/toast before advance and overlapping late EOF (3 sites) | `r02-eof-mode`, `r03-eof-cancel`, `r04-eof-toast`, `eof-latch`, `eof-return` |
+| `dispose` (11857) | C12, C15–C16: direct timer cancel/clear and in-flight fire (2 sites) | `r05-dispose-cancel`, `r06-dispose-clear`, `dispose-nullguard` |
+| `_buildTvControls` (13054) | C02: TV callback and rendered label (2 sites) | `r07-tv-callback`, `r08-tv-label` |
+| `_sleepTimerMinutesLeft` (13812) | C01–C07, C13: zero/ceil menu arguments; real decrement pending | `g-mode`, `g-null`, `g-off-zero`, `g-unit`, `g-edge`, `g-negative`, `g-denominator`, `g-round` |
+| `_sleepTimerButtonLabel` (13823) | C01–C08: null / Episode / N min in controls and dock | `label-off`, `label-episode`, `label-count`, `label-remaining` |
+| `_showSleepTimerSheet` (13830) | C01–C04, C10–C11: unified sleep section; legacy tail dead | `menu-section`, `menu-return`, `menu-unified` |
+| `_applySleepTimerSelection` (13851) | C01–C11: real row and captured selection callbacks, all modes | `select-off-cancel`, `select-off-toast`, `select-minutes`, `select-end-cancel`, `select-end-render`, `select-end-mode`, `select-end-toast` |
+| `_startSleepCountdown` (13865) | C01–C07, C12–C19: arm, replace, cancellation and expiry | `start-cancel`, `start-duration`, `start-render`, `start-mode`, `start-deadline`, `start-preset`, `start-store`, `start-callback`, `start-toast` |
+| `_cancelSleepTimer` (13877) | C05–C09, C12–C17: mounted cancellation and disposed overlapping EOF | `cancel-native`, `cancel-clear`, `cancel-off-check`, `cancel-off-return`, `cancel-mounted`, `cancel-off-mode`, `cancel-deadline`, `cancel-preset`, `cancel-unmounted-mode`, `cancel-unmounted-deadline`, `cancel-nullguard`, `cancel-render` |
+| `_fireSleepTimer` (13893) | C13–C19: save/pause order, latch, suspended save/pause; replacement pending | `fire-cancel`, `fire-latch`, `fire-wanted`, `fire-created`, `fire-no-player`, `fire-save`, `fire-await`, `fire-pause`, `fire-late-pause`, `fire-toast`, `fire-pause-await` |
+| `_showSleepTimerToast` (13906) | C01–C09, C13–C16: exact text, duration, behavior and mounted guard | `toast-mounted`, `toast-behavior`, `toast-duration`, `toast-content` |
+| `build` (14721) | C01: desktop callback and styled dock label (2 sites) | `r09-desktop-callback`, `r10-desktop-label` |
+| `_buildPlayerMenuPanel` (17005) | C01–C11, C13: mode/preset/minutes/callback (4 sites) | `r11-menu-mode`, `r12-menu-preset`, `r13-menu-left`, `r14-menu-selection`, `live-menu-gate` |
+
+### Systematic mutation table
+
+Every row mutates one exact, uniquely contextualized occurrence in the original
+declaration. Raw replacement strings, offsets, commands, hashes and assertion
+messages are in `step0/points.json` and `mutation-results.json`.
+
+| Point | Original declaration | Result / evidence or equivalence reason |
+|---|---|---|
+| `f-mode` | `_sleepTimerMode` | Assertion-killed: C01, C02 |
+| `f-deadline` | `_sleepTimerDeadline` | Equivalent: Off mode masks the deadline; every countdown overwrites it before any read. No timer reads it while off/end-of-item. |
+| `f-preset` | `_sleepTimerArmedMinutes` | Assertion-killed: C01, C02, C04 |
+| `f-timer` | `_sleepTimer` | Equivalent: Explicit null equals Dart implicit null; no branch/literal other than null exists in this initializer. T independently freezes inert initialization. |
+| `g-mode` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-null` | `_sleepTimerMinutesLeft` | Equivalent: Every public countdown arm sets a nonnull deadline synchronously with its mode; every clear first changes the mode to off. No reachable countdown-null state exists. The valid mutation preserves Dart flow analysis using a forced null check. |
+| `g-off-zero` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C04 |
+| `g-unit` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-edge` | `_sleepTimerMinutesLeft` | Equivalent: At zero the fall-through ceil(0/60000) is also zero; negatives still return zero. |
+| `g-negative` | `_sleepTimerMinutesLeft` | Pending: Real DateTime.now is not intercepted by fake_async. Nonpositive real remaining with a still-armed timer requires the approved wall-clock/device check. |
+| `g-denominator` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-round` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `label-off` | `_sleepTimerButtonLabel` | Assertion-killed: C01, C02 |
+| `label-episode` | `_sleepTimerButtonLabel` | Assertion-killed: C04 |
+| `label-count` | `_sleepTimerButtonLabel` | Assertion-killed: C01, C02, C03 |
+| `label-remaining` | `_sleepTimerButtonLabel` | Pending: Ceil of real remaining initially equals armed minutes. The real countdown decrement is explicitly device-pending in the approved plan. |
+| `menu-section` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `menu-return` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `select-off-cancel` | `_applySleepTimerSelection` | Assertion-killed: C06 |
+| `select-off-toast` | `_applySleepTimerSelection` | Assertion-killed: C06 |
+| `select-minutes` | `_applySleepTimerSelection` | Assertion-killed: C01, C02, C07 |
+| `select-end-cancel` | `_applySleepTimerSelection` | Assertion-killed: C08 |
+| `select-end-render` | `_applySleepTimerSelection` | Assertion-killed: C04 |
+| `select-end-mode` | `_applySleepTimerSelection` | Assertion-killed: C04, C08 |
+| `select-end-toast` | `_applySleepTimerSelection` | Assertion-killed: C08 |
+| `start-cancel` | `_startSleepCountdown` | Assertion-killed: C07 |
+| `start-duration` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-render` | `_startSleepCountdown` | Assertion-killed: C03 |
+| `start-mode` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-deadline` | `_startSleepCountdown` | Assertion-killed: C01, C02 |
+| `start-preset` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-store` | `_startSleepCountdown` | Assertion-killed: C07, C12 |
+| `start-callback` | `_startSleepCountdown` | Assertion-killed: C07 |
+| `start-toast` | `_startSleepCountdown` | Assertion-killed: C01, C02 |
+| `cancel-native` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-clear` | `_cancelSleepTimer` | Equivalent: All stored timers are cancelled first. Repeated cancel is idempotent; next arm overwrites it and dispose cancels it again. No caller inspects timer identity. |
+| `cancel-off-check` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-off-return` | `_cancelSleepTimer` | Equivalent: When off, initial/default or completed cancellation already has null deadline and zero preset; reassigning identical values cannot change public menu/dock/player/timer behavior. |
+| `cancel-mounted` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-off-mode` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-deadline` | `_cancelSleepTimer` | Equivalent: Getter returns zero while off; next countdown overwrites deadline. Deadline is private and has no other readers. |
+| `cancel-preset` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-unmounted-mode` | `_cancelSleepTimer` | Assertion-killed: C17 |
+| `cancel-unmounted-deadline` | `_cancelSleepTimer` | Equivalent: Disposed cancellation can be reached by a late EOF, but its deadline has no readers: mode is off, no mounted menu exists, and next countdown cannot run. The overlapping EOF reads mode only. |
+| `fire-cancel` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-latch` | `_fireSleepTimer` | Assertion-killed: C18, C19, C20 |
+| `fire-wanted` | `_fireSleepTimer` | Pending: Survives all original macOS callers. Functional reads are Android-only renderer fallback and Android/iOS openingStartOver background handling; the other reads only snapshot/restore. No raw Platform seam is authorized; not claimed equivalent. |
+| `fire-created` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-no-player` | `_fireSleepTimer` | Pending: Only initial setup before controls or Android-only in-place replacement can leave playerCreated false; no new Platform seam is authorized. |
+| `fire-save` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-await` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-pause` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-late-pause` | `_fireSleepTimer` | Assertion-killed: C15, C16 |
+| `fire-toast` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `toast-mounted` | `_showSleepTimerToast` | Assertion-killed: C16 |
+| `toast-behavior` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `toast-duration` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `r01-recovery-mode` | `_iptvRecoveryEligible` | Assertion-killed: C21 |
+| `r02-eof-mode` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r03-eof-cancel` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r04-eof-toast` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r05-dispose-cancel` | `dispose` | Assertion-killed: C12 |
+| `r06-dispose-clear` | `dispose` | Equivalent: After direct timer cancellation disposal removes every subsequent timer reader; clearing only drops the dead reference. T freezes its statement position. |
+| `r07-tv-callback` | `_buildTvControls` | Assertion-killed: C02 |
+| `r08-tv-label` | `_buildTvControls` | Assertion-killed: C02 |
+| `r09-desktop-callback` | `build` | Assertion-killed: C01 |
+| `r10-desktop-label` | `build` | Assertion-killed: C01 |
+| `r11-menu-mode` | `_buildPlayerMenuPanel` | Assertion-killed: C03, C04 |
+| `r12-menu-preset` | `_buildPlayerMenuPanel` | Assertion-killed: C03 |
+| `r13-menu-left` | `_buildPlayerMenuPanel` | Assertion-killed: C03 |
+| `r14-menu-selection` | `_buildPlayerMenuPanel` | Assertion-killed: C03, C04 |
+| `eof-latch` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `eof-return` | `_onPlaybackEnded` | Assertion-killed: C09 |
+| `live-menu-gate` | `_buildPlayerMenuPanel` | Assertion-killed: C10, C11 |
+| `f-mode-countdown` | `_sleepTimerMode` | Assertion-killed: C01, C02 |
+| `menu-unified` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `cancel-nullguard` | `_cancelSleepTimer` | Assertion-killed: C06, C08, C16 |
+| `dispose-nullguard` | `dispose` | Assertion-killed: C10, C11 |
+| `fire-pause-await` | `_fireSleepTimer` | Assertion-killed: C14 |
+| `toast-content` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `cancel-render` | `_cancelSleepTimer` | Assertion-killed: C05 |
+
+### Dead paths, existing races and pending platform checks
+
+`kUnifiedPlayerMenuEnabled` is constant true. The unified branch, exact sleep
+section and early return are exercised; the legacy sheet tail is dead:
+hide-timer cancellation, `SleepTimerSheet.show` arguments, mounted check,
+auto-hide, nullable picked result and legacy apply callback. These are retained
+verbatim in the manifest; no production flag or source-text behavior test was
+added to manufacture execution. The cancel method's unmounted assignments
+are reached by overlapping EOFs suspended in completion storage during
+disposal. The first clears end mode; the second enters the legacy next-episode
+lookup after disposal. The mode write is observable and mutation-killed; its
+deadline remains private and has no later countdown or mounted UI reader.
+
+**Existing race outcomes, preserved:** after disposal while save is blocked,
+releasing it still invokes the disposed player's pause. A fake native rejection
+is propagated as `StateError`; a successful late pause emits no toast. A live
+recovery open already issued with `play: true` can finish after the sleep pause
+and set the fake player playing again; the latch blocks subsequent recovery.
+This records the existing call-order contract under a delayed open completion,
+not a claim that a real native platform has been exercised. No bug was fixed.
+
+**Pending:** real wall-clock countdown decrement and nonpositive-remaining
+branch (approved design); Android player-instance replacement while save is
+suspended, including `playerCreated == false` and pause on the replacement
+instance; Android/iOS playback-intent consumers. The only in-place replacement
+caller is `_fallbackExplicitRendererToAutomatic`, whose eligibility uses raw
+`Platform.isAndroid`; `_pauseForBackground` also gates on raw Android/iOS.
+`debugDefaultTargetPlatformOverride` cannot change either. No platform seam,
+emulator, device command or private-State invocation was introduced.
+
+The existing P1 clean-tree suite baseline is reusable: `5faaed55b` and
+`31a347ad2` have identical application, original tests, dependencies and root
+analysis configuration, with identical Flutter 3.44.8 / Dart 3.12.2 SDK.
+`step0/base-suite-reuse.json` pins the equality command and original observed
+13 failures / 28 errors / 20 skips. The new full-suite baseline runs on the
+clean characterization/tooling checkpoint and compares identities for additions only;
+no allowlist or dependency change. CI list registration and P2 manifest/analyzer
+selection remain in the production creation commit, as specified by Step T.
+All harness commands include `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`.
+
+### Clean-tree Step 0 baseline and compatibility checks
+
+Characterization commit `61fac9315`; qualification-default compatibility
+correction and final tested checkpoint `5b2b62c3b`. The first suite exposed an
+existing IPTV checker fixture's single textual default-anchor requirement.
+The shared guard now evaluates that default once; unchanged default-false/true
+fixture assertions pass. The first run remains archived under `suite-attempt1/`;
+no failure was allowlisted or accepted as the new baseline.
+
+`step0-suite-final.jsonl` and its environment record pin a clean, unchanged tree,
+Flutter 3.44.8 / Dart 3.12.2, and **12,873 successes / 13 failures / 28 errors /
+20 skips**. Against the reusable P1 observed gate, there are **21 added passing
+identities**, zero missing or changed original identities, zero new failures
+and zero new skips. Both the strict identity ledger (`step0/suite-delta.json`)
+and official comparison (`step0/suite-comparison.txt`) pass. This is the new
+observed suite baseline for the later production move.
+
+All 26 existing Dart manifest self-tests, the P2 universal/real-config tests and
+889-span original self-comparison, and P1 `--at 31a347ad2` pass after the fix.
+`step0/compat-checks-effective.json` records queued and effective commands;
+the draft P2 self-test explicitly uses `--self-compare-original`. The parser
+audit records 309 unique isolated wrapper packages, 927 copied kernels deleted,
+and explicit manifest flags; nested hard-coded parser requests use the isolated
+package too. The successful Step T Kotlin historical/compiled self-test is
+reused: checker, partitioner, fixture/manifests and native application inputs
+are unchanged. Hashes and commands are in `step0/completion.json`.
+
+Format, changed-test analysis, size and architecture checks pass. Root analysis
+has 1,770 diagnostics versus the observed P1 gate's 1,754: tracked-source
+identities/multiplicities are unchanged; the 16 additions are path warnings in
+ignored Android/macOS release-build copies of `pubspec.yaml`, preserved and
+documented in `step0/root-analyzer-delta.json`. The scoped video-player comparator
+and diagnostic negatives pass with 74 occurrences and zero additions.
+Platform/clock limitations above remain pending; no production move, new seam,
+CI transition, application/dependency change or bug fix is included.
+
+## Phase 2 Step 0b addendum — independent original sample (2026-10-11)
+
+Claude sampled the original application at `61fac9315`, using all 76
+video-player characterization tests. Evidence is in `p2/claude-sample/`:
+`p2-claude-muts.json`, `p2-claude-run.log`, `results.json` and per-mutation
+logs. Eighteen of 21 compile-valid mutations were assertion-killed. Excluding
+`e2` (zero falls through to `ceil(0) == 0`) gives the reported **18/20 = 90%**,
+meeting the independent-sample threshold. The remaining two were audited
+before extraction; neither is silently counted as a kill.
+
+| Sample | Original declaration / change | Original outcome / resolution |
+|---|---|---|
+| `e1` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03 |
+| `e2` | minutes-left `<= 0` → `< 0` | Equivalent: `remaining == 0` returns zero either way (sweep `g-edge`). |
+| `e3` | Exact mutation in sample manifest | Assertion-killed: C04, C08 |
+| `e4` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03 |
+| `e5` | Exact mutation in sample manifest | Assertion-killed: C10, C21 |
+| `e6` | Exact mutation in sample manifest | Assertion-killed: C05, C06 |
+| `e7` | Exact mutation in sample manifest | Assertion-killed: C08 |
+| `e8` | Exact mutation in sample manifest | Assertion-killed: C07 |
+| `e9` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C05 |
+| `e10` | Exact mutation in sample manifest | Assertion-killed: C07 |
+| `e11` | cancel off-mode early return removed | Caller-equivalent: off invariant and identical-value `setState`, as detailed below (sweep `cancel-off-return`). |
+| `e12` | Exact mutation in sample manifest | Assertion-killed: C05, C06, C07, C08 |
+| `e13` | Exact mutation in sample manifest | Assertion-killed: C18, C19, C20 |
+| `e14` | fire playback-intent write deleted | Device-pending: mobile playback intent, as detailed below (sweep `fire-wanted`; not equivalent). |
+| `e15` | Exact mutation in sample manifest | Assertion-killed: C13, C15, C16 |
+| `e16` | Exact mutation in sample manifest | Assertion-killed: C13, C07, C14, C18 |
+| `e17` | Exact mutation in sample manifest | Assertion-killed: C13 |
+| `e18` | Exact mutation in sample manifest | Assertion-killed: C21 |
+| `e19` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C12 |
+| `e20` | Exact mutation in sample manifest | Assertion-killed: C01, C02, C03, C05 |
+| `e21` | Exact mutation in sample manifest | Assertion-killed: C01, C02 |
+
+**`e11` equivalence.** Both versions cancel and clear the timer before the
+return. While mounted, off mode implies null deadline and zero armed minutes:
+initializers start there; cancellation resets all three together; arming sets
+countdown/deadline/preset together; end-mode selection first cancels. Removing
+the return only adds `setState` assigning the same values. Subsequent selection,
+arming and toast work runs in the same synchronous caller stack; menu, dock,
+player calls, writes and timers are identical. After disposal the same
+mode/deadline values are reassigned, without changing the retained preset.
+The performance cost of redundant invalidation is not a behavior-test kill.
+
+**`e14` pending evidence.** All 11 occurrences of `_activeMediaShouldPlay`
+were inventoried in `step0b/survivor-analysis.json`. Functional reads are
+renderer fallback (`_fallbackExplicitRendererToAutomatic`, 4321), guarded by
+raw `Platform.isAndroid`, and opening Start Over/background handling
+(`_pauseForBackground`, 11796), guarded by raw Android/iOS. Fallback's resume
+predicate also requires `!_sleepStopLatched`, so the latch alone rejects resume
+immediately after a sleep stop. The remaining read (10505) snapshots the value
+for rejection rollback at 10527; it adds no independent player/UI effect.
+The mobile intent write remains preserved and **device-pending**, not equivalent.
+No raw Platform seam or private-State access is introduced to force coverage.
+
+Exact `e11` and `e14` mutations and an original control were rerun with all
+76 public-caller characterization tests in the detached original evidence
+worktree, nice 19, serialized, hook flag true; all three runs pass and restore
+original source. Commands/results: `step0b/runs.json`. No new tests were needed
+for the proven-equivalent point; the device-only point remains a listed limit.
+The addendum changes documentation/evidence only, so the accepted clean
+`step0-suite-final.jsonl` at `5b2b62c3b` remains the observed **step-0b baseline**,
+with zero additions, identical test/application/dependency inputs and SDK.
+
+## Phase 2 Step 1 — applied sleep-timer ownership (2026-10-11)
+
+Follows step-0b addendum `5205111eb`. Applied P2 manifest retains all 889
+original fates, moves exactly 12 declarations, qualifies exactly 14 retained
+reference sites, and derives/protects all ten P1 destinations from history.
+Production files are byte-identical to the accepted Step T formatted
+materialization: zero further formatting edits, zero optional-comma changes
+and zero formatting-introduced diagnostics. Original comments remain attached.
+
+| Original State member | Current controller member |
+|---|---|
+| `_sleepTimerMode` | `VpSleepTimerController.sleepTimerMode` |
+| `_sleepTimerDeadline` | `VpSleepTimerController.sleepTimerDeadline` |
+| `_sleepTimerArmedMinutes` | `VpSleepTimerController.sleepTimerArmedMinutes` |
+| `_sleepTimer` | `VpSleepTimerController.sleepTimer` |
+| `_sleepTimerMinutesLeft` | `VpSleepTimerController.sleepTimerMinutesLeft` |
+| `_sleepTimerButtonLabel` | `VpSleepTimerController.sleepTimerButtonLabel` |
+| `_showSleepTimerSheet` | `VpSleepTimerController.showSleepTimerSheet` |
+| `_applySleepTimerSelection` | `VpSleepTimerController.applySleepTimerSelection` |
+| `_startSleepCountdown` | `VpSleepTimerController.startSleepCountdown` |
+| `_cancelSleepTimer` | `VpSleepTimerController.cancelSleepTimer` |
+| `_fireSleepTimer` | `VpSleepTimerController.fireSleepTimer` |
+| `_showSleepTimerToast` | `VpSleepTimerController.showSleepTimerToast` |
+
+Destination: `presentation/legacy_video_player/vp_sleep_timer_controller.dart`
+(149 lines). Its constructor stores the narrow 12-member Host; all four owned
+initializers are inert. State eagerly assigns its initializer-free `late final
+_sleep` in one constructor body, after original field initialization and before
+`initState`. The adapter has live one-line forwarders; `_vpSetState` preserves
+protected State ownership. Dispose keeps direct timer cancel/clear at the exact
+original statement position. Shared latch/player/playback-intent fields stay
+State-owned, and every original timing, callback, toast and save/pause order stays.
+
+### Source guards, CI and boundaries
+
+| Guard | Original anchor / selection | Current proof |
+|---|---|---|
+| `player_auto_next_routing_test.dart` | Whole-facade sections; sleep `indexOf` could return -1 | Five named current declarations from validating reader; `_sleep.sleepTimerMode == SleepTimerMode.endOfItem` and fetch anchors explicitly non-negative; original relative-order and routing assertions retained |
+| EOF sleep branch negatives | Missing/reordered sleep branch | Both actual retargeted tests assertion-fail in detached evidence materialization; validating reader refuses edited live text (`step1/source-mutation-results.json`), no historical-text fallback |
+| Seam source proof | Current-tree P1 ledger | Latest applied ownership (P2); original S interception patches still pinned through P1 ledger, current installer tokens directly equal frozen S; all original installation/default/negative assertions retained |
+| Theme containment | P1 destination paths | New exact destination in surface manifest, rendered route boundaries, frozen path list and both exact expected lists in source guard |
+
+CI selects P2 for self-test/current-tree and analyzer, explicitly chooses the P2
+inventory preserving P1 identities, and adds P1 `--at 31a347ad2` with its own
+parser package. Full-history checkout remains enabled. Both sleep-test files
+join `ci_behavior_tests.txt`; harness commands retain the test-hook define.
+Existing `lib/features` format/analyze scopes cover the new destination. Exact
+bridge registration, facade back-import ban, pure-layer boundaries and 500-line
+extraction cap remain active and all architecture negatives pass.
+
+Facade size ratchet lowers **18,018 → 17,932**; the new controller is 149 lines.
+The dated size note retains prior phase notes and names remaining phases 3–25.
+No application change outside the two frozen production files, dependency
+change, warning-allowlist addition, clock/platform seam or bug fix is included.
+The architecture fixture tool now honors `VPLAYER_EVIDENCE_ROOT` (legacy default
+unchanged). Its initial P1 temporary copy auto-removed; the accepted rerun writes
+only under P2. No persistent P1 artifact was overwritten.
+
+Before commit: 92 affected tests pass (79 video-player, three routing, ten theme
+source guards); current ownership zero differences; scoped analyzer/self-tests
+75 diagnostics/zero additions; exact CI analyzer allowlist 45 pre-existing
+warnings/nothing new or stale; format, size, architecture and seam negatives pass.
+Commands and hashes: `p2/step1/completion.json`. Device/clock/sample dispositions
+from Step 0/0b remain unchanged. Clean-tree full-suite/build gate follows.
+
+## Phase 2 clean-tree gate (2026-10-11)
+
+Step-0b addendum `5205111eb`; production creation and tested clean tree
+`b0533aac5`. The accepted baseline remains `step0-suite-final.jsonl` at
+`5b2b62c3b` (Step 0b changes no test/application inputs). The complete gate
+suite is `p2-gate-suite.jsonl`; environment pins Flutter 3.44.8 / Dart 3.12.2,
+clean creation revision and no tree changes during the run.
+
+| Check | Observed result / evidence |
+|---|---|
+| Full suite by identity | 12,873 successes / 13 failures / 28 errors / 20 skips; zero added, missing, changed or newly failing/skipped identities; strict equality and official helper PASS (`gate/suite-delta.json`, `suite-comparison.txt`) |
+| Move/history | P2 current tree, universal/real-config self-test and same-revision `--at b0533aac5` zero differences; P1 historical `--at 31a347ad2` PASS; all ten earlier destinations protected |
+| Dart precedent checks | All 26 existing manifest self-tests PASS with explicit isolated parser-package flags (`gate/accepted-checks.json`) |
+| Kotlin precedent | Complete historical/compiled self-test PASS in the P2 evidence root; initial interrupted invocation excluded (`gate/kotlin-result.json`, `kotlin-self-p2.log`) |
+| Analyzer | P2 comparator including infos and identity/multiplicity negatives: 75 scoped, zero additions; CI warning allowlist: 45 pre-existing, nothing new/stale |
+| Root analyzer identities | 1,770 → 1,771: only the frozen destination directives-ordering info from T; every non-video-player identity/multiplicity unchanged. Existing 16 ignored build-pubspec path warnings remain unsuppressed (`gate/root-analyzer-delta.json`) |
+| Format / size / architecture | PASS; controller 149, facade 17,932; 2,995 files / 140 ratchets; 1,663 migrated files; bridge/import/cap negatives pass |
+| Release APK | `nice -n 19 flutter build apk --release --no-pub`: PASS, 114.31 s, APK 102,268,046 bytes |
+| Release macOS | `nice -n 19 flutter build macos --release --no-pub`: PASS, 108.77 s; app launcher and Dart AOT hashes recorded |
+
+Both builds ran sequentially after the suite, without install/run, and left the
+tracked tree clean and pubspec unchanged. Artifact paths/flags/hashes are in
+`gate/build-results.json`. Every harness suite uses the test-hook define;
+release builds use the normal default path. No device/emulator commands.
+
+Parser routing audit: 496 unique isolated wrapper packages, 1,467 copied kernels
+deleted, 96 explicit manifest invocations; seven detached-worktree copies were
+already kernel-clean before wrapping. Nested legacy parser requests route to
+the isolated package (`gate/parser-routing-audit.json`).
+
+**Evidence-routing deviations, corrected:** the initial architecture self-test
+used its legacy P1 temporary path and cleaned the copy automatically; the tool
+now honors the phase root, with accepted rerun under P2. The first Kotlin gate
+invocation omitted `TVPLAYER_EVIDENCE_ROOT` and used the legacy TV-player root;
+it was interrupted on discovery and earns no credit. Complete rerun with explicit
+`p2/kotlin` root passed. Raw batch retains the interrupted row and therefore exits
+nonzero; the accepted 30-command ledger replaces only that row with the successful
+rerun. Both attempts/notes remain under P2; no prior source/test evidence deleted.
+
+`gate/completion.json` pins all results and constraints. Existing race outcomes
+and `e14` remain preserved; real-clock decrement/nonpositive branch, Android
+replacement/player-created-false during a blocked resume save, and mobile
+Start Over/background intent remain device-pending. End-of-series phone,
+Android TV Flutter player, tvOS and desktop checklist remains pending.
+No further production moves or bug fixes included; stop at the Phase 2 gate.

@@ -65,6 +65,7 @@ ROUTE_BOUNDARIES = (
     "lib/features/video_player/application/vp_filename_hash.dart",
     "lib/features/video_player/application/vp_identity_text.dart",
     "lib/features/video_player/application/vp_subtitle_identity.dart",
+    "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart",
     "lib/services/video_player_launcher.dart",
     "lib/features/player_launch/presentation/legacy_launch/",
     "lib/screens/catalog_item_detail_screen.dart",

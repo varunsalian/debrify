@@ -443,3 +443,5 @@ test/features/video_player/video_player_subtitle_test.dart
 test/features/video_player/video_player_subtitle_edges_test.dart
 test/features/video_player/video_player_zap_test.dart
 test/features/video_player/video_player_zap_categories_test.dart
+test/features/video_player/video_player_sleep_timer_test.dart
+test/features/video_player/video_player_sleep_races_test.dart

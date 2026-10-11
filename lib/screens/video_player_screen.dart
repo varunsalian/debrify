@@ -176,6 +176,7 @@ import '../features/video_player/application/vp_format.dart';
 import '../features/video_player/application/vp_filename_hash.dart';
 import '../features/video_player/application/vp_identity_text.dart';
 import '../features/video_player/application/vp_subtitle_identity.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -379,6 +380,11 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
+  _VideoPlayerScreenState() {
+    _sleep = VpSleepTimerController(_VpSleepTimerHostAdapter(this));
+  }
+  void _vpSetState(VoidCallback fn) => setState(fn);
+
   static const MethodChannel _tvReleaseLogChannel = MethodChannel(
     'debrify/tvlog',
   );
@@ -688,7 +694,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final channel = _currentIptvChannel;
     if (channel == null || !channel.isLive) return false;
     if (_sleepStopLatched) return false;
-    if (_sleepTimerMode == SleepTimerMode.endOfItem) return false;
+    if (_sleep.sleepTimerMode == SleepTimerMode.endOfItem) return false;
     if (_pausedByLifecycle) return false;
     // An explicit user pause (including the PiP pause action) means nobody
     // asked for playback — a pending retry must not restart the channel
@@ -1446,22 +1452,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Aspect / speed
   AspectMode _aspectMode = AspectMode.contain;
   double _playbackSpeed = 1.0;
-
-  // ── Sleep timer ───────────────────────────────────────────────────────────
-  // Stops playback after a countdown, or at the end of the current item. The
-  // wakelock already follows play state here, so pausing is enough to let the
-  // screen sleep — unlike the native players, which pin the screen on.
-  SleepTimerMode _sleepTimerMode = SleepTimerMode.off;
-
-  /// When the armed countdown fires. The label is derived from this rather
-  /// than from the duration picked, so it counts down instead of reading "30
-  /// min" right up to the moment it stops.
-  DateTime? _sleepTimerDeadline;
-
-  /// The preset originally picked, so the sheet can keep it checked while the
-  /// remaining time ticks away from it.
-  int _sleepTimerArmedMinutes = 0;
-  Timer? _sleepTimer;
+  late final VpSleepTimerController _sleep;
 
   /// Latched from a sleep-timer stop until the user explicitly starts playback
   /// again. Advancing is asynchronous here (resolve the URL, then open), so a
@@ -5240,11 +5231,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // "Stop at the end of this episode": suppress every advance below and let
     // the screen sleep. Playback has already finished, so there is nothing
     // left to pause.
-    if (_sleepTimerMode == SleepTimerMode.endOfItem) {
-      _cancelSleepTimer();
+    if (_sleep.sleepTimerMode == SleepTimerMode.endOfItem) {
+      _sleep.cancelSleepTimer();
       _sleepStopLatched = true;
       _activeMediaShouldPlay = false;
-      _showSleepTimerToast('Sleep timer — stopping here');
+      _sleep.showSleepTimerToast('Sleep timer — stopping here');
       return;
     }
 
@@ -11875,8 +11866,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _autoSyncPill.dispose();
     // The sleep timer belongs to this playback session — a pending one must not
     // outlive the player and fire against a disposed state.
-    _sleepTimer?.cancel();
-    _sleepTimer = null;
+    _sleep.sleepTimer?.cancel();
+    _sleep.sleepTimer = null;
     _lifecycle?.dispose();
     final revisionListener = _desktopRecordingRevisionListener;
     if (revisionListener != null) {
@@ -13135,8 +13126,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onShowTracks: () => _showTracksSheet(context),
               onSpeed: _onSpeedButton,
               onAspect: _onAspectButton,
-              onSleepTimer: _showSleepTimerSheet,
-              sleepTimerLabel: _sleepTimerButtonLabel,
+              onSleepTimer: _sleep.showSleepTimerSheet,
+              sleepTimerLabel: _sleep.sleepTimerButtonLabel,
               speed: _playbackSpeed,
               aspectMode: _aspectMode,
               hideOptions: widget.hideOptions,
@@ -13805,113 +13796,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _scheduleAutoHide();
     _saveResume();
-  }
-
-  // ── Sleep timer ───────────────────────────────────────────────────────────
-
-  /// Whole minutes left, rounded up so a fresh 30-minute timer reads "30".
-  int get _sleepTimerMinutesLeft {
-    final deadline = _sleepTimerDeadline;
-    if (_sleepTimerMode != SleepTimerMode.countdown || deadline == null) {
-      return 0;
-    }
-    final remaining = deadline.difference(DateTime.now()).inMilliseconds;
-    if (remaining <= 0) return 0;
-    return (remaining / 60000).ceil();
-  }
-
-  /// Short label for the controls button, or null when nothing is armed.
-  String? get _sleepTimerButtonLabel => switch (_sleepTimerMode) {
-    SleepTimerMode.off => null,
-    SleepTimerMode.endOfItem => 'Episode',
-    SleepTimerMode.countdown => '$_sleepTimerMinutesLeft min',
-  };
-
-  Future<void> _showSleepTimerSheet() async {
-    if (kUnifiedPlayerMenuEnabled) {
-      _openPlayerMenuQuick(PlayerMenuSection.sleep);
-      return;
-    }
-    _hideTimer?.cancel();
-    final picked = await SleepTimerSheet.show(
-      context,
-      current: _sleepTimerMode,
-      armedMinutes: _sleepTimerArmedMinutes,
-      minutesLeft: _sleepTimerMinutesLeft,
-      // A live channel has no end to stop at, so only the countdown applies —
-      // which is the case people actually want a sleep timer for.
-      allowEndOfItem: _currentIptvChannel?.isLive != true,
-    );
-    if (!mounted) return;
-    _scheduleAutoHide();
-    if (picked == null) return;
-    _applySleepTimerSelection(picked);
-  }
-
-  void _applySleepTimerSelection(SleepTimerSelection picked) {
-    switch (picked.mode) {
-      case SleepTimerMode.off:
-        _cancelSleepTimer();
-        _showSleepTimerToast('Sleep timer off');
-      case SleepTimerMode.countdown:
-        _startSleepCountdown(picked.minutes);
-      case SleepTimerMode.endOfItem:
-        _cancelSleepTimer();
-        setState(() => _sleepTimerMode = SleepTimerMode.endOfItem);
-        _showSleepTimerToast('Stopping at the end of this episode');
-    }
-  }
-
-  void _startSleepCountdown(int minutes) {
-    _cancelSleepTimer();
-    final duration = Duration(minutes: minutes);
-    setState(() {
-      _sleepTimerMode = SleepTimerMode.countdown;
-      _sleepTimerDeadline = DateTime.now().add(duration);
-      _sleepTimerArmedMinutes = minutes;
-    });
-    _sleepTimer = Timer(duration, _fireSleepTimer);
-    _showSleepTimerToast('Sleep timer set for $minutes minutes');
-  }
-
-  void _cancelSleepTimer() {
-    _sleepTimer?.cancel();
-    _sleepTimer = null;
-    if (_sleepTimerMode == SleepTimerMode.off) return;
-    if (mounted) {
-      setState(() {
-        _sleepTimerMode = SleepTimerMode.off;
-        _sleepTimerDeadline = null;
-        _sleepTimerArmedMinutes = 0;
-      });
-    } else {
-      _sleepTimerMode = SleepTimerMode.off;
-      _sleepTimerDeadline = null;
-    }
-  }
-
-  /// Stop for the night: persist the position first (losing someone's place
-  /// overnight is exactly the moment this feature is meant to be helping),
-  /// then pause — which releases the wakelock and lets the screen sleep.
-  Future<void> _fireSleepTimer() async {
-    _cancelSleepTimer();
-    _sleepStopLatched = true;
-    _activeMediaShouldPlay = false;
-    if (!_playerCreated) return;
-    await _saveResume();
-    await _player.pause();
-    _showSleepTimerToast('Sleep timer ended — paused');
-  }
-
-  void _showSleepTimerToast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
   }
 
   void _changeSpeed() {
@@ -15473,8 +15357,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onBack: () => Navigator.of(context).pop(),
                                   onAspect: _onAspectButton,
                                   onSpeed: _onSpeedButton,
-                                  onSleepTimer: _showSleepTimerSheet,
-                                  sleepTimerLabel: _sleepTimerButtonLabel,
+                                  onSleepTimer: _sleep.showSleepTimerSheet,
+                                  sleepTimerLabel: _sleep.sleepTimerButtonLabel,
                                   speed: _playbackSpeed,
                                   aspectMode: _aspectMode,
                                   isLandscape: _landscapeLocked,
@@ -17067,11 +16951,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onSpeedSelected: _setPlaybackSpeed,
       aspectMode: _aspectMode,
       onAspectSelected: _setAspectModeDirect,
-      sleepMode: _sleepTimerMode,
-      sleepArmedMinutes: _sleepTimerArmedMinutes,
-      sleepMinutesLeft: _sleepTimerMinutesLeft,
+      sleepMode: _sleep.sleepTimerMode,
+      sleepArmedMinutes: _sleep.sleepTimerArmedMinutes,
+      sleepMinutesLeft: _sleep.sleepTimerMinutesLeft,
       allowEndOfItem: _currentIptvChannel?.isLive != true,
-      onSleepSelected: _applySleepTimerSelection,
+      onSleepSelected: _sleep.applySleepTimerSelection,
       hasPlaylist:
           (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
           _canFetchEpisodes,
@@ -17955,6 +17839,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
   }
+}
+
+class _VpSleepTimerHostAdapter implements VpSleepTimerHost {
+  _VpSleepTimerHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  void openPlayerMenuQuick(PlayerMenuSection section) =>
+      _s._openPlayerMenuQuick(section);
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  void scheduleAutoHide() => _s._scheduleAutoHide();
+  @override
+  set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+  @override
+  set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+  @override
+  bool get playerCreated => _s._playerCreated;
+  @override
+  Future<void> saveResume() => _s._saveResume();
+  @override
+  mk.Player get player => _s._player;
 }
 
 /// Three interception points for the original player characterization harness.

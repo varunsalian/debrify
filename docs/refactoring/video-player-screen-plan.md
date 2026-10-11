@@ -565,6 +565,159 @@ Random-playback menu tiles render and select on phone and TV; IPTV
 catch-up/Start Over cancellation still wins over a slow lookup; identity
 search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) lands at the saved position after the update.
 
+## Phase 2 — sleep timer (first collaborator; establishes the scaffolding)
+
+Branch `refactor/vplayer-p2` off the phase-1 merge `31a347ad2`. Evidence
+`refactor-evidence/vplayer/p2/`. Line numbers at `2eb4fda82` (same facade content as `31a347ad2`); re-measure
+at the phase base.
+
+Deliberately small: it is the first stateful phase, so it introduces the
+series scaffolding that every later phase extends — the State constructor
+body, `_vpSetState`, the first Host interface + private adapter, the
+checker's `_host` forms in a real manifest — on low-risk code.
+
+### Moves → `lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart`
+
+`class VpSleepTimerController` + `abstract interface class VpSleepTimerHost`
+(same file, ≈ 150 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| `_sleepTimerMode` 1454 (+ the 4-line section comment 1450–1453, which moves with it) | field, init `SleepTimerMode.off` | moved → `sleepTimerMode` |
+| `_sleepTimerDeadline` 1459 (doc) | field, `null` | moved → `sleepTimerDeadline` |
+| `_sleepTimerArmedMinutes` 1463 (doc) | field, `0` | moved → `sleepTimerArmedMinutes` |
+| `_sleepTimer` 1464 | field, `null` | moved → `sleepTimer` |
+| `_sleepTimerMinutesLeft` 13813 | getter | moved → `sleepTimerMinutesLeft` |
+| `_sleepTimerButtonLabel` 13824 | getter | moved → `sleepTimerButtonLabel` |
+| `_showSleepTimerSheet` 13830 | method | moved → `showSleepTimerSheet` |
+| `_applySleepTimerSelection` 13851 | method | moved → `applySleepTimerSelection` |
+| `_startSleepCountdown` 13865 | method | moved → `startSleepCountdown` |
+| `_cancelSleepTimer` 13877 | method | moved → `cancelSleepTimer` |
+| `_fireSleepTimer` 13896 | method | moved → `fireSleepTimer` |
+| `_showSleepTimerToast` 13906 | method | moved → `showSleepTimerToast` |
+
+All four field initializers are literals/`null` — **inert** (recorded
+proof). Their relocation from State slots 1454–1464 to the constructor
+body is unobservable. Dispose keeps its direct cancel-and-clear statements
+(`_sleep.sleepTimer?.cancel(); _sleep.sleepTimer = null;`) — replacing them
+with `cancelSleepTimer()` would add a mode change and possibly `setState`
+during teardown.
+
+**Stays State-owned** (shared-state rule): `_sleepStopLatched` (1470; read
+by recovery 690, decoder replacement 4321, EOF 5245, episode navigation
+5790/6212, playlist load 10574, resume-from-background 11828, play toggle
+13703, episode request eligibility 14317),
+`_activeMediaShouldPlay`, `_playerCreated`, `_player`, `_hideTimer`,
+`_currentIptvChannel`, `_saveResume`, `_scheduleAutoHide`,
+`_openPlayerMenuQuick`.
+
+**Host** `VpSleepTimerHost` (exact 12 members; every one used —
+`sleepStopLatched`/`activeMediaShouldPlay` are correctly setter-only; computed
+forwarders in `_VpSleepTimerHostAdapter` in the facade library):
+`bool get mounted`, `BuildContext get context`,
+`void setState(VoidCallback fn)` (→ `_s._vpSetState`),
+`void openPlayerMenuQuick(PlayerMenuSection section)`,
+`Timer? get hideTimer`, `IptvChannel? get currentIptvChannel`,
+`void scheduleAutoHide()`, `set sleepStopLatched(bool v)`,
+`set activeMediaShouldPlay(bool v)`, `bool get playerCreated`,
+`Future<void> saveResume()` (narrow no-argument forwarder to
+`_s._saveResume()`; its optional parameters default to `false`/`null`,
+12671), `mk.Player get player`. Destination imports (frozen): `dart:async`,
+Flutter material, media_kit as `mk`, `IptvChannel`
+(`models/iptv_playlist.dart`), `PlayerMenuSection` + `kUnifiedPlayerMenuEnabled`
+(`player_menu_panel.dart`), `SleepTimerMode` + `SleepTimerSelection` +
+`SleepTimerSheet` (`sleep_timer_sheet.dart`) — constants and the sheet are
+imports, not Host members.
+Declared receiver substitutions inside moved bodies (by occurrence):
+`mounted`→`_host.mounted` (3), `context`→`_host.context` (2),
+`setState(`→`_host.setState(` (3), `_openPlayerMenuQuick`,
+`_hideTimer`, `_currentIptvChannel`, `_scheduleAutoHide`,
+`_sleepStopLatched`, `_activeMediaShouldPlay`, `_playerCreated`,
+`_saveResume`, `_player` → their `_host.` forms; moved-member references
+lose their underscore (renames). The exact return type of
+`_saveResume` and the `context` uses (`SleepTimerSheet.show(context, …)`,
+`ScaffoldMessenger.of(context)`) are verified at step T; no builder-local
+`context` exists in the moved code (checked).
+
+**Retained code — declared substitutions** (`_sleep` = the controller
+field): 691 and 5243 `_sleepTimerMode` → `_sleep.sleepTimerMode`;
+5244 `_cancelSleepTimer()` → `_sleep.cancelSleepTimer()`; 5247
+`_showSleepTimerToast(` → `_sleep.showSleepTimerToast(`; `dispose`
+11878–11879 `_sleepTimer` → `_sleep.sleepTimer` (same statement
+position); 13138/13139 and 15476/15477 tear-offs
+`_showSleepTimerSheet` → `_sleep.showSleepTimerSheet`,
+`_sleepTimerButtonLabel` → `_sleep.sleepTimerButtonLabel`; 17070–17074
+menu arguments → `_sleep.` forms (`onSleepSelected:
+_sleep.applySleepTimerSelection` — tear-off identity is not compared by
+the menu; verified at step 0).
+
+**New scaffolding (frozen):** `late final VpSleepTimerController _sleep;`
+(declared at the old field slot 1454), the State constructor
+`_VideoPlayerScreenState() { _sleep = VpSleepTimerController(_VpSleepTimerHostAdapter(this)); }`,
+`void _vpSetState(VoidCallback fn) => setState(fn);`, the adapter class
+after the State class. Constructor of the controller only stores the
+host. Frozen fields: `final VpSleepTimerHost _host;` in the controller and
+`final _VideoPlayerScreenState _s;` in the adapter.
+
+### Step T (phase 2)
+
+- Materialize the **complete phase-2 manifest** and make it compare:
+  the four controller-owned fields, constructor, adapter, nullable chains
+  (`sleepTimer?.cancel()`), the `Timer(duration, fireSleepTimer)` tear-off
+  and the getter interpolation (`'$sleepTimerMinutesLeft min'`). The
+  phase-1 fixture only exercises retained State fields through the Host;
+  the binding guard (`occurrence_field_bindings.py:257`, `:302`) currently
+  rejects bare renamed references. Add **owner-scoped bare access**: a
+  moved field may be referenced bare only inside its declared owning
+  controller class, keeping lexical-binding checks and mandatory
+  qualification everywhere else (never disabled globally); negatives —
+  bare access from another class, a same-named local capturing the field,
+  and an owned field referenced through `_host`. `this.` qualification is
+  not used (the checker rejects `this` in moved State bodies, 186).
+- **CI transition** in the production creation commit: the current-tree
+  check and self-test switch to `vplayer_p2.json`; P1 stays checked with
+  `--at 31a347ad2`; the analyzer step selects the P2 manifest/inventory
+  while preserving P1's diagnostic mappings; new characterization files
+  join `ci_behavior_tests.txt`.
+- **Source-test retarget:** `test/player_auto_next_routing_test.dart:29`
+  searches `_sleepTimerMode == SleepTimerMode.endOfItem` without asserting
+  it exists, so after qualification `indexOf` would return −1 and the
+  ordering comparison would still pass. Retarget to
+  `_sleep.sleepTimerMode == SleepTimerMode.endOfItem` through validated
+  current source, **assert the anchor is non-negative** before comparing,
+  and prove a removed or reordered sleep branch fails.
+
+### Step 0 — characterization of the original
+
+Through the harness (fake player, `fake_async`): countdown arm → label
+"N min" (ceil of the real remaining time; **minute-by-minute decrement is
+recorded device-pending**: both the deadline and the remaining-time read use
+real `DateTime.now()` (13818, 13870), which `FakeAsync` does not intercept,
+and a clock seam would need its own proof on the original — not added),
+deadline expiry → `_saveResume` before
+`pause`, toast texts, latch set (next auto-advance suppressed);
+end-of-item → EOF stops with "Sleep timer — stopping here" and no
+advance; off → toast + label null; re-arming cancels the old timer;
+dispose with an armed countdown → no fire after dispose; **dispose (and
+player replacement) while `_fireSleepTimer` is suspended in `_saveResume`**,
+then release the save — pin the calls, errors and toast behaviour (any
+existing defect recorded in Follow-ups, not fixed); the latch against an
+**already queued automatic advance** and a **live recovery attempt**; a live IPTV
+channel → `allowEndOfItem` false (legacy sheet path is dead behind
+`kUnifiedPlayerMenuEnabled` — record as dead, like c18); the unified menu
+receives mode/armed/minutes-left and its selection callback applies;
+the controls dock label. Mutation proofs on the original; coverage
+matrix; Claude sample.
+
+### Device checklist (end of series)
+
+Sleep timer 15 min countdown on phone + Android TV (Flutter player) +
+tvOS + desktop: label counts down, pauses at expiry, position saved,
+next episode does not start; "end of episode" stops at EOF.
+After sleep stop, check Android renderer replacement during a suspended resume
+save and Android/iOS Start Over/background playback intent; the intent write
+remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
@@ -579,6 +732,17 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
 - `lib/screens/video_player/**` oversized files (`iptv_channel_sheet` 3,667,
   `tracks_sheet` 2,197, `player_menu_panel` 1,844, …) — their own goal.
 - Localization of player strings.
+- Overlapping EOF callbacks suspended in completion storage can resume after
+  disposal: the first clears end mode and the second enters the legacy
+  next-episode lookup. Phase-2 characterization records the diagnostic and
+  forbids silently fixing this disposed-screen work during extraction.
+- Sleep expiry released after disposal still calls the disposed native player
+  after saving. A rejection propagates; a successful late pause suppresses its
+  toast. Phase-2 original characterization preserves this ordering defect.
+- A live recovery open already issued before sleep pause can complete playing
+  afterward under a delayed-open fake contract. The latch prevents subsequent
+  recovery attempts; verify the real native behavior before a separate fix.
+
 
 ## Progress
 
@@ -808,6 +972,181 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   unchanged; plain playlist entries resume saved progress. Pending.
   Stop here; gated-range review/integration remains with user/Claude.
 
+### 2026-10-11 — Phase 2 Step T (complete; draft only)
+
+- **Revision.** `6fdc85a66`, based on original `31a347ad2`, re-measured by
+  name: 889 spans, 12 moved declarations, 14 retained reference sites.
+  Complete raw/formatted evidence-only P2 materializations compare with
+  zero differences; no production destination created.
+- **Checks.** Opt-in owner-scoped bare-field positive and all binding
+  negatives pass without changing old manifest behavior. All 26 existing
+  Dart manifest self-tests, video-player universal self-test, historical
+  P1 `--at 31a347ad2`, and Kotlin historical/compiled self-test pass.
+  Analyzer root/strict/probe: 74/141/75 scoped occurrences, zero additions
+  against maximum inventory; async-context declaration identities unchanged.
+  Format idempotent, zero optional commas or introduced diagnostics;
+  size/architecture pass. Commands/results: `p2/tooling/completion.json`.
+- **Constraints.** Explicit isolated parser packages (copied kernels
+  deleted), heavy processes nice 19, serialized Flutter runs. Application
+  and pubspec unchanged; CI transition remains in the production creation
+  commit. Step 0 continues on the original; no bug fixes or new seams.
+
+### 2026-10-11 — Phase 2 Step 0 (original characterization checkpoint)
+
+- **Revision/scope.** Follows T `6fdc85a66`; original application remains
+  exactly `31a347ad2`. Twenty-one behavior tests use public controls/menu/guide
+  callbacks, fake-player events and the existing storage boundary. No new
+  seam, private-State call, production move or CI transition.
+- **Coverage/proofs.** Systematic 81-point sweep over all 12 moved
+  declarations and 14 retained reference sites: 68/68 reachable
+  non-equivalent mutations assertion-killed, nine caller-equivalent, four
+  platform/clock pending. All 21 final-input tests have assertion-failing
+  original witnesses in the detached evidence worktree. Tables are in the
+  deps report; `p2/step0/completion.json` pins commands, hashes and results.
+  Invalid/uncaught-error attempts receive no credit; earlier attempts kept.
+- **Checks.** `nice -n 19 python3 step0/run_mutations.py`, `dart format`,
+  changed-test `dart analyze` (no issues), size (2,994/140 ratchets),
+  architecture (1,662 migrated files), and diff checks pass. Full suite
+  follows on this clean checkpoint, compared by identity to the exact
+  reusable P1 observed baseline; dependencies/allowlists unchanged.
+- **Deviations/pending.** Real countdown decrement was already approved
+  device-pending. Android-only instance replacement while save is blocked,
+  the false player-created path, and mobile playback-intent consumers
+  cannot execute on the macOS VM without an unauthorized raw Platform seam.
+  Explicitly pending under rule 4, not declared equivalent or covered.
+  Legacy sleep sheet is dead. Disposed cancellation is reached by overlapping
+  EOFs and its mode assignment has a behavioral mutation proof.
+- **Existing outcomes.** Save released after dispose still calls the disposed
+  player: native rejection propagates, success emits no toast. A previously
+  issued live open can complete after sleep pause under the fake contract;
+  the latch blocks later recovery. Recorded in Follow-ups; no bug fixes.
+  Heavy commands nice 19, harness flag true, suites serialized; no devices.
+
+### 2026-10-11 — Phase 2 tooling compatibility addendum
+
+- First clean checkpoint `61fac9315` full suite completed with 21 added
+  successes and one extra failure: the IPTV two-pane real-config checker
+  fixture requires exactly one textual qualification-default anchor. T's
+  new validation duplicated it; guard behavior was unchanged, but its
+  default-substitution proof could not run. No failure was allowlisted.
+- Shared guard now evaluates the existing default once and uses that value
+  in both checks, preserving the fixture's single anchor and opt-in
+  rejection. Full fixture/default probes and all affected manifest checks
+  are rerun; Kotlin's separate checker inputs are unchanged.
+  A new clean-tree full-suite run establishes the baseline after this fix.
+  Application, app dependencies, tests and all guard assertions unchanged.
+
+### 2026-10-11 — Phase 2 Step T / Step 0 final evidence (stop before moves)
+
+- **Revisions.** T `6fdc85a66`; original characterization `61fac9315`;
+  qualification-default compatibility correction `5b2b62c3b`. Application
+  and pubspec remain byte-identical to `31a347ad2`; the P2 manifest stays
+  draft. CI/source-test/theme registration waits for the creation commit.
+- **Original proofs.** All 21 final tests have assertion-failing original
+  witnesses. The 81-point campaign records 68 valid assertion kills, nine
+  caller-equivalent points and four platform/clock-pending points. Per-run
+  hashes retain earlier inputs; 16 final-input mutation reruns witness all
+  21 final tests. Coverage/mutation tables and limitations are in the deps
+  report and `p2/step0/completion.json`. Claude's independent sample remains
+  the next review checkpoint.
+- **Clean baseline.** On `5b2b62c3b`,
+  `nice -n 19 python3 dev/tool/suite_evidence.py run vplayer/p2/step0-suite-final --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`
+  completed with 12,873 successes, the same 13 failures / 28 errors / 20
+  skips, and exactly 21 added passing identities. Strict identity comparison
+  and `suite_evidence.py compare --against` the reusable P1 gate both pass:
+  zero missing, changed, newly failing or newly skipped originals. No allowlist
+  changes. First-attempt logs remain archived.
+- **Tooling/checks.** All 26 existing Dart manifest self-tests, P2
+  universal/real-config tests with original self-comparison, and historical
+  P1 `--at 31a347ad2` pass after the correction. Kotlin's successful T
+  historical/compiled self-test is reused with unchanged inputs. Parser
+  audit confirms isolated packages under `.dart_tool/vplayer_parser/`,
+  deleted copied kernels and explicit flags. Format, size and architecture
+  pass. Commands/results: `p2/step0/compat-checks-effective.json`.
+- **Analyzer/pending.** `flutter analyze --no-pub` source identities are
+  unchanged; 16 additional warnings originate in ignored release-build
+  copies of pubspec (recorded, unsuppressed). The scoped comparator and its
+  negatives pass: 74 diagnostics, zero additions. Real-clock decrement,
+  Android replacement/player-created-false during suspended save, and
+  mobile intent consumers remain explicitly pending under rule 4. No new
+  platform seam, bug fixes, production moves or device commands.
+
+### 2026-10-11 — Phase 2 Step 0b addendum (independent sample accepted)
+
+- **Original/sample.** Application `31a347ad2` is byte-identical to sample
+  revision `61fac9315`. Claude: 18/21 compile-valid mutations killed;
+  `e2` zero-boundary change equivalent, reported 18/20 = 90%, meets the bar.
+  Full sample and both survivor resolutions are in the deps tables.
+- **Survivors.** `e11` is caller-equivalent: off mode already has null
+  deadline/zero preset, and removing the return adds only identical-value
+  `setState` (or identical unmounted assignments). `e14` intent deletion
+  remains device-pending, not equivalent: raw Android renderer fallback
+  and Android/iOS Start Over/background consumers. Fallback also rejects
+  resume via the already-set sleep latch. All reads inventoried.
+- **Checks/baseline.** Original control plus exact `e11`/`e14` reruns pass
+  all 76 executable characterization tests in the detached original,
+  nice 19, serialized, with the hook define. Initial source-guard rejections
+  are archived and earn no behavior credit. Evidence:
+  `p2/step0b/runs.json`, `survivor-analysis.json`, `source-guard-attempt/`.
+  No new tests/application changes; accepted `step0-suite-final.jsonl` at
+  `5b2b62c3b` is unchanged and remains the step-0b observed baseline.
+  Original mounted/disposed behavior is preserved; no bug fixes or seams.
+
+### 2026-10-11 — Phase 2 Step 1 (production creation checkpoint)
+
+- **Revision/scope.** Follows addendum `5205111eb`; applies the frozen P2
+  draft: 12 declarations, 14 retained substitutions, exact controller/Host,
+  eager State constructor, `_vpSetState` and live adapter. Application files
+  byte-identical to accepted formatted T materialization; all P1 files intact.
+  Direct dispose cancel/clear retains statement order. No bug fixes.
+- **Registration.** Current/self-test and analyzer CI switch to P2 with its
+  inventory; P1 stays `--at 31a347ad2`. Both sleep tests registered, hook
+  define retained. Theme lists/expected lists include the new destination;
+  EOF guards use validating current declaration text and non-negative anchors.
+  Seam proof follows latest ownership while retaining frozen S assertions.
+- **Checks.** 92 affected tests pass; removed/reordered EOF sleep branches
+  assertion-fail in detached evidence materialization. Current move check
+  zero diffs; analyzer/self-tests 75 scoped, zero additions; exact CI
+  analyzer allowlist 45 existing warnings, no new/stale rows. Format,
+  size/architecture and seam negatives pass. Controller 149 lines; facade
+  ratchet 18,018 → 17,932. Evidence `p2/step1/completion.json`.
+- **Tooling/pending.** Architecture fixtures honor phase evidence root;
+  initial legacy P1 temporary copy auto-removed, accepted rerun under P2.
+  No persistent earlier evidence overwritten. Clock/mobile cases remain
+  device-pending; gate proceeds on the clean creation commit, compared to
+  unchanged step-0b observed baseline. No device commands or new seams.
+
+### 2026-10-11 — Phase 2 gate (complete; stop)
+
+- **Revisions.** Addendum `5205111eb`; production/clean tested tree
+  `b0533aac5`. Current P2 applied, all ten P1 destinations unchanged,
+  application edits restricted to frozen facade/controller materialization.
+  Pubspec unchanged. Commands/hashes/results: `p2/gate/completion.json`.
+- **Suite.** `suite_evidence.py run vplayer/p2/p2-gate-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` (nice 19) completed: 12,873
+  successes, same 13 failures / 28 errors / 20 skips. Strict identity
+  equality and official compare against unchanged Step-0b observed baseline
+  pass: zero added/missing/changed identities. No allowlist changes or flakes.
+- **Checks.** P2 current/universal self-test/same-revision `--at b0533aac5`,
+  P1 `--at 31a347ad2`, all 26 Dart manifest self-tests and complete Kotlin
+  historical/compiled self-test pass. Isolated parser flags/audit pass.
+  Analyzer comparator 75 scoped/zero additions, CI warning allowlist 45
+  existing/nothing new or stale; non-video-player identities unchanged.
+  Format, size/architecture pass; 149-line controller, 17,932-line facade.
+- **Builds.** Sequential `nice -n 19 flutter build apk --release --no-pub`
+  (114.31 s) and `flutter build macos --release --no-pub` (108.77 s) pass,
+  no install/run. Tree clean after both; artifact/AOT hashes recorded.
+- **Deviations.** Initial architecture copy used legacy P1 temp path and
+  auto-removed; accepted rerun under P2 after phase-root support. Initial
+  Kotlin run omitted its separate evidence override, was interrupted and
+  earns no credit; complete explicit-P2 rerun passed. Raw batch retains
+  that interruption; accepted ledger replaces only its row. Notes in deps.
+- **Device checklist/pending.** Real countdown decrement/nonpositive branch;
+  Android replacement/player-created-false during blocked save; `e14`
+  Android/iOS Start Over/background intent; phone, Android TV (Flutter),
+  tvOS and desktop sleep/EOF/save checks at series end. No new seams,
+  bug fixes or device commands. Stop before Phase 3 and review externally.
+
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
 proof, seam exactly-once/installation rules, 893-span ownership comparison, history and
@@ -815,6 +1154,12 @@ binding negatives, 58 focused tests, mutation spot checks, equivalence/dead-code
 (c15/c16/c18, d1/d8/d11/d12) and raw suite identities. Claude samples: first 7/17 (41 %,
 step 0b + systematic sweep), after 0b 18/20 on the first set and 9/12 (75 %) on a second
 independent set; d5/d13 then closed. Merged `--no-ff` into `refactor/codebase`.
+
+2026-10-11 — **Phase 2 independent review (Codex `vp-rev2`, fresh session) on
+`31a347ad2..7775198f5`: P1/P2/P3 none — "No P1s".** Reproduced ownership checks for 12
+moves + 14 retained substitutions, P1 `--at`, protection of the ten P1 destinations,
+bare-access negatives, 24 focused tests, e2/e11 equivalence and e14 device-pending, raw
+suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merged.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
@@ -842,3 +1187,13 @@ construction, eager/lazy modifiers preserved; the hash characterization
 targets the fallback resume identity. P3s: two patched declarations with
 three patches; fake `track`/`tracks`; `ProfilePolicyGuard` mirror; exact
 helper names and imports; follow-ups mirror D1/D6 exits.
+
+## Phase 2 design review resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: countdown decrement device-pending (real `DateTime.now()`, no
+clock seam); step T owner-scoped bare field access + full P2 manifest +
+CI transition (P1 `--at 31a347ad2`); `player_auto_next_routing_test`
+anchor asserted non-negative; disposal during an in-flight fire and the
+latch against queued advance / live recovery. P3: line numbers, comment
+span, latch inventory (4321, 14317), "every member used", frozen `_host`/`_s`
+fields, exact imports.

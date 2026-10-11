@@ -136,9 +136,10 @@ class VideoPlayerEnvironment {
       '--path-format=absolute',
       '--git-common-dir',
     ]).stdout.toString().trim();
-    final parent = Directory(
-      '$common/refactor-evidence/vplayer/p1/harness-runtime',
-    );
+    final evidence =
+        Platform.environment['VPLAYER_EVIDENCE_ROOT'] ??
+        '$common/refactor-evidence/vplayer/p2';
+    final parent = Directory('$evidence/harness-runtime');
     await parent.create(recursive: true);
     directory = await parent.createTemp('case-');
     wake.writes.clear();

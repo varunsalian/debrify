@@ -135,6 +135,23 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
         return (owner in record_owners and (selected is None or name in selected)
                 and (field_classes is None or row['destination_class'] in field_classes))
     record_fields = {r['new_name'] for r in fields.values() if is_record_field(r)}
+    # Explicit per-field ownership permits a controller's own bare reads, never
+    # a global relaxation of mandatory qualification or lexical binding checks.
+    mandatory_qualification = binding_config.get('mandatory_qualification', True)
+    bare = binding_config.get('owner_scoped_bare_fields', {})
+    if bare and (not mandatory_qualification
+                 or binding_config.get('mandatory_qualification_classes') is not None):
+        return ['Owner-scoped access requires mandatory qualification in every other class']
+    for identity, owner in bare.items():
+        row = next((r for r in fields.values() if r['original_name'] == identity), None)
+        if (row is None or row['destination_file'] == source
+                or row['destination_class'] != owner or not is_record_field(row)):
+            return ['Invalid owner-scoped bare field: ' + identity]
+        if identity in config.get('host_property_bindings', {}).values():
+            return ['Owned field cannot be forwarded through Host: ' + identity]
+    def owns_bare(field, row):
+        return (field is not None and bare.get(field['original_name']) == row['destination_class']
+                and field['destination_file'] == row['destination_file'])
     if config.get('registered_occurrence_substitutions'):
         from registered_occurrence_substitutions import project
         moved = {r['original_name'] for r in rows if r['destination_file'] != source
@@ -258,7 +275,8 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
                 if b['kind'] == 'selector':
                     if b['qualifierTokens'] not in [_parts(p) for p in paths] or b['name'] != registered['new_name']:
                         errors.append('Occurrence field/member receiver changed: '+label)
-                elif moved_field or a['kind'] != b['kind'] or a['binding'] != b['binding']:
+                elif ((moved_field and not owns_bare(field, row))
+                      or a['kind'] != b['kind'] or a['binding'] != b['binding']):
                     errors.append('Occurrence field qualification lost: '+label)
                 if a['role'] != b['role']:
                     errors.append('Occurrence field role changed: '+label)
@@ -299,11 +317,14 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
             # relied on); a config may only opt out explicitly. A preserved
             # widget may own a same-named field (recordings: now): opt-in class
             # scope keeps that separate from relocated State fields.
-            if (binding_config.get('mandatory_qualification', True)
+            if (mandatory_qualification
                     and (binding_config.get('mandatory_qualification_classes') is None
                          or owner in binding_config['mandatory_qualification_classes'])
                     and occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
-                    and occurrence['name'] in record_fields):
+                    and occurrence['name'] in record_fields
+                    and not any(bare.get(r['original_name']) == owner
+                                and r['destination_file'] == file
+                                and r['new_name'] == occurrence['name'] for r in fields.values())):
                 errors.append('Bare owner field reference: '+f'{file}:{owner}.{name} {occurrence["name"]}')
             if str(occurrence.get('binding', '')).startswith('early:'):
                 errors.append('Early destination reference: '+f'{file}:{owner}.{name}')

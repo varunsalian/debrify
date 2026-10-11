@@ -24,13 +24,13 @@ def load_manifest(path, revision=None, root=ROOT):
     return manifest
 
 
-def earlier_sources(manifest, root=ROOT):
-    """A caller cannot omit a destination by omitting it from a whitelist."""
+def earlier_manifests(manifest, root=ROOT):
+    """Load every applied earlier phase from the same phase-base revision."""
     revision = manifest['base']
     directory = manifest.get('history_directory', 'dev/tool/dart_moves')
     paths = subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-r', '--name-only',
                                      revision, '--', directory], text=True).splitlines()
-    approved, phases = set(), set()
+    approved, phases = [], set()
     for path in paths:
         if not path.endswith('.json'):
             continue
@@ -44,10 +44,17 @@ def earlier_sources(manifest, root=ROOT):
             if prior['phase'] in phases:
                 raise ValueError('duplicate historical phase')
             phases.add(prior['phase'])
-            approved.update(prior['destinations'])
+            approved.append(prior)
     if phases != set(range(1, manifest['phase'])):
         raise ValueError('missing historical phase manifests')
-    return {p: git_text(revision, p, root) for p in sorted(approved)}
+    return sorted(approved, key=lambda p: p['phase'])
+
+
+def earlier_sources(manifest, root=ROOT):
+    """A caller cannot omit a destination by omitting it from a whitelist."""
+    approved = {path for prior in earlier_manifests(manifest, root)
+                for path in prior['destinations']}
+    return {p: git_text(manifest['base'], p, root) for p in sorted(approved)}
 
 
 def check_earlier(manifest, package, current=None, root=ROOT):
