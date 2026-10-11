@@ -131,3 +131,19 @@ Step 1 activates the frozen `vplayer_p1.json` (16 moves, 10 destinations).
 Its creation commit enables architecture, ownership/history and scoped analyzer
 CI, with the facade in format/analyze paths and full checkout history. The
 source reader validates the live moved hash declaration and its S→P1 chain.
+
+Phase 2 Step T freezes `vplayer_p2.json` as **draft**, base `31a347ad2`.
+`draft_vplayer_sleep_moves.py --base 31a347ad2 --parser-package <isolated>
+--probe <git-common-dir>/refactor-evidence/vplayer/p2/<directory>` materializes
+and compares the complete split solely in evidence. It covers all 889 spans,
+12 moved declarations and 14 retained reference occurrences. The per-field
+`owner_scoped_bare_fields` opt-in accepts unbound bare accesses only in the
+field's exact destination file/class; lexical capture, other owners and Host
+forwarding still fail. Existing configurations retain mandatory qualification.
+The real P2 configuration and binding-only negatives run in the shared self-test.
+
+The **P2 production creation commit** must switch current-tree/self-test CI
+and analyzer selection to P2, keep P1 `--at 31a347ad2`, extend theme paths,
+and retarget EOF's sleep anchor through the validating reader with an explicit
+non-negative assertion. P1 diagnostic mappings are preserved in the P2 inventory.
+Do not enable the draft against the original facade.

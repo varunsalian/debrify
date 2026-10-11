@@ -1506,3 +1506,52 @@ entry without TorBox/PikPak identifiers resumes at its saved position. No
 device commands, installation, run, push, merge or branch switch occurred.
 Phase 1 stops here; independent gated-range review and integration remain
 with the user/Claude.
+
+## Phase 2 Step T — original merge-base inventory (2026-10-11)
+
+Original application revision `31a347ad2`, re-measured by declaration name:
+889 exhaustive spans; 12 moved declarations (four fields, two getters, six
+methods), and 14 retained reference occurrences in six declarations. The
+complete draft is `dev/tool/dart_moves/vplayer_p2.json`; it is not applied.
+The destination, controller/Host constructors, live adapter, eager State
+constructor, `_vpSetState`, imports and declaration order are frozen. Direct
+cancel-and-clear in `dispose` stays in place. All ten historical P1 destinations
+are derived from the P1 manifest at the phase base and protected in the current
+working tree.
+
+The four initializers are individually inert: enum constant `SleepTimerMode.off`,
+implicit `null` deadline, integer literal `0`, implicit `null` timer. The new
+constructors only assign `_host`/`_s`; no Host reads, timers or service calls run
+in construction. State assigns its initializer-free `late final _sleep` eagerly
+in one constructor body after all original field initializers. `saveResume`
+forwards zero arguments to the original `Future<void> _saveResume` (defaults
+`debounced: false`, `positionOverride: null`). Context acquisitions remain
+`SleepTimerSheet.show(context, …)` and `ScaffoldMessenger.of(context)`; the moved
+code has no builder-local context. Counts: mounted 3, context 2, setState 3.
+
+Owner-scoped bare field access is an explicit per-field binding opt-in, restricted
+to the field's exact destination file and controller. Binding-only real-config
+negatives reject another physical class, a same-named local, an owned field
+through `_host`, a wrong owner declaration, and an attempted declared Host
+binding. The opt-in also rejects globally disabling or class-narrowing mandatory
+qualification; the capture fixture keeps occurrence counts equal on both sides. Removing the opt-in restores mandatory qualification. Existing manifest
+behavior is preserved. Analyzer mapping now derives P1 identities from historical
+manifests as well as the current P2 manifest; it cannot lose P1 mappings on the CI
+transition.
+
+Evidence under `<git-common-dir>/refactor-evidence/vplayer/p2/tooling/`:
+`probe/remeasured.json`, `construction-and-inventory.json`, complete raw/formatted
+materializations, `optional-commas.json`, `format-diagnostics.json`, analyzer
+logs and `async-context-identities.json`. The formatted split compares with zero
+differences, is idempotent, inserts/deletes zero optional commas and introduces
+zero diagnostics. Original root: 74 scoped occurrences; byte-identical strict
+original: 141; complete compiling receiver/rename probe: 75. Maximum inventory:
+142 occurrences across 34 identities, preserving P1 maxima. The sole probe delta
+is the destination's `directives_ordering` info. All three original
+`use_build_context_synchronously` declaration identities and their counts remain
+unchanged (`_switchToSourcePlaylist`: 1, `_toggleRecording`: 4, `build`: 1).
+
+CI current-tree/analyzer selection stays at P1 until the production creation
+commit switches it to P2 and adds P1 `--at 31a347ad2`. The strengthened, validating
+EOF sleep-anchor retarget and theme path additions belong to that creation
+commit. Application code, app dependencies and size baseline are unchanged.

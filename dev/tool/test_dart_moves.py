@@ -1,6 +1,7 @@
 """Real schema/guards: complete positives and every rule-2/round-2 negative."""
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -145,6 +146,8 @@ def run(package):
     record = original.replace('int _y = 1;', 'Object _y = (1);')
     snap = d.retained_manifest(SOURCE, 'lib/features/video_player', record, 'fixture', package)
     verify('required singleton record comma', {SOURCE: record.replace('(1)', '(1,)')}, snap, record)
+    from test_dart_sleep_moves import run as sleep_tests
+    sleep_tests(package)
     history_tests(package)
     real_manifest = load_manifest('dev/tool/dart_moves/vplayer_p1.json')
     real_original = d.git_text(real_manifest['base'], real_manifest['source'])
@@ -157,7 +160,7 @@ def run(package):
 def history_tests(package):
     # All Git fixtures live in the authorized evidence directory, never /tmp.
     common = Path(subprocess.check_output(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip())
-    evidence = common / 'refactor-evidence/vplayer/p1/history-fixtures'
+    evidence = Path(os.environ.get('VPLAYER_EVIDENCE_ROOT', common / 'refactor-evidence/vplayer/p1')) / 'history-fixtures'
     evidence.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=evidence) as directory:
         root = Path(directory)

@@ -12,7 +12,7 @@ import re
 import subprocess
 
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
-from dart_move_history import git_text, load_manifest
+from dart_move_history import git_text, load_manifest, earlier_manifests
 
 SOURCE = 'lib/screens/video_player_screen.dart'
 FEATURE = 'lib/features/video_player'
@@ -39,10 +39,11 @@ def enclosing(unit, offset):
     return min(matches, key=lambda pair: pair[1]['end'] - pair[1]['start'])[0] if matches else '@directives'
 
 
-def collect(log, sources, package, manifest=None, aliases=None):
-    parsed = parse(sources, package, ownership=True)
+def declaration_mappings(manifest):
+    """Later inventories keep the physical-to-original identities of P1 files."""
     origins, type_origins, reverse = {}, {}, {}
-    for row in (manifest or {}).get('declarations', []):
+    manifests = [*earlier_manifests(manifest), manifest] if manifest else []
+    for row in [r for m in manifests for r in m.get('declarations', [])]:
         if row['fate'] != 'moved':
             continue
         target = row.get('target', row['original'])
@@ -50,6 +51,12 @@ def collect(log, sources, package, manifest=None, aliases=None):
         if '.' not in row['original'] and ':' not in row['original']:
             type_origins[row['destination'], target] = row['original']
         reverse[target.split('.')[-1]] = row['original'].split('.')[-1]
+    return origins, type_origins, reverse
+
+
+def collect(log, sources, package, manifest=None, aliases=None):
+    parsed = parse(sources, package, ownership=True)
+    origins, type_origins, reverse = declaration_mappings(manifest)
     observed, errors = Counter(), []
     for severity, message, path, ln, col, rule in entries(log):
         path = (aliases or {}).get(path, path)
