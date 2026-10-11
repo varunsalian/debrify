@@ -2929,3 +2929,27 @@ CI registration of the five new display files accompanies the future
 Step-1 production creation and P4 current/analyzer transition. Independent
 Claude sampling and phone/TV/tvOS end-of-series checks remain subsequent
 review/device work. No production move, bug fix or dependency change.
+
+
+## Phase 4 clean Step-0 suite baseline (2026-10-12)
+
+Clean characterization checkpoint `5e08bb3a3`, following tooling `1816a0ee5`;
+original is the freshly measured `890df14d8`. Serialized `nice -n 19`
+`suite_evidence.py run vplayer/p4/step0-suite --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true`, same SDK/configuration as the original.
+
+| Baseline check | Result |
+|---|---|
+| Original full suite | 12,932 successes / 13 failures / 28 errors / 20 skips; exact previous P3 gate outcomes plus its accepted incoming-profile test |
+| New full suite | 12,970 successes / 13 failures / 28 errors / 20 skips |
+| Identity delta | Exactly 38 added successes; zero missing identities, changed original outcomes, new failures or skips; official suite comparator PASS |
+| Focused / mutation coverage | 38 original and current display cases pass; all 38 have assertion-failing original witnesses. 170 points: 157 killed, three equivalent, nine dormant, one PiP device-pending |
+| Other checks | All 31 Dart/Kotlin self/history commands pass; complete virtual P4 split and original 868-span self-compare: zero differences. Analyzer forms/identities, optional-comma/idempotence proof, format, test/support analyzer, size and architecture pass |
+| Inputs / evidence | Clean tree throughout the suite, application and pubspec unchanged from original; original mutations restored; isolated parser audit has no violations. `p4/step0/completion.json`, `suite-delta.json`, suite/env/compare logs and detailed mutation artifacts |
+
+No failures were accepted through allowlisting. The recorded preliminary
+runtime-root deviation was corrected before accepted evidence; details remain
+in Progress and `runtime-routing-note.json`. Production moves and CI activation
+remain for Step 1. Phone portrait-start seed/PiP restore and end-of-series
+phone/TV/tvOS/desktop framing, speed, gesture and orientation checks are pending.
+Stop after Step 0.

@@ -1670,6 +1670,26 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   fallback paths stay classified. CI transition and five-file registration
   accompany Step-1 production creation. Stop before production moves.
 
+### 2026-10-12 — Phase 4 Step-0 baseline recorded (stop)
+
+- **Revision/evidence.** Tested clean `5e08bb3a3`, tooling `1816a0ee5`, freshly
+  re-measured original `890df14d8`; `p4/step0/completion.json` records SDK,
+  commands, hashes, coverage, constraints and parser audit.
+- **Suite.** Serialized nice-19 `suite_evidence.py run` with no-pub and hook
+  define: 12,970 success / 13 failure / 28 error / 20 skip. Exactly 38 added
+  successes versus original; zero missing/changed original identities or
+  new failures/skips. Official comparator PASS; no allowlisting.
+- **Final checks.** All 38 cases mutation-proven; 157 kills / three equivalents /
+  nine dormant / one device-pending across 170 points and all 33 references.
+  All 31 tooling/self/history checks pass; format, analyzer probes and test
+  analyzer, size/architecture pass. Explicit isolated parser audit: no
+  violations. Main and original application/pubspec unchanged, original
+  mutations restored, tree clean during complete suite, required trailers.
+- **Stop.** P4 remains draft; no production moves, CI activation, bug fixes,
+  builds/device commands, push, merge or branch switch. Five test registrations
+  and current/analyzer transition belong to Step-1 production creation.
+  Phone portrait/PiP and end-of-series device checklist remain pending.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
