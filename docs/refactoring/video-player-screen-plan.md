@@ -911,18 +911,31 @@ get aspectRatioHud`, `ValueNotifier<bool> get speedHoldHud`, `bool get
 isPlaying`, `ValueNotifier<bool> get controlsVisible` (verify type),
 `double dockBand(double base)` (verify signature), `bool get
 hideBackButton`, `bool get hideOptions` (the two `widget.` reads — live
-forwarders to `_s.widget.…`, read at the original moment). Imports:
+forwarders to `_s.widget.…`, read at the original moment). These
+`widget.hideOptions` → `_host.hideOptions` substitutions are a new shape
+(the widget guard recognises `_deps` *invocations*,
+`occurrence_field_bindings.py:289`, `check_settings_moves.py:417`): step T
+registers both complete selector substitutions in the real P4 manifest via
+`registered_occurrence_substitutions.py:17` (or a narrowly scoped
+extension), freezes the adapter bodies `_s.widget.hideBackButton` /
+`_s.widget.hideOptions`, adds rejection cases for a cached widget value and
+an altered lexical binding, and proves the complete P4 manifest before
+extraction. All 14 Host members have readers; `_controlsVisible` is
+`ValueNotifier<bool>`; `_dockBand(double legacy)` returns `double`. Imports:
 `dart:async`, `dart:math` as `math`, Flutter material + services,
 media_kit, `AspectModeUtils`/`AspectMode`, `AspectRatioHudState`,
 `PlayerMenuSection` + `kUnifiedPlayerMenuEnabled`.
 
-**Retained substitutions** (re-measured at step T; ≈ 30 sites):
+**Retained substitutions** (33 references on 32 lines, measured by the
+design review; retained resume/defaults assignments stay **direct field
+writes** `_display.playbackSpeed = …`, never routed through the action
+methods, which would add effects):
 `initState` 1657/1659 (`_landscapeLocked` writes/read), player creation
 2656 (`_applyAspectVideoZoom()`), player defaults 6208/6264 (aspect write
 + debug log read), PiP 11504, resume restore 12090–12093 (speed/aspect
 writes + zoom), resume save 12511/12514 (reads incl. `_speedBeforeHold
 ?? _playbackSpeed`), controls dock 12914–12919, the TV/keyboard cycle at
-14486, `_buildCustomAspectRatioVideo` 13723 + build 14751/14760,
+14486, `_buildCustomAspectRatioVideo` 13722 (`_getCustomAspectRatio()`) and 13723 (`_currentFit()`) + build 14751/14760,
 gestures 15013/15014 (`onLongPressStart: _display.onLongPressStart` —
 tear-offs; verify the gesture detector does not compare callback
 identity across rebuilds in a way that changes recognizer state), styled
@@ -950,14 +963,34 @@ after dispose; orientation toggle (both directions, immersive mode,
 `setState` only when mounted) via the method-channel recorder; resume
 restore applying speed + aspect + zoom; player defaults setting aspect;
 landscape lock seeded from `startsInPortrait`; PiP's read of the lock.
-Legacy cycle paths behind `kUnifiedPlayerMenuEnabled` recorded dead.
+Legacy cycle paths behind `kUnifiedPlayerMenuEnabled` recorded dead —
+`_changeSpeed` is **wholly dormant** (its only caller is the disabled
+branch, 13605); aspect cycling stays live through key A (14486).
+**Rendered aspect contract:** through the eleven-mode cycle assert the
+rendered `mkv.Video.fit`, the custom-ratio branch and the numeric
+`AspectRatio.aspectRatio` (13722/14751), not only HUD/zoom; native zoom
+`0.000000`, cinema zoom `0.415037`. **Resume sampling:** suspend an
+existing resume write (the preference transport barrier,
+`sleep_timer_driver.dart:55`), queue another save, change speed/aspect or
+start/end a hold, release, and assert the stored records (values are read
+inside `_saveResumeLocked`, 12511, not at action time); saved speed `1.0`
+skips both `setRate` and the assignment (12088). **Orientation async:** a
+suspended orientation request completed after disposal, overlapping
+toggles (both read the same initial lock), a rejected channel request —
+record channel arguments/order and the `_scheduleAutoHide` timer creation
+and draining (12673); preserve outcomes. One real pointer hold spanning a
+rebuild pins long-press delivery (tear-offs of the same instance compare
+equal; recognizers are reused by type). **Reachability:** the landscape
+seed is desktop-covered; the phone-only portrait seed (`PlatformUtil:92`
+uses real `dart:io Platform`) and PiP restore are device-pending.
 Mutation proofs, coverage matrix, Claude sample.
 
 ### Device checklist (end of series)
 
 Aspect modes visibly change framing on phone/TV/desktop/tvOS (incl.
 cinema zoom); speed menu changes rate and persists on resume;
-long-press 2× on phone; orientation toggle on phone.
+long-press 2× on phone; orientation toggle on phone; portrait-start seed
+and PiP restore of the lock on phone.
 
 ## Follow-ups
 
@@ -1630,3 +1663,13 @@ order); HTTP harness transport, dormant replacement, web-only
 unavailable provider. P3s: concrete CI/manifest transition, patched State
 constructor, theme lists; line/label wording; frozen Host signatures and
 imports.
+
+## Phase 4 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+P2s folded: orientation completion after disposal / overlap / rejection;
+resume sampling across queued writes and the speed-1.0 skip; rendered
+aspect contract (fit, custom ratio, numeric ratio). P3s: explicit
+`widget.` selector registration with frozen adapter bodies and negatives;
+33-reference ledger incl. 13722, `_changeSpeed` dormant, portrait seed and
+PiP restore device-pending. Moving the four values (single storage
+location, retained callers write the controller fields directly) accepted.
