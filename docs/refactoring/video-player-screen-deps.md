@@ -1019,3 +1019,29 @@ reruns and the valid 3x runs remain archived with `profile-editor-NOTE.txt`.
 
 The final full-suite comparison is recorded after the Step-0 test commit.
 The incomplete pre-lint-cleanup run is excluded (`step0-suite-NOTE.txt`).
+
+### Step-0 complete baseline
+
+At `c502380169cbc3a1394782c52a0fac08d7595e67`, the complete
+`step0-suite-isolated.jsonl` has 12,820 successes, 13 failures, 28 errors and
+20 skips. `suite_evidence.py compare` against `original-suite-routed.jsonl`
+passes: exactly 26 added successful identities, no new failures, no missing
+tests and no new skips. The only changed original outcome is the repaired
+profile-editor parser setup failure. SDK/configuration is unchanged; the
+tested tree stayed fixed throughout the run. `step0-baseline-outcomes.json`
+is the new observed baseline, with the exact delta in
+`step0-baseline-delta.json`; neither replaces a checked-in failure allowlist.
+
+`step0-suite-final.jsonl` is also incomplete/excluded: auditing found nested
+contract guards with hard-coded parser packages even though their outer
+CLI option was isolated. The final evidence-only routing adapter redirects
+every shared AST parse/ensure call, including child tools, to the fresh
+worktree-local package selected before argument parsing. No repository
+checker/manifest behavior changed. `parser-routing-audit.json` records the
+unique isolated packages, deleted copied kernels and nested redirects.
+
+Final root analysis (`step0-analyze-complete.txt`) has exactly T's 1,753
+diagnostic identities/counts. The scoped comparator retains all 73 S
+identities with zero additions; the new harness folder has zero issues.
+Earlier temporary build/vendor/test scan differences are excluded from
+that final claim and archived separately.

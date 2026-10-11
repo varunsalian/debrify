@@ -624,6 +624,67 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   files are unchanged after R. S, characterization, production moves and gate
   suite/builds remain unstarted.
 
+
+### 2026-10-11 — S and Step 0 (complete; stop before moves)
+
+- **Revisions.** S `80839d827383b05078178f292b56efbddd166fb1` is the
+  separately committed characterization checkpoint; Step 0 is
+  `c502380169cbc3a1394782c52a0fac08d7595e67`. Application code remains
+  byte-identical to S; dependencies are unchanged and the Phase-1 move
+  manifest stays draft. S's dated size exception is 18,251 lines.
+- **S proof.** `vplayer_seam_proof.py --self-test`, the seam move-checker
+  self-test and `check_dart_moves.py --manifest vplayer_p1_seam.json --at S`
+  pass: two patched declarations, three exact interceptions, frozen hook
+  scaffold, once-only defaults/configurations and ordered assignments.
+  Installer/source guard passes both with and without the test flag. The
+  harness flag is in the test command list and CI behaviour command.
+- **Characterization.** Four original launch smoke cases and phase-1
+  source rejection/rollback, identity validation/cancel, subtitle lifecycle,
+  zap offsets/totals, catch-up ownership, active shuffle and fallback hash
+  resume/storage scenarios pass. The full suite passes all 26 additions.
+  All 10 helpers pass the analyzer binding/import proof; the unchanged
+  strict-feature top-level rename probe from T remains valid. The current
+  source reader validates ownership/body/history and chains relocation.
+  Coverage and mutation tables are in the deps report. `_format` and the
+  legacy `_RandomChoiceTile` are dead originals, explicitly recorded under
+  shared rule 4; active duration/shuffle callers are tested. PiP stays
+  device-pending. No predicate seam or manufactured caller was added.
+- **Mutations.** Detached original-S control: 26/26 pass. One application
+  mutation per test plus six identity/total-boundary mutations: 32/32
+  assertion kills. Original S is restored after each run. An offset-zero
+  mutation that caused a microtask loop was interrupted/excluded and
+  replaced by a total-boundary mutation; no assertion was weakened.
+- **Suite/NOTE.** `suite_evidence.py run vplayer/p1/step0-suite-isolated
+  --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  original-suite-routed.jsonl`: **PASS**, 12,820 successes, 13 failures,
+  28 errors, 20 skips; 26 added successful identities, zero new failures,
+  missing tests or new skips. The profile-editor extra failure was a
+  deterministic parser-path setup incompatibility; unchanged-source/test
+  isolated 3x reruns and the final full run pass. No observed behavior
+  flake/regression and no allowlist entry. The 41 remaining failures/errors
+  match the observed original set after that environment repair.
+- **Checks/evidence.** Root `flutter analyze --no-pub` retains S's 73 scoped
+  identities with zero additions; the new harness folder analyzes cleanly.
+  Final root analysis has exactly T's 1,753 diagnostic identities/counts
+  (exit 1 for existing diagnostics); temporary earlier scan differences
+  from vendor/test/build assets are archived separately.
+  Sizes (2,984 files/140 ratchets), architecture (1,652), formatting, Python
+  compile and diff checks pass. Heavy commands use `nice -n 19`; Flutter
+  suite runs are serialized. All artifacts and exact commands are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/`, including the named
+  JSONL runs, `COMMANDS-step0.txt`, baseline delta and routing audit.
+- **Routing/deferred work.** An evidence-only Python routing wrapper now
+  covers outer CLI packages and nested hard-coded parser guards, including
+  child tools; each invocation copies a fresh package under
+  `.dart_tool/vplayer_parser/` and deletes copied kernels. Incomplete runs
+  before lint cleanup/nested routing are excluded with NOTEs. Existing
+  comparison code/manifests are unchanged. No production file, dependency
+  change, bug fix, push, merge, branch switch or device command. Feature
+  move/import/analyzer CI enables only in Step 1's first
+  `lib/features/video_player/models/` production-file commit. Claude's
+  independent mutation sample, any step 0b and production moves remain
+  subsequent work.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
