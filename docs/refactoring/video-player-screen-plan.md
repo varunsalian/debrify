@@ -565,6 +565,107 @@ Random-playback menu tiles render and select on phone and TV; IPTV
 catch-up/Start Over cancellation still wins over a slow lookup; identity
 search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) lands at the saved position after the update.
 
+## Phase 2 — sleep timer (first collaborator; establishes the scaffolding)
+
+Branch `refactor/vplayer-p2` off the phase-1 merge `31a347ad2`. Evidence
+`refactor-evidence/vplayer/p2/`. Line numbers at `2eb4fda82` (same facade content as `31a347ad2`); re-measure
+at the phase base.
+
+Deliberately small: it is the first stateful phase, so it introduces the
+series scaffolding that every later phase extends — the State constructor
+body, `_vpSetState`, the first Host interface + private adapter, the
+checker's `_host` forms in a real manifest — on low-risk code.
+
+### Moves → `lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart`
+
+`class VpSleepTimerController` + `abstract interface class VpSleepTimerHost`
+(same file, ≈ 150 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| `_sleepTimerMode` 1454 (+ the 3-line section comment above it, which moves with it) | field, init `SleepTimerMode.off` | moved → `sleepTimerMode` |
+| `_sleepTimerDeadline` 1459 (doc) | field, `null` | moved → `sleepTimerDeadline` |
+| `_sleepTimerArmedMinutes` 1463 (doc) | field, `0` | moved → `sleepTimerArmedMinutes` |
+| `_sleepTimer` 1464 | field, `null` | moved → `sleepTimer` |
+| `_sleepTimerMinutesLeft` 13813 | getter | moved → `sleepTimerMinutesLeft` |
+| `_sleepTimerButtonLabel` 13824 | getter | moved → `sleepTimerButtonLabel` |
+| `_showSleepTimerSheet` 13830 | method | moved → `showSleepTimerSheet` |
+| `_applySleepTimerSelection` 13851 | method | moved → `applySleepTimerSelection` |
+| `_startSleepCountdown` 13865 | method | moved → `startSleepCountdown` |
+| `_cancelSleepTimer` 13877 | method | moved → `cancelSleepTimer` |
+| `_fireSleepTimer` 13897 | method | moved → `fireSleepTimer` |
+| `_showSleepTimerToast` 13906 | method | moved → `showSleepTimerToast` |
+
+All four field initializers are literals/`null` — **inert** (recorded
+proof). Their relocation from State slots 1454–1464 to the constructor
+body is unobservable.
+
+**Stays State-owned** (shared-state rule): `_sleepStopLatched` (1470; read
+by recovery 690, EOF 5245, episode navigation 5790/6212, playlist load
+10574, resume-from-background 11828, play toggle 13703),
+`_activeMediaShouldPlay`, `_playerCreated`, `_player`, `_hideTimer`,
+`_currentIptvChannel`, `_saveResume`, `_scheduleAutoHide`,
+`_openPlayerMenuQuick`.
+
+**Host** `VpSleepTimerHost` (exact members; every one read; computed
+forwarders in `_VpSleepTimerHostAdapter` in the facade library):
+`bool get mounted`, `BuildContext get context`,
+`void setState(VoidCallback fn)` (→ `_s._vpSetState`),
+`void openPlayerMenuQuick(PlayerMenuSection section)`,
+`Timer? get hideTimer`, `IptvChannel? get currentIptvChannel`,
+`void scheduleAutoHide()`, `set sleepStopLatched(bool v)`,
+`set activeMediaShouldPlay(bool v)`, `bool get playerCreated`,
+`Future<void> saveResume()`, `mk.Player get player`.
+Declared receiver substitutions inside moved bodies (by occurrence):
+`mounted`→`_host.mounted` (3), `context`→`_host.context` (2),
+`setState(`→`_host.setState(` (3), `_openPlayerMenuQuick`,
+`_hideTimer`, `_currentIptvChannel`, `_scheduleAutoHide`,
+`_sleepStopLatched`, `_activeMediaShouldPlay`, `_playerCreated`,
+`_saveResume`, `_player` → their `_host.` forms; moved-member references
+lose their underscore (renames). The exact return type of
+`_saveResume` and the `context` uses (`SleepTimerSheet.show(context, …)`,
+`ScaffoldMessenger.of(context)`) are verified at step T; no builder-local
+`context` exists in the moved code (checked).
+
+**Retained code — declared substitutions** (`_sleep` = the controller
+field): 691 and 5243 `_sleepTimerMode` → `_sleep.sleepTimerMode`;
+5244 `_cancelSleepTimer()` → `_sleep.cancelSleepTimer()`; 5247
+`_showSleepTimerToast(` → `_sleep.showSleepTimerToast(`; `dispose`
+11878–11879 `_sleepTimer` → `_sleep.sleepTimer` (same statement
+position); 13138/13139 and 15476/15477 tear-offs
+`_showSleepTimerSheet` → `_sleep.showSleepTimerSheet`,
+`_sleepTimerButtonLabel` → `_sleep.sleepTimerButtonLabel`; 17070–17074
+menu arguments → `_sleep.` forms (`onSleepSelected:
+_sleep.applySleepTimerSelection` — tear-off identity is not compared by
+the menu; verified at step 0).
+
+**New scaffolding (frozen):** `late final VpSleepTimerController _sleep;`
+(declared at the old field slot 1454), the State constructor
+`_VideoPlayerScreenState() { _sleep = VpSleepTimerController(_VpSleepTimerHostAdapter(this)); }`,
+`void _vpSetState(VoidCallback fn) => setState(fn);`, the adapter class
+after the State class. Constructor of the controller only stores the
+host.
+
+### Step 0 — characterization of the original
+
+Through the harness (fake player, `fake_async`): countdown arm → label
+"N min" counting down (ceil), deadline expiry → `_saveResume` before
+`pause`, toast texts, latch set (next auto-advance suppressed);
+end-of-item → EOF stops with "Sleep timer — stopping here" and no
+advance; off → toast + label null; re-arming cancels the old timer;
+dispose with an armed countdown → no fire after dispose; a live IPTV
+channel → `allowEndOfItem` false (legacy sheet path is dead behind
+`kUnifiedPlayerMenuEnabled` — record as dead, like c18); the unified menu
+receives mode/armed/minutes-left and its selection callback applies;
+the controls dock label. Mutation proofs on the original; coverage
+matrix; Claude sample.
+
+### Device checklist (end of series)
+
+Sleep timer 15 min countdown on phone + Android TV (Flutter player) +
+tvOS + desktop: label counts down, pauses at expiry, position saved,
+next episode does not start; "end of episode" stops at EOF.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
