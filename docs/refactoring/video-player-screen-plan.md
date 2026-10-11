@@ -808,6 +808,14 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   unchanged; plain playlist entries resume saved progress. Pending.
   Stop here; gated-range review/integration remains with user/Claude.
 
+2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
+`ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
+proof, seam exactly-once/installation rules, 893-span ownership comparison, history and
+binding negatives, 58 focused tests, mutation spot checks, equivalence/dead-code claims
+(c15/c16/c18, d1/d8/d11/d12) and raw suite identities. Claude samples: first 7/17 (41 %,
+step 0b + systematic sweep), after 0b 18/20 on the first set and 9/12 (75 %) on a second
+independent set; d5/d13 then closed. Merged `--no-ff` into `refactor/codebase`.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
