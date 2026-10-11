@@ -264,6 +264,17 @@ def receiver_path_match(values, index):
 
 
 def normalize(values, rows, row=None):
+    # Property Hosts are explicit opt-in; other feature configs are untouched.
+    if CONFIG.get('host_property_bindings'):
+        from registered_occurrence_substitutions import canonical_tokens
+        specs = [dict(before=[identity.split('.')[-1]], after=re.split(r'(\.)', path))
+                 for path, identity in CONFIG['host_property_bindings'].items()]
+        values = canonical_tokens(values, specs)
+    if CONFIG.get('host_owner_identity'):
+        from registered_occurrence_substitutions import canonical_tokens
+        specs = [dict(before=['this'], after=re.split(r'(\.)', path))
+                 for path in CONFIG['host_owner_identity']]
+        values = canonical_tokens(values, specs)
     if CONFIG.get('registered_occurrence_substitutions'):
         from registered_occurrence_substitutions import canonical_tokens
         values = canonical_tokens(values, CONFIG['registered_occurrence_substitutions'])
@@ -1883,3 +1894,47 @@ def self_test(package=None):
         print('Settings self-test duplicate destination field: rejected')
     else:
         raise AssertionError('Accepted duplicate destination field')
+
+
+def apply_explicit_token_edits(values, edits):
+    """Exact occurrence-counted edits for the ownership layer (no inference)."""
+    result = list(values)
+    for edit in edits:
+        before, after, count = edit['before'], edit['after'], edit['count']
+        if not before or before == after or not isinstance(count, int) or count < 1:
+            raise ValueError('invalid explicit token edit')
+        output, i, found = [], 0, 0
+        while i < len(result):
+            if result[i:i + len(before)] == before:
+                output.extend(after)
+                i += len(before)
+                found += 1
+            else:
+                output.append(result[i])
+                i += 1
+        if found != count:
+            raise ValueError(f'explicit edit occurrence count: expected {count}, found {found}')
+        result = output
+    return result
+
+
+def compare_explicit_tokens(before, after, edits, label):
+    """Reuse scanner punctuation and canonical comment comparison, exactly.
+
+    Unlike legacy manifest-wide renames, all new edits belong to one span.
+    This function also compares retained code and frozen history; it never
+    ignores a qualifier, lexical token, static modifier or extra patch.
+    """
+    from check_verbatim_moves import canonical
+    def exact(values):
+        return canonical(dict(tokens=[dict(text=t, comment=t.startswith(('//', '/*')))
+                                      for t in values]), [], normalize_qualifiers=False)
+    try:
+        expected = exact(apply_explicit_token_edits(tokens(before), edits))
+    except (ValueError, KeyError, TypeError) as error:
+        return ['invalid declared edit: ' + label + ': ' + str(error)]
+    actual = exact(tokens(after))
+    if expected == actual:
+        return []
+    diff = '\n'.join(list(difflib.unified_diff(expected, actual, fromfile=label, tofile='current'))[:35])
+    return ['non-verbatim declaration: ' + label + '\n' + diff]

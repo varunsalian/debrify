@@ -846,3 +846,42 @@ Inventory at `ed728b078` (`lib/screens/video_player_screen.dart`, 18,106 lines, 
 | 18050 | 18050 | 1 | field | `onTap` |
 | 18052 | 18057 | 6 | ctor | `ctor` |
 | 18059 | 18105 | 47 | method | `build` |
+
+## Phase 1 checkpoint R — 2026-10-11
+
+R is `a43f44cbb33a05830bbcb0325c98a768d10cc166`, the format-only
+checkpoint: 18,187 physical lines, 157 directives, 8 top-level declarations,
+827 class members (725 in State). `vplayer_p1_retained.json` owns every
+scanner token in 893 disjoint spans; whole-class rows own their nested
+members. The complete analyzer inventory is archived as
+`<git-common-dir>/refactor-evidence/vplayer/p1/R-inventory.json`.
+
+The Phase-1 draft below is unapplied. R's AST ranges include declaration
+documentation; destinations are relative to `lib/features/video_player/`.
+Parameter-only re-proofs and production caller characterization remain Step 0.
+
+| Original | R lines | Draft destination |
+|---|---|---|
+| `_ManualSourceValidationFailure` | 167–169 | `models/vp_manual_source_validation_failure.dart` |
+| `_SeasonEpisodeSelection` | 171–176 | `models/vp_season_episode_selection.dart` |
+| `_SubtitleApplyAttempt` | 178–200 | `models/vp_subtitle_apply_attempt.dart` |
+| `_IptvZapPage` | 202–223 | `models/vp_iptv_zap_page.dart` |
+| `IptvCatchupRequestGate` | 225–254 | `models/iptv_catchup_request_gate.dart` |
+| `_RandomChoiceTile` | 18127–18187 | `presentation/vp_random_choice_tile.dart` |
+| `_format` | 13773 | `application/vp_format.dart` |
+| `_pad2` | 14329 | `application/vp_format.dart` |
+| `_generateFilenameHash` | 18117–18124 | `application/vp_filename_hash.dart` |
+| `_normalisePosterUrl` | 16103–16107 | `application/vp_identity_text.dart` |
+| `_normalisedContentType` | 16044–16045 | `application/vp_identity_text.dart` |
+| `_identityMetaSubtitle` | 16109–16117 | `application/vp_identity_text.dart` |
+| `_filterIdentitySearchResults` | 16074–16101 | `application/vp_identity_text.dart` |
+| `_subtitleSearchDisplayLabel` | 16058–16072 | `application/vp_identity_text.dart` |
+| `_diagnosticSubtitleId` | 5073–5074 | `application/vp_subtitle_identity.dart` |
+| `_subtitlePreferenceMatchesAttempt` | 18106–18115 | `application/vp_subtitle_identity.dart` |
+
+Source-reader adjustment at Step T: the delayed-startup assertion in
+`test/manual_source_validation_contract_test.dart` keeps its original
+`_reportStartupFailure` → `_bindPlayerInstanceSubscriptions` anchor and
+now matches the complete `current()` guard with whitespace-tolerant syntax.
+Formatting split the old one-line prefix. No declaration moved, no assertion
+was deleted, and all other source readers/consumer paths remain unchanged.

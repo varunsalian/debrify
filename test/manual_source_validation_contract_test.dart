@@ -537,7 +537,15 @@ void main() {
       'Future<void> _reportStartupFailure(',
       'void _bindPlayerInstanceSubscriptions(',
     );
-    expect(failure, contains('bool current() => mounted && !_screenDisposed'));
+    expect(
+      failure,
+      matches(
+        RegExp(
+          r'bool current\(\)\s*=>\s*mounted\s*&&\s*!_screenDisposed\s*&&\s*'
+          r'\(isCurrent\?\.call\(\)\s*\?\?\s*true\)\s*;',
+        ),
+      ),
+    );
     expect(failure, contains('current() && playerRoute?.isActive == true'));
     expect(
       flutterPlayer,
