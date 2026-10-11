@@ -37,6 +37,16 @@ const Set<String> kThemingPrepared = {};
 const List<String> kStillFrozenPaths = [
   'lib/screens/video_player_screen.dart',
   'lib/screens/video_player/',
+  'lib/features/video_player/models/vp_manual_source_validation_failure.dart',
+  'lib/features/video_player/models/vp_season_episode_selection.dart',
+  'lib/features/video_player/models/vp_subtitle_apply_attempt.dart',
+  'lib/features/video_player/models/vp_iptv_zap_page.dart',
+  'lib/features/video_player/models/iptv_catchup_request_gate.dart',
+  'lib/features/video_player/presentation/vp_random_choice_tile.dart',
+  'lib/features/video_player/application/vp_format.dart',
+  'lib/features/video_player/application/vp_filename_hash.dart',
+  'lib/features/video_player/application/vp_identity_text.dart',
+  'lib/features/video_player/application/vp_subtitle_identity.dart',
 ];
 
 /// Source-level tripwires for the containment rules a type system can't see.
@@ -65,10 +75,12 @@ void main() {
     for (final path in debrifyTvSourceFiles()) {
       final source = _code(File(path)).replaceAll(RegExp(r'\s+'), '');
       expect(
-        RegExp(r'videoPlayerRoute\(builder:\(_\)=>VideoPlayerScreen\(')
-            .allMatches(source),
+        RegExp(
+          r'videoPlayerRoute\(builder:\(_\)=>VideoPlayerScreen\(',
+        ).allMatches(source),
         hasLength('VideoPlayerScreen('.allMatches(source).length),
-        reason: '$path must construct every player inside videoPlayerRoute(builder:)',
+        reason:
+            '$path must construct every player inside videoPlayerRoute(builder:)',
       );
     }
     final offenders = <String>[];
@@ -89,7 +101,9 @@ void main() {
   });
 
   test('magic_tv_screen pushes the player only via FrozenLegacyPageRoute', () {
-    final source = debrifyTvSourceFiles().map((path) => _code(File(path))).join();
+    final source = debrifyTvSourceFiles()
+        .map((path) => _code(File(path)))
+        .join();
     expect(
       source.contains('MaterialPageRoute'),
       isFalse,
@@ -204,6 +218,16 @@ void main() {
       'lib/screens/downloads_screen.dart',
       'lib/screens/video_player_screen.dart',
       'lib/screens/video_player/',
+      'lib/features/video_player/models/vp_manual_source_validation_failure.dart',
+      'lib/features/video_player/models/vp_season_episode_selection.dart',
+      'lib/features/video_player/models/vp_subtitle_apply_attempt.dart',
+      'lib/features/video_player/models/vp_iptv_zap_page.dart',
+      'lib/features/video_player/models/iptv_catchup_request_gate.dart',
+      'lib/features/video_player/presentation/vp_random_choice_tile.dart',
+      'lib/features/video_player/application/vp_format.dart',
+      'lib/features/video_player/application/vp_filename_hash.dart',
+      'lib/features/video_player/application/vp_identity_text.dart',
+      'lib/features/video_player/application/vp_subtitle_identity.dart',
     ];
     final stray = kThemingPrepared
         .where((f) => !frozen.any(f.startsWith))
@@ -296,6 +320,16 @@ void main() {
       const [
         'lib/screens/video_player_screen.dart',
         'lib/screens/video_player/',
+        'lib/features/video_player/models/vp_manual_source_validation_failure.dart',
+        'lib/features/video_player/models/vp_season_episode_selection.dart',
+        'lib/features/video_player/models/vp_subtitle_apply_attempt.dart',
+        'lib/features/video_player/models/vp_iptv_zap_page.dart',
+        'lib/features/video_player/models/iptv_catchup_request_gate.dart',
+        'lib/features/video_player/presentation/vp_random_choice_tile.dart',
+        'lib/features/video_player/application/vp_format.dart',
+        'lib/features/video_player/application/vp_filename_hash.dart',
+        'lib/features/video_player/application/vp_identity_text.dart',
+        'lib/features/video_player/application/vp_subtitle_identity.dart',
       ],
       reason:
           'only playback may sit outside the app palette by path. Changing '

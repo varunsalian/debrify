@@ -65,7 +65,7 @@ def ensure_parser_package(package, config):
                        check=True, stdout=subprocess.DEVNULL)
 
 
-def parse(sources, package=None, *, occurrence_bindings=False):
+def parse(sources, package=None, *, occurrence_bindings=False, ownership=False):
     package = package or parser_package()
     adapter = ROOT / 'dev/tool/verbatim_ast.dart.txt'
     kernel = package.parent / 'verbatim_ast.dill'
@@ -80,8 +80,9 @@ def parse(sources, package=None, *, occurrence_bindings=False):
             os.replace(partial, kernel)
     result = subprocess.run(
         ['dart', str(kernel)],
-        input=json.dumps({"$occurrence_field_bindings": True, "sources": sources}
-                         if occurrence_bindings else sources),
+        input=json.dumps({"$occurrence_field_bindings": occurrence_bindings,
+                               "$ownership_partition": ownership, "sources": sources}
+                         if occurrence_bindings or ownership else sources),
         text=True, capture_output=True, check=True)
     parsed = json.loads(result.stdout)
     def complete(node):

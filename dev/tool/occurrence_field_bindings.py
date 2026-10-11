@@ -12,7 +12,8 @@ def aligned(node, config):
     scaffolding = set()
     paths = [(_parts(path), set(config.get('receiver_members', {}).get(owner, [])))
              for path, owner in config.get('receiver_paths', {}).items()]
-    paths += [(['_deps'], {'context', 'mounted', 'setState'} | set(config.get('live_widget_getters', [])))]
+    paths += [([receiver], {'context', 'mounted', 'setState'} | set(config.get('live_widget_getters', [])))
+              for receiver in ['_deps', *config.get('live_state_receivers', [])]]
     paths += [(['_deps'], {s['after'][2] for s in config.get('registered_occurrence_substitutions', [])
                           if s['after'][:2] == ['_deps', '.']})]
     by_first = {}
@@ -22,6 +23,11 @@ def aligned(node, config):
         if i and values[i-1] in ('.', '?.'):
             continue
         for path, members in by_first.get(value, []):
+            if value in config.get('live_state_receivers', []):
+                receiver = next((o for o in node.get('occurrences', []) if o['tokenIndex'] == i), None)
+                if receiver and receiver['binding'] != 'unbound':
+                    continue
+
             end = i + len(path)
             if (values[i:end] == path and values[end:end+1] == ['.']
                     and values[end+1:end+2] and values[end+1] in members):
@@ -33,7 +39,34 @@ def aligned(node, config):
     for i in range(len(values) - 2):
         if values[i:i+2] == ['widget', '.'] and values[i+2] in config.get('live_widget_getters', []):
             scaffolding.add(i)
-    result = [o for o in node.get('occurrences', []) if o['tokenIndex'] not in scaffolding]
+    # Narrow property/setter/increment Hosts and State identity are opt-in.
+    occurrences = {o['tokenIndex']: o for o in node.get('occurrences', [])}
+    properties = config.get('host_property_bindings', {})
+    owners = config.get('host_owner_identity', [])
+    host_sites, identity_sites = {}, set()
+    for i in range(len(values)):
+        if i and values[i - 1] in ('.', '?.'):
+            continue
+        for path, field in properties.items():
+            parts = _parts(path)
+            if values[i:i + len(parts)] == parts:
+                receiver = occurrences.get(i)
+                if receiver and receiver['binding'] != 'unbound':
+                    continue
+                scaffolding.update(range(i, i + len(parts) - 1))
+                host_sites[i + len(parts) - 1] = field.split('.')[-1]
+        for path in owners:
+            parts = _parts(path)
+            if values[i:i + len(parts)] == parts:
+                receiver = occurrences.get(i)
+                if receiver and receiver['binding'] != 'unbound':
+                    continue
+                identity_sites.update(range(i, i + len(parts)))
+    result = [o for o in node.get('occurrences', [])
+              if o['tokenIndex'] not in scaffolding | identity_sites]
+    result = [dict(o, name=host_sites[o['tokenIndex']], kind='lexical', qualifier=None,
+                   qualifierTokens=None, binding='unbound') if o['tokenIndex'] in host_sites else o
+              for o in result]
     # Only a literal _deps.alias() invocation represents a retained field read.
     # Keep one occurrence at its original scope and role; chained selectors
     # still see the ORIGINAL field as their receiver. Absent config is a no-op.
@@ -107,6 +140,25 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
         moved = {r['original_name'] for r in rows if r['destination_file'] != source
                  and (r['destination_file'], r['destination_class'], r['new_name']) in lookup}
         original = project(original, config, package, moved)
+    # A parameter-only method becomes a FunctionDeclaration whose analyzer
+    # binder has one additional function scope. Project only these explicitly
+    # listed ORIGINAL members through the same parser; no destination rewrite.
+    if config.get('occurrence_top_level_members'):
+        from check_verbatim_moves import parse
+        projected = {}
+        for identity in config['occurrence_top_level_members']:
+            row = next(r for r in rows if r['original_name'] == identity)
+            node = original[identity]
+            if row['destination_file'] == source or row['destination_class'] or not node['parameters']:
+                raise ValueError('top-level occurrence projection requires a moved method')
+            text = node['text']
+            static = next((t for t in node['tokens'] if t['text'] == 'static' and t['offset'] < node['bodyOffset']), None)
+            if static:
+                at = static['offset'] - node['start']
+                text = text[:at] + text[at + len('static'):]
+            projected[identity] = text
+        parsed_projection = parse(projected, package, occurrence_bindings=True)
+        original = dict(original, **{key: unit['declarations'][0] for key, unit in parsed_projection.items()})
     errors = []
     if config.get('alldebrid_formatter_brace_occurrences'):
         from alldebrid_files_formatter_braces import canonical_lookup
@@ -154,6 +206,13 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
                         occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
                         or occurrence['kind'] == 'selector' and occurrence['qualifierTokens'] == ['this']):
                     errors.append('Retained live field qualification lost: ' + identity)
+        if row['destination_file'] != source:
+            host_names = {name.split('.')[-1] for name in config.get('host_property_bindings', {}).values()}
+            for occurrence in after.get('occurrences', []):
+                if occurrence['name'] in host_names and (
+                        occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
+                        or occurrence['kind'] == 'selector' and occurrence['qualifierTokens'] == ['this']):
+                    errors.append('Host property qualification lost: ' + identity)
         left, right = aligned(before, config), aligned(after, config)
         annotations = config.get('forwarded_annotation_occurrences', {}).get(identity)
         destination = (row['destination_file'], row['destination_class'], row['new_name'])
@@ -226,7 +285,7 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
                 errors.append('Occurrence live State callback qualification lost: '+label)
             elif a['name'] in ['context', 'mounted', 'setState'] and a['binding'] == 'unbound' and b['kind'] == 'selector':
                 expected_role = 'invocation' if a['name'] in config.get('live_getter_callbacks', []) else a['role']
-                if b['qualifierTokens'] != ['_deps'] or b['role'] != expected_role:
+                if b['qualifierTokens'] not in [['_deps'], *([r] for r in config.get('live_state_receivers', []))] or b['role'] != expected_role:
                     errors.append('Occurrence live State callback changed: '+label)
             elif a['kind'] != b['kind'] or a['binding'] != b['binding'] or a['role'] != b['role']:
                 # Registered top-level aliases and helper renames keep a bare

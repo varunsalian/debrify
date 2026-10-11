@@ -1,0 +1,1508 @@
+# Video player screen — dependency report
+
+Inventory at `ed728b078` (`lib/screens/video_player_screen.dart`, 18,106 lines, unformatted), produced by an analyzer 14.3.0 member walk (`parseString`; first token after comments/metadata to end). Each phase appends its own inventory below.
+
+## Top-level declarations
+
+| Start | End | Lines | Declaration |
+|---|---|---|---|
+| 167 | 169 | 3 | class _ManualSourceValidationFailure |
+| 171 | 176 | 6 | class _SeasonEpisodeSelection |
+| 178 | 200 | 23 | class _SubtitleApplyAttempt |
+| 207 | 223 | 17 | class _IptvZapPage |
+| 229 | 254 | 26 | class IptvCatchupRequestGate |
+| 268 | 454 | 187 | class VideoPlayerScreen |
+| 456 | 18044 | 17589 | class _VideoPlayerScreenState |
+| 18046 | 18106 | 61 | class _RandomChoiceTile |
+
+## Class members (all classes, in order)
+
+| Start | End | Lines | Kind | Name |
+|---|---|---|---|---|
+| 168 | 168 | 1 | ctor | `ctor` |
+| 172 | 172 | 1 | field | `season` |
+| 173 | 173 | 1 | field | `episode` |
+| 175 | 175 | 1 | ctor | `ctor` |
+| 179 | 179 | 1 | field | `generation` |
+| 180 | 180 | 1 | field | `requested` |
+| 181 | 181 | 1 | field | `previous` |
+| 182 | 182 | 1 | field | `source` |
+| 183 | 183 | 1 | field | `previousStremioId` |
+| 184 | 184 | 1 | field | `previousExternalPath` |
+| 185 | 185 | 1 | field | `failed` |
+| 186 | 186 | 1 | field | `handled` |
+| 187 | 187 | 1 | field | `successReturned` |
+| 188 | 188 | 1 | field | `persisted` |
+| 189 | 189 | 1 | field | `persistedAudioId` |
+| 190 | 190 | 1 | field | `persistenceDone` |
+| 192 | 199 | 8 | ctor | `ctor` |
+| 208 | 208 | 1 | field | `channels` |
+| 209 | 209 | 1 | field | `offset` |
+| 210 | 210 | 1 | field | `total` |
+| 211 | 211 | 1 | field | `sourceId` |
+| 212 | 212 | 1 | field | `category` |
+| 213 | 213 | 1 | field | `categories` |
+| 215 | 222 | 8 | ctor | `ctor` |
+| 230 | 230 | 1 | field | `_generation` |
+| 231 | 231 | 1 | field | `_activeTicket` |
+| 233 | 237 | 5 | method | `begin` |
+| 239 | 240 | 2 | method | `isCurrent` |
+| 242 | 246 | 5 | method | `complete` |
+| 248 | 253 | 6 | method | `cancel` |
+| 269 | 283 | 15 | static | `readLocalResume` |
+| 285 | 285 | 1 | field | `videoUrl` |
+| 287 | 289 | 3 | field | `audioUrl` |
+| 290 | 290 | 1 | field | `title` |
+| 291 | 291 | 1 | field | `subtitle` |
+| 292 | 292 | 1 | field | `playlist` |
+| 293 | 293 | 1 | field | `startIndex` |
+| 294 | 294 | 1 | field | `rdTorrentId` |
+| 295 | 295 | 1 | field | `torboxTorrentId` |
+| 296 | 296 | 1 | field | `pikpakCollectionId` |
+| 298 | 298 | 1 | field | `requestMagicNext` |
+| 300 | 300 | 1 | field | `requestNextChannel` |
+| 302 | 303 | 2 | field | `requestChannelById` |
+| 305 | 305 | 1 | field | `channelDirectory` |
+| 307 | 307 | 1 | field | `initialContinuousShuffle` |
+| 308 | 308 | 1 | field | `startFromRandom` |
+| 309 | 309 | 1 | field | `randomStartMaxPercent` |
+| 311 | 311 | 1 | field | `startAtPercent` |
+| 313 | 313 | 1 | field | `hideSeekbar` |
+| 315 | 315 | 1 | field | `showChannelName` |
+| 316 | 316 | 1 | field | `channelName` |
+| 317 | 317 | 1 | field | `channelNumber` |
+| 319 | 319 | 1 | field | `showVideoTitle` |
+| 321 | 321 | 1 | field | `hideOptions` |
+| 323 | 323 | 1 | field | `hideBackButton` |
+| 325 | 325 | 1 | field | `httpHeaders` |
+| 327 | 327 | 1 | field | `disableAutoResume` |
+| 329 | 329 | 1 | field | `viewMode` |
+| 331 | 331 | 1 | field | `contentImdbId` |
+| 332 | 332 | 1 | field | `contentType` |
+| 333 | 333 | 1 | field | `contentSeason` |
+| 334 | 334 | 1 | field | `contentEpisode` |
+| 335 | 335 | 1 | field | `contentTitle` |
+| 336 | 336 | 1 | field | `resumePolicy` |
+| 338 | 338 | 1 | field | `iptvChannels` |
+| 339 | 339 | 1 | field | `iptvStartIndex` |
+| 340 | 340 | 1 | field | `iptvCategories` |
+| 341 | 341 | 1 | field | `iptvSourceId` |
+| 342 | 342 | 1 | field | `iptvSourceName` |
+| 343 | 343 | 1 | field | `iptvSelectedCategory` |
+| 344 | 344 | 1 | field | `iptvContentType` |
+| 345 | 345 | 1 | field | `iptvSources` |
+| 346 | 347 | 2 | field | `iptvBrowseProvider` |
+| 349 | 349 | 1 | field | `stremioSources` |
+| 350 | 350 | 1 | field | `stremioCurrentSourceIndex` |
+| 351 | 351 | 1 | field | `resolveStremioSource` |
+| 353 | 353 | 1 | field | `resolveSourceToPlaylist` |
+| 354 | 354 | 1 | field | `startupFailoverEnabled` |
+| 355 | 355 | 1 | field | `startupResolverProvider` |
+| 356 | 356 | 1 | field | `onStremioSourceCommitted` |
+| 357 | 357 | 1 | field | `onStartupSourcesExhausted` |
+| 360 | 360 | 1 | field | `seriesSourceFetcher` |
+| 362 | 362 | 1 | field | `stremioTvChannels` |
+| 363 | 363 | 1 | field | `stremioTvCurrentChannelId` |
+| 364 | 365 | 2 | field | `stremioTvGuideDataProvider` |
+| 366 | 367 | 2 | field | `stremioTvChannelSwitchProvider` |
+| 368 | 368 | 1 | field | `stremioTvNextProvider` |
+| 370 | 370 | 1 | field | `traktScrobble` |
+| 372 | 372 | 1 | field | `traktProgressPercent` |
+| 375 | 375 | 1 | field | `simklScrobble` |
+| 376 | 376 | 1 | field | `simklProgressPercent` |
+| 377 | 377 | 1 | field | `mdblistScrobble` |
+| 378 | 378 | 1 | field | `mdblistProgressPercent` |
+| 380 | 383 | 4 | field | `initialSubtitles` |
+| 385 | 450 | 66 | ctor | `ctor` |
+| 452 | 453 | 2 | method | `createState` |
+| 458 | 460 | 3 | sfield | `_tvReleaseLogChannel` |
+| 461 | 463 | 3 | sfield | `_androidPlayerDiagnosticChannel` |
+| 465 | 465 | 1 | field | `_player` |
+| 469 | 469 | 1 | field | `_playerCreated` |
+| 471 | 474 | 4 | field | `_audioEffectSessionId` |
+| 475 | 475 | 1 | field | `_videoController` |
+| 476 | 477 | 2 | field | `_androidVideoRendererMode` |
+| 479 | 482 | 4 | field | `_tvosDecodeRemedy` |
+| 484 | 487 | 4 | field | `_tvosForceSoftwareDecode` |
+| 488 | 489 | 2 | field | `_contentDisplayMatchMode` |
+| 490 | 490 | 1 | field | `_tvosDisplayMatchToken` |
+| 491 | 491 | 1 | field | `_tvosDisplayMatchTimer` |
+| 492 | 492 | 1 | field | `_lastTvosDisplayMatchSignature` |
+| 494 | 496 | 3 | field | `_audioPassthroughEnabled` |
+| 497 | 497 | 1 | field | `_systemAudioEffectsEnabled` |
+| 498 | 498 | 1 | field | `_appleMultichannelEnabled` |
+| 499 | 499 | 1 | field | `_tvosRouteOutputChannels` |
+| 500 | 500 | 1 | field | `_tvosForceStereoAudio` |
+| 501 | 501 | 1 | field | `_tvosLegacyAudioOutput` |
+| 502 | 502 | 1 | field | `_playerInstanceGeneration` |
+| 503 | 503 | 1 | field | `_playerPresentationInitialized` |
+| 510 | 510 | 1 | field | `_rendererValidatedForSession` |
+| 511 | 511 | 1 | field | `_rendererFallbackInProgress` |
+| 512 | 512 | 1 | field | `_rendererStartupGuardToken` |
+| 513 | 513 | 1 | field | `_rendererStartupValidationGeneration` |
+| 514 | 514 | 1 | field | `_activeOpenedMedia` |
+| 515 | 515 | 1 | field | `_activeMediaShouldPlay` |
+| 516 | 516 | 1 | field | `_activeMediaUserPaused` |
+| 517 | 517 | 1 | field | `_random` |
+| 518 | 518 | 1 | field | `_cachedSeriesPlaylist` |
+| 519 | 519 | 1 | field | `_activePlaylist` |
+| 520 | 520 | 1 | field | `_seriesImdbKnownAtLaunch` |
+| 521 | 521 | 1 | field | `_episodeMetadataReady` |
+| 522 | 522 | 1 | field | `_playerInitializationFuture` |
+| 523 | 523 | 1 | field | `_playlistIdentityToken` |
+| 524 | 524 | 1 | field | `_controlsVisible` |
+| 525 | 526 | 2 | field | `_currentStreamUrl` |
+| 529 | 529 | 1 | field | `_singleFileImdbId` |
+| 530 | 530 | 1 | field | `_singleFileImdbFetched` |
+| 533 | 533 | 1 | field | `_manualContentImdbId` |
+| 534 | 534 | 1 | field | `_manualContentType` |
+| 535 | 535 | 1 | field | `_manualContentSeason` |
+| 536 | 536 | 1 | field | `_manualContentEpisode` |
+| 537 | 537 | 1 | field | `_manualSubtitleDisplayLabel` |
+| 540 | 540 | 1 | field | `_isPikPakRetrying` |
+| 541 | 541 | 1 | field | `_pikPakRetryCount` |
+| 542 | 542 | 1 | field | `_pikPakRetryMessage` |
+| 543 | 544 | 2 | field | `_pikPakRetryId` |
+| 546 | 579 | 34 | method | `_constructPlaylistItemData` |
+| 581 | 605 | 25 | get | `_seriesPlaylist` |
+| 607 | 607 | 1 | field | `_hideTimer` |
+| 613 | 613 | 1 | field | `_tvBarScope` |
+| 614 | 614 | 1 | field | `_tvPlayPauseFocus` |
+| 615 | 615 | 1 | field | `_tvProgressFocus` |
+| 617 | 620 | 4 | field | `_tvRootFocus` |
+| 622 | 629 | 8 | get | `_tvNoTimeline` |
+| 631 | 634 | 4 | field | `_tvScrubTarget` |
+| 636 | 639 | 4 | field | `_tvLastArrowAt` |
+| 640 | 640 | 1 | field | `_tvScrubWasPlaying` |
+| 641 | 641 | 1 | field | `_tvScrubRepeats` |
+| 643 | 646 | 4 | field | `_tvScrubGeneration` |
+| 648 | 649 | 2 | field | `_tvScrubStartedAtGeneration` |
+| 654 | 654 | 1 | field | `_isSeekingWithSlider` |
+| 655 | 655 | 1 | field | `_lastSliderSeekPos` |
+| 659 | 659 | 1 | field | `_showDebrifyBanner` |
+| 660 | 660 | 1 | field | `_debrifyBannerFloatingMounted` |
+| 661 | 661 | 1 | field | `_debrifyBannerTimer` |
+| 669 | 669 | 1 | field | `_showIptvZapBanner` |
+| 673 | 673 | 1 | field | `_iptvZapFloatingMounted` |
+| 674 | 674 | 1 | field | `_iptvZapChannel` |
+| 675 | 675 | 1 | field | `_iptvZapEpg` |
+| 676 | 676 | 1 | field | `_iptvZapEpgLoading` |
+| 680 | 680 | 1 | field | `_iptvZapClock` |
+| 681 | 681 | 1 | field | `_iptvZapHideTimer` |
+| 682 | 682 | 1 | field | `_iptvZapTicker` |
+| 683 | 683 | 1 | field | `_iptvZapEpgTicket` |
+| 685 | 685 | 1 | field | `_ripple` |
+| 686 | 686 | 1 | field | `_panIgnore` |
+| 687 | 687 | 1 | field | `_currentIndex` |
+| 688 | 688 | 1 | field | `_lastTapLocal` |
+| 689 | 690 | 2 | field | `_isManualEpisodeSelection` |
+| 691 | 691 | 1 | field | `_isAutoAdvancing` |
+| 692 | 693 | 2 | field | `_allowResumeForManualSelection` |
+| 694 | 694 | 1 | field | `_manualSelectionResetTimer` |
+| 695 | 695 | 1 | field | `_continuousShuffleEnabled` |
+| 696 | 696 | 1 | field | `_shuffleBag` |
+| 697 | 697 | 1 | field | `_showShuffle` |
+| 698 | 698 | 1 | field | `_showShuffleInProgress` |
+| 699 | 699 | 1 | field | `_activeShowShuffleGeneration` |
+| 700 | 700 | 1 | field | `_showShuffleGeneration` |
+| 701 | 701 | 1 | field | `_episodeNavigationGeneration` |
+| 704 | 704 | 1 | field | `_currentChannelName` |
+| 705 | 705 | 1 | field | `_currentChannelNumber` |
+| 706 | 706 | 1 | field | `_currentChannelId` |
+| 709 | 709 | 1 | field | `_showChannelGuide` |
+| 710 | 710 | 1 | field | `_showSyncOverlay` |
+| 711 | 711 | 1 | field | `_channelEntries` |
+| 714 | 714 | 1 | field | `_showIptvChannelSheet` |
+| 715 | 715 | 1 | field | `_currentIptvIndex` |
+| 717 | 720 | 4 | field | `_iptvDiag` |
+| 728 | 729 | 2 | field | `_iptvReconnectText` |
+| 731 | 733 | 3 | field | `_backgroundedAt` |
+| 735 | 757 | 23 | field | `_iptvLiveRecovery` |
+| 759 | 774 | 16 | method | `_iptvRecoveryEligible` |
+| 776 | 825 | 50 | method | `_performIptvLiveRetune` |
+| 827 | 827 | 1 | field | `_iptvChannelsOverride` |
+| 828 | 828 | 1 | field | `_iptvGuideContextOverride` |
+| 829 | 829 | 1 | field | `_iptvCatchupRequests` |
+| 830 | 830 | 1 | field | `_iptvStartOverActive` |
+| 831 | 831 | 1 | field | `_iptvStartOverLoading` |
+| 832 | 832 | 1 | field | `_iptvStartOverTimelineRequested` |
+| 834 | 837 | 4 | get | `_iptvStartOverTimelineVisible` |
+| 839 | 857 | 19 | method | `_toggleIptvStartOverTimeline` |
+| 859 | 867 | 9 | get | `_canStartOverCurrentIptv` |
+| 869 | 872 | 4 | get | `_iptvLiveEdgeAction` |
+| 874 | 895 | 22 | method | `_toggleIptvStartOver` |
+| 897 | 969 | 73 | method | `_startIptvProgrammeFromBeginning` |
+| 971 | 975 | 5 | get | `_effectiveIptvChannels` |
+| 977 | 980 | 4 | get | `_iptvZapBannerOwnsIdentity` |
+| 982 | 984 | 3 | field | `_playerGuideStyle` |
+| 987 | 987 | 1 | field | `_dockStyle` |
+| 988 | 988 | 1 | field | `_dockPalette` |
+| 989 | 989 | 1 | field | `_dockSize` |
+| 991 | 997 | 7 | field | `_dockExtent` |
+| 999 | 1002 | 4 | field | `_infoPanelHeight` |
+| 1004 | 1005 | 2 | field | `_dockVolume` |
+| 1007 | 1042 | 36 | get | `_infoPanelSignature` |
+| 1044 | 1044 | 1 | field | `_lastInfoPanelSignature` |
+| 1046 | 1050 | 5 | field | `_infoPanelGeneration` |
+| 1052 | 1055 | 4 | field | `_dockGeometryGeneration` |
+| 1057 | 1070 | 14 | method | `_dockGeometrySignature` |
+| 1072 | 1072 | 1 | field | `_lastDockGeometrySignature` |
+| 1074 | 1079 | 6 | method | `didChangeDependencies` |
+| 1081 | 1097 | 17 | method | `_refreshDockGeometry` |
+| 1099 | 1109 | 11 | get | `_reservedInfoPanelHeight` |
+| 1111 | 1112 | 2 | field | `_playerGuideTokens` |
+| 1115 | 1117 | 3 | field | `_recordingSupported` |
+| 1118 | 1118 | 1 | field | `_isRecording` |
+| 1120 | 1121 | 2 | field | `_recordingTempPath` |
+| 1123 | 1138 | 16 | field | `_lifecycle` |
+| 1140 | 1145 | 6 | field | `_pausedByLifecycle` |
+| 1147 | 1151 | 5 | field | `_engineTaskId` |
+| 1153 | 1154 | 2 | field | `_engineFlagOn` |
+| 1156 | 1157 | 2 | field | `_engineRefreshTicket` |
+| 1159 | 1165 | 7 | field | `_recordLogSub` |
+| 1166 | 1166 | 1 | field | `_subtitleDiagnosticLogSub` |
+| 1167 | 1167 | 1 | field | `_subtitleDiagnosticGeneration` |
+| 1168 | 1168 | 1 | field | `_activeSubtitleApplyAttempt` |
+| 1169 | 1171 | 3 | field | `_subtitleSelectionCorrection` |
+| 1173 | 1185 | 13 | field | `_desktopRecordingRevisionListener` |
+| 1187 | 1193 | 7 | field | `_recordingStartGen` |
+| 1195 | 1196 | 2 | get | `_canRecord` |
+| 1198 | 1202 | 5 | field | `_iptvGuideContextGeneration` |
+| 1204 | 1208 | 5 | method | `_persistIptvGuideContext` |
+| 1210 | 1224 | 15 | method | `_anchorIptvGuideCategory` |
+| 1226 | 1255 | 30 | method | `_applyIptvGuideCategory` |
+| 1257 | 1265 | 9 | method | `_cancelPendingIptvCatchup` |
+| 1267 | 1270 | 4 | method | `_beginIptvCatchupRequest` |
+| 1272 | 1273 | 2 | method | `_isCurrentIptvCatchupRequest` |
+| 1276 | 1276 | 1 | field | `_showSourceSheet` |
+| 1277 | 1277 | 1 | field | `_currentSourceIndex` |
+| 1278 | 1278 | 1 | field | `_serverWatch` |
+| 1279 | 1279 | 1 | field | `_openedWatchSource` |
+| 1280 | 1280 | 1 | field | `_watchOpenEpoch` |
+| 1281 | 1281 | 1 | field | `_pendingSourcePlaylist` |
+| 1282 | 1282 | 1 | field | `_sourcePlaylistResolution` |
+| 1284 | 1284 | 1 | field | `_stremioSourcesOverride` |
+| 1285 | 1285 | 1 | field | `_resolveStremioSourceOverride` |
+| 1288 | 1288 | 1 | field | `_augmentedSources` |
+| 1293 | 1293 | 1 | field | `_showPlayerMenu` |
+| 1294 | 1294 | 1 | field | `_playerMenuInitialSection` |
+| 1295 | 1296 | 2 | field | `_playerMenuKey` |
+| 1297 | 1297 | 1 | field | `_menuImdbId` |
+| 1298 | 1298 | 1 | field | `_menuContentType` |
+| 1299 | 1299 | 1 | field | `_menuSeason` |
+| 1300 | 1300 | 1 | field | `_menuEpisode` |
+| 1301 | 1301 | 1 | field | `_menuCachedSlots` |
+| 1302 | 1302 | 1 | field | `_menuCacheKey` |
+| 1305 | 1305 | 1 | field | `_showStremioTvGuide` |
+| 1306 | 1306 | 1 | field | `_currentStremioTvChannelId` |
+| 1307 | 1307 | 1 | field | `_stremioTvChannelsOverride` |
+| 1308 | 1308 | 1 | field | `_showStremioTvNextLoading` |
+| 1309 | 1309 | 1 | field | `_currentStremioTvContentImdbId` |
+| 1310 | 1310 | 1 | field | `_currentStremioTvContentType` |
+| 1311 | 1311 | 1 | field | `_currentStremioTvContentSeason` |
+| 1312 | 1312 | 1 | field | `_currentStremioTvContentEpisode` |
+| 1313 | 1313 | 1 | field | `_currentStremioTvContentTitle` |
+| 1315 | 1318 | 4 | get | `_effectiveSources` |
+| 1320 | 1322 | 3 | get | `_effectiveResolver` |
+| 1324 | 1325 | 2 | get | `_effectiveStremioTvChannels` |
+| 1327 | 1328 | 2 | get | `_effectiveContentImdbId` |
+| 1329 | 1330 | 2 | get | `_effectiveContentType` |
+| 1331 | 1332 | 2 | get | `_effectiveContentSeason` |
+| 1333 | 1334 | 2 | get | `_effectiveContentEpisode` |
+| 1335 | 1336 | 2 | get | `_effectiveContentTitle` |
+| 1338 | 1349 | 12 | get | `_currentSeriesImdbId` |
+| 1354 | 1354 | 1 | field | `_skipSegmentSettingsLoaded` |
+| 1355 | 1355 | 1 | field | `_skipSegmentsEnabled` |
+| 1356 | 1356 | 1 | field | `_skipSegmentProviderId` |
+| 1357 | 1357 | 1 | field | `_skipSegmentProvider` |
+| 1358 | 1358 | 1 | field | `_skipSegments` |
+| 1359 | 1359 | 1 | field | `_loadedSkipSegmentsKey` |
+| 1360 | 1360 | 1 | field | `_loadingSkipSegmentsKey` |
+| 1361 | 1361 | 1 | field | `_skipSegmentsFetchGeneration` |
+| 1362 | 1362 | 1 | field | `_skipSegmentsCache` |
+| 1364 | 1373 | 10 | field | `_skipSegmentsMediaReady` |
+| 1376 | 1376 | 1 | field | `_subtitleSettings` |
+| 1379 | 1379 | 1 | field | `_cachedStremioSubtitles` |
+| 1382 | 1382 | 1 | field | `_cachedAddonSlots` |
+| 1387 | 1387 | 1 | field | `_injectedSubtitleSlots` |
+| 1388 | 1388 | 1 | field | `_cachedSubtitleKey` |
+| 1389 | 1390 | 2 | field | `_selectedStremioSubtitleId` |
+| 1391 | 1392 | 2 | field | `_embeddedSubtitleApplied` |
+| 1393 | 1394 | 2 | field | `_userManuallySelectedSubtitle` |
+| 1395 | 1395 | 1 | field | `_trackPreferencesReadyForAddonSubtitles` |
+| 1396 | 1396 | 1 | field | `_subtitlePrioritySelectionQueue` |
+| 1397 | 1398 | 2 | field | `_addonSubtitleFetchToken` |
+| 1402 | 1402 | 1 | field | `_tempSubtitleFiles` |
+| 1403 | 1403 | 1 | field | `_activeExternalSubtitlePath` |
+| 1404 | 1404 | 1 | field | `_subtitleOnlyForeignAudio` |
+| 1405 | 1405 | 1 | field | `_subtitleForcedOnly` |
+| 1406 | 1406 | 1 | get | `_hasSubtitlePolicy` |
+| 1407 | 1407 | 1 | field | `_subtitlePreferredAudio` |
+| 1408 | 1408 | 1 | field | `_subtitleSelectedAudio` |
+| 1409 | 1409 | 1 | field | `_subtitleAudioRevision` |
+| 1410 | 1410 | 1 | field | `_subtitleAutoSyncEnabled` |
+| 1411 | 1411 | 1 | field | `_subtitleAutoSync` |
+| 1414 | 1415 | 2 | field | `_autoSyncPill` |
+| 1417 | 1417 | 1 | field | `_autoSyncWindowActive` |
+| 1418 | 1418 | 1 | field | `_autoSyncPillHold` |
+| 1419 | 1419 | 1 | field | `_autoSyncPillPhaseTimer` |
+| 1421 | 1421 | 1 | field | `_autoSyncPillLastShown` |
+| 1424 | 1424 | 1 | field | `_isReady` |
+| 1425 | 1425 | 1 | field | `_startupGateActive` |
+| 1430 | 1430 | 1 | field | `_startupGateOverlayHidden` |
+| 1434 | 1434 | 1 | field | `_manualSourceGateActive` |
+| 1435 | 1438 | 4 | get | `_validationGateActive` |
+| 1439 | 1439 | 1 | field | `_startupGateMessage` |
+| 1442 | 1442 | 1 | field | `_resumeWriteGuard` |
+| 1446 | 1446 | 1 | field | `_resumeSaveLock` |
+| 1451 | 1451 | 1 | field | `_resumeVerifyEpoch` |
+| 1452 | 1452 | 1 | field | `_stremioTvStartupSeek` |
+| 1453 | 1453 | 1 | field | `_stremioTvStartupWatch` |
+| 1454 | 1454 | 1 | field | `_isPlaying` |
+| 1457 | 1457 | 1 | field | `_isPipActive` |
+| 1458 | 1458 | 1 | field | `_position` |
+| 1459 | 1459 | 1 | field | `_duration` |
+| 1460 | 1461 | 2 | field | `_playbackUiClock` |
+| 1462 | 1463 | 2 | field | `_activeSkipSegmentUi` |
+| 1464 | 1464 | 1 | field | `_isTransitioning` |
+| 1466 | 1471 | 6 | field | `_seriesNextDispatched` |
+| 1472 | 1472 | 1 | field | `_currentEpisodeMarkedAsFinished` |
+| 1473 | 1473 | 1 | field | `_currentMovieMarkedAsFinished` |
+| 1474 | 1474 | 1 | field | `_currentMovieRewatchStarted` |
+| 1475 | 1476 | 2 | field | `_movieCompletionThreshold` |
+| 1477 | 1478 | 2 | field | `_episodeCompletionThreshold` |
+| 1480 | 1480 | 1 | field | `_posSub` |
+| 1481 | 1481 | 1 | field | `_durSub` |
+| 1482 | 1482 | 1 | field | `_playSub` |
+| 1483 | 1483 | 1 | field | `_paramsSub` |
+| 1484 | 1484 | 1 | field | `_trackSub` |
+| 1485 | 1485 | 1 | field | `_completedSub` |
+| 1486 | 1486 | 1 | field | `_bufferingSub` |
+| 1487 | 1487 | 1 | field | `_iptvErrorSub` |
+| 1488 | 1488 | 1 | field | `_rendererStartupErrorSub` |
+| 1490 | 1494 | 5 | field | `_decoderProbeGeneration` |
+| 1495 | 1495 | 1 | field | `_decoderProbeToken` |
+| 1496 | 1496 | 1 | field | `_decoderProbeParams` |
+| 1497 | 1497 | 1 | field | `_decoderProbeTimer` |
+| 1498 | 1498 | 1 | field | `_lastDecoderDiagnosticSignature` |
+| 1501 | 1501 | 1 | field | `_showBufferingIndicator` |
+| 1502 | 1502 | 1 | field | `_bufferingDebounceTimer` |
+| 1505 | 1505 | 1 | field | `_mode` |
+| 1506 | 1506 | 1 | field | `_gestureStartPosition` |
+| 1507 | 1507 | 1 | field | `_gestureStartVideoPosition` |
+| 1508 | 1508 | 1 | field | `_gestureStartVolume` |
+| 1509 | 1509 | 1 | field | `_gestureStartBrightness` |
+| 1512 | 1514 | 3 | field | `_seekHud` |
+| 1515 | 1516 | 2 | field | `_verticalHud` |
+| 1517 | 1518 | 2 | field | `_aspectRatioHud` |
+| 1521 | 1521 | 1 | field | `_aspectMode` |
+| 1522 | 1522 | 1 | field | `_playbackSpeed` |
+| 1528 | 1528 | 1 | field | `_sleepTimerMode` |
+| 1530 | 1533 | 4 | field | `_sleepTimerDeadline` |
+| 1535 | 1537 | 3 | field | `_sleepTimerArmedMinutes` |
+| 1538 | 1538 | 1 | field | `_sleepTimer` |
+| 1540 | 1544 | 5 | field | `_sleepStopLatched` |
+| 1547 | 1547 | 1 | field | `_speedBeforeHold` |
+| 1548 | 1548 | 1 | field | `_speedHoldHud` |
+| 1551 | 1551 | 1 | field | `_landscapeLocked` |
+| 1553 | 1562 | 10 | get | `_startsInPortrait` |
+| 1565 | 1565 | 1 | field | `_rainbowController` |
+| 1566 | 1566 | 1 | field | `_rainbowOpacity` |
+| 1567 | 1567 | 1 | field | `_rainbowActive` |
+| 1568 | 1568 | 1 | field | `_transitionRunning` |
+| 1569 | 1569 | 1 | field | `_transitionStopTimer` |
+| 1570 | 1570 | 1 | field | `_transitionPhaseTimer` |
+| 1571 | 1571 | 1 | field | `_transitionPhase` |
+| 1572 | 1572 | 1 | field | `_transitionPhase2Started` |
+| 1575 | 1575 | 1 | field | `_tvStaticMessage` |
+| 1576 | 1576 | 1 | field | `_tvStaticSubtext` |
+| 1577 | 1586 | 10 | field | `_tvStaticMessages` |
+| 1589 | 1589 | 1 | field | `_dynamicTitle` |
+| 1592 | 1592 | 1 | field | `_traktScrobbleEnabled` |
+| 1595 | 1595 | 1 | field | `_launchTraktPercentSpent` |
+| 1598 | 1598 | 1 | field | `_traktEpisodeProgress` |
+| 1599 | 1599 | 1 | field | `_traktLastScrobbleAction` |
+| 1600 | 1600 | 1 | field | `_traktHeartbeatTimer` |
+| 1603 | 1603 | 1 | field | `_simklScrobbleEnabled` |
+| 1604 | 1604 | 1 | field | `_launchSimklPercentSpent` |
+| 1607 | 1607 | 1 | field | `_simklEpisodeProgress` |
+| 1608 | 1608 | 1 | field | `_mdblistEpisodeProgress` |
+| 1609 | 1609 | 1 | field | `_episodeTrackerProgressImdbId` |
+| 1610 | 1610 | 1 | field | `_launchMdblistPercentSpent` |
+| 1611 | 1611 | 1 | field | `_simklLastScrobbleAction` |
+| 1612 | 1612 | 1 | field | `_simklHeartbeatTimer` |
+| 1613 | 1613 | 1 | field | `_mdblistSession` |
+| 1615 | 1615 | 1 | field | `_analyticsHeartbeatTimer` |
+| 1617 | 1632 | 16 | method | `_randomStartOffset` |
+| 1634 | 1642 | 9 | method | `_percentStartOffset` |
+| 1644 | 1795 | 152 | method | `initState` |
+| 1797 | 1818 | 22 | method | `_loadSkipSegmentSettings` |
+| 1820 | 1831 | 12 | method | `_loadLocalCompletionThresholds` |
+| 1833 | 1839 | 7 | get | `_usesLocalCompletionTracking` |
+| 1841 | 1841 | 1 | field | `_forceLocalCompletionTracking` |
+| 1843 | 1857 | 15 | method | `_loadTrackingPolicy` |
+| 1859 | 1863 | 5 | get | `_currentLocalMovieImdbId` |
+| 1865 | 1869 | 5 | method | `_resetLocalCompletionState` |
+| 1871 | 1935 | 65 | method | `_currentSkipSegmentRequest` |
+| 1937 | 1998 | 62 | method | `_syncSkipSegmentsForCurrentContent` |
+| 2000 | 2013 | 14 | method | `_resetSkipSegmentState` |
+| 2015 | 2019 | 5 | get | `_activeSkipSegment` |
+| 2021 | 2023 | 3 | method | `_syncActiveSkipSegmentUi` |
+| 2025 | 2039 | 15 | method | `_skipActiveSegment` |
+| 2041 | 2057 | 17 | method | `_initTraktScrobble` |
+| 2059 | 2081 | 23 | get | `_persistablePosition` |
+| 2083 | 2089 | 7 | method | `_traktProgress` |
+| 2091 | 2115 | 25 | method | `_traktSeasonEpisode` |
+| 2117 | 2165 | 49 | method | `_traktScrobble` |
+| 2167 | 2216 | 50 | method | `_startTraktHeartbeat` |
+| 2218 | 2221 | 4 | method | `_stopTraktHeartbeat` |
+| 2223 | 2236 | 14 | method | `_startAnalyticsHeartbeat` |
+| 2238 | 2287 | 50 | method | `_traktScrobbleSeek` |
+| 2294 | 2319 | 26 | method | `_initSimklScrobble` |
+| 2321 | 2328 | 8 | method | `_simklSeriesSEUnresolved` |
+| 2330 | 2368 | 39 | method | `_simklScrobble` |
+| 2370 | 2421 | 52 | method | `_startSimklHeartbeat` |
+| 2423 | 2426 | 4 | method | `_stopSimklHeartbeat` |
+| 2428 | 2469 | 42 | method | `_simklScrobbleSeek` |
+| 2471 | 2486 | 16 | method | `_mdblistTarget` |
+| 2488 | 2545 | 58 | method | `_initMdblistScrobble` |
+| 2547 | 2551 | 5 | method | `_updateMdblistPosition` |
+| 2553 | 2557 | 5 | method | `_mdblistPlay` |
+| 2559 | 2563 | 5 | method | `_mdblistPause` |
+| 2565 | 2579 | 15 | method | `_mdblistStop` |
+| 2581 | 2584 | 4 | method | `_mdblistScrobbleSeek` |
+| 2586 | 2599 | 14 | method | `_resumeTrackingAfterValidationGate` |
+| 2601 | 2609 | 9 | method | `_switchMdblistTarget` |
+| 2611 | 2620 | 10 | method | `_bindEpisodeTrackerProgressIdentity` |
+| 2622 | 2675 | 54 | method | `_currentEpisodeTraktPercent` |
+| 2677 | 2727 | 51 | method | `_currentEpisodeSimklPercent` |
+| 2729 | 2748 | 20 | method | `_currentEpisodeMdblistPercent` |
+| 2750 | 2761 | 12 | method | `_setExternalAudioTrack` |
+| 2763 | 2814 | 52 | method | `_attachAudioEffectSession` |
+| 2816 | 2824 | 9 | method | `_releaseAudioEffectSession` |
+| 2826 | 2833 | 8 | field | `_outputLease` |
+| 2835 | 2857 | 23 | sfield | `_outputLeaseTimeout` |
+| 2859 | 2899 | 41 | method | `_claimVideoOutput` |
+| 2901 | 2904 | 4 | method | `_releaseVideoOutput` |
+| 2906 | 2910 | 5 | field | `_screenDisposed` |
+| 2912 | 2938 | 27 | method | `_createPlayerInstance` |
+| 2940 | 2971 | 32 | method | `_installSubtitleAutoSyncForPlayer` |
+| 2973 | 2978 | 6 | method | `_disposeSubtitleAutoSync` |
+| 2980 | 2996 | 17 | method | `_applyAutoSubtitleSyncOffset` |
+| 2998 | 3033 | 36 | method | `_showSubtitleAutoSyncNotice` |
+| 3035 | 3049 | 15 | method | `_openAutoSyncPillWindow` |
+| 3051 | 3061 | 11 | method | `_showAutoSyncPillResult` |
+| 3063 | 3070 | 8 | method | `_hideAutoSyncPill` |
+| 3072 | 3087 | 16 | method | `_setActiveExternalSubtitlePath` |
+| 3089 | 3099 | 11 | method | `_applyAspectVideoZoom` |
+| 3101 | 3105 | 5 | field | `_passthroughFlipChain` |
+| 3107 | 3121 | 15 | method | `_setAudioPassthroughLive` |
+| 3123 | 3153 | 31 | method | `_applyPassthroughFlip` |
+| 3155 | 3195 | 41 | method | `_configurePlayerAudio` |
+| 3197 | 3223 | 27 | method | `_installTvosDecodeRemedy` |
+| 3225 | 3262 | 38 | method | `_onPlayerInstanceReady` |
+| 3264 | 3703 | 440 | method | `_initializePlayer` |
+| 3705 | 3759 | 55 | method | `_watchStremioTvStartup` |
+| 3761 | 3788 | 28 | method | `_reportStartupFailure` |
+| 3790 | 4038 | 249 | method | `_bindPlayerInstanceSubscriptions` |
+| 4040 | 4072 | 33 | method | `_cancelPlayerInstanceSubscriptions` |
+| 4074 | 4074 | 1 | field | `_mediaServerFrameGeneration` |
+| 4076 | 4108 | 33 | method | `_handleDecoderProbeParams` |
+| 4110 | 4126 | 17 | method | `_resetTvosDisplayMatchForMediaBoundary` |
+| 4128 | 4196 | 69 | method | `_scheduleTvosDisplayMatch` |
+| 4198 | 4239 | 42 | method | `_installDecoderObservers` |
+| 4241 | 4266 | 26 | method | `_scheduleRendererStartupValidation` |
+| 4268 | 4311 | 44 | method | `_validateRendererStartup` |
+| 4313 | 4330 | 18 | method | `_canFallbackExplicitRenderer` |
+| 4332 | 4502 | 171 | method | `_fallbackExplicitRendererToAutomatic` |
+| 4504 | 4519 | 16 | method | `_scheduleDecoderProbe` |
+| 4521 | 4679 | 159 | method | `_reportActiveVideoDecoder` |
+| 4681 | 4691 | 11 | method | `_emitDecoderDiagnosticOnce` |
+| 4693 | 4718 | 26 | method | `_beginMediaGeneration` |
+| 4720 | 4724 | 5 | field | `_networkTuning` |
+| 4726 | 4732 | 7 | field | `_networkTuningDefaults` |
+| 4734 | 4739 | 6 | field | `_networkTuningChain` |
+| 4741 | 4755 | 15 | method | `_applyNetworkTuning` |
+| 4757 | 4792 | 36 | method | `_applyNetworkTuningInner` |
+| 4794 | 4946 | 153 | method | `_openMedia` |
+| 4948 | 4977 | 30 | method | `_releasePlayerDiagnostic` |
+| 4979 | 4999 | 21 | method | `didUpdateWidget` |
+| 5002 | 5010 | 9 | method | `_waitForVideoReady` |
+| 5014 | 5029 | 16 | method | `_waitForSubtitleTracks` |
+| 5031 | 5032 | 2 | static | `_diagnosticSubtitleId` |
+| 5034 | 5046 | 13 | method | `_setNativeSubtitleVisibilityForTrack` |
+| 5048 | 5108 | 61 | method | `_setSubtitleTrackWithDiagnostics` |
+| 5110 | 5184 | 75 | method | `_handleSubtitleApplyFailure` |
+| 5186 | 5197 | 12 | method | `_showSubtitleFailureMessage` |
+| 5200 | 5208 | 9 | method | `_waitForDuration` |
+| 5210 | 5242 | 33 | method | `_getLastPlayedEpisode` |
+| 5244 | 5345 | 102 | method | `_onPlaybackEnded` |
+| 5347 | 5364 | 18 | method | `_startTransitionOverlay` |
+| 5366 | 5367 | 2 | method | `_getCurrentEpisodeTitle` |
+| 5369 | 5473 | 105 | method | `_getCurrentEpisodeTitleInfo` |
+| 5475 | 5555 | 81 | method | `_getCurrentEpisodeSubtitle` |
+| 5557 | 5594 | 38 | method | `_getEnhancedMetadata` |
+| 5596 | 5658 | 63 | method | `_findNextEpisodeIndex` |
+| 5660 | 5689 | 30 | method | `_getMainGroupIndices` |
+| 5691 | 5754 | 64 | method | `_showRandomPlaybackMenu` |
+| 5756 | 5779 | 24 | method | `_toggleContinuousShuffle` |
+| 5781 | 5802 | 22 | method | `_playRandomOnce` |
+| 5804 | 5932 | 129 | method | `_playShowShuffle` |
+| 5934 | 5959 | 26 | method | `_shuffleEligibleIndices` |
+| 5961 | 5980 | 20 | method | `_pickShuffleIndex` |
+| 5982 | 6044 | 63 | method | `_findPreviousEpisodeIndex` |
+| 6046 | 6062 | 17 | method | `_hasNextEpisode` |
+| 6064 | 6078 | 15 | method | `_hasPreviousEpisode` |
+| 6080 | 6083 | 4 | method | `_clearBufferingIndicator` |
+| 6085 | 6236 | 152 | method | `_goToNextEpisode` |
+| 6238 | 6279 | 42 | method | `_fetchNextEpisodeInPlayer` |
+| 6281 | 6359 | 79 | method | `_handleSeriesNextEpisode` |
+| 6361 | 6378 | 18 | method | `_parseChannelDirectory` |
+| 6380 | 6391 | 12 | method | `_loadSubtitleSettings` |
+| 6393 | 6401 | 9 | method | `_dockBand` |
+| 6403 | 6429 | 27 | method | `_skipButtonBottom` |
+| 6431 | 6450 | 20 | method | `_loadDockPrefs` |
+| 6452 | 6519 | 68 | method | `_loadPlayerDefaults` |
+| 6521 | 6536 | 16 | method | `_onSubtitleStyleChanged` |
+| 6538 | 6543 | 6 | method | `_applySubtitleSyncOffset` |
+| 6545 | 6555 | 11 | method | `_resetSubtitleSyncOffset` |
+| 6557 | 6564 | 8 | method | `_tvReleaseFocusForOverlay` |
+| 6566 | 6572 | 7 | method | `_showSyncOverlayPanel` |
+| 6574 | 6576 | 3 | method | `_hideSyncOverlay` |
+| 6578 | 6601 | 24 | method | `_buildSyncOverlay` |
+| 6603 | 6625 | 23 | method | `_buildSliderSyncOverlay` |
+| 6627 | 6638 | 12 | method | `_showChannelGuideOverlay` |
+| 6640 | 6645 | 6 | method | `_hideChannelGuideOverlay` |
+| 6647 | 6656 | 10 | method | `_showIptvChannelSheetOverlay` |
+| 6658 | 6664 | 7 | method | `_hideIptvChannelSheet` |
+| 6666 | 6692 | 27 | method | `_switchToIptvGuideChannel` |
+| 6694 | 6784 | 91 | method | `_reanchorIptvRingToCategory` |
+| 6800 | 6804 | 5 | sfield | `_kIptvZapPageSize` |
+| 6806 | 6807 | 2 | sfield | `_kIptvZapEdgeMargin` |
+| 6809 | 6811 | 3 | field | `_iptvZapWindowOffset` |
+| 6813 | 6815 | 3 | field | `_iptvZapCategoryTotal` |
+| 6817 | 6821 | 5 | field | `_iptvZapPagingActive` |
+| 6823 | 6828 | 6 | field | `_iptvZapSourceId` |
+| 6829 | 6829 | 1 | field | `_iptvZapCategory` |
+| 6830 | 6830 | 1 | field | `_iptvZapCategories` |
+| 6832 | 6832 | 1 | field | `_iptvZapRequestTicket` |
+| 6833 | 6833 | 1 | field | `_iptvZapRequestInFlight` |
+| 6835 | 6838 | 4 | field | `_iptvZapPendingInputs` |
+| 6839 | 6839 | 1 | field | `_iptvZapDrainingInputs` |
+| 6841 | 6843 | 3 | field | `_iptvZapCachedOriginCategory` |
+| 6844 | 6844 | 1 | field | `_iptvZapCachedDirection` |
+| 6845 | 6845 | 1 | field | `_iptvZapCachedPage` |
+| 6847 | 6851 | 5 | get | `_canZapIptvChannel` |
+| 6853 | 6857 | 5 | method | `_clearIptvZapBoundaryCache` |
+| 6859 | 6872 | 14 | method | `_resetIptvZapPaging` |
+| 6874 | 6876 | 3 | field | `_iptvZapArmingPaging` |
+| 6878 | 6898 | 21 | method | `_ensureIptvZapPagingArmed` |
+| 6900 | 6942 | 43 | method | `_zapIptvChannel` |
+| 6944 | 6991 | 48 | method | `_requestIptvZapPage` |
+| 6993 | 7026 | 34 | method | `_parseIptvZapPage` |
+| 7028 | 7055 | 28 | method | `_installIptvZapWindow` |
+| 7057 | 7095 | 39 | method | `_mergeIptvZapPage` |
+| 7097 | 7120 | 24 | method | `_prefetchIptvZapPage` |
+| 7122 | 7128 | 7 | method | `_adjacentIptvCategory` |
+| 7130 | 7172 | 43 | method | `_prefetchAdjacentIptvCategory` |
+| 7174 | 7188 | 15 | method | `_consumeCachedAdjacentIptvCategory` |
+| 7190 | 7205 | 16 | method | `_enterIptvZapCategory` |
+| 7207 | 7256 | 50 | method | `_requestAdjacentIptvCategory` |
+| 7258 | 7261 | 4 | method | `_queuePendingIptvZapInput` |
+| 7263 | 7279 | 17 | method | `_drainPendingIptvZapInputs` |
+| 7281 | 7354 | 74 | method | `_playIptvCatchup` |
+| 7356 | 7360 | 5 | field | `_iptvSwitchTicket` |
+| 7362 | 7365 | 4 | field | `_iptvChannelKey` |
+| 7367 | 7374 | 8 | field | `_iptvErrorsMuted` |
+| 7376 | 7380 | 5 | field | `_lastIptvErrorShown` |
+| 7382 | 7436 | 55 | method | `_onIptvStreamError` |
+| 7438 | 7485 | 48 | method | `_setIptvSources` |
+| 7487 | 7504 | 18 | method | `_initIptvStremioSources` |
+| 7506 | 7517 | 12 | get | `_currentIptvChannel` |
+| 7532 | 7532 | 1 | field | `_lastLiveChannelTimer` |
+| 7533 | 7533 | 1 | field | `_lastLiveChannelArmedUrl` |
+| 7535 | 7540 | 6 | sfield | `_lastLiveChannelSettle` |
+| 7542 | 7579 | 38 | method | `_noteLiveChannelPlaying` |
+| 7581 | 7589 | 9 | get | `_hasIptvNext` |
+| 7591 | 7592 | 2 | get | `_hasIptvPrevious` |
+| 7594 | 7603 | 10 | get | `_isIptvSeriesContext` |
+| 7605 | 7608 | 4 | field | `_preferredIptvAudioLanguage` |
+| 7610 | 7620 | 11 | method | `_iptvSeriesAudioKey` |
+| 7622 | 7643 | 22 | method | `_captureIptvAudioLanguage` |
+| 7645 | 7689 | 45 | method | `_applyIptvAudioPreference` |
+| 7691 | 7721 | 31 | method | `_recordIptvWatchForChannel` |
+| 7723 | 7737 | 15 | method | `_desktopCaptureForCurrent` |
+| 7739 | 7911 | 173 | method | `_toggleRecording` |
+| 7913 | 7924 | 12 | method | `_playingLiveUrl` |
+| 7926 | 7958 | 33 | method | `_engineRecordUrlForCurrent` |
+| 7960 | 7992 | 33 | method | `_refreshEngineRecordingState` |
+| 7994 | 8010 | 17 | method | `_recordingFileName` |
+| 8012 | 8046 | 35 | method | `_currentRecordingResource` |
+| 8048 | 8056 | 9 | method | `_tapMpvLogsForRecording` |
+| 8058 | 8061 | 4 | method | `_untapMpvLogs` |
+| 8063 | 8133 | 71 | method | `_startRecording` |
+| 8135 | 8153 | 19 | method | `_disarmStrayRecording` |
+| 8155 | 8212 | 58 | method | `_stopRecording` |
+| 8214 | 8244 | 31 | method | `_publishRecording` |
+| 8246 | 8296 | 51 | method | `_recordingTargetPath` |
+| 8298 | 8502 | 205 | method | `_switchToIptvChannel` |
+| 8504 | 8561 | 58 | method | `_tryOpenLiveStream` |
+| 8563 | 8700 | 138 | method | `_openStartupDebridDirect` |
+| 8702 | 8880 | 179 | method | `_tryOpenStartupVod` |
+| 8882 | 9151 | 270 | method | `_openInitialVodWithFailover` |
+| 9153 | 9173 | 21 | method | `_commitValidatedStremioSource` |
+| 9175 | 9184 | 10 | method | `_startupSourceFields` |
+| 9186 | 9191 | 6 | method | `_setStartupGateActive` |
+| 9193 | 9197 | 5 | method | `_setStartupGateMessage` |
+| 9201 | 9209 | 9 | method | `_showSourceSheetOverlay` |
+| 9211 | 9216 | 6 | method | `_hideSourceSheet` |
+| 9218 | 9238 | 21 | method | `_buildSourceSheetResolver` |
+| 9240 | 9265 | 26 | method | `_handleSourceSelected` |
+| 9267 | 9322 | 56 | method | `_switchToIptvSource` |
+| 9324 | 9623 | 300 | method | `_switchToSourcePlaylist` |
+| 9625 | 9625 | 1 | field | `_activeHttpHeaders` |
+| 9627 | 9817 | 191 | method | `_switchToStremioSource` |
+| 9821 | 9827 | 7 | method | `_findInitialStremioTvChannelId` |
+| 9829 | 9832 | 4 | get | `_hasStremioTvGuide` |
+| 9834 | 9836 | 3 | get | `_hasStremioTvNext` |
+| 9838 | 9839 | 2 | get | `_hasAnyNext` |
+| 9841 | 9847 | 7 | method | `_showStremioTvGuideOverlay` |
+| 9849 | 9853 | 5 | method | `_hideStremioTvGuide` |
+| 9855 | 9860 | 6 | method | `_setStremioTvNextLoading` |
+| 9862 | 9884 | 23 | method | `_applyStremioTvGuidePlaybackData` |
+| 9886 | 9895 | 10 | method | `_parseStremioTvSources` |
+| 9897 | 9988 | 92 | method | `_switchToStremioTvChannel` |
+| 9990 | 10057 | 68 | method | `_goToNextStremioTvSlot` |
+| 10059 | 10187 | 129 | method | `_goToChannelById` |
+| 10189 | 10330 | 142 | method | `_goToNextChannel` |
+| 10332 | 10372 | 41 | method | `_goToPreviousEpisode` |
+| 10374 | 10419 | 46 | method | `_markCurrentEpisodeAsFinished` |
+| 10421 | 10439 | 19 | method | `_markCurrentMovieAsFinished` |
+| 10441 | 10477 | 37 | method | `_checkAndApplyLocalCompletion` |
+| 10479 | 10502 | 24 | method | `_clearTransitionOnFailure` |
+| 10504 | 10560 | 57 | method | `_loadPlaylistIndex` |
+| 10562 | 10794 | 233 | method | `_loadPlaylistIndexAttempt` |
+| 10796 | 10970 | 175 | method | `_resolvePlaylistEntryUrl` |
+| 10972 | 11079 | 108 | method | `_waitForVideoMetadata` |
+| 11081 | 11414 | 334 | method | `_playPikPakVideoWithRetry` |
+| 11416 | 11474 | 59 | method | `_preloadEpisodeInfo` |
+| 11476 | 11498 | 23 | method | `_retryAddonSubtitleFetchAfterSeriesMetadata` |
+| 11500 | 11555 | 56 | method | `_fetchSingleFileMovieMetadata` |
+| 11557 | 11568 | 12 | method | `_saveImdbIdToPlaylist` |
+| 11570 | 11628 | 59 | method | `_saveSeriesPosterToPlaylist` |
+| 11630 | 11630 | 1 | field | `_iosPipStarting` |
+| 11631 | 11631 | 1 | field | `_iosPipDetached` |
+| 11632 | 11632 | 1 | field | `_iosPipSession` |
+| 11633 | 11633 | 1 | field | `_lastIosPipPositionSecond` |
+| 11635 | 11684 | 50 | method | `_enterPip` |
+| 11686 | 11695 | 10 | method | `_armPipAutoEnter` |
+| 11697 | 11714 | 18 | method | `_pushPipState` |
+| 11716 | 11743 | 28 | method | `_onPipModeChanged` |
+| 11745 | 11762 | 18 | method | `_restoreIosPipPlayer` |
+| 11764 | 11794 | 31 | method | `_onPipAction` |
+| 11796 | 11835 | 40 | method | `_pauseForBackground` |
+| 11837 | 11870 | 34 | method | `_resumeFromBackground` |
+| 11872 | 11881 | 10 | method | `_syncWakelock` |
+| 11883 | 12089 | 207 | method | `dispose` |
+| 12091 | 12091 | 1 | field | `_autosaveTimer` |
+| 12093 | 12150 | 58 | get | `_resumeKey` |
+| 12152 | 12175 | 24 | method | `_torboxResumeKeyForEntry` |
+| 12177 | 12188 | 12 | method | `_pikpakResumeKeyForEntry` |
+| 12190 | 12204 | 15 | method | `_resumeIdForEntry` |
+| 12206 | 12402 | 197 | method | `_maybeRestoreResume` |
+| 12404 | 12440 | 37 | method | `_seekForResume` |
+| 12442 | 12482 | 41 | method | `_verifyResumeLanding` |
+| 12484 | 12526 | 43 | method | `_resumeSeekLanded` |
+| 12528 | 12642 | 115 | method | `_getEnhancedPlaybackState` |
+| 12644 | 12662 | 19 | method | `_resumeSaveBlocked` |
+| 12664 | 12682 | 19 | method | `_observeServerWatch` |
+| 12684 | 12703 | 20 | method | `_saveResume` |
+| 12705 | 12900 | 196 | method | `_saveResumeLocked` |
+| 12902 | 12905 | 4 | field | `_tvAutoHideBlocked` |
+| 12907 | 12958 | 52 | method | `_scheduleAutoHide` |
+| 12962 | 12978 | 17 | method | `_tvShowBar` |
+| 12980 | 12987 | 8 | method | `_tvHideBar` |
+| 12989 | 13003 | 15 | method | `_tvScrubBegin` |
+| 13005 | 13023 | 19 | method | `_tvScrubStep` |
+| 13025 | 13046 | 22 | method | `_tvScrubCommit` |
+| 13048 | 13055 | 8 | method | `_tvAbandonScrub` |
+| 13057 | 13064 | 8 | method | `_tvScrubCancel` |
+| 13066 | 13204 | 139 | method | `_buildTvControls` |
+| 13206 | 13214 | 9 | field | `_iptvSheetKey` |
+| 13216 | 13221 | 6 | get | `_overlayJustClosed` |
+| 13223 | 13229 | 7 | get | `_anyPlayerOverlayOpen` |
+| 13231 | 13263 | 33 | method | `_closeTopPlayerOverlay` |
+| 13265 | 13282 | 18 | method | `_openTvGuide` |
+| 13284 | 13403 | 120 | method | `_handleTvKey` |
+| 13405 | 13412 | 8 | method | `_toggleControls` |
+| 13414 | 13437 | 24 | method | `_prepareIptvBannerData` |
+| 13439 | 13461 | 23 | method | `_raiseIptvZapBanner` |
+| 13463 | 13490 | 28 | method | `_onControlsVisibilityChanged` |
+| 13492 | 13505 | 14 | method | `_hideIptvZapBanner` |
+| 13507 | 13527 | 21 | method | `_syncIptvBannerTicker` |
+| 13529 | 13532 | 4 | field | `_iptvArchiveRetryAt` |
+| 13534 | 13547 | 14 | method | `_refreshIptvBannerEpgIfEnded` |
+| 13549 | 13568 | 20 | method | `_loadIptvZapBannerEpg` |
+| 13570 | 13606 | 37 | method | `_handleDoubleTap` |
+| 13608 | 13632 | 25 | method | `_onPanStart` |
+| 13634 | 13686 | 53 | method | `_onPanUpdate` |
+| 13688 | 13704 | 17 | method | `_onPanEnd` |
+| 13706 | 13706 | 1 | method | `_format` |
+| 13708 | 13723 | 16 | method | `_togglePlay` |
+| 13725 | 13737 | 13 | method | `_setManualSelectionMode` |
+| 13739 | 13822 | 84 | method | `_cycleAspectMode` |
+| 13826 | 13835 | 10 | get | `_sleepTimerMinutesLeft` |
+| 13837 | 13842 | 6 | get | `_sleepTimerButtonLabel` |
+| 13844 | 13863 | 20 | method | `_showSleepTimerSheet` |
+| 13865 | 13877 | 13 | method | `_applySleepTimerSelection` |
+| 13879 | 13889 | 11 | method | `_startSleepCountdown` |
+| 13891 | 13905 | 15 | method | `_cancelSleepTimer` |
+| 13907 | 13918 | 12 | method | `_fireSleepTimer` |
+| 13920 | 13929 | 10 | method | `_showSleepTimerToast` |
+| 13931 | 13939 | 9 | method | `_changeSpeed` |
+| 13941 | 13949 | 9 | method | `_onSpeedButton` |
+| 13951 | 13957 | 7 | method | `_onAspectButton` |
+| 13959 | 13963 | 5 | method | `_setPlaybackSpeed` |
+| 13965 | 13970 | 6 | method | `_setAspectModeDirect` |
+| 13972 | 14000 | 29 | method | `_onLongPressStart` |
+| 14002 | 14010 | 9 | method | `_onLongPressEnd` |
+| 14012 | 14028 | 17 | method | `_toggleOrientation` |
+| 14030 | 14030 | 1 | method | `_currentFit` |
+| 14042 | 14055 | 14 | method | `_buildSubtitleViewConfig` |
+| 14058 | 14069 | 12 | method | `_buildCustomAspectRatioVideo` |
+| 14072 | 14078 | 7 | method | `_buildTransitionOverlay` |
+| 14080 | 14122 | 43 | method | `_buildStremioTvNextLoadingOverlay` |
+| 14124 | 14131 | 8 | get | `_recordingActiveNow` |
+| 14133 | 14138 | 6 | get | `_debrifyTvOwnsIdentity` |
+| 14140 | 14159 | 20 | method | `_buildDebrifyTvInfoPanel` |
+| 14161 | 14170 | 10 | method | `_syncPlaybackClockVisibility` |
+| 14172 | 14185 | 14 | method | `_raiseDebrifyBanner` |
+| 14187 | 14207 | 21 | method | `_armDebrifyBannerTimer` |
+| 14209 | 14219 | 11 | method | `_hideDebrifyBanner` |
+| 14221 | 14234 | 14 | method | `_buildIptvInfoPanel` |
+| 14237 | 14238 | 2 | method | `_getCustomAspectRatio` |
+| 14242 | 14253 | 12 | get | `_canFetchEpisodes` |
+| 14255 | 14255 | 1 | field | `_episodeFetchInProgress` |
+| 14259 | 14259 | 1 | field | `_syntheticGuidePlaylist` |
+| 14260 | 14260 | 1 | field | `_syntheticGuideEntries` |
+| 14262 | 14262 | 1 | static | `_pad2` |
+| 14264 | 14288 | 25 | method | `_buildSyntheticGuide` |
+| 14290 | 14306 | 17 | method | `_packCoversSeason` |
+| 14308 | 14513 | 206 | method | `_fetchAndPlayEpisode` |
+| 14515 | 14631 | 117 | method | `_tryEpisodeCandidate` |
+| 14633 | 14656 | 24 | method | `_resolveAdjacentWithCachedGuide` |
+| 14658 | 14674 | 17 | method | `_adjacentEpisode` |
+| 14676 | 14698 | 23 | method | `_prepareNextDirectEpisode` |
+| 14700 | 14735 | 36 | method | `_showPlaylistSheet` |
+| 14737 | 15908 | 1172 | method | `build` |
+| 15910 | 15918 | 9 | get | `_isAnyOverlayOpen` |
+| 15920 | 15930 | 11 | method | `_wakeControlsOnPointer` |
+| 15932 | 15948 | 17 | method | `_currentPlaybackTitleForIdentity` |
+| 15950 | 15975 | 26 | method | `_identitySearchInitialQuery` |
+| 15977 | 15978 | 2 | method | `_normalisedContentType` |
+| 15980 | 15989 | 10 | method | `_subtitleIdentityLabelForSheet` |
+| 15991 | 16005 | 15 | method | `_subtitleSearchDisplayLabel` |
+| 16007 | 16034 | 28 | method | `_filterIdentitySearchResults` |
+| 16036 | 16040 | 5 | method | `_normalisePosterUrl` |
+| 16042 | 16050 | 9 | method | `_identityMetaSubtitle` |
+| 16052 | 16123 | 72 | method | `_buildIdentifyTitleResultTile` |
+| 16125 | 16402 | 278 | method | `_showIdentifyTitleSearchSheet` |
+| 16404 | 16431 | 28 | method | `_currentSeasonEpisodeForIdentity` |
+| 16433 | 16530 | 98 | method | `_requestSeasonEpisodeForIdentity` |
+| 16532 | 16645 | 114 | method | `_identifyTitleAndFetchSubtitles` |
+| 16647 | 16825 | 179 | method | `_showTracksSheet` |
+| 16829 | 16854 | 26 | method | `_openPlayerMenuAt` |
+| 16856 | 16913 | 58 | method | `_openPlayerMenuQuick` |
+| 16915 | 16919 | 5 | method | `_hidePlayerMenu` |
+| 16921 | 16929 | 9 | method | `_menuApplyTrackChange` |
+| 16931 | 16940 | 10 | method | `_audioTrackChoiceChanged` |
+| 16942 | 16949 | 8 | method | `_menuSelectAudio` |
+| 16951 | 16970 | 20 | method | `_withManualSubtitleChoice` |
+| 16972 | 16982 | 11 | method | `_menuSubtitlesOff` |
+| 16984 | 17003 | 20 | method | `_menuSelectEmbeddedSubtitle` |
+| 17005 | 17045 | 41 | method | `_menuSelectAddonSubtitle` |
+| 17047 | 17080 | 34 | method | `_applyStremioSubtitleFromTracksSheet` |
+| 17082 | 17162 | 81 | method | `_buildPlayerMenuPanel` |
+| 17164 | 17190 | 27 | method | `_resetSubtitleState` |
+| 17192 | 17388 | 197 | method | `_restoreTrackPreferences` |
+| 17390 | 17442 | 53 | method | `_applyDefaultAudioLanguage` |
+| 17444 | 17450 | 7 | get | `_audioAllowsAutomaticSubtitles` |
+| 17452 | 17500 | 49 | method | `_refreshSubtitleAudioPolicy` |
+| 17502 | 17611 | 110 | method | `_applyDefaultSubtitleLanguage` |
+| 17613 | 17640 | 28 | method | `_applyForcedSubtitle` |
+| 17642 | 17719 | 78 | method | `_downloadStremioSubtitleToTempFile` |
+| 17721 | 17762 | 42 | method | `_applyExternalSubtitleTrack` |
+| 17764 | 17774 | 11 | method | `_cleanupTempSubtitleFilesSync` |
+| 17776 | 17896 | 121 | method | `_fetchAndMaybeAutoSelectAddonSubtitle` |
+| 17898 | 17908 | 11 | method | `_applySubtitleSourcePriority` |
+| 17910 | 17968 | 59 | method | `_applySubtitlePriorityUpdate` |
+| 17970 | 17983 | 14 | method | `_findSeriesEpisodeForCurrentIndex` |
+| 17985 | 18023 | 39 | method | `_persistTrackChoice` |
+| 18025 | 18034 | 10 | static | `_subtitlePreferenceMatchesAttempt` |
+| 18036 | 18043 | 8 | method | `_generateFilenameHash` |
+| 18047 | 18047 | 1 | field | `icon` |
+| 18048 | 18048 | 1 | field | `title` |
+| 18049 | 18049 | 1 | field | `subtitle` |
+| 18050 | 18050 | 1 | field | `onTap` |
+| 18052 | 18057 | 6 | ctor | `ctor` |
+| 18059 | 18105 | 47 | method | `build` |
+
+## Phase 1 checkpoint R — 2026-10-11
+
+R is `a43f44cbb33a05830bbcb0325c98a768d10cc166`, the format-only
+checkpoint: 18,187 physical lines, 157 directives, 8 top-level declarations,
+827 class members (725 in State). `vplayer_p1_retained.json` owns every
+scanner token in 893 disjoint spans; whole-class rows own their nested
+members. The complete analyzer inventory is archived as
+`<git-common-dir>/refactor-evidence/vplayer/p1/R-inventory.json`.
+
+The Phase-1 draft below is unapplied. R's AST ranges include declaration
+documentation; destinations are relative to `lib/features/video_player/`.
+Parameter-only re-proofs and production caller characterization remain Step 0.
+
+| Original | R lines | Draft destination |
+|---|---|---|
+| `_ManualSourceValidationFailure` | 167–169 | `models/vp_manual_source_validation_failure.dart` |
+| `_SeasonEpisodeSelection` | 171–176 | `models/vp_season_episode_selection.dart` |
+| `_SubtitleApplyAttempt` | 178–200 | `models/vp_subtitle_apply_attempt.dart` |
+| `_IptvZapPage` | 202–223 | `models/vp_iptv_zap_page.dart` |
+| `IptvCatchupRequestGate` | 225–254 | `models/iptv_catchup_request_gate.dart` |
+| `_RandomChoiceTile` | 18127–18187 | `presentation/vp_random_choice_tile.dart` |
+| `_format` | 13773 | `application/vp_format.dart` |
+| `_pad2` | 14329 | `application/vp_format.dart` |
+| `_generateFilenameHash` | 18117–18124 | `application/vp_filename_hash.dart` |
+| `_normalisePosterUrl` | 16103–16107 | `application/vp_identity_text.dart` |
+| `_normalisedContentType` | 16044–16045 | `application/vp_identity_text.dart` |
+| `_identityMetaSubtitle` | 16109–16117 | `application/vp_identity_text.dart` |
+| `_filterIdentitySearchResults` | 16074–16101 | `application/vp_identity_text.dart` |
+| `_subtitleSearchDisplayLabel` | 16058–16072 | `application/vp_identity_text.dart` |
+| `_diagnosticSubtitleId` | 5073–5074 | `application/vp_subtitle_identity.dart` |
+| `_subtitlePreferenceMatchesAttempt` | 18106–18115 | `application/vp_subtitle_identity.dart` |
+
+Source-reader adjustment at Step T: the delayed-startup assertion in
+`test/manual_source_validation_contract_test.dart` keeps its original
+`_reportStartupFailure` → `_bindPlayerInstanceSubscriptions` anchor and
+now matches the complete `current()` guard with whitespace-tolerant syntax.
+Formatting split the old one-line prefix. No declaration moved, no assertion
+was deleted, and all other source readers/consumer paths remain unchanged.
+
+## Phase 1 Step 0 — original S coverage (2026-10-11)
+
+The application ORIGINAL is S `80839d827383b05078178f292b56efbddd166fb1`,
+not a moved implementation. The only application changes from R are the
+three H1 interception sites, foundation import and frozen hook scaffolding.
+The separate S commit is named the characterization checkpoint. Step 0 adds
+only tests, fixtures, source-reading/binding tooling and command registration.
+`vplayer_p1.json` remains draft; no production destination exists.
+
+The fake player, native platform and video controller use `implements`, never
+a vendored/native constructor. Selected `track` and available `tracks` are
+coherent with the broadcast streams, and the real `mkv.Video` subtree mounts.
+Factories capture original configurations; `ready` is delivered only after
+the original assignments/binds. Frame geometry/readiness, failed/delayed
+operations, observers, commands and disposal completion are controllable.
+The environment initializes committed profile storage and the synchronous
+`ProfilePolicyGuard` mirror, records display/window/SystemChrome calls,
+intercepts HTTP and path-provider access, and drains original timers and
+leases through bounded pumps. The Flutter binding's pending-timer assertions
+remain enabled. Test storage/runtime files stay under Phase-1 evidence.
+
+Every harness command passes `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; every
+file is registered in `dev/tool/ci_behavior_tests.txt`. The installer also has
+a no-flag run. Feature move/import/analyzer CI is still deferred to the Step-1
+commit creating the first `lib/features/video_player/models/` file.
+
+### Coverage matrix
+
+| Frozen original | Original caller / observable evidence | Tests / mutation proofs |
+|---|---|---|
+| `_ManualSourceValidationFailure` | Source-sheet pick rejects decoded-media failure, reopens outgoing direct/playlist media at five minutes, never commits rejected row, restores source highlight | `video_player_source_test.dart`; m13–m14 |
+| `_SeasonEpisodeSelection` | Identity sheet rejects empty/nonpositive values, accepts trimmed S3E7, cancellation leaves identity unset | `video_player_identity_test.dart`; m11–m12 |
+| `_SubtitleApplyAttempt` | Menu selection succeeds; immediate and late decoder failures roll back once; persisted audio identity stays captured after an independent audio event; external subtitle download/persistence/rollback | `video_player_subtitle_test.dart`; m08–m10 |
+| `_IptvZapPage` | Channel keys adopt offset-100 window, request offset 102 using adopted source identity, stop at total 104, wrap; underreported total does not fetch beyond the provided window | `video_player_zap_test.dart`; m15–m16, m32 |
+| `IptvCatchupRequestGate` | Active completion consumes ticket; cancellation strands it; stale completion preserves newer ticket; original guide callbacks reject late replay after supersession/channel change | `video_player_catchup_gate_test.dart`, `video_player_catchup_caller_test.dart`; m17–m21 |
+| `_RandomChoiceTile` | **Dead original.** `_showRandomPlaybackMenu` returns through the constant-true `kUnifiedPlayerMenuEnabled` branch before constructing this legacy widget. The active unified menu's once/continuous choices are characterized; its production flag is unchanged | `video_player_menu_test.dart`; active menu m22. No claim of legacy tile execution |
+| `_format` | **Step-0 claim corrected in Step 0b:** the State method is passed as a tear-off to `SeekHud`; the original control-duration test only executes separate `Controls._format` | Step 0b adds mounted pan/HUD target and delta assertions in `video_player_menu_test.dart`; c19/f01 |
+| `_pad2` | Original playlist action builds synthetic guide filename `S03E07 Plain title`, preserving parsed season/episode | `video_player_menu_test.dart`; m23 |
+| `_generateFilenameHash` | `_resumeIdForEntry` fallback for plain playlist with no TorBox/PikPak IDs: existing bookmark restored at three minutes and stored under expected hash; `.mkv`, uppercase `.MP4`, empty entry-title fallback to widget title | `video_player_resume_test.dart`; m05–m07 |
+| `_normalisePosterUrl` | Identity result tile uses HTTPS-normalized protocol-relative poster | `video_player_identity_test.dart`; m27 |
+| `_normalisedContentType` | Uppercase SERIES search result adopts series identity and opens season/episode dialog | `video_player_identity_test.dart`; m28 |
+| `_identityMetaSubtitle` | Rendered Series/Movie, year and addon labels | `video_player_identity_test.dart`; m29 |
+| `_filterIdentitySearchResults` | Search caller keeps richer duplicate, filters unsupported type and missing IMDb identity | `video_player_identity_test.dart`; m30 |
+| `_subtitleSearchDisplayLabel` | Accepted selection returns and renders `Subtitles for Fixture Series (2024) S3E7` | `video_player_identity_test.dart`; m31 |
+| `_diagnosticSubtitleId` | Failed embedded selection logs original requested ID and selection source | `video_player_subtitle_test.dart`; m09 |
+| `_subtitlePreferenceMatchesAttempt` | Persisted embedded/external preference is matched to its apply attempt before late-failure rollback; persisted audio owner preserved | `video_player_subtitle_test.dart`; m08, m10 |
+
+All 10 helpers pass the shared analyzer AST lexical-binding scan at S: no
+`this`, widget, context, State field/member, service or I/O reference. Exact
+application imports are recorded and checked. The already-compiling strict
+feature top-level rename probe at R is valid because those helper bodies are
+unchanged at S. No helper failed or was transformed/dropped. Evidence:
+`parameter-only-S.json`, `parameter-only-S.txt`, `probe-at-R-analyze.txt`.
+The `_RandomChoiceTile` dead original is the shared-rule-4 coverage exception.
+Step 0b corrects the initial `_format` dead-code claim and closes its HUD gap;
+both declarations remain token-frozen in the draft. PiP platform branches remain device-pending
+on this desktop harness; no platform-predicate seam or device command is used.
+
+Four launch smoke cases (direct URL, plain playlist, IPTV channel list, Stremio
+TV channel) assert configuration, factory order, same player/controller owner,
+media URL/headers/play flag, display/orientation calls and clean disposal.
+`video_player_mount_test.dart` has m01–m04. The seam guard and installer flag
+test have m24–m25. The current per-declaration reader has m26 and real-config
+fixtures for repeated relocation, changed body, missing/duplicate fates and
+missing current owner. It validates ownership/body/history before returning
+live text; it never uses historical text to satisfy a source assertion.
+Existing source-test anchors and theme paths need no retarget yet because no
+declaration has moved.
+
+### Assertion-failing mutation table
+
+All accepted runs use a detached worktree pinned to S under
+`<git-common-dir>/refactor-evidence/vplayer/p1/mutations/original-S`. The
+unmutated control passes all 26 tests. Every accepted mutation changes one
+analyzer-owned original application declaration, leaves tests unchanged,
+and fails an assertion. Compile/load failures and hangs are not kills.
+The original source is restored after every run. Exact patches, commands,
+JSONL and assertion text are archived as `mutations/runs/mNN.*`; the result
+ledgers are `mutation-results.json` and `helper-mutation-results.json`.
+
+| ID | Test | Original declaration mutation | Result |
+|---|---|---|---|
+| m01 | `video_player_mount_test.dart`: original S mounts direct URL and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m02 | `video_player_mount_test.dart`: original S mounts playlist and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m03 | `video_player_mount_test.dart`: original S mounts IPTV channel list and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m04 | `video_player_mount_test.dart`: original S mounts Stremio TV channel and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m05 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "Plain.Movie.mkv" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m06 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "Plain.Movie.MP4" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m07 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m08 | `video_player_subtitle_test.dart`: subtitle success then late failure restores selection with the persisted audio identity | `_VideoPlayerScreenState._persistTrackChoice`: `attempt.persistedAudioId = audio; → attempt.persistedAudioId = '2';` | Assertion killed |
+| m09 | `video_player_subtitle_test.dart`: subtitle rejected apply rolls back once and reports the original diagnostic id | `_VideoPlayerScreenState._diagnosticSubtitleId`: `'<external>' : track.id → '<external>' : 'wrong-id'` | Assertion killed |
+| m10 | `video_player_subtitle_test.dart`: external subtitle apply persists its addon identity and rolls back after a decoder error | `_VideoPlayerScreenState._subtitlePreferenceMatchesAttempt`: `return subtitle.startsWith('stremio:'); → return false;` | Assertion killed |
+| m11 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._requestSeasonEpisodeForIdentity`: `_SeasonEpisodeSelection(season: season, episode: episode) → _SeasonEpisodeSelection(season: season, episode: episode + 1)` | Assertion killed |
+| m12 | `video_player_identity_test.dart`: identity search filters and labels results then cancels the season episode | `_VideoPlayerScreenState._requestSeasonEpisodeForIdentity`: `() => Navigator.of(dialogContext).pop(), → () => Navigator.of(dialogContext).pop(const _SeasonEpisodeSelection(season: 1, episode: 1)),` | Assertion killed |
+| m13 | `video_player_source_test.dart`: manual direct source rejection restores outgoing media and position | `_VideoPlayerScreenState._switchToStremioSource`: `_currentSourceIndex = previousSourceIndex; → _currentSourceIndex = index;` | Assertion killed |
+| m14 | `video_player_source_test.dart`: manual playlist source rejection restores outgoing media and position | `_VideoPlayerScreenState._switchToSourcePlaylist`: `_currentSourceIndex = outgoingSourceIndex; → _currentSourceIndex = sourceIndex;` | Assertion killed |
+| m15 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and fetches the next page | `_VideoPlayerScreenState._parseIptvZapPage`: `final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0; → final offset = 0;` | Assertion killed |
+| m16 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and clamps the reported total | `_VideoPlayerScreenState._parseIptvZapPage`: `total: math.max(total, offset + channels.length), → total: math.max(total, offset + channels.length) + 2,` | Assertion killed |
+| m17 | `video_player_catchup_gate_test.dart`: catchup completion consumes only the active ticket | `IptvCatchupRequestGate.complete`: `_activeTicket = null; → _activeTicket = ticket;` | Assertion killed |
+| m18 | `video_player_catchup_gate_test.dart`: catchup cancellation invalidates the ticket without accepting stale completion | `IptvCatchupRequestGate.cancel`: `_activeTicket = null; → _activeTicket = _generation;` | Assertion killed |
+| m19 | `video_player_catchup_gate_test.dart`: catchup stale completion cannot consume a newer lookup | `IptvCatchupRequestGate.complete`: `if (!isCurrent(ticket)) return false; → if (false) return false;` | Assertion killed |
+| m20 | `video_player_catchup_caller_test.dart`: original catchup caller ignores a superseded replay lookup | `IptvCatchupRequestGate.isCurrent`: `_activeTicket == ticket && _generation == ticket → true` | Assertion killed |
+| m21 | `video_player_catchup_caller_test.dart`: original catchup caller cancels on channel change | `IptvCatchupRequestGate.isCurrent`: `_activeTicket == ticket && _generation == ticket → true` | Assertion killed |
+| m22 | `video_player_menu_test.dart`: active random menu dispatches once and continuous choices | `_VideoPlayerScreenState._toggleContinuousShuffle`: `_continuousShuffleEnabled = true; → _continuousShuffleEnabled = false;` | Assertion killed |
+| m23 | `video_player_menu_test.dart`: original controls render duration and synthetic guide stamps padded episode identity | `_VideoPlayerScreenState._pad2`: `padLeft(2, '0') → padLeft(1, '0')` | Assertion killed |
+| m24 | `video_player_seam_guard_test.dart`: S has only the frozen installer and once-only default paths | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m25 | `video_player_seam_guard_test.dart`: installation requires the explicit test-only compile-time flag | `VideoPlayerScreenTestHooks.install`: `if (!const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) → if (const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS'))` | Assertion killed |
+| m26 | `video_player_source_reader_test.dart`: declaration reader validates current ownership and chains repeated relocation | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m27 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._normalisePosterUrl`: `return 'https:$url'; → return url;` | Assertion killed |
+| m28 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._normalisedContentType`: `type.toLowerCase() == 'series' → type == 'series'` | Assertion killed |
+| m29 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._identityMetaSubtitle`: `return parts.join(' \| '); → return parts.join(' / ');` | Assertion killed |
+| m30 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._filterIdentitySearchResults`: `if (newScore > existingScore) → if (newScore < existingScore)` | Assertion killed |
+| m31 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._subtitleSearchDisplayLabel`: `return '$title S${season}E$episode'; → return '$title';` | Assertion killed |
+| m32 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and fetches the next page | `_VideoPlayerScreenState._parseIptvZapPage`: `total: math.max(total, offset + channels.length), → total: offset + channels.length,` | Assertion killed |
+
+One discarded offset-zero experiment created a paging microtask loop, was
+interrupted, and is explicitly excluded (`discarded-offset-loop/NOTE.txt`).
+Its replacement m16 changes the total and fails the unchanged no-next-page
+assertion. No assertion, timeout or original behavior was weakened.
+
+### Original-suite profile-editor NOTE
+
+The extra original-suite failure, `profile editor keeps feature controls
+hidden behind one switch`, was a deterministic parser-path setup failure: the
+existing reader requires `.dart_tool/edit_profile_parser/` inside its path.
+The evidence-only wrapper now nests that component under the required isolated
+`.dart_tool/vplayer_parser/` root, copying a fresh package and deleting kernels.
+Three valid isolated reruns pass unchanged source/test. Classification:
+environment/tool-routing incompatibility, not an observed behavior flake or
+application regression. No allowlist entry was added. Initial incompatible
+reruns and the valid 3x runs remain archived with `profile-editor-NOTE.txt`.
+
+The final full-suite comparison is recorded after the Step-0 test commit.
+The incomplete pre-lint-cleanup run is excluded (`step0-suite-NOTE.txt`).
+
+### Step-0 complete baseline
+
+At `c502380169cbc3a1394782c52a0fac08d7595e67`, the complete
+`step0-suite-isolated.jsonl` has 12,820 successes, 13 failures, 28 errors and
+20 skips. `suite_evidence.py compare` against `original-suite-routed.jsonl`
+passes: exactly 26 added successful identities, no new failures, no missing
+tests and no new skips. The only changed original outcome is the repaired
+profile-editor parser setup failure. SDK/configuration is unchanged; the
+tested tree stayed fixed throughout the run. `step0-baseline-outcomes.json`
+is the new observed baseline, with the exact delta in
+`step0-baseline-delta.json`; neither replaces a checked-in failure allowlist.
+
+`step0-suite-final.jsonl` is also incomplete/excluded: auditing found nested
+contract guards with hard-coded parser packages even though their outer
+CLI option was isolated. The final evidence-only routing adapter redirects
+every shared AST parse/ensure call, including child tools, to the fresh
+worktree-local package selected before argument parsing. No repository
+checker/manifest behavior changed. `parser-routing-audit.json` records the
+unique isolated packages, deleted copied kernels and nested redirects.
+
+Final root analysis (`step0-analyze-complete.txt`) has exactly T's 1,753
+diagnostic identities/counts. The scoped comparator retains all 73 S
+identities with zero additions; the new harness folder has zero issues.
+Earlier temporary build/vendor/test scan differences are excluded from
+that final claim and archived separately.
+
+## Phase 1 Step 0b — systematic original mutation sweep (2026-10-11)
+
+Claude's initial independent sample killed only 7/17 valid mutations (41%).
+This checkpoint therefore inventories every frozen declaration, rather than
+only repairing its listed survivors. All behavior and mutation runs still
+target ORIGINAL `c502380169cbc3a1394782c52a0fac08d7595e67`; its application
+source is byte-identical to S `80839d827383b05078178f292b56efbddd166fb1`.
+There are no production moves, new seams, private-call adapters or bug fixes.
+
+The analyzer inventory enumerates **248 nested statement, branch, literal,
+expression and constructor-binding sites across all 16 declarations**.
+Related nested nodes share a semantic mutation; they are not counted as
+independent kills. The systematic campaign has **113 valid mutations: 107
+assertion kills and six proved original-caller equivalents**, with no
+unclassified site or surviving non-equivalent behavior. The exception marker
+has an empty const constructor and zero mutation sites. The unreachable
+`_RandomChoiceTile` accounts for 26 dead sites under shared rule 4. The Step-0
+claim that State `_format` was dead is corrected: `SeekHud` receives its tear-off.
+
+The checkpoint adds **31 successful test identities**. Each new test itself
+fails at least one accepted original-application mutation; the per-test witness
+ledger is `step0b/new-test-mutation-witnesses.json`. All additions assert runtime
+widgets, callbacks, player commands, preferences, navigation or diagnostic
+output through existing original callers. Source guard/reader tests are excluded
+from mutation scores. Default Flutter pending-timer assertions remain enabled.
+The direct gate tests additionally exercise its existing public API.
+
+All evidence below is under
+`<git-common-dir>/refactor-evidence/vplayer/p1/step0b/`. The detached worktree
+`original/` stays pinned to c50238016; each patch changes one analyzer-owned
+original declaration and restores source afterwards. `SETUP.json` and
+`test-inputs-complete.json` record the original and complete final test inputs
+(the earlier `test-inputs-final.json` predates the added seek-HUD test). Accepted
+patches, commands, raw JSONL, stderr and assertion identities are in
+`sample/` and `sweep/`; canonical ledgers are `sample-results.json` and
+`systematic-coverage.json`. `ast-points.json` and the latter ledger retain every
+site, exact source offsets/text, semantic mutation links and equivalence reasons.
+Each AST invocation uses a fresh isolated parser under
+`.dart_tool/vplayer_parser/`, with copied kernels deleted. Processes use
+`nice -n 19`; Flutter test runs are serialized.
+
+### Updated frozen-declaration coverage matrix
+
+| Frozen original | Enumerated sites | Original caller / observable contract | Tests and mutation witnesses |
+|---|---:|---|---|
+| `_ManualSourceValidationFailure` | 0 | Original source pick / rejected-source rollback and reopened outgoing position | `video_player_source_test.dart`; empty const exception marker has zero mutation sites; Step-0 m13/m14 cover construct/catch |
+| `_SeasonEpisodeSelection` | 4 | Identity search dialog / adopted season and episode; existing pair reuse | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; s13/s14 |
+| `_SubtitleApplyAttempt` | 22 | Mounted menu, automatic restore and decoder-error caller / pending, rejected, successful, superseded and late-failure ownership; persisted audio, previous addon and sync path | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; s01–s12 |
+| `_IptvZapPage` | 12 | Original ChannelUp callback / channels, page offset/total/source and replacement category lists across News→Sports→Movies | `video_player_zap_test.dart`, `video_player_zap_categories_test.dart`; s15–s20 |
+| `IptvCatchupRequestGate` | 34 | Public begin/cancel/complete/isCurrent and original asynchronous guide callbacks / exact tickets, stale and active completion, idle cancellation, 4096 histories | `video_player_catchup_gate_test.dart`, `video_player_catchup_caller_test.dart`; g01–g16, c15/c16 |
+| `_diagnosticSubtitleId` | 4 | Original failed embedded/data/addon apply / runtime requestedId log redaction and source | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; h06–h09 |
+| `_format` | 1 | Mounted original pan callbacks publish SeekHud / rendered target and signed delta in minutes, hours and reverse seek; committed seek and HUD expiry | `video_player_menu_test.dart`; f01/c19; State tear-off is reachable, correcting the Step-0 dead-code claim |
+| `_pad2` | 3 | Original playlist action / synthetic guide filename for S3E7 and S12E34 | `video_player_menu_test.dart`; h01/h02/h24, uniquely scoped c1 |
+| `_normalisedContentType` | 6 | Original identity search/adoption / uppercase movie and series, unsupported type rejection | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; h03–h05/h25, i11/i42/i44 |
+| `_subtitleSearchDisplayLabel` | 21 | Search selection then mounted player menu / absent, empty and trimmed year; movie without dialog; existing or prompted series episode suffix | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i01–i09 |
+| `_filterIdentitySearchResults` | 65 | HTTP-backed real Stremio search caller / empty result, IMDb/type filtering, namespaces, first-wins ties, each score term, poster>year in both orders, result insertion order | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i10–i28/i42–i43/i45–i49/i51 |
+| `_normalisePosterUrl` | 11 | Identity search result / Image.network URL or its absence for null/whitespace | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i29–i33 |
+| `_identityMetaSubtitle` | 20 | Identity search tile / Movie/Series, original year text, empty and named addon, separator | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i34–i41/i44 |
+| `_subtitlePreferenceMatchesAttempt` | 12 | Original preference write/decoder rollback / off, embedded, URI and data tracks; live stale menu snapshots and malformed stremio prefix | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; h10–h17 |
+| `_generateFilenameHash` | 7 | Fallback resume caller / actual bookmark seek and storage identity for multiple dots, uppercase extension, title fallback, no extension, trailing dot and dotfile | `video_player_resume_test.dart`; h18–h23/h26 |
+| `_RandomChoiceTile` | 26 | Dead original: both constructions follow the constant-true unified-menu return | c18 survives; all 26 sites unreachable; active menu remains exercised by `video_player_menu_test.dart` |
+
+### Claude's 20-mutation rerun
+
+The exact requested sample, including c1's unique complete `_pad2` declaration,
+has **18 assertion kills / 20 valid runs (90%)**. Its two survivors are
+proved equivalent/unreachable, not accepted gaps: 18/18 non-equivalent mutations
+are killed. Compilation failures and loops never count as kills.
+
+| ID | Original mutation | Result / assertion witness |
+|---|---|---|
+| c1 | _pad2 unique declaration: padLeft width 2→3 | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity; synthetic guide preserves two-digit season and episode |
+| c2 | Filename hash: remove extension normalization | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv"; fallback resume identity restores bookmark for "Plain.Movie.MP4"; fallback resume identity restores bookmark for ""; fallback resume identity restores bookmark for "Trailing."; fallback resume identity restores bookmark for ".hidden" |
+| c3 | Protocol-relative poster: https→http | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode |
+| c4 | Normalized non-series type: movie→series | Assertion killed: identity year presence improves equally illustrated duplicate "2025"; identity year presence improves equally illustrated duplicate "   "; movie identity adopts without episode prompt for year "null"; movie identity adopts without episode prompt for year "   "; movie identity adopts without episode prompt for year " 2025 "; identity search rejects custom series ids and keeps type namespaces; identity duplicate ranking prefers poster over year in forward order; identity duplicate ranking prefers poster over year in reverse order; identity zero scores keep first title and original result order; identity equal scores keep first title and original result order |
+| c5 | Identity tile series label: Series→Movie | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode |
+| c6 | Identity tile separator: vertical bar→dash | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode; movie identity adopts without episode prompt for year " 2025 " |
+| c7 | Identity filter: accept IMDb identities without tt prefix | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| c8 | Equal-score duplicate: >→>= replaces first | Assertion killed: identity zero scores keep first title and original result order; identity equal scores keep first title and original result order |
+| c9 | Existing duplicate score: swap poster/year weights | Assertion killed: identity duplicate ranking prefers poster over year in reverse order |
+| c10 | Subtitle search label: swap season/episode | Assertion killed: identity search filters and labels results then validates and accepts the season episode; series identity reuses launch episode and keeps absolute poster URL; series identity preserves a single-slash poster URL |
+| c11 | Subtitle search year label: parentheses→brackets | Assertion killed: identity year presence improves equally illustrated duplicate "2025"; identity search filters and labels results then validates and accepts the season episode; movie identity adopts without episode prompt for year " 2025 "; identity equal scores keep first title and original result order |
+| c12 | Diagnostic ID: omit data-track redaction | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| c13 | Off requested: accept any persisted subtitle identity | Assertion killed: off attempt ignores unrelated audio preference identity |
+| c14 | External preference prefix: stremio:→stremio | Assertion killed: external attempt ignores unrelated audio preference identity |
+| c15 | Gate isCurrent: remove generation conjunction | Equivalent: active ticket is null or equals generation at every public method boundary |
+| c16 | Gate cancel: remove generation increment | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| c17 | Gate complete: retain active ticket | Assertion killed: catchup cancellation advances public ticket generation before next lookup; catchup ownership holds across every six-action request history; catchup completion consumes only the active ticket |
+| c18 | Legacy RandomChoiceTile subtitle Text: subtitle→title | Dead original: const-true unified-menu branch returns before both constructions |
+| c19 | State _format passed to SeekHud: formatDuration→Duration.toString | Assertion killed: horizontal seek HUD formats original target and signed delta |
+| c20 | SubtitleApplyAttempt persisted default: false→true | Assertion killed: data apply does not claim an embedded preference as addon persistence; automatic restored subtitle failure leaves saved preference untouched |
+
+**c15 confirmed equivalent; c16 refuted.** The gate invariant starts with no
+active ticket. `begin` establishes active=generation; successful `complete`
+and `cancel` clear active; rejected operations leave it unchanged. Induction
+therefore makes c15's conjunction redundant for all public histories, also
+checked across all 4096 six-action histories. In contrast, public ticket
+values expose c16: `begin()`=1, `cancel()`=true, next `begin()`=3; c16 returns 2.
+The new exact-ticket test assertion-kills it. Ownership booleans alone miss
+this difference. `reachability-proofs.json` records the invariant and counterexample.
+
+**c18 is an original dead-code exception, not covered behavior.** The only
+two `_RandomChoiceTile` constructions are after `_showRandomPlaybackMenu`'s
+return under `const bool kUnifiedPlayerMenuEnabled = true` in the imported
+player-menu library. The analyzer token inventory and exact caller/constant
+text are archived in `reachability-proofs.json`. No fabricated caller, flag
+change or additional seam is used to claim a kill.
+
+**c19 is a real behavior gap, now closed.** The earlier Step-0 report and an
+initial Step-0b call-only search missed `SeekHud(hud: hud, format: _format)`.
+The new mounted pan-callback test renders the actual HUD's minutes/hours target
+and signed delta, including the original double-minus reverse-seek text,
+commits the seek and checks HUD expiry. c19/f01 assertion-fail this test.
+Controls duration assertions remain separate; application behavior is unchanged.
+
+### Systematic statement / branch / literal mutation table
+
+Every row is a valid completed run on the original. The full patch and all
+failing assertion identities are retained in the canonical ledger; the table
+uses one witness per killed row for readability. Constructor rows modify one
+forwarded field only. E1–E6 below are equivalents, excluded from kill counts.
+
+| ID | Frozen original | Semantic change | Result / witness |
+|---|---|---|---|
+| s01 | `_SubtitleApplyAttempt` | `bool failed = false;` → `bool failed = true;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s02 | `_SubtitleApplyAttempt` | `bool handled = false;` → `bool handled = true;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s03 | `_SubtitleApplyAttempt` | `bool successReturned = false;` → `bool successReturned = true;` | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s04 | `_SubtitleApplyAttempt` | `bool persisted = false;` → `bool persisted = true;` | Assertion killed: data apply does not claim an embedded preference as addon persistence |
+| s05 | `_SubtitleApplyAttempt` | Constructor forwarding: generation = generation + 1 | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s06 | `_SubtitleApplyAttempt` | Constructor forwarding: requested = previous | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s07 | `_SubtitleApplyAttempt` | Constructor forwarding: previous = requested | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s08 | `_SubtitleApplyAttempt` | Constructor forwarding: source = 'wrong-source' | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| s09 | `_SubtitleApplyAttempt` | Constructor forwarding: previousStremioId = null | Assertion killed: late embedded failure restores previous addon selection once |
+| s10 | `_SubtitleApplyAttempt` | Constructor forwarding: previousExternalPath = null | Assertion killed: late embedded failure restores previous addon selection once |
+| s11 | `_SubtitleApplyAttempt` | `String? persistedAudioId;` → `String? persistedAudioId = 'wrong-audio';` | Equivalent E1 |
+| s12 | `_SubtitleApplyAttempt` | `Completer<void>? persistenceDone;` → `Completer<void>? persistenceDone = Completer<void>()..complete();` | Equivalent E2 |
+| s13 | `_SeasonEpisodeSelection` | Constructor forwarding: season = season + 1 | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| s14 | `_SeasonEpisodeSelection` | Constructor forwarding: episode = episode + 1 | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| s15 | `_IptvZapPage` | Constructor forwarding: channels = const [] | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s16 | `_IptvZapPage` | Constructor forwarding: offset = offset + 1 | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s17 | `_IptvZapPage` | Constructor forwarding: total = total + 1 | Assertion killed: IPTV zap preserves nonzero page offsets and clamps the reported total |
+| s18 | `_IptvZapPage` | Constructor forwarding: sourceId = null | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s19 | `_IptvZapPage` | Constructor forwarding: category = null | Assertion killed: IPTV category crossing carries page category source and replacement directory |
+| s20 | `_IptvZapPage` | Constructor forwarding: categories = const [] | Assertion killed: IPTV category crossing carries page category source and replacement directory |
+| g01 | `IptvCatchupRequestGate` | `int _generation = 0;` → `int _generation = 1;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g02 | `IptvCatchupRequestGate` | `int? _activeTicket;` → `int? _activeTicket = 0;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g03 | `IptvCatchupRequestGate.begin` | `++_generation` → `_generation` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g04 | `IptvCatchupRequestGate.begin` | `_activeTicket = ticket;` → `_activeTicket = null;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g05 | `IptvCatchupRequestGate.begin` | `return ticket;` → `return ticket + 1;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g06 | `IptvCatchupRequestGate.isCurrent` | `_activeTicket == ticket` → `_activeTicket != ticket` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g07 | `IptvCatchupRequestGate.isCurrent` | `_generation == ticket` → `_generation != ticket` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g08 | `IptvCatchupRequestGate.complete` | `if (!isCurrent(ticket)) return false;` → `if (isCurrent(ticket)) return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g09 | `IptvCatchupRequestGate.complete` | `return false;` → `return true;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g10 | `IptvCatchupRequestGate.complete` | `_activeTicket = null;` → `_activeTicket = ticket;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g11 | `IptvCatchupRequestGate.complete` | `return true;` → `return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g12 | `IptvCatchupRequestGate.cancel` | `if (_activeTicket == null) return false;` → `if (_activeTicket != null) return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g13 | `IptvCatchupRequestGate.cancel` | `return false;` → `return true;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g14 | `IptvCatchupRequestGate.cancel` | `_generation++;` → `(deleted)` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g15 | `IptvCatchupRequestGate.cancel` | `_activeTicket = null;` → `_activeTicket = _generation;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g16 | `IptvCatchupRequestGate.cancel` | `return true;` → `return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| h01 | `_pad2` | `padLeft(2, '0')` → `padLeft(2, 'x')` | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity |
+| h02 | `_pad2` | `padLeft(2, '0')` → `padLeft(1, '0')` | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity |
+| h03 | `_normalisedContentType` | `type.toLowerCase() == 'series'` → `type == 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h04 | `_normalisedContentType` | `? 'series' : 'movie'` → `? 'movie' : 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h05 | `_normalisedContentType` | `? 'series' : 'movie'` → `? 'series' : 'series'` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| h06 | `_diagnosticSubtitleId` | `track.uri \|\| track.data` → `track.data` | Assertion killed: uri subtitle rejection redacts file path in diagnostic id |
+| h07 | `_diagnosticSubtitleId` | `track.uri \|\| track.data` → `track.uri` | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| h08 | `_diagnosticSubtitleId` | `'<external>'` → `'<changed>'` | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| h09 | `_diagnosticSubtitleId` | `track.id;` → `'wrong-id';` | Assertion killed: subtitle rejected apply rolls back once and reports the original diagnostic id |
+| h10 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.id == 'no'` → `attempt.requested.id != 'no'` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| h11 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == 'no';` → `return true;` | Assertion killed: off attempt ignores unrelated audio preference identity |
+| h12 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == 'no';` → `return false;` | Assertion killed: off attempt ignores unrelated audio preference identity |
+| h13 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.uri \|\| attempt.requested.data` → `attempt.requested.data` | Assertion killed: external subtitle apply persists its addon identity and rolls back after a decoder error |
+| h14 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.uri \|\| attempt.requested.data` → `attempt.requested.uri` | Assertion killed: data apply does not claim an embedded preference as addon persistence |
+| h15 | `_subtitlePreferenceMatchesAttempt` | `return subtitle.startsWith('stremio:');` → `return subtitle.startsWith('stremio');` | Assertion killed: external attempt ignores unrelated audio preference identity |
+| h16 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == attempt.requested.id;` → `return false;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| h17 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == attempt.requested.id;` → `return true;` | Assertion killed: embedded attempt ignores unrelated audio preference identity |
+| h18 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'\.[^.]+$')` | Assertion killed: fallback resume identity restores bookmark for "Trailing." |
+| h19 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'\..*$')` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h20 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'[^.]*$')` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h21 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$'), ''` → `RegExp(r'\.[^.]*$'), 'x'` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h22 | `_generateFilenameHash` | `nameWithoutExt.hashCode.toString()` → `filename.hashCode.toString()` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h23 | `_generateFilenameHash` | `return hash;` → `return 'wrong';` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| i01 | `_subtitleSearchDisplayLabel` | `meta.year?.trim()` → `meta.year` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i02 | `_subtitleSearchDisplayLabel` | `year != null && year.isNotEmpty` → `year != null` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i03 | `_subtitleSearchDisplayLabel` | `? '${meta.name} ($year)'` → `? '${meta.name} [$year]'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i04 | `_subtitleSearchDisplayLabel` | `: meta.name;` → `: 'wrong';` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i05 | `_subtitleSearchDisplayLabel` | `contentType == 'series'` → `contentType != 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i06 | `_subtitleSearchDisplayLabel` | `&& season != null` → `(deleted)` | Equivalent E3 |
+| i07 | `_subtitleSearchDisplayLabel` | `&& episode != null` → `(deleted)` | Equivalent E4 |
+| i08 | `_subtitleSearchDisplayLabel` | `return '$title S${season}E$episode';` → `return '$title S${episode}E$season';` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i09 | `_subtitleSearchDisplayLabel` | `return title;` → `return '$title S${season}E$episode';` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i10 | `_filterIdentitySearchResults` | `for (final meta in metas)` → `for (final meta in metas.reversed)` | Assertion killed: identity zero scores keep first title and original result order |
+| i11 | `_filterIdentitySearchResults` | `imdbId == null \|\| !imdbId.startsWith('tt')` → `imdbId == null` | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| i12 | `_filterIdentitySearchResults` | `type != 'movie' && type != 'series'` → `type != 'movie' \|\| type != 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i13 | `_filterIdentitySearchResults` | `type != 'movie' && type != 'series'` → `false` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i14 | `_filterIdentitySearchResults` | `meta.type.toLowerCase()` → `meta.type` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i15 | `_filterIdentitySearchResults` | `'$type:$imdbId'` → `'$imdbId'` | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| i16 | `_filterIdentitySearchResults` | `bestByKey[key] = meta;` → `(deleted)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i17 | `_filterIdentitySearchResults` | `bestByKey[key] = meta;` → `(deleted)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i18 | `_filterIdentitySearchResults` | `if (newScore > existingScore)` → `if (newScore >= existingScore)` | Assertion killed: identity zero scores keep first title and original result order |
+| i19 | `_filterIdentitySearchResults` | `if (newScore > existingScore)` → `if (newScore < existingScore)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i20 | `_filterIdentitySearchResults` | `(existing.poster != null ? 2 : 0)` → `(existing.poster != null ? 0 : 0)` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| i21 | `_filterIdentitySearchResults` | `(existing.year != null ? 1 : 0)` → `(existing.year != null ? 0 : 0)` | Assertion killed: identity equal scores keep first title and original result order |
+| i22 | `_filterIdentitySearchResults` | `(meta.poster != null ? 2 : 0)` → `(meta.poster != null ? 0 : 0)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i23 | `_filterIdentitySearchResults` | `(meta.year != null ? 1 : 0)` → `(meta.year != null ? 0 : 0)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i24 | `_filterIdentitySearchResults` | `(existing.poster != null ? 2 : 0)` → `(existing.poster != null ? 2 : 2)` | Assertion killed: identity duplicate ranking prefers poster over year in reverse order |
+| i25 | `_filterIdentitySearchResults` | `(existing.year != null ? 1 : 0)` → `(existing.year != null ? 1 : 1)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i26 | `_filterIdentitySearchResults` | `(meta.poster != null ? 2 : 0)` → `(meta.poster != null ? 2 : 2)` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| i27 | `_filterIdentitySearchResults` | `(meta.year != null ? 1 : 0)` → `(meta.year != null ? 1 : 1)` | Assertion killed: identity zero scores keep first title and original result order |
+| i28 | `_filterIdentitySearchResults` | `toList(growable: false)` → `toList(growable: true)` | Equivalent E5 |
+| i29 | `_normalisePosterUrl` | `url.trim().isEmpty` → `url.isEmpty` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i30 | `_normalisePosterUrl` | `return null;` → `return 'https://player.test/wrong.png';` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i31 | `_normalisePosterUrl` | `url.startsWith('//')` → `url.startsWith('/')` | Assertion killed: series identity preserves a single-slash poster URL |
+| i32 | `_normalisePosterUrl` | `return 'https:$url';` → `return 'http:$url';` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i33 | `_normalisePosterUrl` | `return url;` → `return null;` | Assertion killed: series identity reuses launch episode and keeps absolute poster URL |
+| i34 | `_identityMetaSubtitle` | `meta.type.toLowerCase() == 'series'` → `meta.type == 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i35 | `_identityMetaSubtitle` | `? 'Series' : 'Movie'` → `? 'Movie' : 'Movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i36 | `_identityMetaSubtitle` | `? 'Series' : 'Movie'` → `? 'Series' : 'Series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i37 | `_identityMetaSubtitle` | `meta.year != null && meta.year!.trim().isNotEmpty` → `meta.year != null` | Assertion killed: movie identity adopts without episode prompt for year "   " |
+| i38 | `_identityMetaSubtitle` | `meta.year!,` → `'wrong-year',` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i39 | `_identityMetaSubtitle` | `meta.sourceAddon?.name.trim().isNotEmpty == true` → `meta.sourceAddon != null` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i40 | `_identityMetaSubtitle` | `meta.sourceAddon!.name` → `'wrong-addon'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i41 | `_identityMetaSubtitle` | `parts.join(' \| ')` → `parts.join(' - ')` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i42 | `_filterIdentitySearchResults` | `imdbId == null \|\| !imdbId.startsWith('tt')` → `imdbId != null && !imdbId.startsWith('tt')` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h24 | `_pad2` | `n.toString()` → `n.toRadixString(16)` | Assertion killed: synthetic guide preserves two-digit season and episode |
+| h25 | `_normalisedContentType` | `== 'series'` → `== 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i43 | `_filterIdentitySearchResults` | `'$type:$imdbId'` → `'$type$imdbId'` | Equivalent E6 |
+| i44 | `_identityMetaSubtitle` | `== 'series'` → `== 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i45 | `_filterIdentitySearchResults` | `<String, StremioMeta>{}` → `<String, StremioMeta>{'injected': const StremioMeta(id: 'tt0900000', imdbId: 'tt0900000', type: 'movie', name: 'Injected')}` | Assertion killed: empty identity catalog leaves identity unset and shows empty results |
+| i46 | `_filterIdentitySearchResults` | `type != 'movie'` → `type != 'film'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i47 | `_filterIdentitySearchResults` | `type != 'series'` → `type != 'tv'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i48 | `_filterIdentitySearchResults` | `continue;` → `break;` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h26 | `_generateFilenameHash` | `hashCode.toString()` → `hashCode.toRadixString(16)` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| i49 | `_filterIdentitySearchResults` | `return bestByKey.values.toList(growable: false);` → `return bestByKey.values.toList(growable: false).reversed.toList(growable: false);` | Assertion killed: identity zero scores keep first title and original result order |
+| i51 | `_filterIdentitySearchResults` | `final existing = bestByKey[key];` → `final existing = bestByKey['wrong'];` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| f01 | `_format` | `formatDuration(d)` → `d.toString()` | Assertion killed: horizontal seek HUD formats original target and signed delta |
+
+### Equivalent variants and excluded experiments
+
+- **E1 (s11):** persistedAudioId is read only when successReturned && persisted. The only original path setting persisted sets persistedAudioId synchronously before its first await; an unpersisted attempt never reads the initial value.
+- **E2 (s12):** persistenceDone is awaited only by a successfully persisted attempt; _persistTrackChoice synchronously overwrites the initial value with its actual write completer before yielding. An unpersisted attempt never reads it.
+- **E3 (i06):** The only caller normalizes a selected series then obtains BOTH season/episode from an existing pair or from the validated dialog before calling this helper. Series calls cannot have null season.
+- **E4 (i07):** The same sole-caller validation ensures series calls cannot have null episode. Movie calls short circuit on contentType and never render episode suffixes.
+- **E5 (i28):** The search sheet assigns the returned list, reads its length/items and iterates it. It never mutates it or exposes the list; only a selected StremioMeta leaves the sheet. Growability has no original-caller effect.
+- **E6 (i43):** Keys stay injective without the colon: normalized type is exactly movie or series (distinct, non-prefix strings), followed by the unchanged IMDb id. The key remains private to this map; first-insertion/result order is unchanged.
+
+The initial s07 constructor generator also matched `previousStremioId` and
+`previousExternalPath`, producing a compile failure. That invalid run is
+excluded in `sweep-invalid/s07.*`; the corrected single-field patch completes
+and assertion-fails unchanged behavior tests. An s17 total+1 experiment over
+both zap tests caused a paging microtask loop and was stopped/excluded in
+`sweep-discarded/s17.*`. The exact same patch was then run against the unchanged
+underreported-total test alone and killed its forbidden-extra-request assertion.
+No test, assertion or timeout was weakened. `s17-loop-NOTE.txt` records this.
+
+Some Flutter widget assertion failures are emitted as `print` events with a
+`TestFailure`/`Expected:` block, followed by a failed `testDone`, rather than
+`error.isFailure=true`. The initial progress-only classifier missed these.
+`sample-classification-NOTE.txt` documents the correction: `classify.py` pairs
+the raw assertion block with the actually failed test. No compile/load failure,
+hang or incomplete run is counted. `sample-initial/` preserves the initial
+c1/c13/c14 runs; their accepted reruns use the final two-digit guide and actual
+stale mounted-menu snapshots. The final null-poster witness reruns i30; i51
+also kills the map's duplicate-lookup mutation. All 31 added identities have
+an individual accepted assertion witness.
+
+### Step-0b suite baseline
+
+At Step-0b commit `849d3b343c4d13d8db96cae2070f479317489b2c`,
+`step0b-suite.jsonl` records **12,851 successes, 13 failures, 28 errors and
+20 skips**. `suite_evidence.py compare --against step0-suite-isolated.jsonl`
+passes: exactly 31 added successful identities, zero changed existing
+outcomes, new failures, missing tests or new skips. The SDK is unchanged and
+the tested tree stayed fixed throughout the run. The profile-editor identity
+passes again; no allowlist is changed. The observed baseline is
+`step0b-baseline-outcomes.json`, with its exact additions-only delta in
+`step0b-baseline-delta.json`.
+
+The full-suite command keeps `--no-pub` and
+`--dart-define=DEBRIFY_VP_TEST_HOOKS=true`. The existing evidence-only routing
+adapter supplies 114 unique isolated packages under
+`.dart_tool/vplayer_parser/`, deletes 342 copied kernels, and redirects all
+618 nested parse/ensure pairs. The records and audit are
+`step0b/parser-routing-full-suite.jsonl` and
+`step0b/parser-routing-audit.json`. The complete detached-original control
+passes all 57 characterization tests (`control-complete-original.jsonl`).
+
+Final root `flutter analyze --no-pub` retains exactly the prior 1,753
+diagnostic identities/counts; scoped analysis retains all 73 S identities
+with zero additions. The complete harness folder analyzes cleanly and
+formats with zero changes. The seam manifest passes both current-tree and
+`--at S` comparisons with zero differences. Size and architecture checks
+pass. `step0b/COMMANDS-step0b.txt`, `mutation-audit.json` and `completion.json`
+record commands, raw assertion verification and tested input identities.
+Application code and dependency files remain byte-identical to S; Phase-1
+destinations and feature-specific CI activation remain deferred to Step 1.
+
+## Step 0b addendum — both independent samples (2026-10-11)
+
+| Independent sample | Original revision | Original assessment | Closure |
+|---|---|---|---|
+| Claude sample 1 | `c502380169` (application S) | 7/17 valid kills (41%); c1 ambiguous, c15/c16 initially excluded | Step 0b systematic sweep above; unique c1 rerun; c16 exclusion refuted; 18/20 raw kills, c15 equivalent and c18 dead |
+| Claude sample 2 | `849d3b343` (application S) | 9/12 valid kills (75%); d8 equivalent, d11/d12 dead | d5 and d13 now assertion-killed on the original; d1 proved caller-equivalent, no fabricated kill |
+
+Original independent ledgers/logs remain under `claude-sample/` and
+`claude-sample2/`. Sample-1 per-case initial outcomes are: c1 invalid (two matches), c2 killed, c3 killed, c4 survived, c5 killed, c6 killed, c7 survived, c8 survived, c9 survived, c10 killed, c11 killed, c12 survived, c13 survived, c14 survived, c15 survived, c16 survived, c17 killed, c18 survived, c19 survived, c20 survived. The existing 20-row rerun table records their closure.
+
+| Second ID | Original mutation | Independent result | Addendum closure / original-caller witness |
+|---|---|---|---|
+| d1 | `total: math.max(total, offset + channels.length),` | survived | Equivalent: `end < max(total,end) ⇔ end < total`; merge clamps to a containing window. Existing mounted payload has total 100 below offset 100 + len 2; complete survivor run. |
+| d2 | `return _IptvZapPage(` | killed | Original independent assertion kill retained; optional rerun incomplete and excluded, see NOTE. |
+| d3 | `previousStremioId: _selectedStremioSubtitleId,` | killed | Assertion kill: `late embedded failure restores previous addon selection once` |
+| d4 | `previousExternalPath: _activeExternalSubtitlePath,` | killed | Assertion kill: `late embedded failure restores previous addon selection once` |
+| d5 | `throw const _ManualSourceValidationFailure();` | survived | Assertion kill: `manual direct source rejection restores outgoing media and position` |
+| d6 | `if (season == null \|\| episode == null) return null;` | killed | Assertion kill: `series identity reuses launch episode and keeps absolute poster URL`; `series identity preserves a single-slash poster URL` |
+| d7 | `if (url == null \|\| url.trim().isEmpty) return null;` | killed | Assertion kill: `movie identity adopts without episode prompt for year "null"`; `movie identity adopts without episode prompt for year "   "`; `movie identity adopts without episode prompt for year " 2025 "` |
+| d8 | `if (contentType == 'series' && season != null && episode != null) {` | excluded equivalent | Equivalent: non-series identity path supplies null season and episode; remaining null guards reject the suffix. |
+| d9 | `if (meta.year != null && meta.year!.trim().isNotEmpty) meta.year!,` | killed | Assertion kill: `movie identity adopts without episode prompt for year "   "` |
+| d10 | `if (type != 'movie' && type != 'series') continue;` | killed | Assertion kill: `identity search filters and labels results then validates and accepts the season episode`; `identity search filters and labels results then cancels the season episode`; `identity search rejects custom series ids and keeps type namespaces`; `series identity reuses launch episode and keeps absolute poster URL`; `series identity preserves a single-slash poster URL` |
+| d11 | `child: Icon(icon, color: const Color(0xFFFCA5A5), size: 20),` | excluded dead | Dead original `_RandomChoiceTile`; both constructions follow the const-true unified-menu return. Preserved by the move. |
+| d12 | `onTap: onTap,` | excluded dead | Dead original `_RandomChoiceTile`; both constructions follow the const-true unified-menu return. Preserved by the move. |
+| d13 | `final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0;` | survived | Assertion kill: `IPTV zap clamps a negative payload offset before paging` |
+| d14 | `sourceId: (rawSourceId == null \|\| rawSourceId.isEmpty)` | killed | Assertion kill: `IPTV category crossing carries page category source and replacement directory`; `IPTV zap clamps a negative payload offset before paging`; `IPTV zap preserves nonzero page offsets and fetches the next page` |
+| d15 | `final key = '$type:$imdbId';` | killed | Assertion kill: `identity search rejects custom series ids and keeps type namespaces` |
+
+### Coverage and mutation additions
+
+| Frozen declaration / caller | Added observable assertion | Original mutation proof |
+|---|---|---|
+| `_IptvZapPage` / `_parseIptvZapPage` → ChannelUp paging | Negative payload offset -7 produces request offset 2, bound to original source, and tunes channel 2 | d13 complete assertion failure (`Expected: <2>`, actual offset 0) |
+| `_ManualSourceValidationFailure` / original mounted manual source sheet | Direct rejection logs exactly `Player: manual Stremio source rejected (_ManualSourceValidationFailure)`; all outgoing media/seek/commit rollback assertions retained | d5 complete assertion failure, captured diagnostic contains `StateError` |
+| `_IptvZapPage` / every total consumer | Underreported payload retains stop/wrap behavior; backward paging reads offset only | d1 complete survivor; exhaustive caller proof in `d1-equivalence-NOTE.txt` |
+
+The addendum adds one behavior identity and strengthens the existing direct
+manual-source test. The detached original control passes all 55 behavior
+tests (the three seam/reader infrastructure tests are excluded from mutation
+scoring). `step0b-addendum/results.json` records exact commands, patches, test
+input hashes, complete-run/compile classification and raw assertion blocks.
+No production code, hook, dependencies or allowlist changed. The Step-1 gate
+compares the full suite with the accepted `step0b-suite.jsonl`; only this one
+additional successful identity is expected. The independent second-sample
+score remains 9/12; closure kills 11/12 of its originally valid cases using
+existing independent evidence plus d5/d13, with d1 now proved equivalent
+(11/11 non-equivalent cases covered). Optional incomplete reruns are excluded.
+
+## Phase 1 Step 1 — frozen moves applied (2026-10-11)
+
+The creation commit applies the unchanged reviewed manifest (only `status`
+changes from `draft` to `applied`). It classifies **893 fates: 875 retained,
+16 moved and two S-patched declarations**. Current-tree ownership, token,
+occurrence/binding, member-order, exact directive and scaffold checks report
+zero differences against R. Whole-file format proof records five inserted
+AST-optional commas, zero deleted commas and idempotence, with all other
+tokens/comments/literals unchanged. Evidence: `step1/move-proof.json`,
+`mechanical-unformatted/`, `current.txt` and `seam-proof.json`.
+
+| Original declaration | Current owner / declared public name | File lines |
+|---|---|---|
+| `_ManualSourceValidationFailure` | `lib/features/video_player/models/vp_manual_source_validation_failure.dart` / `VpManualSourceValidationFailure` | 3 |
+| `_SeasonEpisodeSelection` | `lib/features/video_player/models/vp_season_episode_selection.dart` / `VpSeasonEpisodeSelection` | 6 |
+| `_SubtitleApplyAttempt` | `lib/features/video_player/models/vp_subtitle_apply_attempt.dart` / `VpSubtitleApplyAttempt` | 26 |
+| `_IptvZapPage` | `lib/features/video_player/models/vp_iptv_zap_page.dart` / `VpIptvZapPage` | 24 |
+| `IptvCatchupRequestGate` | `lib/features/video_player/models/iptv_catchup_request_gate.dart` / `IptvCatchupRequestGate` | 30 |
+| `_VideoPlayerScreenState._diagnosticSubtitleId` | `lib/features/video_player/application/vp_subtitle_identity.dart` / `vpDiagnosticSubtitleId` | 16 |
+| `_VideoPlayerScreenState._format` | `lib/features/video_player/application/vp_format.dart` / `vpFormatDuration` | 5 |
+| `_VideoPlayerScreenState._pad2` | `lib/features/video_player/application/vp_format.dart` / `vpPad2` | 5 |
+| `_VideoPlayerScreenState._normalisedContentType` | `lib/features/video_player/application/vp_identity_text.dart` / `vpNormalisedContentType` | 65 |
+| `_VideoPlayerScreenState._subtitleSearchDisplayLabel` | `lib/features/video_player/application/vp_identity_text.dart` / `vpSubtitleSearchDisplayLabel` | 65 |
+| `_VideoPlayerScreenState._filterIdentitySearchResults` | `lib/features/video_player/application/vp_identity_text.dart` / `vpFilterIdentitySearchResults` | 65 |
+| `_VideoPlayerScreenState._normalisePosterUrl` | `lib/features/video_player/application/vp_identity_text.dart` / `vpNormalisePosterUrl` | 65 |
+| `_VideoPlayerScreenState._identityMetaSubtitle` | `lib/features/video_player/application/vp_identity_text.dart` / `vpIdentityMetaSubtitle` | 65 |
+| `_VideoPlayerScreenState._subtitlePreferenceMatchesAttempt` | `lib/features/video_player/application/vp_subtitle_identity.dart` / `vpSubtitlePreferenceMatchesAttempt` | 16 |
+| `_VideoPlayerScreenState._generateFilenameHash` | `lib/features/video_player/application/vp_filename_hash.dart` / `vpFilenameHash` | 8 |
+| `_RandomChoiceTile` | `lib/features/video_player/presentation/vp_random_choice_tile.dart` / `_RandomChoiceTile` | 65 |
+
+No state ownership, resource/timer lifetime, constructor default, disposal
+order, storage contract or widget tree changes. Mutable subtitle-attempt
+identity/completer and catch-up generation behavior stay intact.
+`IptvCatchupRequestGate` keeps its name and exact facade re-export. The private
+random tile keeps its body and uses the frozen public typedef; its dead-path
+coverage exception remains. Static removal is declared only for the three
+reviewed top-level helpers. Every retained reference substitution is counted
+by declaration, including the SeekHud duration tear-off.
+
+### Live source tests and theme containment
+
+| Original anchor / guard | Current anchor |
+|---|---|
+| Hash declaration reader / `_VideoPlayerScreenState._generateFilenameHash` | Validating reader follows S→P1 to `application/vp_filename_hash.dart::vpFilenameHash`; current body asserted, two-relocation and mutation negatives retained |
+| S seam source guard | Validates the applied whole P1 ledger and separately pins the exact two S declarations / three patches / installer scaffold to S; all installation and once-only negative proofs retained |
+| Manual source rejection diagnostic | Runtime expectation follows the declared `_ManualSourceValidationFailure`→`VpManualSourceValidationFailure` type rename; diagnostic template and rollback assertions unchanged; `StateError` still rejected |
+| Eight other direct-source readers in rule 5 | All anchored methods remain in the facade; no anchor moved or assertion removed |
+| Theme frozen paths, rendered-set route boundaries and `p2_player_dart` | All ten exact current destination paths added in the creation commit, including models/application files; exact frozen-list assertion extended |
+
+### CI activation and checks
+
+CI is enabled by this Step-1 commit creating the first production feature
+files, including `models/vp_manual_source_validation_failure.dart`. `FEATURES`
+registers `video_player` and its exact `presentation/legacy_video_player/`
+bridge, rejects facade back-imports, scopes pure compatibility/type imports
+by file, rejects UI/state context in pure layers and enforces a 500-line
+extraction cap. The real architecture fixture accepts the production tree
+and exact bridge, and rejects ten boundary/size violations. All new files
+are 3–65 lines. The facade ratchet drops 18,251→18,018.
+
+`checks.yml` adds the facade to format/analyze lists (`lib/features` already
+contains all destinations), enables move checker self-test/current-tree and
+scoped analyzer comparison with separate vplayer parser packages, and sets
+`fetch-depth: 0`. The curated behavior list contains every characterization
+file and its test-only compile-time flag; the addendum identity is in the
+already registered zap file. No known-failure test allowlist changes.
+
+The actual CI formatting scope passes: 2,321 files, zero edits. Root analysis
+is 1,754 diagnostic identities/counts, with all 1,680 diagnostic occurrences outside this
+slice unchanged by identity/count. Scoped comparison passes 74 diagnostics / zero additions
+to the approved R/root/strict/probe inventory. Seven inventoried warnings
+enter the global allowlist: six original facade warnings and the probe's
+retained import warning. The global scope passes all 45 warning allowances.
+The frozen import list is preserved; no warning fix or suppression is added.
+
+Focused characterization plus theme containment: **68 successful identities**, including all 58 characterization/infrastructure tests. Commands and logs are under `step1/`; the clean-tree full suite, historical comparisons and release builds follow at the gate.
+
+## Phase 1 clean-tree gate (2026-10-11)
+
+The addendum is `8073fc9a2`; production/CI creation commit is
+`5faaed55b0d64b33d2a84fd9f00d93af8d3c5787`. The complete gate tested that clean
+commit, with no tracked or untracked changes during the suite and no tracked
+changes from either release build. The final gate-record commit changes
+documentation only.
+
+| Check | Result / evidence |
+|---|---|
+| Full suite vs accepted Step-0b observed baseline | **PASS**: 12,852 successes, same 13 failures / 28 errors / 20 skips; exactly one additional successful identity; zero changed outcomes, missing tests, new failures or new skips. `p1-gate-suite.jsonl`, `gate/suite-comparison.txt`, `suite-delta.json` |
+| Root/scoped analyzer | **PASS**: 1,754 root diagnostics, 1,680 external diagnostic occurrences, identities/counts unchanged; 74 scoped / zero additions to the approved original/strict/probe inventory. Fresh gate log and current / same-revision comparator logs |
+| Format / physical size / architecture | **PASS**: actual CI scope 2,321 files / zero changes; 2,994 application/native files and 140 ratchets; 1,662 migrated files pass architecture. Facade 18,018; new files at most 65 lines |
+| Existing Dart manifests | **PASS**: all 26 self-tests, exact command/exit ledger `gate/dart-selftests.json` |
+| Video-player move checks | **PASS**: universal self-test, current tree, applied P1 `--at` creation commit, retained `--at T`, seam `--at S`; zero differences, same-revision inputs. `gate/ownership-checks.json` |
+| Kotlin checker | **PASS**: `tvplayer_p19.json --self-test`, historical and compiled ABI/owner/snapshot negatives; exit 0. `gate/kotlin-self-test.txt` |
+| Release builds | **PASS**: APK 120.56s; macOS 221.76s; both `--release --no-pub`, exit 0, tree unchanged. `gate/build-results.json`; APK / macOS ZIP and SHA-256 under `gate/artifacts/` |
+| Isolated parser routing | **PASS**: 147 unique packages under `.dart_tool/vplayer_parser/`, 441 copied kernels deleted; 1247 nested parse and 1238 ensure redirects. All 31 direct manifest invocations carry the effective isolated `--parser-package`. `gate/parser-routing-audit.json` |
+
+The profile-editor test passes at this gate; no flake rerun or test allowlist
+change is needed. The baseline's 41 unsuccessful identities are retained
+explicitly; the suite is parity-passing, not universally green. Existing
+compiler/plugin warnings from the release builds are preserved in their
+logs; no production fix or suppression is included. `gate/completion.json`
+and `COMMANDS-gate.txt` pin the tested tree, SDK, input hashes, exact
+commands, all results and build provenance. Application dependencies remain
+unchanged from `ed728b078`.
+
+Human checks are deferred to the end of the series and are not phase gates:
+phone / Android TV with the Flutter player / tvOS / desktop should verify
+random-playback menu tiles render/select, catch-up and Start Over cancellation
+win over a slow lookup, identity labels remain unchanged, and a plain playlist
+entry without TorBox/PikPak identifiers resumes at its saved position. No
+device commands, installation, run, push, merge or branch switch occurred.
+Phase 1 stops here; independent gated-range review and integration remain
+with the user/Claude.

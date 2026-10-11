@@ -79,3 +79,15 @@ warning | unused_element_parameter | lib/features/recordings/presentation/record
 warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_chrome.dart | A value for optional parameter 'chip' isn't ever given. Try removing the unused parameter
 warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_chrome.dart | A value for optional parameter 'action' isn't ever given. Try removing the unused parameter
 warning | unused_element_parameter | lib/features/recordings/presentation/recordings_hub_library_row.dart | A value for optional parameter 'focusNode' isn't ever given. Try removing the unused parameter
+
+# 2026-10-11 video_player P1: six original R/S facade warnings; the frozen
+# rename probe also records the retained time_formatters import becoming unused.
+# Import removal is outside the reviewed move substitutions. No new allowances
+# beyond the original/probe identity inventory (infos/counts enforced separately).
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/time_formatters.dart'. Try removing the import directive
+warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it
+warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it
+warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it
+warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase' isn't used. Try removing the field, or using it
+warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it
+warning | invalid_use_of_visible_for_testing_member | lib/screens/video_player_screen.dart | The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test

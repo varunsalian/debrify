@@ -1,0 +1,844 @@
+# Flutter video player screen refactor — plan
+
+Written 2026-10-11 on `refactor/codebase` at `ed728b078` (the Android TV
+player series merge). Follow [AGENTS.md](../../AGENTS.md).
+
+Read first: [tv-player-activity-plan.md](tv-player-activity-plan.md) (the
+phased player series this mirrors: per-phase sections, step T/0/0b/1,
+exhaustive ownership checker with `--at`, collaborator pattern with narrow
+Hosts, inert initializer proofs, Claude mutation sample, merged-tree gates,
+end-of-series device checklist) and the Technique sections of
+[debrify-tv-plan.md](debrify-tv-plan.md) and
+[stremio-tv-plan.md](stremio-tv-plan.md) (the Dart verbatim checker, live
+`context`/`mounted`/`setState`, lexical-scope guards, occurrence-level field
+bindings, the source reader, analyzer identity baselines). This plan states
+what differs.
+
+Inventory: the analyzer member map at `ed728b078`
+(`docs/refactoring/video-player-screen-deps.md`, produced with this plan;
+every declaration with kind and line range) is the ledger every phase is
+checked against. Each phase appends its own inventory there.
+
+## Goal and scope
+
+`lib/screens/video_player_screen.dart` is **18,106 lines** and **not
+formatter-clean** (`dart format --set-exit-if-changed` changes it): 157
+import/export directives (1–165, mixed package/relative, two `export`s of
+`PlaylistEntry`/`ChannelEntry` kept for compatibility), then 8 top-level
+declarations:
+
+| Lines | Declaration |
+|---|---|
+| 167–169 | `_ManualSourceValidationFailure` |
+| 171–176 | `_SeasonEpisodeSelection` |
+| 178–200 | `_SubtitleApplyAttempt` (mutable) |
+| 207–223 | `_IptvZapPage` |
+| 229–254 | `IptvCatchupRequestGate` (public) |
+| 268–454 | `VideoPlayerScreen` (public widget, ≈ 60 constructor parameters, static `readLocalResume`) |
+| 456–18044 | `_VideoPlayerScreenState` — **17,589 lines**: ≈ 320 instance fields, 6 static fields, 358 methods, 44 getters, 167 `setState(` tokens, 239 `mounted` tokens, 173 `Timer` tokens |
+| 18046–18106 | `_RandomChoiceTile` |
+
+It is the Flutter (media_kit/libmpv) player used on phones, tablets,
+desktop, tvOS and Android TV when the native player is off: player instance
+and renderer/decoder fallback, open/startup pipeline (debrid direct, VOD
+failover, startup gate), source switching (source sheet, Stremio, IPTV
+sources, source playlists), the IPTV live pipeline (zap paging, guide
+categories, catch-up/Start Over, live retune, audio preference, recording),
+Stremio TV and Debrify TV channel navigation, playlist loading/resolve
+(PikPak retry, metadata preload), episode navigation/shuffle/episode fetch,
+resume restore/save, Trakt/Simkl/MDBList scrobbling and local completion,
+subtitles (apply, auto-sync, addon fetch, identify-title search, priority,
+track preferences), PiP/background, controls/TV keys/gestures/banners, sleep
+timer/speed/aspect, the tracks sheet and the unified player menu, and a
+1,172-line `build`.
+
+The end state moves cohesive responsibilities into explicitly-dependent
+collaborators under `lib/features/video_player/` while
+`lib/screens/video_player_screen.dart` remains the **facade and composition
+root**: the public `VideoPlayerScreen` (imported by 20+ production files and
+14 test files, re-exports `PlaylistEntry`/`ChannelEntry`, public
+`IptvCatchupRequestGate`), the State's lifecycle (`initState`,
+`didChangeDependencies`, `didUpdateWidget`, `dispose` in their exact order),
+the shared player instance and the wiring of collaborators.
+
+**This is too large for one batch.** It runs as **ordered phases**, each on
+its own branch `refactor/vplayer-pN` in worktree `../debrify-wt/vplayer`,
+merged `--no-ff` into `refactor/codebase` and pushed to `private` before the
+next phase starts. Each phase gets its own detailed section here, written
+with then-current line numbers and Codex design-reviewed before it executes.
+
+**Contract — unchanged by every phase:** the public constructor, its
+parameters and defaults, `readLocalResume`, the two exports,
+`IptvCatchupRequestGate`; the widget tree (types, keys, `const` placement,
+order), focus nodes and traversal, TV key routing, gesture handling; every
+`Timer`/`Future.delayed` duration; generation/ticket/token guards; every
+provider callback the widget receives (call order, arguments, result-map
+keys); media_kit configuration (`PlayerConfiguration`,
+`VideoControllerConfiguration`, mpv properties, network tuning, audio
+config); `MethodChannel` names/methods/arguments; storage keys and write
+order; scrobble request order; resume save/restore semantics and the resume
+write guard; lifecycle and teardown order (`dispose` is 207 lines — its
+statement order is frozen); every user-visible string. No bug fixes ride
+along; bugs found go to **Follow-ups**.
+
+**Out of scope:** `lib/screens/video_player/**` (existing helpers and
+sheets; several are oversized and get their own later goal), the native
+players, `VideoPlayerLauncher`, Riverpod migration, localization, data
+contracts, behaviour fixes and dead-code removal.
+
+## Decisions taken before design review (Claude, 2026-10-11)
+
+| # | Question | Decision |
+|---|---|---|
+| D1 | DI style. The user asked whether the Dart extractions use DI. | **Explicit constructor injection with narrow Hosts** (below), as in every prior Dart bridge. Riverpod is a **documented temporary exception**: converting a player's state to providers changes ownership, rebuild timing and teardown (AGENTS: ordered player teardown stays in its lifecycle coordinator) and cannot be proven by a move checker. Exit: a separate goal, *video player Riverpod migration* — per-session/profile notifiers for the extracted controllers, one controller per batch, behaviour-tested — **together with the service/data ownership exit** (the bridge calls services, storage, channels and the player directly; data contracts for resume, trackers, subtitles, sources and IPTV must replace those calls, since converting presentation bridges to Riverpod alone would not resolve the layering exception). Recorded in Follow-ups with its prerequisites (this series' controllers and characterization tests). |
+| D2 | Phasing vs one batch | Phased, as the TV activity (sequential; every phase edits the same file). |
+| D3 | Formatting | The original is not formatter-clean. Phase 1 starts with a **format-only commit (a)** on the original with the token/comma proof (precedent: spotlight/catalog); (a) becomes R for phase 1. |
+| D4 | Testability of the original | No existing test **mounts and characterizes the player State** (tests construct `VideoPlayerScreen` only to inspect launch contracts, and route observers intercept before its State mounts — `iptv_channel_sheet_responsive_test.dart:61`, `stremio_tv_fixture.dart:55`). `initState` initializes native media_kit (1753) and `_createPlayerInstance` constructs `mk.Player`/`mkv.VideoController` directly; private members are unreachable (no reflection in `flutter test`). See "Characterization harness". |
+| D5 | Destination | New feature `lib/features/video_player/`: `models/` and `application/` for service-free pure code, `presentation/legacy_video_player/` (the bridge) for collaborators that call services, storage, platform channels or the player. Registered in `check_search_architecture.py` like the other bridges. |
+| D6 | `build` (1,172 lines) | Move-only cannot split one method. Decided in phase 25: either it stays in the facade or moves whole to a builder; either way a **bounded, measured exception** (exact line count registered at creation, shrink-only ratchet in `file_size_baseline.txt`) with a named exit: a behaviour-level `build` decomposition into layout widgets with goldens, its own goal. Widget + lifecycle are already ≈ 580 lines, so the facade's end state is registered by measurement, never as an unspecified size. |
+
+## Shared rules for every phase
+
+1. **Move, don't rewrite.** Moved declarations keep bodies, comments and
+   order token-for-token. Allowed edits are only those declared per
+   declaration in the manifest: private → public renames of moved members
+   and fields (`_sleepTimer` → `sleepTimer`), receiver qualification for
+   state that stays in the State (`_player` → `_host.player`), the live
+   `context`/`mounted`/`setState` forwarders, and in retained code, a call
+   or field reference that now targets a collaborator
+   (`_cancelSleepTimer()` → `_sleep.cancelSleepTimer()`), and removal of
+   a `static` modifier when a static member becomes a top-level function
+   (exact opt-in per declaration; negatives for an extra modifier or body
+   edit — the existing core only supports *added* static ownership,
+   `check_verbatim_moves.py:163`). Every edit is declared, never inferred.
+   The shared guards (`occurrence_field_bindings.py:37` recognises only
+   `_deps.alias()`) get explicit opt-in support for `_host` property
+   getters/setters, compound assignments/increments and owner-identity
+   substitutions; existing manifests keep their behaviour.
+2. **Exhaustive Dart move checker with `--at`** (phase 1 step T).
+   `dev/tool/check_dart_moves.py` is a **thin ownership/history layer**
+   that invokes the existing comparison core — `check_verbatim_moves.py`
+   (analyzer 14.3.0 declarations and scanner tokens, coverage and moved-body
+   comparison) and the scope/binding protections that enter through
+   `check_settings_moves.py` (`occurrence_field_bindings`,
+   `lexical_state_setters`, context guard, live getters). **No second
+   normalization implementation.** It adds, like `check_kotlin_moves.py`:
+   - **Ownership.** Every declaration of the original at the phase base SHA
+     (top-level declarations, class members including field initializers,
+     constructors, getters/setters, statics, directives) gets exactly one
+     fate: `retained`, `moved` (destination + declared renames/receivers) or
+     `patched` (exact before→after token patches with occurrence counts; the
+     whole patched declaration is compared). Unassigned, doubly assigned,
+     surviving-after-move and unexpected new declarations are errors.
+   - **Retained code is compared** token-for-token (only declared
+     substitutions) and keeps its relative member order, so field
+     initializer order cannot change silently. The facade's import list is
+     validated against an exact reviewed list per phase; every destination's
+     import list too.
+   - **Partitioning** of the split State class: header, braces and ordered
+     children; inter-member comments attach to the following member.
+   - **Tokens** from the Dart scanner, comments included; whitespace outside
+     literals normalised (Dart is not newline-sensitive, but trailing-comma
+     and comment placement are tokens).
+   - **Lexical scopes:** the `lexical_state_setters` and context guards and
+     the `occurrence_field_bindings` guard (mandatory qualification) are
+     reused, so a renamed field can never be captured by a same-named
+     local/parameter, and a builder `context`/`setModalState` stays lexical.
+   - **`--at <sha>`** checks a phase manifest against the tree at its merge
+     commit, reading manifests, sidecars, import lists and initializer
+     evidence **from that same revision** (`merge-checks.sh` runs all of
+     them).
+   - **Current-tree protection of earlier destinations** (the Kotlin
+     precedent, `check_kotlin_moves.py:363` + `kotlin_move_partition.py:61`):
+     every file created by an earlier phase is checked in the **current**
+     tree against its frozen content, or against exact scoped patches when a
+     later phase legitimately rewires it (e.g. a Host gains a member, a call
+     is re-pointed). Required coverage is derived from all historical
+     manifests. Negative: edit a phase-1 destination while the current
+     facade is unchanged → fails.
+   - **Scaffolding is frozen exhaustively**: every Host interface, adapter,
+     controller field list and initializer body, constructor, and the
+     destination's declaration order.
+   - **Formatting**: the format commit (a) and any formatted moved code may
+     differ from the original only by **AST-identified optional trailing
+     commas** (insert/delete sites recorded; a required singleton-record
+     comma is rejected), applied after receiver substitutions too; formatter
+     idempotence and any diagnostics introduced by formatting are recorded.
+   - **Self-tests**: real-config positive fixture plus negatives — changed
+     literal, dropped/edited comment, reordered statement, undeclared
+     receiver/rename, a field captured by a same-named local, a builder
+     `context` replaced by the host's, a lexical `setSheetState`/
+     `setDialogState` (16227, 16445) replaced by the host's `setState`, an
+     owner-identity `this` left unsubstituted in moved code, a captured
+     local turned into a live host read, a Host write/increment
+     (`_host.x++`) mis-targeted, missing declaration, duplicate move,
+     original+destination both present, unexpected new declaration,
+     retained-body edit, field-initializer reorder, facade import change,
+     destination import mismatch, a `patched` declaration with one extra
+     edit, and `--at` against the wrong SHA.
+   Before any production move it must self-compare R with an all-`retained`
+   manifest (zero diffs, every declaration classified).
+3. **Collaborator pattern** (from the first stateful phase):
+   - `class VpXController` (or a precise noun) in the bridge. **Dart
+     construction rule** (Kotlin slot construction does not transfer: a
+     Dart field initializer cannot reference `this`, and `late final` with
+     an initializer is lazy, so its position guarantees nothing):
+     collaborators are `late final` fields **assigned eagerly in one State
+     constructor body** (`_VideoPlayerScreenState() { … }`, added in the
+     first stateful phase as frozen scaffolding, extended one line per
+     collaborator in later phases). It runs after every field initializer
+     and before `initState`. Constructors are **inert** (assign fields,
+     start nothing).
+   - It owns the fields of its responsibility (moved, renamed public). The
+     State reaches them as `_x.field` (registered receiver). Relocating a
+     field changes when its initializer runs (from its slot among the
+     State's initializers to the collaborator's construction), so **every
+     relocated initializer gets its own inertness proof** (a literal,
+     `const`, or an allocation with no side effects: `FocusNode()`,
+     `ValueNotifier(x)`, `Completer()` — listed per phase; **not** `Random()`, whose
+     seeding advances a shared PRNG, so the State's `Random()` (517) stays
+     State-owned unless a phase proves its ordering immaterial). Collaborator
+     constructors **and their field initializers** never read the Host (the
+     State constructor runs before Flutter assigns `widget` and `context`).
+     Original eager/lazy modifiers are preserved (`late final
+     _iptvLiveRecovery` 735 stays lazy).
+     Effectful or order-sensitive initializers (anything that registers,
+     schedules, reads a service, or whose evaluation order with another
+     initializer is observable) **stay State-owned**.
+   - Everything it needs from the State goes through a **narrow Host**: an
+     `abstract interface class VpXHost` declared beside the controller,
+     implemented by a small private adapter class in the facade library
+     (`_VpXHostAdapter(this._s)`; library privacy lets it reach the State's
+     private members) whose members are one-line forwarders to the live
+     State member (`bool get mounted => _s.mounted;`,
+     `mk.Player get player => _s._player;`, setters for writes,
+     methods for calls). **`setState`** is forwarded through a State-owned
+     private method (`void _vpSetState(VoidCallback fn) => setState(fn);`,
+     frozen scaffolding), never by calling the protected `setState` from
+     the adapter. Forwarders are computed (never cached), so values are read
+     at the original moment; **originally captured locals stay locals** —
+     forwarding never turns a snapshot into a later read. Each Host lists
+     only what its controller reads (checked: every Host member has at least
+     one reader; no Host exposes the whole State). Adapters are frozen in
+     the manifest as scaffolding with exact bodies.
+   - **Owner identity.** A moved `this` that identifies the State to a
+     service (`PipService.isOwner(this)` 11637,
+     `PlayerVisibility.playbackState(this, …)` 3925, any `identical(this,`,
+     listener registration keyed by `this`) becomes a narrowly named Host
+     member returning the State (`host.pipOwner`, `host.visibilityOwner`),
+     pinned as a declared substitution by occurrence. An unsubstituted
+     `this` in moved code that reaches such a call is a checker error.
+   - `context` stays live: `_host.context` forwards to the State's `context`
+     at the call site; builder-local `context`s stay lexical.
+   - Cross-collaborator calls go through the Host (wired by the facade), not
+     by collaborators importing each other's state, unless the phase
+     section declares an owner/child pair.
+   - Collaborators are disposed only where the original disposed their
+     resources: `dispose` keeps its statement order; a moved timer cancel
+     becomes `_x.cancelFoo()` at the same position.
+4. **Characterize the original first (step 0)**, through the harness below:
+   widget tests that pin the phase's observable behaviour on the original
+   (rendered widgets, focus, key results, timers via `fake_async`/`tester.pump`,
+   fake player calls, captured provider callbacks, storage writes through the
+   existing test doubles, method-channel invocations via
+   `TestDefaultBinaryMessengerBinding`), each proven by an assertion-failing
+   **mutation of the original** in a detached worktree under the evidence
+   dir. Then Claude's independent mutation sample (≥ 75 % killed, otherwise
+   step 0b closes the gaps and Claude samples again). Coverage sweep: every
+   moved member is reached by at least one characterization test or is
+   listed with a reason (unreachable without a device, dead) in the phase's
+   coverage matrix.
+5. **Tests that read the player source** keep their purpose. The complete
+   list of direct readers (design review round 1):
+
+   | Test | Anchors that must survive |
+   |---|---|
+   | `test/manual_source_validation_contract_test.dart:230` | explicit-selection validation; rejected-candidate progress suppression; outgoing-stream restoration; playlist/PikPak exhaustion |
+   | `test/android_tv_mdblist_progress_source_test.dart:148` | carried TVMaze identity; tracker-progress getters; metadata readiness; rewatch resume suppression |
+   | `test/media_server_service_test.dart:1459` | final authorization barrier; source propagation; validation arming after async setup |
+   | `test/media_server_player_resume_test.dart:105` | guarded `readLocalResume` selection; no direct URL fallback there |
+   | `test/media_server_watch_player_wiring_test.dart:24` | prepare/authorize/open order; watch epoch; commit; reporting guards; close and EOF |
+   | `test/playback_startup_view_test.dart:8` | opaque non-interactive PiP startup shield and its transition rendering site |
+   | `test/player_auto_next_routing_test.dart:16` | EOF routing order, shared next route, navigation/sleep cancellation, resume suppression |
+   | `test/services/webdav_sync/playback_checkpoint_contract_test.dart:18` | pause/seek persisted checkpoints, save lock, guards rechecked after queueing |
+   | `test/theme/source_guard_test.dart:37` | frozen player paths, construction containment, route guards, forbidden theme reads |
+
+   Step 0 of phase 1 adds a **per-declaration source reader**
+   (`test/features/video_player/support/vp_source_reader.dart`) that
+   resolves a declaration by name through the phase manifests, **validates
+   current ownership and the body against the checker before returning
+   it**, and chains relocation across phases; it never satisfies an
+   assertion with historical text. When an anchored declaration moves, its
+   test is switched to the reader in the same commit with an
+   equal-or-stronger assertion, listed in the deps report (old anchor → new
+   anchor). The theme scans need the **current destination files**: the
+   frozen-path list in `dev/tool/theme_surface_manifest.txt:26`
+   (`p2_player_dart`), `dev/tool/theme_rendered_set.py:57` and the exact
+   assertion in `source_guard_test.dart` are extended with each new
+   `lib/features/video_player/**` file in the commit that creates it. The
+   Debrify TV / Stremio TV / recordings fixtures and handoff helpers are
+   public-widget contract consumers, not source readers: their checks are
+   preserved and not retargeted. Never delete an assertion.
+6. **Analyzer identities.** Each phase records, by enclosing declaration
+   and **multiplicity**, the diagnostics of the original (root config), of
+   the formatted original, under the strict `lib/features` config, and of
+   a rename/receiver probe; baseline and probe combine by maximum per
+   identity. Each surviving pre-existing diagnostic gets its
+   `analyzer_allowlist.txt` entry in the commit that creates its file. The
+   global allowlist matches as a set and ignores infos
+   (`check_analyzer_allowlist.py:40`), so phase 1 adds a **scoped identity
+   comparator** (`dev/tool/check_vplayer_analyzer.py`) that enforces the
+   recorded identities and counts, infos included, for the facade and every
+   `video_player` destination. No `const`, key or suppression changes.
+7. **Gates per phase** (evidence under
+   `<git-common-dir>/refactor-evidence/vplayer/pN/`):
+   - Full Flutter suite via `suite_evidence.py` at the base, after step 0
+     (new baseline) and at the gate, compared by test identity; known
+     load-sensitive flakes rerun in isolation with a NOTE, never allowlisted.
+   - `dart format` of changed Dart files, `flutter analyze` (identities),
+     `check_file_sizes.py` (the facade baseline lowered with `--update`;
+     every new file ≤ 800 lines, or ≤ 500 preferred, unless a documented
+     exception), `check_search_architecture.py`, every Dart manifest
+     self-test with an isolated `--parser-package`, all historical phase
+     manifests with `--at`.
+   - At the gate: `flutter build apk --release` and `flutter build macos
+     --release` succeed (no install, no run); gate commit message contains
+     `gate`. Baselines are reused across mechanical moves within a phase
+     (AGENTS); the broad suite and builds run at the gates and the
+     integration milestones below.
+   - **CI from the first production file** (phase 1): `video_player`
+     registered in `check_search_architecture.py` `FEATURES` with the exact
+     legacy bridge, a facade back-import prohibition (no
+     `lib/features/video_player/**` file imports the facade), pure
+     `models/`/`application/` boundaries, scoped compatibility imports and
+     size caps; the facade and new files added to the explicit
+     format/analyze lists in `.github/workflows/checks.yml:70`; the Dart
+     move checker self-test and current-tree check (with history, so
+     `fetch-depth: 0`) and the analyzer comparator in CI; every new
+     characterization file added to `ci_behavior_tests.txt` (the gate job
+     runs that curated list — a `gate` message alone adds no tests).
+   - Never `flutter run`/install on any device; no emulators.
+8. **Device checks** are not gates; each phase lists what a human checks at
+   the end of the series (phone, Android TV with the Flutter player, tvOS,
+   desktop), aggregated into the end-of-series checklist.
+9. **Codex** (gpt-6.1-sol, xhigh, `~/bin/codex-run`) reviews each phase
+   design until "No P1s", executes step T/0/0b/1, and a fresh Codex session
+   reviews the gated range; Claude reviews too and merges.
+
+## Characterization harness
+
+The State is unreachable from tests without help, and the player is native.
+Options, in order of preference — **the design review must settle this**:
+
+- **(H1) Test-only seam checkpoint (chosen; design review round 1).** One
+  separately reviewed commit **S** before phase 1 step 0, the only
+  application change before any move: one `@visibleForTesting` hook object,
+  `VideoPlayerScreenTestHooks`, with **exactly three interception points**:
+  1. the `MediaKitInit.ensureInitialized()` statement in `initState`
+     (1753) → test no-op/recorder;
+  2. the `mk.Player(configuration: …)` expression in `_createPlayerInstance`
+     (2914) → a factory **receiving the original configuration** (including
+     its `ready` callback);
+  3. the `mkv.VideoController(player, configuration: …)` expression → a
+     factory receiving the same player and the original video
+     configuration.
+  The surrounding statements keep their order: `_player` assignment,
+  `_playerCreated`, controller construction, tvOS remedy, subscriptions,
+  decoder observers, aspect zoom. No early return, no objects created up
+  front. **Installation**: one frozen static installer whose assignment
+  happens only inside an `assert` (so it is compiled out of
+  release/profile), preceded by an explicit non-assert check that throws if
+  called when `kReleaseMode || kProfileMode`, and additionally gated on a
+  test-only compile-time flag (`bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')`)
+  so an ordinary debug app cannot install it; the flag is registered in the
+  test and CI commands that run the harness. The source guard permits
+  exactly the installer's own assignment and rejects every other assignment
+  of the hook and every reference to the installer under `lib/`. **Proof**:
+  two `patched` declarations (`initState`, `_createPlayerInstance`) with
+  three exact before→after patches, plus the added scaffolding (hook
+  class, installer, interception helpers) frozen separately; the token
+  proof covers the helper bodies and installer; each default path calls
+  the original operation **exactly once**, evaluates the configuration
+  once, and keeps assignment and guard order. A release build alone proves
+  neither property. S becomes the ORIGINAL for
+  behaviour; every later mutation and proof runs against S.
+
+  **Fakes** (`test/features/video_player/support/`), all via `implements`
+  (extending or calling the vendored native constructors —
+  `packages/media_kit_patched/lib/src/player/player.dart:101`,
+  `packages/media_kit_video_patched/lib/src/video_controller/video_controller.dart:72`
+  — would create native resources):
+  - `FakePlayer implements mk.Player`: `open`, `stop`, `play`, `pause`,
+    `playOrPause`, `seek`, `setRate`, `setVolume`, `setAudioTrack`,
+    `setSubtitleTrack`, `dispose`, `handle`; a coherent `PlayerState` and
+    broadcast streams for every stream the State subscribes to (log,
+    error, video params, position, duration, playing, completed,
+    buffering, the selected `track` and the available `tracks` — `_bindPlayerInstanceSubscriptions` 3790; the conditional audio-policy subscription reads `stream.track` 3878) and that
+    the real `mkv.Video` subtree consumes (width, height, playing,
+    subtitle — `video_texture.dart:303`); recorded calls; controllable
+    delayed/failed operations and disposal completion.
+  - A configurable **fake `mk.NativePlayer` platform** (property get/set,
+    observers, commands, configuration), because substantial production
+    behaviour is gated on `player.platform is mk.NativePlayer` (subtitle
+    visibility, network tuning, recording eligibility, auto-sync — 4838);
+    tests choose native or non-native explicitly.
+  - `FakeVideoController implements mkv.VideoController`: notifiers,
+    completers and deliberate frame-readiness behaviour.
+  - Controllable `ready` callbacks (never fired synchronously inside the
+    factory, before the State's assignments finish), old-instance events
+    after replacement.
+
+  **Environment fixture** (existing overrides; no further application
+  seams in phase 1):
+
+  | Dependency | Handling |
+  |---|---|
+  | `PlayerDisplayControls` singleton (wakelock on load, play/pause writes, teardown — `player_display_controls.dart:9`) | plugin / platform-interface channel mocks, recorded |
+  | window_manager / `SystemChrome` (fullscreen on Linux/Windows 1773, orientation, UI mode, teardown) | recorded channels; statements are never skipped |
+  | PiP (guarded by real `dart:io Platform` predicates, 1706) | **device-pending** on the desktop harness; a narrowly reviewed platform-predicate seam may be proposed before the PiP phase, otherwise those branches are listed device-only and never claimed as covered |
+  | Storage/profile (`ProfileRuntime.isProfileCommitted` throws uninitialized; policy guards on native recording eligibility 3443; subtitle/tracking/skip/completion/defaults loads in `initState`) | existing storage/profile test doubles initialized by the harness; for committed-profile native tests `ProfilePolicyGuard`'s active-profile mirror is initialized/reset explicitly (`profile_policy_guard.dart:19`), since `ProfileRuntime` alone leaves synchronous permission checks closed |
+  | Files/HTTP (`getTemporaryDirectory` + HTTP client in addon subtitles 17648) | path_provider channel mock + HTTP override per test |
+  | Timers/leases (analytics heartbeat in `initState`, autosave 3696, recovery timers, output lease release) | `fake_async`/explicit pumps, drained at teardown; no unrestricted `pumpAndSettle` |
+- **(H2) Real libmpv in tests.** `/opt/homebrew/lib/libmpv.dylib` exists
+  locally but not on CI/Linux runners; real decoding in widget tests is
+  timing-dependent. Rejected as the primary harness; may supplement a
+  smoke test locally.
+- **(H3) Source-text characterization only.** Rejected: AGENTS says
+  source-text tests are not behaviour tests.
+
+The harness also provides a widget pump with the storage/service fakes, a
+method-channel recorder, and helpers to drive TV keys, taps and timers.
+
+**Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
+work, and resources"): each stateful phase's step 0 pins, where its
+members participate, captured-scope writes, profile switch/deletion during
+the operation, stale queued actions, route replacement, events from an old
+player instance, and ordered teardown. Existing epochs, tickets and guards
+stay intact; `mounted` forwarding alone is not evidence. Device-only
+coverage stays pending until performed.
+
+## Shared state that stays State-owned
+
+Static occurrence counts at `ed728b078` (not resolved bindings, but
+executable coupling): `_player` in 76 members, `_duration` 39,
+`_activePlaylist` 30, `_currentIndex` 28, `_isTransitioning` 27.
+`_openMedia` clears resume protection and begins engine generations
+(4828); EOF combines trackers, completion, sleep, IPTV and episode routing
+(5244); subtitle rollback joins engine diagnostics, persistence and menu
+correction (5110). These groups **stay in the State** (reached through
+Host forwarders) through every phase unless a phase section proves a
+complete ownership transfer:
+
+- player instance, readiness, instance/media generations, position/duration;
+- current playlist/index/source/URL/headers and effective content identity;
+- transition, validation and sleep-stop gates;
+- resume guard/epoch (shared by open, renderer fallback and switching);
+- IPTV current identity and switch ticket; navigation and scrub generations.
+
+Each phase section lists every field it moves (with its readers/writers
+from the analyzer binding scan) and every shared field its Host forwards.
+
+## Phase map (risk- and dependency-ordered)
+
+Line numbers at `ed728b078`; each phase section re-measures. "≈ out" is
+declaration lines leaving the facade (facade growth from imports, Host
+adapters and wiring is not subtracted). Phases over ~500 lines name
+**several destination files** (each ≤ 500 preferred, ≤ 800 hard).
+Integration milestones (**M**) run the full suite, both release builds and
+a cross-phase scenario pass over the workflow before the next milestone
+starts.
+
+| Phase | Content | ≈ out | Risk |
+|---|---|---|---|
+| 1 | Format commit (a); Dart move checker + analyzer comparator; harness seam S + fakes + source reader; CI registration; top-level types + parameter-only helpers (frozen list in the phase-1 section) | 300 | low (moves) / **high (tooling + seam)** |
+| 2 | Sleep timer (13826–13930) | 110 | low |
+| 3 | Skip segments (1797–1819, 1871–2040) | 250 | med |
+| 4 | Speed / aspect / orientation (13739–13825, 13931–14030 subset) | 230 | med |
+| 5 | Trackers: Trakt/Simkl/MDBList scrobble + heartbeats, analytics heartbeat, tracker percent helpers (2041–2750) | 700 | med |
+| 6 | Local completion (1820–1870, 10374–10478) | 160 | med |
+| 7 | PiP + background/wakelock (11635–11882) — PiP branches device-pending unless a reviewed predicate seam | 250 | high |
+| **M1** | integration gate: controls/tracker/lifecycle scenarios | | |
+| 8 | Subtitle engine I: subtitle settings, sync overlay, auto-sync pill/notice (2940–3088 auto-sync part only, 6380–6626) | 450 | med |
+| 9 | Subtitle engine II: apply + diagnostics + failure + rollback (5014–5200, `_SubtitleApplyAttempt` users) | 300 | high |
+| 10 | Subtitle sources and preferences: restore, default audio/subtitle language, forced, addon fetch/auto-select, Stremio download, priority (17164–18044) | 880 | high |
+| **M2** | subtitle integration gate: one state-ownership map for phases 8–10; apply/failure/persistence/audio-policy races | | |
+| 11 | Identify title + subtitle search sheet (15932–16645) | 720 | med |
+| 12 | Tracks sheet + unified player menu (16647–17162) | 520 | med |
+| 13 | Resume: keys, restore, seek/verify/landing, enhanced state, save + write guard (12093–12905) | 810 | high |
+| 14 | IPTV recording (7691–8297) | 610 | med |
+| 15 | IPTV workflow (one milestone, separate collaborators, one switch/recovery owner): zap paging, guide categories, Start Over/catch-up, live retune, channel switch, live open, audio preference, stream error (759–1272 IPTV members, 6627–7690, 8298–8562) | 1,700 | highest |
+| **M3** | IPTV integration gate | | |
+| 16 | Startup: debrid direct, startup VOD, VOD failover, startup gate (8563–9200) | 640 | high |
+| 17 | Source switching: source sheet, source playlist / Stremio / IPTV source switch (9201–9820) | 620 | high |
+| **M4** | startup/source-switching integration gate | | |
+| 18 | Stremio TV + Debrify TV channel navigation and banners (9821–10330, 13414–13570, 14124–14236) | 700 | high |
+| 19 | Episode navigation: ended, next/previous, shuffle/random, series next, title/subtitle info (5210–6360, 10332–10373) | 1,200 | high |
+| 20 | Playlist load/resolve, video metadata wait, PikPak retry, metadata preload/save (10479–11634) | 1,150 | high |
+| 21 | Episode fetch + synthetic guide (14242–14736) | 500 | high |
+| **M5** | episode navigation/load/fetch integration gate | | |
+| 22 | Player engine I: audio/output lease/effects, passthrough, tvOS remedy/display match, decoder/renderer fallback (2750–3263 minus auto-sync, 4076–4692) | 1,100 | highest |
+| 23 | Player engine II: `_initializePlayer`, open media, network tuning, instance subscriptions, startup watchdog (3264–4075, 4693–4978) | 1,350 | highest |
+| 24 | Controls runtime: auto-hide, TV bar/scrub, TV keys, overlays, gestures (12907–13738) | 830 | high |
+| 25 | `build` decision (D6), end-state exception, completion audit, CI structure job, device checklist | — | — |
+
+The order puts self-contained features first and the shared engine last,
+so early phases build the Host/adapter scaffolding on low-risk code.
+Phase numbers after 2 are provisional; each phase section may split or
+merge neighbours after its inventory, recorded in Progress.
+
+## Phase 1 — format, tooling, harness seam, top-level types and parameter-only helpers
+
+Branch `refactor/vplayer-p1` off `ed728b078`. Evidence
+`refactor-evidence/vplayer/p1/`. The declaration moves are small; the risk
+is the tooling and the seam, which every later phase depends on.
+
+### Frozen move list
+
+| Original | Kind | Destination | Name |
+|---|---|---|---|
+| `_ManualSourceValidationFailure` 167 | type | `models/vp_manual_source_validation_failure.dart` | `VpManualSourceValidationFailure` |
+| `_SeasonEpisodeSelection` 171 | type | `models/vp_season_episode_selection.dart` | `VpSeasonEpisodeSelection` |
+| `_SubtitleApplyAttempt` 178 | type (mutable; object identity and completion lifecycle preserved — documented legacy exception) | `models/vp_subtitle_apply_attempt.dart` | `VpSubtitleApplyAttempt` |
+| `_IptvZapPage` 207 | type | `models/vp_iptv_zap_page.dart` | `VpIptvZapPage` |
+| `IptvCatchupRequestGate` 229 | type | `models/iptv_catchup_request_gate.dart` | unchanged; **exact facade re-export** added beside the two existing exports (163) |
+| `_RandomChoiceTile` 18046 | widget | `presentation/vp_random_choice_tile.dart` | private name kept; `typedef VpRandomChoiceTile = _RandomChoiceTile;` (spotlight/stremio precedent) |
+| `_format` 13706 | instance, parameter-only | `application/vp_format.dart` | `vpFormatDuration` |
+| `_pad2` 14262 | static (`static` removal declared) | same file | `vpPad2` |
+| `_generateFilenameHash` 18036 | instance, parameter-only (algorithm frozen) | `application/vp_filename_hash.dart` | `vpFilenameHash` |
+| `_normalisePosterUrl` 16036, `_normalisedContentType` 15977, `_identityMetaSubtitle` 16042, `_filterIdentitySearchResults` 16007, `_subtitleSearchDisplayLabel` 15991 | instance, parameter-only (imports `lib/models/stremio_addon.dart`) | `application/vp_identity_text.dart` | `vpNormalisePosterUrl`, `vpNormalisedContentType`, `vpIdentityMetaSubtitle`, `vpFilterIdentitySearchResults`, `vpSubtitleSearchDisplayLabel` |
+| `_diagnosticSubtitleId` 5031, `_subtitlePreferenceMatchesAttempt` 18025 | both **static**, parameter-only (imports media_kit `SubtitleTrack` + `VpSubtitleApplyAttempt`); `static` removal declared | `application/vp_subtitle_identity.dart` | `vpDiagnosticSubtitleId`, `vpSubtitlePreferenceMatchesAttempt` |
+
+Step 0 re-proves each helper parameter-only (no `this`, `widget`,
+`context`, State field, service or I/O reference; analyzer binding scan)
+and that its imports are allowed in `application/` (no Flutter UI; a
+legacy DTO under `lib/screens/` needs an exact scoped compatibility import
+or the helper goes to `presentation/`). A helper failing the proof is
+dropped from phase 1 (recorded), never transformed. **Excluded** (not
+parameter-only — they move with their owners): `_randomStartOffset`
+(widget field + `_random`), `_percentStartOffset` (widget field),
+`_dockGeometrySignature` (State fields + `MediaQueryData`).
+
+### Steps
+
+- **(a) Format-only commit** `style(vplayer): format the original video
+  player screen` with the AST optional-comma proof (rule 2); if formatting
+  grows the facade, its baseline is **raised explicitly** in
+  `file_size_baseline.txt` with a dated note (`check_file_sizes.py
+  --update` only lowers). R = (a).
+- **Step T — tooling.** `check_dart_moves.py` (rule 2) with fixtures and
+  every negative; all-`retained` self-compare of R; every existing Dart
+  manifest self-test passes with an isolated `--parser-package`;
+  `check_vplayer_analyzer.py` (rule 6); CI wiring (rule 7).
+- **(S) Harness seam checkpoint** (H1): the three interception patches,
+  test-mode-only installation, the source guard, the token proof; then the
+  fakes, environment fixture and source reader.
+- **Step 0 — characterization of the original (at S).** Harness smoke
+  tests: the screen mounts with a fake player for a direct URL, a
+  playlist, an IPTV channel list and a Stremio TV channel, opens media
+  with the recorded configuration, and disposes cleanly with no pending
+  timers. Phase-1 behaviour through original callers: manual-source
+  rejection and rollback (`_ManualSourceValidationFailure`); season/episode
+  validation, acceptance and cancellation in the identity sheet
+  (`_SeasonEpisodeSelection`); a subtitle selection's apply-attempt
+  lifecycle (success, failure rollback, persisted audio id); zap page
+  offsets/totals through an IPTV zap; `IptvCatchupRequestGate` (reuse
+  `iptv_channel_sheet_responsive_test.dart:292`, add completion/
+  cancellation/stale cases); the random-playback menu tiles; each helper
+  through a caller (duration text, recording file name hash, identity
+  search labels/filtering, subtitle preference matching). The filename
+  hash is the **fallback resume identity** (`_resumeIdForEntry` 12201), not
+  a recording name (recordings use the timestamp function at 7997): a
+  plain playlist entry without TorBox/PikPak identifiers, an existing
+  fallback bookmark, asserted restored seek and storage identity,
+  extension normalisation and the empty-title fallback to `widget.title`;
+  a mutation of the hash helper must fail that test. Mutation proofs
+  on S for every test; coverage matrix.
+- **Claude sample** (≥ 75 %), **step 0b** if needed.
+- **Step 1 — moves** per the frozen list; source-test retargets; theme
+  path lists extended.
+- **Gate** (commit message contains `gate`), **independent Codex review**,
+  merge, merge checks, push.
+
+### Phase 1 device checklist (end of series)
+
+Random-playback menu tiles render and select on phone and TV; IPTV
+catch-up/Start Over cancellation still wins over a slow lookup; identity
+search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) lands at the saved position after the update.
+
+## Follow-ups
+
+- **Service/data ownership exit** (D1): data contracts for resume,
+  trackers, subtitles, sources and IPTV replace the bridge's direct service,
+  storage, channel and player calls.
+- **`build` decomposition** (D6 exit): behaviour-level split into layout
+  widgets with goldens, its own goal.
+
+- **Video player Riverpod migration** (D1 exit): controllers become
+  per-session/profile notifiers, one per batch, behaviour-tested; requires
+  this series' collaborators and characterization tests.
+- `lib/screens/video_player/**` oversized files (`iptv_channel_sheet` 3,667,
+  `tracks_sheet` 2,197, `player_menu_panel` 1,844, …) — their own goal.
+- Localization of player strings.
+
+## Progress
+
+2026-10-11 — **(a) and Step T complete; stop before S.**
+
+- **R = `a43f44cbb33a05830bbcb0325c98a768d10cc166`.** Ran `dart format`
+  on the original facade only. `vplayer_format_proof.py` records 18 inserted,
+  zero deleted AST-optional commas, identical remaining scanner tokens/comments/
+  literals, idempotence and rejected comment/literal/singleton-record mutations.
+  Explicit dated baseline raise: 18,106 → 18,187 lines. Root player diagnostics
+  rose 70 → 73: three formatting-induced `curly_braces_in_flow_control_structures`
+  infos, recorded by declaration in `format-diagnostics.json`.
+- **T = `c3b7dec1ae018ebdf51e2cdd77c19badf20b24bb`.**
+  `check_dart_moves.py --self-test --self-compare-original`: all real-config,
+  rule-2/round-2 negatives and historical fixtures pass; R has 893 exhaustive
+  spans, zero differences. Current-tree and `--at c3b7dec1a` checks pass.
+  All 26 existing Dart manifest self-tests and the Kotlin Phase-19 checker
+  self-test pass. Accepted manifest runs use isolated `--parser-package`
+  paths under `.dart_tool/vplayer_parser/`, with copied `*.dill` removed;
+  heavy processes use `nice -n 19`. The 16-move/10-destination Phase-1 manifest
+  is **draft**; its formatted evidence-only materialization also compares
+  exactly and has zero analyzer errors. No production file was created.
+- **Analyzer/checks.** `check_vplayer_analyzer.py` passes for root R/current
+  (73), byte-identical strict R (133), rename probe (141), and `--at T`.
+  Inventory includes infos and multiplicity: maxima across 33 identities.
+  `flutter analyze` retains exactly R's 1,753 root diagnostics (exit 1);
+  format, `check_file_sizes.py`, `check_search_architecture.py`, Python compile
+  and diff checks pass. CI remains disabled until the **Step-1 commit creating
+  the first `lib/features/video_player/**` file**; required wiring is listed
+  in `dev/tool/dart_moves/README.md`.
+- **Suite/deviations.** Completed original full suite via `suite_evidence.py`:
+  12,793 successes, 14 failures, 28 errors, 20 skips. Focused post-T run:
+  133 successes, one observed-baseline PiP source-assertion failure; comparison
+  has no new failures, missing tests or new skips. Initial suite run with
+  embedded parser paths outside the isolated root was stopped and replaced
+  using an evidence-only routing wrapper; the initial focused run naming a
+  nonexistent test was discarded. Formatting split one startup source guard;
+  T's existing assertion now pins its complete expression with whitespace-
+  tolerant matching, preserving the anchor and strengthening the assertion.
+  Analyzer setup experiments are excluded from the inventory. All evidence
+  and exact commands/notes are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/`. Application/dependency
+  files are unchanged after R. S, characterization, production moves and gate
+  suite/builds remain unstarted.
+
+
+### 2026-10-11 — S and Step 0 (complete; stop before moves)
+
+- **Revisions.** S `80839d827383b05078178f292b56efbddd166fb1` is the
+  separately committed characterization checkpoint; Step 0 is
+  `c502380169cbc3a1394782c52a0fac08d7595e67`. Application code remains
+  byte-identical to S; dependencies are unchanged and the Phase-1 move
+  manifest stays draft. S's dated size exception is 18,251 lines.
+- **S proof.** `vplayer_seam_proof.py --self-test`, the seam move-checker
+  self-test and `check_dart_moves.py --manifest vplayer_p1_seam.json --at S`
+  pass: two patched declarations, three exact interceptions, frozen hook
+  scaffold, once-only defaults/configurations and ordered assignments.
+  Installer/source guard passes both with and without the test flag. The
+  harness flag is in the test command list and CI behaviour command.
+- **Characterization.** Four original launch smoke cases and phase-1
+  source rejection/rollback, identity validation/cancel, subtitle lifecycle,
+  zap offsets/totals, catch-up ownership, active shuffle and fallback hash
+  resume/storage scenarios pass. The full suite passes all 26 additions.
+  All 10 helpers pass the analyzer binding/import proof; the unchanged
+  strict-feature top-level rename probe from T remains valid. The current
+  source reader validates ownership/body/history and chains relocation.
+  Coverage and mutation tables are in the deps report. The legacy
+  `_RandomChoiceTile` is dead under shared rule 4. **Step-0b correction:**
+  the initial `_format` dead-code claim missed its `SeekHud` tear-off; the
+  added HUD behavior test now covers it. Active duration/shuffle callers
+  are also tested. PiP stays
+  device-pending. No predicate seam or manufactured caller was added.
+- **Mutations.** Detached original-S control: 26/26 pass. One application
+  mutation per test plus six identity/total-boundary mutations: 32/32
+  assertion kills. Original S is restored after each run. An offset-zero
+  mutation that caused a microtask loop was interrupted/excluded and
+  replaced by a total-boundary mutation; no assertion was weakened.
+- **Suite/NOTE.** `suite_evidence.py run vplayer/p1/step0-suite-isolated
+  --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  original-suite-routed.jsonl`: **PASS**, 12,820 successes, 13 failures,
+  28 errors, 20 skips; 26 added successful identities, zero new failures,
+  missing tests or new skips. The profile-editor extra failure was a
+  deterministic parser-path setup incompatibility; unchanged-source/test
+  isolated 3x reruns and the final full run pass. No observed behavior
+  flake/regression and no allowlist entry. The 41 remaining failures/errors
+  match the observed original set after that environment repair.
+- **Checks/evidence.** Root `flutter analyze --no-pub` retains S's 73 scoped
+  identities with zero additions; the new harness folder analyzes cleanly.
+  Final root analysis has exactly T's 1,753 diagnostic identities/counts
+  (exit 1 for existing diagnostics); temporary earlier scan differences
+  from vendor/test/build assets are archived separately.
+  Sizes (2,984 files/140 ratchets), architecture (1,652), formatting, Python
+  compile and diff checks pass. Heavy commands use `nice -n 19`; Flutter
+  suite runs are serialized. All artifacts and exact commands are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/`, including the named
+  JSONL runs, `COMMANDS-step0.txt`, baseline delta and routing audit.
+- **Routing/deferred work.** An evidence-only Python routing wrapper now
+  covers outer CLI packages and nested hard-coded parser guards, including
+  child tools; each invocation copies a fresh package under
+  `.dart_tool/vplayer_parser/` and deletes copied kernels. Incomplete runs
+  before lint cleanup/nested routing are excluded with NOTEs. Existing
+  comparison code/manifests are unchanged. No production file, dependency
+  change, bug fix, push, merge, branch switch or device command. Feature
+  move/import/analyzer CI enables only in Step 1's first
+  `lib/features/video_player/models/` production-file commit. Claude's
+  independent mutation sample, any step 0b and production moves remain
+  subsequent work.
+
+### 2026-10-11 — Step 0b (complete; stop before moves)
+
+- **Revision.** `849d3b343c4d13d8db96cae2070f479317489b2c`; 31 added
+  behavior identities through original callers. Complete detached-original
+  control at c50238016 passes 57/57; application/dependencies stay identical
+  to S. The coverage matrix and mutation tables are in
+  [the deps report](video-player-screen-deps.md).
+- **Systematic sweep.** All 16 frozen declarations, 248 nested AST sites;
+  113 valid mutations give 107 assertion kills and six proved equivalents.
+  Every new test has its own assertion-failing original mutation witness.
+  `build_evidence.py --require-complete` and `audit_mutations.py` pass; no
+  unresolved site or surviving non-equivalent behavior is recorded.
+- **Requested sample.** `run_sample.py` reruns all 20, with uniquely scoped
+  c1: 18/20 assertion kills (90%). c15 is equivalent by the active-ticket
+  invariant; c18 is unreachable after the const-true unified-menu return.
+  c16 is refuted by public ticket values 1→3 versus mutant 1→2. The earlier
+  `_format` dead-code claim missed its SeekHud tear-off; a new mounted pan/HUD
+  behavior test kills c19 and systematic f01 without changing production.
+- **Suite baseline.** `suite_evidence.py run vplayer/p1/step0b-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  step0-suite-isolated.jsonl`: **PASS**. 12,851 successes, 13 failures,
+  28 errors, 20 skips; exactly 31 additions and zero changed existing
+  outcomes, new failures, missing tests or new skips. SDK/tree checks pass;
+  the profile-editor test passes and no allowlist changes.
+- **Checks.** Root analysis retains all 1,753 prior diagnostic identities;
+  scoped analysis retains 73 S identities with zero additions. Harness
+  analysis/formatting, current/`--at S` seam proofs, size, architecture and
+  diff checks pass. The full-suite routing audit records 114 unique isolated
+  parser packages, 342 copied kernels deleted and 618 nested redirects.
+- **Evidence/deviations.** Artifacts and commands are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/step0b/`; the observed suite
+  baseline/delta are `step0b-baseline-outcomes.json` and
+  `step0b-baseline-delta.json`. Invalid s07 compilation and the s17 paging
+  loop are excluded with NOTEs; corrected s07 and the identical s17 patch
+  against the unchanged underreported-total test assertion-fail. Flutter
+  assertion-print classification and the `_format` correction are documented.
+  No weakened tests, extra seam, bug fix or production move. Heavy commands
+  use `nice -n 19`; Flutter runs are serialized. Stop here; feature-specific
+  move/import/analyzer CI still enables only in Step 1's first production
+  `lib/features/video_player/models/` file commit.
+
+### 2026-10-11 — Step 0b addendum (original callers)
+
+- **Revision.** Based on `31769235c`; detached original `849d3b343` remains
+  byte-identical to S. Both independent samples and per-case closure are
+  recorded in the deps report (initial 7/17 and second 9/12).
+- **Results.** Negative-offset ChannelUp paging and exact direct-source
+  rejection diagnostics close d13 and d5, each with a completed assertion
+  failure on the original. Unmodified control: 55 behavior tests pass;
+  one additional identity, all previous assertions retained.
+- **Deviation.** d1 is equivalent through every original caller: forward
+  comparisons are unchanged by clamping total to window end; reverse
+  comparisons ignore total; merging reclamps to a containing window.
+  The complete survivor run and exhaustive algebra/source audit are
+  archived, rather than adding a private seam or claiming a false kill.
+  Optional d2 rerun loops/timeouts are excluded; Claude's completed
+  assertion kill is retained.
+- **Commands/evidence.** `nice -n 19 python3 step0b-addendum/run.py`,
+  `dart format` of the two changed test files, `git diff --check`;
+  `step0b-addendum/` contains exact commands, patches, raw assertion logs,
+  hashes and NOTEs. Application/dependencies unchanged; no allowlist.
+  Flutter runs serialized; full additions-only comparison follows at
+  the authorized Step-1 gate against the accepted Step-0b baseline.
+
+### 2026-10-11 — Step 1 (production moves; CI activation)
+
+- **Revision.** Follows addendum `8073fc9a2`. This creation commit applies
+  the frozen 16-declaration move list into ten feature files, including
+  `models/vp_manual_source_validation_failure.dart`; CI activates here.
+  The manifest changes only status. All 893 fates, including S's two
+  patched declarations/three interceptions, compare with zero differences.
+- **Checks.** Current ownership/history, frozen seam negative proofs,
+  analyzer comparator (74 scoped diagnostics, zero additions), global
+  allowlist (45 inventoried warnings), size and architecture pass.
+  Whole-file format proof: five optional commas inserted, none deleted;
+  idempotent. Actual CI formatting scope: 2,321 files, no changes.
+  Characterization/theme subset: 68 successful identities.
+- **Structure/CI.** Facade 18,251→18,018; new files 3–65 lines. Exact
+  bridge, facade back-import ban, pure import/type lists and 500-line caps
+  are registered with real positive/negative probes. CI has full history,
+  move self-test/current check, scoped analyzer and facade format/analyze
+  paths. All ten theme paths and live reader/seam guards are retargeted;
+  no source assertion removed. The rejection diagnostic expectation
+  follows the declared public type rename.
+- **Evidence/next.** `step1/` holds exact move/format proofs, source-reader
+  and seam validation, analyzer and CI-scope logs. Six original warnings
+  and one approved probe import warning are preserved, with no fixes.
+  Full-suite identity comparison against Step 0b, all manifest self-tests
+  and historical inputs, and both release builds run on the clean commit
+  before the gate Progress entry. Dependencies unchanged; no devices.
+
+### 2026-10-11 — Phase 1 gate (complete; stop)
+
+- **Revisions.** Addendum `8073fc9a2`; production/CI creation
+  `5faaed55b`. Gate ran on the clean production commit; the final gate
+  record changes documentation only. Scope and frozen move list complete.
+- **Suite.** `suite_evidence.py run/compare` against the accepted Step-0b
+  run passes by identity: 12,852 successes, same 13 failures / 28 errors /
+  20 skips; one added success, zero changed outcomes, missing tests, new
+  failures or new skips. Profile editor passes; no test allowlist changes.
+- **Checks.** Fresh analysis/comparator passes (74 scoped, zero additions;
+  1,680 external diagnostic occurrences, identities/counts unchanged). Actual CI formatting scope, size
+  and architecture pass. All 26 existing Dart manifest self-tests plus
+  video-player self-test/current/`--at` P1/T/S comparisons pass. Kotlin
+  checker historical/compiled self-tests pass. Parser audit: 147 isolated
+  packages, 441 copied kernels deleted; all manifest flags under vplayer.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub` succeed (120.56s / 221.76s).
+  Both leave tracked files unchanged; artifacts/checksums archived.
+- **Evidence/deviations.** `gate/COMMANDS-gate.txt`, `completion.json`,
+  `suite-delta.json`, parser audit, checker/analyzer logs and release
+  artifacts record the exact clean tree/SDK/results. d1 is proved
+  caller-equivalent; d5/d13 assertion-killed on the original (addendum).
+  No bug fixes, new seams or dependency changes. Heavy commands nice 19,
+  Flutter suites serialized; no device, push, merge or branch switch.
+- **Human checklist (end of series; not gates).** On phone, Android TV
+  with Flutter player, tvOS and desktop: random menu tiles render/select;
+  catch-up/Start Over cancellation beats slow lookup; identity labels
+  unchanged; plain playlist entries resume saved progress. Pending.
+  Stop here; gated-range review/integration remains with user/Claude.
+
+2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
+`ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
+proof, seam exactly-once/installation rules, 893-span ownership comparison, history and
+binding negatives, 58 focused tests, mutation spot checks, equivalence/dead-code claims
+(c15/c16/c18, d1/d8/d11/d12) and raw suite identities. Claude samples: first 7/17 (41 %,
+step 0b + systematic sweep), after 0b 18/20 on the first set and 9/12 (75 %) on a second
+independent set; d5/d13 then closed. Merged `--no-ff` into `refactor/codebase`.
+
+## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
+
+| Finding | Resolution |
+|---|---|
+| P1-1 Kotlin slot construction illegal in Dart; `setState` via adapter; owner identity `this` | Construction rule (eager assignment in one State constructor body; per-initializer inertness proofs; effectful initializers stay); `_vpSetState` forwarder; `host.pipOwner`/`visibilityOwner` substitutions pinned by occurrence; captured locals stay locals (rule 3). |
+| P1-2 H1 under-specified | Three interception points in one hook, order preserved, test-mode-only installation, token proof; fake player/native platform/video controller contract; environment fixture; PiP device-pending ("Characterization harness"). |
+| P1-3 `--at` leaves earlier destinations unprotected | Current-tree protection of every earlier destination, history-derived coverage, frozen scaffolding, same-revision `--at` inputs, negative (rule 2). |
+| P2-4 impure "pure helpers" | Frozen phase-1 list; random/percent/dock excluded; per-helper proof; drop, never transform. |
+| P2-5 phase map coupling | Shared-state section; phase 3 split into 2/3/4/7, title search split from tracks/menu, subtitle ownership map + M2, IPTV as one milestone, integration gates M1–M5, multiple destination files. |
+| P2-6 reuse checker core | Thin ownership/history layer over the existing comparison and binding modules; optional-comma discipline; explicit baseline raise. |
+| P2-7 source-test inventory | Exact table; validating, chaining reader; theme path lists. |
+| P2-8 naming | `Vp`-prefixed public data types; typedef for `_RandomChoiceTile`; gate re-export; manual-source and season/episode scenarios. |
+| P2-9 CI/analyzer/exceptions | CI registration in phase 1; scoped identity comparator; D6 bounded exception; per-phase profile/resource evidence. |
+| P3-10 wording, baseline reuse | D4 reworded; baselines reused across mechanical moves. |
+
+## Design review round 2 resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: exact hook installation (assert-only assignment, release/profile
+throw, test-only compile-time flag, source guard permitting only the
+installer, exactly-once proof over helpers); declared `static` removal and
+opt-in `_host` property/increment/owner-identity support in the shared
+guards; `Random()` removed from inert examples, no Host reads at
+construction, eager/lazy modifiers preserved; the hash characterization
+targets the fallback resume identity. P3s: two patched declarations with
+three patches; fake `track`/`tracks`; `ProfilePolicyGuard` mirror; exact
+helper names and imports; follow-ups mirror D1/D6 exits.
