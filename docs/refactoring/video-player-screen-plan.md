@@ -1116,6 +1116,37 @@ remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
   device-pending; gate proceeds on the clean creation commit, compared to
   unchanged step-0b observed baseline. No device commands or new seams.
 
+### 2026-10-11 — Phase 2 gate (complete; stop)
+
+- **Revisions.** Addendum `5205111eb`; production/clean tested tree
+  `b0533aac5`. Current P2 applied, all ten P1 destinations unchanged,
+  application edits restricted to frozen facade/controller materialization.
+  Pubspec unchanged. Commands/hashes/results: `p2/gate/completion.json`.
+- **Suite.** `suite_evidence.py run vplayer/p2/p2-gate-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` (nice 19) completed: 12,873
+  successes, same 13 failures / 28 errors / 20 skips. Strict identity
+  equality and official compare against unchanged Step-0b observed baseline
+  pass: zero added/missing/changed identities. No allowlist changes or flakes.
+- **Checks.** P2 current/universal self-test/same-revision `--at b0533aac5`,
+  P1 `--at 31a347ad2`, all 26 Dart manifest self-tests and complete Kotlin
+  historical/compiled self-test pass. Isolated parser flags/audit pass.
+  Analyzer comparator 75 scoped/zero additions, CI warning allowlist 45
+  existing/nothing new or stale; non-video-player identities unchanged.
+  Format, size/architecture pass; 149-line controller, 17,932-line facade.
+- **Builds.** Sequential `nice -n 19 flutter build apk --release --no-pub`
+  (114.31 s) and `flutter build macos --release --no-pub` (108.77 s) pass,
+  no install/run. Tree clean after both; artifact/AOT hashes recorded.
+- **Deviations.** Initial architecture copy used legacy P1 temp path and
+  auto-removed; accepted rerun under P2 after phase-root support. Initial
+  Kotlin run omitted its separate evidence override, was interrupted and
+  earns no credit; complete explicit-P2 rerun passed. Raw batch retains
+  that interruption; accepted ledger replaces only its row. Notes in deps.
+- **Device checklist/pending.** Real countdown decrement/nonpositive branch;
+  Android replacement/player-created-false during blocked save; `e14`
+  Android/iOS Start Over/background intent; phone, Android TV (Flutter),
+  tvOS and desktop sleep/EOF/save checks at series end. No new seams,
+  bug fixes or device commands. Stop before Phase 3 and review externally.
+
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
 proof, seam exactly-once/installation rules, 893-span ownership comparison, history and

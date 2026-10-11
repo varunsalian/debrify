@@ -1926,3 +1926,49 @@ source guards); current ownership zero differences; scoped analyzer/self-tests
 warnings/nothing new or stale; format, size, architecture and seam negatives pass.
 Commands and hashes: `p2/step1/completion.json`. Device/clock/sample dispositions
 from Step 0/0b remain unchanged. Clean-tree full-suite/build gate follows.
+
+## Phase 2 clean-tree gate (2026-10-11)
+
+Step-0b addendum `5205111eb`; production creation and tested clean tree
+`b0533aac5`. The accepted baseline remains `step0-suite-final.jsonl` at
+`5b2b62c3b` (Step 0b changes no test/application inputs). The complete gate
+suite is `p2-gate-suite.jsonl`; environment pins Flutter 3.44.8 / Dart 3.12.2,
+clean creation revision and no tree changes during the run.
+
+| Check | Observed result / evidence |
+|---|---|
+| Full suite by identity | 12,873 successes / 13 failures / 28 errors / 20 skips; zero added, missing, changed or newly failing/skipped identities; strict equality and official helper PASS (`gate/suite-delta.json`, `suite-comparison.txt`) |
+| Move/history | P2 current tree, universal/real-config self-test and same-revision `--at b0533aac5` zero differences; P1 historical `--at 31a347ad2` PASS; all ten earlier destinations protected |
+| Dart precedent checks | All 26 existing manifest self-tests PASS with explicit isolated parser-package flags (`gate/accepted-checks.json`) |
+| Kotlin precedent | Complete historical/compiled self-test PASS in the P2 evidence root; initial interrupted invocation excluded (`gate/kotlin-result.json`, `kotlin-self-p2.log`) |
+| Analyzer | P2 comparator including infos and identity/multiplicity negatives: 75 scoped, zero additions; CI warning allowlist: 45 pre-existing, nothing new/stale |
+| Root analyzer identities | 1,770 → 1,771: only the frozen destination directives-ordering info from T; every non-video-player identity/multiplicity unchanged. Existing 16 ignored build-pubspec path warnings remain unsuppressed (`gate/root-analyzer-delta.json`) |
+| Format / size / architecture | PASS; controller 149, facade 17,932; 2,995 files / 140 ratchets; 1,663 migrated files; bridge/import/cap negatives pass |
+| Release APK | `nice -n 19 flutter build apk --release --no-pub`: PASS, 114.31 s, APK 102,268,046 bytes |
+| Release macOS | `nice -n 19 flutter build macos --release --no-pub`: PASS, 108.77 s; app launcher and Dart AOT hashes recorded |
+
+Both builds ran sequentially after the suite, without install/run, and left the
+tracked tree clean and pubspec unchanged. Artifact paths/flags/hashes are in
+`gate/build-results.json`. Every harness suite uses the test-hook define;
+release builds use the normal default path. No device/emulator commands.
+
+Parser routing audit: 496 unique isolated wrapper packages, 1,467 copied kernels
+deleted, 96 explicit manifest invocations; seven detached-worktree copies were
+already kernel-clean before wrapping. Nested legacy parser requests route to
+the isolated package (`gate/parser-routing-audit.json`).
+
+**Evidence-routing deviations, corrected:** the initial architecture self-test
+used its legacy P1 temporary path and cleaned the copy automatically; the tool
+now honors the phase root, with accepted rerun under P2. The first Kotlin gate
+invocation omitted `TVPLAYER_EVIDENCE_ROOT` and used the legacy TV-player root;
+it was interrupted on discovery and earns no credit. Complete rerun with explicit
+`p2/kotlin` root passed. Raw batch retains the interrupted row and therefore exits
+nonzero; the accepted 30-command ledger replaces only that row with the successful
+rerun. Both attempts/notes remain under P2; no prior source/test evidence deleted.
+
+`gate/completion.json` pins all results and constraints. Existing race outcomes
+and `e14` remain preserved; real-clock decrement/nonpositive branch, Android
+replacement/player-created-false during a blocked resume save, and mobile
+Start Over/background intent remain device-pending. End-of-series phone,
+Android TV Flutter player, tvOS and desktop checklist remains pending.
+No further production moves or bug fixes included; stop at the Phase 2 gate.
