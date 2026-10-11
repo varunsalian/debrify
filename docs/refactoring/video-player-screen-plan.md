@@ -728,6 +728,29 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   move/import/analyzer CI still enables only in Step 1's first production
   `lib/features/video_player/models/` file commit.
 
+### 2026-10-11 — Step 0b addendum (original callers)
+
+- **Revision.** Based on `31769235c`; detached original `849d3b343` remains
+  byte-identical to S. Both independent samples and per-case closure are
+  recorded in the deps report (initial 7/17 and second 9/12).
+- **Results.** Negative-offset ChannelUp paging and exact direct-source
+  rejection diagnostics close d13 and d5, each with a completed assertion
+  failure on the original. Unmodified control: 55 behavior tests pass;
+  one additional identity, all previous assertions retained.
+- **Deviation.** d1 is equivalent through every original caller: forward
+  comparisons are unchanged by clamping total to window end; reverse
+  comparisons ignore total; merging reclamps to a containing window.
+  The complete survivor run and exhaustive algebra/source audit are
+  archived, rather than adding a private seam or claiming a false kill.
+  Optional d2 rerun loops/timeouts are excluded; Claude's completed
+  assertion kill is retained.
+- **Commands/evidence.** `nice -n 19 python3 step0b-addendum/run.py`,
+  `dart format` of the two changed test files, `git diff --check`;
+  `step0b-addendum/` contains exact commands, patches, raw assertion logs,
+  hashes and NOTEs. Application/dependencies unchanged; no allowlist.
+  Flutter runs serialized; full additions-only comparison follows at
+  the authorized Step-1 gate against the accepted Step-0b baseline.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

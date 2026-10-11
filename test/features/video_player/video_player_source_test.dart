@@ -1,6 +1,7 @@
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
@@ -32,6 +33,11 @@ void main() {
         final original = source('Original', 'https://player.test/original.mp4');
         final rejected = source('Rejected', 'https://player.test/rejected.mp4');
         final committed = <Torrent>[];
+        final diagnostics = <String>[];
+        final previousDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) {
+          if (message != null) diagnostics.add(message);
+        };
         try {
           await fixture.mount(
             tester,
@@ -102,6 +108,14 @@ void main() {
           expect(fixture.player.state.playing, isTrue);
           expect(fixture.player.state.position, const Duration(minutes: 5));
           expect(committed, isNot(contains(rejected)));
+          if (!playlist) {
+            expect(
+              diagnostics,
+              contains(
+                'Player: manual Stremio source rejected (_ManualSourceValidationFailure)',
+              ),
+            );
+          }
           final opens = fixture.player.calls
               .where((call) => call.$1 == 'open')
               .map(
@@ -122,7 +136,11 @@ void main() {
             0,
           );
         } finally {
-          await fixture.close(tester);
+          try {
+            await fixture.close(tester);
+          } finally {
+            debugPrint = previousDebugPrint;
+          }
         }
       },
     );

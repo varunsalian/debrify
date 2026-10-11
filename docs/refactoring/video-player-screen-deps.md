@@ -1344,3 +1344,51 @@ pass. `step0b/COMMANDS-step0b.txt`, `mutation-audit.json` and `completion.json`
 record commands, raw assertion verification and tested input identities.
 Application code and dependency files remain byte-identical to S; Phase-1
 destinations and feature-specific CI activation remain deferred to Step 1.
+
+## Step 0b addendum — both independent samples (2026-10-11)
+
+| Independent sample | Original revision | Original assessment | Closure |
+|---|---|---|---|
+| Claude sample 1 | `c502380169` (application S) | 7/17 valid kills (41%); c1 ambiguous, c15/c16 initially excluded | Step 0b systematic sweep above; unique c1 rerun; c16 exclusion refuted; 18/20 raw kills, c15 equivalent and c18 dead |
+| Claude sample 2 | `849d3b343` (application S) | 9/12 valid kills (75%); d8 equivalent, d11/d12 dead | d5 and d13 now assertion-killed on the original; d1 proved caller-equivalent, no fabricated kill |
+
+Original independent ledgers/logs remain under `claude-sample/` and
+`claude-sample2/`. Sample-1 per-case initial outcomes are: c1 invalid (two matches), c2 killed, c3 killed, c4 survived, c5 killed, c6 killed, c7 survived, c8 survived, c9 survived, c10 killed, c11 killed, c12 survived, c13 survived, c14 survived, c15 survived, c16 survived, c17 killed, c18 survived, c19 survived, c20 survived. The existing 20-row rerun table records their closure.
+
+| Second ID | Original mutation | Independent result | Addendum closure / original-caller witness |
+|---|---|---|---|
+| d1 | `total: math.max(total, offset + channels.length),` | survived | Equivalent: `end < max(total,end) ⇔ end < total`; merge clamps to a containing window. Existing mounted payload has total 100 below offset 100 + len 2; complete survivor run. |
+| d2 | `return _IptvZapPage(` | killed | Original independent assertion kill retained; optional rerun incomplete and excluded, see NOTE. |
+| d3 | `previousStremioId: _selectedStremioSubtitleId,` | killed | Assertion kill: `late embedded failure restores previous addon selection once` |
+| d4 | `previousExternalPath: _activeExternalSubtitlePath,` | killed | Assertion kill: `late embedded failure restores previous addon selection once` |
+| d5 | `throw const _ManualSourceValidationFailure();` | survived | Assertion kill: `manual direct source rejection restores outgoing media and position` |
+| d6 | `if (season == null \|\| episode == null) return null;` | killed | Assertion kill: `series identity reuses launch episode and keeps absolute poster URL`; `series identity preserves a single-slash poster URL` |
+| d7 | `if (url == null \|\| url.trim().isEmpty) return null;` | killed | Assertion kill: `movie identity adopts without episode prompt for year "null"`; `movie identity adopts without episode prompt for year "   "`; `movie identity adopts without episode prompt for year " 2025 "` |
+| d8 | `if (contentType == 'series' && season != null && episode != null) {` | excluded equivalent | Equivalent: non-series identity path supplies null season and episode; remaining null guards reject the suffix. |
+| d9 | `if (meta.year != null && meta.year!.trim().isNotEmpty) meta.year!,` | killed | Assertion kill: `movie identity adopts without episode prompt for year "   "` |
+| d10 | `if (type != 'movie' && type != 'series') continue;` | killed | Assertion kill: `identity search filters and labels results then validates and accepts the season episode`; `identity search filters and labels results then cancels the season episode`; `identity search rejects custom series ids and keeps type namespaces`; `series identity reuses launch episode and keeps absolute poster URL`; `series identity preserves a single-slash poster URL` |
+| d11 | `child: Icon(icon, color: const Color(0xFFFCA5A5), size: 20),` | excluded dead | Dead original `_RandomChoiceTile`; both constructions follow the const-true unified-menu return. Preserved by the move. |
+| d12 | `onTap: onTap,` | excluded dead | Dead original `_RandomChoiceTile`; both constructions follow the const-true unified-menu return. Preserved by the move. |
+| d13 | `final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0;` | survived | Assertion kill: `IPTV zap clamps a negative payload offset before paging` |
+| d14 | `sourceId: (rawSourceId == null \|\| rawSourceId.isEmpty)` | killed | Assertion kill: `IPTV category crossing carries page category source and replacement directory`; `IPTV zap clamps a negative payload offset before paging`; `IPTV zap preserves nonzero page offsets and fetches the next page` |
+| d15 | `final key = '$type:$imdbId';` | killed | Assertion kill: `identity search rejects custom series ids and keeps type namespaces` |
+
+### Coverage and mutation additions
+
+| Frozen declaration / caller | Added observable assertion | Original mutation proof |
+|---|---|---|
+| `_IptvZapPage` / `_parseIptvZapPage` → ChannelUp paging | Negative payload offset -7 produces request offset 2, bound to original source, and tunes channel 2 | d13 complete assertion failure (`Expected: <2>`, actual offset 0) |
+| `_ManualSourceValidationFailure` / original mounted manual source sheet | Direct rejection logs exactly `Player: manual Stremio source rejected (_ManualSourceValidationFailure)`; all outgoing media/seek/commit rollback assertions retained | d5 complete assertion failure, captured diagnostic contains `StateError` |
+| `_IptvZapPage` / every total consumer | Underreported payload retains stop/wrap behavior; backward paging reads offset only | d1 complete survivor; exhaustive caller proof in `d1-equivalence-NOTE.txt` |
+
+The addendum adds one behavior identity and strengthens the existing direct
+manual-source test. The detached original control passes all 55 behavior
+tests (the three seam/reader infrastructure tests are excluded from mutation
+scoring). `step0b-addendum/results.json` records exact commands, patches, test
+input hashes, complete-run/compile classification and raw assertion blocks.
+No production code, hook, dependencies or allowlist changed. The Step-1 gate
+compares the full suite with the accepted `step0b-suite.jsonl`; only this one
+additional successful identity is expected. The independent second-sample
+score remains 9/12; closure kills 11/12 of its originally valid cases using
+existing independent evidence plus d5/d13, with d1 now proved equivalent
+(11/11 non-equivalent cases covered). Optional incomplete reruns are excluded.
