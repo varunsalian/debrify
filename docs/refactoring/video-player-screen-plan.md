@@ -729,6 +729,17 @@ next episode does not start; "end of episode" stops at EOF.
 - `lib/screens/video_player/**` oversized files (`iptv_channel_sheet` 3,667,
   `tracks_sheet` 2,197, `player_menu_panel` 1,844, …) — their own goal.
 - Localization of player strings.
+- Overlapping EOF callbacks suspended in completion storage can resume after
+  disposal: the first clears end mode and the second enters the legacy
+  next-episode lookup. Phase-2 characterization records the diagnostic and
+  forbids silently fixing this disposed-screen work during extraction.
+- Sleep expiry released after disposal still calls the disposed native player
+  after saving. A rejection propagates; a successful late pause suppresses its
+  toast. Phase-2 original characterization preserves this ordering defect.
+- A live recovery open already issued before sleep pause can complete playing
+  afterward under a delayed-open fake contract. The latch prevents subsequent
+  recovery attempts; verify the real native behavior before a separate fix.
+
 
 ## Progress
 
@@ -957,6 +968,56 @@ next episode does not start; "end of episode" stops at EOF.
   catch-up/Start Over cancellation beats slow lookup; identity labels
   unchanged; plain playlist entries resume saved progress. Pending.
   Stop here; gated-range review/integration remains with user/Claude.
+
+### 2026-10-11 — Phase 2 Step T (complete; draft only)
+
+- **Revision.** `6fdc85a66`, based on original `31a347ad2`, re-measured by
+  name: 889 spans, 12 moved declarations, 14 retained reference sites.
+  Complete raw/formatted evidence-only P2 materializations compare with
+  zero differences; no production destination created.
+- **Checks.** Opt-in owner-scoped bare-field positive and all binding
+  negatives pass without changing old manifest behavior. All 26 existing
+  Dart manifest self-tests, video-player universal self-test, historical
+  P1 `--at 31a347ad2`, and Kotlin historical/compiled self-test pass.
+  Analyzer root/strict/probe: 74/141/75 scoped occurrences, zero additions
+  against maximum inventory; async-context declaration identities unchanged.
+  Format idempotent, zero optional commas or introduced diagnostics;
+  size/architecture pass. Commands/results: `p2/tooling/completion.json`.
+- **Constraints.** Explicit isolated parser packages (copied kernels
+  deleted), heavy processes nice 19, serialized Flutter runs. Application
+  and pubspec unchanged; CI transition remains in the production creation
+  commit. Step 0 continues on the original; no bug fixes or new seams.
+
+### 2026-10-11 — Phase 2 Step 0 (original characterization checkpoint)
+
+- **Revision/scope.** Follows T `6fdc85a66`; original application remains
+  exactly `31a347ad2`. Twenty-one behavior tests use public controls/menu/guide
+  callbacks, fake-player events and the existing storage boundary. No new
+  seam, private-State call, production move or CI transition.
+- **Coverage/proofs.** Systematic 81-point sweep over all 12 moved
+  declarations and 14 retained reference sites: 68/68 reachable
+  non-equivalent mutations assertion-killed, nine caller-equivalent, four
+  platform/clock pending. All 21 final-input tests have assertion-failing
+  original witnesses in the detached evidence worktree. Tables are in the
+  deps report; `p2/step0/completion.json` pins commands, hashes and results.
+  Invalid/uncaught-error attempts receive no credit; earlier attempts kept.
+- **Checks.** `nice -n 19 python3 step0/run_mutations.py`, `dart format`,
+  changed-test `dart analyze` (no issues), size (2,994/140 ratchets),
+  architecture (1,662 migrated files), and diff checks pass. Full suite
+  follows on this clean checkpoint, compared by identity to the exact
+  reusable P1 observed baseline; dependencies/allowlists unchanged.
+- **Deviations/pending.** Real countdown decrement was already approved
+  device-pending. Android-only instance replacement while save is blocked,
+  the false player-created path, and mobile playback-intent consumers
+  cannot execute on the macOS VM without an unauthorized raw Platform seam.
+  Explicitly pending under rule 4, not declared equivalent or covered.
+  Legacy sleep sheet is dead. Disposed cancellation is reached by overlapping
+  EOFs and its mode assignment has a behavioral mutation proof.
+- **Existing outcomes.** Save released after dispose still calls the disposed
+  player: native rejection propagates, success emits no toast. A previously
+  issued live open can complete after sleep pause under the fake contract;
+  the latch blocks later recovery. Recorded in Follow-ups; no bug fixes.
+  Heavy commands nice 19, harness flag true, suites serialized; no devices.
 
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format

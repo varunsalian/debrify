@@ -1555,3 +1555,206 @@ CI current-tree/analyzer selection stays at P1 until the production creation
 commit switches it to P2 and adds P1 `--at 31a347ad2`. The strengthened, validating
 EOF sleep-anchor retarget and theme path additions belong to that creation
 commit. Application code, app dependencies and size baseline are unchanged.
+
+## Phase 2 Step 0 — original sleep-timer characterization (2026-10-11)
+
+Application original: `31a347ad2`; no production moves or new seams. Twenty-one
+behavior tests mount and dispose the original deterministically. Calls use the
+public Controls/TvControls, unified menu and channel-guide callbacks, player
+events and existing preference transport; no test accesses private State.
+The storage barrier suspends the real `_saveResume`, not a replacement helper.
+All 21 new tests have assertion-failing original mutation witnesses using the
+final frozen test/support inputs. Both controls layouts assert the sleep label;
+desktop uses the configured styled dock tooltip and TV uses its rendered text.
+
+The sweep enumerates **81** statement/branch/literal points across all 12 moved
+declarations and 14 retained reference occurrences: **68/68 reachable
+non-equivalent mutations assertion-killed**, **9 caller-equivalent**, **4
+platform/clock pending**. One pending mobile-intent mutation was executed and
+survived the complete macOS control; it is not classified as equivalent.
+Compilation failures and uncaught exceptions earn no kill credit. First-pass
+logs and input snapshots remain in `step0/campaign-v1/`, `campaign-v2/` and
+`characterization-inputs/`; all accepted results are in `mutation-results.json`.
+An independent Claude sample remains the next review checkpoint.
+
+### Behavior coverage and final-input mutation witnesses
+
+| ID | Original caller behavior | Assertion-failing mutation(s) |
+|---|---|---|
+| C01 | sleep menu and desktop dock preserve mode, preset and ceil label | `g-round` |
+| C02 | sleep menu and TV dock preserve mode, preset and ceil label | `g-round` |
+| C03 | selection callback immediately rebuilds countdown menu and dock | `g-round`, `r11-menu-mode` |
+| C04 | selection callback immediately rebuilds endOfItem menu and dock | `r11-menu-mode` |
+| C05 | off callback immediately rebuilds an armed menu and dock | `cancel-render` |
+| C06 | off cancels countdown and clears mode, preset and dock label | `cancel-native` |
+| C07 | re-arm replaces old countdown and fires only at the new expiry | `start-cancel` |
+| C08 | end-of-item cancels countdown and EOF stops before playlist advance | `cancel-native` |
+| C09 | end-of-item EOF returns before Xtream series channel advance | `eof-return` |
+| C10 | IPTV live menu gates end-of-item through the original caller | `live-menu-gate`, `dispose-nullguard` |
+| C11 | IPTV VOD menu gates end-of-item through the original caller | `live-menu-gate`, `dispose-nullguard` |
+| C12 | disposal cancels the armed countdown without firing later | `r05-dispose-cancel` |
+| C13 | expiry awaits the real resume write before pause and clears the timer | `fire-save` |
+| C14 | expiry awaits native pause before displaying its toast | `fire-pause-await` |
+| C15 | in-flight expiry after dispose still calls disposed pause and reports its error without toast | `fire-late-pause` |
+| C16 | in-flight expiry after dispose suppresses toast when native pause succeeds | `fire-late-pause`, `toast-mounted` |
+| C17 | late overlapping EOF after disposal clears end mode before the next callback | `cancel-unmounted-mode` |
+| C18 | sleep latch cancels an already queued automatic adjacent episode | `fire-latch` |
+| C19 | sleep latch outranks a pending live IPTV recovery retry | `fire-latch` |
+| C20 | sleep latch blocks further recovery after an in-flight live open completes late | `fire-latch` |
+| C21 | end-of-item carried from VOD to live blocks recovery without treating live EOF as completion | `r01-recovery-mode` |
+
+### Per-declaration coverage matrix
+
+Lines are AST declaration starts at the merge base, measured by name; attached
+comments start earlier. T inventories the exact frozen token spans separately.
+
+| Original declaration (line) | Caller coverage / boundary | Sweep points |
+|---|---|---|
+| `_iptvRecoveryEligible` (683) | C19–C21: latch and carried end-mode reject recovery (1 site) | `r01-recovery-mode` |
+| `_sleepTimerMode` (1454) | C01–C04, C10–C11: default and selected menu modes | `f-mode`, `f-mode-countdown` |
+| `_sleepTimerDeadline` (1456) | C01–C04, C07, C13: null default masked by off; arm/ceil/expiry | `f-deadline` |
+| `_sleepTimerArmedMinutes` (1461) | C01–C07, C13: zero default, preset and reset | `f-preset` |
+| `_sleepTimer` (1464) | C06–C09, C12–C16: cancellation, replacement and suspended expiry | `f-timer` |
+| `_onPlaybackEnded` (5207) | C08–C09, C17, C21: end-mode/cancel/toast before advance and overlapping late EOF (3 sites) | `r02-eof-mode`, `r03-eof-cancel`, `r04-eof-toast`, `eof-latch`, `eof-return` |
+| `dispose` (11857) | C12, C15–C16: direct timer cancel/clear and in-flight fire (2 sites) | `r05-dispose-cancel`, `r06-dispose-clear`, `dispose-nullguard` |
+| `_buildTvControls` (13054) | C02: TV callback and rendered label (2 sites) | `r07-tv-callback`, `r08-tv-label` |
+| `_sleepTimerMinutesLeft` (13812) | C01–C07, C13: zero/ceil menu arguments; real decrement pending | `g-mode`, `g-null`, `g-off-zero`, `g-unit`, `g-edge`, `g-negative`, `g-denominator`, `g-round` |
+| `_sleepTimerButtonLabel` (13823) | C01–C08: null / Episode / N min in controls and dock | `label-off`, `label-episode`, `label-count`, `label-remaining` |
+| `_showSleepTimerSheet` (13830) | C01–C04, C10–C11: unified sleep section; legacy tail dead | `menu-section`, `menu-return`, `menu-unified` |
+| `_applySleepTimerSelection` (13851) | C01–C11: real row and captured selection callbacks, all modes | `select-off-cancel`, `select-off-toast`, `select-minutes`, `select-end-cancel`, `select-end-render`, `select-end-mode`, `select-end-toast` |
+| `_startSleepCountdown` (13865) | C01–C07, C12–C19: arm, replace, cancellation and expiry | `start-cancel`, `start-duration`, `start-render`, `start-mode`, `start-deadline`, `start-preset`, `start-store`, `start-callback`, `start-toast` |
+| `_cancelSleepTimer` (13877) | C05–C09, C12–C17: mounted cancellation and disposed overlapping EOF | `cancel-native`, `cancel-clear`, `cancel-off-check`, `cancel-off-return`, `cancel-mounted`, `cancel-off-mode`, `cancel-deadline`, `cancel-preset`, `cancel-unmounted-mode`, `cancel-unmounted-deadline`, `cancel-nullguard`, `cancel-render` |
+| `_fireSleepTimer` (13893) | C13–C19: save/pause order, latch, suspended save/pause; replacement pending | `fire-cancel`, `fire-latch`, `fire-wanted`, `fire-created`, `fire-no-player`, `fire-save`, `fire-await`, `fire-pause`, `fire-late-pause`, `fire-toast`, `fire-pause-await` |
+| `_showSleepTimerToast` (13906) | C01–C09, C13–C16: exact text, duration, behavior and mounted guard | `toast-mounted`, `toast-behavior`, `toast-duration`, `toast-content` |
+| `build` (14721) | C01: desktop callback and styled dock label (2 sites) | `r09-desktop-callback`, `r10-desktop-label` |
+| `_buildPlayerMenuPanel` (17005) | C01–C11, C13: mode/preset/minutes/callback (4 sites) | `r11-menu-mode`, `r12-menu-preset`, `r13-menu-left`, `r14-menu-selection`, `live-menu-gate` |
+
+### Systematic mutation table
+
+Every row mutates one exact, uniquely contextualized occurrence in the original
+declaration. Raw replacement strings, offsets, commands, hashes and assertion
+messages are in `step0/points.json` and `mutation-results.json`.
+
+| Point | Original declaration | Result / evidence or equivalence reason |
+|---|---|---|
+| `f-mode` | `_sleepTimerMode` | Assertion-killed: C01, C02 |
+| `f-deadline` | `_sleepTimerDeadline` | Equivalent: Off mode masks the deadline; every countdown overwrites it before any read. No timer reads it while off/end-of-item. |
+| `f-preset` | `_sleepTimerArmedMinutes` | Assertion-killed: C01, C02, C04 |
+| `f-timer` | `_sleepTimer` | Equivalent: Explicit null equals Dart implicit null; no branch/literal other than null exists in this initializer. T independently freezes inert initialization. |
+| `g-mode` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-null` | `_sleepTimerMinutesLeft` | Equivalent: Every public countdown arm sets a nonnull deadline synchronously with its mode; every clear first changes the mode to off. No reachable countdown-null state exists. The valid mutation preserves Dart flow analysis using a forced null check. |
+| `g-off-zero` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C04 |
+| `g-unit` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-edge` | `_sleepTimerMinutesLeft` | Equivalent: At zero the fall-through ceil(0/60000) is also zero; negatives still return zero. |
+| `g-negative` | `_sleepTimerMinutesLeft` | Pending: Real DateTime.now is not intercepted by fake_async. Nonpositive real remaining with a still-armed timer requires the approved wall-clock/device check. |
+| `g-denominator` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `g-round` | `_sleepTimerMinutesLeft` | Assertion-killed: C01, C02, C03 |
+| `label-off` | `_sleepTimerButtonLabel` | Assertion-killed: C01, C02 |
+| `label-episode` | `_sleepTimerButtonLabel` | Assertion-killed: C04 |
+| `label-count` | `_sleepTimerButtonLabel` | Assertion-killed: C01, C02, C03 |
+| `label-remaining` | `_sleepTimerButtonLabel` | Pending: Ceil of real remaining initially equals armed minutes. The real countdown decrement is explicitly device-pending in the approved plan. |
+| `menu-section` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `menu-return` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `select-off-cancel` | `_applySleepTimerSelection` | Assertion-killed: C06 |
+| `select-off-toast` | `_applySleepTimerSelection` | Assertion-killed: C06 |
+| `select-minutes` | `_applySleepTimerSelection` | Assertion-killed: C01, C02, C07 |
+| `select-end-cancel` | `_applySleepTimerSelection` | Assertion-killed: C08 |
+| `select-end-render` | `_applySleepTimerSelection` | Assertion-killed: C04 |
+| `select-end-mode` | `_applySleepTimerSelection` | Assertion-killed: C04, C08 |
+| `select-end-toast` | `_applySleepTimerSelection` | Assertion-killed: C08 |
+| `start-cancel` | `_startSleepCountdown` | Assertion-killed: C07 |
+| `start-duration` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-render` | `_startSleepCountdown` | Assertion-killed: C03 |
+| `start-mode` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-deadline` | `_startSleepCountdown` | Assertion-killed: C01, C02 |
+| `start-preset` | `_startSleepCountdown` | Assertion-killed: C01, C02, C07 |
+| `start-store` | `_startSleepCountdown` | Assertion-killed: C07, C12 |
+| `start-callback` | `_startSleepCountdown` | Assertion-killed: C07 |
+| `start-toast` | `_startSleepCountdown` | Assertion-killed: C01, C02 |
+| `cancel-native` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-clear` | `_cancelSleepTimer` | Equivalent: All stored timers are cancelled first. Repeated cancel is idempotent; next arm overwrites it and dispose cancels it again. No caller inspects timer identity. |
+| `cancel-off-check` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-off-return` | `_cancelSleepTimer` | Equivalent: When off, initial/default or completed cancellation already has null deadline and zero preset; reassigning identical values cannot change public menu/dock/player/timer behavior. |
+| `cancel-mounted` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-off-mode` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-deadline` | `_cancelSleepTimer` | Equivalent: Getter returns zero while off; next countdown overwrites deadline. Deadline is private and has no other readers. |
+| `cancel-preset` | `_cancelSleepTimer` | Assertion-killed: C06, C08 |
+| `cancel-unmounted-mode` | `_cancelSleepTimer` | Assertion-killed: C17 |
+| `cancel-unmounted-deadline` | `_cancelSleepTimer` | Equivalent: Disposed cancellation can be reached by a late EOF, but its deadline has no readers: mode is off, no mounted menu exists, and next countdown cannot run. The overlapping EOF reads mode only. |
+| `fire-cancel` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-latch` | `_fireSleepTimer` | Assertion-killed: C18, C19, C20 |
+| `fire-wanted` | `_fireSleepTimer` | Pending: Survives all original macOS callers. Functional reads are Android-only renderer fallback and Android/iOS openingStartOver background handling; the other reads only snapshot/restore. No raw Platform seam is authorized; not claimed equivalent. |
+| `fire-created` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-no-player` | `_fireSleepTimer` | Pending: Only initial setup before controls or Android-only in-place replacement can leave playerCreated false; no new Platform seam is authorized. |
+| `fire-save` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-await` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-pause` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `fire-late-pause` | `_fireSleepTimer` | Assertion-killed: C15, C16 |
+| `fire-toast` | `_fireSleepTimer` | Assertion-killed: C13 |
+| `toast-mounted` | `_showSleepTimerToast` | Assertion-killed: C16 |
+| `toast-behavior` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `toast-duration` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `r01-recovery-mode` | `_iptvRecoveryEligible` | Assertion-killed: C21 |
+| `r02-eof-mode` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r03-eof-cancel` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r04-eof-toast` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `r05-dispose-cancel` | `dispose` | Assertion-killed: C12 |
+| `r06-dispose-clear` | `dispose` | Equivalent: After direct timer cancellation disposal removes every subsequent timer reader; clearing only drops the dead reference. T freezes its statement position. |
+| `r07-tv-callback` | `_buildTvControls` | Assertion-killed: C02 |
+| `r08-tv-label` | `_buildTvControls` | Assertion-killed: C02 |
+| `r09-desktop-callback` | `build` | Assertion-killed: C01 |
+| `r10-desktop-label` | `build` | Assertion-killed: C01 |
+| `r11-menu-mode` | `_buildPlayerMenuPanel` | Assertion-killed: C03, C04 |
+| `r12-menu-preset` | `_buildPlayerMenuPanel` | Assertion-killed: C03 |
+| `r13-menu-left` | `_buildPlayerMenuPanel` | Assertion-killed: C03 |
+| `r14-menu-selection` | `_buildPlayerMenuPanel` | Assertion-killed: C03, C04 |
+| `eof-latch` | `_onPlaybackEnded` | Assertion-killed: C08 |
+| `eof-return` | `_onPlaybackEnded` | Assertion-killed: C09 |
+| `live-menu-gate` | `_buildPlayerMenuPanel` | Assertion-killed: C10, C11 |
+| `f-mode-countdown` | `_sleepTimerMode` | Assertion-killed: C01, C02 |
+| `menu-unified` | `_showSleepTimerSheet` | Assertion-killed: C01, C02 |
+| `cancel-nullguard` | `_cancelSleepTimer` | Assertion-killed: C06, C08, C16 |
+| `dispose-nullguard` | `dispose` | Assertion-killed: C10, C11 |
+| `fire-pause-await` | `_fireSleepTimer` | Assertion-killed: C14 |
+| `toast-content` | `_showSleepTimerToast` | Assertion-killed: C13 |
+| `cancel-render` | `_cancelSleepTimer` | Assertion-killed: C05 |
+
+### Dead paths, existing races and pending platform checks
+
+`kUnifiedPlayerMenuEnabled` is constant true. The unified branch, exact sleep
+section and early return are exercised; the legacy sheet tail is dead:
+hide-timer cancellation, `SleepTimerSheet.show` arguments, mounted check,
+auto-hide, nullable picked result and legacy apply callback. These are retained
+verbatim in the manifest; no production flag or source-text behavior test was
+added to manufacture execution. The cancel method's unmounted assignments
+are reached by overlapping EOFs suspended in completion storage during
+disposal. The first clears end mode; the second enters the legacy next-episode
+lookup after disposal. The mode write is observable and mutation-killed; its
+deadline remains private and has no later countdown or mounted UI reader.
+
+**Existing race outcomes, preserved:** after disposal while save is blocked,
+releasing it still invokes the disposed player's pause. A fake native rejection
+is propagated as `StateError`; a successful late pause emits no toast. A live
+recovery open already issued with `play: true` can finish after the sleep pause
+and set the fake player playing again; the latch blocks subsequent recovery.
+This records the existing call-order contract under a delayed open completion,
+not a claim that a real native platform has been exercised. No bug was fixed.
+
+**Pending:** real wall-clock countdown decrement and nonpositive-remaining
+branch (approved design); Android player-instance replacement while save is
+suspended, including `playerCreated == false` and pause on the replacement
+instance; Android/iOS playback-intent consumers. The only in-place replacement
+caller is `_fallbackExplicitRendererToAutomatic`, whose eligibility uses raw
+`Platform.isAndroid`; `_pauseForBackground` also gates on raw Android/iOS.
+`debugDefaultTargetPlatformOverride` cannot change either. No platform seam,
+emulator, device command or private-State invocation was introduced.
+
+The existing P1 clean-tree suite baseline is reusable: `5faaed55b` and
+`31a347ad2` have identical application, original tests, dependencies and root
+analysis configuration, with identical Flutter 3.44.8 / Dart 3.12.2 SDK.
+`step0/base-suite-reuse.json` pins the equality command and original observed
+13 failures / 28 errors / 20 skips. The new full-suite baseline runs on the
+clean characterization commit and compares identities for additions only;
+no allowlist or dependency change. CI list registration and P2 manifest/analyzer
+selection remain in the production creation commit, as specified by Step T.
+All harness commands include `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`.
