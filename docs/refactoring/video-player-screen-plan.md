@@ -889,6 +889,17 @@ Select skips; switching episode does not flash the button.
 - A live recovery open already issued before sleep pause can complete playing
   afterward under a delayed-open fake contract. The latch prevents subsequent
   recovery attempts; verify the real native behavior before a separate fix.
+- Skip fetches have no profile/session guard: an outgoing route still mounted
+  during profile handoff can publish its held result. Disposal rejects it;
+  an incoming route independently reads its own settings. Phase-3 tests pin
+  these three outcomes; add profile isolation only in a separate change.
+- An older A→B→A skip completion writes the session cache before checking
+  generation and clears loading by key alone. It can expose stale data on a
+  tick or poison a later cache return while newer displayed data stays intact.
+  Both success and error outcomes are preserved by Phase-3 characterization.
+- Shortening duration within the same whole-second skip key can clamp a skip
+  seek below the cached segment end and leave its button visible. Phase-3
+  characterization records this existing result without changing it.
 
 
 ## Progress
@@ -1310,7 +1321,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 
 ### 2026-10-11 — Phase 3 Step T (complete; draft only)
 
-- **Revision/scope.** Follows approved design `de55d9987`, original
+- **Revision/scope.** `c1d4cb51b`, approved design `de55d9987`, original
   `fc24e32ae` re-measured by name: 882 classified spans, 17 moves, 14
   substituted retained occurrences and three preserved notifier references.
   Raw/formatted complete evidence materializations compare with zero
@@ -1333,6 +1344,39 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   current/self-test and analyzer manifest/inventory, retain both historical
   phases, register tests and extend all three theme lists. Step 0 continues
   on the original; no bug fixes, new seams or device commands.
+
+### 2026-10-11 — Phase 3 Step 0 characterization checkpoint
+
+- **Scope/revision.** Follows Step T `c1d4cb51b`; original application
+  `fc24e32ae` unchanged. Six new behavior files, two support helpers and the
+  existing HTTP fixture's held/close trace. No new production seam or moves.
+- **Behavior.** All 58 tests pass on the detached original. Settings/request
+  gates, exact identity/key partitioning, cache/dedupe, held A→B→A success/error,
+  cached returns without generation changes, media/reset/failed-load boundaries,
+  all three profile cases, dispose, seek/clock/save/haptic, tracker heartbeat
+  order and TV Select are pinned through original callers. Existing race and
+  profile gaps recorded in Follow-ups without fixing them.
+- **Sweep/proofs.** All 17 moved declarations and 17 retained occurrences:
+  148 points, 119 assertion kills, 26 equivalents with caller/source arguments,
+  three dormant/web/device classifications. Every new test has an assertion
+  witness with final input hashes. First-pass survivors closed systematically;
+  Claude's independent P3 sample remains pending. Deps report has complete
+  coverage, mutation, equivalence and per-test witness tables.
+- **Commands/evidence.** Serialized `nice -n 19 flutter test` with `--no-pub`,
+  hook define and JSON reporter; `p3/step0/coverage.json`, `mutation-results.json`,
+  `points.json`, raw/replay logs and detached worktree. Changed tests analyze
+  cleanly; root `flutter analyze --no-pub`: 1,771, zero added/removed identities.
+  Reusable P2 gate inputs/SDK equal the original (`baseline-reuse.json`).
+- **Deviations.** Initial mutation file selection missed dynamically named
+  tests; final runner discovers all six files. TV missing-seek exceptions
+  excluded until explicit seek-count assertions killed both mutants. Initial
+  clock callback's guarded test assertion corrected to post-pump trace assertion;
+  original control/replays pass. Attempts retained, no allowlist additions.
+- **Next/constraints.** Clean-tree additions-only full-suite baseline follows
+  this checkpoint. CI remains P2; P3 creation must register the six files and
+  perform the documented transition. Provider replacement dormant; unavailable
+  provider web-pending; player-created-false Android path and end-of-series
+  device checklist pending. Pubspec unchanged; no device/build/run commands.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

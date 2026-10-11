@@ -83,21 +83,70 @@ class VideoPlayerBrightness extends ScreenBrightnessPlatform {
 class VideoPlayerHttp extends HttpOverrides {
   final requests = <http.Request>[];
   final replies = <String, http.Response>{};
+  final closedClients = <int>[];
+  final pendingByClient = <int, List<Completer<http.Response>>>{};
+  bool abortOnClose = false;
+  int _nextClient = 0;
   FutureOr<http.Response> Function(http.Request)? handler;
   @override
-  HttpClient createHttpClient(SecurityContext? context) => http.runWithClient(
-    CatalogFixtureHttpClient.new,
-    () => MockClient((request) async {
-      requests.add(request);
-      if (handler != null) return await handler!(request);
-      return replies[request.url.toString()] ??
-          http.Response(
-            '{}',
-            404,
-            headers: {'content-type': 'application/json'},
+  HttpClient createHttpClient(SecurityContext? context) {
+    final id = _nextClient++;
+    final pending = pendingByClient[id] = [];
+    return http.runWithClient(
+      CatalogFixtureHttpClient.new,
+      () => _VideoPlayerMockClient(
+        (request) async {
+          requests.add(request);
+          final response = Completer<http.Response>();
+          pending.add(response);
+          Future<http.Response>.sync(
+            () => handler != null
+                ? handler!(request)
+                : replies[request.url.toString()] ??
+                      http.Response(
+                        '{}',
+                        404,
+                        headers: {'content-type': 'application/json'},
+                      ),
+          ).then(
+            (value) {
+              if (!response.isCompleted) response.complete(value);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!response.isCompleted) response.completeError(error, stack);
+            },
           );
-    }),
-  );
+          try {
+            return await response.future;
+          } finally {
+            pending.remove(response);
+          }
+        },
+        () {
+          closedClients.add(id);
+          if (abortOnClose) {
+            for (final response in pending.toList()) {
+              if (!response.isCompleted) {
+                response.completeError(
+                  http.ClientException('fixture client closed'),
+                );
+              }
+            }
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _VideoPlayerMockClient extends MockClient {
+  _VideoPlayerMockClient(super.fn, this.onClose);
+  final VoidCallback onClose;
+  @override
+  void close() {
+    onClose();
+    super.close();
+  }
 }
 
 /// Uses existing profile/storage/platform boundaries. No extra State access,

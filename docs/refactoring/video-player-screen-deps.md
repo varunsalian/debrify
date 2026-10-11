@@ -2012,3 +2012,399 @@ CI remains on applied P2. The P3 creation commit must change both current/self
 commands and analyzer manifest/inventory, retain P1 at `31a347ad2` and P2 at
 `fc24e32ae`, register new characterization files and extend all three theme lists.
 No production move, new seam, bug fix, dependency change or device command.
+
+
+## Phase 3 original characterization checkpoint (2026-10-11)
+
+Application base `fc24e32ae` re-measured by declaration name; Step T
+`c1d4cb51b`. **No production moves or CI transition.** All 58 new behavior
+tests pass on the original with the existing H1 seam. The original application,
+pubspec and analyzer allowlists are unchanged. Every new test has an
+assertion-failing original mutation with the final test-input hashes.
+
+The six `video_player_skip_*_test.dart` files cover requests/settings,
+identity/key partitioning, playlist/media boundaries, fetch/profile races and
+tracker ordering. `support/skip_segment_driver.dart` drives public controls,
+player streams, rendered notifier/clock contracts and held HTTP responses;
+`skip_settings_reads.dart` holds the existing preferences transport. The
+existing HTTP fixture records client close and optionally aborts held requests.
+It adds no application seam. All commands use nice 19, no pub resolution,
+serialized Flutter processes and `DEBRIFY_VP_TEST_HOOKS=true`.
+
+**Pinned original outcomes.** Older A→B→A success/error writes cache before
+generation rejection and clears loading by key alone. A late old completion
+can poison a future cache return while the newest displayed result stays
+intact, including a newest error. Returning to cached A does not increment
+generation: the current-key guard must keep a held B completion from clearing
+A's UI. An outgoing mounted route accepts its held result after profile
+handoff; disposal rejects publication; an incoming route independently loads
+its disabled/provider settings. ProfilePolicyGuard and profile cache resets
+mirror the existing handoff. These gaps remain in Follow-ups.
+
+Playlist tests cover the positive outgoing-clock interval after transition
+completion but before an incoming duration, zero-duration rejection,
+failed-load re-arm, same-key/no-frame detours and cache preservation. They
+observe the skip notifier cleared **before** the new-media clock notification.
+The independent engine boundary clears source-switch UI. A suspended native
+seek publishes clock/position and clears UI before completion; disposal saves
+the target position. Subsecond shortening within one whole-second key retains
+the existing visible-button quirk after a clamped seek.
+
+Seek order is observed as clock → native seek → synchronous MDBList queue →
+haptic, with all three tracker targets pinned. HTTP stops arrive Simkl,
+Trakt, MDBList because their preparation differs. A second skip back below
+80% re-arms the two periodic checkpoints at the same fake time: the existing
+heartbeat diagnostics prove Trakt before Simkl and kill the source-call swap.
+TV Select dispatches skip while controls are hidden, with explicit seek count
+and no pause. Teardown drains timers through normal production disposal.
+
+### Phase 3 coverage matrix — all 17 moved declarations
+
+Ten relocated initializer proofs are also frozen individually at T; the
+State-owned notifier allocation remains at its original slot. The following
+references identify runtime witnesses or the precise equivalent/default fate.
+
+| Declaration at base | Line | Coverage / initializer proof | Sweep points |
+|---|---:|---|---|
+| `_skipSegmentSettingsLoaded` | 1285 | false literal; loader store before provider use | f-loaded, settings-loaded-store, request-loaded |
+| `_skipSegmentsEnabled` | 1286 | false literal; enabled/disabled settings and provider gating | f-enabled, settings-enabled-*, request-enabled |
+| `_skipSegmentProviderId` | 1287 | static const auto; configured provider transport and key namespace | f-provider-id, settings-provider-*, settings-id-store |
+| `_skipSegmentProvider` | 1288 | implicit null; creation, configured transport, normal/aborted close | f-null-_skipSegmentProvider, settings-provider-store, r11-dispose-close |
+| `_skipSegments` | 1289 | static const empty; successful/error/cache publication and active UI | f-segments, success-segments, error-segments, sync-cache-segments |
+| `_loadedSkipSegmentsKey` | 1290 | implicit null; stale-key UI and same-key reset/late cache writes | f-null-_loadedSkipSegmentsKey, *-loaded-key, reset-loaded |
+| `_loadingSkipSegmentsKey` | 1291 | implicit null; exact-key dedupe and A/B/A vs different-key completion | f-null-_loadingSkipSegmentsKey, sync-loading*, complete-*, reset-loading |
+| `_skipSegmentsFetchGeneration` | 1292 | zero literal; relative counter identity; stale success/error/reset/dispose | f-generation, sync-generation, *-generation |
+| `_skipSegmentsCache` | 1293 | empty map allocation, no callbacks; cached episode/key return and stale writes | f-cache, *-cache*, reset-cache-clear |
+| `_skipSegmentsMediaReady` | 1304 | true literal; positive duration re-arm, failed load and transition-finished window | f-media-ready, request-media-ready, reset-media-ready, r04, r08 |
+| `_loadSkipSegmentSettings` | 1714 | C36 | settings-*; dormant replacement / web fallback classified below |
+| `_currentSkipSegmentRequest` | 1788 | C05, C37, C38, C39, C40, C41, C42, C43, C44, C45, C46, C47, C48, C49, C50 | request-*; independent IMDb/season/episode/duration key partitioning |
+| `_syncSkipSegmentsForCurrentContent` | 1854 | C22, C23, C33, C34, C35 | sync-*, success-*, error-*, complete-*; all three profile outcomes |
+| `_resetSkipSegmentState` | 1917 | C01, C03, C04, C11, C12 | reset-*; held reset, no-frame detour, cache return, notifier/clock order |
+| `_activeSkipSegment` | 1932 | C51 | active-*; loaded key and exact segment start/end |
+| `_syncActiveSkipSegmentUi` | 1938 | C08 | ui-update, r03, r06, r07, r16; visible label and notifier contract |
+| `_skipActiveSegment` | 1942 | C52 | action-*; clamp/suspended seek/tracker heartbeat/TV; player-created false device-pending |
+
+### Retained-reference matrix — all 17 occurrences
+
+Fourteen substitutions are drafted; r07/r13/r16 deliberately retain the
+State notifier. Disposal generation/close/null remain individual statements
+at their original positions. Exact source substitutions remain frozen even
+when one statement is observationally redundant.
+
+| Point | Original caller / line | Planned fate | Runtime witness / disposition |
+|---|---|---|---|
+| `r01-init` | `initState`:1668 | declared substitution | C36 |
+| `r02-position-sync` | `_bindPlayerInstanceSubscriptions`:3815 | declared substitution | C13 |
+| `r03-position-ui` | `_bindPlayerInstanceSubscriptions`:3816 | declared substitution | C51 |
+| `r04-duration-ready` | `_bindPlayerInstanceSubscriptions`:3861 | declared substitution | C01, C11 |
+| `r05-duration-sync` | `_bindPlayerInstanceSubscriptions`:3862 | declared substitution | C51, C54 |
+| `r06-duration-ui` | `_bindPlayerInstanceSubscriptions`:3863 | declared substitution | C51 |
+| `r07-media-clear` | `_beginMediaGeneration`:4665 | unchanged notifier | C08 |
+| `r08-failure-ready` | `_clearTransitionOnFailure`:10459 | declared substitution | C02 |
+| `r09-playlist-reset` | `_loadPlaylistIndexAttempt`:10651 | declared substitution | C11, C12 |
+| `r10-dispose-generation` | `dispose`:11954 | declared substitution | E20 |
+| `r11-dispose-close` | `dispose`:11955 | declared substitution | C28, C29, C31 |
+| `r12-dispose-null` | `dispose`:11956 | declared substitution | E21 |
+| `r13-notifier-dispose` | `dispose`:11998 | unchanged notifier | C10 |
+| `r14-tv-active` | `_handleTvKey`:13315 | declared substitution | C53 |
+| `r15-tv-action` | `_handleTvKey`:13316 | declared substitution | C53 |
+| `r16-build-listenable` | `build`:15527 | unchanged notifier | C36, C52 |
+| `r17-build-action` | `build`:15560 | declared substitution | C52 |
+
+### Systematic mutation table
+
+148 statement/branch/literal points cover the entire moved list and all
+retained occurrences: **119 assertion kills, 26 equivalents, three classified
+paths**. Every executed point compiles and finishes; no timeout, compilation
+failure or exception without an assertion earns a kill. Exact before/after
+text, offsets, patches, commands, completed identities, assertion text and
+input hashes are in `p3/step0/points.json`, `mutation-results.json` and
+`mutations/`. `coverage.json` indexes the final 58-test witnesses.
+
+The first systematic pass (51 tests) is preserved in `campaign-v1/`: 100
+assertion kills, zero compilation failures. Its narrow source-literal file
+selection missed dynamic test names; the final runner always discovers all
+six files. All real survivors were replayed and closed with original-caller
+tests. TV missing-seek exceptions earned no credit until explicit count
+assertions killed both mutations. An initial expanded-control callback used
+guarded `expect` inside an async pump; recording values and asserting after
+the awaited pump corrected the test. All attempts remain in evidence.
+This is our systematic sweep; Claude's independent P3 sample is pending.
+
+| Point | Base line | Result | Witness / disposition |
+|---|---:|---|---|
+| `f-loaded` | 1285 | EQUIVALENT | E01 |
+| `f-enabled` | 1286 | EQUIVALENT | E02 |
+| `f-provider-id` | 1287 | EQUIVALENT | E03 |
+| `f-null-_skipSegmentProvider` | 1288 | EQUIVALENT | E04 |
+| `f-null-_loadedSkipSegmentsKey` | 1290 | EQUIVALENT | E05 |
+| `f-null-_loadingSkipSegmentsKey` | 1291 | EQUIVALENT | E06 |
+| `f-segments` | 1289 | EQUIVALENT | E07 |
+| `f-generation` | 1292 | EQUIVALENT | E08 |
+| `f-cache` | 1293 | KILL | C08, C09, C17 … |
+| `f-media-ready` | 1304 | EQUIVALENT | E09 |
+| `settings-enabled-read` | 1716 | KILL | C36, C56 |
+| `settings-provider-read` | 1717 | KILL | C36 |
+| `settings-mounted` | 1719 | KILL | C55 |
+| `settings-enabled-value` | 1721 | KILL | C02, C05, C06 … |
+| `settings-provider-value` | 1722 | KILL | C56 |
+| `settings-available` | 1723 | KILL | C56 |
+| `settings-provider-create` | 1728 | KILL | C36, C56 |
+| `settings-create-id` | 1729 | KILL | C36 |
+| `settings-enabled-store` | 1731 | KILL | C36, C56 |
+| `settings-id-store` | 1732 | EQUIVALENT | E10 |
+| `settings-loaded-store` | 1733 | KILL | C36, C56 |
+| `settings-sync` | 1734 | EQUIVALENT | E11 |
+| `settings-close` | 1727 | DORMANT | Only initState calls loader; initial provider is null. Replacement is not reachable. |
+| `request-custom` | 1790 | KILL | C14 |
+| `request-loaded` | 1805 | EQUIVALENT | E12 |
+| `request-enabled` | 1806 | EQUIVALENT | E13 |
+| `request-media-ready` | 1807 | KILL | C01 |
+| `request-transition` | 1808 | KILL | C08 |
+| `request-duration` | 1809 | KILL | C51 |
+| `request-catalog-series` | 1815 | KILL | C36, C39 |
+| `request-playlist-series` | 1815 | KILL | C05 |
+| `request-series-return` | 1816 | KILL | C39 |
+| `request-id-trim` | 1818 | KILL | C48, C49 |
+| `request-id-first-regex` | 1819 | KILL | C05 |
+| `request-id-fallback` | 1820 | KILL | C13 |
+| `request-id-fallback-trim` | 1820 | KILL | C13 |
+| `request-id-final-regex` | 1822 | KILL | C13 |
+| `request-playlist-season-branch` | 1826 | KILL | C01, C05 |
+| `request-playlist-season` | 1828 | KILL | C01, C05 |
+| `request-playlist-episode` | 1829 | KILL | C01, C05 |
+| `request-effective-season` | 1831 | KILL | C15, C16 |
+| `request-effective-episode` | 1832 | KILL | C15 |
+| `request-parse-branch` | 1833 | KILL | C16 |
+| `request-parse-season` | 1835 | KILL | C50 |
+| `request-parse-episode` | 1836 | KILL | C50 |
+| `request-season-negative` | 1838 | KILL | C48 |
+| `request-episode-zero` | 1838 | KILL | C43 |
+| `request-key-seconds` | 1842 | KILL | C54 |
+| `request-record-imdbId` | 1846 | KILL | C05, C36 |
+| `request-record-season` | 1847 | KILL | C05, C36 |
+| `request-record-episode` | 1848 | KILL | C05, C36 |
+| `request-record-duration` | 1849 | KILL | C05, C36 |
+| `request-key-imdbId` | 1844 | KILL | C17 |
+| `request-key-season` | 1844 | KILL | C18 |
+| `request-key-episode` | 1844 | KILL | C19 |
+| `request-key-durationSeconds` | 1844 | KILL | C51, C54 |
+| `sync-provider-null` | 1857 | EQUIVALENT | E14 |
+| `sync-loaded` | 1858 | KILL | C33, C34 |
+| `sync-loading` | 1859 | KILL | C22, C23, C33 … |
+| `sync-cache-branch` | 1863 | KILL | C20, C21 |
+| `sync-cache-value` | 1864 | KILL | C20, C21 |
+| `sync-cache-mounted` | 1865 | KILL | C20, C21 |
+| `sync-cache-segments` | 1867 | KILL | C20, C21 |
+| `sync-cache-key` | 1868 | KILL | C20, C21 |
+| `sync-cache-ui` | 1870 | EQUIVALENT | E15 |
+| `sync-generation` | 1875 | KILL | C22, C33, C34 |
+| `sync-loading-store` | 1876 | KILL | C22, C23, C33 … |
+| `sync-fetch-imdbId` | 1879 | KILL | C36 |
+| `sync-fetch-season` | 1880 | KILL | C36 |
+| `sync-fetch-episode` | 1881 | KILL | C36 |
+| `sync-fetch-duration` | 1882 | KILL | C36 |
+| `success-cache` | 1885 | KILL | C20, C21 |
+| `success-mounted` | 1886 | EQUIVALENT | E16 |
+| `success-generation` | 1886 | KILL | C22, C33 |
+| `success-key` | 1887 | KILL | C25 |
+| `success-segments` | 1889 | KILL | C01, C02, C03 … |
+| `success-loaded-key` | 1890 | KILL | C33, C34, C36 |
+| `success-ui` | 1892 | KILL | C22, C33, C34 … |
+| `error-cache` | 1898 | KILL | C23, C24 |
+| `error-log` | 1900 | KILL | C23, C24, C29 |
+| `error-mounted` | 1902 | EQUIVALENT | E17 |
+| `error-generation` | 1902 | KILL | C34 |
+| `error-segments` | 1905 | KILL | C27 |
+| `error-key` | 1903 | KILL | C26 |
+| `error-loaded-key` | 1906 | KILL | C35 |
+| `error-ui` | 1908 | EQUIVALENT | E18 |
+| `complete-samekey` | 1911 | KILL | C22, C33 |
+| `complete-clear` | 1912 | KILL | C22, C33 |
+| `reset-generation` | 1924 | KILL | C12 |
+| `reset-loading` | 1925 | KILL | C11 |
+| `reset-loaded` | 1926 | KILL | C04 |
+| `reset-segments` | 1927 | EQUIVALENT | E19 |
+| `reset-media-ready` | 1928 | KILL | C01, C03, C04 |
+| `reset-ui` | 1929 | KILL | C01 |
+| `active-key` | 1934 | KILL | C51 |
+| `active-position` | 1935 | KILL | C36, C51 |
+| `ui-update` | 1939 | KILL | C36, C51 |
+| `action-guard` | 1944 | KILL | C52, C57 |
+| `action-player-created` | 1944 | DEVICE PENDING | Only Android renderer replacement can make playerCreated false while a retained skip callback exists. No raw platform seam authorized. |
+| `action-clamp` | 1945 | KILL | C07 |
+| `action-target` | 1947 | KILL | C52, C57 |
+| `action-position` | 1948 | KILL | C09 |
+| `action-clock` | 1949 | KILL | C52, C57 |
+| `action-clock-immediate` | 1949 | KILL | C52, C57 |
+| `action-ui` | 1950 | KILL | C09 |
+| `action-seek` | 1951 | KILL | C57 |
+| `action-trakt` | 1952 | KILL | C57 |
+| `action-simkl` | 1953 | KILL | C57 |
+| `action-mdblist` | 1954 | KILL | C57 |
+| `action-haptic` | 1955 | KILL | C52 |
+| `action-order` | 1952 | KILL | C58 |
+| `r01-init` | 1668 | KILL | C36 |
+| `r02-position-sync` | 3815 | KILL | C13 |
+| `r03-position-ui` | 3816 | KILL | C51 |
+| `r04-duration-ready` | 3861 | KILL | C01, C11 |
+| `r05-duration-sync` | 3862 | KILL | C51, C54 |
+| `r06-duration-ui` | 3863 | KILL | C51 |
+| `r07-media-clear` | 4665 | KILL | C08 |
+| `r08-failure-ready` | 10459 | KILL | C02 |
+| `r09-playlist-reset` | 10651 | KILL | C11, C12 |
+| `r10-dispose-generation` | 11954 | EQUIVALENT | E20 |
+| `r11-dispose-close` | 11955 | KILL | C28, C29, C31 |
+| `r12-dispose-null` | 11956 | EQUIVALENT | E21 |
+| `r13-notifier-dispose` | 11998 | KILL | C10 |
+| `r14-tv-active` | 13315 | KILL | C53 |
+| `r15-tv-action` | 13316 | KILL | C53 |
+| `r16-build-listenable` | 15527 | KILL | C36, C52 |
+| `r17-build-action` | 15560 | KILL | C52 |
+| `request-season-rejection` | 1838 | KILL | C42 |
+| `request-episode-rejection` | 1838 | KILL | C43, C44 |
+| `request-missing-season` | 1835 | KILL | C45 |
+| `request-missing-episode` | 1836 | KILL | C46 |
+| `request-season-local` | 1824 | KILL | C36 |
+| `request-episode-local` | 1825 | KILL | C36 |
+| `request-key-record` | 1850 | KILL | C17, C18, C19 … |
+| `sync-cache-return` | 1872 | KILL | C20, C21 |
+| `sync-render-0` | 1866 | EQUIVALENT | E22 |
+| `sync-render-1` | 1888 | EQUIVALENT | E23 |
+| `sync-render-2` | 1904 | EQUIVALENT | E24 |
+| `settings-provider-store` | 1728 | KILL | C36, C56 |
+| `complete-unconditional` | 1911 | KILL | C21 |
+| `reset-cache-clear` | 1924 | KILL | C03, C04 |
+| `action-duration-positive` | 1945 | EQUIVALENT | E25 |
+| `request-key-provider-prefix` | 1844 | EQUIVALENT | E26 |
+| `request-custom-accept` | 1790 | KILL | C14, C38 |
+| `request-id-fallback-accept` | 1820 | KILL | C05, C13, C40 … |
+| `request-parse-defaults` | 1834 | KILL | C15, C16, C45 … |
+| `settings-web-fallback` | 1725 | WEB PENDING | Storage normalizes unknown ids on native; unavailable persisted provider can only reach this branch on web. No platform seam added. |
+
+### Equivalent-point proof notes
+
+These are source/caller arguments backed by full original characterization
+replays (51 tests at the first pass; 58 for the two additional points), not
+equivalence inferred solely from a passing test. Removing `setState` preserves
+the same assignments and notifier publication; these fields have no other
+rendering consumer. The settings loader is started before initialization,
+shares the cached SharedPreferences future, and performs its two reads before
+the sequential player-default reads finish. It cannot reload within a State.
+Dispose returns before the provider's asynchronous completion handler executes,
+so mounted and generation each independently reject late publication.
+
+| Disposition | Point | Proof |
+|---|---|---|
+| E01 | `f-loaded` | Settings loader runs before any player subscription; it sets all values before sync. A false flag is otherwise only read before settings/provider exist. |
+| E02 | `f-enabled` | Overwritten by settings before provider construction can be consumed; unloaded guard masks the initial value. |
+| E03 | `f-provider-id` | Overwritten by load before any request. |
+| E04 | `f-null-_skipSegmentProvider` | Dart implicit null equals explicit null; no allocation/effect. |
+| E05 | `f-null-_loadedSkipSegmentsKey` | Dart implicit null equals explicit null; no allocation/effect. |
+| E06 | `f-null-_loadingSkipSegmentsKey` | Dart implicit null equals explicit null; no allocation/effect. |
+| E07 | `f-segments` | Same immutable empty content before a key is loaded. |
+| E08 | `f-generation` | Only relative generation equality is read; absolute starting value is not observable. |
+| E09 | `f-media-ready` | No positive duration exists before first real duration event, which assigns true before sync. |
+| E10 | `settings-id-store` | Provider never changes during the session. A consistent noncolliding key prefix affects neither query nor cache partitioning. |
+| E11 | `settings-sync` | Loader precedes first duration in current original construction; duration/position callers immediately synchronize afterward. |
+| E12 | `request-loaded` | Settings is read before initialization creates player subscriptions; before that provider/duration also gate. Held preferences test pins unloaded behavior. |
+| E13 | `request-enabled` | Disabled load creates no provider and there is no session settings reload or loaded disabled cache; provider-null path masks it. |
+| E14 | `sync-provider-null` | Settings enabled implies provider nonnull; disabled/unloaded request null; disposal cancels subscriptions before nulling provider. |
+| E15 | `sync-cache-ui` | Both stream callers immediately sync UI after this synchronous cache branch; loader runs before a positive duration exists. |
+| E16 | `success-mounted` | Dispose always increments fetch generation before nulling provider; generation guard independently rejects every post-disposal completion. Removing the mounted term alone is redundant. |
+| E17 | `error-mounted` | Dispose always increments fetch generation before nulling provider; generation guard independently rejects every post-disposal completion. Removing the mounted term alone is redundant. |
+| E18 | `error-ui` | All initiating stream callers already clear UI for a new unmatched key. Empty error cannot introduce a segment; subsequent tick repeats clear. |
+| E19 | `reset-segments` | Loaded-key/media-ready guards hide outgoing segments; every successful/cache/error publication overwrites them before assigning the new loaded key. |
+| E20 | `r10-dispose-generation` | Mounted guard independently rejects every late completion; cache dies with State and callbacks are cancelled. Exact statement remains frozen by move proof. |
+| E21 | `r12-dispose-null` | No subscription callback survives current-instance guard; closed provider never reused, State inaccessible after disposal. |
+| E22 | `sync-render-0` | Skip rendering is owned by the notifier and both callers refresh it independently. Only an otherwise identical facade rebuild is omitted; the full original replay passes. |
+| E23 | `sync-render-1` | Skip rendering is owned by the notifier and both callers refresh it independently. Only an otherwise identical facade rebuild is omitted; the full original replay passes. |
+| E24 | `sync-render-2` | Skip rendering is owned by the notifier and both callers refresh it independently. Only an otherwise identical facade rebuild is omitted; the full original replay passes. |
+| E25 | `action-duration-positive` | The active getter only returns a segment when its request has positive duration; no await intervenes before this read. |
+| E26 | `request-key-provider-prefix` | Provider is loaded once per State; replacing its constant per-session key namespace cannot collide with another provider during that State lifetime. |
+
+Provider replacement is **dormant**, with `initState` the only loader caller
+and an initially null provider. Native storage normalizes unknown ids to auto
+(executable case recorded); actual unavailable-provider fallback is
+**web-pending**. A false player-created flag with an extant skip callback
+requires Android renderer replacement and is **device-pending**. No platform
+predicate seam or production hook was added. End-of-series phone, Android TV
+Flutter player, tvOS and desktop skip-button/Select/episode-switch checklist
+remains pending.
+
+### Each new test's final-input assertion witness
+
+All 58 pass in the detached `fc24e32ae` control. Each row below selects a
+mutation run with exactly the final characterization input hashes, done event,
+successful compilation and a TestFailure for that identity. The full witness
+list and assertions are archived, including additional witnesses per test.
+
+| Case | Original-caller test identity | Mutation witness |
+|---|---|---|
+| C01 | skip playlist episode wins over launch arguments and switches wait for real duration | `request-media-ready` |
+| C02 | skip failed playlist load re-arms prior current media without a duration event | `settings-enabled-value` |
+| C03 | skip playlist reset preserves cached episode on return | `success-segments` |
+| C04 | skip playlist reset reloads same-key cache after no-frame detour | `success-segments` |
+| C05 | skip request falls back to guide IMDb and accepts series playlist without catalog type | `settings-enabled-value` |
+| C06 | skip unknown persisted provider normalizes to auto before settings load | `settings-enabled-value` |
+| C07 | skip clamps to subsecond duration using the same whole-second request key | `success-segments` |
+| C08 | skip engine media boundary clears UI on direct source change independently of playlist reset | `settings-enabled-value` |
+| C09 | skip suspended native seek immediately clears UI and disposal saves target position | `settings-enabled-value` |
+| C10 | skip notifier borrowed by rendered builder is disposed with its State owner | `r13-notifier-dispose` |
+| C11 | skip playlist held A-B-A reset loading permits new same-key request | `settings-enabled-value` |
+| C12 | skip playlist held A-B-A reset generation survives failed-load re-arm | `settings-enabled-value` |
+| C13 | skip rejects invalid guide IMDb before using valid trimmed fallback | `settings-enabled-value` |
+| C14 | skip custom launch identity prevents request even when guide later has IMDb | `request-custom-accept` |
+| C15 | skip channel effective identity wins over launch and parsed metadata | `success-segments` |
+| C16 | skip channel effective identity fills only missing parsed episode | `success-segments` |
+| C17 | skip cache key independently partitions channel IMDb | `settings-enabled-value` |
+| C18 | skip cache key independently partitions channel season | `settings-enabled-value` |
+| C19 | skip cache key independently partitions channel episode | `settings-enabled-value` |
+| C20 | skip cache returns episode-duration key without another fetch | `success-segments` |
+| C21 | skip stale generation caches result without publishing wrong duration | `success-segments` |
+| C22 | skip held A-B-A old success caches and clears same-key loading before generation rejection | `settings-enabled-value` |
+| C23 | skip held A-B-A old error caches and clears same-key loading before generation rejection | `settings-enabled-value` |
+| C24 | skip failed fetch caches empty and logs once without retrying ticks | `success-segments` |
+| C25 | skip current cached A stays visible when held B completes with success in the same generation | `success-key` |
+| C26 | skip current cached A stays visible when held B completes with error in the same generation | `success-segments` |
+| C27 | skip failed changed-key fetch clears previously loaded segments | `success-segments` |
+| C28 | skip provider closes on disposal and late success cannot publish | `settings-enabled-value` |
+| C29 | skip close-aborted fetch logs once without publishing or uncaught errors | `settings-enabled-value` |
+| C30 | skip outgoing mounted route publishes held result after profile changes as-is | `success-segments` |
+| C31 | skip outgoing disposed route rejects held result after profile changes | `settings-enabled-value` |
+| C32 | skip incoming route reads incoming disabled settings and provider independently | `settings-enabled-value` |
+| C33 | skip held A-B-A late old success preserves newer UI but poisons cache as-is | `success-segments` |
+| C34 | skip held A-B-A late old error preserves newer UI but poisons cache as-is | `success-segments` |
+| C35 | skip held A-B-A current error remains displayed after late old success until cache return | `error-loaded-key` |
+| C36 | skip settings enable one exact request and position ticks deduplicate it | `settings-enabled-value` |
+| C37 | skip request rejects disabled | `settings-enabled-value` |
+| C38 | skip request rejects custom identity | `request-custom-accept` |
+| C39 | skip request rejects non-series | `request-catalog-series` |
+| C40 | skip request rejects invalid IMDb | `request-id-fallback-accept` |
+| C41 | skip request rejects missing IMDb | `request-id-fallback-accept` |
+| C42 | skip request rejects negative season | `request-season-rejection` |
+| C43 | skip request rejects zero episode | `request-episode-rejection` |
+| C44 | skip request rejects negative episode | `request-episode-rejection` |
+| C45 | skip request rejects missing season | `request-parse-defaults` |
+| C46 | skip request rejects missing episode | `request-parse-defaults` |
+| C47 | skip request rejects missing season episode | `request-parse-defaults` |
+| C48 | skip request preserves season 0 and trims IMDb | `settings-enabled-value` |
+| C49 | skip request preserves season 7 and trims IMDb | `settings-enabled-value` |
+| C50 | skip request falls back to parsed title season and episode | `settings-enabled-value` |
+| C51 | skip button uses loaded duration key and exact segment boundaries | `success-segments` |
+| C52 | skip action seeks and publishes clock immediately before native completion and haptic | `settings-enabled-value` |
+| C53 | TV Select owns visible skip action while the bar is hidden | `settings-enabled-value` |
+| C54 | skip exact key distinguishes adjacent whole seconds while subsecond ticks share it | `settings-enabled-value` |
+| C55 | skip unloaded settings start no request and disposed settings completion creates no provider | `settings-mounted` |
+| C56 | skip configured single-provider choice reaches IntroDB rather than auto or SkipDB | `settings-enabled-value` |
+| C57 | skip publishes clock before seek, queues tracking before haptic and preserves remote stop order | `settings-enabled-value` |
+| C58 | skip tracker seek order arms Trakt heartbeat before Simkl | `action-order` |
+
+Root analyzer remains 1,771 identities/occurrences, zero additions/removals
+versus the reusable P2 gate; changed tests analyze cleanly. Original application,
+dependency/configuration and pre-existing test inputs at `fc24e32ae` are
+identical to the clean P2 gate `b0533aac5`; `baseline-reuse.json` records SDK,
+revision and hashes. The clean-tree additions-only full-suite baseline follows
+this characterization checkpoint and will be appended with its tested revision.
+CI stays on P2 until the production creation commit, which must register all
+six new test files and perform the exact P3 transition documented above.
