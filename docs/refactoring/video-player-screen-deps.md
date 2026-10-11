@@ -2629,3 +2629,303 @@ the five display characterization files, and extends all three theme path
 lists. No CI activation or production move occurs at Step T. The initial
 failed interpolation/scaffold probes remain archived as attempts; only zero
 exit completed proofs are credited.
+
+## Phase 4 Step 0 — original display characterization (2026-10-12)
+
+Original application: `890df14d8`, detached under `p4/step0/original`.
+All tests use original public widget/gesture/menu callers and the existing
+player/platform/preference doubles. No new seam or private State invocation.
+The complete mutation patches, original AST declaration offsets, statements,
+branch/literal points and test hashes are in `step0/points.json`,
+`mutation-results.json` and per-point JSONL/stderr/patch files.
+
+38 cases pass on the original; every case has a completed assertion
+kill. The systematic sweep covers every moved declaration and each of the
+33 retained references: **170 points**, 3 equivalent, 157 killed, 9 dormant, 1 device pending.
+Compilation/load failures and uncaught-error-only runs are not credited.
+
+| Moved declaration (original) | Covered behavior / point groups |
+|---|---|
+| `_aspectMode` | field-aspect |
+| `_playbackSpeed` | field-speed |
+| `_speedBeforeHold` | field-hold |
+| `_landscapeLocked` | field-landscape |
+| `_applyAspectVideoZoom` | zoom-native, zoom-mode, zoom-log, zoom-base, zoom-property, zoom-precision, zoom-await, zoom-diagnostic |
+| `_cycleAspectMode` | cycle-mode-0, cycle-label-0, cycle-icon-0, cycle-mode-1, cycle-label-1, cycle-icon-1, cycle-mode-2, cycle-label-2, cycle-icon-2, cycle-mode-3, cycle-label-3, cycle-icon-3, cycle-mode-4, cycle-label-4, cycle-icon-4, cycle-mode-5, cycle-label-5, cycle-icon-5, cycle-mode-6, cycle-label-6, cycle-icon-6, cycle-mode-7, cycle-label-7, cycle-icon-7, cycle-mode-8, cycle-label-8, cycle-icon-8, cycle-mode-9, cycle-label-9, cycle-icon-9, cycle-mode-10, cycle-label-10, cycle-icon-10, cycle-dispatch-0, cycle-dispatch-1, cycle-dispatch-2, cycle-dispatch-3, cycle-dispatch-4, cycle-dispatch-5, cycle-dispatch-6, cycle-dispatch-7, cycle-dispatch-8, cycle-dispatch-9, cycle-dispatch-10, cycle-selector, cycle-state, cycle-rebuild, cycle-zoom, cycle-hud-label, cycle-hud-icon, cycle-hud-delay, cycle-hud-early, cycle-hud-mounted, cycle-hud-clear, cycle-autohide, cycle-save |
+| `_changeSpeed` | dormant-speed-rates, dormant-speed-index, dormant-speed-wrap, dormant-speed-rate, dormant-speed-state, dormant-speed-hide, dormant-speed-save |
+| `_onSpeedButton` | button-speed-gate, button-speed-section, button-speed-return, button-speed-fallback |
+| `_onAspectButton` | button-aspect-gate, button-aspect-section, button-aspect-return, button-aspect-fallback |
+| `_setPlaybackSpeed` | speed-rate, speed-value, speed-rebuild, speed-save |
+| `_setAspectModeDirect` | aspect-same, aspect-value, aspect-rebuild, aspect-zoom, aspect-save |
+| `_onLongPressStart` | hold-locked, hold-back, hold-options, hold-paused, hold-edge-width, hold-edge-left, hold-edge-right, hold-visible, hold-top-size, hold-bottom-size, hold-top-boundary, hold-bottom-boundary, hold-prior, hold-rate, hold-value, hold-rebuild, hold-hud, hold-haptic, hold-horizontal-or, hold-vertical-or, hold-box-null |
+| `_onLongPressEnd` | end-prior, end-null, end-clear, end-mounted, end-rate, end-value, end-rebuild, end-hud |
+| `_toggleOrientation` | orientation-branch, orientation-portrait, orientation-left, orientation-right, orientation-await-portrait, orientation-await-landscape, orientation-portrait-lock, orientation-landscape-lock, orientation-immersive, orientation-mounted, orientation-rebuild, orientation-hide |
+| `_currentFit` | fit-result |
+| `_getCustomAspectRatio` | ratio-result |
+
+| Retained enclosing member | Individually classified references |
+|---|---|
+| `_maybeRestoreResume` | `r07` (line 12090), `r08` (line 12092), `r09` (line 12093) |
+| `_saveResumeLocked` | `r10` (line 12511), `r11` (line 12514), `r12` (line 12514) |
+| `initState` | `r01` (line 1657), `r02` (line 1659) |
+| `_createPlayerInstance` | `r03` (line 2656) |
+| `_loadPlayerDefaults` | `r04` (line 6208), `r05` (line 6264) |
+| `_restoreIosPipPlayer` | `r06` (line 11504) |
+| `_buildTvControls` | `r13` (line 12914), `r14` (line 12915), `r15` (line 12918), `r16` (line 12919) |
+| `_buildCustomAspectRatioVideo` | `r17` (line 13722), `r18` (line 13723) |
+| `build` | `r19` (line 14486), `r20` (line 14751), `r21` (line 14760), `r22` (line 15013), `r23` (line 15014), `r24` (line 15145), `r25` (line 15146), `r26` (line 15149), `r27` (line 15150), `r28` (line 15151), `r29` (line 15152) |
+| `_buildPlayerMenuPanel` | `r30` (line 16737), `r31` (line 16738), `r32` (line 16739), `r33` (line 16740) |
+
+| Case | Original caller / asserted behavior | Assertion-failing original witness |
+|---|---|---|
+| C01 | display aspect key cycles to Cover with rendered ratio HUD zoom and save | `zoom-native` |
+| C02 | display aspect key cycles to Fit Width with rendered ratio HUD zoom and save | `zoom-native` |
+| C03 | display aspect key cycles to Fit Height with rendered ratio HUD zoom and save | `zoom-native` |
+| C04 | display aspect key cycles to 16:9 with rendered ratio HUD zoom and save | `zoom-native` |
+| C05 | display aspect key cycles to 4:3 with rendered ratio HUD zoom and save | `zoom-native` |
+| C06 | display aspect key cycles to 21:9 with rendered ratio HUD zoom and save | `zoom-native` |
+| C07 | display aspect key cycles to 1:1 with rendered ratio HUD zoom and save | `zoom-native` |
+| C08 | display aspect key cycles to 3:2 with rendered ratio HUD zoom and save | `zoom-native` |
+| C09 | display aspect key cycles to 5:4 with rendered ratio HUD zoom and save | `zoom-native` |
+| C10 | display aspect key cycles to Cinema Zoom with rendered ratio HUD zoom and save | `zoom-native` |
+| C11 | display aspect key cycles to Contain with rendered ratio HUD zoom and save | `zoom-native` |
+| C12 | display aspect pending HUD clear does nothing after disposal | `cycle-hud-mounted` |
+| C13 | display aspect menu passes selection and identical aspect is a no-op | `button-aspect-gate` |
+| C14 | display non-native aspect path skips native zoom | `r24-build-_onAspectButton` |
+| C15 | display native zoom rejection logs once and still applies aspect | `zoom-await` |
+| C16 | display defaults seed cinema framing and record the loaded aspect diagnostic | `field-speed` |
+| C17 | display TV dock dispatches speed and aspect menus with live selected values and key A | `r13-_buildTvControls-_onSpeedButton` |
+| C18 | display styled dock forwards current speed aspect and orientation actions | `aspect-value` |
+| C19 | display aspect cycle rearms controls auto-hide from the action time | `cycle-autohide` |
+| C20 | display hold lock back=true options=true reads current widget flags | `hold-back` |
+| C21 | display hold lock back=true options=false reads current widget flags | `hold-locked` |
+| C22 | display hold lock back=false options=true reads current widget flags | `hold-locked` |
+| C23 | display hold lock back=false options=false reads current widget flags | `hold-back` |
+| C24 | display paused hold and release without a hold have no effects | `field-hold` |
+| C25 | display hold edge and visible-bar strict boundaries preserve button regions | `hold-edge-width` |
+| C26 | display hidden controls allow top and bottom holds and restore prior speed with one haptic | `hold-visible` |
+| C27 | display real pointer hold spans rebuild and releases the same recognizer once | `hold-prior` |
+| C28 | display late release after dispose clears hold without changing disposed player rate | `end-mounted` |
+| C29 | display desktop landscape seed ignores phone portrait preference and toggles both directions | `orientation-branch` |
+| C30 | display overlapping orientation toggles read the same initial lock and rearm one hide timer | `orientation-branch` |
+| C31 | display orientation completed after dispose still sends immersive mode and creates a drained timer | `orientation-await-portrait` |
+| C32 | display rejected orientation propagates without lock change immersive call or hide timer | `orientation-branch` |
+| C33 | display portrait-to-landscape orientation waits for the held channel before lock and timer changes | `orientation-await-landscape` |
+| C34 | display speed menu preserves ordered rates wraps selections and persists each selected value | `field-speed` |
+| C35 | display queued resume writes sample latest speed and aspect inside the save lock | `r10-_saveResumeLocked-_aspectMode` |
+| C36 | display temporary 2x never persists and queued hold saves sample after release and speed change | `aspect-value` |
+| C37 | display playlist resume speed 1.0 restores aspect zoom and preserves the 1x skip | `r08-_maybeRestoreResume-_aspectMode` |
+| C38 | display playlist resume speed 2.0 restores aspect zoom and preserves the 1x skip | `r07-_maybeRestoreResume-_playbackSpeed` |
+
+| Mutation point | Original statement/branch/literal → mutation | Result / case |
+|---|---|---|
+| `field-aspect` (_aspectMode:1433) | `AspectMode.contain` → `AspectMode.cover` | equivalent: Awaited defaults overwrite the inert initial value before player creation/rendering. |
+| `field-speed` (_playbackSpeed:1434) | `1.0` → `1.25` | killed: C16, C34 |
+| `field-hold` (_speedBeforeHold:1444) | `_speedBeforeHold;` → `_speedBeforeHold = 1.75;` | killed: C24, C34 |
+| `field-landscape` (_landscapeLocked:1448) | `false` → `true` | equivalent: initState assigns !startsInPortrait before it reads this value or builds controls. |
+| `zoom-native` (_applyAspectVideoZoom:2810) | `if (platform is! mk.NativePlayer) return;` → `if (platform is! mk.NativePlayer \|\| mounted) return;` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `zoom-mode` (_applyAspectVideoZoom:2811) | `getScaleForMode(_aspectMode)` → `getScaleForMode(AspectMode.contain)` | killed: C10 |
+| `zoom-log` (_applyAspectVideoZoom:2812) | `math.log(scale) / math.ln2` → `scale` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `zoom-base` (_applyAspectVideoZoom:2812) | `math.ln2` → `math.ln10` | killed: C10 |
+| `zoom-property` (_applyAspectVideoZoom:2814) | `'video-zoom'` → `'video-scale'` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `zoom-precision` (_applyAspectVideoZoom:2814) | `toStringAsFixed(6)` → `toStringAsFixed(5)` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `zoom-await` (_applyAspectVideoZoom:2814) | `await platform.setProperty` → `platform.setProperty` | killed: C15 |
+| `zoom-diagnostic` (_applyAspectVideoZoom:2816) | `aspect zoom apply failed: $e` → `aspect zoom apply failed` | killed: C15 |
+| `cycle-mode-0` (_cycleAspectMode:13510) | `newMode = AspectMode.cover;` → `newMode = AspectMode.contain;` | killed: C01 |
+| `cycle-label-0` (_cycleAspectMode:13511) | `modeName = 'Cover';` → `modeName = 'changed';` | killed: C01 |
+| `cycle-icon-0` (_cycleAspectMode:13510) | `newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Icons.crop_free_rounded;` → `newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Icons.close_rounded;` | killed: C01 |
+| `cycle-mode-1` (_cycleAspectMode:13515) | `newMode = AspectMode.fitWidth;` → `newMode = AspectMode.cover;` | killed: C02 |
+| `cycle-label-1` (_cycleAspectMode:13516) | `modeName = 'Fit Width';` → `modeName = 'changed';` | killed: C02 |
+| `cycle-icon-1` (_cycleAspectMode:13515) | `newMode = AspectMode.fitWidth; modeName = 'Fit Width'; modeIcon = Icons.fit_screen_rounded;` → `newMode = AspectMode.fitWidth; modeName = 'Fit Width'; modeIcon = Icons.close_rounded;` | killed: C02 |
+| `cycle-mode-2` (_cycleAspectMode:13520) | `newMode = AspectMode.fitHeight;` → `newMode = AspectMode.cover;` | killed: C03 |
+| `cycle-label-2` (_cycleAspectMode:13521) | `modeName = 'Fit Height';` → `modeName = 'changed';` | killed: C03 |
+| `cycle-icon-2` (_cycleAspectMode:13520) | `newMode = AspectMode.fitHeight; modeName = 'Fit Height'; modeIcon = Icons.fit_screen_roun…` → `newMode = AspectMode.fitHeight; modeName = 'Fit Height'; modeIcon = Icons.close_rounded;` | killed: C03 |
+| `cycle-mode-3` (_cycleAspectMode:13525) | `newMode = AspectMode.aspect16_9;` → `newMode = AspectMode.cover;` | killed: C04 |
+| `cycle-label-3` (_cycleAspectMode:13526) | `modeName = '16:9';` → `modeName = 'changed';` | killed: C04 |
+| `cycle-icon-3` (_cycleAspectMode:13525) | `newMode = AspectMode.aspect16_9; modeName = '16:9'; modeIcon = Icons.aspect_ratio_rounded;` → `newMode = AspectMode.aspect16_9; modeName = '16:9'; modeIcon = Icons.close_rounded;` | killed: C04 |
+| `cycle-mode-4` (_cycleAspectMode:13530) | `newMode = AspectMode.aspect4_3;` → `newMode = AspectMode.cover;` | killed: C05 |
+| `cycle-label-4` (_cycleAspectMode:13531) | `modeName = '4:3';` → `modeName = 'changed';` | killed: C05 |
+| `cycle-icon-4` (_cycleAspectMode:13530) | `newMode = AspectMode.aspect4_3; modeName = '4:3'; modeIcon = Icons.aspect_ratio_rounded;` → `newMode = AspectMode.aspect4_3; modeName = '4:3'; modeIcon = Icons.close_rounded;` | killed: C05 |
+| `cycle-mode-5` (_cycleAspectMode:13535) | `newMode = AspectMode.aspect21_9;` → `newMode = AspectMode.cover;` | killed: C06 |
+| `cycle-label-5` (_cycleAspectMode:13536) | `modeName = '21:9';` → `modeName = 'changed';` | killed: C06 |
+| `cycle-icon-5` (_cycleAspectMode:13535) | `newMode = AspectMode.aspect21_9; modeName = '21:9'; modeIcon = Icons.aspect_ratio_rounded;` → `newMode = AspectMode.aspect21_9; modeName = '21:9'; modeIcon = Icons.close_rounded;` | killed: C06 |
+| `cycle-mode-6` (_cycleAspectMode:13540) | `newMode = AspectMode.aspect1_1;` → `newMode = AspectMode.cover;` | killed: C07 |
+| `cycle-label-6` (_cycleAspectMode:13541) | `modeName = '1:1';` → `modeName = 'changed';` | killed: C07 |
+| `cycle-icon-6` (_cycleAspectMode:13540) | `newMode = AspectMode.aspect1_1; modeName = '1:1'; modeIcon = Icons.crop_square_rounded;` → `newMode = AspectMode.aspect1_1; modeName = '1:1'; modeIcon = Icons.close_rounded;` | killed: C07 |
+| `cycle-mode-7` (_cycleAspectMode:13545) | `newMode = AspectMode.aspect3_2;` → `newMode = AspectMode.cover;` | killed: C08 |
+| `cycle-label-7` (_cycleAspectMode:13546) | `modeName = '3:2';` → `modeName = 'changed';` | killed: C08 |
+| `cycle-icon-7` (_cycleAspectMode:13545) | `newMode = AspectMode.aspect3_2; modeName = '3:2'; modeIcon = Icons.aspect_ratio_rounded;` → `newMode = AspectMode.aspect3_2; modeName = '3:2'; modeIcon = Icons.close_rounded;` | killed: C08 |
+| `cycle-mode-8` (_cycleAspectMode:13550) | `newMode = AspectMode.aspect5_4;` → `newMode = AspectMode.cover;` | killed: C09 |
+| `cycle-label-8` (_cycleAspectMode:13551) | `modeName = '5:4';` → `modeName = 'changed';` | killed: C09 |
+| `cycle-icon-8` (_cycleAspectMode:13550) | `newMode = AspectMode.aspect5_4; modeName = '5:4'; modeIcon = Icons.aspect_ratio_rounded;` → `newMode = AspectMode.aspect5_4; modeName = '5:4'; modeIcon = Icons.close_rounded;` | killed: C09 |
+| `cycle-mode-9` (_cycleAspectMode:13555) | `newMode = AspectMode.cinemaZoom;` → `newMode = AspectMode.cover;` | killed: C10 |
+| `cycle-label-9` (_cycleAspectMode:13556) | `modeName = 'Cinema Zoom';` → `modeName = 'changed';` | killed: C10 |
+| `cycle-icon-9` (_cycleAspectMode:13555) | `newMode = AspectMode.cinemaZoom; modeName = 'Cinema Zoom'; modeIcon = Icons.zoom_in_map_r…` → `newMode = AspectMode.cinemaZoom; modeName = 'Cinema Zoom'; modeIcon = Icons.close_rounded;` | killed: C10 |
+| `cycle-mode-10` (_cycleAspectMode:13560) | `newMode = AspectMode.contain;` → `newMode = AspectMode.cover;` | killed: C11 |
+| `cycle-label-10` (_cycleAspectMode:13561) | `modeName = 'Contain';` → `modeName = 'changed';` | killed: C11 |
+| `cycle-icon-10` (_cycleAspectMode:13560) | `newMode = AspectMode.contain; modeName = 'Contain'; modeIcon = Icons.crop_free_rounded;` → `newMode = AspectMode.contain; modeName = 'Contain'; modeIcon = Icons.close_rounded;` | killed: C11 |
+| `cycle-dispatch-0` (_cycleAspectMode:13509) | `case AspectMode.contain: newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Icons…` → `case AspectMode.cover: newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Icons.c…` | killed: C01 |
+| `cycle-dispatch-1` (_cycleAspectMode:13514) | `case AspectMode.cover: newMode = AspectMode.fitWidth; modeName = 'Fit Width'; modeIcon = …` → `case AspectMode.fitWidth: newMode = AspectMode.fitWidth; modeName = 'Fit Width'; modeIcon…` | killed: C02 |
+| `cycle-dispatch-2` (_cycleAspectMode:13519) | `case AspectMode.fitWidth: newMode = AspectMode.fitHeight; modeName = 'Fit Height'; modeIc…` → `case AspectMode.fitHeight: newMode = AspectMode.fitHeight; modeName = 'Fit Height'; modeI…` | killed: C03 |
+| `cycle-dispatch-3` (_cycleAspectMode:13524) | `case AspectMode.fitHeight: newMode = AspectMode.aspect16_9; modeName = '16:9'; modeIcon =…` → `case AspectMode.aspect16_9: newMode = AspectMode.aspect16_9; modeName = '16:9'; modeIcon …` | killed: C04 |
+| `cycle-dispatch-4` (_cycleAspectMode:13529) | `case AspectMode.aspect16_9: newMode = AspectMode.aspect4_3; modeName = '4:3'; modeIcon = …` → `case AspectMode.aspect4_3: newMode = AspectMode.aspect4_3; modeName = '4:3'; modeIcon = I…` | killed: C05 |
+| `cycle-dispatch-5` (_cycleAspectMode:13534) | `case AspectMode.aspect4_3: newMode = AspectMode.aspect21_9; modeName = '21:9'; modeIcon =…` → `case AspectMode.aspect21_9: newMode = AspectMode.aspect21_9; modeName = '21:9'; modeIcon …` | killed: C06 |
+| `cycle-dispatch-6` (_cycleAspectMode:13539) | `case AspectMode.aspect21_9: newMode = AspectMode.aspect1_1; modeName = '1:1'; modeIcon = …` → `case AspectMode.aspect1_1: newMode = AspectMode.aspect1_1; modeName = '1:1'; modeIcon = I…` | killed: C07 |
+| `cycle-dispatch-7` (_cycleAspectMode:13544) | `case AspectMode.aspect1_1: newMode = AspectMode.aspect3_2; modeName = '3:2'; modeIcon = I…` → `case AspectMode.aspect3_2: newMode = AspectMode.aspect3_2; modeName = '3:2'; modeIcon = I…` | killed: C08 |
+| `cycle-dispatch-8` (_cycleAspectMode:13549) | `case AspectMode.aspect3_2: newMode = AspectMode.aspect5_4; modeName = '5:4'; modeIcon = I…` → `case AspectMode.aspect5_4: newMode = AspectMode.aspect5_4; modeName = '5:4'; modeIcon = I…` | killed: C09 |
+| `cycle-dispatch-9` (_cycleAspectMode:13554) | `case AspectMode.aspect5_4: newMode = AspectMode.cinemaZoom; modeName = 'Cinema Zoom'; mod…` → `case AspectMode.cinemaZoom: newMode = AspectMode.cinemaZoom; modeName = 'Cinema Zoom'; mo…` | killed: C10 |
+| `cycle-dispatch-10` (_cycleAspectMode:13509) | `case AspectMode.contain: newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Icons…` → `case AspectMode.cinemaZoom: newMode = AspectMode.cover; modeName = 'Cover'; modeIcon = Ic…` | killed: C11 |
+| `cycle-selector` (_cycleAspectMode:13508) | `switch (_aspectMode)` → `switch (AspectMode.contain)` | killed: C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-state` (_cycleAspectMode:13567) | `_aspectMode = newMode;` → `_aspectMode = AspectMode.contain;` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10 |
+| `cycle-rebuild` (_cycleAspectMode:13566) | `setState(() { _aspectMode = newMode; });` → `_aspectMode = newMode;` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-zoom` (_cycleAspectMode:13569) | `unawaited(_applyAspectVideoZoom());` → `// zoom removed` | killed: C10, C11 |
+| `cycle-hud-label` (_cycleAspectMode:13573) | `aspectRatio: modeName,` → `aspectRatio: 'changed',` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-hud-icon` (_cycleAspectMode:13574) | `icon: modeIcon,` → `icon: Icons.close_rounded,` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-hud-delay` (_cycleAspectMode:13578) | `milliseconds: 1500` → `milliseconds: 1501` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-hud-early` (_cycleAspectMode:13578) | `milliseconds: 1500` → `milliseconds: 1499` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-hud-mounted` (_cycleAspectMode:13579) | `if (mounted)` → `if (true)` | killed: C12 |
+| `cycle-hud-clear` (_cycleAspectMode:13580) | `_aspectRatioHud.value = null;` → `// HUD clear removed` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `cycle-autohide` (_cycleAspectMode:13584) | `_scheduleAutoHide();` → `// auto hide removed` | killed: C19 |
+| `cycle-save` (_cycleAspectMode:13585) | `_saveResume();` → `// save removed` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
+| `dormant-speed-rates` (_changeSpeed:13589) | `[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]` → `[1.0]` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-index` (_changeSpeed:13590) | `speeds.indexOf(_playbackSpeed)` → `0` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-wrap` (_changeSpeed:13591) | `(idx + 1) % speeds.length` → `idx` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-rate` (_changeSpeed:13592) | `_player.setRate(next);` → `// rate removed` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-state` (_changeSpeed:13593) | `setState(() => _playbackSpeed = next);` → `// state removed` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-hide` (_changeSpeed:13594) | `_scheduleAutoHide();` → `// hide removed` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `dormant-speed-save` (_changeSpeed:13595) | `_saveResume();` → `// save removed` | dormant: Only caller is disabled by const kUnifiedPlayerMenuEnabled=true. |
+| `button-speed-gate` (_onSpeedButton:13601) | `if (kUnifiedPlayerMenuEnabled)` → `if (!kUnifiedPlayerMenuEnabled)` | killed: C34 |
+| `button-speed-section` (_onSpeedButton:13602) | `PlayerMenuSection.speed` → `PlayerMenuSection.audio` | killed: C34 |
+| `button-speed-return` (_onSpeedButton:13603) | `return;` → `// return removed` | killed: C34 |
+| `button-speed-fallback` (_onSpeedButton:13605) | `_changeSpeed();` → `// fallback removed` | dormant: Const enabled menu returns before this statement. |
+| `button-aspect-gate` (_onAspectButton:13609) | `if (kUnifiedPlayerMenuEnabled)` → `if (!kUnifiedPlayerMenuEnabled)` | killed: C13 |
+| `button-aspect-section` (_onAspectButton:13610) | `PlayerMenuSection.aspect` → `PlayerMenuSection.audio` | killed: C13 |
+| `button-aspect-return` (_onAspectButton:13611) | `return;` → `// return removed` | killed: C13 |
+| `button-aspect-fallback` (_onAspectButton:13613) | `_cycleAspectMode();` → `// fallback removed` | dormant: Const enabled menu returns before this statement. |
+| `speed-rate` (_setPlaybackSpeed:13617) | `_player.setRate(v);` → `_player.setRate(1.0);` | killed: C34 |
+| `speed-value` (_setPlaybackSpeed:13618) | `_playbackSpeed = v` → `_playbackSpeed = 1.0` | killed: C34 |
+| `speed-rebuild` (_setPlaybackSpeed:13618) | `setState(() => _playbackSpeed = v);` → `_playbackSpeed = v;` | killed: C34 |
+| `speed-save` (_setPlaybackSpeed:13619) | `_saveResume();` → `// save removed` | killed: C34 |
+| `aspect-same` (_setAspectModeDirect:13623) | `if (m == _aspectMode) return;` → `// same-aspect guard removed` | killed: C13 |
+| `aspect-value` (_setAspectModeDirect:13624) | `_aspectMode = m` → `_aspectMode = AspectMode.contain` | killed: C18, C36 |
+| `aspect-rebuild` (_setAspectModeDirect:13624) | `setState(() => _aspectMode = m);` → `_aspectMode = m;` | killed: C18, C36 |
+| `aspect-zoom` (_setAspectModeDirect:13625) | `unawaited(_applyAspectVideoZoom());` → `// zoom removed` | killed: C15 |
+| `aspect-save` (_setAspectModeDirect:13626) | `_saveResume();` → `// save removed` | killed: C13, C36 |
+| `hold-locked` (_onLongPressStart:13631) | `widget.hideBackButton && widget.hideOptions` → `widget.hideBackButton \|\| widget.hideOptions` | killed: C21, C22 |
+| `hold-back` (_onLongPressStart:13631) | `widget.hideBackButton && widget.hideOptions` → `false && widget.hideOptions` | killed: C20, C21, C22, C23 |
+| `hold-options` (_onLongPressStart:13631) | `widget.hideBackButton && widget.hideOptions` → `widget.hideBackButton && false` | killed: C20, C21, C22, C23 |
+| `hold-paused` (_onLongPressStart:13633) | `if (!_isPlaying) return;` → `// pause guard removed` | killed: C24 |
+| `hold-edge-width` (_onLongPressStart:13639) | `const edgeGuard = 24.0;` → `const edgeGuard = 0.0;` | killed: C25 |
+| `hold-edge-left` (_onLongPressStart:13640) | `localPos.dx < edgeGuard` → `localPos.dx <= edgeGuard` | killed: C25 |
+| `hold-edge-right` (_onLongPressStart:13640) | `localPos.dx > size.width - edgeGuard` → `localPos.dx >= size.width - edgeGuard` | killed: C25 |
+| `hold-visible` (_onLongPressStart:13644) | `if (_controlsVisible.value)` → `if (true)` | killed: C26 |
+| `hold-top-size` (_onLongPressStart:13645) | `const topBar = 72.0;` → `const topBar = 0.0;` | killed: C25 |
+| `hold-bottom-size` (_onLongPressStart:13646) | `_dockBand(72.0)` → `_dockBand(0.0)` | killed: C25 |
+| `hold-top-boundary` (_onLongPressStart:13647) | `localPos.dy < topBar` → `localPos.dy <= topBar` | killed: C25 |
+| `hold-bottom-boundary` (_onLongPressStart:13647) | `localPos.dy > size.height - bottomBar` → `localPos.dy >= size.height - bottomBar` | killed: C25 |
+| `hold-prior` (_onLongPressStart:13652) | `_speedBeforeHold = _playbackSpeed;` → `_speedBeforeHold = 1.0;` | killed: C26, C27, C36 |
+| `hold-rate` (_onLongPressStart:13653) | `_player.setRate(2.0);` → `_player.setRate(1.0);` | killed: C21, C22, C23, C26, C27 |
+| `hold-value` (_onLongPressStart:13654) | `_playbackSpeed = 2.0` → `_playbackSpeed = 1.0` | killed: C21, C22, C23, C26, C36 |
+| `hold-rebuild` (_onLongPressStart:13654) | `setState(() => _playbackSpeed = 2.0);` → `_playbackSpeed = 2.0;` | killed: C21, C22, C23, C26, C36 |
+| `hold-hud` (_onLongPressStart:13655) | `_speedHoldHud.value = true;` → `_speedHoldHud.value = false;` | killed: C21, C22, C23, C26, C27 |
+| `hold-haptic` (_onLongPressStart:13656) | `HapticFeedback.mediumImpact();` → `HapticFeedback.lightImpact();` | killed: C26 |
+| `hold-horizontal-or` (_onLongPressStart:13640) | `localPos.dx < edgeGuard \|\| localPos.dx > size.width - edgeGuard` → `localPos.dx < edgeGuard && localPos.dx > size.width - edgeGuard` | killed: C25 |
+| `hold-vertical-or` (_onLongPressStart:13647) | `localPos.dy < topBar \|\| localPos.dy > size.height - bottomBar` → `localPos.dy < topBar && localPos.dy > size.height - bottomBar` | killed: C25 |
+| `hold-box-null` (_onLongPressStart:13635) | `if (box != null)` → `if (box == null) return; if (true)` | equivalent: Mounted original State renders a non-null RenderBox; no caller invokes start after disposal. Retain safety branch; no test-only private invocation. |
+| `end-prior` (_onLongPressEnd:13660) | `final prior = _speedBeforeHold;` → `final prior = 1.0;` | killed: C26, C27, C36 |
+| `end-null` (_onLongPressEnd:13661) | `if (prior == null) return;` → `if (prior == null) { _player.setRate(2.0); return; }` | killed: C24 |
+| `end-clear` (_onLongPressEnd:13662) | `_speedBeforeHold = null;` → `// prior clear removed` | killed: C36 |
+| `end-mounted` (_onLongPressEnd:13663) | `if (!mounted) return;` → `// mounted guard removed` | killed: C28 |
+| `end-rate` (_onLongPressEnd:13664) | `_player.setRate(prior);` → `_player.setRate(1.0);` | killed: C26, C27 |
+| `end-value` (_onLongPressEnd:13665) | `_playbackSpeed = prior` → `_playbackSpeed = 1.0` | killed: C26, C27, C36 |
+| `end-rebuild` (_onLongPressEnd:13665) | `setState(() => _playbackSpeed = prior);` → `_playbackSpeed = prior;` | killed: C26, C27, C36 |
+| `end-hud` (_onLongPressEnd:13666) | `_speedHoldHud.value = false;` → `_speedHoldHud.value = true;` | killed: C26, C27, C36 |
+| `orientation-branch` (_toggleOrientation:13670) | `if (_landscapeLocked)` → `if (!_landscapeLocked)` | killed: C18, C29, C30, C32 |
+| `orientation-portrait` (_toggleOrientation:13672) | `DeviceOrientation.portraitUp` → `DeviceOrientation.portraitDown` | killed: C18, C29, C30, C32 |
+| `orientation-left` (_toggleOrientation:13677) | `DeviceOrientation.landscapeLeft,` → `DeviceOrientation.landscapeRight,` | killed: C29 |
+| `orientation-right` (_toggleOrientation:13678) | `DeviceOrientation.landscapeRight,` → `DeviceOrientation.landscapeLeft,` | killed: C29 |
+| `orientation-await-portrait` (_toggleOrientation:13671) | `await SystemChrome.setPreferredOrientations` → `SystemChrome.setPreferredOrientations` | killed: C30, C31, C32 |
+| `orientation-await-landscape` (_toggleOrientation:13676) | `await SystemChrome.setPreferredOrientations` → `SystemChrome.setPreferredOrientations` | killed: C33 |
+| `orientation-portrait-lock` (_toggleOrientation:13674) | `_landscapeLocked = false;` → `_landscapeLocked = true;` | killed: C18, C29, C30 |
+| `orientation-landscape-lock` (_toggleOrientation:13680) | `_landscapeLocked = true;` → `_landscapeLocked = false;` | killed: C29 |
+| `orientation-immersive` (_toggleOrientation:13682) | `SystemUiMode.immersiveSticky` → `SystemUiMode.edgeToEdge` | killed: C29, C31 |
+| `orientation-mounted` (_toggleOrientation:13683) | `if (mounted) setState(() {});` → `setState(() {});` | killed: C31 |
+| `orientation-rebuild` (_toggleOrientation:13683) | `if (mounted) setState(() {});` → `// state rebuild removed` | killed: C18, C29, C30 |
+| `orientation-hide` (_toggleOrientation:13684) | `_scheduleAutoHide();` → `// auto hide removed` | killed: C29, C30, C31 |
+| `fit-result` (_currentFit:13687) | `getBoxFitForMode(_aspectMode)` → `getBoxFitForMode(AspectMode.contain)` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09 |
+| `resume-one-skip` (_maybeRestoreResume:12088) | `if (speed != 1.0)` → `if (true)` | killed: C37 |
+| `resume-queued-speed` (_saveResumeLocked:12514) | `_speedBeforeHold ?? _playbackSpeed` → `1.25` | killed: C35 |
+| `ratio-result` (_getCustomAspectRatio:13895) | `getAspectRatioValue(_aspectMode)` → `getAspectRatioValue(AspectMode.contain)` | killed: C04, C05, C06, C07, C08, C09 |
+| `r01-initState-_landscapeLocked` (initState:1657) | `_landscapeLocked = !_startsInPortrait;` → `/* retained write removed */` | killed: C18, C29, C30, C32 |
+| `r02-initState-_landscapeLocked` (initState:1659) | `_landscapeLocked` → `false` | killed: C29 |
+| `r03-_createPlayerInstance-_applyAspectVideoZoom` (_createPlayerInstance:2656) | `_applyAspectVideoZoom()` → `Future<void>.value()` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11, C16 |
+| `r04-_loadPlayerDefaults-_aspectMode` (_loadPlayerDefaults:6208) | `_aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];` → `/* retained write removed */` | killed: C02, C03, C04, C05, C06, C07, C08, C09, C10, C11, C16 |
+| `r05-_loadPlayerDefaults-_aspectMode` (_loadPlayerDefaults:6264) | `$_aspectMode` → `changed` | killed: C16 |
+| `r06-_restoreIosPipPlayer-_landscapeLocked` (_restoreIosPipPlayer:11504) | `_landscapeLocked` → `false` | device_pending: Real Platform.isIOS and PiP lifecycle; no additional seam authorized. |
+| `r07-_maybeRestoreResume-_playbackSpeed` (_maybeRestoreResume:12090) | `_playbackSpeed = speed;` → `/* retained write removed */` | killed: C38 |
+| `r08-_maybeRestoreResume-_aspectMode` (_maybeRestoreResume:12092) | `_aspectMode = AspectModeUtils.stringToAspectMode(aspect);` → `/* retained write removed */` | killed: C37, C38 |
+| `r09-_maybeRestoreResume-_applyAspectVideoZoom` (_maybeRestoreResume:12093) | `_applyAspectVideoZoom()` → `Future<void>.value()` | killed: C38 |
+| `r10-_saveResumeLocked-_aspectMode` (_saveResumeLocked:12511) | `_aspectMode` → `AspectMode.contain` | killed: C35, C36 |
+| `r11-_saveResumeLocked-_speedBeforeHold` (_saveResumeLocked:12514) | `_speedBeforeHold` → `null` | killed: C36 |
+| `r12-_saveResumeLocked-_playbackSpeed` (_saveResumeLocked:12514) | `_playbackSpeed` → `1.0` | killed: C34 |
+| `r13-_buildTvControls-_onSpeedButton` (_buildTvControls:12914) | `_onSpeedButton` → `() {}` | killed: C17 |
+| `r14-_buildTvControls-_onAspectButton` (_buildTvControls:12915) | `_onAspectButton` → `() {}` | killed: C17 |
+| `r15-_buildTvControls-_playbackSpeed` (_buildTvControls:12918) | `_playbackSpeed` → `1.0` | killed: C17 |
+| `r16-_buildTvControls-_aspectMode` (_buildTvControls:12919) | `_aspectMode` → `AspectMode.contain` | killed: C17 |
+| `r17-_buildCustomAspectRatioVideo-_getCustomAspectRatio` (_buildCustomAspectRatioVideo:13722) | `_getCustomAspectRatio()` → `null` | killed: C04, C05, C06, C07, C08, C09 |
+| `r18-_buildCustomAspectRatioVideo-_currentFit` (_buildCustomAspectRatioVideo:13723) | `_currentFit()` → `BoxFit.contain` | killed: C04, C05, C06, C07, C08, C09 |
+| `r19-build-_cycleAspectMode` (build:14486) | `_cycleAspectMode()` → `(() {})()` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11, C12, C17 |
+| `r20-build-_getCustomAspectRatio` (build:14751) | `_getCustomAspectRatio()` → `null` | killed: C04, C05, C06, C07, C08, C09, C13, C18, C37 |
+| `r21-build-_currentFit` (build:14760) | `_currentFit()` → `BoxFit.contain` | killed: C01, C02, C03 |
+| `r22-build-_onLongPressStart` (build:15013) | `_onLongPressStart` → `(LongPressStartDetails _) {}` | killed: C21, C22, C23, C25, C26, C27, C36 |
+| `r23-build-_onLongPressEnd` (build:15014) | `_onLongPressEnd` → `(LongPressEndDetails _) {}` | killed: C25, C26, C27, C36 |
+| `r24-build-_onAspectButton` (build:15145) | `_onAspectButton` → `() {}` | killed: C13, C14, C15, C18, C35, C36 |
+| `r25-build-_onSpeedButton` (build:15146) | `_onSpeedButton` → `() {}` | killed: C18, C26, C27, C28, C34, C35, C36, C37, C38 |
+| `r26-build-_playbackSpeed` (build:15149) | `_playbackSpeed` → `1.0` | killed: C18, C21, C22, C23, C26, C27, C28, C34, C35, C36, C37, C38 |
+| `r27-build-_aspectMode` (build:15150) | `_aspectMode` → `AspectMode.contain` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11, C13, C14, C15, C16, C18, C35, C36, C37, C38 |
+| `r28-build-_landscapeLocked` (build:15151) | `_landscapeLocked` → `false` | killed: C29, C30, C32 |
+| `r29-build-_toggleOrientation` (build:15152) | `_toggleOrientation` → `() async {}` | killed: C18, C29, C30, C31, C32 |
+| `r30-_buildPlayerMenuPanel-_playbackSpeed` (_buildPlayerMenuPanel:16737) | `_playbackSpeed` → `1.0` | killed: C18 |
+| `r31-_buildPlayerMenuPanel-_setPlaybackSpeed` (_buildPlayerMenuPanel:16738) | `_setPlaybackSpeed` → `(double _) {}` | killed: C18, C34 |
+| `r32-_buildPlayerMenuPanel-_aspectMode` (_buildPlayerMenuPanel:16739) | `_aspectMode` → `AspectMode.contain` | killed: C18 |
+| `r33-_buildPlayerMenuPanel-_setAspectModeDirect` (_buildPlayerMenuPanel:16740) | `_setAspectModeDirect` → `(AspectMode _) {}` | killed: C13, C18 |
+
+**Reachability/equivalence.** The inert aspect initializer is overwritten by
+awaited defaults before player creation; the landscape initializer is
+overwritten synchronously in `initState` before its first read. Both altered
+initial values pass the complete original controls. Gesture start is delivered
+on a mounted rendered State with a non-null `RenderBox`; the box-null fallback
+is unreachable through the supported callers. Each candidate has a completed
+surviving replay and caller-order evidence, while its source remains frozen.
+The legacy speed cycle (all seven rates/index/wrap/effects) and the two disabled
+menu fallback calls are dormant behind the constant unified-menu flag.
+Phone-only portrait seed and PiP landscape restore remain device-pending;
+desktop landscape seeding and both orientation directions are covered.
+
+**Preserved details.** HUD clear is 1.5 seconds and does not clear after
+disposal: the test observes the notifier exposed by the rendered widget.
+That notifier is not disposed in the original; no cleanup fix is included.
+Orientation completion after disposal still sends immersive mode and creates
+a three-second auto-hide timer, which is explicitly drained. Held toggles in
+both directions, overlap and channel rejection pin locks, channel ordering
+and timer creation/cancellation. Resume tests select the series guide with
+saved progress so the real allow-resume caller runs; saved 1.0 skips both
+rate and field assignment. Queued saves sample current fields inside the
+existing save lock and held 2× is not persisted.
+
+**Development attempts.** The first controls exposed fixture expectations
+for list identity, duplicate rail/value text, auto-selected resume entries
+and manual-next resume suppression. Corrected caller fixtures retain the
+required assertions. An invalid native-guard mutation is replaced by a
+flow-valid gate mutation. The initial post-dispose orientation error alone
+is replaced by an explicit captured-error assertion. All attempts are
+archived and excluded from accepted results. Two preliminary direct runs
+inherited the harness P2 runtime default; their 72 newly created directories
+were relocated into P4 by the exact run timestamp bounds
+(`runtime-routing-note.json`). Accepted controls/mutations explicitly set
+`VPLAYER_EVIDENCE_ROOT` and Kotlin evidence overrides to P4.
+
+CI registration of the five new display files accompanies the future
+Step-1 production creation and P4 current/analyzer transition. Independent
+Claude sampling and phone/TV/tvOS end-of-series checks remain subsequent
+review/device work. No production move, bug fix or dependency change.

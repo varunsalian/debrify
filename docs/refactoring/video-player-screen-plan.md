@@ -1638,6 +1638,38 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   Failed development probes are archived and uncredited. Step 0 follows;
   no production moves.
 
+### 2026-10-12 — Phase 4 Step 0 (characterization checkpoint)
+
+- **Revision/base.** Follows tooling `1816a0ee5`; every mutation uses detached
+  original application `890df14d8`, restored after each run. Main application
+  and pubspec remain byte-identical to that named base.
+- **Coverage/results.** All 38 new display cases pass on the original and
+  current application. Every case has an assertion-failing original witness.
+  Systematic 170-point sweep covers all 16 moved declarations and each of
+  33 retained references: 157 assertion kills, three caller equivalences,
+  nine dormant points and one PiP device-pending reference. Added held reverse
+  orientation and aspect auto-hide cases close both async/action branches;
+  HUD-after-dispose observes the rendered notifier's unchanged value.
+- **Commands.** Serialized `nice -n 19 flutter test` with no-pub, concurrency 1
+  and `DEBRIFY_VP_TEST_HOOKS=true`; explicit P4 evidence overrides. Original
+  38-case control and current `display-focused.jsonl` pass; format and changed
+  test/support analyzer pass. Size/architecture: 2,996 files / 140 ratchets,
+  1,664 migrated files pass. Detailed coverage/mutation tables in deps;
+  `p4/step0/points.json`, `mutation-results.json`, `coverage.json` and logs.
+- **Attempts/deviations.** Invalid native-gate and uncaught-error-only witnesses
+  are uncredited and replaced by flow-valid assertion kills. Fixture corrections
+  preserve requested behavior assertions. Two preliminary runs inherited the
+  harness's P2 runtime default; only their 72 newly created directories were
+  relocated into P4 using exact run bounds (`runtime-routing-note.json`). All
+  accepted controls/mutations export P4. No assertion weakening or app fixes.
+- **Baseline/remaining.** Fresh original full suite re-measured at `890df14d8`:
+  12,932 success / 13 failure / 28 error / 20 skip; exact P3 gate outcomes plus
+  the accepted incoming-profile case. The new additions-only clean checkpoint
+  suite follows this commit. Phone portrait seed/PiP restoration and the
+  end-of-series device checklist remain pending; dormant speed cycle/old menu
+  fallback paths stay classified. CI transition and five-file registration
+  accompany Step-1 production creation. Stop before production moves.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
