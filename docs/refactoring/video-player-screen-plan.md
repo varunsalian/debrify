@@ -583,7 +583,7 @@ checker's `_host` forms in a real manifest — on low-risk code.
 
 | Original | Kind | Fate |
 |---|---|---|
-| `_sleepTimerMode` 1454 (+ the 3-line section comment above it, which moves with it) | field, init `SleepTimerMode.off` | moved → `sleepTimerMode` |
+| `_sleepTimerMode` 1454 (+ the 4-line section comment 1450–1453, which moves with it) | field, init `SleepTimerMode.off` | moved → `sleepTimerMode` |
 | `_sleepTimerDeadline` 1459 (doc) | field, `null` | moved → `sleepTimerDeadline` |
 | `_sleepTimerArmedMinutes` 1463 (doc) | field, `0` | moved → `sleepTimerArmedMinutes` |
 | `_sleepTimer` 1464 | field, `null` | moved → `sleepTimer` |
@@ -593,21 +593,26 @@ checker's `_host` forms in a real manifest — on low-risk code.
 | `_applySleepTimerSelection` 13851 | method | moved → `applySleepTimerSelection` |
 | `_startSleepCountdown` 13865 | method | moved → `startSleepCountdown` |
 | `_cancelSleepTimer` 13877 | method | moved → `cancelSleepTimer` |
-| `_fireSleepTimer` 13897 | method | moved → `fireSleepTimer` |
+| `_fireSleepTimer` 13896 | method | moved → `fireSleepTimer` |
 | `_showSleepTimerToast` 13906 | method | moved → `showSleepTimerToast` |
 
 All four field initializers are literals/`null` — **inert** (recorded
 proof). Their relocation from State slots 1454–1464 to the constructor
-body is unobservable.
+body is unobservable. Dispose keeps its direct cancel-and-clear statements
+(`_sleep.sleepTimer?.cancel(); _sleep.sleepTimer = null;`) — replacing them
+with `cancelSleepTimer()` would add a mode change and possibly `setState`
+during teardown.
 
 **Stays State-owned** (shared-state rule): `_sleepStopLatched` (1470; read
-by recovery 690, EOF 5245, episode navigation 5790/6212, playlist load
-10574, resume-from-background 11828, play toggle 13703),
+by recovery 690, decoder replacement 4321, EOF 5245, episode navigation
+5790/6212, playlist load 10574, resume-from-background 11828, play toggle
+13703, episode request eligibility 14317),
 `_activeMediaShouldPlay`, `_playerCreated`, `_player`, `_hideTimer`,
 `_currentIptvChannel`, `_saveResume`, `_scheduleAutoHide`,
 `_openPlayerMenuQuick`.
 
-**Host** `VpSleepTimerHost` (exact members; every one read; computed
+**Host** `VpSleepTimerHost` (exact 12 members; every one used —
+`sleepStopLatched`/`activeMediaShouldPlay` are correctly setter-only; computed
 forwarders in `_VpSleepTimerHostAdapter` in the facade library):
 `bool get mounted`, `BuildContext get context`,
 `void setState(VoidCallback fn)` (→ `_s._vpSetState`),
@@ -615,7 +620,14 @@ forwarders in `_VpSleepTimerHostAdapter` in the facade library):
 `Timer? get hideTimer`, `IptvChannel? get currentIptvChannel`,
 `void scheduleAutoHide()`, `set sleepStopLatched(bool v)`,
 `set activeMediaShouldPlay(bool v)`, `bool get playerCreated`,
-`Future<void> saveResume()`, `mk.Player get player`.
+`Future<void> saveResume()` (narrow no-argument forwarder to
+`_s._saveResume()`; its optional parameters default to `false`/`null`,
+12671), `mk.Player get player`. Destination imports (frozen): `dart:async`,
+Flutter material, media_kit as `mk`, `IptvChannel`
+(`models/iptv_playlist.dart`), `PlayerMenuSection` + `kUnifiedPlayerMenuEnabled`
+(`player_menu_panel.dart`), `SleepTimerMode` + `SleepTimerSelection` +
+`SleepTimerSheet` (`sleep_timer_sheet.dart`) — constants and the sheet are
+imports, not Host members.
 Declared receiver substitutions inside moved bodies (by occurrence):
 `mounted`→`_host.mounted` (3), `context`→`_host.context` (2),
 `setState(`→`_host.setState(` (3), `_openPlayerMenuQuick`,
@@ -644,16 +656,53 @@ the menu; verified at step 0).
 `_VideoPlayerScreenState() { _sleep = VpSleepTimerController(_VpSleepTimerHostAdapter(this)); }`,
 `void _vpSetState(VoidCallback fn) => setState(fn);`, the adapter class
 after the State class. Constructor of the controller only stores the
-host.
+host. Frozen fields: `final VpSleepTimerHost _host;` in the controller and
+`final _VideoPlayerScreenState _s;` in the adapter.
+
+### Step T (phase 2)
+
+- Materialize the **complete phase-2 manifest** and make it compare:
+  the four controller-owned fields, constructor, adapter, nullable chains
+  (`sleepTimer?.cancel()`), the `Timer(duration, fireSleepTimer)` tear-off
+  and the getter interpolation (`'$sleepTimerMinutesLeft min'`). The
+  phase-1 fixture only exercises retained State fields through the Host;
+  the binding guard (`occurrence_field_bindings.py:257`, `:302`) currently
+  rejects bare renamed references. Add **owner-scoped bare access**: a
+  moved field may be referenced bare only inside its declared owning
+  controller class, keeping lexical-binding checks and mandatory
+  qualification everywhere else (never disabled globally); negatives —
+  bare access from another class, a same-named local capturing the field,
+  and an owned field referenced through `_host`. `this.` qualification is
+  not used (the checker rejects `this` in moved State bodies, 186).
+- **CI transition** in the production creation commit: the current-tree
+  check and self-test switch to `vplayer_p2.json`; P1 stays checked with
+  `--at 31a347ad2`; the analyzer step selects the P2 manifest/inventory
+  while preserving P1's diagnostic mappings; new characterization files
+  join `ci_behavior_tests.txt`.
+- **Source-test retarget:** `test/player_auto_next_routing_test.dart:29`
+  searches `_sleepTimerMode == SleepTimerMode.endOfItem` without asserting
+  it exists, so after qualification `indexOf` would return −1 and the
+  ordering comparison would still pass. Retarget to
+  `_sleep.sleepTimerMode == SleepTimerMode.endOfItem` through validated
+  current source, **assert the anchor is non-negative** before comparing,
+  and prove a removed or reordered sleep branch fails.
 
 ### Step 0 — characterization of the original
 
 Through the harness (fake player, `fake_async`): countdown arm → label
-"N min" counting down (ceil), deadline expiry → `_saveResume` before
+"N min" (ceil of the real remaining time; **minute-by-minute decrement is
+recorded device-pending**: both the deadline and the remaining-time read use
+real `DateTime.now()` (13818, 13870), which `FakeAsync` does not intercept,
+and a clock seam would need its own proof on the original — not added),
+deadline expiry → `_saveResume` before
 `pause`, toast texts, latch set (next auto-advance suppressed);
 end-of-item → EOF stops with "Sleep timer — stopping here" and no
 advance; off → toast + label null; re-arming cancels the old timer;
-dispose with an armed countdown → no fire after dispose; a live IPTV
+dispose with an armed countdown → no fire after dispose; **dispose (and
+player replacement) while `_fireSleepTimer` is suspended in `_saveResume`**,
+then release the save — pin the calls, errors and toast behaviour (any
+existing defect recorded in Follow-ups, not fixed); the latch against an
+**already queued automatic advance** and a **live recovery attempt**; a live IPTV
 channel → `allowEndOfItem` false (legacy sheet path is dead behind
 `kUnifiedPlayerMenuEnabled` — record as dead, like c18); the unified menu
 receives mode/armed/minutes-left and its selection callback applies;
@@ -943,3 +992,13 @@ construction, eager/lazy modifiers preserved; the hash characterization
 targets the fallback resume identity. P3s: two patched declarations with
 three patches; fake `track`/`tracks`; `ProfilePolicyGuard` mirror; exact
 helper names and imports; follow-ups mirror D1/D6 exits.
+
+## Phase 2 design review resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: countdown decrement device-pending (real `DateTime.now()`, no
+clock seam); step T owner-scoped bare field access + full P2 manifest +
+CI transition (P1 `--at 31a347ad2`); `player_auto_next_routing_test`
+anchor asserted non-negative; disposal during an in-flight fire and the
+latch against queued advance / live recovery. P3: line numbers, comment
+span, latch inventory (4321, 14317), "every member used", frozen `_host`/`_s`
+fields, exact imports.
