@@ -1575,6 +1575,9 @@ survived the complete macOS control; it is not classified as equivalent.
 Compilation failures and uncaught exceptions earn no kill credit. First-pass
 logs and input snapshots remain in `step0/campaign-v1/`, `campaign-v2/` and
 `characterization-inputs/`; all accepted results are in `mutation-results.json`.
+The ledger pins each run's input hashes: 52 valid kills used earlier campaign
+inputs, and 16 final-input mutation reruns provide assertion-failing witnesses
+for all 21 final tests. The final control and full suite use the committed inputs.
 An independent Claude sample remains the next review checkpoint.
 
 ### Behavior coverage and final-input mutation witnesses
@@ -1754,7 +1757,43 @@ The existing P1 clean-tree suite baseline is reusable: `5faaed55b` and
 analysis configuration, with identical Flutter 3.44.8 / Dart 3.12.2 SDK.
 `step0/base-suite-reuse.json` pins the equality command and original observed
 13 failures / 28 errors / 20 skips. The new full-suite baseline runs on the
-clean characterization commit and compares identities for additions only;
+clean characterization/tooling checkpoint and compares identities for additions only;
 no allowlist or dependency change. CI list registration and P2 manifest/analyzer
 selection remain in the production creation commit, as specified by Step T.
 All harness commands include `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`.
+
+### Clean-tree Step 0 baseline and compatibility checks
+
+Characterization commit `61fac9315`; qualification-default compatibility
+correction and final tested checkpoint `5b2b62c3b`. The first suite exposed an
+existing IPTV checker fixture's single textual default-anchor requirement.
+The shared guard now evaluates that default once; unchanged default-false/true
+fixture assertions pass. The first run remains archived under `suite-attempt1/`;
+no failure was allowlisted or accepted as the new baseline.
+
+`step0-suite-final.jsonl` and its environment record pin a clean, unchanged tree,
+Flutter 3.44.8 / Dart 3.12.2, and **12,873 successes / 13 failures / 28 errors /
+20 skips**. Against the reusable P1 observed gate, there are **21 added passing
+identities**, zero missing or changed original identities, zero new failures
+and zero new skips. Both the strict identity ledger (`step0/suite-delta.json`)
+and official comparison (`step0/suite-comparison.txt`) pass. This is the new
+observed suite baseline for the later production move.
+
+All 26 existing Dart manifest self-tests, the P2 universal/real-config tests and
+889-span original self-comparison, and P1 `--at 31a347ad2` pass after the fix.
+`step0/compat-checks-effective.json` records queued and effective commands;
+the draft P2 self-test explicitly uses `--self-compare-original`. The parser
+audit records 309 unique isolated wrapper packages, 927 copied kernels deleted,
+and explicit manifest flags; nested hard-coded parser requests use the isolated
+package too. The successful Step T Kotlin historical/compiled self-test is
+reused: checker, partitioner, fixture/manifests and native application inputs
+are unchanged. Hashes and commands are in `step0/completion.json`.
+
+Format, changed-test analysis, size and architecture checks pass. Root analysis
+has 1,770 diagnostics versus the observed P1 gate's 1,754: tracked-source
+identities/multiplicities are unchanged; the 16 additions are path warnings in
+ignored Android/macOS release-build copies of `pubspec.yaml`, preserved and
+documented in `step0/root-analyzer-delta.json`. The scoped video-player comparator
+and diagnostic negatives pass with 74 occurrences and zero additions.
+Platform/clock limitations above remain pending; no production move, new seam,
+CI transition, application/dependency change or bug fix is included.

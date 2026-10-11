@@ -1033,6 +1033,41 @@ next episode does not start; "end of episode" stops at EOF.
   A new clean-tree full-suite run establishes the baseline after this fix.
   Application, app dependencies, tests and all guard assertions unchanged.
 
+### 2026-10-11 — Phase 2 Step T / Step 0 final evidence (stop before moves)
+
+- **Revisions.** T `6fdc85a66`; original characterization `61fac9315`;
+  qualification-default compatibility correction `5b2b62c3b`. Application
+  and pubspec remain byte-identical to `31a347ad2`; the P2 manifest stays
+  draft. CI/source-test/theme registration waits for the creation commit.
+- **Original proofs.** All 21 final tests have assertion-failing original
+  witnesses. The 81-point campaign records 68 valid assertion kills, nine
+  caller-equivalent points and four platform/clock-pending points. Per-run
+  hashes retain earlier inputs; 16 final-input mutation reruns witness all
+  21 final tests. Coverage/mutation tables and limitations are in the deps
+  report and `p2/step0/completion.json`. Claude's independent sample remains
+  the next review checkpoint.
+- **Clean baseline.** On `5b2b62c3b`,
+  `nice -n 19 python3 dev/tool/suite_evidence.py run vplayer/p2/step0-suite-final --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`
+  completed with 12,873 successes, the same 13 failures / 28 errors / 20
+  skips, and exactly 21 added passing identities. Strict identity comparison
+  and `suite_evidence.py compare --against` the reusable P1 gate both pass:
+  zero missing, changed, newly failing or newly skipped originals. No allowlist
+  changes. First-attempt logs remain archived.
+- **Tooling/checks.** All 26 existing Dart manifest self-tests, P2
+  universal/real-config tests with original self-comparison, and historical
+  P1 `--at 31a347ad2` pass after the correction. Kotlin's successful T
+  historical/compiled self-test is reused with unchanged inputs. Parser
+  audit confirms isolated packages under `.dart_tool/vplayer_parser/`,
+  deleted copied kernels and explicit flags. Format, size and architecture
+  pass. Commands/results: `p2/step0/compat-checks-effective.json`.
+- **Analyzer/pending.** `flutter analyze --no-pub` source identities are
+  unchanged; 16 additional warnings originate in ignored release-build
+  copies of pubspec (recorded, unsuppressed). The scoped comparator and its
+  negatives pass: 74 diagnostics, zero additions. Real-clock decrement,
+  Android replacement/player-created-false during suspended save, and
+  mobile intent consumers remain explicitly pending under rule 4. No new
+  platform seam, bug fixes, production moves or device commands.
+
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
 proof, seam exactly-once/installation rules, 893-span ownership comparison, history and
