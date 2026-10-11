@@ -751,6 +751,33 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   Flutter runs serialized; full additions-only comparison follows at
   the authorized Step-1 gate against the accepted Step-0b baseline.
 
+### 2026-10-11 — Step 1 (production moves; CI activation)
+
+- **Revision.** Follows addendum `8073fc9a2`. This creation commit applies
+  the frozen 16-declaration move list into ten feature files, including
+  `models/vp_manual_source_validation_failure.dart`; CI activates here.
+  The manifest changes only status. All 893 fates, including S's two
+  patched declarations/three interceptions, compare with zero differences.
+- **Checks.** Current ownership/history, frozen seam negative proofs,
+  analyzer comparator (74 scoped diagnostics, zero additions), global
+  allowlist (45 inventoried warnings), size and architecture pass.
+  Whole-file format proof: five optional commas inserted, none deleted;
+  idempotent. Actual CI formatting scope: 2,321 files, no changes.
+  Characterization/theme subset: 68 successful identities.
+- **Structure/CI.** Facade 18,251→18,018; new files 3–65 lines. Exact
+  bridge, facade back-import ban, pure import/type lists and 500-line caps
+  are registered with real positive/negative probes. CI has full history,
+  move self-test/current check, scoped analyzer and facade format/analyze
+  paths. All ten theme paths and live reader/seam guards are retargeted;
+  no source assertion removed. The rejection diagnostic expectation
+  follows the declared public type rename.
+- **Evidence/next.** `step1/` holds exact move/format proofs, source-reader
+  and seam validation, analyzer and CI-scope logs. Six original warnings
+  and one approved probe import warning are preserved, with no fixes.
+  Full-suite identity comparison against Step 0b, all manifest self-tests
+  and historical inputs, and both release builds run on the clean commit
+  before the gate Progress entry. Dependencies unchanged; no devices.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -14,7 +14,7 @@ are unchanged. Run heavy checks with `nice -n 19`.
 
 ```sh
 nice -n 19 python3 dev/tool/check_dart_moves.py --self-test --self-compare-original --parser-package .dart_tool/vplayer_parser/moves/.dart_tool/package_config.json
-nice -n 19 python3 dev/tool/check_dart_moves.py --parser-package .dart_tool/vplayer_parser/current/.dart_tool/package_config.json
+nice -n 19 python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p1.json --parser-package .dart_tool/vplayer_parser/current/.dart_tool/package_config.json
 ```
 
 `vplayer_p1_retained.json` classifies the formatted original R, including every
@@ -24,12 +24,11 @@ that one fate; a competing member row is rejected. Leading inter-member
 comments belong to the following span. Every scanner token has exactly one
 owner, including file tails and comments after the final declaration.
 
-`vplayer_p1.json` is **draft**, with 16 frozen moves into 10 destinations.
-Ordinary execution rejects a draft. The self-test materializes it in memory
-against R, checks every span, and never writes production code. The analyzer
-probe is an evidence-only materialization. Step S and later production moves
-must update the manifest with their reviewed patches/scaffolding; this draft
-does not claim seam or characterization completion.
+`vplayer_p1.json` is **applied**, with 16 frozen moves into 10 destinations.
+It retains the original reviewed draft, changing only its status. The current
+checker compares all 893 fates against R, including the two S patches and the
+frozen hook scaffolding. Self-tests materialize this same manifest in memory;
+no ownership expectations are regenerated from destination bodies.
 
 Each row has exactly one `fate`: `retained`, `moved`, or `patched`. Edits are
 scanner token arrays (`before`, `after`, positive exact `count`) scoped to that
@@ -82,8 +81,8 @@ It does not replace the
 global analyzer allowlist. Surviving warnings enter that allowlist when their
 production file is created.
 
-CI remains disabled for this slice until the **Step-1 commit creating the first
-`lib/features/video_player/**` file**. That commit must:
+CI is enabled in the **Step-1 commit creating the first
+`lib/features/video_player/**` file**. That commit:
 
 1. Register `video_player` and its exact legacy bridge in
    `check_search_architecture.py`, prohibit facade back-imports, enforce pure
@@ -94,14 +93,13 @@ CI remains disabled for this slice until the **Step-1 commit creating the first
    using isolated CI parser packages and `fetch-depth: 0`; run historical
    manifests against their corresponding revisions.
 4. Register each new characterization file in `ci_behavior_tests.txt` and
-   the test-only seam flag in its test/CI commands. No characterization exists
-   at Step T.
+   the test-only seam flag in its test/CI commands.
 
 S is frozen separately in `vplayer_p1_seam.json`: two patched declarations,
 three interception patches, the hook class frozen as a whole, and its foundation
-import substitution. The unapplied Phase-1 draft includes the same scaffold and
-patches; no destination exists yet. Feature move/analyzer/boundary CI remains
-scheduled for Step 1's first `lib/features/video_player/models/` file.
+import substitution. The applied Phase-1 manifest includes the same scaffold and
+patches. Feature move/analyzer/boundary CI starts in this first production-file
+commit.
 
 Harness commands must pass `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`, including
 full-suite evidence runs and the curated CI behaviour command. Ordinary debug
@@ -126,5 +124,10 @@ exact approved application import lists. Its compilation companion is the
 strict-feature top-level rename probe from T; helper bodies are unchanged at S.
 
 All characterization files are registered now in `ci_behavior_tests.txt`;
-feature move/analyzer/import CI still starts with Step 1's first production
+feature move/analyzer/import CI is enabled with Step 1's first production
 `lib/features/video_player/models/` file.
+
+Step 1 activates the frozen `vplayer_p1.json` (16 moves, 10 destinations).
+Its creation commit enables architecture, ownership/history and scoped analyzer
+CI, with the facade in format/analyze paths and full checkout history. The
+source reader validates the live moved hash declaration and its S→P1 chain.

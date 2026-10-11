@@ -1392,3 +1392,80 @@ additional successful identity is expected. The independent second-sample
 score remains 9/12; closure kills 11/12 of its originally valid cases using
 existing independent evidence plus d5/d13, with d1 now proved equivalent
 (11/11 non-equivalent cases covered). Optional incomplete reruns are excluded.
+
+## Phase 1 Step 1 — frozen moves applied (2026-10-11)
+
+The creation commit applies the unchanged reviewed manifest (only `status`
+changes from `draft` to `applied`). It classifies **893 fates: 875 retained,
+16 moved and two S-patched declarations**. Current-tree ownership, token,
+occurrence/binding, member-order, exact directive and scaffold checks report
+zero differences against R. Whole-file format proof records five inserted
+AST-optional commas, zero deleted commas and idempotence, with all other
+tokens/comments/literals unchanged. Evidence: `step1/move-proof.json`,
+`mechanical-unformatted/`, `current.txt` and `seam-proof.json`.
+
+| Original declaration | Current owner / declared public name | File lines |
+|---|---|---|
+| `_ManualSourceValidationFailure` | `lib/features/video_player/models/vp_manual_source_validation_failure.dart` / `VpManualSourceValidationFailure` | 3 |
+| `_SeasonEpisodeSelection` | `lib/features/video_player/models/vp_season_episode_selection.dart` / `VpSeasonEpisodeSelection` | 6 |
+| `_SubtitleApplyAttempt` | `lib/features/video_player/models/vp_subtitle_apply_attempt.dart` / `VpSubtitleApplyAttempt` | 26 |
+| `_IptvZapPage` | `lib/features/video_player/models/vp_iptv_zap_page.dart` / `VpIptvZapPage` | 24 |
+| `IptvCatchupRequestGate` | `lib/features/video_player/models/iptv_catchup_request_gate.dart` / `IptvCatchupRequestGate` | 30 |
+| `_VideoPlayerScreenState._diagnosticSubtitleId` | `lib/features/video_player/application/vp_subtitle_identity.dart` / `vpDiagnosticSubtitleId` | 16 |
+| `_VideoPlayerScreenState._format` | `lib/features/video_player/application/vp_format.dart` / `vpFormatDuration` | 5 |
+| `_VideoPlayerScreenState._pad2` | `lib/features/video_player/application/vp_format.dart` / `vpPad2` | 5 |
+| `_VideoPlayerScreenState._normalisedContentType` | `lib/features/video_player/application/vp_identity_text.dart` / `vpNormalisedContentType` | 65 |
+| `_VideoPlayerScreenState._subtitleSearchDisplayLabel` | `lib/features/video_player/application/vp_identity_text.dart` / `vpSubtitleSearchDisplayLabel` | 65 |
+| `_VideoPlayerScreenState._filterIdentitySearchResults` | `lib/features/video_player/application/vp_identity_text.dart` / `vpFilterIdentitySearchResults` | 65 |
+| `_VideoPlayerScreenState._normalisePosterUrl` | `lib/features/video_player/application/vp_identity_text.dart` / `vpNormalisePosterUrl` | 65 |
+| `_VideoPlayerScreenState._identityMetaSubtitle` | `lib/features/video_player/application/vp_identity_text.dart` / `vpIdentityMetaSubtitle` | 65 |
+| `_VideoPlayerScreenState._subtitlePreferenceMatchesAttempt` | `lib/features/video_player/application/vp_subtitle_identity.dart` / `vpSubtitlePreferenceMatchesAttempt` | 16 |
+| `_VideoPlayerScreenState._generateFilenameHash` | `lib/features/video_player/application/vp_filename_hash.dart` / `vpFilenameHash` | 8 |
+| `_RandomChoiceTile` | `lib/features/video_player/presentation/vp_random_choice_tile.dart` / `_RandomChoiceTile` | 65 |
+
+No state ownership, resource/timer lifetime, constructor default, disposal
+order, storage contract or widget tree changes. Mutable subtitle-attempt
+identity/completer and catch-up generation behavior stay intact.
+`IptvCatchupRequestGate` keeps its name and exact facade re-export. The private
+random tile keeps its body and uses the frozen public typedef; its dead-path
+coverage exception remains. Static removal is declared only for the three
+reviewed top-level helpers. Every retained reference substitution is counted
+by declaration, including the SeekHud duration tear-off.
+
+### Live source tests and theme containment
+
+| Original anchor / guard | Current anchor |
+|---|---|
+| Hash declaration reader / `_VideoPlayerScreenState._generateFilenameHash` | Validating reader follows S→P1 to `application/vp_filename_hash.dart::vpFilenameHash`; current body asserted, two-relocation and mutation negatives retained |
+| S seam source guard | Validates the applied whole P1 ledger and separately pins the exact two S declarations / three patches / installer scaffold to S; all installation and once-only negative proofs retained |
+| Manual source rejection diagnostic | Runtime expectation follows the declared `_ManualSourceValidationFailure`→`VpManualSourceValidationFailure` type rename; diagnostic template and rollback assertions unchanged; `StateError` still rejected |
+| Eight other direct-source readers in rule 5 | All anchored methods remain in the facade; no anchor moved or assertion removed |
+| Theme frozen paths, rendered-set route boundaries and `p2_player_dart` | All ten exact current destination paths added in the creation commit, including models/application files; exact frozen-list assertion extended |
+
+### CI activation and checks
+
+CI is enabled by this Step-1 commit creating the first production feature
+files, including `models/vp_manual_source_validation_failure.dart`. `FEATURES`
+registers `video_player` and its exact `presentation/legacy_video_player/`
+bridge, rejects facade back-imports, scopes pure compatibility/type imports
+by file, rejects UI/state context in pure layers and enforces a 500-line
+extraction cap. The real architecture fixture accepts the production tree
+and exact bridge, and rejects ten boundary/size violations. All new files
+are 3–65 lines. The facade ratchet drops 18,251→18,018.
+
+`checks.yml` adds the facade to format/analyze lists (`lib/features` already
+contains all destinations), enables move checker self-test/current-tree and
+scoped analyzer comparison with separate vplayer parser packages, and sets
+`fetch-depth: 0`. The curated behavior list contains every characterization
+file and its test-only compile-time flag; the addendum identity is in the
+already registered zap file. No known-failure test allowlist changes.
+
+The actual CI formatting scope passes: 2,321 files, zero edits. Root analysis
+is 1,754 diagnostic identities/counts, with all 1,680 identities outside this
+slice unchanged. Scoped comparison passes 74 diagnostics / zero additions
+to the approved R/root/strict/probe inventory. Seven inventoried warnings
+enter the global allowlist: six original facade warnings and the probe's
+retained import warning. The global scope passes all 45 warning allowances.
+The frozen import list is preserved; no warning fix or suppression is added.
+
+Focused characterization plus theme containment: **68 successful identities**, including all 58 characterization/infrastructure tests. Commands and logs are under `step1/`; the clean-tree full suite, historical comparisons and release builds follow at the gate.

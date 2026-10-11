@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
-from check_dart_moves import check
+from check_dart_moves import check, run_manifest
 from dart_move_history import git_text, load_manifest
 from dart_move_partition import partition
 from check_settings_moves import tokens
@@ -26,17 +26,29 @@ def installation_errors(sources):
 
 
 def prove(package, self_test=False):
-    manifest = load_manifest(MANIFEST)
+    seam = load_manifest(MANIFEST)
+    phase_path = 'dev/tool/dart_moves/vplayer_p1.json'
+    phase = load_manifest(phase_path)
+    manifest = phase if phase['status'] == 'applied' else seam
+    active_path = phase_path if phase['status'] == 'applied' else MANIFEST
     original = git_text(manifest['base'], SOURCE)
     current = (ROOT / SOURCE).read_text()
     sources = {p.relative_to(ROOT).as_posix(): p.read_text()
                for p in (ROOT / 'lib').rglob('*.dart')}
-    errors = check(manifest, original, {SOURCE: current}, package)
+    owned = {path: sources[path] for path in [SOURCE, *manifest['destinations']]}
+    errors = run_manifest(active_path, package)
     errors += installation_errors(sources)
     patched = [r for r in manifest['declarations'] if r['fate'] == 'patched']
     assert {r['original'] for r in patched} == {
         '_VideoPlayerScreenState.initState', '_VideoPlayerScreenState._createPlayerInstance'}
     assert sum(len(r['patches']) for r in patched) == 3
+    # A later ownership ledger must keep the accepted S interception edits
+    # and installer scaffold exactly, rather than replace the S proof.
+    seam_patches = {r['original']: r['patches'] for r in seam['declarations']
+                    if r['fate'] == 'patched'}
+    assert {r['original']: r['patches'] for r in patched} == seam_patches
+    assert (manifest['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks']
+            == seam['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks'])
     unit = parse({'current': current}, package, ownership=True)['current']
     hook = next(n for n in unit['declarations'] if n['name'] == 'VideoPlayerScreenTestHooks')
     members = {n['name']: tokens(n) for n in hook['members']}
@@ -73,7 +85,7 @@ def prove(package, self_test=False):
             'ready removed': current.replace('ready: () => _onPlayerInstanceReady(instanceGeneration),', ''),
             'assignment order': current.replace('_player = player;\n    _playerCreated = true;', '_playerCreated = true;\n    _player = player;'),
         }.items():
-            assert check(manifest, original, {SOURCE: text}, package), 'accepted ' + name
+            assert check(manifest, original, dict(owned, **{SOURCE: text}), package), 'accepted ' + name
         assert installation_errors({SOURCE: current, 'lib/other.dart': 'VideoPlayerScreenTestHooks.install(null);'})
     return errors, dict(patched_declarations=2, interception_patches=3,
                         original_spans=len(manifest['declarations']),

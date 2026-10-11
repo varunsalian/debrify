@@ -112,7 +112,7 @@ void main() {
             expect(
               diagnostics,
               contains(
-                'Player: manual Stremio source rejected (_ManualSourceValidationFailure)',
+                'Player: manual Stremio source rejected (VpManualSourceValidationFailure)',
               ),
             );
           }

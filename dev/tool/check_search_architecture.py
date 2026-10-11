@@ -96,6 +96,32 @@ STREMIO_TV_HANDOFF_FILES = {
     STREMIO_TV_BRIDGE + "stremio_tv_player_guide.dart",
 }
 FEATURES += ("alldebrid_files",)
+FEATURES += ("video_player",)
+VIDEO_PLAYER_FACADE = "lib/screens/video_player_screen.dart"
+# D1: bounded service/platform bridge; exit is the separate player data-contract
+# and per-session Riverpod migration in video-player-screen-plan.md.
+VIDEO_PLAYER_BRIDGE = "lib/features/video_player/presentation/legacy_video_player/"
+VIDEO_PLAYER_FILE_CAP = 500
+# Exact Phase-1 compatibility/type imports. Pure files cannot acquire other
+# legacy dependencies merely because they live in models/ or application/.
+VIDEO_PLAYER_PURE_IMPORTS = {
+    "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": {
+        "dart:async", "package:media_kit/media_kit.dart",
+    },
+    "lib/features/video_player/models/vp_iptv_zap_page.dart": {
+        "lib/models/iptv_playlist.dart",
+    },
+    "lib/features/video_player/application/vp_format.dart": {
+        "lib/utils/time_formatters.dart",
+    },
+    "lib/features/video_player/application/vp_identity_text.dart": {
+        "lib/models/stremio_addon.dart",
+    },
+    "lib/features/video_player/application/vp_subtitle_identity.dart": {
+        "package:media_kit/media_kit.dart",
+        "lib/features/video_player/models/vp_subtitle_apply_attempt.dart",
+    },
+}
 ALLDEBRID_COMPLETE = True
 ALLDEBRID_FACADE = "lib/screens/alldebrid/alldebrid_files_screen.dart"
 ALLDEBRID_BRIDGE = "lib/features/alldebrid_files/presentation/legacy_alldebrid/"
@@ -544,6 +570,7 @@ PRESENTATION_BRIDGE_IMPORTS = {
 # http, shared_preferences and sqflite stay forbidden. Exit milestone: those
 # calls move behind Sources data contracts and this folder is dissolved.
 LEGACY_PLAYBACK_BRIDGES = (
+    VIDEO_PLAYER_BRIDGE,
     ALLDEBRID_BRIDGE,
     EDIT_PROFILE_BRIDGE,
     "lib/features/sources/presentation/legacy_playback/",
@@ -975,6 +1002,12 @@ def violations(path: Path) -> list[str]:
         if not part.endswith(GENERATED_SUFFIXES):
             problems.append(f"handwritten part directive: {part}")
 
+    if relative.startswith("lib/features/video_player/"):
+        if lines > VIDEO_PLAYER_FILE_CAP:
+            problems.append(f"{lines} lines exceeds the {VIDEO_PLAYER_FILE_CAP}-line video-player extraction limit")
+        if relative.startswith(("lib/features/video_player/models/", "lib/features/video_player/application/")) and re.search(r"\b(?:BuildContext|WidgetRef|ProviderContainer|Ref)\b", source):
+            problems.append("pure video-player declaration references UI/state context")
+
     layer = next((x for x in ("application", "data", "models", "presentation")
                   if x in path.parts), None)
     if relative.startswith(("lib/utils/", "lib/services/", "lib/core/metadata/")):
@@ -994,6 +1027,14 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/video_player/"):
+                if target == VIDEO_PLAYER_FACADE:
+                    problems.append("Video-player feature imports its facade")
+                if (layer in ("models", "application")
+                        and target not in VIDEO_PLAYER_PURE_IMPORTS.get(relative, set())):
+                    problems.append("pure video-player import outside its exact compatibility/type list")
+                if not relative.startswith(VIDEO_PLAYER_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("Video-player service import outside its exact legacy bridge")
             if relative.startswith("lib/features/recordings/"):
                 if target == RECORDINGS_FACADE:
                     problems.append("Recordings feature imports its facade")

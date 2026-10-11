@@ -75,7 +75,11 @@ def self_test(package):
     draft = load_manifest(ROOT / 'dev/tool/dart_moves/vplayer_p1.json')
     identity = '_VideoPlayerScreenState._generateFilenameHash'
     current = read(identity, package)
-    assert current['path'] == seam['source']
+    expected_path = 'lib/features/video_player/application/vp_filename_hash.dart'
+    assert current['path'] == (expected_path if draft['status'] == 'applied' else seam['source'])
+    if draft['status'] == 'applied':
+        assert current['declaration'] == 'vpFilenameHash'
+        assert len(current['chain']) == 2
     assert 'nameWithoutExt.hashCode.toString()' in current['source']
     original = git_text(draft['base'], draft['source'])
     virtual = materialize(draft, original, package)
@@ -110,7 +114,7 @@ def self_test(package):
         pass
     else:
         raise AssertionError('historical text substituted for a missing current owner')
-    print('PASS: current S, real Phase-1 draft, two relocations, changed body, missing/duplicate fates and missing live owner')
+    print('PASS: current validated owner, frozen Phase-1 manifest, two relocations, changed body, missing/duplicate fates and missing live owner')
 
 
 def main():
