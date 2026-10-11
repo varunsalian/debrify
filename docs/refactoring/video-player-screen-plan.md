@@ -1019,6 +1019,20 @@ next episode does not start; "end of episode" stops at EOF.
   the latch blocks later recovery. Recorded in Follow-ups; no bug fixes.
   Heavy commands nice 19, harness flag true, suites serialized; no devices.
 
+### 2026-10-11 — Phase 2 tooling compatibility addendum
+
+- First clean checkpoint `61fac9315` full suite completed with 21 added
+  successes and one extra failure: the IPTV two-pane real-config checker
+  fixture requires exactly one textual qualification-default anchor. T's
+  new validation duplicated it; guard behavior was unchanged, but its
+  default-substitution proof could not run. No failure was allowlisted.
+- Shared guard now evaluates the existing default once and uses that value
+  in both checks, preserving the fixture's single anchor and opt-in
+  rejection. Full fixture/default probes and all affected manifest checks
+  are rerun; Kotlin's separate checker inputs are unchanged.
+  A new clean-tree full-suite run establishes the baseline after this fix.
+  Application, app dependencies, tests and all guard assertions unchanged.
+
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
 proof, seam exactly-once/installation rules, 893-span ownership comparison, history and

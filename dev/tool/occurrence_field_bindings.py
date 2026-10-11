@@ -137,8 +137,9 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
     record_fields = {r['new_name'] for r in fields.values() if is_record_field(r)}
     # Explicit per-field ownership permits a controller's own bare reads, never
     # a global relaxation of mandatory qualification or lexical binding checks.
+    mandatory_qualification = binding_config.get('mandatory_qualification', True)
     bare = binding_config.get('owner_scoped_bare_fields', {})
-    if bare and (not binding_config.get('mandatory_qualification', True)
+    if bare and (not mandatory_qualification
                  or binding_config.get('mandatory_qualification_classes') is not None):
         return ['Owner-scoped access requires mandatory qualification in every other class']
     for identity, owner in bare.items():
@@ -316,7 +317,7 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
             # relied on); a config may only opt out explicitly. A preserved
             # widget may own a same-named field (recordings: now): opt-in class
             # scope keeps that separate from relocated State fields.
-            if (binding_config.get('mandatory_qualification', True)
+            if (mandatory_qualification
                     and (binding_config.get('mandatory_qualification_classes') is None
                          or owner in binding_config['mandatory_qualification_classes'])
                     and occurrence['kind'] == 'lexical' and occurrence['binding'] == 'unbound'
