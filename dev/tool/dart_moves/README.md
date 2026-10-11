@@ -179,3 +179,14 @@ commands and both analyzer manifest/inventory arguments to P3; retain P1
 `--at 31a347ad2`, add P2 `--at fc24e32ae`, register all P3 characterization
 files in `ci_behavior_tests.txt`, and extend all three theme path lists.
 Do not enable the draft against the original facade.
+
+
+Phase 3 Step 1 applies `vplayer_p3.json`: 17 declarations move to the
+skip-segment controller, 14 retained occurrences are qualified and three
+notifier references stay unchanged. State construction keeps sleep then skip;
+the notifier allocation and individual disposal statement positions stay owned
+by State. CI selects P3 current/self and both P3 analyzer arguments; P1/P2
+historical checks remain at their merge revisions. All six behavior files and
+all three theme destination lists are registered. The validating source reader
+already chains these ownership manifests; no skip source assertions require a
+textual retarget. Original races/profile outcomes are unchanged.

@@ -4,7 +4,8 @@
 # 2026-10-11 vplayer S: frozen H1 test-hook scaffolding; legacy responsibilities retained until phases 1–25.
 # 2026-10-11 vplayer P1 Step 1: 16 frozen moves; facade ratchet lowered 18251 -> 18018; exit: remaining phases 2–25.
 # 2026-10-11 vplayer P2 Step 1: 12 frozen sleep-timer moves; facade ratchet lowered 18018 -> 17932; exit: remaining phases 3–25.
-17932 lib/screens/video_player_screen.dart
+# 2026-10-12 vplayer P3 Step 1: 17 frozen skip moves; facade ratchet lowered 17932 -> 17766; exit: remaining phases 4–25.
+17766 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

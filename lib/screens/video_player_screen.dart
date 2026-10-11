@@ -177,6 +177,7 @@ import '../features/video_player/application/vp_filename_hash.dart';
 import '../features/video_player/application/vp_identity_text.dart';
 import '../features/video_player/application/vp_subtitle_identity.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -382,6 +383,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
   _VideoPlayerScreenState() {
     _sleep = VpSleepTimerController(_VpSleepTimerHostAdapter(this));
+    _skip = VpSkipSegmentController(_VpSkipSegmentHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -1279,29 +1281,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
-  // Community intro/outro markers for the currently playing series episode.
-  // The request key includes the stream duration because providers may use it
-  // to distinguish releases, and timestamps are always validated against it.
-  bool _skipSegmentSettingsLoaded = false;
-  bool _skipSegmentsEnabled = false;
-  String _skipSegmentProviderId = SkipSegmentProviders.auto;
-  SkipSegmentProvider? _skipSegmentProvider;
-  SkipSegments _skipSegments = SkipSegments.empty;
-  String? _loadedSkipSegmentsKey;
-  String? _loadingSkipSegmentsKey;
-  int _skipSegmentsFetchGeneration = 0;
-  final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
-
-  /// Whether _position/_duration describe the item currently selected, rather
-  /// than the one being switched away from. The native player's equivalent is
-  /// `hasEverBeenReady`.
-  ///
-  /// Cleared when a playlist switch starts and set again on the first real
-  /// duration for the incoming media. It cannot stick: media_kit's `open()`
-  /// pushes Duration.zero to the duration stream unconditionally, so a fresh
-  /// duration always follows — even when the new episode runs exactly as long
-  /// as the old one.
-  bool _skipSegmentsMediaReady = true;
+  late final VpSkipSegmentController _skip;
 
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
@@ -1665,7 +1645,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
     unawaited(_loadTrackingPolicy());
-    unawaited(_loadSkipSegmentSettings());
+    unawaited(_skip.loadSkipSegmentSettings());
     unawaited(_loadLocalCompletionThresholds());
     VideoPlayerScreenTestHooks._ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -1709,29 +1689,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _initTraktScrobble();
     _initSimklScrobble();
     _initMdblistScrobble();
-  }
-
-  Future<void> _loadSkipSegmentSettings() async {
-    final values = await Future.wait<Object>([
-      SkipSegmentsStorage.getSkipSegmentsEnabled(),
-      SkipSegmentsStorage.getSkipSegmentProvider(),
-    ]);
-    if (!mounted) return;
-
-    final enabled = values[0] as bool;
-    final storedProvider = values[1] as String;
-    final providerId = SkipSegmentProviders.isAvailable(storedProvider)
-        ? storedProvider
-        : SkipSegmentProviders.auto;
-
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = enabled
-        ? SkipSegmentProviders.create(providerId)
-        : null;
-    _skipSegmentsEnabled = enabled;
-    _skipSegmentProviderId = providerId;
-    _skipSegmentSettingsLoaded = true;
-    _syncSkipSegmentsForCurrentContent();
   }
 
   Future<void> _loadLocalCompletionThresholds() async {
@@ -1783,176 +1740,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentEpisodeMarkedAsFinished = false;
     _currentMovieMarkedAsFinished = false;
     _currentMovieRewatchStarted = false;
-  }
-
-  ({String imdbId, int season, int episode, Duration duration, String key})?
-  _currentSkipSegmentRequest() {
-    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return null;
-    // Two stale-media windows, both of which would judge the incoming item
-    // against the outgoing one's clock:
-    //
-    // * _skipSegmentsMediaReady covers a playlist switch. _loadPlaylistIndex
-    //   points _currentIndex at the new episode and only then saves resume and
-    //   resolves the stream URL — a network round trip for debrid/PikPak
-    //   links. Through all of that _position/_duration still describe the
-    //   outgoing episode, and that position is usually deep enough to land
-    //   inside a segment, so the button flashes on the moment next-episode is
-    //   pressed. It also asks the provider for the new episode at the old
-    //   episode's duration, which can select or validate the wrong release.
-    // * _isTransitioning covers an IPTV zap / source switch, where the key
-    //   flips before the incoming stream opens (the same window _saveResume
-    //   guards against).
-    if (!_skipSegmentSettingsLoaded ||
-        !_skipSegmentsEnabled ||
-        !_skipSegmentsMediaReady ||
-        _isTransitioning ||
-        _duration <= Duration.zero) {
-      return null;
-    }
-
-    final seriesPlaylist = _seriesPlaylist;
-    final isSeries =
-        _effectiveContentType == 'series' || seriesPlaylist?.isSeries == true;
-    if (!isSeries) return null;
-
-    var imdbId = _effectiveContentImdbId?.trim();
-    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) {
-      imdbId = seriesPlaylist?.imdbId?.trim();
-    }
-    if (imdbId == null || !RegExp(r'^tt\d+$').hasMatch(imdbId)) return null;
-
-    int? season;
-    int? episode;
-    if (seriesPlaylist?.isSeries == true) {
-      final current = _findSeriesEpisodeForCurrentIndex(seriesPlaylist!);
-      season = current?.seriesInfo.season;
-      episode = current?.seriesInfo.episode;
-    }
-    season ??= _effectiveContentSeason;
-    episode ??= _effectiveContentEpisode;
-    if (season == null || episode == null) {
-      final parsed = _traktSeasonEpisode();
-      season ??= parsed.season;
-      episode ??= parsed.episode;
-    }
-    if (season == null || episode == null || season < 0 || episode < 1) {
-      return null;
-    }
-
-    final durationSeconds = _duration.inSeconds;
-    final key =
-        '$_skipSegmentProviderId:$imdbId:$season:$episode:$durationSeconds';
-    return (
-      imdbId: imdbId,
-      season: season,
-      episode: episode,
-      duration: _duration,
-      key: key,
-    );
-  }
-
-  void _syncSkipSegmentsForCurrentContent() {
-    final request = _currentSkipSegmentRequest();
-    final provider = _skipSegmentProvider;
-    if (request == null || provider == null) return;
-    if (_loadedSkipSegmentsKey == request.key ||
-        _loadingSkipSegmentsKey == request.key) {
-      return;
-    }
-
-    if (_skipSegmentsCache.containsKey(request.key)) {
-      final cached = _skipSegmentsCache[request.key]!;
-      if (mounted) {
-        setState(() {
-          _skipSegments = cached;
-          _loadedSkipSegmentsKey = request.key;
-        });
-        _syncActiveSkipSegmentUi();
-      }
-      return;
-    }
-
-    final generation = ++_skipSegmentsFetchGeneration;
-    _loadingSkipSegmentsKey = request.key;
-    provider
-        .fetch(
-          imdbId: request.imdbId,
-          season: request.season,
-          episode: request.episode,
-          duration: request.duration,
-        )
-        .then((segments) {
-          _skipSegmentsCache[request.key] = segments;
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = segments;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .catchError((Object error) {
-          // Missing skip data must never affect playback. Cache the miss for
-          // this session so an offline API cannot be retried on every position
-          // tick.
-          _skipSegmentsCache[request.key] = SkipSegments.empty;
-          debugPrint(
-            'SkipSegments: ${provider.displayName} fetch failed: $error',
-          );
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = SkipSegments.empty;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .whenComplete(() {
-          if (_loadingSkipSegmentsKey == request.key) {
-            _loadingSkipSegmentsKey = null;
-          }
-        });
-  }
-
-  /// Forget the outgoing item's skip segments when switching playlist entries,
-  /// and stop reading its clock until the incoming one opens. The native TV
-  /// player does the same in playItem.
-  ///
-  /// The fetch cache survives on purpose: it's keyed per episode, so going
-  /// back to one already looked up is instant.
-  void _resetSkipSegmentState() {
-    _skipSegmentsFetchGeneration++;
-    _loadingSkipSegmentsKey = null;
-    _loadedSkipSegmentsKey = null;
-    _skipSegments = SkipSegments.empty;
-    _skipSegmentsMediaReady = false;
-    _activeSkipSegmentUi.clear();
-  }
-
-  SkipSegment? get _activeSkipSegment {
-    final request = _currentSkipSegmentRequest();
-    if (request == null || request.key != _loadedSkipSegmentsKey) return null;
-    return _skipSegments.segmentAt(_position);
-  }
-
-  void _syncActiveSkipSegmentUi() {
-    _activeSkipSegmentUi.update(_activeSkipSegment);
-  }
-
-  void _skipActiveSegment() {
-    final segment = _activeSkipSegment;
-    if (segment == null || !_playerCreated) return;
-    final target = _duration > Duration.zero && segment.end > _duration
-        ? _duration
-        : segment.end;
-    _position = target;
-    _playbackUiClock.updatePosition(target, immediate: true);
-    _syncActiveSkipSegmentUi();
-    unawaited(_player.seek(target));
-    _traktScrobbleSeek(target);
-    _simklScrobbleSeek(target);
-    _mdblistScrobbleSeek(target);
-    HapticFeedback.selectionClick();
   }
 
   Future<void> _initTraktScrobble() async {
@@ -3812,8 +3599,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _prepareNextDirectEpisode();
       _updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
-      _syncSkipSegmentsForCurrentContent();
-      _syncActiveSkipSegmentUi();
+      _skip.syncSkipSegmentsForCurrentContent();
+      _skip.syncActiveSkipSegmentUi();
       _checkAndApplyLocalCompletion();
     });
     if (_subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
@@ -3858,9 +3645,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _mdblistPlay();
       }
       _playbackUiClock.updateDuration(d);
-      if (d > Duration.zero) _skipSegmentsMediaReady = true;
-      _syncSkipSegmentsForCurrentContent();
-      _syncActiveSkipSegmentUi();
+      if (d > Duration.zero) _skip.skipSegmentsMediaReady = true;
+      _skip.syncSkipSegmentsForCurrentContent();
+      _skip.syncActiveSkipSegmentUi();
       setState(() {});
     });
     _playSub = player.stream.playing.listen((p) {
@@ -10456,7 +10243,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // No new media will open, so the duration emit that normally re-arms the
     // skip lookup never comes. Leaving it disarmed would silently cost the
     // skip button for the rest of whatever is still playing.
-    _skipSegmentsMediaReady = true;
+    _skip.skipSegmentsMediaReady = true;
     if (mounted) {
       setState(() {
         _isTransitioning = false;
@@ -10648,7 +10435,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Clear subtitle cache and selection when changing content
     _resetSubtitleState();
-    _resetSkipSegmentState();
+    _skip.resetSkipSegmentState();
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -11951,9 +11738,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryMessage = null;
 
     _cleanupTempSubtitleFilesSync();
-    _skipSegmentsFetchGeneration++;
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = null;
+    _skip.skipSegmentsFetchGeneration++;
+    _skip.skipSegmentProvider?.close();
+    _skip.skipSegmentProvider = null;
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
@@ -13312,8 +13099,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // While a skip is offered it owns OK: the button is on screen naming
         // the action, and it lives outside the bar's focus scope so the remote
         // has no other way to reach it.
-        if (_activeSkipSegment != null) {
-          _skipActiveSegment();
+        if (_skip.activeSkipSegment != null) {
+          _skip.skipActiveSegment();
           return KeyEventResult.handled;
         }
         // Native TV player: OK both toggles playback and raises the bar.
@@ -15557,7 +15344,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   child: SkipSegmentButton(
                                     key: ValueKey(activeSkipSegment.type),
                                     type: activeSkipSegment.type,
-                                    onPressed: _skipActiveSegment,
+                                    onPressed: _skip.skipActiveSegment,
                                   ),
                                 ),
                               );
@@ -17839,6 +17626,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
   }
+}
+
+class _VpSkipSegmentHostAdapter implements VpSkipSegmentHost {
+  _VpSkipSegmentHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  Duration get position => _s._position;
+  @override
+  set position(Duration v) => _s._position = v;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  SeriesEpisode? findSeriesEpisodeForCurrentIndex(SeriesPlaylist sp) =>
+      _s._findSeriesEpisodeForCurrentIndex(sp);
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  bool get playerCreated => _s._playerCreated;
+  @override
+  PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  SkipSegmentUiController get activeSkipSegmentUi => _s._activeSkipSegmentUi;
+  @override
+  void traktScrobbleSeek(Duration target) => _s._traktScrobbleSeek(target);
+  @override
+  void simklScrobbleSeek(Duration target) => _s._simklScrobbleSeek(target);
+  @override
+  void mdblistScrobbleSeek(Duration target) => _s._mdblistScrobbleSeek(target);
 }
 
 class _VpSleepTimerHostAdapter implements VpSleepTimerHost {

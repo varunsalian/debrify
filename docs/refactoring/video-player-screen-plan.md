@@ -1404,7 +1404,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 
 ### 2026-10-12 — Phase 3 Step-0b independent-sample addendum
 
-- **Revision.** tested original `55ac577e6`; addendum follows `425242b60`; application `55ac577e6` / `fc24e32ae`
+- **Revision.** `682d86812`; tested original `55ac577e6`; application `55ac577e6` / `fc24e32ae`
   unchanged; documentation/evidence only.
 - **Sample.** Claude 20/21 (95.2%). f9–f13/f20 false COMPILE-ERR labels
   corrected to assertion kills; saved tails lack assertion sections, so six
@@ -1420,6 +1420,29 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 - **Baseline/constraints.** Reuse clean `55ac577e6` full suite; no test/app/input
   changes, no allowlist or pubspec edits, no device/run/install commands. Proceed
   to frozen Step 1 production moves and the clean-tree gate.
+
+### 2026-10-12 — Phase 3 Step 1 production creation
+
+- **Revision.** Creation follows `682d86812`; tested source hashes in
+  `p3/step1/materialization-application.json`; clean-tree gate follows.
+- **Move.** 17 declarations, patched State constructor (sleep then skip),
+  frozen Host/adapter, 14 retained substitutions + three unchanged notifier
+  references; individual dispose positions and State-owned allocation retained.
+  Controller 260 lines; facade 17,932 → 17,766. P3 manifest applied, zero diffs.
+- **CI/source guards.** P3 current/self and analyzer manifest+inventory;
+  P1/P2 historical checks retained; six test files and three theme lists added.
+  Reader already chains live P3 declarations; no moved legacy anchor/weakening.
+- **Commands/results.** `nice -n 19` ownership, format, size `--update`,
+  architecture/negatives, root/CI analyze, scoped comparator and affected suite
+  with hook define/no-pub: all 150 pass. Root 1,777 vs 1,771; six frozen-probe
+  additions only, every outside identity unchanged; 81 scoped diagnostics pass.
+- **Deviations/evidence.** Theme helper's one-occurrence assertion stopped;
+  resumed for all three fixture lists after byte validation. Size updater's
+  dated comments restored; no tree change during affected run. `p3/step1/`
+  contains attempts, commands, inputs and results; no application bug fixes,
+  pubspec changes, device/run/install, push/merge or branch switch.
+- **Pending.** Clean-tree gate suite/builds/all self-tests/historical phases;
+  classified web/Android paths and end-of-series device checklist remain pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

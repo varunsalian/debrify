@@ -2500,3 +2500,43 @@ Coverage matrix for `_loadSkipSegmentSettings`: C36/C55/C56 and the existing
 settings witnesses unchanged; its trailing sync is E11/f2-equivalent.
 The clean `55ac577e6` additions-only suite is the Step-0b baseline unchanged
 (`addendum/baseline-reuse.json`); no allowlist additions.
+
+
+## Phase 3 Step 1 — applied frozen split (2026-10-12)
+
+Creation commit follows addendum `682d86812`. Application changes are the
+facade and `presentation/legacy_video_player/vp_skip_segment_controller.dart`
+only: 17 moved declarations, one patched constructor, 14 substituted retained
+occurrences and three unchanged State notifier references. The 260-line
+controller/Host and computed adapter are the Step T formatted materialization
+byte for byte (`step1/materialization-application.json`); 882 exhaustive fates
+compare with zero differences. Every initializer's inertness proof and the
+State-owned notifier allocation proof remain `tooling/construction-proof.json`.
+Sleep constructs first, skip second, with no Host reads at construction.
+Dispose's generation/close/null statements stay separately at their original
+positions. No behavior, race, profile or schema changes.
+
+CI current/self-test and both analyzer arguments now select P3. P1 remains
+`--at 31a347ad2`; P2 adds `--at fc24e32ae`. Six behavior files are registered,
+hook define remains enabled for harness commands, all three theme lists
+include the destination (all three copies in the fixture too). The facade
+ratchet shrinks 17,932 → 17,766 with original dated notes retained. The existing
+feature registration, bridge/import restrictions and 500-line cap apply.
+
+| Creation verification | Evidence/result |
+|---|---|
+| Current ownership/history | `step1/current.txt`: zero differences; earlier P1/P2 destinations protected |
+| Source guards | Eight remaining legacy readers have no moved P3 anchors (`source-retarget-inventory.json`); chaining reader resolves original settings method to current controller (`reader-moved.txt`); no assertions weakened |
+| Optional commas/format | Exactly equals reviewed formatted source; zero inserted/deleted optional commas, idempotent (`tooling/optional-commas.json`); creation format passes |
+| Analyzer | Root 1,771 → 1,777; outside-video-player identities/multiplicities exact; scoped 81 diagnostics, zero additions over frozen inventory; all P1/P2 maxima preserved (`step1/root-analyzer-delta.json`, `analyzer.txt`) |
+| Declared diagnostic delta | Retained original facade import becomes unused (Step T probe identity); two destination import-order infos; three formatting-exposed brace infos. Original import list preserved, no cleanup/suppression edits. Global warning entry records only that frozen import identity. |
+| Sizes/boundaries | 2,995 tracked files / 140 ratchets; new controller capped by architecture; 1,664 migrated files; architecture negatives pass; controller 260, facade 17,766 |
+| Affected behavior/source guards | All 150 pass, including all 58 P3 cases, seam/current reader, EOF and theme guards; `p3/step1-affected.jsonl`, unchanged tree during run |
+
+Initial apply helper stopped before modifying the theme fixture because its
+frozen path occurs in three lists. Corrected helper/resume extends all three
+with original indentation, validates already-materialized application bytes,
+and preserves the attempt NOTE. The shrink helper discards baseline comments;
+dated history notes were restored before the affected suite. No result from a
+failed check is credited. Clean-tree full suite, historical/self checks and
+both release builds follow at the gate.

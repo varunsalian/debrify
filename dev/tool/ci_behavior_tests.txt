@@ -445,3 +445,9 @@ test/features/video_player/video_player_zap_test.dart
 test/features/video_player/video_player_zap_categories_test.dart
 test/features/video_player/video_player_sleep_timer_test.dart
 test/features/video_player/video_player_sleep_races_test.dart
+test/features/video_player/video_player_skip_boundaries_test.dart
+test/features/video_player/video_player_skip_identity_test.dart
+test/features/video_player/video_player_skip_races_test.dart
+test/features/video_player/video_player_skip_segments_test.dart
+test/features/video_player/video_player_skip_settings_test.dart
+test/features/video_player/video_player_skip_tracking_test.dart
