@@ -1308,6 +1308,32 @@ moves + 14 retained substitutions, P1 `--at`, protection of the ten P1 destinati
 bare-access negatives, 24 focused tests, e2/e11 equivalence and e14 device-pending, raw
 suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merged.
 
+### 2026-10-11 — Phase 3 Step T (complete; draft only)
+
+- **Revision/scope.** Follows approved design `de55d9987`, original
+  `fc24e32ae` re-measured by name: 882 classified spans, 17 moves, 14
+  substituted retained occurrences and three preserved notifier references.
+  Raw/formatted complete evidence materializations compare with zero
+  differences; existing State constructor is patched after its sleep assignment.
+  All ten initializer inertness proofs and the State-owned notifier are recorded.
+- **Checks.** All 26 existing Dart manifest self-tests, complete video-player
+  universal/real-config self-test, P1 `--at 31a347ad2`, P2 `--at fc24e32ae`,
+  and Kotlin historical/compiled self-test pass. All 11 earlier destinations
+  protected. Analyzer root/strict/raw/formatted probe: 75/142/78/81 scoped
+  diagnostics, zero additions to frozen maxima; async-context identities
+  unchanged. Format idempotent, zero inserted/deleted optional commas; three
+  brace infos exposed by formatting recorded. Size/architecture pass.
+- **Evidence/deviation.** `p3/tooling/completion.json`, accepted 30-command
+  ledger and parser audit. Initial new constructor negative used an invalid
+  no-op edit; corrected fixture and complete universal rerun pass. No shared
+  guard behavior change. Every Dart manifest has an explicit isolated parser
+  package, copied kernels deleted; both evidence overrides active, nice 19.
+- **Constraints.** Application/pubspec unchanged, P3 manifest draft, no
+  production destination or CI transition. Creation commit must select P3
+  current/self-test and analyzer manifest/inventory, retain both historical
+  phases, register tests and extend all three theme lists. Step 0 continues
+  on the original; no bug fixes, new seams or device commands.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

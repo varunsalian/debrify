@@ -157,3 +157,25 @@ P2 inventory while preserving P1 mappings. Both sleep characterization files
 are in the behavior list, all three theme path lists include the destination,
 and EOF source guards read current validated declarations with a non-negative
 sleep anchor. No original sleep behavior or disposal ordering changes.
+
+
+Phase 3 Step T freezes `vplayer_p3.json` as **draft**, base `fc24e32ae`.
+`draft_vplayer_skip_moves.py --base fc24e32ae --parser-package <isolated>
+--probe <git-common-dir>/refactor-evidence/vplayer/p3/<directory>` compares
+the complete evidence-only materialization: 882 classified spans, 17 moved
+declarations, 14 substituted retained occurrences and three deliberately
+unchanged notifier references. The existing State constructor is patched,
+not duplicated: keep the sleep assignment, append eager inert skip construction.
+The 19-name/20-declaration Host, live position setter, adapter, imports and
+scaffolding are frozen. The notifier allocation remains State-owned.
+
+The shared self-test exercises the complete P3 configuration, constructor
+patch, map/subscript and nullable-record edits, generation increments, live
+position writes, frozen Host signatures and preservation of all 11 earlier
+destinations. P3 analyzer identities preserve both P1 and P2 mappings.
+
+**P3 production creation commit only:** switch both current/self-test move
+commands and both analyzer manifest/inventory arguments to P3; retain P1
+`--at 31a347ad2`, add P2 `--at fc24e32ae`, register all P3 characterization
+files in `ci_behavior_tests.txt`, and extend all three theme path lists.
+Do not enable the draft against the original facade.

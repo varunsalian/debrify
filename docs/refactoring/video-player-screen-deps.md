@@ -1972,3 +1972,43 @@ replacement/player-created-false during a blocked resume save, and mobile
 Start Over/background intent remain device-pending. End-of-series phone,
 Android TV Flutter player, tvOS and desktop checklist remains pending.
 No further production moves or bug fixes included; stop at the Phase 2 gate.
+
+
+## Phase 3 tooling checkpoint (2026-10-11)
+
+Original `fc24e32ae`, approved design `de55d9987`: 882 exhaustive spans,
+17 moved declarations and 17 retained references (14 substitutions + three
+unchanged notifier reads/cleanup). The full raw and formatted virtual split
+compares with zero differences. The draft, generator and real-configuration
+negatives are checked in; production application and pubspec remain unchanged.
+
+The existing State constructor is patched to preserve `_sleep` then eagerly
+assign `_skip`. Ten relocated initializers are individually inert: two false
+literals, static-const provider id and empty segments, three implicit nulls,
+zero generation, empty map and true media-ready. Constructors store references
+only; no Host reads before widget/context assignment. `_activeSkipSegmentUi`
+keeps its original State allocation slot. Exact Host: 19 names / 20 declarations,
+live getter/setter for position, computed State forwarders, existing `_vpSetState`.
+Formatted destination: 260 lines; it exists only in evidence.
+
+All 26 precedent Dart manifests, universal/P3 real configuration, P1 historical
+`--at 31a347ad2`, P2 historical `--at fc24e32ae`, and complete Kotlin
+historical/compiled self-test pass. The new configuration proves map accesses,
+nullable record selectors, generation increments, position writes, retained
+constructor assignment, Host signatures and all 11 earlier destinations.
+Initial invalid no-op constructor negative is retained in raw evidence; corrected
+complete universal rerun passes. Shared comparison/binding behavior is unchanged.
+
+Analyzer original root/strict/raw/formatted: 75/142/78/81 scoped occurrences;
+P1/P2 mappings preserved, maxima frozen, async-context declaration identities
+unchanged. Formatting inserts/deletes zero optional commas and is idempotent;
+three brace infos are exposed by formatted longer receiver statements in
+`_currentSkipSegmentRequest` (one) and `_syncSkipSegmentsForCurrentContent`
+(two), archived without rewriting code. Comparator/negative tests report zero
+additions. Size/architecture pass. Commands/results and parser audit:
+`p3/tooling/completion.json`, `accepted-checks.json`, `parser-audit.json`.
+
+CI remains on applied P2. The P3 creation commit must change both current/self
+commands and analyzer manifest/inventory, retain P1 at `31a347ad2` and P2 at
+`fc24e32ae`, register new characterization files and extend all three theme lists.
+No production move, new seam, bug fix, dependency change or device command.
