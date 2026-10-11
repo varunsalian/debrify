@@ -1470,6 +1470,26 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   desktop: button timing, seek end, TV Select and no old-button episode flash.
   Existing race/profile gaps remain unchanged in Follow-ups. Stop at Phase 3.
 
+### 2026-10-12 — Phase 3 `vp-rev3` test-only review closure (stop)
+
+- **Revision/review.** Closure follows `d6e91c62a`. Independent review:
+  no P1s/P2s; the P3 incoming-provider coverage gap is closed by C59 while
+  preserving the disabled incoming-profile case unchanged.
+- **Original witness.** Exact detached `55ac577e6`: new behavior test passes;
+  forcing the provider factory to keep SkipDB fails its IntroDB-request
+  assertion (expected one, actual zero). Completed assertion kill, no
+  compile/load errors; original application restored.
+- **Commands/results.** Serialized `nice -n 19 flutter test` across all six
+  skip files, `--no-pub --concurrency=1` and hook define: 59 pass on moved code.
+  `check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p3.json` with
+  explicit isolated parser: zero differences; copied kernels deleted.
+  Changed-file `dart format` and `flutter analyze --no-pub` pass.
+- **Evidence/scope.** `p3/review-closure/` records commands, hashes, mutation
+  logs and completion; deps coverage/mutation addendum records C59. Existing
+  CI registration covers the same file. Test/docs only, pubspec unchanged;
+  no deviations, production changes, device commands or push/merge/branch
+  switch. Stop after this review closure.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

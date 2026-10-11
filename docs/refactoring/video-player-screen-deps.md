@@ -2568,3 +2568,33 @@ TV Flutter player, tvOS and desktop, verify Skip intro/credits appears within
 the segment, seeks to its end, TV Select works, and episode switching does not
 flash the old button. Web unavailable-provider and Android replacement
 `playerCreated == false` branches remain classified pending. Stop after gate.
+
+## Phase 3 independent review closure — `vp-rev3` (2026-10-12)
+
+Independent review found no P1s or P2s and one P3: C32's incoming profile
+disables skips, so its provider selection cannot affect the assertions.
+Keep C32 unchanged and add C59 in the already-registered
+`video_player_skip_races_test.dart`. It mounts an enabled outgoing SkipDB
+route, disposes it, performs the existing profile handoff, persists enabled
+incoming IntroDB settings and mounts the incoming route through the original
+caller. Assert one IntroDB request with the exact IMDb/season/episode query
+and no additional SkipDB request after handoff and a position tick.
+
+| Coverage addition | Declaration / existing sweep point | Observable contract |
+|---|---|---|
+| C59: skip incoming enabled profile selects IntroDB without another SkipDB request | `_loadSkipSegmentSettings`, `settings-create-id`; `_syncSkipSegmentsForCurrentContent` | Incoming enabled profile determines provider transport independently of the outgoing SkipDB selection; C32 still covers disabled incoming settings |
+
+| Additional mutation witness | Original mutation | Result / assertion |
+|---|---|---|
+| `vp-rev3-P3`, C59 (`settings-create-id`) | At `55ac577e6`, `SkipSegmentProviders.create(providerId)` → `SkipSegmentProviders.create(SkipSegmentProviders.skipDb)` (one occurrence) | Killed by C59: expected one IntroDB request, actual zero; completed assertion failure, no compile/load errors |
+
+Evidence: `<git-common-dir>/refactor-evidence/vplayer/p3/review-closure/`.
+`results.json` pins the detached worktree at exact `55ac577e6`, test/source
+hashes, commands, clean original control (one pass), mutation assertion and
+source restoration. The same test input passes on moved application
+`d6e91c62a`; `moved-skip-tests.jsonl` records all 59 focused skip tests passing.
+`p3-checker.txt` records exhaustive P3 ownership with zero differences;
+`completion.json` includes the isolated parser package and deleted copied
+kernels. Changed-file format and analyzer pass. The witness strengthens an
+existing sweep point; the accepted 148-point sweep and independent sample
+totals are unchanged. No production/dependency changes or new CI file needed.

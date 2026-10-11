@@ -389,6 +389,43 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'skip incoming enabled profile selects IntroDB without another SkipDB request',
+    (t) async {
+      final f = VideoPlayerEnvironment();
+      await t.runAsync(f.initialize);
+      final d = SkipSegmentDriver(t, f);
+      try {
+        await d.configure();
+        await f.mount(t, skipScreen());
+        await d.tick();
+        expect(d.requests, hasLength(1));
+        d.expectButton(true);
+        final outgoingRequests = d.requests.length;
+
+        await t.pumpWidget(const SizedBox.shrink());
+        await f.until(t, () => f.player.disposed.isCompleted);
+        await incomingProfile(t, f);
+        await d.configure(enabled: true, provider: 'introdb');
+        await f.mount(t, skipScreen());
+        await d.tick();
+
+        final incomingRequests = f.network.requests
+            .where((r) => r.url.host == 'api.introdb.app')
+            .toList();
+        expect(incomingRequests, hasLength(1));
+        expect(incomingRequests.single.url.queryParameters, {
+          'imdb_id': 'tt4100000',
+          'season': '2',
+          'episode': '3',
+        });
+        expect(d.requests, hasLength(outgoingRequests));
+        d.expectButton(false);
+      } finally {
+        await f.close(t);
+      }
+    },
+  );
   for (final error in [false, true]) {
     testWidgets(
       'skip held A-B-A late old ${error ? 'error' : 'success'} preserves newer UI but poisons cache as-is',
