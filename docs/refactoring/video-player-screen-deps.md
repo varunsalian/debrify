@@ -1461,11 +1461,48 @@ file and its test-only compile-time flag; the addendum identity is in the
 already registered zap file. No known-failure test allowlist changes.
 
 The actual CI formatting scope passes: 2,321 files, zero edits. Root analysis
-is 1,754 diagnostic identities/counts, with all 1,680 identities outside this
-slice unchanged. Scoped comparison passes 74 diagnostics / zero additions
+is 1,754 diagnostic identities/counts, with all 1,680 diagnostic occurrences outside this
+slice unchanged by identity/count. Scoped comparison passes 74 diagnostics / zero additions
 to the approved R/root/strict/probe inventory. Seven inventoried warnings
 enter the global allowlist: six original facade warnings and the probe's
 retained import warning. The global scope passes all 45 warning allowances.
 The frozen import list is preserved; no warning fix or suppression is added.
 
 Focused characterization plus theme containment: **68 successful identities**, including all 58 characterization/infrastructure tests. Commands and logs are under `step1/`; the clean-tree full suite, historical comparisons and release builds follow at the gate.
+
+## Phase 1 clean-tree gate (2026-10-11)
+
+The addendum is `8073fc9a2`; production/CI creation commit is
+`5faaed55b0d64b33d2a84fd9f00d93af8d3c5787`. The complete gate tested that clean
+commit, with no tracked or untracked changes during the suite and no tracked
+changes from either release build. The final gate-record commit changes
+documentation only.
+
+| Check | Result / evidence |
+|---|---|
+| Full suite vs accepted Step-0b observed baseline | **PASS**: 12,852 successes, same 13 failures / 28 errors / 20 skips; exactly one additional successful identity; zero changed outcomes, missing tests, new failures or new skips. `p1-gate-suite.jsonl`, `gate/suite-comparison.txt`, `suite-delta.json` |
+| Root/scoped analyzer | **PASS**: 1,754 root diagnostics, 1,680 external diagnostic occurrences, identities/counts unchanged; 74 scoped / zero additions to the approved original/strict/probe inventory. Fresh gate log and current / same-revision comparator logs |
+| Format / physical size / architecture | **PASS**: actual CI scope 2,321 files / zero changes; 2,994 application/native files and 140 ratchets; 1,662 migrated files pass architecture. Facade 18,018; new files at most 65 lines |
+| Existing Dart manifests | **PASS**: all 26 self-tests, exact command/exit ledger `gate/dart-selftests.json` |
+| Video-player move checks | **PASS**: universal self-test, current tree, applied P1 `--at` creation commit, retained `--at T`, seam `--at S`; zero differences, same-revision inputs. `gate/ownership-checks.json` |
+| Kotlin checker | **PASS**: `tvplayer_p19.json --self-test`, historical and compiled ABI/owner/snapshot negatives; exit 0. `gate/kotlin-self-test.txt` |
+| Release builds | **PASS**: APK 120.56s; macOS 221.76s; both `--release --no-pub`, exit 0, tree unchanged. `gate/build-results.json`; APK / macOS ZIP and SHA-256 under `gate/artifacts/` |
+| Isolated parser routing | **PASS**: 147 unique packages under `.dart_tool/vplayer_parser/`, 441 copied kernels deleted; 1247 nested parse and 1238 ensure redirects. All 31 direct manifest invocations carry the effective isolated `--parser-package`. `gate/parser-routing-audit.json` |
+
+The profile-editor test passes at this gate; no flake rerun or test allowlist
+change is needed. The baseline's 41 unsuccessful identities are retained
+explicitly; the suite is parity-passing, not universally green. Existing
+compiler/plugin warnings from the release builds are preserved in their
+logs; no production fix or suppression is included. `gate/completion.json`
+and `COMMANDS-gate.txt` pin the tested tree, SDK, input hashes, exact
+commands, all results and build provenance. Application dependencies remain
+unchanged from `ed728b078`.
+
+Human checks are deferred to the end of the series and are not phase gates:
+phone / Android TV with the Flutter player / tvOS / desktop should verify
+random-playback menu tiles render/select, catch-up and Start Over cancellation
+win over a slow lookup, identity labels remain unchanged, and a plain playlist
+entry without TorBox/PikPak identifiers resumes at its saved position. No
+device commands, installation, run, push, merge or branch switch occurred.
+Phase 1 stops here; independent gated-range review and integration remain
+with the user/Claude.

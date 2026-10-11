@@ -778,6 +778,36 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   and historical inputs, and both release builds run on the clean commit
   before the gate Progress entry. Dependencies unchanged; no devices.
 
+### 2026-10-11 — Phase 1 gate (complete; stop)
+
+- **Revisions.** Addendum `8073fc9a2`; production/CI creation
+  `5faaed55b`. Gate ran on the clean production commit; the final gate
+  record changes documentation only. Scope and frozen move list complete.
+- **Suite.** `suite_evidence.py run/compare` against the accepted Step-0b
+  run passes by identity: 12,852 successes, same 13 failures / 28 errors /
+  20 skips; one added success, zero changed outcomes, missing tests, new
+  failures or new skips. Profile editor passes; no test allowlist changes.
+- **Checks.** Fresh analysis/comparator passes (74 scoped, zero additions;
+  1,680 external diagnostic occurrences, identities/counts unchanged). Actual CI formatting scope, size
+  and architecture pass. All 26 existing Dart manifest self-tests plus
+  video-player self-test/current/`--at` P1/T/S comparisons pass. Kotlin
+  checker historical/compiled self-tests pass. Parser audit: 147 isolated
+  packages, 441 copied kernels deleted; all manifest flags under vplayer.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub` succeed (120.56s / 221.76s).
+  Both leave tracked files unchanged; artifacts/checksums archived.
+- **Evidence/deviations.** `gate/COMMANDS-gate.txt`, `completion.json`,
+  `suite-delta.json`, parser audit, checker/analyzer logs and release
+  artifacts record the exact clean tree/SDK/results. d1 is proved
+  caller-equivalent; d5/d13 assertion-killed on the original (addendum).
+  No bug fixes, new seams or dependency changes. Heavy commands nice 19,
+  Flutter suites serialized; no device, push, merge or branch switch.
+- **Human checklist (end of series; not gates).** On phone, Android TV
+  with Flutter player, tvOS and desktop: random menu tiles render/select;
+  catch-up/Start Over cancellation beats slow lookup; identity labels
+  unchanged; plain playlist entries resume saved progress. Pending.
+  Stop here; gated-range review/integration remains with user/Claude.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
