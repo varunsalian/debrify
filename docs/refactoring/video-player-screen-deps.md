@@ -2994,7 +2994,7 @@ application statement is changed to close an equivalent point.
 
 ## Phase 4 Step 1 — frozen production creation (2026-10-12)
 
-Creation follows `61c081e33`; tested source hashes and commands in
+Creation `9cae15e31`, following `61c081e33`; tested source hashes and commands in
 `p4/step1/completion.json`. Exact formatted Step-T materialization is applied:
 16 declarations into the 243-line `VpDisplayModeController`, its exact
 14-member Host and frozen adapter; eager State constructor appends `_display`
@@ -3006,7 +3006,7 @@ No production bug fix or new seam.
 | Check / transition | Result |
 |---|---|
 | Applied manifest | P4 current-tree, exhaustive ownership and retained order, imports, frozen scaffolding, historical destination protection: zero differences (`step1/current.txt`) |
-| Optional commas / construction | Source bytes equal the proven Step-T formatted files; zero inserted/deleted optional commas; idempotent; zero formatting-introduced diagnostics; four inert initializers and 14 live Host readers (`tooling/optional-commas.json`, `construction-proof.json`) |
+| Optional commas / construction | Source bytes equal the proven Step-T formatted files; zero inserted/deleted optional commas; idempotent; zero formatting-introduced diagnostics; four inert initializers and 14 live Host readers (`tooling/optional-commas.json`, `tooling/construction-proof.json`) |
 | Affected original-caller / guard tests | 189 successes, no failures/skips: all video-player tests, auto-next routing and theme source guards (`step1-affected.jsonl`); validating reader follows P4 without assertion edits |
 | CI | Current/self → P4; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`; analyzer P4 inventory preserves P1/P2/P3 mappings; five display test files registered; existing hook flag/fetch-depth 0/feature lists retained |
 | Theme / architecture | All three source lists, rendered set and theme manifest extended; 1,665 migrated files and architecture negatives pass; existing exact bridge and 500-line caps apply |
@@ -3018,3 +3018,30 @@ Clean-tree gate follows this creation commit: full suite against accepted
 `p4/step0-suite.jsonl`, all Dart/Kotlin self/current/history checks and both
 release builds. Phone portrait seed, PiP restore and end-of-series manual
 framing/rate/hold/orientation checklist remain pending.
+
+## Phase 4 clean production gate (2026-10-12)
+
+Tested clean creation `9cae15e31` against accepted Step-0 original-caller baseline
+`5e08bb3a3`, with the same Flutter 3.44.8 / Dart 3.12.2 SDK and runner flags.
+Gate evidence is entirely `refactor-evidence/vplayer/p4/`.
+
+| Gate | Result / evidence |
+|---|---|
+| Complete suite | 12,970 success / 13 failure / 28 error / 20 skip; exact same identities and outcomes as `step0-suite.jsonl`; no additions, missing identities or changed outcomes (`p4-gate-suite.jsonl`, `gate/suite-delta.json`); official comparator PASS |
+| Analyzer | Root/CI scoped 82, zero beyond frozen P4 inventory; root 1,778, expected +1 controller import-order info; outside identities/multiplicities exact and P1/P2/P3 maxima preserved (`gate/root-analyzer-delta.json`) |
+| Format / sizes / boundaries | Exact CI format list PASS; 2,997 files / 140 ratchets, facade 17,592 / controller 243; 1,665 migrated files and architecture negatives PASS (`gate/fast-checks.json`) |
+| Ownership / compatibility | All 32 commands PASS: 26 existing Dart manifest self-tests, P4 universal self-test including real configurations/negatives, P4 current, P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`, Kotlin checker self-test (`gate/compat-checks.json`) |
+| Release builds | `nice -n 19 flutter build apk --release --no-pub` and `flutter build macos --release --no-pub` PASS on clean creation; artifact and macOS Dart AOT hashes in `gate/build-results.json`; no install/run |
+| Parser / constraints | Explicit isolated parser per manifest, kernels deleted on copying, including nested self-tests; both evidence overrides active; exact two-file application scope, frozen formatted bytes, pubspec unchanged, trailers and original restore verified (`gate/parser-routing-audit.json`, `gate/constraints.json`) |
+
+The 13 failures and 28 load errors remain pre-existing by identity; no allowlist
+is expanded and no passing baseline test regresses. Claude's separate sample is
+19/19 valid kills after the agreed g20 pure-computation equivalence; systematic
+170-point matrix remains 157 killed / three equivalent / nine dormant / one
+PiP device-pending. No bug fixes, new seams or assertion weakening.
+
+End-of-series manual checklist remains pending on phone, Android TV Flutter
+player, tvOS and desktop: each aspect mode visibly changes framing (cinema zoom
+included), selected speed changes rate and survives resume, phone hold gives
+temporary 2×, phone orientation toggles, portrait-start seed and PiP restore of
+the lock. Legacy cycle/menu fallback paths stay dormant. Stop after this gate.

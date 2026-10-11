@@ -1715,6 +1715,32 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   evidence overrides. No bug fixes, push, merge, switch or device commands.
   Clean creation gate follows; manual end-of-series checklist remains pending.
 
+### 2026-10-12 — Phase 4 clean-tree gate (stop)
+
+- **Revision.** Tested clean production `9cae15e31`; gate commit follows it.
+  Accepted original-caller baseline `5e08bb3a3`; original base `890df14d8`.
+- **Suite.** Serialized nice-19 `suite_evidence.py run vplayer/p4/p4-gate-suite`
+  with no-pub and `DEBRIFY_VP_TEST_HOOKS=true`: 12,970 success / 13 failure /
+  28 error / 20 skip. Exact Step-0 identities/outcomes, SDK and runner flags;
+  official comparator PASS. Zero new regressions/skips or allowlisting.
+- **Checks.** Scoped analyzer 82 / zero additions, root 1,778 with frozen +1;
+  outside identities exact and previous mappings retained. Exact CI format,
+  2,997-file size / 140 ratchets, 1,665-file architecture and negatives PASS.
+  All 32 self/current/history commands PASS: all existing Dart manifests,
+  universal real configurations/negatives, P4 current, historical P1/P2/P3,
+  Kotlin self-test. Every manifest parser isolated with copied kernels deleted.
+- **Builds.** Nice-19 `flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`: PASS on clean creation; artifacts
+  and AOT hashes/logs recorded. No install/run/device commands.
+- **Evidence/constraints.** `p4/gate/completion.json`, exact suite delta,
+  analyzer identities, checker ledger, parser audit, build results. Exact two
+  frozen application paths and pubspec unchanged; branch/trailers/clean tree
+  and original mutation restore verified. No bug fixes, push, merge or switch.
+- **Pending/stop.** Phone portrait seed and PiP restore; end-of-series manual
+  phone/Android TV Flutter/tvOS/desktop framing (incl. cinema zoom), rate/resume,
+  phone temporary hold and orientation checklist. Dormant speed/menu branches
+  remain classified. Phase 4 complete; stop before further production moves.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
