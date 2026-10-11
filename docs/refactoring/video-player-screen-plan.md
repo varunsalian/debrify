@@ -1155,6 +1155,12 @@ binding negatives, 58 focused tests, mutation spot checks, equivalence/dead-code
 step 0b + systematic sweep), after 0b 18/20 on the first set and 9/12 (75 %) on a second
 independent set; d5/d13 then closed. Merged `--no-ff` into `refactor/codebase`.
 
+2026-10-11 — **Phase 2 independent review (Codex `vp-rev2`, fresh session) on
+`31a347ad2..7775198f5`: P1/P2/P3 none — "No P1s".** Reproduced ownership checks for 12
+moves + 14 retained substitutions, P1 `--at`, protection of the ten P1 destinations,
+bare-access negatives, 24 focused tests, e2/e11 equivalence and e14 device-pending, raw
+suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merged.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
