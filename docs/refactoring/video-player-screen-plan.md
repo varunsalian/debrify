@@ -1617,6 +1617,27 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   no deviations, production changes, device commands or push/merge/branch
   switch. Stop after this review closure.
 
+### 2026-10-12 — Phase 4 Step T (tooling checkpoint)
+
+- **Revision/base.** Tooling follows approved `b6f1c2c50`; original re-measured
+  by name at `890df14d8`: 868 original spans, 16 moves, 33 retained references.
+- **Commands/results.** Complete evidence-only P4 materialization and
+  all-retained self-compare report zero differences. Real-config widget
+  selector registration, binding-only capture negatives, frozen live adapters,
+  eager constructor/HUD/direct-write negatives pass. Evidence-only format is
+  idempotent with no optional-comma or diagnostic changes; controller 243 lines.
+  Root/strict/probe analyzer inventories: 81/149/82; async-context identities
+  unchanged by declaration. All existing Dart manifest and Kotlin self-tests
+  plus P1/P2/P3 merge-revision historical checks pass (`p4/tooling/checks.json`).
+- **Constraints/CI.** Every manifest uses an explicit isolated parser under
+  `.dart_tool/vplayer_parser/`, copied kernels deleted; heavy work uses nice 19.
+  P4 drafts only, application/pubspec unchanged. CI transition deferred to the
+  production Step-1 commit creating `vp_display_mode_controller.dart`.
+- **Deviations.** No guard extension needed: the existing opt-in complete
+  selector registration already preserves/rejects the required bindings.
+  Failed development probes are archived and uncredited. Step 0 follows;
+  no production moves.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

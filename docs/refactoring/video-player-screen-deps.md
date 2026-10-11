@@ -2598,3 +2598,34 @@ source restoration. The same test input passes on moved application
 kernels. Changed-file format and analyzer pass. The witness strengthens an
 existing sweep point; the accepted 148-point sweep and independent sample
 totals are unchanged. No production/dependency changes or new CI file needed.
+
+
+## Phase 4 Step T — display modes tooling (2026-10-12)
+
+Original application is the named merge `890df14d8`; approved design is
+`b6f1c2c50`. Evidence lives only in `<git-common-dir>/refactor-evidence/vplayer/p4/`.
+The draft remains unapplied. Re-measuring by declaration gives 16 moved
+spans and 33 retained references on 32 lines (10 retained members), plus the
+patched State constructor. The all-retained snapshot classifies all 868
+original spans and reports zero differences.
+
+| Proof | Result / evidence |
+|---|---|
+| Complete materialization | `draft_vplayer_display_moves.py --base 890df14d8 --parser-package … --probe …/p4/tooling/probe`; exhaustive ownership, facade/destination directives, member order and earlier-destination history compare with zero differences |
+| Widget selectors | Register both complete `widget.hideBackButton/hideOptions` → `_host.hideBackButton/hideOptions` selectors in the P4 configuration; existing comparison/registration core supports this opt-in shape without a shared-guard change |
+| Binding-only negatives | Missing registration, a lexical `VideoPlayerScreen widget` parameter and a lexical `VpDisplayModeHost _host` parameter are rejected by the binding guard alone; token mismatches cannot supply this proof |
+| Frozen scaffolding negatives | Cached and lazy-cached widget values, wrong live forwarder, missing eager display assignment, removed earlier skip assignment, changed State HUD allocation, effectful resume action replacing a direct write, and a destination widget reference are rejected |
+| Construction / initializers | `construction-proof.json`: enum constant `AspectMode.contain`, literal `1.0`, implicit `null`, literal `false`; inert constructors only store references and read no Host during construction. Existing eager sleep/skip assignments retained; display appended before `initState`. Both HUD notifier allocations remain at their State positions |
+| Host | All 14 specified members have original readers; `controlsVisible` is `ValueNotifier<bool>`, `dockBand(double legacy)` returns `double`, and `saveResume()` remains `Future<void>` called unawaited where originally unawaited. Frozen adapter getters read live `_s.widget` values |
+| Formatting | Evidence-only facade/controller formatted (controller 243 lines); zero inserted/deleted optional commas, idempotent, zero comparison differences; no diagnostics introduced or removed by formatting (`optional-commas.json`, `format-diagnostics.json`) |
+| Analyzer receiver/rename probe | Original scoped root 81 / strict features 149; materialized root 82. Frozen P4 inventory retains P1/P2/P3 mappings and maxima. `use_build_context_synchronously` identities unchanged: `_switchToSourcePlaylist` ×1, `_toggleRecording` ×4, `build` ×1; no moved declaration gains that identity (`async-context-identities.json`) |
+| Compatibility | All 26 existing Dart manifest self-tests, universal video-player self-test including real P1/P2/P3/P4 configurations, Kotlin checker self-test, P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`; accepted commands/results in `tooling/checks.json` |
+| Parser discipline | Each manifest command explicitly selects its own package under `.dart_tool/vplayer_parser/`; copied kernels deleted, including nested manifest/guard fixtures. Evidence overrides route Dart and Kotlin artifacts only to P4 |
+
+CI stays on applied P3 until the Step-1 production commit that creates
+`vp_display_mode_controller.dart`. That commit switches current/self and both
+analyzer arguments to P4, preserves all three historical checks, registers
+the five display characterization files, and extends all three theme path
+lists. No CI activation or production move occurs at Step T. The initial
+failed interpolation/scaffold probes remain archived as attempts; only zero
+exit completed proofs are credited.
