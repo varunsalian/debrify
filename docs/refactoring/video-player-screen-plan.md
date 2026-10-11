@@ -718,6 +718,103 @@ After sleep stop, check Android renderer replacement during a suspended resume
 save and Android/iOS Start Over/background playback intent; the intent write
 remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
 
+## Phase 3 — skip segments
+
+Branch `refactor/vplayer-p3` off the phase-2 merge `fc24e32ae`. Evidence
+`refactor-evidence/vplayer/p3/`. Line numbers at `7775198f5` (phase-2
+gate); re-measure at the phase base by name.
+
+### Moves → `presentation/legacy_video_player/vp_skip_segment_controller.dart`
+
+`class VpSkipSegmentController` + `abstract interface class VpSkipSegmentHost`
+(≈ 260 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| comment 1283–1284 + `_skipSegmentSettingsLoaded` 1285 | field `false` | moved → `skipSegmentSettingsLoaded` |
+| `_skipSegmentsEnabled` 1286 | field `false` | moved |
+| `_skipSegmentProviderId` 1287 | field `SkipSegmentProviders.auto` (a `static const` String — verify) | moved |
+| `_skipSegmentProvider` 1288 | field `null` | moved |
+| `_skipSegments` 1289 | field `SkipSegments.empty` (const — verify) | moved |
+| `_loadedSkipSegmentsKey` 1290, `_loadingSkipSegmentsKey` 1291 | fields `null` | moved |
+| `_skipSegmentsFetchGeneration` 1292 | field `0` | moved |
+| `_skipSegmentsCache` 1293 | `final` map literal | moved |
+| `_skipSegmentsMediaReady` 1304 (doc) | field `true` | moved |
+| `_activeSkipSegmentUi` 1394 | `final` `SkipSegmentUiController()` — a `ValueNotifier(null)` allocation, no listeners/side effects → inert (proof recorded) | moved |
+| `_loadSkipSegmentSettings` 1714 | method | moved |
+| `_currentSkipSegmentRequest` 1789 | method (record return type) | moved |
+| `_syncSkipSegmentsForCurrentContent` 1854 | method | moved |
+| `_resetSkipSegmentState` 1923 | method | moved |
+| `_activeSkipSegment` 1932 | getter | moved |
+| `_syncActiveSkipSegmentUi` 1938 | method | moved |
+| `_skipActiveSegment` 1942 | method | moved |
+
+Relocation changes initializer timing (State slots 1285–1304 and 1394 →
+State constructor body); every initializer above is a literal, `const`
+value, empty literal or the inert `ValueNotifier` allocation. Its order
+relative to `_playbackUiClock` (1392) is unobservable (no side effects);
+recorded proof per field.
+
+**Stays State-owned:** `_isTransitioning`, `_duration`, `_position`,
+`_playbackUiClock`, `_player`, `_playerCreated`, effective content
+identity getters, `_seriesPlaylist`, `_findSeriesEpisodeForCurrentIndex`,
+`_traktSeasonEpisode`, the tracker seek methods (phase 5 re-points them),
+`_skipButtonBottom` (dock layout, not skip logic).
+
+**Host** `VpSkipSegmentHost` (exact, every member used; measured at step
+T): `mounted`, `setState` (→ `_vpSetState`), `effectiveContentImdbId`,
+`effectiveContentType`, `effectiveContentSeason`,
+`effectiveContentEpisode`, `isTransitioning`, `duration`, `position`
+get **and set** (`_position = target`), `seriesPlaylist`,
+`findSeriesEpisodeForCurrentIndex(SeriesPlaylist)`,
+`traktSeasonEpisode()`, `playerCreated`, `playbackUiClock`, `player`,
+`traktScrobbleSeek(Duration)`, `simklScrobbleSeek(Duration)`,
+`mdblistScrobbleSeek(Duration)`. `HapticFeedback`, `SkipSegmentsStorage`,
+`SkipSegmentProviders`, `CustomSeriesIdentity`, `RegExp` are imports.
+`debugPrint` stays a top-level call.
+
+**Retained substitutions** (`_skip` = controller): `initState` 1668
+`_loadSkipSegmentSettings()` → `_skip.loadSkipSegmentSettings()`; player
+subscriptions 3815/3816/3861–3863 (`_skipSegmentsMediaReady = true` →
+`_skip.skipSegmentsMediaReady = true`, sync calls → `_skip.`); 4665
+`_activeSkipSegmentUi.clear()`; playlist load 10459 and 10651; dispose
+11954–11956 (generation bump and provider close **in place**, not via a
+new method) and 11998 (`_skip.activeSkipSegmentUi.dispose()` at the same
+position); TV key handler 13315/13316; build 15527 (`valueListenable:`)
+and 15560 (`onPressed: _skip.skipActiveSegment` — tear-off; verify
+`SkipSegmentButton`/the dock compare no callback identity).
+
+**Scaffolding:** one line added to the State constructor body; `late
+final VpSkipSegmentController _skip;` at the old slot 1285;
+`_VpSkipSegmentHostAdapter` after the State class. CI: current checks →
+`vplayer_p3.json`; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`.
+
+### Step 0 — characterization of the original
+
+Settings load (enabled/disabled, unavailable stored provider → auto,
+provider closed/replaced); request gating (custom identity, settings not
+loaded, disabled, media not ready after a playlist switch, transitioning,
+zero duration, non-series, invalid/fallback IMDb id via the series
+playlist, season/episode from the playlist, from the effective content,
+from the Trakt parse, negative season/episode < 1) and the exact key
+(provider:imdb:season:episode:seconds); fetch: cache hit, in-flight
+dedupe by key, generation/stale-request rejection when the key changes
+mid-fetch, profile switch or dispose during the fetch, error → cached
+empty + debug log; UI: button appears only inside a segment of the
+loaded key, skip seeks to `min(end, duration)`, updates the clock
+immediately, tracker seeks in order, haptic; TV key path; reset on
+playlist switch; dispose closes the provider. Fake provider through the
+existing `SkipSegmentProviders` seam if one exists; otherwise record
+which fetch paths need a provider fake and how it is injected **without
+an application change** (or stop and ask for a reviewed seam). Mutation
+proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+Skip intro/recap button on a series with segments (phone, Android TV
+Flutter player, tvOS, desktop): appears, skips to the segment end, TV
+Select skips; switching episode does not flash the button.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
