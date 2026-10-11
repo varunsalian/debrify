@@ -865,6 +865,100 @@ Skip intro / Skip credits button on a series with segments (phone, Android TV
 Flutter player, tvOS, desktop): appears, skips to the segment end, TV
 Select skips; switching episode does not flash the button.
 
+## Phase 4 — playback speed, aspect mode and orientation
+
+Branch `refactor/vplayer-p4` off the phase-3 merge `890df14d8`. Evidence
+`refactor-evidence/vplayer/p4/`. Line numbers at `d6e91c62a` (phase-3
+gate); re-measure at the phase base by name.
+
+### Moves → `presentation/legacy_video_player/vp_display_mode_controller.dart`
+
+`class VpDisplayModeController` + `abstract interface class VpDisplayModeHost`
+(≈ 290 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| `// Aspect / speed` comment + `_aspectMode` 1433 | field `AspectMode.contain` (enum const) | moved → `aspectMode` |
+| `_playbackSpeed` 1434 | field `1.0` | moved → `playbackSpeed` |
+| `// Press-and-hold…` comment + `_speedBeforeHold` 1444 | field `null` | moved → `speedBeforeHold` |
+| `_landscapeLocked` 1448 | field `false` | moved → `landscapeLocked` |
+| `_applyAspectVideoZoom` 2808 | method | moved |
+| `_cycleAspectMode` 13503 | method | moved |
+| `_changeSpeed` 13588 | method | moved |
+| `_onSpeedButton` 13600, `_onAspectButton` 13608 | methods | moved |
+| `_setPlaybackSpeed` 13616, `_setAspectModeDirect` 13622 | methods | moved |
+| `_onLongPressStart` 13629, `_onLongPressEnd` 13659 | methods | moved |
+| `_toggleOrientation` 13669 | method | moved |
+| `_currentFit` 13687, `_getCustomAspectRatio` 13894 | methods | moved |
+
+All four initializers are literals/enum constants → inert (recorded).
+**Stay State-owned:** the `_aspectRatioHud` (1429) and `_speedHoldHud`
+(1445) `ValueNotifier`s (allocation-event order, phase-3 rule), reached
+through the Host; `_buildCustomAspectRatioVideo` (a build helper reading
+subtitle settings and the video controller; its calls to the two moved
+getters become `_display.` substitutions); `_controlsVisible`,
+`_isPlaying`, `_dockBand`, `_player`, `_saveResume`, `_scheduleAutoHide`,
+`_openPlayerMenuQuick`.
+
+**Host** `VpDisplayModeHost` (exact; verified at step T): `mounted`,
+`context` (State context — `_onLongPressStart` uses
+`context.findRenderObject()`; no builder-local context in the moved
+bodies), `setState` (→ `_vpSetState`), `mk.Player get player`,
+`void scheduleAutoHide()`, `Future<void> saveResume()` (the moved bodies
+call it unawaited exactly as the original), `void
+openPlayerMenuQuick(PlayerMenuSection)`, `ValueNotifier<AspectRatioHudState?>
+get aspectRatioHud`, `ValueNotifier<bool> get speedHoldHud`, `bool get
+isPlaying`, `ValueNotifier<bool> get controlsVisible` (verify type),
+`double dockBand(double base)` (verify signature), `bool get
+hideBackButton`, `bool get hideOptions` (the two `widget.` reads — live
+forwarders to `_s.widget.…`, read at the original moment). Imports:
+`dart:async`, `dart:math` as `math`, Flutter material + services,
+media_kit, `AspectModeUtils`/`AspectMode`, `AspectRatioHudState`,
+`PlayerMenuSection` + `kUnifiedPlayerMenuEnabled`.
+
+**Retained substitutions** (re-measured at step T; ≈ 30 sites):
+`initState` 1657/1659 (`_landscapeLocked` writes/read), player creation
+2656 (`_applyAspectVideoZoom()`), player defaults 6208/6264 (aspect write
++ debug log read), PiP 11504, resume restore 12090–12093 (speed/aspect
+writes + zoom), resume save 12511/12514 (reads incl. `_speedBeforeHold
+?? _playbackSpeed`), controls dock 12914–12919, the TV/keyboard cycle at
+14486, `_buildCustomAspectRatioVideo` 13723 + build 14751/14760,
+gestures 15013/15014 (`onLongPressStart: _display.onLongPressStart` —
+tear-offs; verify the gesture detector does not compare callback
+identity across rebuilds in a way that changes recognizer state), styled
+dock 15145–15152, unified menu 16737–16740. Resume code keeps reading
+and writing these values at the same statement positions (shared-state
+rule: the values move with their only state owner, the controller;
+resume sees them through `_display.`).
+
+**Scaffolding:** patched State constructor (keeps `_sleep`, `_skip`,
+appends `_display`); `late final VpDisplayModeController _display;` at
+slot 1433; `_VpDisplayModeHostAdapter`. CI: current → P4; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`; earlier
+`--at` their merges; analyzer manifest + inventory → P4.
+
+### Step 0 — characterization of the original
+
+Aspect cycle order through all 11 modes with HUD label/icon and its
+1.5 s auto-clear (and no clear after dispose); `video-zoom` property per
+mode on a native platform, skipped on a non-native one, failure logged;
+speed cycle order and wrap, `setRate` calls, persistence via resume save
+(including the held 2× not persisted: `_speedBeforeHold ?? speed`);
+unified-menu speed/aspect selection, the no-op on the same aspect;
+long-press 2× gating (locked controls, paused, edge guard, visible
+controls top/bottom bars) and release restoring the prior speed, release
+after dispose; orientation toggle (both directions, immersive mode,
+`setState` only when mounted) via the method-channel recorder; resume
+restore applying speed + aspect + zoom; player defaults setting aspect;
+landscape lock seeded from `startsInPortrait`; PiP's read of the lock.
+Legacy cycle paths behind `kUnifiedPlayerMenuEnabled` recorded dead.
+Mutation proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+Aspect modes visibly change framing on phone/TV/desktop/tvOS (incl.
+cinema zoom); speed menu changes rate and persists on resume;
+long-press 2× on phone; orientation toggle on phone.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
