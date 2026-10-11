@@ -106,8 +106,15 @@ contracts, behaviour fixes and dead-code removal.
    state that stays in the State (`_player` → `_host.player`), the live
    `context`/`mounted`/`setState` forwarders, and in retained code, a call
    or field reference that now targets a collaborator
-   (`_cancelSleepTimer()` → `_sleep.cancelSleepTimer()`). Every edit is
-   declared, never inferred.
+   (`_cancelSleepTimer()` → `_sleep.cancelSleepTimer()`), and removal of
+   a `static` modifier when a static member becomes a top-level function
+   (exact opt-in per declaration; negatives for an extra modifier or body
+   edit — the existing core only supports *added* static ownership,
+   `check_verbatim_moves.py:163`). Every edit is declared, never inferred.
+   The shared guards (`occurrence_field_bindings.py:37` recognises only
+   `_deps.alias()`) get explicit opt-in support for `_host` property
+   getters/setters, compound assignments/increments and owner-identity
+   substitutions; existing manifests keep their behaviour.
 2. **Exhaustive Dart move checker with `--at`** (phase 1 step T).
    `dev/tool/check_dart_moves.py` is a **thin ownership/history layer**
    that invokes the existing comparison core — `check_verbatim_moves.py`
@@ -188,7 +195,13 @@ contracts, behaviour fixes and dead-code removal.
      State's initializers to the collaborator's construction), so **every
      relocated initializer gets its own inertness proof** (a literal,
      `const`, or an allocation with no side effects: `FocusNode()`,
-     `ValueNotifier(x)`, `Completer()`, `Random()` — listed per phase).
+     `ValueNotifier(x)`, `Completer()` — listed per phase; **not** `Random()`, whose
+     seeding advances a shared PRNG, so the State's `Random()` (517) stays
+     State-owned unless a phase proves its ordering immaterial). Collaborator
+     constructors **and their field initializers** never read the Host (the
+     State constructor runs before Flutter assigns `widget` and `context`).
+     Original eager/lazy modifiers are preserved (`late final
+     _iptvLiveRecovery` 735 stays lazy).
      Effectful or order-sensitive initializers (anything that registers,
      schedules, reads a service, or whose evaluation order with another
      initializer is observable) **stay State-owned**.
@@ -332,13 +345,22 @@ Options, in order of preference — **the design review must settle this**:
   The surrounding statements keep their order: `_player` assignment,
   `_playerCreated`, controller construction, tvOS remedy, subscriptions,
   decoder observers, aspect zoom. No early return, no objects created up
-  front. The hook can only be installed in test mode (assigned inside an
-  `assert`/`kDebugMode`-guarded setter that throws in release/profile), and
-  a source guard test proves nothing under `lib/` assigns it. **Proof**:
-  after removing the declared interception syntax, the original
-  operations, arguments, relative order and guards are token-identical
-  (three declared `patched` declarations with exact before→after tokens).
-  A release build alone proves neither property. S becomes the ORIGINAL for
+  front. **Installation**: one frozen static installer whose assignment
+  happens only inside an `assert` (so it is compiled out of
+  release/profile), preceded by an explicit non-assert check that throws if
+  called when `kReleaseMode || kProfileMode`, and additionally gated on a
+  test-only compile-time flag (`bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')`)
+  so an ordinary debug app cannot install it; the flag is registered in the
+  test and CI commands that run the harness. The source guard permits
+  exactly the installer's own assignment and rejects every other assignment
+  of the hook and every reference to the installer under `lib/`. **Proof**:
+  two `patched` declarations (`initState`, `_createPlayerInstance`) with
+  three exact before→after patches, plus the added scaffolding (hook
+  class, installer, interception helpers) frozen separately; the token
+  proof covers the helper bodies and installer; each default path calls
+  the original operation **exactly once**, evaluates the configuration
+  once, and keeps assignment and guard order. A release build alone proves
+  neither property. S becomes the ORIGINAL for
   behaviour; every later mutation and proof runs against S.
 
   **Fakes** (`test/features/video_player/support/`), all via `implements`
@@ -351,7 +373,7 @@ Options, in order of preference — **the design review must settle this**:
     `setSubtitleTrack`, `dispose`, `handle`; a coherent `PlayerState` and
     broadcast streams for every stream the State subscribes to (log,
     error, video params, position, duration, playing, completed,
-    buffering, tracks — `_bindPlayerInstanceSubscriptions` 3790) and that
+    buffering, the selected `track` and the available `tracks` — `_bindPlayerInstanceSubscriptions` 3790; the conditional audio-policy subscription reads `stream.track` 3878) and that
     the real `mkv.Video` subtree consumes (width, height, playing,
     subtitle — `video_texture.dart:303`); recorded calls; controllable
     delayed/failed operations and disposal completion.
@@ -374,7 +396,7 @@ Options, in order of preference — **the design review must settle this**:
   | `PlayerDisplayControls` singleton (wakelock on load, play/pause writes, teardown — `player_display_controls.dart:9`) | plugin / platform-interface channel mocks, recorded |
   | window_manager / `SystemChrome` (fullscreen on Linux/Windows 1773, orientation, UI mode, teardown) | recorded channels; statements are never skipped |
   | PiP (guarded by real `dart:io Platform` predicates, 1706) | **device-pending** on the desktop harness; a narrowly reviewed platform-predicate seam may be proposed before the PiP phase, otherwise those branches are listed device-only and never claimed as covered |
-  | Storage/profile (`ProfileRuntime.isProfileCommitted` throws uninitialized; policy guards on native recording eligibility 3443; subtitle/tracking/skip/completion/defaults loads in `initState`) | existing storage/profile test doubles initialized by the harness |
+  | Storage/profile (`ProfileRuntime.isProfileCommitted` throws uninitialized; policy guards on native recording eligibility 3443; subtitle/tracking/skip/completion/defaults loads in `initState`) | existing storage/profile test doubles initialized by the harness; for committed-profile native tests `ProfilePolicyGuard`'s active-profile mirror is initialized/reset explicitly (`profile_policy_guard.dart:19`), since `ProfileRuntime` alone leaves synchronous permission checks closed |
   | Files/HTTP (`getTemporaryDirectory` + HTTP client in addon subtitles 17648) | path_provider channel mock + HTTP override per test |
   | Timers/leases (analytics heartbeat in `initState`, autosave 3696, recovery timers, output lease release) | `fake_async`/explicit pumps, drained at teardown; no unrestricted `pumpAndSettle` |
 - **(H2) Real libmpv in tests.** `/opt/homebrew/lib/libmpv.dylib` exists
@@ -481,10 +503,10 @@ is the tooling and the seam, which every later phase depends on.
 | `IptvCatchupRequestGate` 229 | type | `models/iptv_catchup_request_gate.dart` | unchanged; **exact facade re-export** added beside the two existing exports (163) |
 | `_RandomChoiceTile` 18046 | widget | `presentation/vp_random_choice_tile.dart` | private name kept; `typedef VpRandomChoiceTile = _RandomChoiceTile;` (spotlight/stremio precedent) |
 | `_format` 13706 | instance, parameter-only | `application/vp_format.dart` | `vpFormatDuration` |
-| `_pad2` 14262 | static | same file | `vpPad2` |
+| `_pad2` 14262 | static (`static` removal declared) | same file | `vpPad2` |
 | `_generateFilenameHash` 18036 | instance, parameter-only (algorithm frozen) | `application/vp_filename_hash.dart` | `vpFilenameHash` |
-| `_normalisePosterUrl` 16036, `_normalisedContentType` 15977, `_identityMetaSubtitle` 16042, `_filterIdentitySearchResults` 16007, `_subtitleSearchDisplayLabel` 15991 | instance, parameter-only | `application/vp_identity_text.dart` | `vp…` public names |
-| `_diagnosticSubtitleId` 5031, `_subtitlePreferenceMatchesAttempt` 18025 | static/instance, parameter-only | `application/vp_subtitle_identity.dart` | `vp…` public names |
+| `_normalisePosterUrl` 16036, `_normalisedContentType` 15977, `_identityMetaSubtitle` 16042, `_filterIdentitySearchResults` 16007, `_subtitleSearchDisplayLabel` 15991 | instance, parameter-only (imports `lib/models/stremio_addon.dart`) | `application/vp_identity_text.dart` | `vpNormalisePosterUrl`, `vpNormalisedContentType`, `vpIdentityMetaSubtitle`, `vpFilterIdentitySearchResults`, `vpSubtitleSearchDisplayLabel` |
+| `_diagnosticSubtitleId` 5031, `_subtitlePreferenceMatchesAttempt` 18025 | both **static**, parameter-only (imports media_kit `SubtitleTrack` + `VpSubtitleApplyAttempt`); `static` removal declared | `application/vp_subtitle_identity.dart` | `vpDiagnosticSubtitleId`, `vpSubtitlePreferenceMatchesAttempt` |
 
 Step 0 re-proves each helper parameter-only (no `this`, `widget`,
 `context`, State field, service or I/O reference; analyzer binding scan)
@@ -523,7 +545,13 @@ parameter-only — they move with their owners): `_randomStartOffset`
   `iptv_channel_sheet_responsive_test.dart:292`, add completion/
   cancellation/stale cases); the random-playback menu tiles; each helper
   through a caller (duration text, recording file name hash, identity
-  search labels/filtering, subtitle preference matching). Mutation proofs
+  search labels/filtering, subtitle preference matching). The filename
+  hash is the **fallback resume identity** (`_resumeIdForEntry` 12201), not
+  a recording name (recordings use the timestamp function at 7997): a
+  plain playlist entry without TorBox/PikPak identifiers, an existing
+  fallback bookmark, asserted restored seek and storage identity,
+  extension normalisation and the empty-title fallback to `widget.title`;
+  a mutation of the hash helper must fail that test. Mutation proofs
   on S for every test; coverage matrix.
 - **Claude sample** (≥ 75 %), **step 0b** if needed.
 - **Step 1 — moves** per the frozen list; source-test retargets; theme
@@ -535,9 +563,15 @@ parameter-only — they move with their owners): `_randomStartOffset`
 
 Random-playback menu tiles render and select on phone and TV; IPTV
 catch-up/Start Over cancellation still wins over a slow lookup; identity
-search labels unchanged; recording file names unchanged.
+search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) lands at the saved position after the update.
 
 ## Follow-ups
+
+- **Service/data ownership exit** (D1): data contracts for resume,
+  trackers, subtitles, sources and IPTV replace the bridge's direct service,
+  storage, channel and player calls.
+- **`build` decomposition** (D6 exit): behaviour-level split into layout
+  widgets with goldens, its own goal.
 
 - **Video player Riverpod migration** (D1 exit): controllers become
   per-session/profile notifiers, one per batch, behaviour-tested; requires
@@ -564,3 +598,15 @@ search labels unchanged; recording file names unchanged.
 | P2-8 naming | `Vp`-prefixed public data types; typedef for `_RandomChoiceTile`; gate re-export; manual-source and season/episode scenarios. |
 | P2-9 CI/analyzer/exceptions | CI registration in phase 1; scoped identity comparator; D6 bounded exception; per-phase profile/resource evidence. |
 | P3-10 wording, baseline reuse | D4 reworded; baselines reused across mechanical moves. |
+
+## Design review round 2 resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: exact hook installation (assert-only assignment, release/profile
+throw, test-only compile-time flag, source guard permitting only the
+installer, exactly-once proof over helpers); declared `static` removal and
+opt-in `_host` property/increment/owner-identity support in the shared
+guards; `Random()` removed from inert examples, no Host reads at
+construction, eager/lazy modifiers preserved; the hash characterization
+targets the fallback resume identity. P3s: two patched declarations with
+three patches; fake `track`/`tracks`; `ProfilePolicyGuard` mirror; exact
+helper names and imports; follow-ups mirror D1/D6 exits.
