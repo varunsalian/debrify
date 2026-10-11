@@ -428,3 +428,13 @@ test/features/premiumize_files/presentation/legacy_premiumize/premiumize_review_
 
 # Video-player S characterization seam (requires DEBRIFY_VP_TEST_HOOKS=true).
 test/features/video_player/video_player_seam_guard_test.dart
+test/features/video_player/video_player_catchup_caller_test.dart
+test/features/video_player/video_player_catchup_gate_test.dart
+test/features/video_player/video_player_identity_test.dart
+test/features/video_player/video_player_menu_test.dart
+test/features/video_player/video_player_mount_test.dart
+test/features/video_player/video_player_resume_test.dart
+test/features/video_player/video_player_source_reader_test.dart
+test/features/video_player/video_player_source_test.dart
+test/features/video_player/video_player_subtitle_test.dart
+test/features/video_player/video_player_zap_test.dart

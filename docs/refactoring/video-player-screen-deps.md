@@ -885,3 +885,137 @@ Source-reader adjustment at Step T: the delayed-startup assertion in
 now matches the complete `current()` guard with whitespace-tolerant syntax.
 Formatting split the old one-line prefix. No declaration moved, no assertion
 was deleted, and all other source readers/consumer paths remain unchanged.
+
+## Phase 1 Step 0 — original S coverage (2026-10-11)
+
+The application ORIGINAL is S `80839d827383b05078178f292b56efbddd166fb1`,
+not a moved implementation. The only application changes from R are the
+three H1 interception sites, foundation import and frozen hook scaffolding.
+The separate S commit is named the characterization checkpoint. Step 0 adds
+only tests, fixtures, source-reading/binding tooling and command registration.
+`vplayer_p1.json` remains draft; no production destination exists.
+
+The fake player, native platform and video controller use `implements`, never
+a vendored/native constructor. Selected `track` and available `tracks` are
+coherent with the broadcast streams, and the real `mkv.Video` subtree mounts.
+Factories capture original configurations; `ready` is delivered only after
+the original assignments/binds. Frame geometry/readiness, failed/delayed
+operations, observers, commands and disposal completion are controllable.
+The environment initializes committed profile storage and the synchronous
+`ProfilePolicyGuard` mirror, records display/window/SystemChrome calls,
+intercepts HTTP and path-provider access, and drains original timers and
+leases through bounded pumps. The Flutter binding's pending-timer assertions
+remain enabled. Test storage/runtime files stay under Phase-1 evidence.
+
+Every harness command passes `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; every
+file is registered in `dev/tool/ci_behavior_tests.txt`. The installer also has
+a no-flag run. Feature move/import/analyzer CI is still deferred to the Step-1
+commit creating the first `lib/features/video_player/models/` file.
+
+### Coverage matrix
+
+| Frozen original | Original caller / observable evidence | Tests / mutation proofs |
+|---|---|---|
+| `_ManualSourceValidationFailure` | Source-sheet pick rejects decoded-media failure, reopens outgoing direct/playlist media at five minutes, never commits rejected row, restores source highlight | `video_player_source_test.dart`; m13–m14 |
+| `_SeasonEpisodeSelection` | Identity sheet rejects empty/nonpositive values, accepts trimmed S3E7, cancellation leaves identity unset | `video_player_identity_test.dart`; m11–m12 |
+| `_SubtitleApplyAttempt` | Menu selection succeeds; immediate and late decoder failures roll back once; persisted audio identity stays captured after an independent audio event; external subtitle download/persistence/rollback | `video_player_subtitle_test.dart`; m08–m10 |
+| `_IptvZapPage` | Channel keys adopt offset-100 window, request offset 102 using adopted source identity, stop at total 104, wrap; underreported total does not fetch beyond the provided window | `video_player_zap_test.dart`; m15–m16, m32 |
+| `IptvCatchupRequestGate` | Active completion consumes ticket; cancellation strands it; stale completion preserves newer ticket; original guide callbacks reject late replay after supersession/channel change | `video_player_catchup_gate_test.dart`, `video_player_catchup_caller_test.dart`; m17–m21 |
+| `_RandomChoiceTile` | **Dead original.** `_showRandomPlaybackMenu` returns through the constant-true `kUnifiedPlayerMenuEnabled` branch before constructing this legacy widget. The active unified menu's once/continuous choices are characterized; its production flag is unchanged | `video_player_menu_test.dart`; active menu m22. No claim of legacy tile execution |
+| `_format` | **Dead original.** Only definition exists in the facade; no caller. Active duration text is rendered by `Controls._format`, a separate implementation. No manufactured caller or behavior change | `video_player_menu_test.dart` renders 02:03 / 20:00; no claim of State `_format` execution |
+| `_pad2` | Original playlist action builds synthetic guide filename `S03E07 Plain title`, preserving parsed season/episode | `video_player_menu_test.dart`; m23 |
+| `_generateFilenameHash` | `_resumeIdForEntry` fallback for plain playlist with no TorBox/PikPak IDs: existing bookmark restored at three minutes and stored under expected hash; `.mkv`, uppercase `.MP4`, empty entry-title fallback to widget title | `video_player_resume_test.dart`; m05–m07 |
+| `_normalisePosterUrl` | Identity result tile uses HTTPS-normalized protocol-relative poster | `video_player_identity_test.dart`; m27 |
+| `_normalisedContentType` | Uppercase SERIES search result adopts series identity and opens season/episode dialog | `video_player_identity_test.dart`; m28 |
+| `_identityMetaSubtitle` | Rendered Series/Movie, year and addon labels | `video_player_identity_test.dart`; m29 |
+| `_filterIdentitySearchResults` | Search caller keeps richer duplicate, filters unsupported type and missing IMDb identity | `video_player_identity_test.dart`; m30 |
+| `_subtitleSearchDisplayLabel` | Accepted selection returns and renders `Subtitles for Fixture Series (2024) S3E7` | `video_player_identity_test.dart`; m31 |
+| `_diagnosticSubtitleId` | Failed embedded selection logs original requested ID and selection source | `video_player_subtitle_test.dart`; m09 |
+| `_subtitlePreferenceMatchesAttempt` | Persisted embedded/external preference is matched to its apply attempt before late-failure rollback; persisted audio owner preserved | `video_player_subtitle_test.dart`; m08, m10 |
+
+All 10 helpers pass the shared analyzer AST lexical-binding scan at S: no
+`this`, widget, context, State field/member, service or I/O reference. Exact
+application imports are recorded and checked. The already-compiling strict
+feature top-level rename probe at R is valid because those helper bodies are
+unchanged at S. No helper failed or was transformed/dropped. Evidence:
+`parameter-only-S.json`, `parameter-only-S.txt`, `probe-at-R-analyze.txt`.
+The two dead originals above are the shared-rule-4 coverage exceptions; both
+remain token-frozen in the draft. PiP platform branches remain device-pending
+on this desktop harness; no platform-predicate seam or device command is used.
+
+Four launch smoke cases (direct URL, plain playlist, IPTV channel list, Stremio
+TV channel) assert configuration, factory order, same player/controller owner,
+media URL/headers/play flag, display/orientation calls and clean disposal.
+`video_player_mount_test.dart` has m01–m04. The seam guard and installer flag
+test have m24–m25. The current per-declaration reader has m26 and real-config
+fixtures for repeated relocation, changed body, missing/duplicate fates and
+missing current owner. It validates ownership/body/history before returning
+live text; it never uses historical text to satisfy a source assertion.
+Existing source-test anchors and theme paths need no retarget yet because no
+declaration has moved.
+
+### Assertion-failing mutation table
+
+All accepted runs use a detached worktree pinned to S under
+`<git-common-dir>/refactor-evidence/vplayer/p1/mutations/original-S`. The
+unmutated control passes all 26 tests. Every accepted mutation changes one
+analyzer-owned original application declaration, leaves tests unchanged,
+and fails an assertion. Compile/load failures and hangs are not kills.
+The original source is restored after every run. Exact patches, commands,
+JSONL and assertion text are archived as `mutations/runs/mNN.*`; the result
+ledgers are `mutation-results.json` and `helper-mutation-results.json`.
+
+| ID | Test | Original declaration mutation | Result |
+|---|---|---|---|
+| m01 | `video_player_mount_test.dart`: original S mounts direct URL and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m02 | `video_player_mount_test.dart`: original S mounts playlist and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m03 | `video_player_mount_test.dart`: original S mounts IPTV channel list and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m04 | `video_player_mount_test.dart`: original S mounts Stremio TV channel and drains disposal | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m05 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "Plain.Movie.mkv" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m06 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "Plain.Movie.MP4" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m07 | `video_player_resume_test.dart`: fallback resume identity restores bookmark for "" | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m08 | `video_player_subtitle_test.dart`: subtitle success then late failure restores selection with the persisted audio identity | `_VideoPlayerScreenState._persistTrackChoice`: `attempt.persistedAudioId = audio; → attempt.persistedAudioId = '2';` | Assertion killed |
+| m09 | `video_player_subtitle_test.dart`: subtitle rejected apply rolls back once and reports the original diagnostic id | `_VideoPlayerScreenState._diagnosticSubtitleId`: `'<external>' : track.id → '<external>' : 'wrong-id'` | Assertion killed |
+| m10 | `video_player_subtitle_test.dart`: external subtitle apply persists its addon identity and rolls back after a decoder error | `_VideoPlayerScreenState._subtitlePreferenceMatchesAttempt`: `return subtitle.startsWith('stremio:'); → return false;` | Assertion killed |
+| m11 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._requestSeasonEpisodeForIdentity`: `_SeasonEpisodeSelection(season: season, episode: episode) → _SeasonEpisodeSelection(season: season, episode: episode + 1)` | Assertion killed |
+| m12 | `video_player_identity_test.dart`: identity search filters and labels results then cancels the season episode | `_VideoPlayerScreenState._requestSeasonEpisodeForIdentity`: `() => Navigator.of(dialogContext).pop(), → () => Navigator.of(dialogContext).pop(const _SeasonEpisodeSelection(season: 1, episode: 1)),` | Assertion killed |
+| m13 | `video_player_source_test.dart`: manual direct source rejection restores outgoing media and position | `_VideoPlayerScreenState._switchToStremioSource`: `_currentSourceIndex = previousSourceIndex; → _currentSourceIndex = index;` | Assertion killed |
+| m14 | `video_player_source_test.dart`: manual playlist source rejection restores outgoing media and position | `_VideoPlayerScreenState._switchToSourcePlaylist`: `_currentSourceIndex = outgoingSourceIndex; → _currentSourceIndex = sourceIndex;` | Assertion killed |
+| m15 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and fetches the next page | `_VideoPlayerScreenState._parseIptvZapPage`: `final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0; → final offset = 0;` | Assertion killed |
+| m16 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and clamps the reported total | `_VideoPlayerScreenState._parseIptvZapPage`: `total: math.max(total, offset + channels.length), → total: math.max(total, offset + channels.length) + 2,` | Assertion killed |
+| m17 | `video_player_catchup_gate_test.dart`: catchup completion consumes only the active ticket | `IptvCatchupRequestGate.complete`: `_activeTicket = null; → _activeTicket = ticket;` | Assertion killed |
+| m18 | `video_player_catchup_gate_test.dart`: catchup cancellation invalidates the ticket without accepting stale completion | `IptvCatchupRequestGate.cancel`: `_activeTicket = null; → _activeTicket = _generation;` | Assertion killed |
+| m19 | `video_player_catchup_gate_test.dart`: catchup stale completion cannot consume a newer lookup | `IptvCatchupRequestGate.complete`: `if (!isCurrent(ticket)) return false; → if (false) return false;` | Assertion killed |
+| m20 | `video_player_catchup_caller_test.dart`: original catchup caller ignores a superseded replay lookup | `IptvCatchupRequestGate.isCurrent`: `_activeTicket == ticket && _generation == ticket → true` | Assertion killed |
+| m21 | `video_player_catchup_caller_test.dart`: original catchup caller cancels on channel change | `IptvCatchupRequestGate.isCurrent`: `_activeTicket == ticket && _generation == ticket → true` | Assertion killed |
+| m22 | `video_player_menu_test.dart`: active random menu dispatches once and continuous choices | `_VideoPlayerScreenState._toggleContinuousShuffle`: `_continuousShuffleEnabled = true; → _continuousShuffleEnabled = false;` | Assertion killed |
+| m23 | `video_player_menu_test.dart`: original controls render duration and synthetic guide stamps padded episode identity | `_VideoPlayerScreenState._pad2`: `padLeft(2, '0') → padLeft(1, '0')` | Assertion killed |
+| m24 | `video_player_seam_guard_test.dart`: S has only the frozen installer and once-only default paths | `_VideoPlayerScreenState._createPlayerInstance`: `logLevel: mk.MPVLogLevel.error → logLevel: mk.MPVLogLevel.warn` | Assertion killed |
+| m25 | `video_player_seam_guard_test.dart`: installation requires the explicit test-only compile-time flag | `VideoPlayerScreenTestHooks.install`: `if (!const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) → if (const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS'))` | Assertion killed |
+| m26 | `video_player_source_reader_test.dart`: declaration reader validates current ownership and chains repeated relocation | `_VideoPlayerScreenState._generateFilenameHash`: `nameWithoutExt.hashCode.toString() → (nameWithoutExt + 'mutated').hashCode.toString()` | Assertion killed |
+| m27 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._normalisePosterUrl`: `return 'https:$url'; → return url;` | Assertion killed |
+| m28 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._normalisedContentType`: `type.toLowerCase() == 'series' → type == 'series'` | Assertion killed |
+| m29 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._identityMetaSubtitle`: `return parts.join(' \| '); → return parts.join(' / ');` | Assertion killed |
+| m30 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._filterIdentitySearchResults`: `if (newScore > existingScore) → if (newScore < existingScore)` | Assertion killed |
+| m31 | `video_player_identity_test.dart`: identity search filters and labels results then validates and accepts the season episode | `_VideoPlayerScreenState._subtitleSearchDisplayLabel`: `return '$title S${season}E$episode'; → return '$title';` | Assertion killed |
+| m32 | `video_player_zap_test.dart`: IPTV zap preserves nonzero page offsets and fetches the next page | `_VideoPlayerScreenState._parseIptvZapPage`: `total: math.max(total, offset + channels.length), → total: offset + channels.length,` | Assertion killed |
+
+One discarded offset-zero experiment created a paging microtask loop, was
+interrupted, and is explicitly excluded (`discarded-offset-loop/NOTE.txt`).
+Its replacement m16 changes the total and fails the unchanged no-next-page
+assertion. No assertion, timeout or original behavior was weakened.
+
+### Original-suite profile-editor NOTE
+
+The extra original-suite failure, `profile editor keeps feature controls
+hidden behind one switch`, was a deterministic parser-path setup failure: the
+existing reader requires `.dart_tool/edit_profile_parser/` inside its path.
+The evidence-only wrapper now nests that component under the required isolated
+`.dart_tool/vplayer_parser/` root, copying a fresh package and deleting kernels.
+Three valid isolated reruns pass unchanged source/test. Classification:
+environment/tool-routing incompatibility, not an observed behavior flake or
+application regression. No allowlist entry was added. Initial incompatible
+reruns and the valid 3x runs remain archived with `profile-editor-NOTE.txt`.
+
+The final full-suite comparison is recorded after the Step-0 test commit.
+The incomplete pre-lint-cleanup run is excluded (`step0-suite-NOTE.txt`).

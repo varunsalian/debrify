@@ -18,7 +18,7 @@ void main() {
 
   test('installation requires the explicit test-only compile-time flag', () {
     if (const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) {
-      VideoPlayerScreenTestHooks.install(null);
+      expect(() => VideoPlayerScreenTestHooks.install(null), returnsNormally);
     } else {
       expect(() => VideoPlayerScreenTestHooks.install(null), throwsStateError);
     }

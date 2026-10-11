@@ -108,3 +108,23 @@ full-suite evidence runs and the curated CI behaviour command. Ordinary debug
 installation is checked by running the seam guard test without that flag too.
 Run `nice -n 19 python3 dev/tool/vplayer_seam_proof.py --self-test
 --parser-package .dart_tool/vplayer_parser/<isolated>/.dart_tool/package_config.json`.
+
+Step 0 harness support and characterization commands (application stays at S):
+
+```sh
+nice -n 19 flutter test --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true test/features/video_player
+nice -n 19 python3 dev/tool/suite_evidence.py run vplayer/p1/step0-suite --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true
+```
+
+`vp_source_reader.dart` invokes `vplayer_source_reader.py` with an isolated
+parser. The Python reader validates the latest applied manifest and its
+history-derived destinations before returning current text; missing current
+ownership never falls back to Git text. Its real Phase-1 virtual fixture chains
+a second relocation and rejects current-body drift and missing/duplicate fates.
+`vplayer_parameter_proof.py` records lexical analyzer binding evidence and the
+exact approved application import lists. Its compilation companion is the
+strict-feature top-level rename probe from T; helper bodies are unchanged at S.
+
+All characterization files are registered now in `ci_behavior_tests.txt`;
+feature move/analyzer/import CI still starts with Step 1's first production
+`lib/features/video_player/models/` file.
