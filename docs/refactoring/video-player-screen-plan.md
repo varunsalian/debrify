@@ -1402,6 +1402,25 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   application builds. P3 independent Claude sample and the classified web/device
   checks remain pending. Stop at Step 0 for review.
 
+### 2026-10-12 — Phase 3 Step-0b independent-sample addendum
+
+- **Revision.** tested original `55ac577e6`; addendum follows `425242b60`; application `55ac577e6` / `fc24e32ae`
+  unchanged; documentation/evidence only.
+- **Sample.** Claude 20/21 (95.2%). f9–f13/f20 false COMPILE-ERR labels
+  corrected to assertion kills; saved tails lack assertion sections, so six
+  complete original replays verify them. f2 replay passes all 134 tests.
+- **Equivalence.** f2 strengthens sweep E11: skip preferences register before
+  initialization's sequential defaults reads on the same cached future; positive
+  duration cannot exist at the trailing sync. Paused late-settings case is
+  unreachable through original callers. Preserve call unchanged; no new seam.
+- **Commands/evidence.** Serialized `nice -n 19 flutter test` original behavior
+  files, no-pub, concurrency 1, hook define, JSON. `p3/addendum/` contains full
+  replay logs, normalized kill table, hashed caller/dependency proof and reuse
+  NOTE. Systematic sweep unchanged (119 killed / 26 equivalent / 3 classified).
+- **Baseline/constraints.** Reuse clean `55ac577e6` full suite; no test/app/input
+  changes, no allowlist or pubspec edits, no device/run/install commands. Proceed
+  to frozen Step 1 production moves and the clean-tree gate.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

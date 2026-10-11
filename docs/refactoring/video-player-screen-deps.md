@@ -2436,3 +2436,67 @@ isolated parser packages. No overlapping Flutter suites or application builds.
 constraints. CI remains P2, P3 manifest draft. Independent Claude P3 sample,
 web-unavailable-provider and Android player-created-false paths, plus the
 end-of-series device checklist, remain pending. Stop before production moves.
+
+
+## Phase 3 Step-0b addendum — independent sample (2026-10-12)
+
+Claude's sample on original `55ac577e6` kills 20/21 (95.2%). The
+f9–f13/f20 COMPILE-ERR labels were heuristic false positives (test names
+containing "loading"); all 134 tests executed. Saved per-mutation logs contain
+only their last 20 KB and omit the assertion sections. Complete serialized
+replays on the detached original (application byte-identical to `55ac577e6`)
+confirm assertion kills for all six, with no compilation/load errors:
+`p3/addendum/replay-results.json`, full `f*.jsonl`/stderr. Original Claude
+artifacts remain untouched; corrected table in `claude-normalized.json`.
+
+| Mutation | Correct outcome | Assertion witness / equivalence |
+|---|---|---|
+| f1 | killed | `skip configured single-provider choice reaches IntroDB rather than auto or SkipDB` |
+| f2 | equivalent original-caller startup ordering | `f2-equivalence.json` |
+| f3 | killed | `skip custom launch identity prevents request even when guide later has IMDb` |
+| f4 | killed | `skip playlist episode wins over launch arguments and switches wait for real duration` |
+| f5 | killed | `skip engine media boundary clears UI on direct source change independently of playlist reset` |
+| f6 | killed | `skip rejects invalid guide IMDb before using valid trimmed fallback` |
+| f7 | killed | `skip request falls back to guide IMDb and accepts series playlist without catalog type` |
+| f8 | killed | `skip request preserves season 0 and trims IMDb` |
+| f9 | killed | `skip cache returns episode-duration key without another fetch` |
+| f10 | killed | `skip playlist episode wins over launch arguments and switches wait for real duration` |
+| f11 | killed | `skip playlist reset preserves cached episode on return` |
+| f12 | killed | `skip playlist held A-B-A reset generation survives failed-load re-arm` |
+| f13 | killed | `skip held A-B-A old error caches and clears same-key loading before generation rejection` |
+| f14 | killed | `skip stale generation caches result without publishing wrong duration` |
+| f15 | killed | `skip playlist episode wins over launch arguments and switches wait for real duration` |
+| f16 | killed | `skip cache returns episode-duration key without another fetch` |
+| f17 | killed | `skip clamps to subsecond duration using the same whole-second request key` |
+| f18 | killed | `skip publishes clock before seek, queues tracking before haptic and preserves remote stop order` |
+| f19 | killed | `skip publishes clock before seek, queues tracking before haptic and preserves remote stop order` |
+| f20 | killed | `skip playlist episode wins over launch arguments and switches wait for real duration` |
+| f21 | killed | `skip provider closes on disposal and late success cannot publish` |
+
+**f2 is equivalent through the original callers, strengthening sweep E11
+(`settings-sync`), not a missing late-settings test.** Only `initState` calls
+this loader, before `_initializePlayer`. Both skip settings reads await
+`ProfilePreferences.instance` → the same cached `SharedPreferences.getInstance`
+completer; all per-key reads/guards after it are synchronous. Player
+initialization awaits `_loadPlayerDefaults`, whose first three unconditional
+preferences reads follow that same path sequentially. The skip reads register
+first; their `Future.wait` completion hop precedes the later defaults await
+hops, on both cold and warm caches. Duration initializes to zero and its only
+positive assignment is in subscriptions installed after defaults and player
+creation; decoder replacement sets it to zero. At the trailing sync, request
+construction therefore rejects zero duration before any fetch/state/notifier
+write. Pausing and synchronous first frames do not change that ordering.
+Disposal returns earlier; errors leave before this statement in both versions.
+Profile read guards add no async per-key delay. A private reload, bypassed
+initialization or new settings seam would manufacture a different caller.
+`f2-equivalence.json` records the exact original/dependency hashes and complete
+argument. The f2 removal replay passes all 134 original behavior tests.
+
+The systematic sweep remains 148 points: 119 assertion kills, 26 equivalents
+(E11 now substantiated), three classified paths. The independent sample is
+20/21 raw, 20/20 after this equivalent exclusion. No new test or behavior
+change is needed; keep the trailing sync in the frozen production move.
+Coverage matrix for `_loadSkipSegmentSettings`: C36/C55/C56 and the existing
+settings witnesses unchanged; its trailing sync is E11/f2-equivalent.
+The clean `55ac577e6` additions-only suite is the Step-0b baseline unchanged
+(`addendum/baseline-reuse.json`); no allowlist additions.
