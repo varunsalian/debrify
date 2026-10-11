@@ -1339,7 +1339,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// initialization, this may legitimately appear after launch when TVMaze
   /// enriches a release-only playlist.
   String? get _currentSeriesImdbId {
-    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return _effectiveContentImdbId;
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId))
+      return _effectiveContentImdbId;
     final value =
         _seriesPlaylist?.imdbId ??
         _syntheticGuidePlaylist?.imdbId ??
@@ -1403,7 +1404,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _activeExternalSubtitlePath;
   bool _subtitleOnlyForeignAudio = false;
   bool _subtitleForcedOnly = false;
-  bool get _hasSubtitlePolicy => _subtitleOnlyForeignAudio || _subtitleForcedOnly;
+  bool get _hasSubtitlePolicy =>
+      _subtitleOnlyForeignAudio || _subtitleForcedOnly;
   String? _subtitlePreferredAudio;
   String? _subtitleSelectedAudio;
   int _subtitleAudioRevision = 0;
@@ -2042,7 +2044,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.traktScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     _traktScrobbleEnabled =
         policy.scrobbles(TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated();
@@ -2295,7 +2299,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.simklScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     _simklScrobbleEnabled =
         policy.scrobbles(TrackingSource.simkl) &&
         await SimklService.instance.isAuthenticated();
@@ -2495,7 +2501,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('[MDBListDiag] player init skipped: tracking not requested');
       return;
     }
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!policy.scrobbles(TrackingSource.mdblist)) return;
     // Playlist launches resolve their requested/resume episode asynchronously.
     // Before that finishes `_currentIndex` is still zero, so constructing the
@@ -2620,7 +2628,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2630,9 +2640,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // user advances to a different episode while this is in flight, we key
     // off the episode that's actually current when the fetch resolves.
     if (_traktEpisodeProgress == null) {
-      final loaded = await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
-        imdbId: imdbId,
-      );
+      final loaded =
+          await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+            imdbId: imdbId,
+          );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
       _traktEpisodeProgress = loaded;
     }
@@ -2678,7 +2689,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// above but remains independently stored so remote unwatch changes never
   /// mutate local playback history.
   Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2687,9 +2700,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Await before resolving the episode identity for the same race-safety as
     // [_currentEpisodeTraktPercent].
     if (_simklEpisodeProgress == null) {
-      final loaded = await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
-        imdbId: imdbId,
-      );
+      final loaded =
+          await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+            imdbId: imdbId,
+          );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
       _simklEpisodeProgress = loaded;
     }
@@ -2727,15 +2741,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
     _bindEpisodeTrackerProgressIdentity(imdbId);
     if (_mdblistEpisodeProgress == null) {
-      final loaded = await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
-        imdbId: imdbId,
-      );
+      final loaded =
+          await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+            imdbId: imdbId,
+          );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
       _mdblistEpisodeProgress = loaded;
     }
@@ -3714,9 +3731,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _currentSourceIndex < sources.length
         ? sources[_currentSourceIndex]
         : null;
-    final sourceName = [source?.source, source?.addonDisplayName, source?.name]
-        .whereType<String>()
-        .join(' ');
+    final sourceName = [
+      source?.source,
+      source?.addonDisplayName,
+      source?.name,
+    ].whereType<String>().join(' ');
     final isAioStreams = StartupStreamPolicy.isAioStreams(
       addonId: source?.stremioAddonId,
       sourceName: sourceName,
@@ -3759,7 +3778,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _reportStartupFailure({bool Function()? isCurrent}) async {
-    bool current() => mounted && !_screenDisposed && (isCurrent?.call() ?? true);
+    bool current() =>
+        mounted && !_screenDisposed && (isCurrent?.call() ?? true);
     if (!current()) return;
     final canRecover = widget.onStartupSourcesExhausted != null;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -3781,7 +3801,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (!mounted || !current() || playerRoute?.isCurrent != true) return;
     if (canRecover) {
-      Navigator.of(context).pop(<String, dynamic>{'startupSourcesExhausted': true});
+      Navigator.of(
+        context,
+      ).pop(<String, dynamic>{'startupSourcesExhausted': true});
     } else {
       Navigator.of(context).maybePop();
     }
@@ -3830,8 +3852,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final source = _openedWatchSource;
       if (isCurrent() && source != null) {
         // mpv errors can contain credential-bearing URLs; record only category.
-        logSourceSelection('media_server_player_error', source: source,
-            player: 'mpv', reason: mediaServerPlayerErrorCategory(error));
+        logSourceSelection(
+          'media_server_player_error',
+          source: source,
+          player: 'mpv',
+          reason: mediaServerPlayerErrorCategory(error),
+        );
       }
       // mpv also emits nonfatal decoder/stream log errors here. Re-evaluate
       // actual state; healthy playback may not emit another state event.
@@ -3900,10 +3926,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       if (startupOffset != null) {
         unawaited(
-          _seekForResume(startupOffset.inMilliseconds, verifyLanding: true)
-              .catchError((Object error) {
-                debugPrint('Player: Stremio TV startup seek failed: $error');
-              }),
+          _seekForResume(
+            startupOffset.inMilliseconds,
+            verifyLanding: true,
+          ).catchError((Object error) {
+            debugPrint('Player: Stremio TV startup seek failed: $error');
+          }),
         );
       }
       _updateMdblistPosition();
@@ -4092,8 +4120,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_openedWatchSource != null &&
         _mediaServerFrameGeneration != _decoderProbeGeneration) {
       _mediaServerFrameGeneration = _decoderProbeGeneration;
-      logSourceSelection('media_server_first_frame', source: _openedWatchSource,
-          player: 'mpv');
+      logSourceSelection(
+        'media_server_first_frame',
+        source: _openedWatchSource,
+        player: 'mpv',
+      );
     }
     _decoderProbeParams = params;
     _scheduleTvosDisplayMatch(params);
@@ -4491,9 +4522,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (watch?.hasFailed != true) {
           watch?.dispose();
           _stremioTvStartupSeek.cancel();
-          unawaited(_reportStartupFailure(
-            isCurrent: () => failureEpoch == _resumeVerifyEpoch,
-          ));
+          unawaited(
+            _reportStartupFailure(
+              isCurrent: () => failureEpoch == _resumeVerifyEpoch,
+            ),
+          );
         }
       }
     } finally {
@@ -4804,12 +4837,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (request?.isCurrent == false) return;
     final watchEpoch = ++_watchOpenEpoch;
     final sources = _effectiveSources;
-    final indexedSource = sources != null &&
+    final indexedSource =
+        sources != null &&
             _currentSourceIndex >= 0 &&
             _currentSourceIndex < sources.length
         ? sources[_currentSourceIndex]
         : null;
-    final candidate = source ??
+    final candidate =
+        source ??
         (indexedSource?.directUrl == media.uri ? indexedSource : null);
     final watchSource = MediaServerWatchController.isServerSource(candidate)
         ? candidate
@@ -4916,7 +4951,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         await DirectSourceAuthorization.authorize(watchSource);
       }
-      if (_screenDisposed || !mounted || watchEpoch != _watchOpenEpoch ||
+      if (_screenDisposed ||
+          !mounted ||
+          watchEpoch != _watchOpenEpoch ||
           request?.isCurrent == false) {
         return;
       }
@@ -4924,7 +4961,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // media could still emit events during a server watch-state request.
       if (beforeOpen != null && !beforeOpen()) return;
       if (watchSource != null) {
-        logSourceSelection('media_server_open', source: watchSource, player: 'mpv');
+        logSourceSelection(
+          'media_server_open',
+          source: watchSource,
+          player: 'mpv',
+        );
       }
       _openedWatchSource = watchSource;
       _activeOpenedMedia = media;
@@ -4937,6 +4978,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       return _player.open(media, play: play);
     }
+
     // Startup direct fallbacks bypass URL resolvers. Recheck their captured
     // capability here so revoked/disabled/reconnected sources cannot open.
     if (source != null) {
@@ -6450,16 +6492,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlayerDefaults() async {
-    _subtitleOnlyForeignAudio = await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
+    _subtitleOnlyForeignAudio =
+        await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
     _subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
-    _subtitlePreferredAudio = await SubtitleSettingsStorage.getDefaultAudioLanguage();
+    _subtitlePreferredAudio =
+        await SubtitleSettingsStorage.getDefaultAudioLanguage();
     _subtitleAutoSyncEnabled =
         await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
     debugPrint(
       'SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled',
     );
     // Load default aspect index
-    final aspectIndex = await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
+    final aspectIndex =
+        await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
     _aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
 
@@ -6498,8 +6543,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await PlayerSettingsStorage.getAppleMultichannelAudio();
     }
     if (PlatformUtil.isTvOS) {
-      _tvosForceStereoAudio = await PlayerSettingsStorage.getTvosForceStereoAudio();
-      _tvosLegacyAudioOutput = await PlayerSettingsStorage.getTvosLegacyAudioOutput();
+      _tvosForceStereoAudio =
+          await PlayerSettingsStorage.getTvosForceStereoAudio();
+      _tvosLegacyAudioOutput =
+          await PlayerSettingsStorage.getTvosLegacyAudioOutput();
       // What the CURRENT output route can take. ao_avfoundation passes the
       // file's native layout through, so a 5.1 track on a two-channel route
       // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps
@@ -9753,7 +9800,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _openMedia(
             mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
             play: true,
-            source: _effectiveSources != null &&
+            source:
+                _effectiveSources != null &&
                     previousSourceIndex >= 0 &&
                     previousSourceIndex < _effectiveSources!.length &&
                     MediaServerWatchController.isServerSource(
@@ -10353,7 +10401,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             : null;
         if (prev == null && se.season != null && se.episode != null) {
           final resolved = await _resolveAdjacentWithCachedGuide(
-            se.season!, se.episode!, -1,
+            se.season!,
+            se.episode!,
+            -1,
           );
           if (resolved != null) prev = (resolved.season, resolved.episode);
         }
@@ -10431,7 +10481,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       await Future.wait([
         MovieProgressStorage.markMovieAsFinished(imdbId),
-        VideoResumeStorage.removeVideoResume(_resumeKey, playbackCheckpoint: true),
+        VideoResumeStorage.removeVideoResume(
+          _resumeKey,
+          playbackCheckpoint: true,
+        ),
       ]);
     } catch (_) {
       // Playback remains usable if local storage is temporarily unavailable.
@@ -12092,7 +12145,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   String get _resumeKey {
     final customKey = CustomSeriesIdentity.resumeBookmarkKey(
-      _effectiveContentImdbId, _effectiveContentSeason, _effectiveContentEpisode,
+      _effectiveContentImdbId,
+      _effectiveContentSeason,
+      _effectiveContentEpisode,
     );
     if (customKey != null) return customKey;
     if (_activePlaylist != null &&
@@ -12232,7 +12287,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
       return;
     }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     // The launched item's widget percent is a first-load-only signal; capture it
     // before marking it spent so it can't apply to a later switched-to episode.
     final firstLoad = !_launchTraktPercentSpent;
@@ -12566,11 +12623,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (_effectiveContentType == 'series') {
         if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) ||
             (_effectiveContentImdbId?.startsWith('medialibrary:') ?? false)) {
-          if (_effectiveContentSeason == null || _effectiveContentEpisode == null) return null;
+          if (_effectiveContentSeason == null ||
+              _effectiveContentEpisode == null)
+            return null;
           return LocalPlaybackResumeResolver.episode(
             seriesTitle: _effectiveContentTitle ?? widget.title,
-            season: _effectiveContentSeason!, episode: _effectiveContentEpisode!,
-            imdbId: _effectiveContentImdbId, policy: widget.resumePolicy,
+            season: _effectiveContentSeason!,
+            episode: _effectiveContentEpisode!,
+            imdbId: _effectiveContentImdbId,
+            policy: widget.resumePolicy,
           );
         }
         if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
@@ -12602,7 +12663,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final legacyTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-        return VideoProgressStorage.getVideoPlaybackState(videoTitle: legacyTitle);
+        return VideoProgressStorage.getVideoPlaybackState(
+          videoTitle: legacyTitle,
+        );
       }
 
       final resumeId = currentEntry != null
@@ -12662,9 +12725,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _observeServerWatch({bool completed = false}) {
-    if (!_serverWatch.isActive || _validationGateActive || !_isReady ||
+    if (!_serverWatch.isActive ||
+        _validationGateActive ||
+        !_isReady ||
         _isTransitioning ||
-        _resumeWriteGuard.heldTargetIfBlocked(_position.inMilliseconds) != null) {
+        _resumeWriteGuard.heldTargetIfBlocked(_position.inMilliseconds) !=
+            null) {
       return;
     }
     // This resolver follows the current playlist entry after episode advance;
@@ -12874,21 +12940,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) await VideoResumeStorage.upsertVideoResume(
-      _resumeKey,
-      {
-        'positionMs': pos.inMilliseconds,
-        'speed': persistedSpeed,
-        'aspect': aspectStr,
-        'durationMs': dur.inMilliseconds,
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      },
-      sourceId:
-          _currentIptvChannel?.attributes['series_playlist_id'] ??
-          _currentIptvChannel?.attributes['source_playlist_id'] ??
-          _iptvGuideContextOverride?.sourceId ??
-          widget.iptvSourceId,
-    );
+    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId))
+      await VideoResumeStorage.upsertVideoResume(
+        _resumeKey,
+        {
+          'positionMs': pos.inMilliseconds,
+          'speed': persistedSpeed,
+          'aspect': aspectStr,
+          'durationMs': dur.inMilliseconds,
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        },
+        sourceId:
+            _currentIptvChannel?.attributes['series_playlist_id'] ??
+            _currentIptvChannel?.attributes['source_playlist_id'] ??
+            _iptvGuideContextOverride?.sourceId ??
+            widget.iptvSourceId,
+      );
 
     // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
     // handoff moments another device would resume from — let sync flush now
@@ -16928,7 +16995,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _persistTrackChoice(audioId, subtitleId);
   }
 
-  Future<void> _audioTrackChoiceChanged(String audioId, String currentSubId) async {
+  Future<void> _audioTrackChoiceChanged(
+    String audioId,
+    String currentSubId,
+  ) async {
     _captureIptvAudioLanguage(audioId);
     await _persistTrackChoice(
       audioId,
@@ -17214,17 +17284,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         // For series content, get preferences for the entire series
-        trackPreferences = await TrackPreferencesStorage.getSeriesTrackPreferences(
-          seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-        );
+        trackPreferences =
+            await TrackPreferencesStorage.getSeriesTrackPreferences(
+              seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+            );
       } else {
         // For non-series content, get preferences for this specific video
         final videoTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-        trackPreferences = await TrackPreferencesStorage.getVideoTrackPreferences(
-          videoTitle: videoTitle,
-        );
+        trackPreferences =
+            await TrackPreferencesStorage.getVideoTrackPreferences(
+              videoTitle: videoTitle,
+            );
       }
 
       // Bail out if content changed during preferences fetch
@@ -17390,7 +17462,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Apply default audio language from settings (when no stored preference exists)
   Future<void> _applyDefaultAudioLanguage() async {
     try {
-      final defaultLang = await SubtitleSettingsStorage.getDefaultAudioLanguage();
+      final defaultLang =
+          await SubtitleSettingsStorage.getDefaultAudioLanguage();
       if (defaultLang == null) {
         // No preference set - do nothing, let player use its default
         return;
@@ -17461,7 +17534,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final token = _addonSubtitleFetchToken;
     _subtitleSelectedAudio = null;
     final audio = _player.state.track.audio;
-    String? language = LanguageMapper.canonicalLanguage(audio.language) ??
+    String? language =
+        LanguageMapper.canonicalLanguage(audio.language) ??
         LanguageMapper.canonicalLanguage(audio.title);
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
@@ -17520,7 +17594,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         return false;
       }
-      final defaultLang = await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
+      final defaultLang =
+          await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
       if (!current()) {
         return false;
@@ -17629,7 +17704,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (!current()) return false;
     final track = _player.state.tracks.subtitle
-        .where((track) => track.id == id && !isAppManagedAddonSubtitleTrack(track))
+        .where(
+          (track) => track.id == id && !isAppManagedAddonSubtitleTrack(track),
+        )
         .firstOrNull;
     // A missing or unmarked track must never fall back to full subtitles.
     return _setSubtitleTrackWithDiagnostics(
@@ -17743,7 +17820,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
       for (final id in oldExternalIds) {
-        if (!mounted || contentToken != _addonSubtitleFetchToken ||
+        if (!mounted ||
+            contentToken != _addonSubtitleFetchToken ||
             (isCurrent != null && !isCurrent())) {
           debugPrint(
             'VideoPlayer: Content changed during addon subtitle cleanup; '
@@ -17776,7 +17854,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Fetch Stremio addon subtitles proactively and auto-select if no embedded subtitle was applied.
   /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
   Future<void> _fetchAndMaybeAutoSelectAddonSubtitle() async {
-    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) && _manualContentImdbId == null) return;
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) &&
+        _manualContentImdbId == null)
+      return;
     // Capture token at start to detect if content changes during async operations
     final fetchToken = _addonSubtitleFetchToken;
 
@@ -17922,7 +18002,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _selectedStremioSubtitleId == null;
     if (!valid()) return;
     try {
-      final language = await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
+      final language =
+          await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       if (_subtitleForcedOnly) {
         if (valid()) await _applyForcedSubtitle(language, valid);
         return;
