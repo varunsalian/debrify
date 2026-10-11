@@ -6,16 +6,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/video_player_environment.dart';
 
 void main() {
-  for (final entryTitle in ['Plain.Movie.mkv', 'Plain.Movie.MP4', '']) {
+  const identities = {
+    'Plain.Movie.mkv': 'Plain.Movie',
+    'Plain.Movie.MP4': 'Plain.Movie',
+    '': 'Fallback title',
+    'No extension': 'No extension',
+    'Trailing.': 'Trailing',
+    '.hidden': '',
+  };
+  for (final entryTitle in identities.keys) {
     testWidgets(
       'fallback resume identity restores bookmark for "$entryTitle"',
       (tester) async {
         final fixture = VideoPlayerEnvironment();
         await tester.runAsync(fixture.initialize);
         const title = 'Fallback title.ts';
-        final key = (entryTitle.isEmpty ? 'Fallback title' : 'Plain.Movie')
-            .hashCode
-            .toString();
+        final key = identities[entryTitle]!.hashCode.toString();
         await tester.runAsync(
           () => VideoResumeStorage.upsertVideoResume(key, {
             'positionMs': 180000,

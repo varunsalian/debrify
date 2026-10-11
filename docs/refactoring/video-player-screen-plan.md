@@ -645,9 +645,11 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   All 10 helpers pass the analyzer binding/import proof; the unchanged
   strict-feature top-level rename probe from T remains valid. The current
   source reader validates ownership/body/history and chains relocation.
-  Coverage and mutation tables are in the deps report. `_format` and the
-  legacy `_RandomChoiceTile` are dead originals, explicitly recorded under
-  shared rule 4; active duration/shuffle callers are tested. PiP stays
+  Coverage and mutation tables are in the deps report. The legacy
+  `_RandomChoiceTile` is dead under shared rule 4. **Step-0b correction:**
+  the initial `_format` dead-code claim missed its `SeekHud` tear-off; the
+  added HUD behavior test now covers it. Active duration/shuffle callers
+  are also tested. PiP stays
   device-pending. No predicate seam or manufactured caller was added.
 - **Mutations.** Detached original-S control: 26/26 pass. One application
   mutation per test plus six identity/total-boundary mutations: 32/32

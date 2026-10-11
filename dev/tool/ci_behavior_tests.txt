@@ -431,10 +431,13 @@ test/features/video_player/video_player_seam_guard_test.dart
 test/features/video_player/video_player_catchup_caller_test.dart
 test/features/video_player/video_player_catchup_gate_test.dart
 test/features/video_player/video_player_identity_test.dart
+test/features/video_player/video_player_identity_edges_test.dart
 test/features/video_player/video_player_menu_test.dart
 test/features/video_player/video_player_mount_test.dart
 test/features/video_player/video_player_resume_test.dart
 test/features/video_player/video_player_source_reader_test.dart
 test/features/video_player/video_player_source_test.dart
 test/features/video_player/video_player_subtitle_test.dart
+test/features/video_player/video_player_subtitle_edges_test.dart
 test/features/video_player/video_player_zap_test.dart
+test/features/video_player/video_player_zap_categories_test.dart

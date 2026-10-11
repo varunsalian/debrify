@@ -922,7 +922,7 @@ commit creating the first `lib/features/video_player/models/` file.
 | `_IptvZapPage` | Channel keys adopt offset-100 window, request offset 102 using adopted source identity, stop at total 104, wrap; underreported total does not fetch beyond the provided window | `video_player_zap_test.dart`; m15–m16, m32 |
 | `IptvCatchupRequestGate` | Active completion consumes ticket; cancellation strands it; stale completion preserves newer ticket; original guide callbacks reject late replay after supersession/channel change | `video_player_catchup_gate_test.dart`, `video_player_catchup_caller_test.dart`; m17–m21 |
 | `_RandomChoiceTile` | **Dead original.** `_showRandomPlaybackMenu` returns through the constant-true `kUnifiedPlayerMenuEnabled` branch before constructing this legacy widget. The active unified menu's once/continuous choices are characterized; its production flag is unchanged | `video_player_menu_test.dart`; active menu m22. No claim of legacy tile execution |
-| `_format` | **Dead original.** Only definition exists in the facade; no caller. Active duration text is rendered by `Controls._format`, a separate implementation. No manufactured caller or behavior change | `video_player_menu_test.dart` renders 02:03 / 20:00; no claim of State `_format` execution |
+| `_format` | **Step-0 claim corrected in Step 0b:** the State method is passed as a tear-off to `SeekHud`; the original control-duration test only executes separate `Controls._format` | Step 0b adds mounted pan/HUD target and delta assertions in `video_player_menu_test.dart`; c19/f01 |
 | `_pad2` | Original playlist action builds synthetic guide filename `S03E07 Plain title`, preserving parsed season/episode | `video_player_menu_test.dart`; m23 |
 | `_generateFilenameHash` | `_resumeIdForEntry` fallback for plain playlist with no TorBox/PikPak IDs: existing bookmark restored at three minutes and stored under expected hash; `.mkv`, uppercase `.MP4`, empty entry-title fallback to widget title | `video_player_resume_test.dart`; m05–m07 |
 | `_normalisePosterUrl` | Identity result tile uses HTTPS-normalized protocol-relative poster | `video_player_identity_test.dart`; m27 |
@@ -939,8 +939,9 @@ application imports are recorded and checked. The already-compiling strict
 feature top-level rename probe at R is valid because those helper bodies are
 unchanged at S. No helper failed or was transformed/dropped. Evidence:
 `parameter-only-S.json`, `parameter-only-S.txt`, `probe-at-R-analyze.txt`.
-The two dead originals above are the shared-rule-4 coverage exceptions; both
-remain token-frozen in the draft. PiP platform branches remain device-pending
+The `_RandomChoiceTile` dead original is the shared-rule-4 coverage exception.
+Step 0b corrects the initial `_format` dead-code claim and closes its HUD gap;
+both declarations remain token-frozen in the draft. PiP platform branches remain device-pending
 on this desktop harness; no platform-predicate seam or device command is used.
 
 Four launch smoke cases (direct URL, plain playlist, IPTV channel list, Stremio
@@ -1045,3 +1046,278 @@ diagnostic identities/counts. The scoped comparator retains all 73 S
 identities with zero additions; the new harness folder has zero issues.
 Earlier temporary build/vendor/test scan differences are excluded from
 that final claim and archived separately.
+
+## Phase 1 Step 0b — systematic original mutation sweep (2026-10-11)
+
+Claude's initial independent sample killed only 7/17 valid mutations (41%).
+This checkpoint therefore inventories every frozen declaration, rather than
+only repairing its listed survivors. All behavior and mutation runs still
+target ORIGINAL `c502380169cbc3a1394782c52a0fac08d7595e67`; its application
+source is byte-identical to S `80839d827383b05078178f292b56efbddd166fb1`.
+There are no production moves, new seams, private-call adapters or bug fixes.
+
+The analyzer inventory enumerates **248 nested statement, branch, literal,
+expression and constructor-binding sites across all 16 declarations**.
+Related nested nodes share a semantic mutation; they are not counted as
+independent kills. The systematic campaign has **113 valid mutations: 107
+assertion kills and six proved original-caller equivalents**, with no
+unclassified site or surviving non-equivalent behavior. The exception marker
+has an empty const constructor and zero mutation sites. The unreachable
+`_RandomChoiceTile` accounts for 26 dead sites under shared rule 4. The Step-0
+claim that State `_format` was dead is corrected: `SeekHud` receives its tear-off.
+
+The checkpoint adds **31 successful test identities**. Each new test itself
+fails at least one accepted original-application mutation; the per-test witness
+ledger is `step0b/new-test-mutation-witnesses.json`. All additions assert runtime
+widgets, callbacks, player commands, preferences, navigation or diagnostic
+output through existing original callers. Source guard/reader tests are excluded
+from mutation scores. Default Flutter pending-timer assertions remain enabled.
+The direct gate tests additionally exercise its existing public API.
+
+All evidence below is under
+`<git-common-dir>/refactor-evidence/vplayer/p1/step0b/`. The detached worktree
+`original/` stays pinned to c50238016; each patch changes one analyzer-owned
+original declaration and restores source afterwards. `SETUP.json` and
+`test-inputs-complete.json` record the original and complete final test inputs
+(the earlier `test-inputs-final.json` predates the added seek-HUD test). Accepted
+patches, commands, raw JSONL, stderr and assertion identities are in
+`sample/` and `sweep/`; canonical ledgers are `sample-results.json` and
+`systematic-coverage.json`. `ast-points.json` and the latter ledger retain every
+site, exact source offsets/text, semantic mutation links and equivalence reasons.
+Each AST invocation uses a fresh isolated parser under
+`.dart_tool/vplayer_parser/`, with copied kernels deleted. Processes use
+`nice -n 19`; Flutter test runs are serialized.
+
+### Updated frozen-declaration coverage matrix
+
+| Frozen original | Enumerated sites | Original caller / observable contract | Tests and mutation witnesses |
+|---|---:|---|---|
+| `_ManualSourceValidationFailure` | 0 | Original source pick / rejected-source rollback and reopened outgoing position | `video_player_source_test.dart`; empty const exception marker has zero mutation sites; Step-0 m13/m14 cover construct/catch |
+| `_SeasonEpisodeSelection` | 4 | Identity search dialog / adopted season and episode; existing pair reuse | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; s13/s14 |
+| `_SubtitleApplyAttempt` | 22 | Mounted menu, automatic restore and decoder-error caller / pending, rejected, successful, superseded and late-failure ownership; persisted audio, previous addon and sync path | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; s01–s12 |
+| `_IptvZapPage` | 12 | Original ChannelUp callback / channels, page offset/total/source and replacement category lists across News→Sports→Movies | `video_player_zap_test.dart`, `video_player_zap_categories_test.dart`; s15–s20 |
+| `IptvCatchupRequestGate` | 34 | Public begin/cancel/complete/isCurrent and original asynchronous guide callbacks / exact tickets, stale and active completion, idle cancellation, 4096 histories | `video_player_catchup_gate_test.dart`, `video_player_catchup_caller_test.dart`; g01–g16, c15/c16 |
+| `_diagnosticSubtitleId` | 4 | Original failed embedded/data/addon apply / runtime requestedId log redaction and source | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; h06–h09 |
+| `_format` | 1 | Mounted original pan callbacks publish SeekHud / rendered target and signed delta in minutes, hours and reverse seek; committed seek and HUD expiry | `video_player_menu_test.dart`; f01/c19; State tear-off is reachable, correcting the Step-0 dead-code claim |
+| `_pad2` | 3 | Original playlist action / synthetic guide filename for S3E7 and S12E34 | `video_player_menu_test.dart`; h01/h02/h24, uniquely scoped c1 |
+| `_normalisedContentType` | 6 | Original identity search/adoption / uppercase movie and series, unsupported type rejection | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; h03–h05/h25, i11/i42/i44 |
+| `_subtitleSearchDisplayLabel` | 21 | Search selection then mounted player menu / absent, empty and trimmed year; movie without dialog; existing or prompted series episode suffix | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i01–i09 |
+| `_filterIdentitySearchResults` | 65 | HTTP-backed real Stremio search caller / empty result, IMDb/type filtering, namespaces, first-wins ties, each score term, poster>year in both orders, result insertion order | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i10–i28/i42–i43/i45–i49/i51 |
+| `_normalisePosterUrl` | 11 | Identity search result / Image.network URL or its absence for null/whitespace | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i29–i33 |
+| `_identityMetaSubtitle` | 20 | Identity search tile / Movie/Series, original year text, empty and named addon, separator | `video_player_identity_test.dart`, `video_player_identity_edges_test.dart`; i34–i41/i44 |
+| `_subtitlePreferenceMatchesAttempt` | 12 | Original preference write/decoder rollback / off, embedded, URI and data tracks; live stale menu snapshots and malformed stremio prefix | `video_player_subtitle_test.dart`, `video_player_subtitle_edges_test.dart`; h10–h17 |
+| `_generateFilenameHash` | 7 | Fallback resume caller / actual bookmark seek and storage identity for multiple dots, uppercase extension, title fallback, no extension, trailing dot and dotfile | `video_player_resume_test.dart`; h18–h23/h26 |
+| `_RandomChoiceTile` | 26 | Dead original: both constructions follow the constant-true unified-menu return | c18 survives; all 26 sites unreachable; active menu remains exercised by `video_player_menu_test.dart` |
+
+### Claude's 20-mutation rerun
+
+The exact requested sample, including c1's unique complete `_pad2` declaration,
+has **18 assertion kills / 20 valid runs (90%)**. Its two survivors are
+proved equivalent/unreachable, not accepted gaps: 18/18 non-equivalent mutations
+are killed. Compilation failures and loops never count as kills.
+
+| ID | Original mutation | Result / assertion witness |
+|---|---|---|
+| c1 | _pad2 unique declaration: padLeft width 2→3 | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity; synthetic guide preserves two-digit season and episode |
+| c2 | Filename hash: remove extension normalization | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv"; fallback resume identity restores bookmark for "Plain.Movie.MP4"; fallback resume identity restores bookmark for ""; fallback resume identity restores bookmark for "Trailing."; fallback resume identity restores bookmark for ".hidden" |
+| c3 | Protocol-relative poster: https→http | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode |
+| c4 | Normalized non-series type: movie→series | Assertion killed: identity year presence improves equally illustrated duplicate "2025"; identity year presence improves equally illustrated duplicate "   "; movie identity adopts without episode prompt for year "null"; movie identity adopts without episode prompt for year "   "; movie identity adopts without episode prompt for year " 2025 "; identity search rejects custom series ids and keeps type namespaces; identity duplicate ranking prefers poster over year in forward order; identity duplicate ranking prefers poster over year in reverse order; identity zero scores keep first title and original result order; identity equal scores keep first title and original result order |
+| c5 | Identity tile series label: Series→Movie | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode |
+| c6 | Identity tile separator: vertical bar→dash | Assertion killed: identity search filters and labels results then validates and accepts the season episode; identity search filters and labels results then cancels the season episode; movie identity adopts without episode prompt for year " 2025 " |
+| c7 | Identity filter: accept IMDb identities without tt prefix | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| c8 | Equal-score duplicate: >→>= replaces first | Assertion killed: identity zero scores keep first title and original result order; identity equal scores keep first title and original result order |
+| c9 | Existing duplicate score: swap poster/year weights | Assertion killed: identity duplicate ranking prefers poster over year in reverse order |
+| c10 | Subtitle search label: swap season/episode | Assertion killed: identity search filters and labels results then validates and accepts the season episode; series identity reuses launch episode and keeps absolute poster URL; series identity preserves a single-slash poster URL |
+| c11 | Subtitle search year label: parentheses→brackets | Assertion killed: identity year presence improves equally illustrated duplicate "2025"; identity search filters and labels results then validates and accepts the season episode; movie identity adopts without episode prompt for year " 2025 "; identity equal scores keep first title and original result order |
+| c12 | Diagnostic ID: omit data-track redaction | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| c13 | Off requested: accept any persisted subtitle identity | Assertion killed: off attempt ignores unrelated audio preference identity |
+| c14 | External preference prefix: stremio:→stremio | Assertion killed: external attempt ignores unrelated audio preference identity |
+| c15 | Gate isCurrent: remove generation conjunction | Equivalent: active ticket is null or equals generation at every public method boundary |
+| c16 | Gate cancel: remove generation increment | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| c17 | Gate complete: retain active ticket | Assertion killed: catchup cancellation advances public ticket generation before next lookup; catchup ownership holds across every six-action request history; catchup completion consumes only the active ticket |
+| c18 | Legacy RandomChoiceTile subtitle Text: subtitle→title | Dead original: const-true unified-menu branch returns before both constructions |
+| c19 | State _format passed to SeekHud: formatDuration→Duration.toString | Assertion killed: horizontal seek HUD formats original target and signed delta |
+| c20 | SubtitleApplyAttempt persisted default: false→true | Assertion killed: data apply does not claim an embedded preference as addon persistence; automatic restored subtitle failure leaves saved preference untouched |
+
+**c15 confirmed equivalent; c16 refuted.** The gate invariant starts with no
+active ticket. `begin` establishes active=generation; successful `complete`
+and `cancel` clear active; rejected operations leave it unchanged. Induction
+therefore makes c15's conjunction redundant for all public histories, also
+checked across all 4096 six-action histories. In contrast, public ticket
+values expose c16: `begin()`=1, `cancel()`=true, next `begin()`=3; c16 returns 2.
+The new exact-ticket test assertion-kills it. Ownership booleans alone miss
+this difference. `reachability-proofs.json` records the invariant and counterexample.
+
+**c18 is an original dead-code exception, not covered behavior.** The only
+two `_RandomChoiceTile` constructions are after `_showRandomPlaybackMenu`'s
+return under `const bool kUnifiedPlayerMenuEnabled = true` in the imported
+player-menu library. The analyzer token inventory and exact caller/constant
+text are archived in `reachability-proofs.json`. No fabricated caller, flag
+change or additional seam is used to claim a kill.
+
+**c19 is a real behavior gap, now closed.** The earlier Step-0 report and an
+initial Step-0b call-only search missed `SeekHud(hud: hud, format: _format)`.
+The new mounted pan-callback test renders the actual HUD's minutes/hours target
+and signed delta, including the original double-minus reverse-seek text,
+commits the seek and checks HUD expiry. c19/f01 assertion-fail this test.
+Controls duration assertions remain separate; application behavior is unchanged.
+
+### Systematic statement / branch / literal mutation table
+
+Every row is a valid completed run on the original. The full patch and all
+failing assertion identities are retained in the canonical ledger; the table
+uses one witness per killed row for readability. Constructor rows modify one
+forwarded field only. E1–E6 below are equivalents, excluded from kill counts.
+
+| ID | Frozen original | Semantic change | Result / witness |
+|---|---|---|---|
+| s01 | `_SubtitleApplyAttempt` | `bool failed = false;` → `bool failed = true;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s02 | `_SubtitleApplyAttempt` | `bool handled = false;` → `bool handled = true;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s03 | `_SubtitleApplyAttempt` | `bool successReturned = false;` → `bool successReturned = true;` | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s04 | `_SubtitleApplyAttempt` | `bool persisted = false;` → `bool persisted = true;` | Assertion killed: data apply does not claim an embedded preference as addon persistence |
+| s05 | `_SubtitleApplyAttempt` | Constructor forwarding: generation = generation + 1 | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| s06 | `_SubtitleApplyAttempt` | Constructor forwarding: requested = previous | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s07 | `_SubtitleApplyAttempt` | Constructor forwarding: previous = requested | Assertion killed: audio write during pending subtitle apply is not owned by unfinished attempt |
+| s08 | `_SubtitleApplyAttempt` | Constructor forwarding: source = 'wrong-source' | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| s09 | `_SubtitleApplyAttempt` | Constructor forwarding: previousStremioId = null | Assertion killed: late embedded failure restores previous addon selection once |
+| s10 | `_SubtitleApplyAttempt` | Constructor forwarding: previousExternalPath = null | Assertion killed: late embedded failure restores previous addon selection once |
+| s11 | `_SubtitleApplyAttempt` | `String? persistedAudioId;` → `String? persistedAudioId = 'wrong-audio';` | Equivalent E1 |
+| s12 | `_SubtitleApplyAttempt` | `Completer<void>? persistenceDone;` → `Completer<void>? persistenceDone = Completer<void>()..complete();` | Equivalent E2 |
+| s13 | `_SeasonEpisodeSelection` | Constructor forwarding: season = season + 1 | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| s14 | `_SeasonEpisodeSelection` | Constructor forwarding: episode = episode + 1 | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| s15 | `_IptvZapPage` | Constructor forwarding: channels = const [] | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s16 | `_IptvZapPage` | Constructor forwarding: offset = offset + 1 | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s17 | `_IptvZapPage` | Constructor forwarding: total = total + 1 | Assertion killed: IPTV zap preserves nonzero page offsets and clamps the reported total |
+| s18 | `_IptvZapPage` | Constructor forwarding: sourceId = null | Assertion killed: IPTV zap preserves nonzero page offsets and fetches the next page |
+| s19 | `_IptvZapPage` | Constructor forwarding: category = null | Assertion killed: IPTV category crossing carries page category source and replacement directory |
+| s20 | `_IptvZapPage` | Constructor forwarding: categories = const [] | Assertion killed: IPTV category crossing carries page category source and replacement directory |
+| g01 | `IptvCatchupRequestGate` | `int _generation = 0;` → `int _generation = 1;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g02 | `IptvCatchupRequestGate` | `int? _activeTicket;` → `int? _activeTicket = 0;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g03 | `IptvCatchupRequestGate.begin` | `++_generation` → `_generation` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g04 | `IptvCatchupRequestGate.begin` | `_activeTicket = ticket;` → `_activeTicket = null;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g05 | `IptvCatchupRequestGate.begin` | `return ticket;` → `return ticket + 1;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g06 | `IptvCatchupRequestGate.isCurrent` | `_activeTicket == ticket` → `_activeTicket != ticket` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g07 | `IptvCatchupRequestGate.isCurrent` | `_generation == ticket` → `_generation != ticket` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g08 | `IptvCatchupRequestGate.complete` | `if (!isCurrent(ticket)) return false;` → `if (isCurrent(ticket)) return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g09 | `IptvCatchupRequestGate.complete` | `return false;` → `return true;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g10 | `IptvCatchupRequestGate.complete` | `_activeTicket = null;` → `_activeTicket = ticket;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g11 | `IptvCatchupRequestGate.complete` | `return true;` → `return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g12 | `IptvCatchupRequestGate.cancel` | `if (_activeTicket == null) return false;` → `if (_activeTicket != null) return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g13 | `IptvCatchupRequestGate.cancel` | `return false;` → `return true;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g14 | `IptvCatchupRequestGate.cancel` | `_generation++;` → `(deleted)` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| g15 | `IptvCatchupRequestGate.cancel` | `_activeTicket = null;` → `_activeTicket = _generation;` | Assertion killed: catchup ownership holds across every six-action request history |
+| g16 | `IptvCatchupRequestGate.cancel` | `return true;` → `return false;` | Assertion killed: catchup cancellation advances public ticket generation before next lookup |
+| h01 | `_pad2` | `padLeft(2, '0')` → `padLeft(2, 'x')` | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity |
+| h02 | `_pad2` | `padLeft(2, '0')` → `padLeft(1, '0')` | Assertion killed: original controls render duration and synthetic guide stamps padded episode identity |
+| h03 | `_normalisedContentType` | `type.toLowerCase() == 'series'` → `type == 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h04 | `_normalisedContentType` | `? 'series' : 'movie'` → `? 'movie' : 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h05 | `_normalisedContentType` | `? 'series' : 'movie'` → `? 'series' : 'series'` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| h06 | `_diagnosticSubtitleId` | `track.uri \|\| track.data` → `track.data` | Assertion killed: uri subtitle rejection redacts file path in diagnostic id |
+| h07 | `_diagnosticSubtitleId` | `track.uri \|\| track.data` → `track.uri` | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| h08 | `_diagnosticSubtitleId` | `'<external>'` → `'<changed>'` | Assertion killed: data subtitle rejection redacts contents in diagnostic id |
+| h09 | `_diagnosticSubtitleId` | `track.id;` → `'wrong-id';` | Assertion killed: subtitle rejected apply rolls back once and reports the original diagnostic id |
+| h10 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.id == 'no'` → `attempt.requested.id != 'no'` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| h11 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == 'no';` → `return true;` | Assertion killed: off attempt ignores unrelated audio preference identity |
+| h12 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == 'no';` → `return false;` | Assertion killed: off attempt ignores unrelated audio preference identity |
+| h13 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.uri \|\| attempt.requested.data` → `attempt.requested.data` | Assertion killed: external subtitle apply persists its addon identity and rolls back after a decoder error |
+| h14 | `_subtitlePreferenceMatchesAttempt` | `attempt.requested.uri \|\| attempt.requested.data` → `attempt.requested.uri` | Assertion killed: data apply does not claim an embedded preference as addon persistence |
+| h15 | `_subtitlePreferenceMatchesAttempt` | `return subtitle.startsWith('stremio:');` → `return subtitle.startsWith('stremio');` | Assertion killed: external attempt ignores unrelated audio preference identity |
+| h16 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == attempt.requested.id;` → `return false;` | Assertion killed: subtitle success then late failure restores selection with the persisted audio identity |
+| h17 | `_subtitlePreferenceMatchesAttempt` | `return subtitle == attempt.requested.id;` → `return true;` | Assertion killed: embedded attempt ignores unrelated audio preference identity |
+| h18 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'\.[^.]+$')` | Assertion killed: fallback resume identity restores bookmark for "Trailing." |
+| h19 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'\..*$')` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h20 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$')` → `RegExp(r'[^.]*$')` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h21 | `_generateFilenameHash` | `RegExp(r'\.[^.]*$'), ''` → `RegExp(r'\.[^.]*$'), 'x'` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h22 | `_generateFilenameHash` | `nameWithoutExt.hashCode.toString()` → `filename.hashCode.toString()` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| h23 | `_generateFilenameHash` | `return hash;` → `return 'wrong';` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| i01 | `_subtitleSearchDisplayLabel` | `meta.year?.trim()` → `meta.year` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i02 | `_subtitleSearchDisplayLabel` | `year != null && year.isNotEmpty` → `year != null` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i03 | `_subtitleSearchDisplayLabel` | `? '${meta.name} ($year)'` → `? '${meta.name} [$year]'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i04 | `_subtitleSearchDisplayLabel` | `: meta.name;` → `: 'wrong';` | Assertion killed: identity year presence improves equally illustrated duplicate "   " |
+| i05 | `_subtitleSearchDisplayLabel` | `contentType == 'series'` → `contentType != 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i06 | `_subtitleSearchDisplayLabel` | `&& season != null` → `(deleted)` | Equivalent E3 |
+| i07 | `_subtitleSearchDisplayLabel` | `&& episode != null` → `(deleted)` | Equivalent E4 |
+| i08 | `_subtitleSearchDisplayLabel` | `return '$title S${season}E$episode';` → `return '$title S${episode}E$season';` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i09 | `_subtitleSearchDisplayLabel` | `return title;` → `return '$title S${season}E$episode';` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i10 | `_filterIdentitySearchResults` | `for (final meta in metas)` → `for (final meta in metas.reversed)` | Assertion killed: identity zero scores keep first title and original result order |
+| i11 | `_filterIdentitySearchResults` | `imdbId == null \|\| !imdbId.startsWith('tt')` → `imdbId == null` | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| i12 | `_filterIdentitySearchResults` | `type != 'movie' && type != 'series'` → `type != 'movie' \|\| type != 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i13 | `_filterIdentitySearchResults` | `type != 'movie' && type != 'series'` → `false` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i14 | `_filterIdentitySearchResults` | `meta.type.toLowerCase()` → `meta.type` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i15 | `_filterIdentitySearchResults` | `'$type:$imdbId'` → `'$imdbId'` | Assertion killed: identity search rejects custom series ids and keeps type namespaces |
+| i16 | `_filterIdentitySearchResults` | `bestByKey[key] = meta;` → `(deleted)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i17 | `_filterIdentitySearchResults` | `bestByKey[key] = meta;` → `(deleted)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i18 | `_filterIdentitySearchResults` | `if (newScore > existingScore)` → `if (newScore >= existingScore)` | Assertion killed: identity zero scores keep first title and original result order |
+| i19 | `_filterIdentitySearchResults` | `if (newScore > existingScore)` → `if (newScore < existingScore)` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i20 | `_filterIdentitySearchResults` | `(existing.poster != null ? 2 : 0)` → `(existing.poster != null ? 0 : 0)` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| i21 | `_filterIdentitySearchResults` | `(existing.year != null ? 1 : 0)` → `(existing.year != null ? 0 : 0)` | Assertion killed: identity equal scores keep first title and original result order |
+| i22 | `_filterIdentitySearchResults` | `(meta.poster != null ? 2 : 0)` → `(meta.poster != null ? 0 : 0)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i23 | `_filterIdentitySearchResults` | `(meta.year != null ? 1 : 0)` → `(meta.year != null ? 0 : 0)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i24 | `_filterIdentitySearchResults` | `(existing.poster != null ? 2 : 0)` → `(existing.poster != null ? 2 : 2)` | Assertion killed: identity duplicate ranking prefers poster over year in reverse order |
+| i25 | `_filterIdentitySearchResults` | `(existing.year != null ? 1 : 0)` → `(existing.year != null ? 1 : 1)` | Assertion killed: identity year presence improves equally illustrated duplicate "2025" |
+| i26 | `_filterIdentitySearchResults` | `(meta.poster != null ? 2 : 0)` → `(meta.poster != null ? 2 : 2)` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| i27 | `_filterIdentitySearchResults` | `(meta.year != null ? 1 : 0)` → `(meta.year != null ? 1 : 1)` | Assertion killed: identity zero scores keep first title and original result order |
+| i28 | `_filterIdentitySearchResults` | `toList(growable: false)` → `toList(growable: true)` | Equivalent E5 |
+| i29 | `_normalisePosterUrl` | `url.trim().isEmpty` → `url.isEmpty` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i30 | `_normalisePosterUrl` | `return null;` → `return 'https://player.test/wrong.png';` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i31 | `_normalisePosterUrl` | `url.startsWith('//')` → `url.startsWith('/')` | Assertion killed: series identity preserves a single-slash poster URL |
+| i32 | `_normalisePosterUrl` | `return 'https:$url';` → `return 'http:$url';` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i33 | `_normalisePosterUrl` | `return url;` → `return null;` | Assertion killed: series identity reuses launch episode and keeps absolute poster URL |
+| i34 | `_identityMetaSubtitle` | `meta.type.toLowerCase() == 'series'` → `meta.type == 'series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i35 | `_identityMetaSubtitle` | `? 'Series' : 'Movie'` → `? 'Movie' : 'Movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i36 | `_identityMetaSubtitle` | `? 'Series' : 'Movie'` → `? 'Series' : 'Series'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i37 | `_identityMetaSubtitle` | `meta.year != null && meta.year!.trim().isNotEmpty` → `meta.year != null` | Assertion killed: movie identity adopts without episode prompt for year "   " |
+| i38 | `_identityMetaSubtitle` | `meta.year!,` → `'wrong-year',` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i39 | `_identityMetaSubtitle` | `meta.sourceAddon?.name.trim().isNotEmpty == true` → `meta.sourceAddon != null` | Assertion killed: movie identity adopts without episode prompt for year "null" |
+| i40 | `_identityMetaSubtitle` | `meta.sourceAddon!.name` → `'wrong-addon'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i41 | `_identityMetaSubtitle` | `parts.join(' \| ')` → `parts.join(' - ')` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i42 | `_filterIdentitySearchResults` | `imdbId == null \|\| !imdbId.startsWith('tt')` → `imdbId != null && !imdbId.startsWith('tt')` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h24 | `_pad2` | `n.toString()` → `n.toRadixString(16)` | Assertion killed: synthetic guide preserves two-digit season and episode |
+| h25 | `_normalisedContentType` | `== 'series'` → `== 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i43 | `_filterIdentitySearchResults` | `'$type:$imdbId'` → `'$type$imdbId'` | Equivalent E6 |
+| i44 | `_identityMetaSubtitle` | `== 'series'` → `== 'movie'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i45 | `_filterIdentitySearchResults` | `<String, StremioMeta>{}` → `<String, StremioMeta>{'injected': const StremioMeta(id: 'tt0900000', imdbId: 'tt0900000', type: 'movie', name: 'Injected')}` | Assertion killed: empty identity catalog leaves identity unset and shows empty results |
+| i46 | `_filterIdentitySearchResults` | `type != 'movie'` → `type != 'film'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i47 | `_filterIdentitySearchResults` | `type != 'series'` → `type != 'tv'` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| i48 | `_filterIdentitySearchResults` | `continue;` → `break;` | Assertion killed: identity search filters and labels results then validates and accepts the season episode |
+| h26 | `_generateFilenameHash` | `hashCode.toString()` → `hashCode.toRadixString(16)` | Assertion killed: fallback resume identity restores bookmark for "Plain.Movie.mkv" |
+| i49 | `_filterIdentitySearchResults` | `return bestByKey.values.toList(growable: false);` → `return bestByKey.values.toList(growable: false).reversed.toList(growable: false);` | Assertion killed: identity zero scores keep first title and original result order |
+| i51 | `_filterIdentitySearchResults` | `final existing = bestByKey[key];` → `final existing = bestByKey['wrong'];` | Assertion killed: identity duplicate ranking prefers poster over year in forward order |
+| f01 | `_format` | `formatDuration(d)` → `d.toString()` | Assertion killed: horizontal seek HUD formats original target and signed delta |
+
+### Equivalent variants and excluded experiments
+
+- **E1 (s11):** persistedAudioId is read only when successReturned && persisted. The only original path setting persisted sets persistedAudioId synchronously before its first await; an unpersisted attempt never reads the initial value.
+- **E2 (s12):** persistenceDone is awaited only by a successfully persisted attempt; _persistTrackChoice synchronously overwrites the initial value with its actual write completer before yielding. An unpersisted attempt never reads it.
+- **E3 (i06):** The only caller normalizes a selected series then obtains BOTH season/episode from an existing pair or from the validated dialog before calling this helper. Series calls cannot have null season.
+- **E4 (i07):** The same sole-caller validation ensures series calls cannot have null episode. Movie calls short circuit on contentType and never render episode suffixes.
+- **E5 (i28):** The search sheet assigns the returned list, reads its length/items and iterates it. It never mutates it or exposes the list; only a selected StremioMeta leaves the sheet. Growability has no original-caller effect.
+- **E6 (i43):** Keys stay injective without the colon: normalized type is exactly movie or series (distinct, non-prefix strings), followed by the unchanged IMDb id. The key remains private to this map; first-insertion/result order is unchanged.
+
+The initial s07 constructor generator also matched `previousStremioId` and
+`previousExternalPath`, producing a compile failure. That invalid run is
+excluded in `sweep-invalid/s07.*`; the corrected single-field patch completes
+and assertion-fails unchanged behavior tests. An s17 total+1 experiment over
+both zap tests caused a paging microtask loop and was stopped/excluded in
+`sweep-discarded/s17.*`. The exact same patch was then run against the unchanged
+underreported-total test alone and killed its forbidden-extra-request assertion.
+No test, assertion or timeout was weakened. `s17-loop-NOTE.txt` records this.
+
+Some Flutter widget assertion failures are emitted as `print` events with a
+`TestFailure`/`Expected:` block, followed by a failed `testDone`, rather than
+`error.isFailure=true`. The initial progress-only classifier missed these.
+`sample-classification-NOTE.txt` documents the correction: `classify.py` pairs
+the raw assertion block with the actually failed test. No compile/load failure,
+hang or incomplete run is counted. `sample-initial/` preserves the initial
+c1/c13/c14 runs; their accepted reruns use the final two-digit guide and actual
+stale mounted-menu snapshots. The final null-poster witness reruns i30; i51
+also kills the map's duplicate-lookup mutation. All 31 added identities have
+an individual accepted assertion witness.
+
+### Step-0b suite baseline
+
+The complete suite baseline will be recorded after the Step-0b test commit,
+using the existing evidence-only parser-routing adapter and explicit harness
+compile-time flag. It must add exactly these 31 successes against the complete
+Step-0 baseline, with no changed existing outcome, new failure, missing test
+or new skip. No allowlist is changed.
