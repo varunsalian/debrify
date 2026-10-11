@@ -2953,3 +2953,68 @@ in Progress and `runtime-routing-note.json`. Production moves and CI activation
 remain for Step 1. Phone portrait-start seed/PiP restore and end-of-series
 phone/TV/tvOS/desktop framing, speed, gesture and orientation checks are pending.
 Stop after Step 0.
+
+## Phase 4 independent sample — original `5e08bb3a3` (2026-10-12)
+
+Claude's separate 173-case original-caller sample (`p4/claude-sample/`)
+kills 19/20 raw; g20 is equivalent, so **19/19 valid = 100%**.
+All 19 kills have assertion failures and no compile errors. This complements
+the systematic 170-point sweep above; no addendum or production fix is needed.
+Normalized results and source hashes: `p4/step1/independent-sample.json`.
+
+| Mutation | Original behaviour changed | Outcome / assertion witness |
+|---|---|---|
+| `g1` | Cover → Fit Height | killed: display aspect key cycles to Fit Width with rendered ratio HUD zoom and save |
+| `g2` | Cinema Zoom HUD label | killed: display aspect key cycles to Cinema Zoom with rendered ratio HUD zoom and save |
+| `g3` | HUD clear 1500 → 3000 ms | killed: display aspect key cycles to Cover with rendered ratio HUD zoom and save |
+| `g4` | Zoom logarithm denominator removed | killed: display defaults seed cinema framing and record the loaded aspect diagnostic |
+| `g5` | Zoom decimal precision 6 → 3 | killed: display defaults seed cinema framing and record the loaded aspect diagnostic |
+| `g6` | Selected speed resume save removed | killed: display speed menu preserves ordered rates wraps selections and persists each selected value |
+| `g7` | Same-aspect early return removed | killed: display aspect menu passes selection and identical aspect is a no-op |
+| `g8` | Both locked flags → either locked flag | killed: display hold lock back=true options=false reads current widget flags |
+| `g9` | Paused hold guard removed | killed: display paused hold and release without a hold have no effects |
+| `g10` | Edge guard 24 → 48 | killed: display hold edge and visible-bar strict boundaries preserve button regions |
+| `g11` | Top bar 72 → 36 | killed: display hold edge and visible-bar strict boundaries preserve button regions |
+| `g12` | Held speed 2.0 → 1.5 | killed: display hold lock back=true options=false reads current widget flags |
+| `g13` | Held HUD true → false | killed: display hold lock back=true options=false reads current widget flags |
+| `g14` | Prior-speed clear removed | killed: display temporary 2x never persists and queued hold saves sample after release and speed change |
+| `g15` | Landscape Right omitted | killed: display desktop landscape seed ignores phone portrait preference and toggles both directions |
+| `g16` | Immersive mode omitted | killed: display desktop landscape seed ignores phone portrait preference and toggles both directions |
+| `g17` | Rendered fit always contain | killed: display aspect key cycles to Cover with rendered ratio HUD zoom and save |
+| `g18` | Custom ratio always null | killed: display styled dock forwards current speed aspect and orientation actions |
+| `g19` | Persist held speed instead of prior speed | killed: display temporary 2x never persists and queued hold saves sample after release and speed change |
+| `g20` | Compute scale before non-native return | equivalent (pure computation; excluded) |
+
+**g20 equivalence.** `_aspectMode` is a plain enum field.
+`AspectModeUtils.getScaleForMode` consists only of
+`mode == AspectMode.cinemaZoom ? 4.0 / 3.0 : 1.0`; moving that read and pure
+calculation before `platform is! mk.NativePlayer` cannot affect callers.
+The existing non-native behaviour test passes in the sample. No guard or
+application statement is changed to close an equivalent point.
+
+## Phase 4 Step 1 — frozen production creation (2026-10-12)
+
+Creation follows `61c081e33`; tested source hashes and commands in
+`p4/step1/completion.json`. Exact formatted Step-T materialization is applied:
+16 declarations into the 243-line `VpDisplayModeController`, its exact
+14-member Host and frozen adapter; eager State constructor appends `_display`
+after `_sleep` and `_skip`. Both HUD notifier allocations stay State-owned,
+with original lifecycle ordering. All 33 retained occurrences are declared
+substitutions; defaults and resume keep direct writes at the original positions.
+No production bug fix or new seam.
+
+| Check / transition | Result |
+|---|---|
+| Applied manifest | P4 current-tree, exhaustive ownership and retained order, imports, frozen scaffolding, historical destination protection: zero differences (`step1/current.txt`) |
+| Optional commas / construction | Source bytes equal the proven Step-T formatted files; zero inserted/deleted optional commas; idempotent; zero formatting-introduced diagnostics; four inert initializers and 14 live Host readers (`tooling/optional-commas.json`, `construction-proof.json`) |
+| Affected original-caller / guard tests | 189 successes, no failures/skips: all video-player tests, auto-next routing and theme source guards (`step1-affected.jsonl`); validating reader follows P4 without assertion edits |
+| CI | Current/self → P4; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`; analyzer P4 inventory preserves P1/P2/P3 mappings; five display test files registered; existing hook flag/fetch-depth 0/feature lists retained |
+| Theme / architecture | All three source lists, rendered set and theme manifest extended; 1,665 migrated files and architecture negatives pass; existing exact bridge and 500-line caps apply |
+| Sizes | Facade 17,766 → 17,592; dated shrink-only ratchet; controller 243; 2,996 files / 140 ratchets pass |
+| Analyzer | Root/CI scoped 82, zero beyond frozen P4 maxima; root 1,777 → 1,778: one new controller import-order info only; outside identities/multiplicities exact; surviving warning allowlist unchanged |
+| Format / scope | Exact CI format list passes; two declared application paths only; pubspec unchanged; isolated P4 parser/evidence routing |
+
+Clean-tree gate follows this creation commit: full suite against accepted
+`p4/step0-suite.jsonl`, all Dart/Kotlin self/current/history checks and both
+release builds. Phone portrait seed, PiP restore and end-of-series manual
+framing/rate/hold/orientation checklist remain pending.

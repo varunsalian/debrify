@@ -1690,6 +1690,31 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   and current/analyzer transition belong to Step-1 production creation.
   Phone portrait/PiP and end-of-series device checklist remain pending.
 
+### 2026-10-12 — Phase 4 Step-1 production creation
+
+- **Revision.** Creation follows `61c081e33`; frozen sources/hashes/commands in
+  `p4/step1/completion.json`. Original remains named `890df14d8`.
+- **Independent review sample.** Original `5e08bb3a3`: 19/20 raw; g20 pure
+  enum-field read/scale computation is equivalent, agreed with Claude;
+  19/19 valid = 100%, assertion kills only. Deps table and
+  `p4/step1/independent-sample.json` record every witness. No addendum needed.
+- **Applied.** 16 frozen declarations, exact 14-member Host/adapter and eager
+  `_display` append; 33 retained occurrences; direct resume/default writes;
+  both HUD notifiers stay State-owned. Controller 243 lines; facade 17,592.
+- **Commands/results.** Nice-19 P4 current checker: zero differences. Serialized
+  hook-defined/no-pub affected suite: 189 successes, no failure/skip.
+  Exact CI format, 2,996-file size / 140 ratchets, 1,665-file architecture and
+  negatives pass. Scoped analyzer 82 / zero additions; root 1,778 with expected
+  probe-only +1 and identical outside identities. Existing warning allowlist
+  and all earlier analyzer mappings preserved.
+- **CI/source guards.** Current/self/analyzer → P4, P1/P2/P3 historical merges
+  retained; five display test files registered. Validating reader chains P4;
+  theme's three lists, rendered set and manifest extended. No assertion edits.
+- **Constraints/next.** Exact proven formatted bytes, zero optional-comma
+  changes and formatting diagnostics, pubspec unchanged; isolated parser and
+  evidence overrides. No bug fixes, push, merge, switch or device commands.
+  Clean creation gate follows; manual end-of-series checklist remains pending.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

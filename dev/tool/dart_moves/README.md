@@ -190,3 +190,13 @@ historical checks remain at their merge revisions. All six behavior files and
 all three theme destination lists are registered. The validating source reader
 already chains these ownership manifests; no skip source assertions require a
 textual retarget. Original races/profile outcomes are unchanged.
+
+Phase 4 Step 1 applies `vplayer_p4.json`: 16 declarations move to the
+243-line display-mode controller, with all 33 retained references qualified.
+State construction appends display after sleep/skip; both HUD allocations and
+disposal statements stay State-owned. Resume/defaults use direct field writes.
+The widget selectors use the registered complete substitutions and frozen live
+adapter getters. CI selects P4 current/self and both analyzer arguments;
+P1/P2/P3 historical checks stay at their merge revisions. All five display
+behavior files and all three theme lists are registered. The validating reader
+chains P4 automatically; no moved legacy source anchor requires a retarget.
