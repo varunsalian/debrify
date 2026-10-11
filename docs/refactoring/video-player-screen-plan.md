@@ -731,7 +731,7 @@ gate); re-measure at the phase base by name.
 
 | Original | Kind | Fate |
 |---|---|---|
-| comment 1283–1284 + `_skipSegmentSettingsLoaded` 1285 | field `false` | moved → `skipSegmentSettingsLoaded` |
+| comment 1282–1284 + `_skipSegmentSettingsLoaded` 1285 | field `false` | moved → `skipSegmentSettingsLoaded` |
 | `_skipSegmentsEnabled` 1286 | field `false` | moved |
 | `_skipSegmentProviderId` 1287 | field `SkipSegmentProviders.auto` (a `static const` String — verify) | moved |
 | `_skipSegmentProvider` 1288 | field `null` | moved |
@@ -740,7 +740,6 @@ gate); re-measure at the phase base by name.
 | `_skipSegmentsFetchGeneration` 1292 | field `0` | moved |
 | `_skipSegmentsCache` 1293 | `final` map literal | moved |
 | `_skipSegmentsMediaReady` 1304 (doc) | field `true` | moved |
-| `_activeSkipSegmentUi` 1394 | `final` `SkipSegmentUiController()` — a `ValueNotifier(null)` allocation, no listeners/side effects → inert (proof recorded) | moved |
 | `_loadSkipSegmentSettings` 1714 | method | moved |
 | `_currentSkipSegmentRequest` 1789 | method (record return type) | moved |
 | `_syncSkipSegmentsForCurrentContent` 1854 | method | moved |
@@ -749,27 +748,43 @@ gate); re-measure at the phase base by name.
 | `_syncActiveSkipSegmentUi` 1938 | method | moved |
 | `_skipActiveSegment` 1942 | method | moved |
 
-Relocation changes initializer timing (State slots 1285–1304 and 1394 →
-State constructor body); every initializer above is a literal, `const`
-value, empty literal or the inert `ValueNotifier` allocation. Its order
-relative to `_playbackUiClock` (1392) is unobservable (no side effects);
-recorded proof per field.
+Relocation changes initializer timing (State slots 1285–1304 → State
+constructor body); every initializer above is a literal, a `static const`
+(`SkipSegmentProviders.auto`, `SkipSegments.empty` — confirmed) or an empty
+map literal; recorded proof per field. **`_activeSkipSegmentUi` (1394)
+stays State-owned**: its `SkipSegmentUiController()` → `ValueNotifier(null)`
+constructor dispatches a debug memory-allocation event
+(`change_notifier.dart:544`, `:235`), so moving the allocation would change
+that event's order relative to later notifier allocations (1433). The
+controller reaches the same instance through the Host.
 
 **Stays State-owned:** `_isTransitioning`, `_duration`, `_position`,
 `_playbackUiClock`, `_player`, `_playerCreated`, effective content
 identity getters, `_seriesPlaylist`, `_findSeriesEpisodeForCurrentIndex`,
 `_traktSeasonEpisode`, the tracker seek methods (phase 5 re-points them),
+`_activeSkipSegmentUi` (see above),
 `_skipButtonBottom` (dock layout, not skip logic).
 
-**Host** `VpSkipSegmentHost` (exact, every member used; measured at step
-T): `mounted`, `setState` (→ `_vpSetState`), `effectiveContentImdbId`,
-`effectiveContentType`, `effectiveContentSeason`,
-`effectiveContentEpisode`, `isTransitioning`, `duration`, `position`
-get **and set** (`_position = target`), `seriesPlaylist`,
-`findSeriesEpisodeForCurrentIndex(SeriesPlaylist)`,
-`traktSeasonEpisode()`, `playerCreated`, `playbackUiClock`, `player`,
-`traktScrobbleSeek(Duration)`, `simklScrobbleSeek(Duration)`,
-`mdblistScrobbleSeek(Duration)`. `HapticFeedback`, `SkipSegmentsStorage`,
+**Host** `VpSkipSegmentHost` (exact, every member used; 19 names / 20
+declarations, signatures frozen): `bool get mounted`,
+`void setState(VoidCallback fn)` (→ `_vpSetState`),
+`String? get effectiveContentImdbId`, `String? get effectiveContentType`,
+`int? get effectiveContentSeason`, `int? get effectiveContentEpisode`,
+`bool get isTransitioning`, `Duration get duration`,
+`Duration get position` + `set position(Duration v)`,
+`SeriesPlaylist? get seriesPlaylist`,
+`SeriesEpisode? findSeriesEpisodeForCurrentIndex(SeriesPlaylist sp)`,
+`({int? season, int? episode}) traktSeasonEpisode()` (non-null outer
+record), `bool get playerCreated`,
+`PlaybackUiClockController get playbackUiClock`, `mk.Player get player`,
+`SkipSegmentUiController get activeSkipSegmentUi`, and
+`void traktScrobbleSeek(Duration)`, `void simklScrobbleSeek(Duration)`,
+`void mdblistScrobbleSeek(Duration)` (exact types verified at step T).
+The moved request method keeps its nullable five-field named-record return
+type (1788). Destination imports (frozen at step T): `dart:async`, Flutter
+foundation/services, media_kit, custom series identity, series playlist,
+skip segment service + storage, playback UI clock, skip segment UI
+controller. `HapticFeedback`, `SkipSegmentsStorage`,
 `SkipSegmentProviders`, `CustomSeriesIdentity`, `RegExp` are imports.
 `debugPrint` stays a top-level call.
 
@@ -777,17 +792,30 @@ get **and set** (`_position = target`), `seriesPlaylist`,
 `_loadSkipSegmentSettings()` → `_skip.loadSkipSegmentSettings()`; player
 subscriptions 3815/3816/3861–3863 (`_skipSegmentsMediaReady = true` →
 `_skip.skipSegmentsMediaReady = true`, sync calls → `_skip.`); 4665
-`_activeSkipSegmentUi.clear()`; playlist load 10459 and 10651; dispose
-11954–11956 (generation bump and provider close **in place**, not via a
-new method) and 11998 (`_skip.activeSkipSegmentUi.dispose()` at the same
-position); TV key handler 13315/13316; build 15527 (`valueListenable:`)
-and 15560 (`onPressed: _skip.skipActiveSegment` — tear-off; verify
-`SkipSegmentButton`/the dock compare no callback identity).
+`_activeSkipSegmentUi.clear()` stays as is (State-owned); playlist load
+10459 and 10651; dispose 11954–11956 (generation bump and provider close
+**in place**, each statement individually, not via a new method); 11998
+`_activeSkipSegmentUi.dispose()` unchanged; TV key handler 13315/13316; build 15527 (`valueListenable:`)
+and 15560 (`onPressed: _skip.skipActiveSegment` — tear-off;
+`SkipSegmentButton` is stateless and the dock compares geometry, not
+callbacks — confirmed). 15527 `valueListenable: _activeSkipSegmentUi`
+unchanged.
 
-**Scaffolding:** one line added to the State constructor body; `late
-final VpSkipSegmentController _skip;` at the old slot 1285;
-`_VpSkipSegmentHostAdapter` after the State class. CI: current checks →
-`vplayer_p3.json`; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`.
+**Scaffolding:** the existing State constructor is now a **patched**
+declaration (keeps the `_sleep` assignment, appends the `_skip` one);
+`late final VpSkipSegmentController _skip;` at the old slot 1285;
+`_VpSkipSegmentHostAdapter` after the State class.
+
+**Step T / CI transition:** materialize the complete P3 manifest before
+moving code (owned fields, map subscripts, nullable record selectors,
+interpolation, generation increments, the Host position write); switch
+both current/self-test move commands (`checks.yml:77`) to P3, keep P1
+`--at 31a347ad2` and add P2 `--at fc24e32ae`; switch **both** the analyzer
+manifest and inventory (`checks.yml:95`; historical mappings compose via
+`check_vplayer_analyzer.py:45`); history protection covers the ten P1
+files plus the sleep controller; register the new tests and extend the
+three theme lists (`theme_surface_manifest.txt:26`,
+`theme_rendered_set.py:68`, `source_guard_test.dart:50`).
 
 ### Step 0 — characterization of the original
 
@@ -803,15 +831,37 @@ mid-fetch, profile switch or dispose during the fetch, error → cached
 empty + debug log; UI: button appears only inside a segment of the
 loaded key, skip seeks to `min(end, duration)`, updates the clock
 immediately, tracker seeks in order, haptic; TV key path; reset on
-playlist switch; dispose closes the provider. Fake provider through the
-existing `SkipSegmentProviders` seam if one exists; otherwise record
-which fetch paths need a provider fake and how it is injected **without
-an application change** (or stop and ask for a reviewed seam). Mutation
+playlist switch; dispose closes the provider. Fake provider transport: **no application seam** —
+`SkipSegmentProviders.create` builds `http.Client()` internally, which
+reaches the harness's existing `VideoPlayerHttp` `MockClient` override
+(`video_player_environment.dart:83`, `:189`); held replies/errors and a
+test-only client-close trace drive the races (close-aborted requests and
+late replies surviving close). Use a stored single-provider choice to
+reach the facade's error handler (auto swallows child errors,
+`skip_segment_service.dart:148`). **Classified:** provider replacement in
+`_loadSkipSegmentSettings` is dormant (only caller is `initState`, provider
+initially null); the unavailable-provider branch is web-only (storage
+normalises unknown ids, `skip_segments_storage.dart:37`) → web-pending.
+
+**Races and boundaries (pin existing behaviour, defects included, never
+corrected):** held A→B→A requests releasing the older A first, then a
+position tick — success and error (the handlers write the cache before the
+generation/mounted check, and `whenComplete` clears loading by key alone,
+1885/1898/1911); the engine media-boundary clear (4665) independently of
+the playlist reset; the failed-load re-arm (10459) with no incoming
+duration event. **Profile:** the original guards are `mounted`,
+generation and request key only — no profile/session identity (1719,
+1844, 1886); characterize separately (a) completion while the outgoing
+route is still mounted during the picker's exit animation
+(`profile_gate.dart:360`), (b) completion after disposal, (c) an incoming
+route with a different profile's enabled/provider settings. Pin the actual
+outcomes; any profile-isolation gap goes to Follow-ups, unchanged by the
+move. Mutation
 proofs, coverage matrix, Claude sample.
 
 ### Device checklist (end of series)
 
-Skip intro/recap button on a series with segments (phone, Android TV
+Skip intro / Skip credits button on a series with segments (phone, Android TV
 Flutter player, tvOS, desktop): appears, skips to the segment end, TV
 Select skips; switching episode does not flash the button.
 
@@ -1294,3 +1344,13 @@ anchor asserted non-negative; disposal during an in-flight fire and the
 latch against queued advance / live recovery. P3: line numbers, comment
 span, latch inventory (4321, 14317), "every member used", frozen `_host`/`_s`
 fields, exact imports.
+
+## Phase 3 design review resolution (Codex `vp-design`, 2026-10-11) — "No P1s"
+
+P2s folded: profile-switch outcomes characterized as-is (no profile guard
+exists); A→B→A same-key overlap, media-boundary clear and failed-load
+re-arm; `_activeSkipSegmentUi` stays State-owned (debug allocation event
+order); HTTP harness transport, dormant replacement, web-only
+unavailable provider. P3s: concrete CI/manifest transition, patched State
+constructor, theme lists; line/label wording; frozen Host signatures and
+imports.
