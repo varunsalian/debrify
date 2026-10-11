@@ -1316,8 +1316,31 @@ an individual accepted assertion witness.
 
 ### Step-0b suite baseline
 
-The complete suite baseline will be recorded after the Step-0b test commit,
-using the existing evidence-only parser-routing adapter and explicit harness
-compile-time flag. It must add exactly these 31 successes against the complete
-Step-0 baseline, with no changed existing outcome, new failure, missing test
-or new skip. No allowlist is changed.
+At Step-0b commit `849d3b343c4d13d8db96cae2070f479317489b2c`,
+`step0b-suite.jsonl` records **12,851 successes, 13 failures, 28 errors and
+20 skips**. `suite_evidence.py compare --against step0-suite-isolated.jsonl`
+passes: exactly 31 added successful identities, zero changed existing
+outcomes, new failures, missing tests or new skips. The SDK is unchanged and
+the tested tree stayed fixed throughout the run. The profile-editor identity
+passes again; no allowlist is changed. The observed baseline is
+`step0b-baseline-outcomes.json`, with its exact additions-only delta in
+`step0b-baseline-delta.json`.
+
+The full-suite command keeps `--no-pub` and
+`--dart-define=DEBRIFY_VP_TEST_HOOKS=true`. The existing evidence-only routing
+adapter supplies 114 unique isolated packages under
+`.dart_tool/vplayer_parser/`, deletes 342 copied kernels, and redirects all
+618 nested parse/ensure pairs. The records and audit are
+`step0b/parser-routing-full-suite.jsonl` and
+`step0b/parser-routing-audit.json`. The complete detached-original control
+passes all 57 characterization tests (`control-complete-original.jsonl`).
+
+Final root `flutter analyze --no-pub` retains exactly the prior 1,753
+diagnostic identities/counts; scoped analysis retains all 73 S identities
+with zero additions. The complete harness folder analyzes cleanly and
+formats with zero changes. The seam manifest passes both current-tree and
+`--at S` comparisons with zero differences. Size and architecture checks
+pass. `step0b/COMMANDS-step0b.txt`, `mutation-audit.json` and `completion.json`
+record commands, raw assertion verification and tested input identities.
+Application code and dependency files remain byte-identical to S; Phase-1
+destinations and feature-specific CI activation remain deferred to Step 1.

@@ -687,6 +687,47 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
   independent mutation sample, any step 0b and production moves remain
   subsequent work.
 
+### 2026-10-11 — Step 0b (complete; stop before moves)
+
+- **Revision.** `849d3b343c4d13d8db96cae2070f479317489b2c`; 31 added
+  behavior identities through original callers. Complete detached-original
+  control at c50238016 passes 57/57; application/dependencies stay identical
+  to S. The coverage matrix and mutation tables are in
+  [the deps report](video-player-screen-deps.md).
+- **Systematic sweep.** All 16 frozen declarations, 248 nested AST sites;
+  113 valid mutations give 107 assertion kills and six proved equivalents.
+  Every new test has its own assertion-failing original mutation witness.
+  `build_evidence.py --require-complete` and `audit_mutations.py` pass; no
+  unresolved site or surviving non-equivalent behavior is recorded.
+- **Requested sample.** `run_sample.py` reruns all 20, with uniquely scoped
+  c1: 18/20 assertion kills (90%). c15 is equivalent by the active-ticket
+  invariant; c18 is unreachable after the const-true unified-menu return.
+  c16 is refuted by public ticket values 1→3 versus mutant 1→2. The earlier
+  `_format` dead-code claim missed its SeekHud tear-off; a new mounted pan/HUD
+  behavior test kills c19 and systematic f01 without changing production.
+- **Suite baseline.** `suite_evidence.py run vplayer/p1/step0b-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  step0-suite-isolated.jsonl`: **PASS**. 12,851 successes, 13 failures,
+  28 errors, 20 skips; exactly 31 additions and zero changed existing
+  outcomes, new failures, missing tests or new skips. SDK/tree checks pass;
+  the profile-editor test passes and no allowlist changes.
+- **Checks.** Root analysis retains all 1,753 prior diagnostic identities;
+  scoped analysis retains 73 S identities with zero additions. Harness
+  analysis/formatting, current/`--at S` seam proofs, size, architecture and
+  diff checks pass. The full-suite routing audit records 114 unique isolated
+  parser packages, 342 copied kernels deleted and 618 nested redirects.
+- **Evidence/deviations.** Artifacts and commands are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/step0b/`; the observed suite
+  baseline/delta are `step0b-baseline-outcomes.json` and
+  `step0b-baseline-delta.json`. Invalid s07 compilation and the s17 paging
+  loop are excluded with NOTEs; corrected s07 and the identical s17 patch
+  against the unchanged underreported-total test assertion-fail. Flutter
+  assertion-print classification and the `_format` correction are documented.
+  No weakened tests, extra seam, bug fix or production move. Heavy commands
+  use `nice -n 19`; Flutter runs are serialized. Stop here; feature-specific
+  move/import/analyzer CI still enables only in Step 1's first production
+  `lib/features/video_player/models/` file commit.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
