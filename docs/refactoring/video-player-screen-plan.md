@@ -582,7 +582,47 @@ search labels unchanged; resume of a plain playlist entry (no TorBox/PikPak id) 
 
 ## Progress
 
-(none yet)
+2026-10-11 — **(a) and Step T complete; stop before S.**
+
+- **R = `a43f44cbb33a05830bbcb0325c98a768d10cc166`.** Ran `dart format`
+  on the original facade only. `vplayer_format_proof.py` records 18 inserted,
+  zero deleted AST-optional commas, identical remaining scanner tokens/comments/
+  literals, idempotence and rejected comment/literal/singleton-record mutations.
+  Explicit dated baseline raise: 18,106 → 18,187 lines. Root player diagnostics
+  rose 70 → 73: three formatting-induced `curly_braces_in_flow_control_structures`
+  infos, recorded by declaration in `format-diagnostics.json`.
+- **T = `c3b7dec1ae018ebdf51e2cdd77c19badf20b24bb`.**
+  `check_dart_moves.py --self-test --self-compare-original`: all real-config,
+  rule-2/round-2 negatives and historical fixtures pass; R has 893 exhaustive
+  spans, zero differences. Current-tree and `--at c3b7dec1a` checks pass.
+  All 26 existing Dart manifest self-tests and the Kotlin Phase-19 checker
+  self-test pass. Accepted manifest runs use isolated `--parser-package`
+  paths under `.dart_tool/vplayer_parser/`, with copied `*.dill` removed;
+  heavy processes use `nice -n 19`. The 16-move/10-destination Phase-1 manifest
+  is **draft**; its formatted evidence-only materialization also compares
+  exactly and has zero analyzer errors. No production file was created.
+- **Analyzer/checks.** `check_vplayer_analyzer.py` passes for root R/current
+  (73), byte-identical strict R (133), rename probe (141), and `--at T`.
+  Inventory includes infos and multiplicity: maxima across 33 identities.
+  `flutter analyze` retains exactly R's 1,753 root diagnostics (exit 1);
+  format, `check_file_sizes.py`, `check_search_architecture.py`, Python compile
+  and diff checks pass. CI remains disabled until the **Step-1 commit creating
+  the first `lib/features/video_player/**` file**; required wiring is listed
+  in `dev/tool/dart_moves/README.md`.
+- **Suite/deviations.** Completed original full suite via `suite_evidence.py`:
+  12,793 successes, 14 failures, 28 errors, 20 skips. Focused post-T run:
+  133 successes, one observed-baseline PiP source-assertion failure; comparison
+  has no new failures, missing tests or new skips. Initial suite run with
+  embedded parser paths outside the isolated root was stopped and replaced
+  using an evidence-only routing wrapper; the initial focused run naming a
+  nonexistent test was discarded. Formatting split one startup source guard;
+  T's existing assertion now pins its complete expression with whitespace-
+  tolerant matching, preserving the anchor and strengthening the assertion.
+  Analyzer setup experiments are excluded from the inventory. All evidence
+  and exact commands/notes are under
+  `<git-common-dir>/refactor-evidence/vplayer/p1/`. Application/dependency
+  files are unchanged after R. S, characterization, production moves and gate
+  suite/builds remain unstarted.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
