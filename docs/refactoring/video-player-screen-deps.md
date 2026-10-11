@@ -2540,3 +2540,31 @@ and preserves the attempt NOTE. The shrink helper discards baseline comments;
 dated history notes were restored before the affected suite. No result from a
 failed check is credited. Clean-tree full suite, historical/self checks and
 both release builds follow at the gate.
+
+
+## Phase 3 clean production gate (2026-10-12)
+
+Tested clean creation `575ead0ca`, following addendum `682d86812`; final gate
+commit contains "gate". Original remains `fc24e32ae`; Step-0b reuses the clean
+`55ac577e6` suite because its addendum changes only documentation/evidence.
+`p3/gate/completion.json` records revisions, SDK/flags, hashes and all results.
+
+| Gate | Result / evidence |
+|---|---|
+| Full suite | 12,931 successes / 13 failures / 28 errors / 20 skips; exact identity/outcome equality to Step-0b baseline; zero missing/added/changed identities, new failures or skips (`p3-gate-suite.jsonl`, `gate/suite-delta.json`, official `suite-comparison.txt`) |
+| Clean inputs | Flutter 3.44.8 / Dart 3.12.2, no-pub and hook define; unchanged clean tree during complete suite |
+| Analyzer | Root 1,777; expected +6 frozen probe delta, every outside-video-player identity/multiplicity unchanged; scoped root and CI 81, no additions beyond P3 maxima; earlier P1/P2 mappings preserved; global warning list exact (`gate/root-analyzer-delta.json`, comparator/allowlist logs) |
+| Format / size / architecture | Full CI format list passes; 2,996 tracked files / 140 ratchets; 1,664 migrated files; architecture negatives pass; facade ratchet 17,766; controller 260 |
+| All Dart/Kotlin checks | 31 accepted commands: 26 existing Dart manifest self-tests, P3 universal self-test including real P1/P2/P3 configurations, P3 current, historical P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, Kotlin historical/compiled self-test; all zero exits (`gate/compat-checks.json`) |
+| Release builds | `nice -n 19 flutter build apk --release --no-pub` and `flutter build macos --release --no-pub` pass on clean creation; artifact sizes/hashes in `gate/build-results.json`; no install/run |
+| Parser routing / constraints | Every manifest invocation has an explicit isolated package under `.dart_tool/vplayer_parser/`; copied kernels deleted, including nested self-tests; both evidence overrides active (`gate/parser-routing-audit.json`); pubspec unchanged, exact two-file application scope, required trailers, branch retained, original mutation source restored |
+
+No application bug fixes, new seams or assertion weakening. The independent
+sample remains 20/21 raw (f2 equivalent); full assertion replays correct the six
+false compile labels. Systematic 148-point coverage/mutation tables remain
+119 killed / 26 equivalent / three classified. Existing profile/cache races
+remain documented in Follow-ups. Device checks stay pending: on phone, Android
+TV Flutter player, tvOS and desktop, verify Skip intro/credits appears within
+the segment, seeks to its end, TV Select works, and episode switching does not
+flash the old button. Web unavailable-provider and Android replacement
+`playerCreated == false` branches remain classified pending. Stop after gate.

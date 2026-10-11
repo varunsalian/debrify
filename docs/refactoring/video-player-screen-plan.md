@@ -1423,7 +1423,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 
 ### 2026-10-12 — Phase 3 Step 1 production creation
 
-- **Revision.** Creation follows `682d86812`; tested source hashes in
+- **Revision.** `575ead0ca`, following `682d86812`; tested source hashes in
   `p3/step1/materialization-application.json`; clean-tree gate follows.
 - **Move.** 17 declarations, patched State constructor (sleep then skip),
   frozen Host/adapter, 14 retained substitutions + three unchanged notifier
@@ -1443,6 +1443,32 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   pubspec changes, device/run/install, push/merge or branch switch.
 - **Pending.** Clean-tree gate suite/builds/all self-tests/historical phases;
   classified web/Android paths and end-of-series device checklist remain pending.
+
+### 2026-10-12 — Phase 3 clean-tree gate (stop)
+
+- **Revision.** Tested clean production `575ead0ca`; gate commit follows it.
+  Step-0b baseline remains clean `55ac577e6`, SDK/inputs pinned.
+- **Suite.** Serialized `nice -n 19 python3 dev/tool/suite_evidence.py run
+  vplayer/p3/p3-gate-suite --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`:
+  12,931 success / 13 failure / 28 error / 20 skip. Exact baseline identities
+  and outcomes; official comparator PASS; no new failures/skips/allowlisting.
+- **Checks.** Root/CI scoped analyzer 81, zero beyond frozen P3 inventory;
+  root 1,777 with expected probe-only +6 and unchanged outside identities.
+  CI format list, 2,996-file size check (140 ratchets), 1,664-file architecture
+  and negatives pass. All 31 Dart/Kotlin self/current/history commands pass;
+  P1/P2 historical revisions retained and earlier destinations protected.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`: both pass on clean creation;
+  hashes/logs in `p3/gate/build-results.json`. No install/run/device commands.
+- **Evidence/constraints.** `p3/gate/completion.json`, full suite/strict delta,
+  analyzer/format/size/boundary logs, accepted checker ledger and parser audit.
+  Every manifest uses an isolated VPlayer parser with copied kernels deleted;
+  only declared application paths changed, pubspec unchanged, trailers checked.
+  No pushes, merges, branch switches or bug fixes. Original mutations restored.
+- **Pending/stop.** Web unavailable-provider and Android player-created-false
+  paths; human end-of-series checklist on phone, Android TV Flutter, tvOS,
+  desktop: button timing, seek end, TV Select and no old-button episode flash.
+  Existing race/profile gaps remain unchanged in Follow-ups. Stop at Phase 3.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
