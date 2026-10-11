@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,7 +25,8 @@ def main():
     common = Path(subprocess.check_output(
         ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
         cwd=root, text=True).strip())
-    evidence = common / 'refactor-evidence/vplayer/p1/architecture-fixtures'
+    evidence = Path(os.environ.get(
+        'VPLAYER_EVIDENCE_ROOT', common / 'refactor-evidence/vplayer/p1')) / 'architecture-fixtures'
     evidence.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=evidence) as directory:
         copy = Path(directory)

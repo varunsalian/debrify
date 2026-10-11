@@ -1861,3 +1861,68 @@ for the proven-equivalent point; the device-only point remains a listed limit.
 The addendum changes documentation/evidence only, so the accepted clean
 `step0-suite-final.jsonl` at `5b2b62c3b` remains the observed **step-0b baseline**,
 with zero additions, identical test/application/dependency inputs and SDK.
+
+## Phase 2 Step 1 — applied sleep-timer ownership (2026-10-11)
+
+Follows step-0b addendum `5205111eb`. Applied P2 manifest retains all 889
+original fates, moves exactly 12 declarations, qualifies exactly 14 retained
+reference sites, and derives/protects all ten P1 destinations from history.
+Production files are byte-identical to the accepted Step T formatted
+materialization: zero further formatting edits, zero optional-comma changes
+and zero formatting-introduced diagnostics. Original comments remain attached.
+
+| Original State member | Current controller member |
+|---|---|
+| `_sleepTimerMode` | `VpSleepTimerController.sleepTimerMode` |
+| `_sleepTimerDeadline` | `VpSleepTimerController.sleepTimerDeadline` |
+| `_sleepTimerArmedMinutes` | `VpSleepTimerController.sleepTimerArmedMinutes` |
+| `_sleepTimer` | `VpSleepTimerController.sleepTimer` |
+| `_sleepTimerMinutesLeft` | `VpSleepTimerController.sleepTimerMinutesLeft` |
+| `_sleepTimerButtonLabel` | `VpSleepTimerController.sleepTimerButtonLabel` |
+| `_showSleepTimerSheet` | `VpSleepTimerController.showSleepTimerSheet` |
+| `_applySleepTimerSelection` | `VpSleepTimerController.applySleepTimerSelection` |
+| `_startSleepCountdown` | `VpSleepTimerController.startSleepCountdown` |
+| `_cancelSleepTimer` | `VpSleepTimerController.cancelSleepTimer` |
+| `_fireSleepTimer` | `VpSleepTimerController.fireSleepTimer` |
+| `_showSleepTimerToast` | `VpSleepTimerController.showSleepTimerToast` |
+
+Destination: `presentation/legacy_video_player/vp_sleep_timer_controller.dart`
+(149 lines). Its constructor stores the narrow 12-member Host; all four owned
+initializers are inert. State eagerly assigns its initializer-free `late final
+_sleep` in one constructor body, after original field initialization and before
+`initState`. The adapter has live one-line forwarders; `_vpSetState` preserves
+protected State ownership. Dispose keeps direct timer cancel/clear at the exact
+original statement position. Shared latch/player/playback-intent fields stay
+State-owned, and every original timing, callback, toast and save/pause order stays.
+
+### Source guards, CI and boundaries
+
+| Guard | Original anchor / selection | Current proof |
+|---|---|---|
+| `player_auto_next_routing_test.dart` | Whole-facade sections; sleep `indexOf` could return -1 | Five named current declarations from validating reader; `_sleep.sleepTimerMode == SleepTimerMode.endOfItem` and fetch anchors explicitly non-negative; original relative-order and routing assertions retained |
+| EOF sleep branch negatives | Missing/reordered sleep branch | Both actual retargeted tests assertion-fail in detached evidence materialization; validating reader refuses edited live text (`step1/source-mutation-results.json`), no historical-text fallback |
+| Seam source proof | Current-tree P1 ledger | Latest applied ownership (P2); original S interception patches still pinned through P1 ledger, current installer tokens directly equal frozen S; all original installation/default/negative assertions retained |
+| Theme containment | P1 destination paths | New exact destination in surface manifest, rendered route boundaries, frozen path list and both exact expected lists in source guard |
+
+CI selects P2 for self-test/current-tree and analyzer, explicitly chooses the P2
+inventory preserving P1 identities, and adds P1 `--at 31a347ad2` with its own
+parser package. Full-history checkout remains enabled. Both sleep-test files
+join `ci_behavior_tests.txt`; harness commands retain the test-hook define.
+Existing `lib/features` format/analyze scopes cover the new destination. Exact
+bridge registration, facade back-import ban, pure-layer boundaries and 500-line
+extraction cap remain active and all architecture negatives pass.
+
+Facade size ratchet lowers **18,018 → 17,932**; the new controller is 149 lines.
+The dated size note retains prior phase notes and names remaining phases 3–25.
+No application change outside the two frozen production files, dependency
+change, warning-allowlist addition, clock/platform seam or bug fix is included.
+The architecture fixture tool now honors `VPLAYER_EVIDENCE_ROOT` (legacy default
+unchanged). Its initial P1 temporary copy auto-removed; the accepted rerun writes
+only under P2. No persistent P1 artifact was overwritten.
+
+Before commit: 92 affected tests pass (79 video-player, three routing, ten theme
+source guards); current ownership zero differences; scoped analyzer/self-tests
+75 diagnostics/zero additions; exact CI analyzer allowlist 45 pre-existing
+warnings/nothing new or stale; format, size, architecture and seam negatives pass.
+Commands and hashes: `p2/step1/completion.json`. Device/clock/sample dispositions
+from Step 0/0b remain unchanged. Clean-tree full-suite/build gate follows.

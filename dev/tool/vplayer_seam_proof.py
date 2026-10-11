@@ -29,8 +29,15 @@ def prove(package, self_test=False):
     seam = load_manifest(MANIFEST)
     phase_path = 'dev/tool/dart_moves/vplayer_p1.json'
     phase = load_manifest(phase_path)
-    manifest = phase if phase['status'] == 'applied' else seam
-    active_path = phase_path if phase['status'] == 'applied' else MANIFEST
+    seam_ledger = phase if phase['status'] == 'applied' else seam
+    applied = []
+    for path in (ROOT / 'dev/tool/dart_moves').glob('*.json'):
+        candidate = load_manifest(path)
+        if (candidate.get('schema') == 1 and candidate.get('series') == 'vplayer'
+                and candidate.get('status') in {'applied', 'checkpoint'}):
+            applied.append((path, candidate))
+    active_path, manifest = max(applied, key=lambda item: (
+        item[1]['phase'], item[1].get('status') == 'applied'))
     original = git_text(manifest['base'], SOURCE)
     current = (ROOT / SOURCE).read_text()
     sources = {p.relative_to(ROOT).as_posix(): p.read_text()
@@ -38,7 +45,7 @@ def prove(package, self_test=False):
     owned = {path: sources[path] for path in [SOURCE, *manifest['destinations']]}
     errors = run_manifest(active_path, package)
     errors += installation_errors(sources)
-    patched = [r for r in manifest['declarations'] if r['fate'] == 'patched']
+    patched = [r for r in seam_ledger['declarations'] if r['fate'] == 'patched']
     assert {r['original'] for r in patched} == {
         '_VideoPlayerScreenState.initState', '_VideoPlayerScreenState._createPlayerInstance'}
     assert sum(len(r['patches']) for r in patched) == 3
@@ -47,10 +54,11 @@ def prove(package, self_test=False):
     seam_patches = {r['original']: r['patches'] for r in seam['declarations']
                     if r['fate'] == 'patched'}
     assert {r['original']: r['patches'] for r in patched} == seam_patches
-    assert (manifest['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks']
+    assert (seam_ledger['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks']
             == seam['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks'])
     unit = parse({'current': current}, package, ownership=True)['current']
     hook = next(n for n in unit['declarations'] if n['name'] == 'VideoPlayerScreenTestHooks')
+    assert tokens(hook) == seam['scaffolding'][SOURCE]['VideoPlayerScreenTestHooks']
     members = {n['name']: tokens(n) for n in hook['members']}
     installed = members['install']
     required = [
@@ -88,7 +96,7 @@ def prove(package, self_test=False):
             assert check(manifest, original, dict(owned, **{SOURCE: text}), package), 'accepted ' + name
         assert installation_errors({SOURCE: current, 'lib/other.dart': 'VideoPlayerScreenTestHooks.install(null);'})
     return errors, dict(patched_declarations=2, interception_patches=3,
-                        original_spans=len(manifest['declarations']),
+                        original_spans=len(manifest['declarations']), ownership_phase=manifest['phase'],
                         frozen_scaffolding=list(manifest['scaffolding'][SOURCE]),
                         default_operations_once=True, original_configuration_once=True,
                         installation='explicit release/profile throw, compile-time flag, assert-only assignment',

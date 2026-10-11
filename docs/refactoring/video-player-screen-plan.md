@@ -1092,6 +1092,30 @@ remains device-pending (`e14`), while the sleep latch must prevent auto-resume.
   `5b2b62c3b` is unchanged and remains the step-0b observed baseline.
   Original mounted/disposed behavior is preserved; no bug fixes or seams.
 
+### 2026-10-11 — Phase 2 Step 1 (production creation checkpoint)
+
+- **Revision/scope.** Follows addendum `5205111eb`; applies the frozen P2
+  draft: 12 declarations, 14 retained substitutions, exact controller/Host,
+  eager State constructor, `_vpSetState` and live adapter. Application files
+  byte-identical to accepted formatted T materialization; all P1 files intact.
+  Direct dispose cancel/clear retains statement order. No bug fixes.
+- **Registration.** Current/self-test and analyzer CI switch to P2 with its
+  inventory; P1 stays `--at 31a347ad2`. Both sleep tests registered, hook
+  define retained. Theme lists/expected lists include the new destination;
+  EOF guards use validating current declaration text and non-negative anchors.
+  Seam proof follows latest ownership while retaining frozen S assertions.
+- **Checks.** 92 affected tests pass; removed/reordered EOF sleep branches
+  assertion-fail in detached evidence materialization. Current move check
+  zero diffs; analyzer/self-tests 75 scoped, zero additions; exact CI
+  analyzer allowlist 45 existing warnings, no new/stale rows. Format,
+  size/architecture and seam negatives pass. Controller 149 lines; facade
+  ratchet 18,018 → 17,932. Evidence `p2/step1/completion.json`.
+- **Tooling/pending.** Architecture fixtures honor phase evidence root;
+  initial legacy P1 temporary copy auto-removed, accepted rerun under P2.
+  No persistent earlier evidence overwritten. Clock/mobile cases remain
+  device-pending; gate proceeds on the clean creation commit, compared to
+  unchanged step-0b observed baseline. No device commands or new seams.
+
 2026-10-11 — **Phase 1 independent review (Codex `vp-rev1`, fresh session) on
 `ed728b078..2eb4fda82`: P1 none, P2 none, P3 none — "No P1s".** It reproduced the format
 proof, seam exactly-once/installation rules, 893-span ownership comparison, history and

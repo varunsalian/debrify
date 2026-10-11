@@ -147,3 +147,13 @@ and analyzer selection to P2, keep P1 `--at 31a347ad2`, extend theme paths,
 and retarget EOF's sleep anchor through the validating reader with an explicit
 non-negative assertion. P1 diagnostic mappings are preserved in the P2 inventory.
 Do not enable the draft against the original facade.
+
+
+Phase 2 Step 1 applies `vplayer_p2.json`: 12 declarations move to the
+sleep-timer controller, 14 retained sites are qualified, and exact Host,
+adapter and eager State-constructor scaffolding is frozen. Current-tree and
+self-test CI select P2; P1 is checked at `31a347ad2`; the analyzer selects the
+P2 inventory while preserving P1 mappings. Both sleep characterization files
+are in the behavior list, all three theme path lists include the destination,
+and EOF source guards read current validated declarations with a non-negative
+sleep anchor. No original sleep behavior or disposal ordering changes.
