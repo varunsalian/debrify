@@ -96,3 +96,15 @@ CI remains disabled for this slice until the **Step-1 commit creating the first
 4. Register each new characterization file in `ci_behavior_tests.txt` and
    the test-only seam flag in its test/CI commands. No characterization exists
    at Step T.
+
+S is frozen separately in `vplayer_p1_seam.json`: two patched declarations,
+three interception patches, the hook class frozen as a whole, and its foundation
+import substitution. The unapplied Phase-1 draft includes the same scaffold and
+patches; no destination exists yet. Feature move/analyzer/boundary CI remains
+scheduled for Step 1's first `lib/features/video_player/models/` file.
+
+Harness commands must pass `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`, including
+full-suite evidence runs and the curated CI behaviour command. Ordinary debug
+installation is checked by running the seam guard test without that flag too.
+Run `nice -n 19 python3 dev/tool/vplayer_seam_proof.py --self-test
+--parser-package .dart_tool/vplayer_parser/<isolated>/.dart_tool/package_config.json`.

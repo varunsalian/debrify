@@ -139,6 +139,27 @@ def check(manifest, original, sources, package):
         present = sorted((t for t in targets if t in current[path]), key=lambda t: current[path][t]['start'])
         if present != targets:
             errors.append('moved declaration order changed: ' + path)
+    # Reviewed patches can change an unbound constructor chain into a helper
+    # chain. Project only the ORIGINAL patched members through the existing
+    # counted-edit core; then retain all occurrence/scope/context protections
+    # for the whole declaration. Destination source is never rewritten.
+    from dart_move_fixture import edited_text
+    projected = {}
+    for row in rows:
+        key = row['original']
+        node = original_nodes.get(key)
+        if row['fate'] == 'patched' and node and node['owner'] in manifest['split_containers']:
+            text = edited_text(original, base[key], row['patches'])
+            projected[key] = 'class ' + node['owner'] + ' { ' + text + ' }'
+    if projected:
+        units = parse(projected, package, occurrence_bindings=True)
+        original_nodes = dict(original_nodes)
+        for key, unit in units.items():
+            members = unit['declarations'][0]['members']
+            if len(members) != 1 or members[0]['name'] != original_nodes[key]['name']:
+                errors.append('patch projection changed declaration ownership: ' + key)
+            else:
+                original_nodes[key] = members[0]
     config = guard_config(manifest)
     core_rows = ownership_rows(manifest)
     original_leaves = {r['original_name']: original_nodes[r['original_name']]

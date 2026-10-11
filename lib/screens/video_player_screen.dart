@@ -38,7 +38,8 @@ import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, kProfileMode, kReleaseMode, listEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1752,7 +1753,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_loadTrackingPolicy());
     unawaited(_loadSkipSegmentSettings());
     unawaited(_loadLocalCompletionThresholds());
-    MediaKitInit.ensureInitialized();
+    VideoPlayerScreenTestHooks._ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
     // user asked it to open upright, in which case the Portrait/Landscape
@@ -2929,7 +2930,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
     final instanceGeneration = ++_playerInstanceGeneration;
     _isReady = false;
-    final player = mk.Player(
+    final player = VideoPlayerScreenTestHooks._createPlayer(
       configuration: mk.PlayerConfiguration(
         logLevel: mk.MPVLogLevel.error,
         ready: () => _onPlayerInstanceReady(instanceGeneration),
@@ -2937,7 +2938,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     _player = player;
     _playerCreated = true;
-    _videoController = mkv.VideoController(
+    _videoController = VideoPlayerScreenTestHooks._createVideoController(
       player,
       configuration: mkv.VideoControllerConfiguration(
         vo: rendererMode.videoOutput,
@@ -18183,5 +18184,68 @@ class _RandomChoiceTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Three interception points for the original player characterization harness.
+@visibleForTesting
+class VideoPlayerScreenTestHooks {
+  const VideoPlayerScreenTestHooks({
+    required this.ensureInitialized,
+    required this.createPlayer,
+    required this.createVideoController,
+  });
+
+  final void Function() ensureInitialized;
+  final mk.Player Function(mk.PlayerConfiguration configuration) createPlayer;
+  final mkv.VideoController Function(
+    mk.Player player,
+    mkv.VideoControllerConfiguration configuration,
+  )
+  createVideoController;
+
+  static VideoPlayerScreenTestHooks? _installed;
+
+  static void install(VideoPlayerScreenTestHooks? hooks) {
+    if (kReleaseMode || kProfileMode) {
+      throw StateError(
+        'Video player test hooks require an assertion-enabled test',
+      );
+    }
+    if (!const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) {
+      throw StateError('Video player test hooks require DEBRIFY_VP_TEST_HOOKS');
+    }
+    assert(() {
+      _installed = hooks;
+      return true;
+    }());
+  }
+
+  static void _ensureInitialized() {
+    final hooks = _installed;
+    if (hooks == null) {
+      MediaKitInit.ensureInitialized();
+    } else {
+      hooks.ensureInitialized();
+    }
+  }
+
+  static mk.Player _createPlayer({
+    required mk.PlayerConfiguration configuration,
+  }) {
+    final hooks = _installed;
+    return hooks == null
+        ? mk.Player(configuration: configuration)
+        : hooks.createPlayer(configuration);
+  }
+
+  static mkv.VideoController _createVideoController(
+    mk.Player player, {
+    required mkv.VideoControllerConfiguration configuration,
+  }) {
+    final hooks = _installed;
+    return hooks == null
+        ? mkv.VideoController(player, configuration: configuration)
+        : hooks.createVideoController(player, configuration);
   }
 }

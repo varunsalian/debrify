@@ -111,7 +111,7 @@ jobs:
       - run: flutter pub get
       # Sources/TorrentPlaybackService behaviour tests. Fails on any failure
       # not listed by exact identity, and on a listed one that passes or is gone.
-      - run: python3 dev/tool/suite_evidence.py check dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt --dart-define=SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true --dart-define=PREMIUMIZE_REQUIRE_ORIGINAL_LINUX=true
+      - run: python3 dev/tool/suite_evidence.py check dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt --dart-define=SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true --dart-define=PREMIUMIZE_REQUIRE_ORIGINAL_LINUX=true --dart-define=DEBRIFY_VP_TEST_HOOKS=true
       # Keep the exact runner error/trace when a CI-only failure needs review.
       - uses: actions/upload-artifact@v4
         if: failure()

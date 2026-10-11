@@ -1,7 +1,8 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 # 2026-10-11 vplayer P1 (a): formatter-only growth, 18 AST-optional commas; exit: phase-25 facade measurement.
-18187 lib/screens/video_player_screen.dart
+# 2026-10-11 vplayer S: frozen H1 test-hook scaffolding; legacy responsibilities retained until phases 1–25.
+18251 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart
