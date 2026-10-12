@@ -2583,6 +2583,32 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   merge, branch switch or device command. Stop here; Step 1 and its gate are later.
   The end-of-series local movie/episode/rewatch/This-device checklist stays pending.
 
+### 2026-10-13 — Phase 7 independent sample and Step-1 production creation
+
+- **Sample.** Claude's accepted original `e62a3a41f` sample kills 20/20 valid
+  mutations (100%); no exclusions or addendum. Deps table records each identity
+  and original-caller assertion witness. Results/run summary agree; per-mutation
+  logs retain tails. Systematic Step-0 matrix stays 114 kills / three equivalences.
+- **Move/revision.** Original `2defa5100`; resulting revision, commands and hashes
+  in `p7/step1/completion.json`. Fourteen declarations move to the 208-line
+  `VpLocalCompletion` with 21 frozen live Host getters. Six inert initializers,
+  eager construction after `_mdblist`, local series-playlist snapshot and all 11
+  retained statement positions (EOF order/reset/resume reads) are preserved.
+  Applied manifest compares with zero differences; all 16 earlier destinations
+  protected. Production matches the checked Step-T formatted split exactly.
+- **Transition.** CI current/self-test and analyzer manifest **and inventory**
+  select P7; P1–P6 histories/fetch-depth 0 retained. Twelve completion behavior
+  files registered with the hooks define. Theme surface/rendered/all three source
+  guard lists include the new file. Facade ratchet 17,087 → 16,974; no new size
+  exception. Two probe-recorded unused retained imports are allowlisted.
+- **Checks/scope.** 143 focused completion/theme/source-contract tests pass.
+  Scoped analyzer comparator/self-negatives: 98 occurrences, zero additions,
+  moved `empty_catches` identity/multiplicity preserved. Format zero changes;
+  size 3,000 files / 140 ratchets, architecture 1,669 and its negatives pass.
+  No behavior/test assertion change, bug fix, pubspec change, real network,
+  push/merge/switch or device execution. Clean-tree gate follows; end-of-series
+  local movie/episode/rewatch/This-device and earlier device checklists pending.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

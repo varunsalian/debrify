@@ -53,6 +53,7 @@ const List<String> kStillFrozenPaths = [
   'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
   'lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart',
   'lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart',
+  'lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart',
 ];
 
 /// Source-level tripwires for the containment rules a type system can't see.
@@ -240,6 +241,7 @@ void main() {
       'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
       'lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart',
       'lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart',
+      'lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart',
     ];
     final stray = kThemingPrepared
         .where((f) => !frozen.any(f.startsWith))
@@ -348,6 +350,7 @@ void main() {
         'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
         'lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart',
         'lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart',
+        'lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart',
       ],
       reason:
           'only playback may sit outside the app palette by path. Changing '

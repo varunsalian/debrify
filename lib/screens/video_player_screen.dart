@@ -182,6 +182,7 @@ import '../features/video_player/presentation/legacy_video_player/vp_display_mod
 import '../features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_local_completion.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -392,6 +393,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trakt = VpTraktScrobbler(_VpTraktScrobblerHostAdapter(this));
     _simkl = VpSimklScrobbler(_VpSimklScrobblerHostAdapter(this));
     _mdblist = VpMdblistScrobbler(_VpMdblistScrobblerHostAdapter(this));
+    _completion = VpLocalCompletion(_VpLocalCompletionHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -1389,13 +1391,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// network lookup and then pops — without this, the two can race and pop
   /// twice, ejecting the user off the host screen instead of playing the next.
   bool _seriesNextDispatched = false;
-  bool _currentEpisodeMarkedAsFinished = false;
-  bool _currentMovieMarkedAsFinished = false;
-  bool _currentMovieRewatchStarted = false;
-  int _movieCompletionThreshold =
-      LocalCompletionStorage.defaultLocalCompletionThreshold;
-  int _episodeCompletionThreshold =
-      LocalCompletionStorage.defaultLocalCompletionThreshold;
+  late final VpLocalCompletion _completion;
+
   // We render using a large logical surface; fit is controlled by BoxFit
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
@@ -1625,9 +1622,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
-    unawaited(_loadTrackingPolicy());
+    unawaited(_completion.loadTrackingPolicy());
     unawaited(_skip.loadSkipSegmentSettings());
-    unawaited(_loadLocalCompletionThresholds());
+    unawaited(_completion.loadLocalCompletionThresholds());
     VideoPlayerScreenTestHooks._ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
@@ -1670,57 +1667,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trakt.initTraktScrobble();
     _simkl.initSimklScrobble();
     _mdblist.initMdblistScrobble();
-  }
-
-  Future<void> _loadLocalCompletionThresholds() async {
-    final values = await Future.wait<int>([
-      LocalCompletionStorage.getMovieCompletionThreshold(),
-      LocalCompletionStorage.getEpisodeCompletionThreshold(),
-    ]);
-    if (!mounted) return;
-    _movieCompletionThreshold = values[0];
-    _episodeCompletionThreshold = values[1];
-    // A seek can cross the default threshold before the preference read
-    // finishes. Re-evaluate against the configured value once it arrives.
-    _checkAndApplyLocalCompletion();
-  }
-
-  bool get _usesLocalCompletionTracking =>
-      (_forceLocalCompletionTracking ||
-          (!widget.traktScrobble &&
-              !widget.simklScrobble &&
-              !widget.mdblistScrobble)) &&
-      widget.stremioTvChannels == null &&
-      _effectiveIptvChannels == null;
-
-  bool _forceLocalCompletionTracking = false;
-
-  Future<void> _loadTrackingPolicy() async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    if (!mounted) return;
-    _forceLocalCompletionTracking = policy.usesLocalCompletionTracking(
-      traktScrobble: widget.traktScrobble,
-      simklScrobble: widget.simklScrobble,
-      mdblistScrobble: widget.mdblistScrobble,
-    );
-    // A very short item can cross its completion threshold before this async
-    // profile read returns. Re-evaluate immediately so This-device mode never
-    // misses the forced-local rule merely because scrobbling is also enabled.
-    _checkAndApplyLocalCompletion();
-  }
-
-  String? get _currentLocalMovieImdbId {
-    if (_effectiveContentType != 'movie') return null;
-    final imdbId = _effectiveContentImdbId?.trim();
-    return imdbId == null || imdbId.isEmpty ? null : imdbId;
-  }
-
-  void _resetLocalCompletionState() {
-    _currentEpisodeMarkedAsFinished = false;
-    _currentMovieMarkedAsFinished = false;
-    _currentMovieRewatchStarted = false;
   }
 
   /// The position trackers and stores may persist: the live position, unless
@@ -2937,7 +2883,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _playbackUiClock.updatePosition(d);
       _skip.syncSkipSegmentsForCurrentContent();
       _skip.syncActiveSkipSegmentUi();
-      _checkAndApplyLocalCompletion();
+      _completion.checkAndApplyLocalCompletion();
     });
     if (_subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
       var lastAudioTrackId = player.state.track.audio.id;
@@ -4345,11 +4291,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _mdblist.mdblistStop(complete: true);
 
     // Mark the current episode as finished if it's a series
-    await _markCurrentEpisodeAsFinished();
+    await _completion.markCurrentEpisodeAsFinished();
     // A locally tracked movie may finish before the next periodic position
     // save; make EOF a completion too (tracker sessions keep their existing
     // scrobble-only path above).
-    await _markCurrentMovieAsFinished();
+    await _completion.markCurrentMovieAsFinished();
 
     // "Stop at the end of this episode": suppress every advance below and let
     // the screen sleep. Playback has already finished, so there is nothing
@@ -5234,7 +5180,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _resetSubtitleState();
           _singleFileImdbId = null;
           _singleFileImdbFetched = false;
-          _resetLocalCompletionState();
+          _completion.resetLocalCompletionState();
 
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
@@ -9027,7 +8973,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _resetSubtitleState();
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
-    _resetLocalCompletionState();
+    _completion.resetLocalCompletionState();
 
     try {
       _pikPakRetryId++;
@@ -9456,114 +9402,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Mark the current episode as finished if it's a series
-  Future<void> _markCurrentEpisodeAsFinished() async {
-    final seriesPlaylist = _seriesPlaylist;
-    // Single-file series playback: use widget params
-    if ((seriesPlaylist == null || !seriesPlaylist.isSeries) &&
-        widget.contentType == 'series' &&
-        widget.contentSeason != null &&
-        widget.contentEpisode != null &&
-        widget.contentImdbId != null) {
-      _currentEpisodeMarkedAsFinished = true;
-      try {
-        await EpisodeCompletionStorage.markEpisodeAsFinished(
-          seriesTitle: widget.contentTitle ?? widget.title,
-          season: widget.contentSeason!,
-          episode: widget.contentEpisode!,
-          imdbId: widget.contentImdbId,
-        );
-      } catch (_) {}
-      return;
-    }
-    if (seriesPlaylist == null ||
-        !seriesPlaylist.isSeries ||
-        seriesPlaylist.seriesTitle == null) {
-      return;
-    }
-    _currentEpisodeMarkedAsFinished = true;
-    try {
-      // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-        final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-          (episode) => episode.originalIndex == _currentIndex,
-          orElse: () => seriesPlaylist.allEpisodes.first,
-        );
-
-        if (currentEpisode.seriesInfo.season != null &&
-            currentEpisode.seriesInfo.episode != null) {
-          await EpisodeCompletionStorage.markEpisodeAsFinished(
-            seriesTitle: seriesPlaylist.seriesTitle!,
-            season: currentEpisode.seriesInfo.season!,
-            episode: currentEpisode.seriesInfo.episode!,
-            imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
-          );
-        }
-      }
-    } catch (e) {}
-  }
-
-  Future<void> _markCurrentMovieAsFinished() async {
-    final imdbId = _currentLocalMovieImdbId;
-    if (!_usesLocalCompletionTracking ||
-        _currentMovieMarkedAsFinished ||
-        imdbId == null) {
-      return;
-    }
-    // Set this before the await: position events are frequent and completion
-    // must perform one cleanup/write, not queue one per frame.
-    _currentMovieMarkedAsFinished = true;
-    try {
-      await Future.wait([
-        MovieProgressStorage.markMovieAsFinished(imdbId),
-        VideoResumeStorage.removeVideoResume(
-          _resumeKey,
-          playbackCheckpoint: true,
-        ),
-      ]);
-    } catch (_) {
-      // Playback remains usable if local storage is temporarily unavailable.
-    }
-  }
-
-  /// Apply the local, user-configured completion rule. This is synchronous on
-  /// purpose because it runs for every position update; actual writes stay
-  /// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].
-  void _checkAndApplyLocalCompletion() {
-    if (_validationGateActive ||
-        !_usesLocalCompletionTracking ||
-        _duration <= Duration.zero ||
-        _position <= Duration.zero) {
-      return;
-    }
-
-    final percent = _position.inMicroseconds * 100 / _duration.inMicroseconds;
-    final movieImdbId = _currentLocalMovieImdbId;
-    if (movieImdbId != null) {
-      if (!_currentMovieRewatchStarted && percent < _movieCompletionThreshold) {
-        // The title was finished during an earlier session. A real new play
-        // below its threshold is a rewatch, so restore it to normal local
-        // Continue Watching behavior before the next resume save.
-        _currentMovieRewatchStarted = true;
-        unawaited(MovieProgressStorage.unmarkMovieAsFinished(movieImdbId));
-      }
-      if (!_currentMovieMarkedAsFinished &&
-          percent >= _movieCompletionThreshold) {
-        unawaited(_markCurrentMovieAsFinished());
-      }
-      return;
-    }
-
-    final isSeries =
-        _effectiveContentType == 'series' || _seriesPlaylist?.isSeries == true;
-    if (!isSeries) return;
-    if (_currentEpisodeMarkedAsFinished ||
-        percent < _episodeCompletionThreshold) {
-      return;
-    }
-    unawaited(_markCurrentEpisodeAsFinished());
-  }
-
   /// Tear down the black transition overlay when a load fails partway (bad
   /// index, or no resolvable URL — e.g. a dead debrid/torbox link on the next
   /// episode). Without this the UI stays stuck on the black transition
@@ -9767,7 +9605,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentIndex = index;
     await _mdblist.switchMdblistTarget();
     if (!mounted || request?.isCurrent == false) return false;
-    _resetLocalCompletionState();
+    _completion.resetLocalCompletionState();
 
     // Clear subtitle cache and selection when changing content
     _resetSubtitleState();
@@ -11401,7 +11239,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int localMs = 0;
     final allowLocalResume =
         preferLocalResume || trackingPolicy.progressFrom(TrackingSource.local);
-    final localMovieImdbId = _currentLocalMovieImdbId;
+    final localMovieImdbId = _completion.currentLocalMovieImdbId;
     final locallyFinishedMovie =
         !preferLocalResume &&
         localMovieImdbId != null &&
@@ -11845,7 +11683,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Completion clears local movie resume/CW state. Do not let the autosave
     // tick immediately recreate that state while end credits keep playing.
-    if (_currentMovieMarkedAsFinished && _currentLocalMovieImdbId != null) {
+    if (_completion.currentMovieMarkedAsFinished &&
+        _completion.currentLocalMovieImdbId != null) {
       return;
     }
 
@@ -16779,6 +16618,54 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
   }
+}
+
+class _VpLocalCompletionHostAdapter implements VpLocalCompletionHost {
+  _VpLocalCompletionHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get traktScrobble => _s.widget.traktScrobble;
+  @override
+  bool get simklScrobble => _s.widget.simklScrobble;
+  @override
+  bool get mdblistScrobble => _s.widget.mdblistScrobble;
+  @override
+  List<Map<String, dynamic>>? get stremioTvChannels =>
+      _s.widget.stremioTvChannels;
+  @override
+  String? get contentType => _s.widget.contentType;
+  @override
+  int? get contentSeason => _s.widget.contentSeason;
+  @override
+  int? get contentEpisode => _s.widget.contentEpisode;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  String? get contentTitle => _s.widget.contentTitle;
+  @override
+  String get title => _s.widget.title;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  Duration get position => _s._position;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  String get resumeKey => _s._resumeKey;
 }
 
 class _VpMdblistScrobblerHostAdapter implements VpMdblistScrobblerHost {

@@ -5060,3 +5060,55 @@ destination, bug fix, real network, push/merge/branch switch or device command.
 The end-of-series manual local movie/episode/rewatch/This-device checklist remains
 pending. Step 1, its registrations and its clean-tree gate are future work.
 Stop after Step 0.
+
+## Phase 7 independent sample — accepted Step 0 (2026-10-13)
+
+Claude sampled original `e62a3a41f` (application identical to `2defa5100`).
+All 20 valid mutations are reported as assertion kills: **20/20 (100%)**,
+no compilation failures or exclusions. The accepted `results.json` and run
+summary agree on the failed behavior identities; per-mutation files retain
+log tails. Evidence: `p7/claude-sample/` and the hashed
+`p7/step1/independent-sample-audit.json`. The systematic matrix remains
+117 points: 114 kills / three equivalences; this independent sample adds no
+coverage credit or tests. No Step-0b addendum is needed.
+
+| Mutation | Contract | Assertion witness through original caller | Result |
+|---|---|---|---|
+| `j1` | Movie threshold loader index | Completion movie threshold 50 uses equality and performs cleanup only once | killed |
+| `j2` | Threshold delivery re-evaluation | Completion early movie default 80 then 50 re-evaluates while paused without another clock tick | killed |
+| `j3` | Stremio TV exclusion | Completion forced local still excludes Stremio channels | killed |
+| `j4` | MDBList enabled exclusion | Completion live mdblist widget selector permits local progress when the flag retires | killed |
+| `j5` | Movie type identity gate | Completion series EOF ignores local enablement and position one-shot tracked=false | killed |
+| `j6` | Rewatch reset | Completion MagicTV next resets movie completion and rewatch flags on the existing State | killed |
+| `j7` | Single-file IMDb gate | Completion missing single-file identity does not spend the guard and public widget delivery retries | killed |
+| `j8` | Content title preference | Completion series EOF ignores local enablement and position one-shot tracked=false | killed |
+| `j9` | Playlist current-index selection | Completion missing current playlist metadata falls back to the first remaining episode and EOF later retries the restored entry | killed |
+| `j10` | Playlist IMDb preference | Completion playlist uses parsed coordinates and enriched identity | killed |
+| `j11` | Movie resume cleanup | Completion caught movie marker failure preserves partial cleanup and spends the resume-suppression guard | killed |
+| `j12` | Checkpoint cleanup flag | Completion resume cleanup wakes playback sync for its profile rather than ordinary library scheduling | killed |
+| `j13` | Validation gate | Completion local movie identity gates legacy resume and speed restoration finished=true | killed |
+| `j14` | Rewatch threshold equality | Completion first eligible movie position at exact threshold never starts a rewatch unmark | killed |
+| `j15` | Rewatch unmark | Completion MagicTV next resets movie completion and rewatch flags on the existing State | killed |
+| `j16` | Completion threshold equality | Completion resume cleanup wakes playback sync for its profile rather than ordinary library scheduling | killed |
+| `j17` | Parsed series fallback | Completion parsed series playlist supplies completion when catalog type is absent | killed |
+| `j18` | Episode threshold choice | Completion single-file series chooses content title and exact episode coordinates | killed |
+| `j19` | Policy result | Completion series EOF ignores local enablement and position one-shot tracked=true | killed |
+| `j20` | Policy delivery re-evaluation | Completion independent policy-first loader delivery with configured 70 pins the early mark and late rewatch | killed |
+
+## Phase 7 Step 1 — production local completion (2026-10-13)
+
+Applied `vplayer_p7.json`: 14 moves / 813 retained / one patched constructor;
+11 retained substitutions; 21 frozen live Host getters and 16 protected prior
+destinations. The local `seriesPlaylist` snapshot, EOF order, reset placement,
+resume suppression and cross-profile writes stay as characterized. Inert
+construction follows `_mdblist`. The 208-line destination and 16,974-line facade
+are byte-identical to the accepted Step-T formatted materialization.
+
+CI selects P7 for current/self and both analyzer manifest/inventory, retaining
+P1–P6 named histories. Twelve behavior files and all theme/source path lists are
+registered. Two newly unused frozen facade imports match the accepted probe;
+the moved `empty_catches` identity retains its original symbol/multiplicity one.
+No source-reader assertion needs retargeting in this phase. Current checker,
+98-diagnostic scoped comparator/negatives, 143 focused tests, format, size and
+architecture/negatives pass. Commands/hashes/revision: `p7/step1/completion.json`.
+The full clean-tree gate follows; no behavior or pubspec change.
