@@ -149,9 +149,11 @@ def run(package):
     from test_dart_sleep_moves import run as sleep_tests
     from test_dart_skip_moves import run as skip_tests
     from test_dart_display_moves import run as display_tests
+    from test_dart_trakt_moves import run as trakt_tests
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)
+    trakt_tests(package)
     history_tests(package)
     real_manifest = load_manifest('dev/tool/dart_moves/vplayer_p1.json')
     real_original = d.git_text(real_manifest['base'], real_manifest['source'])

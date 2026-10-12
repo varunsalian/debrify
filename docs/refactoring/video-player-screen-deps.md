@@ -3087,3 +3087,47 @@ Commands, test/source hashes and parser invocation are in `vp-rev4/completion.js
 No full-suite/build repeat for this test/docs-only review closure; the recorded
 production gate remains at `9cae15e31`. No bug fix, production move, seam,
 allowlisting, device command, push, merge or branch switch. Stop after commit.
+
+## Phase 5 Step T — Trakt ownership tooling (2026-10-12)
+
+Original `315028407`; tooling input `fc7196f78`. The P5 manifest is a complete
+**draft**, with no production moves: 855 disjoint original spans, 841 retained,
+12 moved and two patched (State constructor and whole skip Host adapter).
+All 32 retained references are enumerated in
+`p5/tooling/construction-and-references.json`; the skip adapter contributes
+one exact counted receiver patch, and Simkl contributes two retained progress
+substitutions. The original percentage documentation remains with its binder.
+
+The frozen `VpTraktScrobblerHost` has 21 computed readers. The five relocated
+initializers are inert: enabled/budget literal false; episode cache, last
+scrobble action and heartbeat implicit null. Constructors assign only and read
+no Host; the State eagerly appends Trakt after sleep, skip and display. The
+294-line formatted destination exists only in evidence. No shared seek guard
+or Simkl/MDBList declaration moves. History-derived protection covers all 13
+P1–P4 destinations.
+
+`check_dart_moves.py` adds opt-in exact projection for a patched whole facade
+class, through the existing token-edit/parser implementation. `test_dart_trakt_moves.py`
+rejects missing opt-in, wrong class/fate/count, undeclared skip-class changes,
+wrong forwarding receiver, missing widget registrations, cached widget/index
+values, wrong live identity, seek handover reordering/removal, late identity
+reads, changed initial enablement and missing eager construction. Old manifest
+behavior is unchanged. Complete raw/formatted splits and the exhaustive
+all-retained original comparison have zero differences. All 26 existing Dart
+self-tests, P5 universal/real-config tests, P1–P4 historical checks and Kotlin
+historical/compiled self-test pass. Commands and logs: `p5/tooling/checks.json`.
+
+Analyzer inventory preserves the earlier mappings and maxima; original root,
+strict original and complete compiling probe record 82/151/84 occurrences.
+The probe records the retained facade's now-unused Trakt import and new import
+ordering info; formatting introduces none. `use_build_context_synchronously`
+identities/multiplicities are unchanged by declaration. Full inventory and
+format/token/optional-comma/idempotence evidence: `p5/tooling/`. Parser routing,
+size and architecture checks pass. Failed development probes are archived and
+uncredited. CI, theme lists and source-guard retargets wait for Step 1.
+
+**Source guard retarget plan.** At Step 1, replace the percentage-reader slice
+in `android_tv_mdblist_progress_source_test.dart` with validated per-declaration
+reader calls for the Trakt, Simkl and MDBList readers, checking each live show
+identity capture and rejection at its current location. Preserve the retained
+TVMaze identity and rewatch assertions. The present source test remains intact.

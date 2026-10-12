@@ -1905,6 +1905,32 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   allowlisting, full-suite/build repeat, device commands, push, merge or switch.
   Manual phone portrait/PiP/end-of-series checklist remains pending. Stop.
 
+
+### 2026-10-12 — Phase 5 Step T (Trakt tooling checkpoint)
+
+- **Revision/base.** Tooling follows approved `fc7196f78`; original application
+  re-measured by name at `315028407`: 855 disjoint spans, 12 Trakt moves,
+  32 retained occurrences (including the one patched skip-adapter receiver).
+- **Proof.** Complete raw/formatted evidence-only P5 splits compare with zero
+  differences; 21 live Host readers, five inert false/null initializers,
+  eager construction after `_display`, both retained Simkl progress calls and
+  all 13 earlier destinations are pinned. Opt-in whole facade-class patch
+  projection uses the existing counted-edit/parser core; no old manifest
+  behavior changes. Real-config class/receiver/widget/capture negatives pass.
+- **Commands/results.** `p5/tooling/checks.json`: all 26 existing Dart manifest
+  self-tests, P5 universal/self-compare, P1–P4 merge-revision `--at` and Kotlin
+  historical/compiled self-test pass. Format is idempotent; optional comma
+  sites recorded, zero introduced formatting diagnostics. Root/strict/probe
+  analyzer counts 82/151/84; two mechanical import diagnostics are recorded,
+  async-context identities unchanged, earlier inventories preserved. Size and
+  architecture pass. Parser audit: 167 unique packages, 144 copied kernels
+  deleted; 119 detached packages copied from the already-clean seed.
+- **Scope/CI.** Draft only; no production destination, application/pubspec or
+  CI/theme changes. P5 CI transition belongs to the Step-1 creation commit.
+  Heavy work nice 19; explicit isolated parser flags; serialized suites.
+  Evidence `p5/tooling/completion.json` records the resulting commit.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
