@@ -1962,13 +1962,13 @@ aspect contract (fit, custom ratio, numeric ratio). P3s: explicit
 PiP restore device-pending. Moving the four values (single storage
 location, retained callers write the controller fields directly) accepted.
 
-## Phase 5 design review resolution (Codex , 2026-10-12) — "No P1s"
+## Phase 5 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
 
 Split into phase 5 (Trakt) and phase 6 (Simkl + MDBList). P2s folded:
-exact Hosts incl. borrowed seek guards (,
-,  State-owned) and
-the Simkl→ routing; skip adapter as a P5  facade
-declaration (not ); isolate-wide delegating HTTP
+exact Hosts incl. borrowed seek guards (`_resumeWriteGuard`,
+`_stremioTvStartupSeek`, `_episodeTrackerProgressImdbId` State-owned) and
+the Simkl→`traktProgress` routing; skip adapter as a P5 `patched` facade
+declaration (not `earlier_patches`); isolate-wide delegating HTTP
 transport + credential seeding + cipher barrier; tracker-specific
 protocols and error propagation; async reader/initialization races;
 source-text guard retarget via the validating reader. P3s: staged phases,
