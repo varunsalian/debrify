@@ -1230,6 +1230,69 @@ a series episode, watched at the threshold, progress visible elsewhere;
 trackers disabled before playback send nothing; disabling one mid-playback
 behaves as characterized (continuation, if any, is a recorded follow-up).
 
+## Phase 7 — local completion tracking
+
+Branch `refactor/vplayer-p7` off the phase-6 merge `2defa5100`. Evidence
+`refactor-evidence/vplayer/p7/`. Line numbers at `6d2ac75d8` (pre-phase-6
+moves; ≈ −360 after phase 6) — re-measure by name.
+
+### Moves → `presentation/legacy_video_player/vp_local_completion.dart`
+
+`VpLocalCompletion` + `VpLocalCompletionHost` (≈ 190 lines).
+
+| Original | Kind |
+|---|---|
+| `_currentEpisodeMarkedAsFinished` 1388, `_currentMovieMarkedAsFinished` 1389, `_currentMovieRewatchStarted` 1390 | fields `false` |
+| `_movieCompletionThreshold` 1391, `_episodeCompletionThreshold` 1393 | fields initialized from storage constants (verify `const`/static → inert, else stay State-owned) |
+| `_forceLocalCompletionTracking` 1702 (declared mid-class, after its getter) | field `false` |
+| `_loadLocalCompletionThresholds` 1681, `_loadTrackingPolicy` 1704 | async loaders |
+| `_usesLocalCompletionTracking` 1694, `_currentLocalMovieImdbId` 1720 | getters |
+| `_resetLocalCompletionState` 1726 | method |
+| `_markCurrentEpisodeAsFinished` 9855, `_markCurrentMovieAsFinished` 9901, `_checkAndApplyLocalCompletion` 9925 | methods |
+
+**Stay State-owned:** `_resumeKey` (read by the movie mark), playlist /
+index / effective identity, position/duration, validation gate.
+
+**Host** (exact at step T): `mounted`, widget `traktScrobble` /
+`simklScrobble` / `mdblistScrobble` / `stremioTvChannels` / `contentType` /
+`contentSeason` / `contentEpisode` / `contentImdbId` / `contentTitle` /
+`title` (live selectors), `effectiveIptvChannels`, `effectiveContentImdbId`,
+`effectiveContentType`, `seriesPlaylist`, `activePlaylist`, `currentIndex`,
+`position`, `duration`, `validationGateActive`, `resumeKey`.
+
+**Retained references:** initState (1634/1636); position subscription
+(3336); EOF (4744/4748 — the finished marks); playlist/episode resets
+(5633, 9426, 10166); resume (11799, 12241 — `_currentLocalMovieImdbId`,
+`_currentMovieMarkedAsFinished`); the playlist-index code at 9856 that
+calls the episode mark. Statement positions preserved; writes stay direct.
+
+**Scaffolding / CI:** patched State constructor appends `_completion`;
+adapter; CI current → P7, P1–P6 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`, `315028407`, `ea7901ead`, `2defa5100`); protect all earlier destinations.
+
+### Step 0 — characterization of the original
+
+Threshold load (configured movie/episode thresholds; a seek crossing the
+default before the preference read returns re-evaluates once it arrives —
+early window); tracking-policy load forcing local tracking while
+scrobbling is enabled (profile "This device" mode) and its re-evaluation;
+`_usesLocalCompletionTracking` truth table (trackers, Stremio TV, IPTV);
+movie: rewatch unmark below threshold, one-shot mark + resume checkpoint
+removal (set before the await; one write despite frequent position
+events), storage failure swallowed; series: single-file widget-param path
+vs playlist path, episode lookup by original index with fallback to the
+first episode, missing title/season/episode, one-shot flag; validation gate
+/ zero position / zero duration short-circuits; resets on playlist switch;
+EOF paths; resume reading the movie flag; profile switch/disposal during
+the async loaders and marks (pin as-is). Mutation proofs, coverage matrix,
+Claude sample.
+
+### Device checklist (end of series)
+
+With no tracker connected: a movie past the configured threshold shows as
+watched and leaves Continue Watching; a rewatch below it restores it; an
+episode past its threshold is marked finished; "This device" mode marks
+locally even with trackers on.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
