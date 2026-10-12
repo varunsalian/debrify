@@ -1260,31 +1260,79 @@ index / effective identity, position/duration, validation gate.
 `effectiveContentType`, `seriesPlaylist`, `activePlaylist`, `currentIndex`,
 `position`, `duration`, `validationGateActive`, `resumeKey`.
 
-**Retained references:** initState (1634/1636); position subscription
-(3336); EOF (4744/4748 — the finished marks); playlist/episode resets
-(5633, 9426, 10166); resume (11799, 12241 — `_currentLocalMovieImdbId`,
-`_currentMovieMarkedAsFinished`); the playlist-index code at 9856 that
-calls the episode mark. Statement positions preserved; writes stay direct.
+**Membership (re-measured at `2defa5100`, 14 declarations):** flags
+1392/1393/1394, thresholds 1395/1397 (both reference the `static const int`
+`LocalCompletionStorage.defaultLocalCompletionThreshold`,
+`local_completion_storage.dart:29` — inert), mid-class force-local flag 1696,
+loaders 1675/1698, getters 1688/1714, reset/episode mark/movie mark/check
+1720/9460/9506/9532. ≈ 163 lines move; 21 Host getters (live widget
+selectors, the local `seriesPlaylist` snapshot preserved); no `context`,
+`_vpSetState`, owner identity or sibling collaborator; no tracker adapter
+needs patching. Imports: `dart:async`, the four completion/resume storage
+modules, tracking policy, the three legacy playlist/channel types.
 
-**Scaffolding / CI:** patched State constructor appends `_completion`;
-adapter; CI current → P7, P1–P6 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`, `315028407`, `ea7901ead`, `2defa5100`); protect all earlier destinations.
+**Retained references (11 occurrences, frozen ledger):**
+
+| Responsibility | Facade lines |
+|---|---|
+| Policy / threshold startup (skip-settings call stays between them) | 1628, 1630 |
+| Position dispatch | 2940 |
+| EOF episode / movie marks | 4348, 4352 |
+| MagicTV / Stremio TV / playlist resets (playlist reset after MDBList target switching and the mounted/request check) | 5237, 9030, 9770 |
+| Resume restore movie identity | 11404 |
+| Resume-save flag and identity reads | 11848 (twice) |
+
+**Scaffolding / CI:** patched State constructor appends `_completion` after
+`_mdblist`; adapter; switch current/self-test (`checks.yml:77`) and **both**
+analyzer manifest and inventory (line 99) to P7; P1–P6 `--at` incl. P6
+`2defa5100`; protect all 16 earlier destinations; register tests in
+`ci_behavior_tests.txt` and the destination in `theme_surface_manifest.txt`,
+`theme_rendered_set.py` and all three lists in
+`test/theme/source_guard_test.dart`; preserve the moved episode method's
+`empty_catches` diagnostic identity (not a changed count).
 
 ### Step 0 — characterization of the original
 
-Threshold load (configured movie/episode thresholds; a seek crossing the
-default before the preference read returns re-evaluates once it arrives —
-early window); tracking-policy load forcing local tracking while
-scrobbling is enabled (profile "This device" mode) and its re-evaluation;
-`_usesLocalCompletionTracking` truth table (trackers, Stremio TV, IPTV);
-movie: rewatch unmark below threshold, one-shot mark + resume checkpoint
-removal (set before the await; one write despite frequent position
-events), storage failure swallowed; series: single-file widget-param path
-vs playlist path, episode lookup by original index with fallback to the
-first episode, missing title/season/episode, one-shot flag; validation gate
-/ zero position / zero duration short-circuits; resets on playlist switch;
-EOF paths; resume reading the movie flag; profile switch/disposal during
-the async loaders and marks (pin as-is). Mutation proofs, coverage matrix,
-Claude sample.
+Threshold load and tracking-policy load (forced local while scrobbling),
+`_usesLocalCompletionTracking` truth table, movie rewatch/mark, series
+single-file vs playlist paths, validation/zero-position/zero-duration
+short-circuits, resets, resume reads — plus, from the design review:
+
+- **Cross-profile writes (pin as-is):** hold delivery after profile A's
+  read in the episode mark (`episode_completion_storage.dart:20` →
+  `playback_state_store.dart:33` re-acquires preferences) and the movie
+  mark/unmark (`movie_progress_storage.dart:55`, `:82`), complete the public
+  profile handoff, release; assert **both** profiles' physical preference
+  contents, completion notifications, cleanup and resume records; include
+  disposal while held. The stale-instance guard
+  (`profile_preferences.dart:296`) does not reject a newly obtained B
+  instance, so A's map can land in B — **recorded in Follow-ups, preserved
+  by this move**. Check the resume-removal branch separately (scoped
+  database operations).
+- **One-shot is position-dispatch only:** the episode mark checks neither
+  its flag nor local-tracking enablement (9460) and EOF calls it directly
+  (4348); the playlist path sets the flag before validating index/metadata.
+  Cover threshold→EOF, repeated/overlapping EOF, tracker-enabled EOF,
+  missing metadata/index; assert writes, timestamps/revisions, later retry;
+  preserve EOF order: tracker stops → awaited episode mark → awaited movie
+  mark → sleep/advance.
+- **Early threshold, both directions, selective barrier:** arriving
+  preferences re-evaluate but never undo an earlier mark (85 % under the
+  default 80 stays finished when 90 arrives); a lower configured threshold
+  can trigger on delivery. Hold only the completion loader's `List<int>`
+  (the shared cold-preferences barrier, `display_defaults_reads.dart:27`,
+  also stalls player defaults awaited before player construction, 2321);
+  thresholds above/below 80, exact equality, both policy/threshold arrival
+  orders; test-only barriers, no production seam.
+- **Failure state:** caught mark failures (flag stays set; resume saves
+  then suppressed at 11848 even if persistence failed) vs the **uncaught**
+  unawaited rewatch unmark (9548; flag stays spent); hold an unmark across a
+  later completion; one movie cleanup branch failing while the other
+  succeeds (`Future.wait`). Use the pumping `finish` helper
+  (`video_player_environment.dart:307`, P6 stabilization precedent).
+
+Early windows for every moved initializer. Mutation proofs, coverage
+matrix, Claude sample.
 
 ### Device checklist (end of series)
 
@@ -1294,6 +1342,14 @@ episode past its threshold is marked finished; "This device" mode marks
 locally even with trackers on.
 
 ## Follow-ups
+
+- **Cross-profile completion writes (found in phase 7 design review,
+  pre-existing, not fixed):** a profile switch between the read and the
+  re-acquired write in `EpisodeCompletionStorage.markEpisodeAsFinished` /
+  `MovieProgressStorage.markMovieAsFinished`/`unmarkMovieAsFinished` can
+  write profile A's map (incl. unrelated entries) into profile B; the
+  stale-instance guard does not catch a freshly obtained B instance. Needs a
+  captured-scope write path (AGENTS profile rules) and its own tests.
 
 - **Service/data ownership exit** (D1): data contracts for resume,
   trackers, subtitles, sources and IPTV replace the bridge's direct service,
@@ -2525,3 +2581,13 @@ Simkl responses incl. the 409 recovery; startup ordering and heartbeat
 contracts. P3s: full `_trakt.traktProgress` → `_host.traktProgress` chain
 registration with frozen adapter body; accurate source-guard prefix update.
 Membership confirmed: 24 moves, 59 retained references; Hosts 19/15.
+
+## Phase 7 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+P2s folded: concrete cross-profile write characterization (pre-existing
+corruption risk recorded in Follow-ups, preserved); one-shot scoped to
+position dispatch with EOF/overlap/tracker cases and EOF order; early
+threshold in both directions with a selective loader barrier; caught vs
+uncaught failure state and partial cleanup failure. P3s: corrected
+11-occurrence ledger (no playlist-index caller of the episode mark);
+explicit CI/theme/analyzer transition.
