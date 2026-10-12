@@ -2609,6 +2609,30 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   push/merge/switch or device execution. Clean-tree gate follows; end-of-series
   local movie/episode/rewatch/This-device and earlier device checklists pending.
 
+### 2026-10-13 — Phase 7 gate fixture closure (test/docs only)
+
+- **Reproduction.** First clean `cc430295d` suite completed and is rejected:
+  exactly one changed identity, Simkl suspended episode snapshot (600 s instead
+  of 360 s); all 98 completion cases pass. Unmodified original `2defa5100`
+  reproduces it on isolated run two, after one passing run. No failure allowance.
+- **Cause/fix.** Guide background refresh can persist the synthetic empty Simkl
+  response over the seeded snapshot; an original diagnostic trace observes the
+  concurrent player reader loading `{}`. Hold guide HTTP refreshes with the
+  existing completer until race assertions finish, then release the existing
+  404/cleanup path. Production is untouched. Earlier wait/reader-ordinal
+  candidates failed and remain excluded; diagnostic sources restored.
+- **Proof/checks.** Entire 18-case file original/moved 3× passes (54 + 54), plus
+  restored final original control. Isolated AST proof preserves all 19 expectation
+  calls and test-name tokens. Simkl and MDBList percent+1 mutations on the original
+  assertion-fail against unchanged duration expectations; both sources restored.
+  Test format/analyzer pass. The first token-audit attempt omitted ownership
+  output and rejected before mutation execution; corrected with a fresh parser.
+  Commands/hashes/revision and NOTE in `p7/gate/fixture-note/`.
+- **Gate.** Same accepted Step-0 identity baseline retained after original fixture
+  validation. Fresh clean full suite/builds follow this test/docs commit; manifest
+  matrix continues with unchanged production/tool/configuration inputs. Human
+  device checklist pending; no bug fix, pubspec change or device execution.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

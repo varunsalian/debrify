@@ -5112,3 +5112,34 @@ No source-reader assertion needs retargeting in this phase. Current checker,
 98-diagnostic scoped comparator/negatives, 143 focused tests, format, size and
 architecture/negatives pass. Commands/hashes/revision: `p7/step1/completion.json`.
 The full clean-tree gate follows; no behavior or pubspec change.
+
+## Phase 7 gate fixture NOTE — original snapshot flake (2026-10-13)
+
+The completed first clean gate at `cc430295d` has exactly one changed outcome:
+Simkl suspended same-show episode snapshot expects 360 s but observes the 600 s
+launch seek. Unmodified original `2defa5100` reproduces the exact assertion on
+isolated run two (run one passes). The guide's background authenticated refresh
+receives the synthetic empty Simkl response and can replace the seeded map;
+an original trace observes the concurrent player reader loading `{}`. The empty
+refresh path is confirmed in `SeriesBrowser._refreshTrackerSnapshots` and
+`EpisodeTrackerSnapshotService.refreshSimkl`. Diagnostic edits are restored and
+receive no pass/mutation credit.
+
+Test-only stabilization holds the existing guide HTTP completer for every
+snapshot race until the assertions finish, preserving the profile case and its
+404 completion/cleanup. Earlier seek-wait and ordinal-boundary attempts failed
+and are excluded. All 19 existing expectation calls and test-name tokens are
+AST-identical. Entire file original/moved 3× controls pass (54 + 54), then the
+final restored-original 18-case control passes. No added identity, deleted
+assertion, application change or failure allowance. Format/analyzer pass.
+The accepted Step-0 baseline remains the comparison target.
+
+| Supplemental original mutation | Observable contract | Result |
+|---|---|---|
+| Simkl current-episode percentage +1 | Exact resumed duration through public episode selection, with the guide refresh held | assertion killed |
+| MDBList current-episode percentage +1 | Exact resumed duration through public episode selection, with the guide refresh held | assertion killed |
+
+Evidence: `p7/gate/fixture-note/` reproduction logs, rejected candidates,
+non-credit traces, 3× controls, AST assertion proof, patches and mutation logs;
+revision/input hashes in `completion.json`. The systematic P7 and independent
+sample totals remain unchanged. New clean gate evidence follows separately.
