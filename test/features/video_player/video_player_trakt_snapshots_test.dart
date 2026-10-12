@@ -99,11 +99,12 @@ void main() {
             traktScreen(enabled: false, playlist: traktPlaylist, percent: 50),
           );
           final b = await traktBrowser(t, f);
-          reads.run(() => unawaited(b.onEpisodeSelected(1, 2)));
+          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
           await f.until(t, () => reads.pending.isNotEmpty);
           final before = d.seeks.length;
           b.seriesPlaylist.allEpisodes.removeWhere((e) => e.originalIndex == 1);
           reads.release();
+          await f.finish(t, selection);
           await d.drain();
           expect(d.seeks, hasLength(before));
         } finally {
@@ -211,7 +212,7 @@ void main() {
               ),
             );
           }
-          reads.run(() => unawaited(b.onEpisodeSelected(1, 2)));
+          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
           await f.until(
             t,
             () => reads.pending.isNotEmpty,
@@ -253,6 +254,7 @@ void main() {
           }
           final preRelease = d.seeks.length;
           reads.release();
+          await f.finish(t, selection);
           await d.drain();
           if (race == 'episode') {
             expect(d.seeks.skip(preRelease), [const Duration(seconds: 360)]);

@@ -3619,3 +3619,27 @@ negative witnesses validate wrong live reader/adapter rejection on a detached
 creation worktree. No bug fix, new seam or tracker redesign. Simkl/MDBList
 extraction stays Phase 6; original profile/race gaps and human Trakt/PiP
 checklist remain pending.
+
+## Phase 5 gate fixture scheduling closure (2026-10-12)
+
+First clean creation gate exposed one original load-sensitive profile snapshot
+observation: expected a 480 s resume seek, but the fixed drain ended before
+its public selection action completed. The identical assertion reproduced
+on original `1347a5ad8` (one failure, two passes in isolation); moved creation
+`edd4d9ca5` passed three isolation repeats. No production-body difference.
+
+The test now retains and awaits `SeriesBrowser.onEpisodeSelected` after the
+real storage barrier releases, for the five races and missing-row case. Every
+value, count, identity rejection, absence and error assertion stays. The entire
+eight-case file passes three times on original and moved code (24 + 24);
+six original mutation runs still assertion-kill `snapshot-index`,
+`snapshot-ep-null`, `snapshot-add-mounted`, `snapshot-add-generation`,
+`snapshot-early-index`, `snapshot-guard`. Original application restored.
+
+Evidence/NOTE: `p5/gate/profile-repeat/`, `profile-stabilization/` (commands,
+hashes, assertion logs, patches). First raw gate retained as `first-suite.*`.
+The recorded Step-0b expected identities remain unchanged; focused original
+replays revalidate the only modified fixture file. No failure allowlisting,
+no outcome acceptance and no application fix. The full clean-tree gate is
+rerun after this test/docs-only commit. Previously completed app/tool checks
+have identical inputs; their creation evidence is retained.

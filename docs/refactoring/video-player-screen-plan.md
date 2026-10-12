@@ -2028,6 +2028,22 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   checklist and original profile/race gaps remain pending; Phase 6 is later.
 
 
+### 2026-10-12 — Phase 5 gate fixture scheduling closure (test/docs only)
+
+- **Finding/reproduction.** First clean `edd4d9ca5` suite exposed a missing
+  profile snapshot seek before a fixed drain. Identical assertion reproduced
+  on original `1347a5ad8` (1/3 fails); moved isolation 3/3 passes. NOTE and
+  raw evidence in `p5/gate/profile-repeat`, `profile-stabilization`.
+- **Fix/proof.** Await the original public selection Future after releasing
+  held storage; all assertions retained. Entire eight-case file original/moved
+  3× passes (24 + 24); six original race/missing-row mutations assertion-kill.
+  Source restored, format/analyzer pass, application/tooling/pubspec unchanged.
+- **Gate.** No failure allowlist or changed expected identity. Step-0b baseline
+  reused with original focused validation of this changed fixture; first raw
+  failed suite archived. Fresh full gate on clean stabilization commit follows.
+  Creation app/tool checks have identical inputs and remain valid. No bug fix.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
