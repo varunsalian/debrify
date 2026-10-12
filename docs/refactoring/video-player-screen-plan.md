@@ -1163,6 +1163,17 @@ phase-5 merge.
   seek below the cached segment end and leave its button visible. Phase-3
   characterization records this existing result without changing it.
 
+- Trakt initialization awaits the policy before resolving auth ownership: if
+  profile handoff completes during that await, the still-mounted outgoing route
+  can scrobble with incoming credentials. A handoff during cipher authorization
+  instead propagates ResourceAuthorizationException. Phase-5 characterization
+  pins both original outcomes; profile/session capture needs a separate fix.
+- The Trakt percentage reader captures show identity but only compares the
+  shared string binder after storage. A→B→A can accept an older A snapshot over
+  a newer A, and ready playlist callers can attempt an outgoing resume seek
+  after profile change/disposal. Phase-5 tests retain these original gaps;
+  cancellation/generation/profile guards belong to a separate change.
+
 
 ## Progress
 
@@ -1908,7 +1919,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 
 ### 2026-10-12 — Phase 5 Step T (Trakt tooling checkpoint)
 
-- **Revision/base.** Tooling follows approved `fc7196f78`; original application
+- **Revision/base.** Committed `5d074e762` after approved `fc7196f78`; original application
   re-measured by name at `315028407`: 855 disjoint spans, 12 Trakt moves,
   32 retained occurrences (including the one patched skip-adapter receiver).
 - **Proof.** Complete raw/formatted evidence-only P5 splits compare with zero
@@ -1930,6 +1941,45 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   Heavy work nice 19; explicit isolated parser flags; serialized suites.
   Evidence `p5/tooling/completion.json` records the resulting commit.
 
+
+### 2026-10-12 — Phase 5 Step 0 (original Trakt characterization; stop)
+
+- **Revision/base.** Follows Step T `5d074e762`; application re-measured at
+  `315028407`, detached under `p5/step0/original`. Resulting Step-0 revision
+  and tested tree are recorded in `p5/step0/completion.json`.
+- **Harness/behavior.** Isolate-wide delegating HTTP clients, synthetic storage
+  sessions, real-cipher and decoded-storage/policy continuation barriers;
+  no production seam. 75 new Trakt cases plus two existing skip integration
+  cases pass on the original: exact start/pause/stop bodies, 80/81, heartbeat,
+  failed-send dedup, launch budget, shared Simkl percent, disabled/validation
+  seek handover, held target, early init and show/episode/profile/dispose races.
+- **Sweep/proof.** All 12 declarations and 32 retained occurrences classified:
+  191 points = 180 assertion kills, ten equivalent, one PiP device-pending.
+  A separate player-construction mutation proves early-await disposal. Every
+  new case has an assertion kill matching its final case-file hash; invalid,
+  comment-only and uncaught-error-only attempts excluded. Original restored.
+  Deps tables and `p5/step0/coverage.json` contain cases, points and witnesses.
+- **Preserved gaps.** Early policy/profile handoff can use incoming credentials
+  for the outgoing route; init/storage failures escape; snapshot readers accept
+  old A in A→B→A and ready playlist callers attempt resume after profile/dispose.
+  No fixes. Cache null→empty is equivalent through the first identity binder;
+  index/scan candidates use original construction invariants, not mount waits.
+- **Commands/results.** Nice-19 serialized hook-defined/no-pub controls,
+  mutations and `suite_evidence.py run/compare`: 13,047 successes / 13 pre-existing failures / 28 pre-existing load errors / 20 skips,
+  **75 passing additions only**, every original identity unchanged.
+  Changed test analysis/format/idempotence, unchanged 75 facade diagnostic
+  identities, size/architecture and explicit isolated-parser audit PASS.
+  Step-T complete-materialization, all Dart/Kotlin self-tests and P1–P4
+  historical checks reused; application/tooling inputs are unchanged.
+- **Deviation.** One exploratory retry omitted the evidence override; nine
+  fixture directories were immediately moved from the old P2 default into
+  P5 and that run excluded (`retry-evidence-correction.json`). Accepted runs
+  use the explicit P5 root and isolated kernel-clean parser packages.
+- **Scope/stop.** Application/pubspec untouched; Trakt only, no production
+  moves, bug fixes, allowlisting, device commands, push, merge or branch switch.
+  Step 1 will apply P5, register the ten test files and retarget the named
+  source guard. Simkl/MDBList extraction is Phase 6. Manual Trakt movie/series
+  start/pause/seek/stop, >80 watched, cross-device resume and PiP remain pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
