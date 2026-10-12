@@ -2000,6 +2000,34 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   allowlisting or real network. Existing profile/race gaps remain unchanged.
 
 
+### 2026-10-12 — Phase 5 Step-1 production creation
+
+- **Revision/base.** Follows addendum `e0772d8d8`; original `315028407`.
+  Resulting creation revision/hashes/commands in `p5/step1/completion.json`.
+- **Applied.** Twelve Trakt moves, exact 21-member live Host and frozen adapter;
+  eager `_trakt` append, all 32 retained occurrences, one counted skip-adapter
+  patch and Simkl's two progress forwardings. Shared seek guards/identity,
+  persistable-position and analytics/dispose statement order stay State-owned.
+  App bytes equal frozen Step-T formatted files; facade 17,394 / destination 294.
+- **Commands/results.** Nice-19 P5 current: zero differences. Serialized
+  hook-defined/no-pub affected suite: 279 successes, no failure/skip.
+  Format, size/architecture and negatives PASS; root/CI comparator 84 / zero
+  additions; previous inventory mappings preserved, one frozen unused Trakt
+  import warning allowlisted. Broad scan removed 51 unchanged-source/generated
+  diagnostics, with no outside additions; variation recorded, no suppression.
+- **CI/guards.** Current/self/analyzer→P5; P1–P4 merge-revision history checks;
+  ten Trakt files, all theme/source lists registered. Android TV percentage
+  guard validates each live reader/capture/rejection and current adapter;
+  retained TVMaze, metadata and rewatch checks stay.
+- **Baseline/sample.** Clean addendum baseline: 13,049 successes, unchanged
+  13 failures / 28 errors / 20 skips; two additions only. Independent sample
+  17/18; h17 closed separately on original `1347a5ad8`, no bug fix.
+- **Next/constraints.** Clean creation gate, detached source-guard negative
+  proof and both release builds follow. Pubspec unchanged, no new seams,
+  real API network, device commands, push, merge or switch. Human Trakt/PiP
+  checklist and original profile/race gaps remain pending; Phase 6 is later.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

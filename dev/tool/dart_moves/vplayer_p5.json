@@ -2,7 +2,7 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 5,
-  "status": "draft",
+  "status": "applied",
   "base": "315028407",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",

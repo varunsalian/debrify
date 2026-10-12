@@ -3583,3 +3583,39 @@ clean addendum commit before any production move and compares by identity
 against Step 0, requiring exactly two passing additions and unchanged original
 outcomes. Baseline metadata/delta are in `p5/step0b/`. No bug fix, production
 move, seam, real network, dependency change or allowlisting.
+
+## Phase 5 Step 1 — frozen Trakt production creation (2026-10-12)
+
+Creation follows addendum `e0772d8d8`; application original `315028407`.
+The clean addendum baseline has 13,049 successes, unchanged 13 failures /
+28 load errors / 20 skips: exactly C78/C79 added, all previous outcomes identical
+(`p5/step0b/baseline*`, `suite-delta.json`). Commands/source hashes in
+`p5/step1/completion.json` and `materialization-application.json`.
+
+| Contract / check | Applied result |
+|---|---|
+| Ownership | Twelve Trakt declarations, `VpTraktScrobbler`, its frozen 21-member Host/adapter; eager State constructor appends `_trakt` after `_display`; current P5 checker zero differences |
+| Retained references | All 32 counted occurrences preserve statement order. Simkl's two progress calls forward to `_trakt.traktProgress()`. The entire skip adapter is P5 `patched` with one counted receiver rewrite, not an earlier-destination patch |
+| Shared lifecycle | Persistable-position code, season/episode resolution, both seek guard objects, shared identity and analytics timer stay State-owned; each dispose statement stays in its original position |
+| Byte/token proof | Both application paths equal Step-T formatted materialization exactly; archived optional-comma, idempotence, construction and diagnostic proof reused; all 13 earlier destinations protected |
+| Characterization / guards | 279 affected successes, no failure/skip: all video-player tests, auto-next routing, Android TV MDBList source guard and theme guards; new transient-duration cases pass on moved code |
+| Source retarget | Old binder→external-audio slice replaced by validated LIVE `_currentEpisodeTraktPercent`, `_currentEpisodeSimklPercent`, `_currentEpisodeMdblistPercent` declarations. Every body must capture the live show and reject mismatched binder identity; complete current-facade validation pins the computed Trakt adapter. Carried TVMaze identity, metadata readiness and rewatch assertions retained |
+| CI | P5 current/self/analyzer inventory; P1–P4 historical merges 31a347ad2/fc24e32ae/890df14d8/315028407; fetch-depth 0 and harness flag preserved; ten Trakt files registered; feature-wide format/analyze lists cover the new destination, retargeted root test added to format |
+| Themes / architecture | Manifest, rendered set and all three frozen source-guard lists extended; existing exact bridge, facade back-import prohibition, pure boundaries and 500-line cap apply; architecture and negatives pass |
+| Size | Facade 17,592→17,394, shrink-only dated baseline; controller/Host file 294 lines |
+| Analyzer | Root/CI scoped 84 with zero additions beyond frozen P5 probe maxima; P1–P4 mappings preserved. Exact retained Trakt import produces the probe's recorded unused-import warning; allowlist adds only that mechanical warning. Destination import-order info is likewise frozen |
+
+The first broad-root before/after check observed 51 removed diagnostics from
+unchanged test/vendor files and generated build paths; no outside additions.
+Every affected tracked source hash is unchanged. This analyzer scan variation
+is recorded in `step1/analyzer-delta.json`, without changing the scoped
+identity comparator, inventory maxima or production code. Initial strict
+outside-equality attempt remains archived in `checks-initial.json`.
+
+Clean-tree gate follows this creation commit: exact Step-0b suite identities,
+all Dart/Kotlin self-tests/current/history checks, root/CI analyzer comparators,
+format/size/architecture and both release builds. Additional source-guard
+negative witnesses validate wrong live reader/adapter rejection on a detached
+creation worktree. No bug fix, new seam or tracker redesign. Simkl/MDBList
+extraction stays Phase 6; original profile/race gaps and human Trakt/PiP
+checklist remain pending.

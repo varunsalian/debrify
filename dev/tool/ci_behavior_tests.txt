@@ -458,3 +458,15 @@ test/features/video_player/video_player_display_controls_test.dart
 test/features/video_player/video_player_display_gestures_test.dart
 test/features/video_player/video_player_display_orientation_test.dart
 test/features/video_player/video_player_display_speed_test.dart
+
+# Phase 5 Trakt characterization: protocol, seek handover, races and early windows.
+test/features/video_player/video_player_trakt_cache_test.dart
+test/features/video_player/video_player_trakt_early_policy_test.dart
+test/features/video_player/video_player_trakt_guide_mask_test.dart
+test/features/video_player/video_player_trakt_initialization_test.dart
+test/features/video_player/video_player_trakt_progress_test.dart
+test/features/video_player/video_player_trakt_protocol_test.dart
+test/features/video_player/video_player_trakt_seek_handover_test.dart
+test/features/video_player/video_player_trakt_seek_inputs_test.dart
+test/features/video_player/video_player_trakt_snapshots_test.dart
+test/features/video_player/video_player_trakt_validation_test.dart
