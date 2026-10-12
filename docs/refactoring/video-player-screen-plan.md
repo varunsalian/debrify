@@ -1108,24 +1108,100 @@ requests, seeks still release resume.
 
 ## Phase 6 — Simkl and MDBList scrobbling (trackers, part 2 of 2)
 
-Branch `refactor/vplayer-p6` off the phase-5 merge. Same rules, from the
-phase-5 design review: **Simkl** (5 fields 1494–1503, 7 methods, 205
-lines; Host 19 members incl. `double traktProgress()` forwarded to
-`_trakt`) and **MDBList** (3 fields 1499/1501/1504, 9 methods, 142 lines;
-Host 15 members incl. position, persistable position and `Future<void> get
-playerInitializationFuture`; the session is allocated inside
-initialization, not a field initializer — preserve that). Tracker-specific
-protocol to characterize: Simkl play stamps a local `start` without
-POSTing, heartbeats POST **pause**, its defensive `_simklScrobble('start')`
-branch has no live caller (dormant); MDBList play checkpoints through
-**pause**, sub-threshold exit sends pause (`mdblist_scrobble_session.dart:226`),
-completion uses **`>= 80`** (vs Trakt/Simkl `> 80`); MDBList catches only
-player-initialization failure; gated MDBList disposal (`_mdblistStop()` can
-return at its gate while `session.close()` still runs, 11707). MDBList's
-production singleton keeps the client from first construction
-(`mdblist_service.dart:58`) — the phase-5 isolate-wide delegating transport
-covers it. The detailed section is written and design-reviewed after the
-phase-5 merge.
+Branch `refactor/vplayer-p6` off the phase-5 merge `ea7901ead`. Evidence
+`refactor-evidence/vplayer/p6/`. Line numbers at `d019a0765` (phase-5
+gate, facade 17,394); re-measure by name at the phase base. Precedent:
+phase 5 (its Host shape, HTTP transport harness, selector registration,
+patched-adapter rule, async-reader cases and the stabilized snapshot
+fixture apply unchanged).
+
+Two sibling collaborators, no sibling imports.
+
+### Moves
+
+**`vp_simkl_scrobbler.dart` — `VpSimklScrobbler` + `VpSimklScrobblerHost`
+(≈ 250 lines; 205 method lines):** fields (interleaved block 1484–1497,
+moved individually; comment ownership by checker) `_simklScrobbleEnabled`,
+`_launchSimklPercentSpent`, `_simklEpisodeProgress` (with its comment),
+`_simklLastScrobbleAction`, `_simklHeartbeatTimer`; methods
+`_initSimklScrobble` (with the "Simkl scrobble machine" section comment,
+which names `_traktProgress()` — comments move verbatim, never edited),
+`_simklSeriesSEUnresolved`, `_simklScrobble`, `_startSimklHeartbeat`,
+`_stopSimklHeartbeat`, `_simklScrobbleSeek`, `_currentEpisodeSimklPercent`.
+
+**`vp_mdblist_scrobbler.dart` — `VpMdblistScrobbler` + Host (≈ 200
+lines; 142 method lines):** fields `_mdblistEpisodeProgress`,
+`_launchMdblistPercentSpent`, `_mdblistSession`; methods `_mdblistTarget`,
+`_initMdblistScrobble`, `_updateMdblistPosition`, `_mdblistPlay`,
+`_mdblistPause`, `_mdblistStop`, `_mdblistScrobbleSeek`,
+`_switchMdblistTarget`, `_currentEpisodeMdblistPercent`.
+
+Initializers: `false` / implicit `null` — inert. The MDBList session is
+allocated inside `_initMdblistScrobble`, not by a field initializer —
+timing preserved.
+
+**Stay State-owned:** `_episodeTrackerProgressImdbId` (in the middle of the
+field block), `_analyticsHeartbeatTimer`, `_persistablePosition`,
+`_traktSeasonEpisode`, `_bindEpisodeTrackerProgressIdentity`,
+`_resumeTrackingAfterValidationGate`, the seek guards.
+
+**Hosts** (design review measured 19 Simkl / 15 MDBList members; re-freeze
+at step T): common — `mounted`, validation-gate state, playing, duration,
+five nullable identity getters, `traktSeasonEpisode()`,
+`bindEpisodeTrackerProgressIdentity(String)`; Simkl adds the
+`widget.simklScrobble` selector, **`double traktProgress()`** (facade
+forwards to `_trakt.traktProgress()` — replaces phase 5's two retained
+`_trakt.traktProgress()` substitutions with Host calls inside the moved
+body), playlist/index/effective-episode members; MDBList adds the
+`widget.mdblistScrobble` selector, position, persistable position and
+`Future<void> get playerInitializationFuture`.
+
+**Retained references** (≈ 60, measured at step T; statement order
+preserved, including the MDBList update preceding validation resumption
+and the Trakt → Simkl → MDBList order in every fan-out): initState
+1677/1678; validation resumption/cache reset; player subscriptions
+(3332–3432 region); EOF (4739–4741); switch restoration/advance (9071,
+10041, 10144–10164); disposal (11454–11457 in place); launch budgets and
+percent reads (11728–11731, 11764/11779, 11856/11857); seek dispatch
+(11260/11261, 12539/12540, 12608/12609, 13096/13097, 13194/13195,
+14178–14193, 14730/14731); the skip adapter's two remaining tracker
+forwarders (17301/17303) → a P6 `patched` facade declaration with two
+counted receiver rewrites; the `_VpTraktScrobblerHostAdapter`'s
+`bindEpisodeTrackerProgressIdentity` unchanged.
+
+**Scaffolding:** patched State constructor appends `_simkl`, then
+`_mdblist`; two adapters; CI current → P6, P1–P5 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`, `315028407`, `ea7901ead`); protect all 14
+earlier destinations; theme/source-guard lists; the
+`android_tv_mdblist_progress_source_test.dart` slice for the Simkl and
+MDBList percentage readers moves to the validating reader (equal or
+stronger, as phase 5 did for Trakt).
+
+### Step 0 — characterization of the original
+
+Reuse the phase-5 isolate-wide delegating HTTP transport, credential
+seeding, cache/session reset and cipher barrier. **Simkl:** play stamps a
+local `start` marker without POSTing; heartbeats POST **pause**; the
+defensive `_simklScrobble('start')` branch with no live caller is
+classified dormant; `> 80` transitions (80 vs 81); dedup on repeated
+actions and after failed sends; unresolved series S/E; launch budget;
+per-episode progress. **MDBList:** play checkpoints through **pause**;
+sub-threshold exit sends pause (`mdblist_scrobble_session.dart:226`);
+completion `>= 80` (exactly 80); target switch on source/episode change;
+only player-initialization failure is caught (other init errors
+propagate — pin both); gated disposal (`_mdblistStop()` returns at its gate
+while `session.close()` still runs, 11457); the production singleton keeps
+its first client (`mdblist_service.dart:58`). **Both:** the fan-out order
+on play/pause/seek/EOF/dispose across all three trackers (Trakt now moved);
+async percent readers (same-show episode change, different-show
+rejection, A→B→A, concurrent reads resetting the shared cache, profile
+change/disposal during init and snapshot load); early windows for every
+moved initializer. Mutation proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+With Simkl and MDBList connected: start/pause/seek/stop for a movie and
+a series episode, watched at the threshold, progress visible elsewhere;
+disabled trackers send nothing.
 
 ## Follow-ups
 
