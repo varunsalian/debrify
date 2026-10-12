@@ -1981,6 +1981,25 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   source guard. Simkl/MDBList extraction is Phase 6. Manual Trakt movie/series
   start/pause/seek/stop, >80 watched, cross-device resume and PiP remain pending.
 
+### 2026-10-12 — Phase 5 Step 0b addendum (independent sample closure)
+
+- **Original/revision.** Follows `1347a5ad8`; detached original at that exact
+  revision, application still `315028407`. Resulting addendum revision is
+  recorded in `p5/step0b/completion.json`.
+- **Sample/closure.** Claude 17/18 killed (94%); h17 was a real gap in the
+  State-owned persistable-position dependency. C78/C79 hold a failed ten-minute
+  resume at raw 80 ms, then shrink duration to 12.5/10 minutes. Pause, play and
+  heartbeat report raw progress, with no automatic watched stop. h17
+  assertion-kills both; >=→> kills the exact-80 case. Original restored.
+- **Commands/results.** Nice-19 serialized hook-defined/no-pub original
+  control and two mutations PASS; changed format/analyzer PASS. Deps sample,
+  mutation and supplemental coverage rows updated; 77 new Trakt cases total.
+  Clean addendum full-suite baseline follows before Step 1, compared to Step 0
+  for exactly two passing additions (`p5/step0b/baseline*`, `suite-delta.json`).
+- **Scope.** Test/docs only; no application/pubspec change, seam, fix,
+  allowlisting or real network. Existing profile/race gaps remain unchanged.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

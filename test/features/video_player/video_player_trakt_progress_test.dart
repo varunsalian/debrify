@@ -34,6 +34,43 @@ void main() {
       }
     },
   );
+  for (final shortDurationMs in [750000, 600000]) {
+    testWidgets(
+      'Trakt held resume at or above eighty percent of transient duration $shortDurationMs uses raw progress',
+      (t) async {
+        final f = VideoPlayerEnvironment(
+          configurePlayer: (p) {
+            p.failures['seek'] = StateError('synthetic unlanded resume');
+          },
+        );
+        final d = TraktPlayerDriver(t, f);
+        await d.initialize();
+        try {
+          await d.mount(traktScreen(percent: 50));
+          expect(d.seeks, contains(const Duration(minutes: 10)));
+          expect(f.player.state.position, const Duration(milliseconds: 80));
+          d.expectRequest(0, 'start', 50);
+          f.player.emit('duration', Duration(milliseconds: shortDurationMs));
+          await d.drain();
+          await d.playing(false);
+          expect(d.actions, ['start', 'pause']);
+          d.expectRequest(1, 'pause', 80 / shortDurationMs * 100);
+          await d.playing(true);
+          expect(d.actions, ['start', 'pause', 'start']);
+          d.expectRequest(2, 'start', 80 / shortDurationMs * 100);
+          await f.advance(t, const Duration(minutes: 2));
+          await d.drain();
+          expect(d.actions, ['start', 'pause', 'start', 'start']);
+          d.expectRequest(3, 'start', 80 / shortDurationMs * 100);
+          expect(f.player.state.position, const Duration(milliseconds: 80));
+          expect(d.actions, isNot(contains('stop')));
+        } finally {
+          await d.close();
+        }
+      },
+    );
+  }
+
   for (final gate in ['paused', 'duration', 'coordinates', 'identity']) {
     testWidgets(
       'Trakt heartbeat live gates $gate retain the original timer without sending or logging a checkpoint',

@@ -3533,3 +3533,53 @@ default. All nine were relocated into `p5/step0/retry-evidence-correction/`;
 Accepted controls/mutations/baseline explicitly set the P5 root. No production
 move, application change, new seam, dependency change, allowlisting, device
 command, push, merge or branch switch.
+
+## Phase 5 Step 0b — independent sample and transient-duration closure (2026-10-12)
+
+Claude sampled original `1347a5ad8`: **17/18 valid killed (94%)**.
+Evidence: `p5/claude-sample/p5-claude-muts.json`, per-mutation logs and
+`results.json`. The one survivor feeds Trakt through the retained State-owned
+`_persistablePosition`; it is a real coverage gap, now closed without an
+application change.
+
+| Independent mutation | Original sample result | Assertion case(s) / closure |
+|---|---|---|
+| `h1` | killed | Trakt initialization type gate prevents play seek heartbeat and dispose sends |
+| `h2` | killed | Trakt initialization target gate prevents play seek heartbeat and dispose sends; Trakt initialization custom gate prevents play seek heartbeat and dispose sends |
+| `h3` | killed | Trakt held auth initialization paused completion samples live state |
+| `h4` | killed | Trakt unresolved episode creates no latent seek or start heartbeat when coordinates arrive later; Trakt held auth completion above eighty sends stop without arming heartbeat |
+| `h5` | killed | Trakt progress samples held unlanded resume rather than the raw restart position |
+| `h6` | killed | Trakt pause transition at 80 percent keeps strict watched threshold; Trakt playing transition at 80 percent keeps strict watched threshold; Trakt heartbeat interval replaces previous timer bypasses dedup then stops above eighty |
+| `h7` | killed | Trakt progress beyond duration or position uses original clamped percent; Trakt pause transition at 81 percent keeps strict watched threshold |
+| `h8` | killed | Trakt seek rearms heartbeat and restores start dedup after a watched stop; Trakt protocol episode start pause stop bodies and duplicate edges; Trakt protocol movie start pause stop bodies and duplicate edges; Trakt TV scrub confirm sends progress while the native pause is still suspended |
+| `h9` | killed | skip tracker seek order arms Trakt heartbeat before Simkl; Trakt seek rearms heartbeat and restores start dedup after a watched stop; Trakt heartbeat live gates paused retain the original timer without sending or logging a checkpoint; Trakt heartbeat live gates duration retain the original timer without sending or logging a checkpoint |
+| `h10` | killed | Trakt heartbeat live gates paused retain the original timer without sending or logging a checkpoint |
+| `h11` | killed | Trakt heartbeat interval replaces previous timer bypasses dedup then stops above eighty |
+| `h12` | killed | Trakt heartbeat restores start dedup after an implicit stop with a live timer |
+| `h13` | killed | Trakt validation-active key releases held resume target before its early return |
+| `h14` | killed | Trakt disabled key releases held resume target before its early return; Trakt validation-active key releases held resume target before its early return |
+| `h15` | killed | Trakt seek target before landing is sent immediately without sampling the old position; Trakt keyboard rewind seek sends the clamped target; Trakt double tap left seek reaches the original tracking caller; Trakt keyboard forward seek sends the clamped target |
+| `h16` | killed | skip tracker seek order arms Trakt heartbeat before Simkl; Trakt seek rearms heartbeat and restores start dedup after a watched stop |
+| `h17` | survived | C78/C79 now assertion-kill h17 on original application |
+| `h18` | killed | Trakt progress samples held unlanded resume rather than the raw restart position; Trakt protocol episode start pause stop bodies and duplicate edges; Trakt protocol movie start pause stop bodies and duplicate edges; Trakt pause transition at 80 percent keeps strict watched threshold |
+
+| Addendum case / retained dependency | Original behavior / assertion-failing witness |
+|---|---|
+| C78 — `_persistablePosition`, 750,000 ms duration | Requested resume 600,000 ms was held at the original 1,200,000 ms duration; seek fails and raw position remains 80 ms. At exactly 80% of the new duration, pause, play and heartbeat all report `80 / 750000 * 100`, with no automatic stop. Both h17 removal and `>=`→`>` assertion-fail this case. |
+| C79 — `_persistablePosition`, 600,000 ms duration | Held target becomes 100% of transient duration, but pause, play and heartbeat report `80 / 600000 * 100`; no watched/automatic-stop scrobble. h17 removal assertion-fails this case. |
+| `h17` closure | Delete held-target >=80% fallback: two assertion kills; original detached HEAD `1347a5ad8`, application source identical to `315028407`; restored after each run. |
+| `boundary-equality` | Change held-target >= to >: one assertion kill, exact-80 case. |
+
+The existing 191-point moved-declaration/retained-reference matrix remains
+180 killed / ten equivalent / one PiP device-pending. These two supplemental
+mutations cover a State-owned dependency and do not change those fates.
+New Trakt cases total 77 (plus two existing skip integration controls).
+The independent sample remains reported as 17/18; the separate h17 replay
+documents the closed survivor. Commands, control, assertion text, patches,
+test hashes and restoration: `p5/step0b/mutation-results.json`.
+
+Changed test format/analyzer pass. The new full-suite baseline runs on the
+clean addendum commit before any production move and compares by identity
+against Step 0, requiring exactly two passing additions and unchanged original
+outcomes. Baseline metadata/delta are in `p5/step0b/`. No bug fix, production
+move, seam, real network, dependency change or allowlisting.
