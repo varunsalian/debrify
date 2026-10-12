@@ -213,3 +213,23 @@ lifetime. The percentage source guard reads each validated current declaration;
 TVMaze identity and rewatch assertions stay. CI selects P5 current/self/analyzer
 and P1–P4 historical merge revisions, with ten Trakt behavior files and all theme
 lists registered. No bug fixes or new seam.
+
+Phase 6 Step T freezes `vplayer_p6.json` as **draft**, base `ea7901ead`.
+`draft_vplayer_secondary_tracker_moves.py --parser-package <isolated>
+--probe <git-common-dir>/refactor-evidence/vplayer/p6/<directory>` materializes
+and compares the complete split without creating production files: 24 moves,
+57 retained substitutions and two counted skip-adapter patches (59 references).
+The State constructor appends Simkl then MDBList after Trakt; eight false/null
+initializers, the 19/15-member Hosts, live adapters and imports are frozen.
+Both complete `_trakt.traktProgress` chains register an explicit original
+expression projection to `_host.traktProgress`; binding-only receiver/capture
+negatives enforce it. The whole skip adapter carries its existing P5 rewrite
+and projects exactly the two new P6 rewrites. All 14 earlier destinations
+remain protected and earlier analyzer mappings remain in the P6 inventory.
+
+**P6 production creation commit only:** select P6 current/self-test and both
+analyzer arguments, retain P1–P5 historical checks at their merge revisions,
+register the new behavior files and both destinations in every theme list,
+retarget the Simkl/MDBList source-reader prefix assertions with independent
+adapter witnesses, and lower the facade size ratchet. T/0 do not enable CI
+against this draft.

@@ -1108,24 +1108,127 @@ requests, seeks still release resume.
 
 ## Phase 6 — Simkl and MDBList scrobbling (trackers, part 2 of 2)
 
-Branch `refactor/vplayer-p6` off the phase-5 merge. Same rules, from the
-phase-5 design review: **Simkl** (5 fields 1494–1503, 7 methods, 205
-lines; Host 19 members incl. `double traktProgress()` forwarded to
-`_trakt`) and **MDBList** (3 fields 1499/1501/1504, 9 methods, 142 lines;
-Host 15 members incl. position, persistable position and `Future<void> get
-playerInitializationFuture`; the session is allocated inside
-initialization, not a field initializer — preserve that). Tracker-specific
-protocol to characterize: Simkl play stamps a local `start` without
-POSTing, heartbeats POST **pause**, its defensive `_simklScrobble('start')`
-branch has no live caller (dormant); MDBList play checkpoints through
-**pause**, sub-threshold exit sends pause (`mdblist_scrobble_session.dart:226`),
-completion uses **`>= 80`** (vs Trakt/Simkl `> 80`); MDBList catches only
-player-initialization failure; gated MDBList disposal (`_mdblistStop()` can
-return at its gate while `session.close()` still runs, 11707). MDBList's
-production singleton keeps the client from first construction
-(`mdblist_service.dart:58`) — the phase-5 isolate-wide delegating transport
-covers it. The detailed section is written and design-reviewed after the
-phase-5 merge.
+Branch `refactor/vplayer-p6` off the phase-5 merge `ea7901ead`. Evidence
+`refactor-evidence/vplayer/p6/`. Line numbers at `d019a0765` (phase-5
+gate, facade 17,394); re-measure by name at the phase base. Precedent:
+phase 5 (its Host shape, HTTP transport harness, selector registration,
+patched-adapter rule, async-reader cases and the stabilized snapshot
+fixture apply unchanged).
+
+Two sibling collaborators, no sibling imports.
+
+### Moves
+
+**`vp_simkl_scrobbler.dart` — `VpSimklScrobbler` + `VpSimklScrobblerHost`
+(≈ 250 lines; 205 method lines):** fields (interleaved block 1484–1497,
+moved individually; comment ownership by checker) `_simklScrobbleEnabled`,
+`_launchSimklPercentSpent`, `_simklEpisodeProgress` (with its comment),
+`_simklLastScrobbleAction`, `_simklHeartbeatTimer`; methods
+`_initSimklScrobble` (with the "Simkl scrobble machine" section comment,
+which names `_traktProgress()` — comments move verbatim, never edited),
+`_simklSeriesSEUnresolved`, `_simklScrobble`, `_startSimklHeartbeat`,
+`_stopSimklHeartbeat`, `_simklScrobbleSeek`, `_currentEpisodeSimklPercent`.
+
+**`vp_mdblist_scrobbler.dart` — `VpMdblistScrobbler` + Host (≈ 200
+lines; 142 method lines):** fields `_mdblistEpisodeProgress`,
+`_launchMdblistPercentSpent`, `_mdblistSession`; methods `_mdblistTarget`,
+`_initMdblistScrobble`, `_updateMdblistPosition`, `_mdblistPlay`,
+`_mdblistPause`, `_mdblistStop`, `_mdblistScrobbleSeek`,
+`_switchMdblistTarget`, `_currentEpisodeMdblistPercent`.
+
+Initializers: `false` / implicit `null` — inert. The MDBList session is
+allocated inside `_initMdblistScrobble`, not by a field initializer —
+timing preserved.
+
+**Stay State-owned:** `_episodeTrackerProgressImdbId` (in the middle of the
+field block), `_analyticsHeartbeatTimer`, `_persistablePosition`,
+`_traktSeasonEpisode`, `_bindEpisodeTrackerProgressIdentity`,
+`_resumeTrackingAfterValidationGate`, the seek guards.
+
+**Hosts** (design review measured 19 Simkl / 15 MDBList members; re-freeze
+at step T): common — `mounted`, validation-gate state, playing, duration,
+five nullable identity getters, `traktSeasonEpisode()`,
+`bindEpisodeTrackerProgressIdentity(String)`; Simkl adds the
+`widget.simklScrobble` selector, **`double traktProgress()`** (facade
+forwards to `_trakt.traktProgress()`; step T registers the full chain
+`_trakt.traktProgress` → `_host.traktProgress` at both occurrences (1844,
+1897) via `registered_occurrence_substitutions.py:17`, freezes the adapter
+body `double traktProgress() => _s._trakt.traktProgress();` and adds
+receiver/capture negatives — ordinary host property bindings reconstruct
+only bare names), playlist/index/effective-episode members; MDBList adds the
+`widget.mdblistScrobble` selector, position, persistable position and
+`Future<void> get playerInitializationFuture`.
+
+**Retained references** (≈ 60, measured at step T; statement order
+preserved, including the MDBList update preceding validation resumption
+and the Trakt → Simkl → MDBList order in every fan-out): initState
+1677/1678; validation resumption/cache reset; player subscriptions
+(3332–3432 region); EOF (4739–4741); switch restoration/advance (9071,
+10041, 10144–10164); disposal (11454–11457 in place); launch budgets and
+percent reads (11728–11731, 11764/11779, 11856/11857); seek dispatch
+(11260/11261, 12539/12540, 12608/12609, 13096/13097, 13194/13195,
+14178–14193, 14730/14731); the skip adapter's two remaining tracker
+forwarders (17301/17303) → a P6 `patched` facade declaration keeping P5's
+Trakt rewrite and adding two counted receiver rewrites (carry the P5
+`patched_class_projection` registration forward; no `earlier_patches`); the `_VpTraktScrobblerHostAdapter`'s
+`bindEpisodeTrackerProgressIdentity` unchanged.
+
+**Scaffolding:** patched State constructor appends `_simkl`, then
+`_mdblist`; two adapters; CI current → P6, P1–P5 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`, `315028407`, `ea7901ead`); protect all 14
+earlier destinations; theme/source-guard lists; in
+`android_tv_mdblist_progress_source_test.dart` (already on the validating
+reader since P5) the Simkl/MDBList expected prefixes change from `_` to
+`_host.`, keeping the capture/rejection and TVMaze/rewatch assertions, with
+an independent failing mutation of each new adapter.
+
+### Step 0 — characterization of the original
+
+Reuse the phase-5 isolate-wide delegating HTTP transport, credential
+seeding, cache/session reset and cipher barrier. **Simkl:** play stamps a
+local `start` marker without POSTing; heartbeats POST **pause**; the
+defensive `_simklScrobble('start')` branch with no live caller is
+classified dormant; `> 80` transitions (80 vs 81); dedup on repeated
+actions and after failed sends; unresolved series S/E; launch budget;
+per-episode progress. **MDBList:** play checkpoints through **pause**;
+sub-threshold exit sends pause (`mdblist_scrobble_session.dart:226`);
+completion `>= 80` (exactly 80); target switch on source/episode change;
+only player-initialization failure is caught (other init errors
+propagate — pin both); gated disposal (`_mdblistStop()` returns at its gate
+while `session.close()` still runs, 11457); the production singleton keeps
+its first client (`mdblist_service.dart:58`). **Both:** the fan-out order
+on play/pause/seek/EOF/dispose across all three trackers (Trakt now moved);
+async percent readers (same-show episode change, different-show
+rejection, A→B→A, concurrent reads resetting the shared cache, profile
+change/disposal during init and snapshot load); early windows for every
+moved initializer. **Disabled vs disabling:** both initially disabled
+playback and disabling each tracker while its session stays active (Simkl
+loads enablement once, 1809, and its send path does not recheck targets,
+`simkl_service.dart:1101`; MDBList checks policy only at init) — record
+actual requests after pause, heartbeat, seek and exit; any continuation is
+a Follow-up, never fixed here. **Pending work:** hold an outgoing MDBList
+checkpoint, start an episode/source switch, dispose or change profile,
+release — assert outgoing/incoming target payloads, later requests,
+revision notifications and timer cleanup (`switchTarget` and `close` wait
+for sends, session 134/171; disposal closes unawaited, 11457); hold a Simkl
+response across retirement incl. the service-owned 409 recovery (25 s
+retry outliving the route, `simkl_service.dart:1183`); drain pending work
+before attaching another fixture. **Startup and heartbeat:** auth
+before/after playing and positive duration (Simkl arms its heartbeat only
+when playing with positive duration, 1822; the first usable-duration event
+starts MDBList, 3377); MDBList init while player setup is suspended (its
+sequence at 1998 — policy, player-init await, mounted, captured target,
+capability await, mounted, allocation, raw-position update, assignment,
+conditional play — and captured locals preserved); the 2-minute interval,
+cancellation on pause/EOF/dispose, Simkl's heartbeat keeping the local
+`start` marker so a later real pause still sends, same-side seek silence vs
+threshold crossings. Mutation proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+With Simkl and MDBList connected: start/pause/seek/stop for a movie and
+a series episode, watched at the threshold, progress visible elsewhere;
+trackers disabled before playback send nothing; disabling one mid-playback
+behaves as characterized (continuation, if any, is a recorded follow-up).
 
 ## Follow-ups
 
@@ -1173,6 +1276,34 @@ phase-5 merge.
   a newer A, and ready playlist callers can attempt an outgoing resume seek
   after profile change/disposal. Phase-5 tests retain these original gaps;
   cancellation/generation/profile guards belong to a separate change.
+
+- Simkl loads enablement once; disabling its target while playback remains
+  active does not retire its pause/heartbeat/seek/exit sends. MDBList checks
+  policy at initialization and likewise continues its existing session.
+  Phase-6 characterization preserves both continuations.
+- A held Simkl success after route/profile retirement still invalidates the
+  global title revision. Its service-owned 409 recovery can retry after the
+  route is gone (25 seconds); a changed token rejects the old-profile retry.
+  A held MDBList completion after disposal can still publish its playback
+  revision; the captured capability rejects a retired profile instead.
+- An explicit source-playlist switch can open the incoming episode while an
+  outgoing MDBList checkpoint is held. Validation suppresses target switching,
+  so the original session can continue checkpointing the outgoing episode.
+  Phase 6 records the actual payloads; target handoff needs a separate fix.
+- Simkl/MDBList percentage readers share Trakt's string identity binder.
+  A→B→A can accept an older A snapshot, and public playlist selections can
+  attempt a late resume after profile handoff/disposal. MDBList capability
+  capture can also allocate an outgoing session after profile handoff; its
+  sends fail authorization while the idle session timer remains until disposal.
+  These Phase-6 original outcomes remain separate from this extraction.
+- A failed ordinary incoming open retains the incoming MDBList tracker target;
+  a failed source preparation can checkpoint an unplayed target before rollback
+  restores the outgoing session. Validation release while paused can also leave
+  the session's existing playing bit and heartbeat active. Phase-6 tests record
+  these original payloads and timers without repairing them.
+- A guide-only Simkl/MDBList read can warm its snapshot even when policy masks
+  that provider's progress. A later selected-provider resume can use that cached
+  value after storage changes; cache freshness is separate follow-up work.
 
 
 ## Progress
@@ -2079,6 +2210,180 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   switch or device command. Phase 5 complete; Phase 6 Simkl/MDBList is later.
 
 
+### 2026-10-12 — Phase 6 Step T (secondary tracker tooling checkpoint)
+
+- **Revision/base.** Follows approved `1c8ce8e7f`; original application
+  re-measured by name at `ea7901ead`: 846 disjoint spans, 24 moved,
+  820 retained and two patched declarations; 57 retained substitutions plus
+  two counted skip-adapter rewrites give all 59 references. Resulting revision
+  and commands are recorded in `p6/tooling/completion.json`.
+- **Proof.** Complete raw/formatted evidence-only splits compare with zero
+  differences. Eight false/null initializers, 19/15 live Hosts, eager Simkl
+  then MDBList construction, existing P5 skip forwarding and both complete
+  Trakt-progress chains are frozen. Existing opt-in expression projection
+  needs no shared-guard change; guard-only chain/leaf/capture negatives pass.
+  All 14 earlier destinations remain protected. Two optional commas inserted,
+  none deleted; format idempotent, zero formatting diagnostic changes.
+- **Commands/results.** All 33 accepted tooling checks pass: 26 existing
+  Dart manifest self-tests, universal P6 self-test/original self-comparison,
+  P1–P5 historical merge revisions and complete Kotlin self-test. Root/strict/
+  raw/formatted probe diagnostics: 84/153/94/94; prior mappings/maxima retained,
+  async-context identities unchanged. Size/architecture and parser audit pass.
+  Fresh original full suite: 13,049 successes, 13 failures, 28 load errors,
+  20 skips; exact P5 gate identities/outcomes, no allowlist changes.
+- **Attempts/scope.** One disposal negative initially used a nonexistent
+  textual pattern; corrected whole-statement witness and complete rerun pass.
+  A copied driver selected the P5 merge for P4; rejected attempt archived,
+  correct P4 `--at 315028407` passes. Application/pubspec unchanged, manifest
+  draft, no production destinations or CI/theme changes. CI enables in the
+  Step-1 commit creating both P6 scrobblers. Nice 19, isolated parser copies
+  with copied kernels deleted, serialized suites; Step 0 continues separately.
+
+### 2026-10-12 — Phase 6 Step 0 (original secondary trackers; stop)
+
+- **Revision/base.** Follows tooling `80a47fa2b`; application re-measured at
+  `ea7901ead`, untouched in the main tree. Resulting revision, tested tree,
+  source hashes and commands are in `p6/step0/completion.json`. Both P6
+  destinations remain absent; the manifest stays draft.
+- **Coverage/proofs.** 142 new behavior cases across 21 files, reusing the
+  phase-5 isolate-wide transport, synthetic credentials and cipher barrier.
+  Real policy/capability/storage completions are held without private State
+  access; selections await public `finish()`. Protocols, all-tracker fan-out,
+  startup/validation/retirement races, target switches, async percentage readers
+  and every early initializer window are pinned through original callers.
+  All 24 moved declarations / 59 retained occurrences and 411 AST sites map
+  to 319 responsibility points plus one initialization-caller witness:
+  301 assertion kills, 15 source-proven equivalences with final-input replays,
+  two dormant defensive Simkl start branches and two PiP device references.
+  Every addition has a final case-file assertion witness on the detached
+  original; no compilation/load/error-only failure earns credit.
+- **Commands/results.** Serialized nice-19 original control: 144 cases pass
+  (142 additions plus two existing skip integrations). Final full suite with
+  `--no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`: 13,191 success / 13
+  pre-existing failure / 28 pre-existing load error / 20 skip. Official and
+  strict identity comparisons pass: exactly 142 passing additions, zero old
+  outcome changes or missing identities. Changed-test analyzer: no issues;
+  format: 25 files, zero changes; sizes: 2,998 files / 140 ratchets;
+  architecture: 1,666 migrated files pass. Unchanged application/tooling uses
+  Step T's 33 accepted manifest/history/self-tests and analyzer inventories.
+  Parser isolation/copy-kernel deletion and mutation restoration are audited.
+- **Attempts/scope.** Archived first sweep, fixture corrections and closure
+  replays. Three invalid dangling-await deletions were replaced by flow-valid
+  mutations; an empty-URL probe could not hold the intended await, replaced
+  by a real synthetic HTTP barrier. Normal-completion assertions exclude
+  error-only witnesses. Final audit refreshed one equivalence replay after
+  a reader test changed: all 29 selected cases pass. One fake opt-in permits
+  native position before seek acknowledgement; its existing default is
+  unchanged. No bug fix, real network, app/pubspec/CI/theme/size-baseline
+  change, failure allowlisting, push/merge/switch or device command. Original
+  continuation/cache/rollback gaps are in Follow-ups. Manual Simkl/MDBList
+  and PiP checklist remains pending. Stop at Step 0; no production moves.
+
+### 2026-10-12 — Phase 6 Step 0b (independent sample survivor audit)
+
+- **Original/sample.** Application `6d2ac75d8` equals `ea7901ead`; Claude's
+  independent sample records 18/20 assertion kills (90%). i2/i3 already match
+  the Step-0 init-marker and unresolved-episode equivalence proofs.
+- **Closure.** Added two original-caller tests: auth resolves while already
+  playing, then pause/exit checkpoint exactly 25%; incomplete season-only
+  launch rejects pause/heartbeat/seek/EOF/dispose. Detached-original controls
+  pass; exact i2/i3 survive. Neighboring pause-marker/whole-guard mutations
+  assertion-fail, with logs/patches/test hashes in `p6/step0b/`. Init is called
+  once, false enablement prevents earlier pause/stop writes, and no await
+  separates enablement from the stamp. The resolver accepts complete pairs
+  or bounded parsed episodes; `(season != null, episode == null)` is unreachable.
+  Both original statements remain unchanged by the extraction; no forged State
+  or direct private-method test is used to manufacture a kill.
+- **Evidence/scope.** Broader original control: 146 passing cases (144 new plus
+  two existing skip integrations); exact survivors retain equivalent status.
+  Full suite: 13,193 success / 13 pre-existing failure / 28 pre-existing load
+  error / 20 skip; exactly two passing additions, every old identity/outcome
+  unchanged. Analyzer/format pass. Baseline and resulting revision are in
+  `p6/step0b/completion.json`. Initial addendum runner accidentally replaced the
+  old raw control log; accepted ledger restored exactly, replacement archived
+  and hashes/deviation recorded explicitly. Mutation/suite logs remain intact.
+  No application/pubspec/bug fix/failure allowlist/production move in this commit.
+
+### 2026-10-12 — Phase 6 Step-1 production creation
+
+- **Revision/scope.** Follows `8c5a962c3`, application original `ea7901ead`;
+  resulting revision/check hashes are in `p6/step1/completion.json`. Exactly
+  24 moves / 59 retained occurrences; only facade plus two production paths.
+  Simkl/MDBList are 283/187 lines, with 19/15 frozen live Hosts, eager inert
+  construction in that order, full Trakt-progress chains and the patched skip
+  adapter preserving P5 plus two new rewrites. Captured MDBList locals/init
+  sequence and every fan-out/disposal position stay unchanged.
+- **Transition.** Manifest applied; CI current/self-test/analyzer → P6 with
+  P1–P5 historical merges and fetch-depth 0 preserved. Frozen inventory keeps
+  all mappings/maxima; five recorded retained-import warnings added to the
+  allowlist. All 22 P6 behavior files registered; hooks define retained.
+  Theme/source-guard lists include both new destinations. Facade ratchet
+  17,394 → 17,087, all historical notes preserved and P6 note appended.
+- **Checks.** Current checker rerun after interruption: zero differences,
+  all 14 earlier destinations protected; application matches reviewed formatted
+  materialization exactly. 167 focused tests pass. Root comparator: 94 scoped,
+  zero additions; format idempotent; 3,000-file size / 140 ratchets and
+  1,668-file architecture/negatives pass. Validating percentage-reader prefixes
+  updated; each new adapter has independent class-local assertions and an
+  assertion-failing getter mutation with passing moved control. Originals
+  restored. No bug fix, pubspec change, new seam, network or device action.
+  The clean-tree gate follows; human checklist remains pending.
+
+### 2026-10-12 — Phase 6 gate fixture scheduling closure (test/docs only)
+
+- **Finding/reproduction.** First clean `dd6fa4016` suite hung during the
+  pending-checkpoint profile handoff, cascading into later cases. It is archived
+  incomplete, never accepted. Original `6d2ac75d8` reproduces the scheduling
+  flake: two isolated passes, one 120-second external deadline; database-lock
+  warnings accompany the unpumped fake-zone transaction. NOTE/raw evidence in
+  `p6/gate/fixture-note/`.
+- **Fix/proof.** Await the same public profile registry operations and incoming
+  synthetic-token write through the existing pumping `finish()` helper. All
+  21 expectation calls and eight test identities remain unchanged. Entire file
+  original/moved 3× passes (24 + 24). Four original mutations assertion-kill:
+  MDBList season payload, target-switch await, disposal close, Simkl progress.
+  Three supplemental probes survive this eight-case subset; their wider
+  Step-0 witnesses are unchanged and no extra kills are claimed.
+- **Gate.** Original source restored; test format/analyzer/current checker pass.
+  No application/tooling/pubspec change or failure allowance. The same Step-0b
+  identity baseline is reused after original focused validation of this fixture.
+  All 35 creation-input Dart/history/Kotlin commands have completed successfully
+  (Kotlin 597 tests); unchanged application/tool inputs preserve those results.
+  A fresh full suite and both release builds follow on the clean fixture commit.
+  Resulting revision and test hashes are in `p6/gate/fixture-note/completion.json`.
+
+### 2026-10-12 — Phase 6 clean-tree gate (stop)
+
+- **Revision.** Clean tested `5bb287d72`, creation `dd6fa4016`; Step-0b
+  `8c5a962c3`, original application `ea7901ead`. Gate revision, commands,
+  input-equality audit, SDK and artifact/evidence hashes are archived in
+  `p6/gate/completion.json`. Only the test fixture/docs changed after creation.
+- **Suite.** Nice-19 serialized hook-defined/no-pub `suite_evidence.py` full
+  run: 13,193 successes, unchanged 13 failures / 28 load errors / 20 skips.
+  Official and strict identity/outcome comparisons PASS; zero added, missing,
+  changed or newly skipped identities. First incomplete run remains excluded;
+  no failure allowance. Fixture closure has original/moved 3× controls and four
+  assertion-failing original witnesses, preserving every expectation.
+- **Checks.** All 35 Dart/Kotlin self/current/history commands PASS, including
+  P6 current/same-revision and P1–P5 at their named merges; Kotlin 597 tests.
+  Root and strict-CI analyzer comparators: 94 scoped occurrences, zero additions,
+  including infos/multiplicity; global allowlist and comparator negatives pass.
+  CI format idempotent; changed test format/analyzer pass. Size 3,000 files /
+  140 ratchets and architecture 1,668 migrated files plus negatives PASS.
+  Post-fixture current checker, size and architecture also pass. Reused checks
+  have identical production/tool/configuration inputs, archived explicitly.
+  All manifest invocations use fresh isolated ignored parser packages with
+  copied kernels deleted; routing audit archived.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and then
+  `nice -n 19 flutter build macos --release --no-pub` PASS on the clean tested
+  tree. APK, macOS executable and release AOT hashes archived. Flutter 3.44.8 /
+  Dart 3.12.2 unchanged; existing macOS plugin SwiftPM notices do not fail build.
+- **Stop/pending.** Phase 6 complete at this gate. Human Simkl/MDBList connected
+  movie/series start, pause, seek, stop, threshold watched/resume-elsewhere,
+  disabled-at-start and disabling-mid-session checks remain pending, along with
+  earlier device/PiP checklist items. No device execution, real tracker network,
+  pubspec change, bug fix, push, merge, branch switch or later production move.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -2147,3 +2452,13 @@ transport + credential seeding + cipher barrier; tracker-specific
 protocols and error propagation; async reader/initialization races;
 source-text guard retarget via the validating reader. P3s: staged phases,
 concrete CI/comment ownership.
+
+## Phase 6 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+(Two "model at capacity" interruptions; resumed in the same session.) P2s
+folded: disabled-at-start vs disabled-mid-session characterized as-is;
+pending MDBList checkpoints across switch/dispose/profile change and held
+Simkl responses incl. the 409 recovery; startup ordering and heartbeat
+contracts. P3s: full `_trakt.traktProgress` → `_host.traktProgress` chain
+registration with frozen adapter body; accurate source-guard prefix update.
+Membership confirmed: 24 moves, 59 retained references; Hosts 19/15.

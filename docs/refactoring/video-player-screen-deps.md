@@ -3684,3 +3684,945 @@ sealed-platform PiP seek `ref-18`. Existing profile, A→B→A and post-disposal
 reader gaps stay in Follow-ups. No bug fix, new seam, real API network,
 allowlisting of failures, device command, push, merge or branch switch.
 Stop after this gate.
+
+## Phase 6 Step T — Simkl/MDBList tooling (2026-10-12)
+
+Original `ea7901ead`, approved design `1c8ce8e7f`; 846 original spans:
+24 moved / 820 retained / two patched. Complete draft `vplayer_p6.json`
+compares both raw and formatted evidence-only materializations with zero
+changes beyond counted edits. All 59 references are measured (57 retained,
+two in the whole patched skip adapter). P5's Trakt forwarding stays in that
+adapter; the P6 class projection carries two exact new rewrites. The State
+constructor eagerly appends Simkl then MDBList after Trakt.
+
+The eight field initializers are false literals or implicit null; no allocation,
+Host read, service call or scheduling moves into construction. Both Hosts
+(19 Simkl, 15 MDBList) and live widget selectors are frozen. The two complete
+`_trakt.traktProgress` chains project to `_host.traktProgress` only through
+explicit registrations. Guard-only missing registration, wrong leaf and
+`_host`/`_trakt`/`widget` capture negatives pass; existing manifests retain their
+behavior without a shared-guard implementation change. All 14 historical
+feature destinations stay protected.
+
+All 33 accepted tooling commands pass: all 26 existing Dart manifest self-tests,
+P6 universal negatives and all-retained original comparison, P1–P5 same-revision
+historical inputs, and complete Kotlin historical/compiled self-test. Root/
+strict/raw/formatted inventories record 84/153/94/94 occurrences, preserving
+all prior mappings/maxima and unchanged async-context identities. Five retained
+facade import warnings and five destination directive infos are probe effects;
+no suppression/import cleanup. Formatting inserts two AST-optional commas,
+deletes none, is idempotent and introduces zero diagnostic changes. Sizes and
+architecture pass. Parser flags and copy/kernel deletion are audited.
+
+Fresh original full-suite evidence at the named merge is clean and has exact
+P5 gate identities: 13,049 success / 13 failure / 28 load error / 20 skip. No new
+outcome or failure allowlist. Evidence: `p6/tooling/` and `p6/step0/base*`.
+Rejected development attempts remain archived: nonexistent disposal-negative
+pattern (fixed and complete self-test rerun), and wrong P4 revision in a copied
+driver (correct `--at 315028407` passes). Draft only; CI/source guard/theme/size
+transition belongs to the commit creating both production scrobblers. No app,
+pubspec, bug fix, real API network, push/merge/switch or device command.
+
+## Phase 6 Step 0 — original Simkl/MDBList characterization (2026-10-12)
+
+Application original `ea7901ead`; tooling `80a47fa2b`. The detached worktree
+under `p6/step0/original/` contains that application throughout controls and
+mutation proofs. The main worktree's application, pubspec, CI registrations,
+theme/source-guard lists and file-size baseline remain unchanged. The complete
+P6 manifest stays draft; both production destinations are absent.
+
+The phase-5 isolate-wide delegating HTTP transport is reused. Both production
+singleton clients keep their first client; each fixture redirects that client
+to its own synthetic recorder. Credentials are seeded through real profile
+storage, with the existing cipher barrier and mirrored ProfilePolicyGuard.
+There is no real transport fallback. New barriers suspend actual immutable
+policy/capability/storage completions at their public callers; they neither
+forge results nor access private State. Public selections await `finish()`.
+
+Protocols pin Simkl's local start marker, pause heartbeats, strict `>80` caller
+threshold, failed-send dedup and transition-only seek. MDBList pins pause play/
+sub-threshold exit, inclusive completion, raw initialization versus held resume,
+target handoff, two-minute timers and response/revision ownership. Timer creation,
+first active cancellation and callback ownership establish the Trakt → Simkl →
+MDBList fan-out order without assuming asynchronous HTTP completion order.
+
+The early-window matrix covers all eight moved initializers: false enablement/
+launch budgets and null action/timer/session before delayed initialization; the
+two null cache initializers are invariant-equivalent because every non-null
+identity first runs the shared binder. Initialization also covers paused/zero
+duration, active validation, disposal, incoming profile credentials, captured
+MDBList target/capability, suspended player setup, propagated storage errors and
+the separately caught player-initialization failure. Native progress may arrive
+before seek acknowledgement; one fake opt-in suppresses its duplicate position
+edge after acknowledgement, retaining the original default for every other test.
+
+All 24 moved declarations and all 59 retained references are re-measured by name
+at the original. The analyzer AST sweep enumerates 411 statement/branch/literal
+sites, each mapped to concrete original mutations. There are 319 responsibility
+points plus one retained initialization-caller witness: **301 assertion kills,
+15 evidenced equivalences, two dormant defensive start branches and two sealed-
+platform PiP references pending devices**. Every one of 142 new behavior cases
+has an assertion-failing original witness with its final case-file hash. Existing
+executable skip callers independently exercise both patched adapter forwarders.
+
+Equivalence proofs include implicit switch termination, the immutable true
+MDBList feature flag, the Simkl timer's enabled-only armers/idempotent inactive
+cancellation, the nullable identity cache reset, bounded complete-pair parsing,
+unique production row indices, overwritten local coordinate initializers and
+the synchronous outer gate already protecting the sole MDBList pause caller.
+The first broad sweep and all survivors remain archived; equivalence is never
+inferred from a survivor. Compilation/load failures and error-only failures
+never count as assertion kills.
+
+Original continuations remain unchanged and are recorded in Follow-ups: target
+disablement does not retire existing tracker state; Simkl's held response/25-second
+409 recovery can outlive a route; capabilities distinguish MDBList disposal from
+profile retirement; A→B→A can accept an older snapshot; callers can resume after
+profile handoff/disposal; a source-validation gate can preserve an outgoing
+MDBList target or playing bit. Failed ordinary opens retain the incoming tracker
+target. Failed source preparation can checkpoint an unplayed target before both
+rollback calls restore the outgoing session. A masked guide read can warm a cache
+used by a later selected-provider resume. These are characterization, not fixes.
+
+The source guard retarget stays deferred to Step 1: the validating reader's
+Simkl/MDBList prefixes become `_host.`, preserving captured series identity,
+stale-result rejection, TVMaze carry-forward and rewatch assertions. Independent
+failing mutations of each new computed adapter are required then. No source-text
+test is credited as behavior coverage here.
+
+Development attempts are preserved: three first-sweep call deletions left a
+dangling `await` and were replaced by flow-valid no-op futures; four expectation/
+observation errors were corrected without changing production; the completed
+empty-URL fast path did not expose the requested await barrier, so the transient
+index case instead holds a real synthetic TorBox transport response. Explicit
+normal-completion/diagnostic assertions replace error-only mutation evidence.
+The final 144-case original control (142 additions plus two existing skip cases)
+passes. The selected Trakt guide case's outer policy excludes local progress
+before guide fallback; dedicated overlap cases pin both companion guide masks.
+
+Evidence: `p6/step0/coverage.json`, `points.json`, `ast-site-matrix.json`,
+`mutation-results.json`, `equivalence-proofs.json`, command logs and patches.
+Full-suite additions-only comparison and final check results are recorded below.
+
+### New behavior cases
+
+| New characterization file (`test/features/video_player/`) | Cases |
+|---|---|
+| `video_player_mdblist_startup_test.dart` | 6 |
+| `video_player_secondary_boundary_test.dart` | 20 |
+| `video_player_secondary_early_policy_test.dart` | 2 |
+| `video_player_secondary_fanout_test.dart` | 4 |
+| `video_player_secondary_gate_release_test.dart` | 2 |
+| `video_player_secondary_guide_mask_test.dart` | 4 |
+| `video_player_secondary_guide_overlap_test.dart` | 2 |
+| `video_player_secondary_index_race_test.dart` | 1 |
+| `video_player_secondary_initialization_test.dart` | 21 |
+| `video_player_secondary_lifecycle_test.dart` | 3 |
+| `video_player_secondary_mdblist_validation_test.dart` | 5 |
+| `video_player_secondary_pending_test.dart` | 8 |
+| `video_player_secondary_protocol_test.dart` | 11 |
+| `video_player_secondary_reader_boundaries_test.dart` | 11 |
+| `video_player_secondary_seek_inputs_test.dart` | 7 |
+| `video_player_secondary_simkl_policy_test.dart` | 2 |
+| `video_player_secondary_snapshots_test.dart` | 16 |
+| `video_player_secondary_source_pending_test.dart` | 1 |
+| `video_player_secondary_suspended_transition_test.dart` | 3 |
+| `video_player_secondary_switch_rollback_test.dart` | 4 |
+| `video_player_secondary_timing_test.dart` | 9 |
+
+### Step-0 baseline and checks
+
+The clean named original was re-run before additions. The final staged test tree
+`746453f37ec5e5d7c58c9dd7d63ed031ea35484d` has **13,191 success / 13 failure /
+28 load error / 20 skip**. `suite_evidence.py compare` and a strict comparison
+of every old identity/outcome both pass: exactly **142 added passing identities**,
+zero changed/missing/newly skipped/fixed old identities. No failure allowlist or
+`test_baseline.py --record`. Flutter 3.44.8 (`058e0af2c2b57e369d905a03ac9748b0ebf543c6`),
+Dart 3.12.2, same SDK/configuration as the fresh original. The suite's nonzero
+exit is the observed original failures/load errors; it is not a new-test failure.
+`final-suite.env.json` records no tree change during the run. Subsequent changes
+are documentation/evidence only; application and tested test blobs remain exact.
+
+| Check / command | Recorded result |
+|---|---|
+| Original controls and mutations: `nice -n 19 flutter test <selected files> --concurrency=1 --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json` | Final 144-case control passes; 301 points have assertion failures at final case-file inputs; all 15 equivalence candidates have passing final-input original replays and separate source proofs |
+| Full suite: `nice -n 19 python3 dev/tool/suite_evidence.py run vplayer/p6/step0/final-suite --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`; `suite_evidence.py compare --against <p6>/step0/base.jsonl <p6>/step0/final-suite.jsonl` | Exact old identities/outcomes; 142 passing additions only |
+| `nice -n 19 dart analyze <25 changed/new test files>` | No issues; unchanged application diagnostics reuse Step T's root/strict probe |
+| `nice -n 19 dart format --output=none --set-exit-if-changed <25 changed/new test files>` | 25 files, zero changes |
+| `check_file_sizes.py`; `check_search_architecture.py` | 2,998 files / 140 ratchets; 1,666 migrated files pass; baselines unchanged |
+| Step T manifest/history/analyzer evidence reused | All 33 accepted commands still apply: no application, checker, manifest or configuration change since `80a47fa2b`; includes all Dart manifest self-tests, Kotlin self-test and P1–P5 `--at` |
+| Parser routing and restoration audit | Every manifest CLI has an explicit isolated parser package; nested source parses use fresh `.dart_tool/vplayer_parser/` copies with copied `*.dill` removed; all mutations restored to the original |
+
+Evidence is only under `<git-common-dir>/refactor-evidence/vplayer/p6/`.
+The evidence-only runner writes its real commands, selected names, completed
+assertion messages, patches and test SHA-256 inputs to `mutation-results.json`.
+The opt-in fake seek acknowledgement switch retains its old default; the original
+control and full-suite identity comparison cover that unchanged default. Early
+attempts using other test-support hashes remain archived rather than overwritten.
+One equivalence replay predated the final reader-boundary file; its final-input
+29-case replay passes and is recorded separately as `audit-snapshot-simkl-bounds`.
+
+The matrices below cover 24 moved declarations and all 59 retained occurrences;
+`ast-site-matrix.json` maps every one of the 411 individual AST sites to a concrete
+point. The final case table maps every addition to an assertion witness. The
+mutation table includes the extra `caller-init-mounted` proof; abbreviated token
+fragments are backed by complete spans/patches in `points.json` and `mutations/`.
+Two dormant Simkl start branches and two PiP device references receive no executable
+coverage credit. Both production scrobblers, CI transition, source-guard adapter
+retarget proofs and manual Simkl/MDBList/PiP device checklist remain future steps.
+Stop after Step 0; no production move or bug fix.
+
+### Declaration and retained-reference coverage
+
+| Moved declaration (original name) | AST statement / branch / literal sites | Concrete mutation points and results |
+|---|---|---|
+| `_simklScrobbleEnabled` | 1 | killed: 1; `field-simklScrobbleEnabled` |
+| `_launchSimklPercentSpent` | 1 | killed: 1; `field-launchSimklPercentSpent` |
+| `_simklEpisodeProgress` | 1 | equivalent: 1; `field-simklEpisodeProgress` |
+| `_mdblistEpisodeProgress` | 1 | equivalent: 1; `field-mdblistEpisodeProgress` |
+| `_launchMdblistPercentSpent` | 1 | killed: 1; `field-launchMdblistPercentSpent` |
+| `_simklLastScrobbleAction` | 1 | killed: 1; `field-action` |
+| `_simklHeartbeatTimer` | 1 | killed: 1; `field-timer` |
+| `_mdblistSession` | 1 | killed: 1; `field-session` |
+| `_initSimklScrobble` | 26 | killed: 14; equivalent: 1; `simkl-init-flag`, `simkl-init-id`, `simkl-init-type`, `simkl-init-movie`, `simkl-init-series`, `simkl-init-policy-content`, `simkl-init-policy`, `simkl-init-auth`, `simkl-init-mounted`, `simkl-init-validation`, `simkl-init-enabled`, `simkl-init-playing`, `simkl-init-duration`, `simkl-init-marker`, `simkl-init-heartbeat` |
+| `_simklSeriesSEUnresolved` | 8 | killed: 3; equivalent: 1; `simkl-unresolved-series`, `simkl-unresolved-season`, `simkl-unresolved-episode`, `simkl-unresolved-or` |
+| `_simklScrobble` | 38 | killed: 26; equivalent: 2; dormant: 2; `simkl-send-api-0-call`, `simkl-send-api-0-id`, `simkl-send-api-0-progress`, `simkl-send-api-0-season`, `simkl-send-api-0-episode`, `simkl-send-api-1-call`, `simkl-send-api-1-id`, `simkl-send-api-1-progress`, `simkl-send-api-1-season`, `simkl-send-api-1-episode`, `simkl-send-break-0`, `simkl-send-break-1`, `simkl-send-validation`, `simkl-send-enabled`, `simkl-send-id`, `simkl-send-capture`, `simkl-send-percent`, `simkl-send-se`, `simkl-send-unresolved`, `simkl-send-threshold`, `simkl-send-upper`, `simkl-send-pause`, `simkl-send-stop`, `simkl-send-dedup`, `simkl-send-marker`, `simkl-send-start-intent`, `simkl-send-start-case`, `ast-048`, `ast-073`, `ast-077` |
+| `_startSimklHeartbeat` | 40 | killed: 34; equivalent: 1; `simkl-beat-api-0-call`, `simkl-beat-api-0-id`, `simkl-beat-api-0-progress`, `simkl-beat-api-0-season`, `simkl-beat-api-0-episode`, `simkl-beat-api-1-call`, `simkl-beat-api-1-id`, `simkl-beat-api-1-progress`, `simkl-beat-api-1-season`, `simkl-beat-api-1-episode`, `simkl-beat-cancel`, `simkl-beat-interval`, `simkl-beat-validation`, `simkl-beat-id`, `simkl-beat-playing`, `simkl-beat-duration`, `simkl-beat-capture`, `simkl-beat-percent`, `simkl-beat-se`, `simkl-beat-unresolved`, `simkl-beat-threshold`, `simkl-beat-upper`, `simkl-beat-stop-marker`, `simkl-beat-stop-heartbeat`, `simkl-beat-pause-marker`, `simkl-beat-precision`, `simkl-beat-stop-log`, `simkl-beat-pause-log`, `simkl-beat-enabled`, `ast-088`, `ast-093`, `ast-109`, `ast-111`, `ast-118`, `ast-119` |
+| `_stopSimklHeartbeat` | 3 | killed: 1; equivalent: 1; `simkl-stop-cancel`, `simkl-stop-null` |
+| `_simklScrobbleSeek` | 40 | killed: 33; `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-api-1-call`, `simkl-seek-api-1-id`, `simkl-seek-api-1-progress`, `simkl-seek-api-1-season`, `simkl-seek-api-1-episode`, `simkl-seek-validation`, `simkl-seek-enabled`, `simkl-seek-id`, `simkl-seek-playing`, `simkl-seek-duration`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-low`, `simkl-seek-high`, `simkl-seek-se`, `simkl-seek-unresolved`, `simkl-seek-threshold`, `simkl-seek-upper`, `simkl-seek-stop-dedup`, `simkl-seek-stop-marker`, `simkl-seek-stop-heartbeat`, `simkl-seek-reverse-threshold`, `simkl-seek-reverse-stop`, `simkl-seek-reverse-marker`, `simkl-seek-reverse-heartbeat`, `ast-129`, `ast-134` |
+| `_mdblistTarget` | 27 | killed: 11; `md-target-capture`, `md-target-null`, `md-target-empty`, `md-target-ids`, `md-target-movie`, `md-target-series`, `md-target-se`, `md-target-unresolved`, `md-target-season`, `md-target-episode`, `ast-174` |
+| `_initMdblistScrobble` | 64 | killed: 39; equivalent: 1; `md-init-flag`, `md-init-policy-content`, `md-init-policy`, `md-init-player-wait`, `md-init-target`, `md-init-null-target`, `md-init-capability`, `md-init-late-target`, `md-init-session-capability`, `md-init-raw-position`, `md-init-zero-position`, `md-init-zero-duration`, `md-init-assignment`, `md-init-validation`, `md-init-playing`, `md-init-duration`, `md-init-play`, `md-init-mounted-0`, `md-init-mounted-1`, `md-init-player-catch`, `md-init-feature-flag`, `log-initMdblistScrobble-0`, `log-initMdblistScrobble-1`, `log-initMdblistScrobble-2`, `log-initMdblistScrobble-3`, `log-initMdblistScrobble-4`, `log-initMdblistScrobble-5`, `ast-193`, `ast-194`, `ast-195`, `ast-199`, `ast-206`, `ast-218`, `ast-225`, `ast-230`, `ast-237`, `ast-238`, `ast-239`, `ast-243`, `ast-246` |
+| `_updateMdblistPosition` | 3 | killed: 4; `md-updateMdblistPosition-validation`, `md-position-position`, `md-position-duration`, `md-position-update` |
+| `_mdblistPlay` | 4 | killed: 3; `md-mdblistPlay-validation`, `md-mdblistPlay-update`, `md-call-mdblistPlay-play` |
+| `_mdblistPause` | 4 | equivalent: 1; killed: 2; `md-mdblistPause-validation`, `md-mdblistPause-update`, `md-call-mdblistPause-pause` |
+| `_mdblistStop` | 23 | killed: 12; `md-mdblistStop-validation`, `md-mdblistStop-update`, `md-call-mdblistStop-complete`, `md-call-mdblistStop-exit`, `md-stop-complete`, `md-stop-default`, `log-mdblistStop-0`, `ast-272`, `ast-273`, `ast-274`, `ast-279`, `ast-282` |
+| `_mdblistScrobbleSeek` | 3 | killed: 4; `md-mdblistScrobbleSeek-validation`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration` |
+| `_switchMdblistTarget` | 9 | killed: 7; `md-switchMdblistTarget-validation`, `md-switch-target`, `md-switch-null`, `md-switch-exit`, `md-switch-call`, `md-switch-await`, `ast-298` |
+| `_currentEpisodeSimklPercent` | 73 | killed: 27; equivalent: 5; `snapshot-simkl-default`, `snapshot-simkl-policy-content`, `snapshot-simkl-policy-mask`, `snapshot-simkl-guide-bypass`, `snapshot-simkl-identity`, `snapshot-simkl-null-id`, `snapshot-simkl-bind`, `snapshot-simkl-cache`, `snapshot-simkl-guard`, `snapshot-simkl-late-guard`, `snapshot-simkl-assign`, `snapshot-simkl-guide-mask`, `snapshot-simkl-branch`, `snapshot-simkl-series`, `snapshot-simkl-empty`, `snapshot-simkl-index`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `snapshot-simkl-fallback`, `snapshot-simkl-fallback-season`, `snapshot-simkl-fallback-episode`, `snapshot-simkl-unresolved`, `snapshot-simkl-key`, `snapshot-simkl-bounds`, `snapshot-simkl-negative`, `snapshot-simkl-break`, `ast-316`, `ast-322`, `ast-323`, `ast-324`, `ast-329`, `ast-333` |
+| `_currentEpisodeMdblistPercent` | 38 | killed: 17; `snapshot-mdblist-default`, `snapshot-mdblist-policy-content`, `snapshot-mdblist-policy-mask`, `snapshot-mdblist-guide-bypass`, `snapshot-mdblist-identity`, `snapshot-mdblist-null-id`, `snapshot-mdblist-bind`, `snapshot-mdblist-cache`, `snapshot-mdblist-guard`, `snapshot-mdblist-late-guard`, `snapshot-mdblist-assign`, `snapshot-mdblist-guide-mask`, `snapshot-mdblist-branch`, `snapshot-mdblist-se`, `snapshot-mdblist-unresolved`, `snapshot-mdblist-key`, `ast-389` |
+
+| Retained occurrence (original declaration:line) | Original reference / caller | Result / original assertion |
+|---|---|---|
+| `ref-01` (initState:1677) | `_initSimklScrobble();` | killed: C091 |
+| `ref-02` (initState:1678) | `_initMdblistScrobble();` | killed: C061, C058 |
+| `ref-03` (_resumeTrackingAfterValidationGate:2104) | `_simklScrobbleEnabled` | killed: C049, C048, C047, C050 |
+| `ref-04` (_resumeTrackingAfterValidationGate:2107) | `_simklLastScrobbleAction = 'start';` | killed: C142 |
+| `ref-05` (_resumeTrackingAfterValidationGate:2108) | `_startSimklHeartbeat();` | killed: C116 |
+| `ref-06` (_resumeTrackingAfterValidationGate:2100) | `_updateMdblistPosition();` | killed: C028 |
+| `ref-07` (_resumeTrackingAfterValidationGate:2110) | `_mdblistPlay();` | killed: C013 |
+| `ref-08` (_bindEpisodeTrackerProgressIdentity:2130) | `_simklEpisodeProgress = null;` | killed: C109, C037 |
+| `ref-09` (_bindEpisodeTrackerProgressIdentity:2131) | `_mdblistEpisodeProgress = null;` | killed: C077, C038 |
+| `ref-10` (_bindPlayerInstanceSubscriptions:3413) | `_simklScrobbleEnabled` | killed: C095, C098, C093, C096, C099 |
+| `ref-11` (_bindPlayerInstanceSubscriptions:3416) | `_simklLastScrobbleAction = 'start';` | killed: C044, C045, C043 |
+| `ref-12` (_bindPlayerInstanceSubscriptions:3422) | `_simklLastScrobbleAction` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-13` (_bindPlayerInstanceSubscriptions:3423) | `_simklScrobble('pause');` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-14` (_bindPlayerInstanceSubscriptions:3417) | `_startSimklHeartbeat();` | killed: C035, C036, C033, C034, C087, C088, C114 |
+| `ref-15` (_bindPlayerInstanceSubscriptions:3424) | `_stopSimklHeartbeat();` | killed: C035, C087, C088 |
+| `ref-16` (_bindPlayerInstanceSubscriptions:3332) | `_updateMdblistPosition();` | killed: C035, C036, C033, C034, C087, C088 |
+| `ref-17` (_bindPlayerInstanceSubscriptions:3371) | `_updateMdblistPosition();` | killed: C022 |
+| `ref-18` (_bindPlayerInstanceSubscriptions:3377) | `_mdblistPlay();` | killed: C114 |
+| `ref-19` (_bindPlayerInstanceSubscriptions:3427) | `_mdblistPlay();` | killed: C035, C036, C033, C034, C087, C088 |
+| `ref-20` (_bindPlayerInstanceSubscriptions:3432) | `_mdblistPause();` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-21` (_onPlaybackEnded:4740) | `_simklScrobble('stop');` | killed: C033 |
+| `ref-22` (_onPlaybackEnded:4739) | `_stopSimklHeartbeat();` | killed: C033 |
+| `ref-23` (_onPlaybackEnded:4741) | `_mdblistStop(complete: true);` | killed: C033 |
+| `ref-24` (_switchToSourcePlaylist:9071) | `_switchMdblistTarget();` | killed: C009 |
+| `ref-25` (_loadPlaylistIndex:10041) | `_switchMdblistTarget();` | killed: C009 |
+| `ref-26` (_loadPlaylistIndexAttempt:10145) | `_simklScrobble('stop');` | killed: C137 |
+| `ref-27` (_loadPlaylistIndexAttempt:10144) | `_stopSimklHeartbeat();` | killed: C137 |
+| `ref-28` (_loadPlaylistIndexAttempt:10149) | `_updateMdblistPosition();` | killed: C021 |
+| `ref-29` (_loadPlaylistIndexAttempt:10164) | `_switchMdblistTarget();` | killed: C008 |
+| `ref-30` (_onPipAction:11260) | `_simklScrobbleSeek(position);` | device_pending: Installed only behind sealed Android/iOS predicates; no raw Platform seam. Human PiP seek checklist. |
+| `ref-31` (_onPipAction:11261) | `_mdblistScrobbleSeek(position);` | device_pending: Installed only behind sealed Android/iOS predicates; no raw Platform seam. Human PiP seek checklist. |
+| `ref-32` (dispose:11455) | `_simklScrobble('stop');` | killed: C034, C085, C086 |
+| `ref-33` (dispose:11454) | `_stopSimklHeartbeat();` | killed: C034, C046 |
+| `ref-34` (dispose:11457) | `_mdblistSession?.close()` | killed: C046, C005 |
+| `ref-35` (dispose:11456) | `_mdblistStop();` | killed: C016 |
+| `ref-36` (_maybeRestoreResume:11728) | `_launchSimklPercentSpent` | killed: C101 |
+| `ref-37` (_maybeRestoreResume:11729) | `_launchSimklPercentSpent = true;` | killed: C101 |
+| `ref-38` (_maybeRestoreResume:11779) | `_currentEpisodeSimklPercent()` | killed: C101, C106 |
+| `ref-39` (_maybeRestoreResume:11856) | `_currentEpisodeSimklPercent(forGuide: true)` | killed: C102 |
+| `ref-40` (_maybeRestoreResume:11730) | `_launchMdblistPercentSpent` | killed: C071 |
+| `ref-41` (_maybeRestoreResume:11731) | `_launchMdblistPercentSpent = true;` | killed: C071 |
+| `ref-42` (_maybeRestoreResume:11764) | `_currentEpisodeMdblistPercent()` | killed: C071, C075 |
+| `ref-43` (_maybeRestoreResume:11857) | `_currentEpisodeMdblistPercent(         forGuide: true,       )` | killed: C072 |
+| `ref-44` (_tvScrubCommit:12539) | `_simklScrobbleSeek(target);` | killed: C032 |
+| `ref-45` (_tvScrubCommit:12540) | `_mdblistScrobbleSeek(target);` | killed: C032 |
+| `ref-46` (_buildTvControls:12608) | `_simklScrobbleSeek(target);` | killed: C031 |
+| `ref-47` (_buildTvControls:12609) | `_mdblistScrobbleSeek(target);` | killed: C031 |
+| `ref-48` (_handleDoubleTap:13096) | `_simklScrobbleSeek(clamped);` | killed: C040, C041 |
+| `ref-49` (_handleDoubleTap:13097) | `_mdblistScrobbleSeek(clamped);` | killed: C040, C041 |
+| `ref-50` (_onPanEnd:13194) | `_simklScrobbleSeek(target);` | killed: C053 |
+| `ref-51` (_onPanEnd:13195) | `_mdblistScrobbleSeek(target);` | killed: C053 |
+| `ref-52` (build:14178) | `_simklScrobbleSeek(newPos);` | killed: C055 |
+| `ref-53` (build:14192) | `_simklScrobbleSeek(newPos);` | killed: C054 |
+| `ref-54` (build:14730) | `_simklScrobbleSeek(settledPosition);` | killed: C088, C057, C055 |
+| `ref-55` (build:14179) | `_mdblistScrobbleSeek(newPos);` | killed: C055 |
+| `ref-56` (build:14193) | `_mdblistScrobbleSeek(newPos);` | killed: C054 |
+| `ref-57` (build:14731) | `_mdblistScrobbleSeek(settledPosition);` | killed: C087, C088, C055 |
+| `ref-58` (_VpSkipSegmentHostAdapter:17301) | `_simklScrobbleSeek` | killed: skip publishes clock before seek, queues tracking before haptic and preserves remote stop order, skip tracker seek order arms Trakt heartbeat before Simkl |
+| `ref-59` (_VpSkipSegmentHostAdapter:17303) | `_mdblistScrobbleSeek` | killed: skip publishes clock before seek, queues tracking before haptic and preserves remote stop order, skip tracker seek order arms Trakt heartbeat before Simkl |
+
+### Original assertion witnesses and mutation table
+
+| Case | Original caller / observable assertion | Original assertion witness |
+|---|---|---|
+| C001 | MDBList capability finishing paused allocates without starting until the real playing edge | `final2-md-init-playing` |
+| C002 | MDBList captured target before capability dispose completion retains original allocation and guards | `md-init-capability`, `md-init-mounted-1`, `log-initMdblistScrobble-4`, `ast-230` |
+| C003 | MDBList captured target before capability profile completion retains original allocation and guards | `md-target-capture`, `md-target-ids`, `md-init-target`, `md-init-capability`, `md-init-session-capability`, `md-init-play`, `log-initMdblistScrobble-5`, `ast-237`, `ast-238`, `ast-239`, `ast-243`, `ast-246` |
+| C004 | MDBList captured target before capability widget completion retains original allocation and guards | `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode`, `md-init-target`, `md-init-capability`, `md-init-late-target`, `md-init-zero-position`, `md-init-zero-duration`, `md-init-play`, `log-initMdblistScrobble-5`, `ast-237`, `ast-238`, `ast-239`, `ast-243`, `ast-246` |
+| C005 | MDBList close awaits failed outgoing completion and retries its captured target before finishing disposal | `md-stop-default`, `ref-34` |
+| C006 | MDBList disposal after successful player setup but before policy delivery returns before capability diagnostics | `final2-md-init-mounted-0` |
+| C007 | MDBList episode selection with newly invalid live identity exits then continues its outgoing target | `final2-md-switch-null`, `final2-md-switch-exit`, `final2-ast-298` |
+| C008 | MDBList failed ordinary incoming open retains the incoming tracker target as the original does | `final-ref-29` |
+| C009 | MDBList failed source preparation checkpoints the unplayed target then restores the outgoing session | `final-ref-24`, `final-ref-25` |
+| C010 | MDBList held resume dispose samples its promised position before any intervening native position event | `final-md-mdblistStop-update` |
+| C011 | MDBList held resume play samples its promised position before any intervening native position event | `final-md-mdblistPlay-update` |
+| C012 | MDBList late capability during manual validation keeps its original checkpoint at late-close | `final2-md-init-validation`, `final2-md-mdblistPlay-validation`, `final2-md-mdblistStop-validation` |
+| C013 | MDBList late capability during manual validation keeps its original checkpoint at late-release | `final2-md-init-validation`, `final2-ref-07` |
+| C014 | MDBList live seek and duration edge during manual validation keeps its original checkpoint at early-close | `final2-md-mdblistStop-validation`, `final2-md-mdblistScrobbleSeek-validation` |
+| C015 | MDBList only catches player initialization failure and never allocates a session for the failed controller | `md-init-player-wait`, `md-init-player-catch`, `log-initMdblistScrobble-2` |
+| C016 | MDBList ordinary disposal logs its session exit before close exactly once | `final-md-call-mdblistStop-exit`, `final-ref-35` |
+| C017 | MDBList pending checkpoint across an explicit source playlist switch preserves validation gating and the existing target | `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode`, `md-switchMdblistTarget-validation` |
+| C018 | MDBList pending outgoing checkpoint across dispose preserves payload owner revisions and timer cleanup | `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode` |
+| C019 | MDBList pending outgoing checkpoint across episode preserves payload owner revisions and timer cleanup | `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode`, `md-switch-target`, `md-switch-call`, `md-switch-await` |
+| C020 | MDBList pending outgoing checkpoint across profile preserves payload owner revisions and timer cleanup | `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode` |
+| C021 | MDBList playlist switch captures an unlanded outgoing resume before clearing its guard | `final-ref-28` |
+| C022 | MDBList positive duration replacement updates the heartbeat denominator without another position or playing event | `final-ref-17` |
+| C023 | MDBList startup disabled preserves exact requested and rejection diagnostics | `final-log-initMdblistScrobble-0`, `final-log-initMdblistScrobble-1`, `final-ast-193`, `final-ast-194`, `final-ast-195`, `final-ast-199` |
+| C024 | MDBList startup empty preserves exact requested and rejection diagnostics | `final-md-target-empty`, `final-log-initMdblistScrobble-3` |
+| C025 | MDBList startup policy precedes suspended player setup and dispose preserves the captured setting | `field-session`, `md-init-player-wait`, `ast-218` |
+| C026 | MDBList startup policy precedes suspended player setup and none preserves the captured setting | `field-session`, `md-init-player-wait`, `md-init-target`, `md-init-zero-position`, `md-init-zero-duration`, `md-init-play`, `log-initMdblistScrobble-5`, `ast-237`, `ast-238`, `ast-239`, `ast-243`, `ast-246` |
+| C027 | MDBList startup unresolved preserves exact requested and rejection diagnostics | `final2-log-initMdblistScrobble-3` |
+| C028 | MDBList validation release while paused refreshes its session before returning without play | `final2-ref-06` |
+| C029 | Secondary Simkl auth finishing paused with zero duration retains null dedup for the first real pause | `field-action`, `simkl-init-series`, `simkl-init-auth` |
+| C030 | Secondary Simkl auth storage failure propagates before enablement and never becomes an HTTP failure | `simkl-init-series`, `simkl-init-auth` |
+| C031 | Secondary TV scope seek forwards its target into the tracker | `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-46`, `ref-47` |
+| C032 | Secondary TV scrub confirm sends progress while the native pause is still suspended | `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `simkl-seek-reverse-stop`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-44`, `ref-45` |
+| C033 | Secondary all-tracker EOF fanout preserves ordered timer ownership and tracker-specific payloads | `simkl-stop-cancel`, `md-call-mdblistPlay-play`, `md-call-mdblistStop-complete`, `md-stop-complete`, `ref-12`, `ref-13`, `ref-14`, `ref-16`, `ref-19`, `ref-20`, `ref-21`, `ref-22`, `ref-23` |
+| C034 | Secondary all-tracker dispose fanout preserves ordered timer ownership and tracker-specific payloads | `simkl-stop-cancel`, `md-call-mdblistPlay-play`, `md-stop-default`, `ref-12`, `ref-13`, `ref-14`, `ref-16`, `ref-19`, `ref-20`, `ref-32`, `ref-33` |
+| C035 | Secondary all-tracker pause fanout preserves ordered timer ownership and tracker-specific payloads | `simkl-stop-cancel`, `md-call-mdblistPlay-play`, `md-call-mdblistPause-pause`, `ref-12`, `ref-13`, `ref-14`, `ref-15`, `ref-16`, `ref-19`, `ref-20` |
+| C036 | Secondary all-tracker seek fanout preserves ordered timer ownership and tracker-specific payloads | `simkl-stop-cancel`, `md-call-mdblistPlay-play`, `ref-12`, `ref-13`, `ref-14`, `ref-16`, `ref-19`, `ref-20` |
+| C037 | Secondary concurrent mdblist and simkl readers reset the shared identity and sibling cache | `ref-08` |
+| C038 | Secondary concurrent simkl and mdblist readers reset the shared identity and sibling cache | `ref-09` |
+| C039 | Secondary dispose during policy preferences await starts no player heartbeat or send | `final2-caller-init-mounted` |
+| C040 | Secondary double tap left seek reaches the original tracking caller | `simkl-seek-api-0-call`, `simkl-seek-api-1-call`, `simkl-seek-api-1-id`, `simkl-seek-api-1-progress`, `simkl-seek-api-1-season`, `simkl-seek-api-1-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `simkl-seek-stop-marker`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-48`, `ref-49` |
+| C041 | Secondary double tap right seek reaches the original tracking caller | `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-48`, `ref-49` |
+| C042 | Secondary early policy await follows incoming profile credentials for the still-mounted outgoing route | `simkl-init-series`, `md-init-target`, `md-init-zero-position`, `md-init-zero-duration`, `md-init-assignment`, `md-init-play` |
+| C043 | Secondary failed held checkpoint retains original tracker dedup before and after reply | `simkl-send-api-0-call`, `final-ref-11`, `ast-073` |
+| C044 | Secondary failed status checkpoint retains original tracker dedup before and after reply | `simkl-send-api-0-call`, `final-ref-11`, `ast-073` |
+| C045 | Secondary failed throw checkpoint retains original tracker dedup before and after reply | `simkl-send-api-0-call`, `final-ref-11`, `ast-073` |
+| C046 | Secondary gated disposal still closes MDBList at its outgoing position with no Trakt or Simkl stop | `field-session`, `simkl-send-validation`, `md-updateMdblistPosition-validation`, `md-position-duration`, `md-position-update`, `ref-33`, `ref-34` |
+| C047 | Secondary guide mask custom is reloaded after held local resume and late episode metadata | `final-ref-03` |
+| C048 | Secondary guide mask local is reloaded after held local resume and late episode metadata | `final-ref-03` |
+| C049 | Secondary guide mask smart is reloaded after held local resume and late episode metadata | `final-ref-03` |
+| C050 | Secondary guide mask trakt is reloaded after held local resume and late episode metadata | `final-ref-03` |
+| C051 | Secondary held Simkl auth observes false enablement and null timer before pause and late dispose completion | `field-simklScrobbleEnabled`, `field-timer`, `simkl-init-series`, `simkl-init-auth` |
+| C052 | Secondary held resume pins MDBList raw initialization then persistable pause and stop diagnostics | `md-init-player-wait`, `md-init-target`, `md-init-raw-position`, `md-init-zero-position`, `md-init-zero-duration`, `md-init-assignment`, `md-init-play`, `md-mdblistPause-update`, `md-position-position`, `md-position-duration`, `md-position-update`, `md-call-mdblistPause-pause`, `md-stop-default`, `log-initMdblistScrobble-5`, `log-mdblistStop-0`, `ref-12`, `ref-13`, `ref-20`, `ast-237`, `ast-238`, `ast-239`, `ast-243`, `ast-246`, `ast-272`, `ast-273`, `ast-274`, `ast-279`, `ast-282` |
+| C053 | Secondary horizontal pan completion sends the displayed seek target | `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-50`, `ref-51` |
+| C054 | Secondary keyboard forward seek sends the clamped target | `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-53`, `ref-56` |
+| C055 | Secondary keyboard rewind seek sends the clamped target | `simkl-seek-api-0-call`, `simkl-seek-api-1-call`, `simkl-seek-api-1-id`, `simkl-seek-api-1-progress`, `simkl-seek-api-1-season`, `simkl-seek-api-1-episode`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `simkl-seek-stop-marker`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-52`, `ref-54`, `ref-55`, `ref-57` |
+| C056 | Secondary landed slider 80 keeps original MDBList crossing silence until exit | `simkl-seek-threshold`, `simkl-seek-reverse-stop` |
+| C057 | Secondary landed slider 81 keeps original MDBList crossing silence until exit | `simkl-seek-api-0-call`, `simkl-seek-scale`, `simkl-seek-upper`, `ref-54` |
+| C058 | Secondary legacy policy storage type error propagates from MDBList initialization while player failure stays caught | `final2-ref-02` |
+| C059 | Secondary mdblist custom identity policy disables otherwise enabled tracking before authentication | `final-md-init-policy-content` |
+| C060 | Secondary mdblist disabled at startup stays disabled after target enablement | `final2-md-init-policy` |
+| C061 | Secondary mdblist disabling an active target preserves pause heartbeat seek and exit continuation | `final2-ref-02` |
+| C062 | Secondary mdblist guide completion stays masked during an overlapping episode change and Trakt rewatch | `final-snapshot-mdblist-guide-mask`, `final-snapshot-mdblist-branch` |
+| C063 | Secondary mdblist initialization credential gate preserves absent checkpoints | `md-init-assignment` |
+| C064 | Secondary mdblist initialization episode gate preserves absent checkpoints | `md-target-se`, `md-target-unresolved`, `md-init-target`, `md-init-null-target`, `ast-225` |
+| C065 | Secondary mdblist initialization flag gate preserves absent checkpoints | `md-init-flag`, `ast-206` |
+| C066 | Secondary mdblist initialization identity gate preserves absent checkpoints | `md-target-capture`, `md-target-null`, `md-init-target`, `md-init-null-target`, `ast-225` |
+| C067 | Secondary mdblist initialization season gate preserves absent checkpoints | `md-target-se`, `md-target-unresolved`, `md-init-target`, `md-init-null-target`, `ast-225` |
+| C068 | Secondary mdblist initialization target gate preserves absent checkpoints | `md-init-policy` |
+| C069 | Secondary mdblist initialization type gate preserves absent checkpoints | `md-target-series`, `md-init-target`, `md-init-null-target`, `ast-225` |
+| C070 | Secondary mdblist inner snapshot policy rejects remote resume after the outer policy has been captured | `final2-snapshot-mdblist-default`, `final2-snapshot-mdblist-policy-mask` |
+| C071 | Secondary mdblist launch promise is spent once and episode snapshots stay cached per bound show | `field-launchMdblistPercentSpent`, `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-cache`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `snapshot-mdblist-key`, `ref-40`, `ref-41`, `ref-42`, `ast-389` |
+| C072 | Secondary mdblist masked guide read still warms its snapshot for a later selected-provider resume | `final2-snapshot-mdblist-guide-bypass`, `final2-ref-43` |
+| C073 | Secondary mdblist missing coordinates snapshot boundary cannot resume from malformed null keys | `final2-snapshot-mdblist-unresolved` |
+| C074 | Secondary mdblist missing identity snapshot boundary cannot resume from malformed null keys | `final2-snapshot-mdblist-null-id` |
+| C075 | Secondary mdblist single-file snapshot resolves effective coordinates before resuming | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `snapshot-mdblist-key`, `ref-42`, `ast-389` |
+| C076 | Secondary mdblist snapshot custom identity arriving after outer policy capture rejects provider-owned resume | `final2-snapshot-mdblist-policy-content` |
+| C077 | Secondary mdblist suspended snapshot A-B-A pins late coordinates and original identity guard | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `snapshot-mdblist-key`, `ref-09`, `ast-389` |
+| C078 | Secondary mdblist suspended snapshot dispose pins late coordinates and original identity guard | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `snapshot-mdblist-key`, `ast-389` |
+| C079 | Secondary mdblist suspended snapshot episode pins late coordinates and original identity guard | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `ast-389` |
+| C080 | Secondary mdblist suspended snapshot profile pins late coordinates and original identity guard | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `snapshot-mdblist-key`, `ast-389` |
+| C081 | Secondary mdblist suspended snapshot show pins late coordinates and original identity guard | `snapshot-mdblist-identity`, `snapshot-mdblist-bind`, `snapshot-mdblist-guard`, `snapshot-mdblist-late-guard`, `snapshot-mdblist-assign`, `snapshot-mdblist-se`, `ast-389` |
+| C082 | Secondary missing session stop diagnostics retain false presence before any allocation | `final2-ast-274` |
+| C083 | Secondary pause at 80 preserves Simkl strict and MDBList inclusive completion thresholds | `simkl-send-api-0-call`, `simkl-send-api-0-id`, `simkl-send-api-0-progress`, `simkl-send-api-0-season`, `simkl-send-api-0-episode`, `simkl-send-capture`, `simkl-send-percent`, `simkl-send-se`, `simkl-send-threshold`, `ast-073` |
+| C084 | Secondary pause at 81 preserves Simkl strict and MDBList inclusive completion thresholds | `simkl-send-api-1-call`, `simkl-send-api-1-id`, `simkl-send-api-1-progress`, `simkl-send-api-1-season`, `simkl-send-api-1-episode`, `simkl-send-capture`, `simkl-send-percent`, `simkl-send-se`, `simkl-send-upper`, `simkl-send-pause`, `simkl-send-stop`, `ast-077` |
+| C085 | Secondary protocol episode play pause exit bodies and dedup | `simkl-send-api-0-call`, `simkl-send-api-0-id`, `simkl-send-api-0-progress`, `simkl-send-api-0-season`, `simkl-send-api-0-episode`, `simkl-send-api-1-call`, `simkl-send-api-1-id`, `simkl-send-api-1-progress`, `simkl-send-api-1-season`, `simkl-send-api-1-episode`, `simkl-send-capture`, `simkl-send-percent`, `simkl-send-se`, `simkl-stop-cancel`, `md-position-duration`, `md-position-update`, `md-call-mdblistPause-pause`, `ref-01`, `ref-02`, `ref-12`, `ref-13`, `ref-20`, `ref-32`, `ast-073`, `ast-077` |
+| C086 | Secondary protocol movie play pause exit bodies and dedup | `final-simkl-init-movie`, `simkl-unresolved-series`, `simkl-send-api-0-call`, `simkl-send-api-0-id`, `simkl-send-api-0-progress`, `simkl-send-api-0-season`, `simkl-send-api-0-episode`, `simkl-send-api-1-call`, `simkl-send-api-1-id`, `simkl-send-api-1-progress`, `simkl-send-api-1-season`, `simkl-send-api-1-episode`, `simkl-send-capture`, `simkl-send-percent`, `simkl-send-se`, `simkl-stop-cancel`, `md-target-capture`, `md-target-ids`, `md-target-movie`, `md-position-duration`, `md-position-update`, `md-call-mdblistPause-pause`, `ref-01`, `ref-02`, `ref-12`, `ref-13`, `ref-20`, `ref-32`, `ast-073`, `ast-077`, `ast-174` |
+| C087 | Secondary seek at 80 crosses tracker thresholds and seeking back rearms checkpoints | `simkl-beat-api-1-call`, `simkl-beat-api-1-id`, `simkl-beat-api-1-progress`, `simkl-beat-api-1-season`, `simkl-beat-api-1-episode`, `simkl-beat-interval`, `simkl-beat-capture`, `simkl-beat-percent`, `simkl-beat-se`, `simkl-beat-pause-marker`, `simkl-seek-threshold`, `simkl-seek-reverse-stop`, `md-call-mdblistPlay-play`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-12`, `ref-13`, `ref-14`, `ref-15`, `ref-16`, `ref-19`, `ref-20`, `ref-57` |
+| C088 | Secondary seek at 81 crosses tracker thresholds and seeking back rearms checkpoints | `simkl-beat-api-1-call`, `simkl-beat-api-1-id`, `simkl-beat-api-1-progress`, `simkl-beat-api-1-season`, `simkl-beat-api-1-episode`, `simkl-seek-api-0-call`, `simkl-seek-api-0-id`, `simkl-seek-api-0-progress`, `simkl-seek-api-0-season`, `simkl-seek-api-0-episode`, `simkl-seek-api-1-call`, `simkl-seek-api-1-id`, `simkl-seek-api-1-progress`, `simkl-seek-api-1-season`, `simkl-seek-api-1-episode`, `simkl-beat-interval`, `simkl-beat-capture`, `simkl-beat-percent`, `simkl-beat-se`, `simkl-beat-pause-marker`, `simkl-seek-capture`, `simkl-seek-position`, `simkl-seek-scale`, `simkl-seek-se`, `simkl-seek-upper`, `simkl-seek-stop-marker`, `simkl-seek-reverse-stop`, `simkl-seek-reverse-marker`, `md-call-mdblistPlay-play`, `md-call-mdblistScrobbleSeek-seek`, `md-seek-target`, `md-seek-duration`, `ref-12`, `ref-13`, `ref-14`, `ref-15`, `ref-16`, `ref-19`, `ref-20`, `ref-54`, `ref-57` |
+| C089 | Secondary simkl custom identity policy disables otherwise enabled tracking before authentication | `final-simkl-init-policy-content` |
+| C090 | Secondary simkl disabled at startup stays disabled after target enablement | `final2-simkl-init-policy`, `final-simkl-send-enabled` |
+| C091 | Secondary simkl disabling an active target preserves pause heartbeat seek and exit continuation | `final2-ref-01` |
+| C092 | Secondary simkl guide completion stays masked during an overlapping episode change and Trakt rewatch | `final-snapshot-simkl-guide-mask`, `final-snapshot-simkl-branch` |
+| C093 | Secondary simkl initialization credential gate preserves absent checkpoints | `final-ref-10` |
+| C094 | Secondary simkl initialization episode gate preserves absent checkpoints | `simkl-init-series`, `final-simkl-send-unresolved`, `final-simkl-seek-unresolved` |
+| C095 | Secondary simkl initialization flag gate preserves absent checkpoints | `field-simklScrobbleEnabled`, `simkl-init-flag`, `final-ref-10` |
+| C096 | Secondary simkl initialization identity gate preserves absent checkpoints | `field-simklScrobbleEnabled`, `simkl-init-id`, `final-ref-10` |
+| C097 | Secondary simkl initialization season gate preserves absent checkpoints | `simkl-init-series`, `final-simkl-send-unresolved`, `final-simkl-seek-unresolved` |
+| C098 | Secondary simkl initialization target gate preserves absent checkpoints | `simkl-init-policy`, `final-simkl-send-enabled`, `final-simkl-seek-enabled`, `final-ref-10` |
+| C099 | Secondary simkl initialization type gate preserves absent checkpoints | `field-simklScrobbleEnabled`, `simkl-init-type`, `final-ref-10` |
+| C100 | Secondary simkl inner snapshot policy rejects remote resume after the outer policy has been captured | `final2-snapshot-simkl-default`, `final2-snapshot-simkl-policy-mask` |
+| C101 | Secondary simkl launch promise is spent once and episode snapshots stay cached per bound show | `field-launchSimklPercentSpent`, `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-cache`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-index`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `snapshot-simkl-key`, `ref-36`, `ref-37`, `ref-38`, `ast-316`, `ast-324`, `ast-329` |
+| C102 | Secondary simkl masked guide read still warms its snapshot for a later selected-provider resume | `final2-snapshot-simkl-guide-bypass`, `final2-ref-39` |
+| C103 | Secondary simkl missing coordinates snapshot boundary cannot resume from malformed null keys | `final2-snapshot-simkl-unresolved` |
+| C104 | Secondary simkl missing identity snapshot boundary cannot resume from malformed null keys | `final2-snapshot-simkl-null-id` |
+| C105 | Secondary simkl missing public guide row during snapshot storage rejects the outgoing resume | `final2-snapshot-simkl-empty` |
+| C106 | Secondary simkl single-file snapshot resolves effective coordinates before resuming | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-assign`, `snapshot-simkl-fallback`, `snapshot-simkl-fallback-season`, `snapshot-simkl-fallback-episode`, `snapshot-simkl-key`, `ref-38`, `ast-316` |
+| C107 | Secondary simkl snapshot custom identity arriving after outer policy capture rejects provider-owned resume | `final2-snapshot-simkl-policy-content` |
+| C108 | Secondary simkl snapshot rejects the transient old index while a shorter source playlist awaits URL resolution | `final2-ast-333` |
+| C109 | Secondary simkl suspended snapshot A-B-A pins late coordinates and original identity guard | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-index`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `snapshot-simkl-key`, `ref-08`, `ast-316`, `ast-324`, `ast-329` |
+| C110 | Secondary simkl suspended snapshot dispose pins late coordinates and original identity guard | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-index`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `snapshot-simkl-key`, `ast-316`, `ast-324`, `ast-329` |
+| C111 | Secondary simkl suspended snapshot episode pins late coordinates and original identity guard | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `ast-316`, `ast-324`, `ast-329` |
+| C112 | Secondary simkl suspended snapshot profile pins late coordinates and original identity guard | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-index`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `snapshot-simkl-key`, `ast-316`, `ast-324`, `ast-329` |
+| C113 | Secondary simkl suspended snapshot show pins late coordinates and original identity guard | `snapshot-simkl-identity`, `snapshot-simkl-bind`, `snapshot-simkl-guard`, `snapshot-simkl-late-guard`, `snapshot-simkl-assign`, `snapshot-simkl-series`, `snapshot-simkl-season`, `snapshot-simkl-episode`, `ast-316`, `ast-324`, `ast-329` |
+| C114 | Secondary zero-duration session starts MDBList on the first usable duration and Simkl on a playing edge | `simkl-init-series`, `simkl-init-auth`, `simkl-init-duration`, `md-target-capture`, `md-target-ids`, `md-target-se`, `md-target-season`, `md-target-episode`, `md-init-target`, `md-init-capability`, `md-init-assignment`, `md-init-duration`, `md-position-duration`, `md-position-update`, `md-call-mdblistPlay-play`, `ref-14`, `ref-18` |
+| C115 | Simkl EOF then disposal deduplicates the already sent stop checkpoint | `final-simkl-send-dedup`, `final-simkl-send-marker` |
+| C116 | Simkl auth before playing and duration stays inert until the original validation release caller | `simkl-init-series`, `ref-05` |
+| C117 | Simkl auth finishing paused with positive duration does not arm a checkpoint | `simkl-init-series`, `simkl-init-auth`, `simkl-init-playing` |
+| C118 | Simkl authentication inside startup validation keeps its timer absent until a decoded frame releases the gate | `final-simkl-init-validation` |
+| C119 | Simkl disabled policy delivered after playing and duration cannot arm a silent heartbeat | `final2-simkl-init-enabled` |
+| C120 | Simkl disposal during playing auth completion cannot create a late heartbeat | `final-simkl-init-mounted` |
+| C121 | Simkl episode-only filename remains unresolved and leaves its heartbeat armed above eighty | `final2-simkl-beat-unresolved` |
+| C122 | Simkl heartbeat exact interval force pause keeps live marker then stops above eighty with exact diagnostics | `simkl-beat-api-0-call`, `simkl-beat-api-0-id`, `simkl-beat-api-0-progress`, `simkl-beat-api-0-season`, `simkl-beat-api-0-episode`, `simkl-beat-api-1-call`, `simkl-beat-api-1-id`, `simkl-beat-api-1-progress`, `simkl-beat-api-1-season`, `simkl-beat-api-1-episode`, `simkl-beat-interval`, `simkl-beat-capture`, `simkl-beat-percent`, `simkl-beat-se`, `simkl-beat-threshold`, `simkl-beat-upper`, `simkl-beat-stop-marker`, `simkl-beat-stop-heartbeat`, `simkl-beat-precision`, `simkl-beat-stop-log`, `simkl-beat-pause-log`, `simkl-stop-cancel`, `ast-109`, `ast-111`, `ast-118`, `ast-119` |
+| C123 | Simkl heartbeat live coordinates gate keeps original armed timer silent until disposal | `simkl-beat-interval`, `simkl-beat-se`, `simkl-beat-unresolved`, `simkl-stop-cancel` |
+| C124 | Simkl heartbeat live duration gate keeps original armed timer silent until disposal | `simkl-beat-interval`, `simkl-beat-duration`, `simkl-stop-cancel`, `ast-093` |
+| C125 | Simkl heartbeat live identity gate keeps original armed timer silent until disposal | `simkl-beat-interval`, `simkl-beat-id`, `simkl-stop-cancel`, `ast-088` |
+| C126 | Simkl held 201 stop across dispose pins response revisions and service-owned recovery | `case-simkl-seek-api-0-call` |
+| C127 | Simkl held 201 stop across profile pins response revisions and service-owned recovery | `case-simkl-seek-api-0-call` |
+| C128 | Simkl held 409 stop across dispose pins response revisions and service-owned recovery | `case-simkl-seek-api-0-call` |
+| C129 | Simkl held 409 stop across profile pins response revisions and service-owned recovery | `case-simkl-seek-api-0-call` |
+| C130 | Simkl initialized playing owns one immediate heartbeat without a remote start | `final-simkl-init-heartbeat` |
+| C131 | Simkl initially disabled policy cannot install even a silent heartbeat before any input | `final2-simkl-init-policy` |
+| C132 | Simkl live heartbeat during a suspended source open rejects the paused or validation-gated renderer | `final2-simkl-beat-validation`, `final2-simkl-seek-validation` |
+| C133 | Simkl live heartbeat during a suspended source pause rejects the paused or validation-gated renderer | `final2-simkl-beat-playing` |
+| C134 | Simkl live null widget identity at pause never reuses its initialized identity | `simkl-send-id`, `ast-048` |
+| C135 | Simkl live null widget identity at seek never reuses its initialized identity | `simkl-seek-id`, `ast-129` |
+| C136 | Simkl parsed episode-only identity rejects heartbeat and pause with a missing season | `final2-simkl-unresolved-season`, `final2-simkl-unresolved-or` |
+| C137 | Simkl playlist selection stops its outgoing episode and heartbeat before a held incoming open | `final-ref-26`, `final-ref-27` |
+| C138 | Simkl public seek endpoints send exactly one hundred then zero and a reverse seek at eighty remains resumable | `final-simkl-seek-low`, `final-simkl-seek-high`, `final-simkl-seek-stop-dedup`, `final-simkl-seek-stop-heartbeat`, `final-simkl-seek-reverse-threshold`, `final-simkl-seek-reverse-heartbeat` |
+| C139 | Simkl public seek while duration remains silent despite a threshold-sized input | `final-simkl-seek-duration`, `final-ast-134` |
+| C140 | Simkl public seek while paused remains silent despite a threshold-sized input | `final-simkl-seek-playing`, `final-ast-134` |
+| C141 | Simkl repeated playing notification replaces its live heartbeat without a duplicate checkpoint | `final-simkl-beat-cancel` |
+| C142 | Simkl successful source validation resets a watched stop marker before the next real pause | `final2-ref-04` |
+
+| Mutation point (original declaration:line) | Statement / branch / literal → mutation | Result / original case |
+|---|---|---|
+| `field-simklScrobbleEnabled` (_simklScrobbleEnabled:1487) | `false` → `true` | killed: C095, C096, C099, C051 |
+| `field-launchSimklPercentSpent` (_launchSimklPercentSpent:1488) | `false` → `true` | killed: C101 |
+| `field-launchMdblistPercentSpent` (_launchMdblistPercentSpent:1494) | `false` → `true` | killed: C071 |
+| `field-simklEpisodeProgress` (_simklEpisodeProgress:1491) | `_simklEpisodeProgress;` → `_simklEpisodeProgress = {};` | equivalent: All readers bind a non-null series identity before reading this cache. The State binder starts with null identity and resets all three caches on that first identity. A null identity returns before accessing the cache. No asynchronous gap occurs between bind and the cache test. |
+| `field-mdblistEpisodeProgress` (_mdblistEpisodeProgress:1492) | `_mdblistEpisodeProgress;` → `_mdblistEpisodeProgress = {};` | equivalent: Same shared State-owned identity-binder invariant as Simkl: the first non-null identity clears this cache before reading, even if another tracker binds first; a null identity returns before reading. |
+| `field-action` (_simklLastScrobbleAction:1495) | `_simklLastScrobbleAction;` → `_simklLastScrobbleAction = 'pause';` | killed: C029 |
+| `field-timer` (_simklHeartbeatTimer:1496) | `Timer? _simklHeartbeatTimer;` → `late Timer? _simklHeartbeatTimer;` | killed: C051 |
+| `field-session` (_mdblistSession:1497) | `MdblistScrobbleSession? _mdblistSession;` → `late MdblistScrobbleSession? _mdblistSession;` | killed: C046, C026, C025 |
+| `simkl-init-flag` (_initSimklScrobble:1803) | `if (!widget.simklScrobble) return;` → `` | killed: C095 |
+| `simkl-init-id` (_initSimklScrobble:1804) | `if (widget.contentImdbId == null) return;` → `` | killed: C096 |
+| `simkl-init-type` (_initSimklScrobble:1805) | `if (widget.contentType != 'movie' && widget.contentType != 'series') return;` → `` | killed: C099 |
+| `simkl-init-movie` (_initSimklScrobble:1805) | `widget.contentType != 'movie'` → `true` | killed: C086 |
+| `simkl-init-series` (_initSimklScrobble:1805) | `widget.contentType != 'series'` → `true` | killed: C042, C097, C094, C051, C029, C030, C116, C117, C114 |
+| `simkl-init-policy-content` (_initSimklScrobble:1807) | `_effectiveContentImdbId` → `null` | killed: C089 |
+| `simkl-init-policy` (_initSimklScrobble:1810) | `policy.scrobbles(TrackingSource.simkl) &&` → `true &&` | killed: C131, C090 |
+| `simkl-init-auth` (_initSimklScrobble:1811) | `await SimklService.instance.isAuthenticated()` → `true` | killed: C051, C029, C030, C117, C114 |
+| `simkl-init-mounted` (_initSimklScrobble:1812) | `if (!mounted) return;` → `` | killed: C120 |
+| `simkl-init-validation` (_initSimklScrobble:1822) | `!_validationGateActive &&` → `true &&` | killed: C118 |
+| `simkl-init-enabled` (_initSimklScrobble:1823) | `_simklScrobbleEnabled &&` → `true &&` | killed: C119 |
+| `simkl-init-playing` (_initSimklScrobble:1824) | `_isPlaying &&` → `true &&` | killed: C117 |
+| `simkl-init-duration` (_initSimklScrobble:1825) | `_duration > Duration.zero` → `true` | killed: C114 |
+| `simkl-init-marker` (_initSimklScrobble:1826) | `_simklLastScrobbleAction = 'start';` → `` | equivalent: At original init completion the marker is null unless a live playing or validation-release caller already stamped start. Init stamp start versus null cannot change a pause/stop caller dedup check: both differ from pause/stop. No live caller passes start. The first pause/stop writes its action; heartbeat and subsequent playing overwrite the marker independently. |
+| `simkl-init-heartbeat` (_initSimklScrobble:1827) | `_startSimklHeartbeat();` → `` | killed: C130 |
+| `simkl-unresolved-series` (_simklSeriesSEUnresolved:1837) | `widget.contentType == 'series'` → `true` | killed: C086 |
+| `simkl-unresolved-season` (_simklSeriesSEUnresolved:1838) | `se.season == null` → `false` | killed: C136 |
+| `simkl-unresolved-episode` (_simklSeriesSEUnresolved:1838) | `se.episode == null` → `false` | equivalent: The retained resolver prefers parsed playlist coordinates only as a complete pair, then explicit launch coordinates only as a complete pair. Filename parsing uses bounded numeric pair patterns, episode-only patterns (season can remain null), anime (both), or special content (both). It cannot produce non-null season with null episode. Thus episode-null implies season-null and the unmodified season operand still rejects every reachable unresolved record. |
+| `simkl-unresolved-or` (_simklSeriesSEUnresolved:1838) | `\|\|` → `&&` | killed: C136 |
+| `simkl-send-api-0-call` (_simklScrobble:1862) | `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` → `` | killed: C085, C086, C083, C044, C045, C043 |
+| `simkl-send-api-0-id` (_simklScrobble:1862) | `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` → `SimklService.instance.scrobblePause(           'tt5999999',           progress,           seas…` | killed: C085, C086, C083 |
+| `simkl-send-api-0-progress` (_simklScrobble:1862) | `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` → `SimklService.instance.scrobblePause(           imdbId,           0.0,           season: se.sea…` | killed: C085, C086, C083 |
+| `simkl-send-api-0-season` (_simklScrobble:1862) | `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` → `SimklService.instance.scrobblePause(           imdbId,           progress,           season: 9…` | killed: C085, C086, C083 |
+| `simkl-send-api-0-episode` (_simklScrobble:1862) | `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` → `SimklService.instance.scrobblePause(           imdbId,           progress,           season: s…` | killed: C085, C086, C083 |
+| `simkl-send-api-1-call` (_simklScrobble:1870) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `` | killed: C085, C086, C084 |
+| `simkl-send-api-1-id` (_simklScrobble:1870) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           'tt5999999',           progress,           seaso…` | killed: C085, C086, C084 |
+| `simkl-send-api-1-progress` (_simklScrobble:1870) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           0.0,           season: se.seas…` | killed: C085, C086, C084 |
+| `simkl-send-api-1-season` (_simklScrobble:1870) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: 99…` | killed: C085, C086, C084 |
+| `simkl-send-api-1-episode` (_simklScrobble:1870) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` | killed: C085, C086, C084 |
+| `simkl-send-break-0` (_simklScrobble:1868) | `break;` → `// implicit switch termination` | equivalent: Dart 3 nonempty switch cases implicitly terminate. Removing this terminal break leaves the same pause call and termination, without fallthrough. |
+| `simkl-send-break-1` (_simklScrobble:1876) | `break;` → `// implicit switch termination` | equivalent: Dart 3 nonempty switch cases implicitly terminate. Removing this terminal break leaves the same stop call and termination. |
+| `simkl-beat-api-0-call` (_startSimklHeartbeat:1902) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `` | killed: C122 |
+| `simkl-beat-api-0-id` (_startSimklHeartbeat:1902) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           'tt5999999',           progress,           seaso…` | killed: C122 |
+| `simkl-beat-api-0-progress` (_startSimklHeartbeat:1902) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           0.0,           season: se.seas…` | killed: C122 |
+| `simkl-beat-api-0-season` (_startSimklHeartbeat:1902) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: 99…` | killed: C122 |
+| `simkl-beat-api-0-episode` (_startSimklHeartbeat:1902) | `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` → `SimklService.instance.scrobbleStop(           imdbId,           progress,           season: se…` | killed: C122 |
+| `simkl-beat-api-1-call` (_startSimklHeartbeat:1921) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `` | killed: C087, C088, C122 |
+| `simkl-beat-api-1-id` (_startSimklHeartbeat:1921) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         'tt5999999',         progress,         season: se…` | killed: C087, C088, C122 |
+| `simkl-beat-api-1-progress` (_startSimklHeartbeat:1921) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         0.0,         season: se.season,  …` | killed: C087, C088, C122 |
+| `simkl-beat-api-1-season` (_startSimklHeartbeat:1921) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         progress,         season: 99,    …` | killed: C087, C088, C122 |
+| `simkl-beat-api-1-episode` (_startSimklHeartbeat:1921) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` | killed: C087, C088, C122 |
+| `simkl-seek-api-0-call` (_simklScrobbleSeek:1959) | `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` → `` | killed: C126, C127, C128, C129 |
+| `simkl-seek-api-0-id` (_simklScrobbleSeek:1959) | `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` → `SimklService.instance.scrobbleStop(         'tt5999999',         progress,         season: se.…` | killed: C088, C054, C041, C053, C031, C032 |
+| `simkl-seek-api-0-progress` (_simklScrobbleSeek:1959) | `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` → `SimklService.instance.scrobbleStop(         imdbId,         0.0,         season: se.season,   …` | killed: C088, C054, C041, C053, C031, C032 |
+| `simkl-seek-api-0-season` (_simklScrobbleSeek:1959) | `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` → `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: 99,     …` | killed: C088, C054, C041, C053, C031, C032 |
+| `simkl-seek-api-0-episode` (_simklScrobbleSeek:1959) | `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` → `SimklService.instance.scrobbleStop(         imdbId,         progress,         season: se.seaso…` | killed: C088, C054, C041, C053, C031, C032 |
+| `simkl-seek-api-1-call` (_simklScrobbleSeek:1971) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `` | killed: C088, C055, C040 |
+| `simkl-seek-api-1-id` (_simklScrobbleSeek:1971) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         'tt5999999',         progress,         season: se…` | killed: C088, C055, C040 |
+| `simkl-seek-api-1-progress` (_simklScrobbleSeek:1971) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         0.0,         season: se.season,  …` | killed: C088, C055, C040 |
+| `simkl-seek-api-1-season` (_simklScrobbleSeek:1971) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         progress,         season: 99,    …` | killed: C088, C055, C040 |
+| `simkl-seek-api-1-episode` (_simklScrobbleSeek:1971) | `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` → `SimklService.instance.scrobblePause(         imdbId,         progress,         season: se.seas…` | killed: C088, C055, C040 |
+| `simkl-send-validation` (_simklScrobble:1841) | `if (_validationGateActive) return;` → `` | killed: C046 |
+| `simkl-send-enabled` (_simklScrobble:1842) | `!_simklScrobbleEnabled \|\| widget.contentImdbId == null` → `widget.contentImdbId == null` | killed: C098, C090 |
+| `simkl-send-id` (_simklScrobble:1842) | `!_simklScrobbleEnabled \|\| widget.contentImdbId == null` → `!_simklScrobbleEnabled` | killed: C134 |
+| `simkl-send-capture` (_simklScrobble:1843) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C085, C086, C083, C084 |
+| `simkl-send-percent` (_simklScrobble:1844) | `_trakt.traktProgress()` → `0.0` | killed: C085, C086, C083, C084 |
+| `simkl-send-se` (_simklScrobble:1845) | `_traktSeasonEpisode()` → `(season: 99, episode: 99)` | killed: C085, C086, C083, C084 |
+| `simkl-send-unresolved` (_simklScrobble:1846) | `if (_simklSeriesSEUnresolved(se)) return;` → `` | killed: C097, C094 |
+| `simkl-send-threshold` (_simklScrobble:1849) | `progress > 80` → `progress >= 80` | killed: C083 |
+| `simkl-send-upper` (_simklScrobble:1849) | `progress > 80` → `progress > 81` | killed: C084 |
+| `simkl-send-pause` (_simklScrobble:1849) | `action == 'pause'` → `false` | killed: C084 |
+| `simkl-send-stop` (_simklScrobble:1850) | `action = 'stop';` → `action = 'pause';` | killed: C084 |
+| `simkl-send-dedup` (_simklScrobble:1852) | `if (_simklLastScrobbleAction == action) return;` → `` | killed: C115 |
+| `simkl-send-marker` (_simklScrobble:1853) | `_simklLastScrobbleAction = action;` → `` | killed: C115 |
+| `simkl-send-start-intent` (_simklScrobble:1849) | `action == 'start'` → `false` | dormant: All original live callers pass pause or stop; playing writes the start marker directly. Defensive start intent has no original caller. |
+| `simkl-send-start-case` (_simklScrobble:1860) | `case 'start':` → `` | dormant: Same dormant defensive start intent; shared pause body remains live. |
+| `simkl-beat-cancel` (_startSimklHeartbeat:1888) | `_simklHeartbeatTimer?.cancel();` → `` | killed: C141 |
+| `simkl-beat-interval` (_startSimklHeartbeat:1889) | `minutes: 2` → `minutes: 1` | killed: C087, C088, C122, C124, C125, C123 |
+| `simkl-beat-validation` (_startSimklHeartbeat:1890) | `_validationGateActive \|\|` → `false \|\|` | killed: C132 |
+| `simkl-beat-id` (_startSimklHeartbeat:1892) | `widget.contentImdbId == null` → `false` | killed: C125 |
+| `simkl-beat-playing` (_startSimklHeartbeat:1895) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `_duration.inMilliseconds <= 0` | killed: C133 |
+| `simkl-beat-duration` (_startSimklHeartbeat:1895) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `!_isPlaying` | killed: C124 |
+| `simkl-beat-capture` (_startSimklHeartbeat:1896) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C087, C088, C122 |
+| `simkl-beat-percent` (_startSimklHeartbeat:1897) | `_trakt.traktProgress()` → `0.0` | killed: C087, C088, C122 |
+| `simkl-beat-se` (_startSimklHeartbeat:1898) | `_traktSeasonEpisode()` → `(season: 99, episode: 99)` | killed: C087, C088, C122, C123 |
+| `simkl-beat-unresolved` (_startSimklHeartbeat:1899) | `if (_simklSeriesSEUnresolved(se)) return;` → `` | killed: C121 |
+| `simkl-beat-threshold` (_startSimklHeartbeat:1900) | `progress > 80` → `progress >= 80` | killed: C122 |
+| `simkl-beat-upper` (_startSimklHeartbeat:1900) | `progress > 80` → `progress > 81` | killed: C122 |
+| `simkl-beat-stop-marker` (_startSimklHeartbeat:1901) | `_simklLastScrobbleAction = 'stop';` → `` | killed: C122 |
+| `simkl-beat-stop-heartbeat` (_startSimklHeartbeat:1911) | `_stopSimklHeartbeat();` → `` | killed: C122 |
+| `simkl-beat-pause-marker` (_startSimklHeartbeat:1920) | `_simklLastScrobbleAction = 'start';` → `_simklLastScrobbleAction = 'pause';` | killed: C087, C088 |
+| `simkl-beat-precision` (_startSimklHeartbeat:1909) | `toStringAsFixed(1)` → `toStringAsFixed(2)` | killed: C122 |
+| `simkl-beat-stop-log` (_startSimklHeartbeat:1909) | `Simkl: Heartbeat stop at` → `Simkl: Changed stop at` | killed: C122 |
+| `simkl-beat-pause-log` (_startSimklHeartbeat:1928) | `Simkl: Heartbeat pause checkpoint at` → `Simkl: Changed pause at` | killed: C122 |
+| `simkl-beat-enabled` (_startSimklHeartbeat:1891) | `!_simklScrobbleEnabled \|\|` → `false \|\|` | equivalent: The only assignments of enablement are false initializer and awaited one-time init result. Every live timer armer requires that result true (init, validation release, playing subscription, or seek past an earlier tracked stop); no later path assigns false. Policy changes do not change the field. Disabled-at-start has no armed timer; disabled-mid-session retains true. |
+| `simkl-stop-cancel` (_stopSimklHeartbeat:1934) | `_simklHeartbeatTimer?.cancel();` → `` | killed: C035, C036, C033, C034, C085, C086, C122, C124, C125, C123 |
+| `simkl-stop-null` (_stopSimklHeartbeat:1935) | `_simklHeartbeatTimer = null;` → `` | equivalent: Only cancel and overwrite access this timer pointer. Timer.cancel is idempotent; keeping an inactive pointer changes neither scheduling nor callback delivery, and the next armer overwrites it. |
+| `simkl-seek-validation` (_simklScrobbleSeek:1946) | `if (_validationGateActive) return;` → `` | killed: C132 |
+| `simkl-seek-enabled` (_simklScrobbleSeek:1947) | `!_simklScrobbleEnabled \|\| widget.contentImdbId == null` → `widget.contentImdbId == null` | killed: C098 |
+| `simkl-seek-id` (_simklScrobbleSeek:1947) | `!_simklScrobbleEnabled \|\| widget.contentImdbId == null` → `!_simklScrobbleEnabled` | killed: C135 |
+| `simkl-seek-playing` (_simklScrobbleSeek:1948) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `_duration.inMilliseconds <= 0` | killed: C140 |
+| `simkl-seek-duration` (_simklScrobbleSeek:1948) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `!_isPlaying` | killed: C139 |
+| `simkl-seek-capture` (_simklScrobbleSeek:1949) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C088, C055, C040, C054, C041, C053, C031, C032 |
+| `simkl-seek-position` (_simklScrobbleSeek:1951) | `seekTarget.inMilliseconds` → `_position.inMilliseconds` | killed: C088, C055, C040, C054, C041, C053, C031, C032 |
+| `simkl-seek-scale` (_simklScrobbleSeek:1951) | `* 100` → `* 10` | killed: C088, C057, C055, C040, C054, C041, C053, C031, C032 |
+| `simkl-seek-low` (_simklScrobbleSeek:1952) | `0.0,           100.0` → `1.0,           100.0` | killed: C138 |
+| `simkl-seek-high` (_simklScrobbleSeek:1952) | `0.0,           100.0` → `0.0,           90.0` | killed: C138 |
+| `simkl-seek-se` (_simklScrobbleSeek:1955) | `_traktSeasonEpisode()` → `(season: 99, episode: 99)` | killed: C088, C055, C040, C054, C041, C053, C031, C032 |
+| `simkl-seek-unresolved` (_simklScrobbleSeek:1956) | `if (_simklSeriesSEUnresolved(se)) return;` → `` | killed: C097, C094 |
+| `simkl-seek-threshold` (_simklScrobbleSeek:1957) | `progress > 80` → `progress >= 80` | killed: C087, C056 |
+| `simkl-seek-upper` (_simklScrobbleSeek:1957) | `progress > 80` → `progress > 81` | killed: C088, C057, C055, C040, C054, C041, C053, C031, C032 |
+| `simkl-seek-stop-dedup` (_simklScrobbleSeek:1957) | `_simklLastScrobbleAction != 'stop'` → `true` | killed: C138 |
+| `simkl-seek-stop-marker` (_simklScrobbleSeek:1958) | `_simklLastScrobbleAction = 'stop';` → `` | killed: C088, C055, C040 |
+| `simkl-seek-stop-heartbeat` (_simklScrobbleSeek:1965) | `_stopSimklHeartbeat();` → `` | killed: C138 |
+| `simkl-seek-reverse-threshold` (_simklScrobbleSeek:1966) | `progress <= 80` → `progress < 80` | killed: C138 |
+| `simkl-seek-reverse-stop` (_simklScrobbleSeek:1966) | `_simklLastScrobbleAction == 'stop'` → `true` | killed: C087, C088, C056, C032 |
+| `simkl-seek-reverse-marker` (_simklScrobbleSeek:1970) | `_simklLastScrobbleAction = 'pause';` → `` | killed: C088 |
+| `simkl-seek-reverse-heartbeat` (_simklScrobbleSeek:1977) | `_startSimklHeartbeat();` → `` | killed: C138 |
+| `md-target-capture` (_mdblistTarget:1982) | `final imdbId = widget.contentImdbId;` → `final imdbId = 'tt5999999';` | killed: C066, C019, C018, C020, C086, C017, C114, C004, C003 |
+| `md-target-null` (_mdblistTarget:1983) | `if (imdbId == null \|\| imdbId.isEmpty) return null;` → `if (imdbId == null \|\| imdbId.isEmpty) throw StateError('target');` | killed: C066 |
+| `md-target-empty` (_mdblistTarget:1983) | `imdbId == null \|\| imdbId.isEmpty` → `imdbId == null` | killed: C024 |
+| `md-target-ids` (_mdblistTarget:1984) | `MdblistMediaIds.forContent(imdbId)` → `MdblistMediaIds.forContent('tt5999999')` | killed: C019, C018, C020, C086, C017, C114, C004, C003 |
+| `md-target-movie` (_mdblistTarget:1985) | `widget.contentType == 'movie'` → `false` | killed: C086 |
+| `md-target-series` (_mdblistTarget:1988) | `if (widget.contentType != 'series') return null;` → `` | killed: C069 |
+| `md-target-se` (_mdblistTarget:1989) | `_traktSeasonEpisode()` → `(season: 99, episode: 99)` | killed: C067, C064, C019, C018, C020, C017, C114, C004 |
+| `md-target-unresolved` (_mdblistTarget:1990) | `if (se.season == null \|\| se.episode == null) return null;` → `if (se.season == null \|\| se.episode == null) throw StateError('coordinates');` | killed: C067, C064 |
+| `md-target-season` (_mdblistTarget:1993) | `season: se.season!` → `season: 99` | killed: C019, C018, C020, C017, C114, C004 |
+| `md-target-episode` (_mdblistTarget:1994) | `episode: se.episode!` → `episode: 99` | killed: C019, C018, C020, C017, C114, C004 |
+| `md-init-flag` (_initMdblistScrobble:2004) | `!widget.mdblistScrobble \|\| !kMdblistEnabled` → `!kMdblistEnabled` | killed: C065 |
+| `md-init-policy-content` (_initMdblistScrobble:2009) | `_effectiveContentImdbId` → `null` | killed: C059 |
+| `md-init-policy` (_initMdblistScrobble:2011) | `if (!policy.scrobbles(TrackingSource.mdblist)) return;` → `` | killed: C060 |
+| `md-init-player-wait` (_initMdblistScrobble:2019) | `await _playerInitializationFuture;` → `` | killed: C052, C026, C025, C015 |
+| `md-init-target` (_initMdblistScrobble:2030) | `final target = _mdblistTarget();` → `final target = MdblistScrobbleTarget.movie(MdblistMediaIds.forContent('tt5999999'));` | killed: C042, C066, C069, C067, C064, C052, C114, C026, C004, C003 |
+| `md-init-null-target` (_initMdblistScrobble:2031) | `if (target == null) {` → `if (target == null) { throw StateError('missing target');` | killed: C066, C069, C067, C064 |
+| `md-init-capability` (_initMdblistScrobble:2035) | `final capability = await MdblistService.instance         .capturePlaybackCapability();` → `final capability = null;` | killed: C114, C004, C003, C002 |
+| `md-init-late-target` (_initMdblistScrobble:2043) | `target: target,` → `target: _mdblistTarget()!,` | killed: C004 |
+| `md-init-session-capability` (_initMdblistScrobble:2044) | `capability: capability,` → `capability: null,` | killed: C003 |
+| `md-init-raw-position` (_initMdblistScrobble:2046) | `session.updatePosition(_position, _duration);` → `session.updatePosition(_persistablePosition, _duration);` | killed: C052 |
+| `md-init-zero-position` (_initMdblistScrobble:2046) | `session.updatePosition(_position, _duration);` → `session.updatePosition(Duration.zero, _duration);` | killed: C042, C052, C026, C004 |
+| `md-init-zero-duration` (_initMdblistScrobble:2046) | `session.updatePosition(_position, _duration);` → `session.updatePosition(_position, Duration.zero);` | killed: C042, C052, C026, C004 |
+| `md-init-assignment` (_initMdblistScrobble:2047) | `_mdblistSession = session;` → `` | killed: C042, C063, C052, C114 |
+| `md-init-validation` (_initMdblistScrobble:2054) | `!_validationGateActive &&` → `true &&` | killed: C012, C013 |
+| `md-init-playing` (_initMdblistScrobble:2054) | `_isPlaying &&` → `true &&` | killed: C001 |
+| `md-init-duration` (_initMdblistScrobble:2054) | `_duration > Duration.zero` → `true` | killed: C114 |
+| `md-init-play` (_initMdblistScrobble:2055) | `session.play();` → `` | killed: C042, C052, C026, C004, C003 |
+| `md-init-mounted-0` (_initMdblistScrobble:2024) | `if (!mounted)` → `if (false)` | killed: C006 |
+| `md-init-mounted-1` (_initMdblistScrobble:2037) | `if (!mounted)` → `if (false)` | killed: C002 |
+| `md-init-player-catch` (_initMdblistScrobble:2018) | `try {       await _playerInitializationFuture;     } catch (e) {       debugPrint('[MDBListDia…` → `await _playerInitializationFuture;` | killed: C015 |
+| `md-init-feature-flag` (_initMdblistScrobble:2004) | `!widget.mdblistScrobble \|\| !kMdblistEnabled` → `!widget.mdblistScrobble` | equivalent: kMdblistEnabled is a top-level final bool initialized true at original mdblist_service.dart:26. No test seam, build flag, setter or other assignment can make it false. |
+| `md-updateMdblistPosition-validation` (_updateMdblistPosition:2060) | `if (_validationGateActive) return;` → `` | killed: C046 |
+| `md-mdblistPlay-validation` (_mdblistPlay:2066) | `if (_validationGateActive) return;` → `` | killed: C012 |
+| `md-mdblistPlay-update` (_mdblistPlay:2067) | `_updateMdblistPosition();` → `` | killed: C011 |
+| `md-mdblistPause-validation` (_mdblistPause:2072) | `if (_validationGateActive) return;` → `` | equivalent: The only original caller is the playing subscription, inside the synchronous !validationGateActive && !p && wasPlaying && !isTransitioning branch. No await or callback occurs between that gate and this call; the gate cannot become true before the helper reads it. Removing the inner guard leaves all original calls unchanged. The move still retains the redundant guard verbatim. |
+| `md-mdblistPause-update` (_mdblistPause:2073) | `_updateMdblistPosition();` → `` | killed: C052 |
+| `md-mdblistStop-validation` (_mdblistStop:2078) | `if (_validationGateActive) return;` → `` | killed: C012, C014 |
+| `md-mdblistStop-update` (_mdblistStop:2079) | `_updateMdblistPosition();` → `` | killed: C010 |
+| `md-mdblistScrobbleSeek-validation` (_mdblistScrobbleSeek:2094) | `if (_validationGateActive) return;` → `` | killed: C014 |
+| `md-switchMdblistTarget-validation` (_switchMdblistTarget:2114) | `if (_validationGateActive) return;` → `` | killed: C017 |
+| `md-position-position` (_updateMdblistPosition:2062) | `_persistablePosition` → `_position` | killed: C052 |
+| `md-position-duration` (_updateMdblistPosition:2062) | `_duration` → `Duration.zero` | killed: C052, C046, C085, C086, C114 |
+| `md-position-update` (_updateMdblistPosition:2062) | `_mdblistSession?.updatePosition(_persistablePosition, _duration);` → `` | killed: C052, C046, C085, C086, C114 |
+| `md-call-mdblistPlay-play` (_mdblistPlay:2068) | `_mdblistSession?.play();` → `` | killed: C035, C036, C033, C034, C087, C088, C114 |
+| `md-call-mdblistPause-pause` (_mdblistPause:2074) | `_mdblistSession?.pause();` → `` | killed: C035, C052, C085, C086 |
+| `md-call-mdblistStop-complete` (_mdblistStop:2087) | `_mdblistSession?.complete();` → `` | killed: C033 |
+| `md-call-mdblistStop-exit` (_mdblistStop:2089) | `_mdblistSession?.exit();` → `` | killed: C016 |
+| `md-call-mdblistScrobbleSeek-seek` (_mdblistScrobbleSeek:2095) | `_mdblistSession?.seek(target, _duration);` → `` | killed: C087, C088, C055, C040, C054, C041, C053, C031, C032 |
+| `md-stop-complete` (_mdblistStop:2086) | `if (complete)` → `if (false)` | killed: C033 |
+| `md-stop-default` (_mdblistStop:2077) | `bool complete = false` → `bool complete = true` | killed: C034, C052, C005 |
+| `md-seek-target` (_mdblistScrobbleSeek:2095) | `seek(target, _duration)` → `seek(_position, _duration)` | killed: C087, C088, C055, C040, C054, C041, C053, C031, C032 |
+| `md-seek-duration` (_mdblistScrobbleSeek:2095) | `seek(target, _duration)` → `seek(target, Duration.zero)` | killed: C087, C088, C055, C040, C054, C041, C053, C031, C032 |
+| `md-switch-target` (_switchMdblistTarget:2115) | `final target = _mdblistTarget();` → `final target = MdblistScrobbleTarget.movie(MdblistMediaIds.forContent('tt5999999'));` | killed: C019 |
+| `md-switch-null` (_switchMdblistTarget:2116) | `if (target == null) {` → `if (target == null) { throw StateError('target');` | killed: C007 |
+| `md-switch-exit` (_switchMdblistTarget:2117) | `_mdblistSession?.exit();` → `` | killed: C007 |
+| `md-switch-call` (_switchMdblistTarget:2120) | `await _mdblistSession?.switchTarget(target);` → `` | killed: C019 |
+| `md-switch-await` (_switchMdblistTarget:2120) | `await _mdblistSession?.switchTarget(target);` → `_mdblistSession?.switchTarget(target);` | killed: C019 |
+| `snapshot-simkl-default` (_currentEpisodeSimklPercent:2137) | `bool forGuide = false` → `bool forGuide = true` | killed: C100 |
+| `snapshot-simkl-policy-content` (_currentEpisodeSimklPercent:2139) | `_effectiveContentImdbId` → `null` | killed: C107 |
+| `snapshot-simkl-policy-mask` (_currentEpisodeSimklPercent:2141) | `if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;` → `` | killed: C100 |
+| `snapshot-simkl-guide-bypass` (_currentEpisodeSimklPercent:2141) | `!forGuide && !policy.progressFrom` → `!policy.progressFrom` | killed: C102 |
+| `snapshot-simkl-identity` (_currentEpisodeSimklPercent:2142) | `final imdbId = _currentSeriesImdbId;` → `final imdbId = 'tt5999999';` | killed: C111, C113, C109, C112, C110, C101, C106 |
+| `snapshot-simkl-null-id` (_currentEpisodeSimklPercent:2143) | `if (imdbId == null) return null;` → `if (imdbId == null) throw StateError('snapshot identity');` | killed: C104 |
+| `snapshot-simkl-bind` (_currentEpisodeSimklPercent:2144) | `_bindEpisodeTrackerProgressIdentity(imdbId);` → `` | killed: C111, C113, C109, C112, C110, C101, C106 |
+| `snapshot-simkl-cache` (_currentEpisodeSimklPercent:2148) | `if (_simklEpisodeProgress == null)` → `if (true)` | killed: C101 |
+| `snapshot-simkl-guard` (_currentEpisodeSimklPercent:2153) | `if (_episodeTrackerProgressImdbId != imdbId) return null;` → `` | killed: C113 |
+| `snapshot-simkl-late-guard` (_currentEpisodeSimklPercent:2153) | `_episodeTrackerProgressImdbId != imdbId` → `_episodeTrackerProgressImdbId != _currentSeriesImdbId` | killed: C113 |
+| `snapshot-simkl-assign` (_currentEpisodeSimklPercent:2154) | `_simklEpisodeProgress = loaded;` → `_simklEpisodeProgress = {};` | killed: C111, C113, C109, C112, C110, C101, C106 |
+| `snapshot-simkl-guide-mask` (_currentEpisodeSimklPercent:2185) | `policy.guideProgressFrom(TrackingSource.simkl, percent)` → `percent` | killed: C092 |
+| `snapshot-simkl-branch` (_currentEpisodeSimklPercent:2184) | `return forGuide` → `return !forGuide` | killed: C092 |
+| `snapshot-simkl-series` (_currentEpisodeSimklPercent:2160) | `seriesPlaylist != null && seriesPlaylist.isSeries` → `seriesPlaylist != null && !seriesPlaylist.isSeries` | killed: C111, C113, C109, C112, C110, C101 |
+| `snapshot-simkl-empty` (_currentEpisodeSimklPercent:2174) | `if (currentEpisode == null) return null;` → `if (currentEpisode == null) throw StateError('missing row');` | killed: C105 |
+| `snapshot-simkl-index` (_currentEpisodeSimklPercent:2169) | `candidate.originalIndex == _currentIndex` → `candidate.originalIndex == 0` | killed: C109, C112, C110, C101 |
+| `snapshot-simkl-season` (_currentEpisodeSimklPercent:2175) | `season = currentEpisode.seriesInfo.season;` → `season = 99;` | killed: C111, C113, C109, C112, C110, C101 |
+| `snapshot-simkl-episode` (_currentEpisodeSimklPercent:2176) | `episode = currentEpisode.seriesInfo.episode;` → `episode = 99;` | killed: C111, C113, C109, C112, C110, C101 |
+| `snapshot-simkl-fallback` (_currentEpisodeSimklPercent:2177) | `_effectiveContentType == 'series'` → `_effectiveContentType == 'movie'` | killed: C106 |
+| `snapshot-simkl-fallback-season` (_currentEpisodeSimklPercent:2178) | `season = _effectiveContentSeason;` → `season = 99;` | killed: C106 |
+| `snapshot-simkl-fallback-episode` (_currentEpisodeSimklPercent:2179) | `episode = _effectiveContentEpisode;` → `episode = 99;` | killed: C106 |
+| `snapshot-simkl-unresolved` (_currentEpisodeSimklPercent:2181) | `if (season == null \|\| episode == null) return null;` → `if (season == null \|\| episode == null) throw StateError('snapshot coordinates');` | killed: C103 |
+| `snapshot-simkl-key` (_currentEpisodeSimklPercent:2183) | `['${season}_$episode']` → `['${episode}_$season']` | killed: C109, C112, C110, C101, C106 |
+| `snapshot-simkl-bounds` (_currentEpisodeSimklPercent:2164) | `_currentIndex >= playlist.length` → `false` | equivalent: Production SeriesEpisode rows originate from valid indices of the active playlist. An out-of-range index cannot equal any row originalIndex; after the synchronous scan the missing-row guard returns null. No await exists inside index validation/scan. |
+| `snapshot-simkl-negative` (_currentEpisodeSimklPercent:2163) | `_currentIndex < 0` → `false` | equivalent: Same invariant: production row originalIndex is non-negative. With an invalid negative index, the following missing-row guard returns null. SeriesBrowser placeholders with originalIndex=-1 are local merged display rows and are never added to seriesPlaylist.allEpisodes. |
+| `snapshot-simkl-break` (_currentEpisodeSimklPercent:2171) | `break;` → `` | equivalent: Production row construction assigns unique original indices; metadata updates replace only seriesInfo, keeping originalIndex. At most one candidate matches. Continuing the loop cannot overwrite the unique matching row. The factory keeps each valid index in either the normal season or the alternate-version season, never both; its fallback and movie paths also emit one row per valid index. Missing-episode placeholders remain in the browser-only merged display list. |
+| `snapshot-mdblist-default` (_currentEpisodeMdblistPercent:2189) | `bool forGuide = false` → `bool forGuide = true` | killed: C070 |
+| `snapshot-mdblist-policy-content` (_currentEpisodeMdblistPercent:2191) | `_effectiveContentImdbId` → `null` | killed: C076 |
+| `snapshot-mdblist-policy-mask` (_currentEpisodeMdblistPercent:2193) | `if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;` → `` | killed: C070 |
+| `snapshot-mdblist-guide-bypass` (_currentEpisodeMdblistPercent:2193) | `!forGuide && !policy.progressFrom` → `!policy.progressFrom` | killed: C072 |
+| `snapshot-mdblist-identity` (_currentEpisodeMdblistPercent:2194) | `final imdbId = _currentSeriesImdbId;` → `final imdbId = 'tt5999999';` | killed: C079, C081, C077, C080, C078, C071, C075 |
+| `snapshot-mdblist-null-id` (_currentEpisodeMdblistPercent:2195) | `if (imdbId == null) return null;` → `if (imdbId == null) throw StateError('snapshot identity');` | killed: C074 |
+| `snapshot-mdblist-bind` (_currentEpisodeMdblistPercent:2196) | `_bindEpisodeTrackerProgressIdentity(imdbId);` → `` | killed: C079, C081, C077, C080, C078, C071, C075 |
+| `snapshot-mdblist-cache` (_currentEpisodeMdblistPercent:2197) | `if (_mdblistEpisodeProgress == null)` → `if (true)` | killed: C071 |
+| `snapshot-mdblist-guard` (_currentEpisodeMdblistPercent:2202) | `if (_episodeTrackerProgressImdbId != imdbId) return null;` → `` | killed: C081 |
+| `snapshot-mdblist-late-guard` (_currentEpisodeMdblistPercent:2202) | `_episodeTrackerProgressImdbId != imdbId` → `_episodeTrackerProgressImdbId != _currentSeriesImdbId` | killed: C081 |
+| `snapshot-mdblist-assign` (_currentEpisodeMdblistPercent:2203) | `_mdblistEpisodeProgress = loaded;` → `_mdblistEpisodeProgress = {};` | killed: C079, C081, C077, C080, C078, C071, C075 |
+| `snapshot-mdblist-guide-mask` (_currentEpisodeMdblistPercent:2209) | `policy.guideProgressFrom(TrackingSource.mdblist, percent)` → `percent` | killed: C062 |
+| `snapshot-mdblist-branch` (_currentEpisodeMdblistPercent:2208) | `return forGuide` → `return !forGuide` | killed: C062 |
+| `snapshot-mdblist-se` (_currentEpisodeMdblistPercent:2205) | `_traktSeasonEpisode()` → `(season: 99, episode: 99)` | killed: C079, C081, C077, C080, C078, C071, C075 |
+| `snapshot-mdblist-unresolved` (_currentEpisodeMdblistPercent:2206) | `if (se.season == null \|\| se.episode == null) return null;` → `if (se.season == null \|\| se.episode == null) throw StateError('snapshot coordinates');` | killed: C073 |
+| `snapshot-mdblist-key` (_currentEpisodeMdblistPercent:2207) | `['${se.season}_${se.episode}']` → `['${se.episode}_${se.season}']` | killed: C077, C080, C078, C071, C075 |
+| `log-initMdblistScrobble-0` (_initMdblistScrobble:2000) | `[MDBListDiag] player init requested=${widget.mdblistScrobble}` → `[ChangedMDB] player init requested=${widget.mdblistScrobble}` | killed: C023 |
+| `log-initMdblistScrobble-1` (_initMdblistScrobble:2005) | `[MDBListDiag] player init skipped: tracking not requested` → `[ChangedMDB] player init skipped: tracking not requested` | killed: C023 |
+| `log-initMdblistScrobble-2` (_initMdblistScrobble:2021) | `[MDBListDiag] player init skipped: player setup failed $e` → `[ChangedMDB] player init skipped: player setup failed $e` | killed: C015 |
+| `log-initMdblistScrobble-3` (_initMdblistScrobble:2032) | `[MDBListDiag] player init skipped: invalid target metadata` → `[ChangedMDB] player init skipped: invalid target metadata` | killed: C027 |
+| `log-initMdblistScrobble-4` (_initMdblistScrobble:2038) | `[MDBListDiag] player init abandoned: player unmounted` → `[ChangedMDB] player init abandoned: player unmounted` | killed: C002 |
+| `log-initMdblistScrobble-5` (_initMdblistScrobble:2049) | `[MDBListDiag] player session ready imdb=${target.ids.imdb}` → `[ChangedMDB] player session ready imdb=${target.ids.imdb}` | killed: C052, C026, C004, C003 |
+| `log-mdblistStop-0` (_mdblistStop:2081) | `[MDBListDiag] player stop complete=$complete` → `[ChangedMDB] player stop complete=$complete` | killed: C052 |
+| `ref-01` (initState:1677) | `_initSimklScrobble();` → `` | killed: C091 |
+| `ref-02` (initState:1678) | `_initMdblistScrobble();` → `` | killed: C061, C058 |
+| `ref-03` (_resumeTrackingAfterValidationGate:2104) | `_simklScrobbleEnabled` → `true` | killed: C049, C048, C047, C050 |
+| `ref-04` (_resumeTrackingAfterValidationGate:2107) | `_simklLastScrobbleAction = 'start';` → `` | killed: C142 |
+| `ref-05` (_resumeTrackingAfterValidationGate:2108) | `_startSimklHeartbeat();` → `` | killed: C116 |
+| `ref-06` (_resumeTrackingAfterValidationGate:2100) | `_updateMdblistPosition();` → `` | killed: C028 |
+| `ref-07` (_resumeTrackingAfterValidationGate:2110) | `_mdblistPlay();` → `` | killed: C013 |
+| `ref-08` (_bindEpisodeTrackerProgressIdentity:2130) | `_simklEpisodeProgress = null;` → `` | killed: C109, C037 |
+| `ref-09` (_bindEpisodeTrackerProgressIdentity:2131) | `_mdblistEpisodeProgress = null;` → `` | killed: C077, C038 |
+| `ref-10` (_bindPlayerInstanceSubscriptions:3413) | `_simklScrobbleEnabled` → `true` | killed: C095, C098, C093, C096, C099 |
+| `ref-11` (_bindPlayerInstanceSubscriptions:3416) | `_simklLastScrobbleAction = 'start';` → `` | killed: C044, C045, C043 |
+| `ref-12` (_bindPlayerInstanceSubscriptions:3422) | `_simklLastScrobbleAction` → `'stop'` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-13` (_bindPlayerInstanceSubscriptions:3423) | `_simklScrobble('pause');` → `` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-14` (_bindPlayerInstanceSubscriptions:3417) | `_startSimklHeartbeat();` → `` | killed: C035, C036, C033, C034, C087, C088, C114 |
+| `ref-15` (_bindPlayerInstanceSubscriptions:3424) | `_stopSimklHeartbeat();` → `` | killed: C035, C087, C088 |
+| `ref-16` (_bindPlayerInstanceSubscriptions:3332) | `_updateMdblistPosition();` → `` | killed: C035, C036, C033, C034, C087, C088 |
+| `ref-17` (_bindPlayerInstanceSubscriptions:3371) | `_updateMdblistPosition();` → `` | killed: C022 |
+| `ref-18` (_bindPlayerInstanceSubscriptions:3377) | `_mdblistPlay();` → `` | killed: C114 |
+| `ref-19` (_bindPlayerInstanceSubscriptions:3427) | `_mdblistPlay();` → `` | killed: C035, C036, C033, C034, C087, C088 |
+| `ref-20` (_bindPlayerInstanceSubscriptions:3432) | `_mdblistPause();` → `` | killed: C035, C036, C033, C034, C052, C085, C086, C087, C088 |
+| `ref-21` (_onPlaybackEnded:4740) | `_simklScrobble('stop');` → `` | killed: C033 |
+| `ref-22` (_onPlaybackEnded:4739) | `_stopSimklHeartbeat();` → `` | killed: C033 |
+| `ref-23` (_onPlaybackEnded:4741) | `_mdblistStop(complete: true);` → `` | killed: C033 |
+| `ref-24` (_switchToSourcePlaylist:9071) | `_switchMdblistTarget();` → `Future<void>.value();` | killed: C009 |
+| `ref-25` (_loadPlaylistIndex:10041) | `_switchMdblistTarget();` → `Future<void>.value();` | killed: C009 |
+| `ref-26` (_loadPlaylistIndexAttempt:10145) | `_simklScrobble('stop');` → `` | killed: C137 |
+| `ref-27` (_loadPlaylistIndexAttempt:10144) | `_stopSimklHeartbeat();` → `` | killed: C137 |
+| `ref-28` (_loadPlaylistIndexAttempt:10149) | `_updateMdblistPosition();` → `` | killed: C021 |
+| `ref-29` (_loadPlaylistIndexAttempt:10164) | `_switchMdblistTarget();` → `Future<void>.value();` | killed: C008 |
+| `ref-30` (_onPipAction:11260) | `_simklScrobbleSeek(position);` → `` | device_pending: Installed only behind sealed Android/iOS predicates; no raw Platform seam. Human PiP seek checklist. |
+| `ref-31` (_onPipAction:11261) | `_mdblistScrobbleSeek(position);` → `` | device_pending: Installed only behind sealed Android/iOS predicates; no raw Platform seam. Human PiP seek checklist. |
+| `ref-32` (dispose:11455) | `_simklScrobble('stop');` → `` | killed: C034, C085, C086 |
+| `ref-33` (dispose:11454) | `_stopSimklHeartbeat();` → `` | killed: C034, C046 |
+| `ref-34` (dispose:11457) | `_mdblistSession?.close()` → `Future<void>.value()` | killed: C046, C005 |
+| `ref-35` (dispose:11456) | `_mdblistStop();` → `` | killed: C016 |
+| `ref-36` (_maybeRestoreResume:11728) | `_launchSimklPercentSpent` → `true` | killed: C101 |
+| `ref-37` (_maybeRestoreResume:11729) | `_launchSimklPercentSpent = true;` → `` | killed: C101 |
+| `ref-38` (_maybeRestoreResume:11779) | `_currentEpisodeSimklPercent()` → `Future<double?>.value(null)` | killed: C101, C106 |
+| `ref-39` (_maybeRestoreResume:11856) | `_currentEpisodeSimklPercent(forGuide: true)` → `Future<double?>.value(null)` | killed: C102 |
+| `ref-40` (_maybeRestoreResume:11730) | `_launchMdblistPercentSpent` → `true` | killed: C071 |
+| `ref-41` (_maybeRestoreResume:11731) | `_launchMdblistPercentSpent = true;` → `` | killed: C071 |
+| `ref-42` (_maybeRestoreResume:11764) | `_currentEpisodeMdblistPercent()` → `Future<double?>.value(null)` | killed: C071, C075 |
+| `ref-43` (_maybeRestoreResume:11857) | `_currentEpisodeMdblistPercent(         forGuide: true,       )` → `Future<double?>.value(null)` | killed: C072 |
+| `ref-44` (_tvScrubCommit:12539) | `_simklScrobbleSeek(target);` → `` | killed: C032 |
+| `ref-45` (_tvScrubCommit:12540) | `_mdblistScrobbleSeek(target);` → `` | killed: C032 |
+| `ref-46` (_buildTvControls:12608) | `_simklScrobbleSeek(target);` → `` | killed: C031 |
+| `ref-47` (_buildTvControls:12609) | `_mdblistScrobbleSeek(target);` → `` | killed: C031 |
+| `ref-48` (_handleDoubleTap:13096) | `_simklScrobbleSeek(clamped);` → `` | killed: C040, C041 |
+| `ref-49` (_handleDoubleTap:13097) | `_mdblistScrobbleSeek(clamped);` → `` | killed: C040, C041 |
+| `ref-50` (_onPanEnd:13194) | `_simklScrobbleSeek(target);` → `` | killed: C053 |
+| `ref-51` (_onPanEnd:13195) | `_mdblistScrobbleSeek(target);` → `` | killed: C053 |
+| `ref-52` (build:14178) | `_simklScrobbleSeek(newPos);` → `` | killed: C055 |
+| `ref-53` (build:14192) | `_simklScrobbleSeek(newPos);` → `` | killed: C054 |
+| `ref-54` (build:14730) | `_simklScrobbleSeek(settledPosition);` → `` | killed: C088, C057, C055 |
+| `ref-55` (build:14179) | `_mdblistScrobbleSeek(newPos);` → `` | killed: C055 |
+| `ref-56` (build:14193) | `_mdblistScrobbleSeek(newPos);` → `` | killed: C054 |
+| `ref-57` (build:14731) | `_mdblistScrobbleSeek(settledPosition);` → `` | killed: C087, C088, C055 |
+| `ref-58` (_VpSkipSegmentHostAdapter:17301) | `_simklScrobbleSeek` → `_trakt.traktScrobbleSeek` | killed: skip publishes clock before seek, queues tracking before haptic and preserves remote stop order, skip tracker seek order arms Trakt heartbeat before Simkl |
+| `ref-59` (_VpSkipSegmentHostAdapter:17303) | `_mdblistScrobbleSeek` → `_trakt.traktScrobbleSeek` | killed: skip publishes clock before seek, queues tracking before haptic and preserves remote stop order, skip tracker seek order arms Trakt heartbeat before Simkl |
+| `ast-048` (_simklScrobble:1842) | `return;` → `throw StateError('vp return mutation');` | killed: C134 |
+| `ast-073` (_simklScrobble:1861) | `'pause'` → `'other'` | killed: C085, C086, C083, C044, C045, C043 |
+| `ast-077` (_simklScrobble:1869) | `'stop'` → `'other'` | killed: C085, C086, C084 |
+| `ast-088` (_startSimklHeartbeat:1893) | `return;` → `throw StateError('vp return mutation');` | killed: C125 |
+| `ast-093` (_startSimklHeartbeat:1895) | `return;` → `throw StateError('vp return mutation');` | killed: C124 |
+| `ast-109` (_startSimklHeartbeat:1909) | `% (>80%)'` → `% (>80%)x'` | killed: C122 |
+| `ast-111` (_startSimklHeartbeat:1912) | `return;` → `throw StateError('vp return mutation');` | killed: C122 |
+| `ast-118` (_startSimklHeartbeat:1928) | `1` → `2` | killed: C122 |
+| `ast-119` (_startSimklHeartbeat:1928) | `%'` → `%x'` | killed: C122 |
+| `ast-129` (_simklScrobbleSeek:1947) | `return;` → `throw StateError('vp return mutation');` | killed: C135 |
+| `ast-134` (_simklScrobbleSeek:1948) | `return;` → `throw StateError('vp return mutation');` | killed: C140, C139 |
+| `ast-174` (_mdblistTarget:1986) | `return MdblistScrobbleTarget.movie(ids);` → `return MdblistScrobbleTarget.episode(ids, season: 99, episode: 99);` | killed: C086 |
+| `ast-193` (_initMdblistScrobble:2000) | `'[MDBListDiag] player init requested=` → `'[MDBListDiag] player init requested=x` | killed: C023 |
+| `ast-194` (_initMdblistScrobble:2000) | `'` → `x'` | killed: C023 |
+| `ast-195` (_initMdblistScrobble:2001) | `'flag=$kMdblistEnabled imdb=${widget.contentImdbId} '` → `'changed diagnostic'` | killed: C023 |
+| `ast-199` (_initMdblistScrobble:2002) | `'type=${widget.contentType}'` → `'changed diagnostic'` | killed: C023 |
+| `ast-206` (_initMdblistScrobble:2006) | `return;` → `throw StateError('vp return mutation');` | killed: C065 |
+| `ast-218` (_initMdblistScrobble:2024) | `return;` → `throw StateError('vp return mutation');` | killed: C025 |
+| `ast-225` (_initMdblistScrobble:2033) | `return;` → `throw StateError('vp return mutation');` | killed: C066, C069, C067, C064 |
+| `ast-230` (_initMdblistScrobble:2039) | `return;` → `throw StateError('vp return mutation');` | killed: C002 |
+| `ast-237` (_initMdblistScrobble:2049) | `'[MDBListDiag] player session ready imdb=` → `'[MDBListDiag] player session ready imdb=x` | killed: C052, C026, C004, C003 |
+| `ast-238` (_initMdblistScrobble:2049) | `'` → `x'` | killed: C052, C026, C004, C003 |
+| `ast-239` (_initMdblistScrobble:2050) | `'episode=${target.isEpisode} playing=$_isPlaying '` → `'changed diagnostic'` | killed: C052, C026, C004, C003 |
+| `ast-243` (_initMdblistScrobble:2051) | `'positionMs=${_position.inMilliseconds} '` → `'changed diagnostic'` | killed: C052, C026, C004, C003 |
+| `ast-246` (_initMdblistScrobble:2052) | `'durationMs=${_duration.inMilliseconds}'` → `'changed diagnostic'` | killed: C052, C026, C004, C003 |
+| `ast-272` (_mdblistStop:2081) | `'[MDBListDiag] player stop complete=` → `'[MDBListDiag] player stop complete=x` | killed: C052 |
+| `ast-273` (_mdblistStop:2081) | `'` → `x'` | killed: C052 |
+| `ast-274` (_mdblistStop:2082) | `'session=${_mdblistSession != null} '` → `'changed diagnostic'` | killed: C082 |
+| `ast-279` (_mdblistStop:2083) | `'positionMs=${_position.inMilliseconds} '` → `'changed diagnostic'` | killed: C052 |
+| `ast-282` (_mdblistStop:2084) | `'durationMs=${_duration.inMilliseconds}'` → `'changed diagnostic'` | killed: C052 |
+| `ast-298` (_switchMdblistTarget:2118) | `return;` → `throw StateError('vp return mutation');` | killed: C007 |
+| `ast-316` (_currentEpisodeSimklPercent:2149) | `final loaded =           await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(         …` → `final loaded = <String, double>{};` | killed: C111, C113, C109, C112, C110, C101, C106 |
+| `ast-322` (_currentEpisodeSimklPercent:2157) | `int? season;` → `int? season = 99;` | equivalent: The series-playlist and single-file series branches assign both season and episode. On other paths the unchanged episode remains null and the joint guard rejects; changing only season initializer to 99 cannot reach a lookup. |
+| `ast-323` (_currentEpisodeSimklPercent:2158) | `int? episode;` → `int? episode = 99;` | equivalent: The series-playlist and single-file series branches assign both season and episode. On other paths the unchanged season remains null and the joint guard rejects; changing only episode initializer to 99 cannot reach a lookup. |
+| `ast-324` (_currentEpisodeSimklPercent:2159) | `final seriesPlaylist = _seriesPlaylist;` → `final seriesPlaylist = null as SeriesPlaylist?;` | killed: C111, C113, C109, C112, C110, C101 |
+| `ast-329` (_currentEpisodeSimklPercent:2161) | `final playlist = _activePlaylist;` → `final playlist = null as List<PlaylistEntry>?;` | killed: C111, C113, C109, C112, C110, C101 |
+| `ast-333` (_currentEpisodeSimklPercent:2162) | `if (seriesPlaylist != null && seriesPlaylist.isSeries) {       final playlist = _activePlaylis…` → `if (seriesPlaylist != null && seriesPlaylist.isSeries) {       final playlist = _activePlaylis…` | killed: C108 |
+| `ast-389` (_currentEpisodeMdblistPercent:2198) | `final loaded =           await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(       …` → `final loaded = <String, double>{};` | killed: C079, C081, C077, C080, C078, C071, C075 |
+| `caller-init-mounted` (_initializePlayer:2879) | `if (!mounted) return;` → `` | killed: C039 |
+
+## Phase 6 Step 0b — independent sample and survivor audit (2026-10-12)
+
+Claude sampled application original `6d2ac75d8` (byte-identical to `ea7901ead`):
+**18/20 assertion kills (90%)**, no compile-error credit. Raw sample evidence is
+`p6/claude-sample/{p6-claude-muts.json,p6-claude-run.log,results.json}`. Both
+survivors match existing Step-0 equivalence entries, not newly accepted gaps.
+The exact mutations were replayed against detached `6d2ac75d8` with focused
+public-caller tests. Those tests pass on the original and both exact survivors;
+two neighboring non-equivalent mutations assertion-fail. No artificial private
+State writes, second initialization or forged resolver record is credited.
+
+| Sample | Observed result | Original witness / closure |
+|---|---|---|
+| `i1` | killed | Assertion kill: Secondary simkl custom identity policy disables otherwise enabled tracking before authentication, Simkl initially disabled policy cannot install even a silent heartbeat before any input |
+| `i2` | survived | Survives; equivalent to `simkl-init-marker`; new authentication-mid-playback pause/exit case passes unchanged; `i2-marker-pause-negative` assertion-kills |
+| `i3` | survived | Survives; equivalent to `simkl-unresolved-episode`; new incomplete season-only launch case rejects pause/heartbeat/seek/EOF/dispose; `i3-whole-guard-negative` assertion-kills |
+| `i4` | killed | Assertion kill: Secondary pause at 80 preserves Simkl strict and MDBList inclusive completion thresholds, Secondary simkl suspended snapshot episode pins late coordinates and original identity guard |
+| `i5` | killed | Assertion kill: Simkl EOF then disposal deduplicates the already sent stop checkpoint, Simkl held 201 stop across dispose pins response revisions and service-owned recovery |
+| `i6` | killed | Assertion kill: Secondary all-tracker pause fanout preserves ordered timer ownership and tracker-specific payloads, Secondary seek at 80 crosses tracker thresholds and seeking back rearms checkpoints |
+| `i7` | killed | Assertion kill: Secondary all-tracker pause fanout preserves ordered timer ownership and tracker-specific payloads, Secondary all-tracker seek fanout preserves ordered timer ownership and tracker-specific payloads |
+| `i8` | killed | Assertion kill: Simkl public seek endpoints send exactly one hundred then zero and a reverse seek at eighty remains resumable |
+| `i9` | killed | Assertion kill: Secondary seek at 80 crosses tracker thresholds and seeking back rearms checkpoints, Secondary seek at 81 crosses tracker thresholds and seeking back rearms checkpoints |
+| `i10` | killed | Assertion kill: Simkl public seek endpoints send exactly one hundred then zero and a reverse seek at eighty remains resumable, skip tracker seek order arms Trakt heartbeat before Simkl |
+| `i11` | killed | Assertion kill: Secondary mdblist initialization type gate preserves absent checkpoints |
+| `i12` | killed | Assertion kill: Secondary mdblist custom identity policy disables otherwise enabled tracking before authentication, Secondary mdblist initialization target gate preserves absent checkpoints |
+| `i13` | killed | Assertion kill: MDBList startup policy precedes suspended player setup and none preserves the captured setting, MDBList startup policy precedes suspended player setup and dispose preserves the captured setting |
+| `i14` | killed | Assertion kill: MDBList startup policy precedes suspended player setup and none preserves the captured setting, MDBList captured target before capability widget completion retains original allocation and guards |
+| `i15` | killed | Assertion kill: MDBList capability finishing paused allocates without starting until the real playing edge |
+| `i16` | killed | Assertion kill: Secondary held resume pins MDBList raw initialization then persistable pause and stop diagnostics, MDBList held resume play samples its promised position before any intervening native position event |
+| `i17` | killed | Assertion kill: Secondary all-tracker EOF fanout preserves ordered timer ownership and tracker-specific payloads |
+| `i18` | killed | Assertion kill: MDBList live seek and duration edge during manual validation keeps its original checkpoint at early-close |
+| `i19` | killed | Assertion kill: MDBList episode selection with newly invalid live identity exits then continues its outgoing target |
+| `i20` | killed | Assertion kill: Secondary held resume pins MDBList raw initialization then persistable pause and stop diagnostics |
+
+**i2 proof.** `_initSimklScrobble` has one original caller, `initState` (1677).
+Enablement remains false until its awaited policy/auth result is assigned; all
+pause/stop/seek writers reject false enablement. Between that assignment and
+the initializer's start stamp there is no await, callback or effectful getter.
+The marker is therefore null or already start; both differ from every live
+pause/stop action. No live caller passes start to `_simklScrobble`. The first
+pause/stop writes its own action, and timer/playing/validation callers overwrite
+the marker independently. Removing only the init stamp cannot suppress the
+first pause. Changing it to pause does suppress that pause and assertion-fails
+the new test. The original stamp remains verbatim in production.
+
+**i3 proof.** `_traktSeasonEpisode` accepts playlist and launch coordinates only
+when both are non-null (1758–1781). Its last fallback uses `parseFilename`.
+All paired regex groups are bounded decimal digits (1–2 season / 1–3 episode),
+so both parse; one-group episode patterns parse a bounded episode before any
+season inference. Anime sets season only after parsing an episode, and special
+content sets both together. No later parser assignment removes an episode.
+Thus the season-only launch input falls back to (null, null); episode-only
+filenames can produce (null, episode), but (season, null) is unreachable from
+original callers. Removing the episode operand is equivalent. A direct forged
+record/private-call test would violate original-caller characterization and is
+not used. The original two-operand guard remains verbatim in production.
+
+| New caller case | Original control | Exact survivor | Assertion-failing negative |
+|---|---|---|---|
+| Authentication arrives while already playing with positive duration; no later playing edge; user pause sends 25%, cancels timer, disposal sends stop 25% | PASS | `i2` PASS | `i2-marker-pause-negative` killed |
+| Season-only launch without an episode; pause, heartbeat, seek above 80%, EOF and disposal send no Simkl request | PASS | `i3` PASS | `i3-whole-guard-negative` killed |
+
+Evidence: `p6/step0b/closure-results.json` records the commands, test hashes,
+completed names and assertion messages; per-mutation patches and logs remain.
+The broader original control passes **146 cases** (144 new P6 cases plus two
+existing skip integrations). Existing 320-point Step-0 classifications stay
+301 killed / 15 equivalent / two dormant / two device-pending; the new cases
+have two additional non-equivalent assertion witnesses, without relabeling the
+exact survivor replays as kills. The observed independent score stays 18/20.
+
+One evidence-path error is explicit: the first addendum control reused Step 0's
+raw `mutations/control.jsonl` path. Its accepted ledger was restored byte-for-byte,
+and all mutation logs/full-suite baselines remain intact; the old raw control
+is superseded by `step0b/full-control.jsonl` (146 passing cases), not reconstructed.
+`step0b/evidence-path-note.json` and `step0/accepted-raw-control-superseded.json`
+record the old expected hash and actual replacement. No outcome was allowlisted.
+The new suite baseline and resulting revision are recorded in Step-0b completion
+once the additions-only comparison is complete. Application/pubspec unchanged.
+
+Step-0b full suite: **13,193 success / 13 pre-existing failure / 28 pre-existing
+load error / 20 skip**; official comparator and strict old-identity/outcome
+comparison PASS, exactly two passing additions, zero missing/changed/skipped old
+identities. New test analyzer/format pass. The application remains byte-identical
+to the named original; no manifest or CI transition in this addendum.
+
+## Phase 6 Step 1 — production creation (2026-10-12)
+
+Follows Step-0b `8c5a962c3`; original application `ea7901ead`. Only the three
+manifest-owned application paths change: the facade and the Simkl/MDBList
+controllers. All 24 original declarations move, all 59 retained references
+(57 substitutions plus two counted skip-adapter rewrites) retain their statement
+positions, and all 14 earlier destinations remain protected. Current-tree
+comparison passes with zero differences, including the resumed verification.
+Both controllers exactly match Step T's reviewed formatted materialization.
+
+| Responsibility / path | Production ownership |
+|---|---|
+| `presentation/legacy_video_player/vp_simkl_scrobbler.dart` | `VpSimklScrobbler` + 19-member Host; 283 lines; five fields / seven methods |
+| `presentation/legacy_video_player/vp_mdblist_scrobbler.dart` | `VpMdblistScrobbler` + 15-member Host; 187 lines; three fields / nine methods |
+| State constructor / adapters | Eager inert `_simkl` then `_mdblist` after `_trakt`; computed, frozen live getters; no constructor Host read or scheduling |
+| Shared Trakt progress / skip adapter | Two full `_trakt.traktProgress` chains become `_host.traktProgress`, forwarded by the facade; patched whole skip adapter carries P5's Trakt forwarder and two new counted rewrites; no sibling import |
+| Lifecycle / MDBList initialization | Original fan-out and each disposal statement stay in place; session close remains unawaited at its original position; policy → player-init await/catch → mounted → captured target → capability await → mounted → allocation/raw update/assignment/conditional play is unchanged |
+| Facade size | 17,394 → 17,087; `--update` shrink retained and dated P6 note appended with all previous notes preserved |
+
+`vplayer_p6.json` is applied. CI current/self-test and scoped analyzer switch to
+P6; P1–P5 `--at` remain `31a347ad2` / `fc24e32ae` / `890df14d8` / `315028407` /
+`ea7901ead`, checkout remains fetch-depth 0. The existing recursive `lib/features`
+format/analyze scope includes both new files and the explicit facade stays covered.
+The frozen P6 analyzer inventory already recorded at Step T preserves every
+previous mapping/maximum; it is not enlarged. Five exact retained-import warnings
+from that probe receive their allowlist entries. No import cleanup or suppression.
+All 22 P6 characterization files (144 added behavior cases) are registered once
+in `ci_behavior_tests.txt`; the test-hook define remains enabled. Both destinations
+are added to the theme manifest, route boundaries and all three frozen-path lists.
+
+Source guard retarget: `android_tv_mdblist_progress_source_test.dart` still uses
+the validating, chaining reader for all three original percentage declarations;
+Simkl/MDBList expected prefixes become `_host.`. Identity capture/rejection,
+carried TVMaze identity, metadata readiness and rewatch assertions remain.
+Each new adapter additionally has its own class-local live identity/binder
+assertions. In a detached evidence-only materialization the moved control passes;
+changing only Simkl's or only MDBList's computed current-series getter to the
+widget id independently assertion-fails. Complete patches/logs are in
+`p6/step1/source-guard/`; the original worktree is restored afterward.
+
+Creation checks: **167 focused tests pass** (all P6 behaviors, existing skip
+integrations, Android TV source guards and theme guards); root analyzer comparator
+passes **94 scoped occurrences, zero additions**, infos/multiplicities included;
+format idempotent, size **3,000 files / 140 ratchets**, architecture **1,668 migrated
+files** and real architecture negatives pass. The production application is the
+exact Step-T formatted split: its two optional commas, idempotence and zero
+formatting diagnostic delta are archived there. No new seam, bug fix, pubspec
+change, real network, device command or failure allowance. i2/i3 remain verbatim,
+with their exact survivor replays/source equivalences recorded in Step 0b.
+Clean-tree full-suite/history/self-test/analyzer/format/architecture/build gate
+follows separately; manual Simkl/MDBList movie/series and PiP checks remain pending.
+Resulting revision and source/check hashes are recorded in `p6/step1/completion.json`.
+
+
+## Phase 6 gate fixture scheduling closure (2026-10-12)
+
+The first clean creation gate at `dd6fa4016` is incomplete and excluded: a
+pending MDBList profile-handoff test hung, then later cases inherited the blocked
+`runAsync`. The original application's isolated pair passed twice and reached an
+external 120-second deadline once. This is recorded as an original fixture
+scheduling flake, without a failure allowance, in `p6/gate/fixture-note/NOTE.json`.
+The fixture now pumps while awaiting the same public registry operations and
+incoming synthetic-token write, following Phase 5's `finish()` precedent. It
+preserves all 21 expectation calls, eight identities and HTTP response holds.
+Original and moved complete eight-case controls pass three times each (48 passes).
+The original production source is restored after the independent witnesses.
+
+| Original mutation on stabilized fixture | Result |
+|---|---|
+| `md-target-season`: change captured season to 99 | assertion-killed |
+| `md-switch-await`: remove target-switch await | assertion-killed |
+| `ref-34`: suppress disposal session close | assertion-killed |
+| `simkl-seek-api-0-progress`: send zero stop progress | assertion-killed |
+| `ref-28`, `simkl-seek-stop-heartbeat`, `md-init-session-capability` | survive this eight-case subset; broader original Step-0 witnesses remain unchanged; no supplemental kill claimed |
+
+These are supplemental fixture proofs, not additions to the original 320-point
+sweep or a changed independent-sample score. Full-suite Step-0b identities and
+outcomes remain the comparison baseline. No application, pubspec, assertion or
+expected-outcome change; fresh clean-tree gate follows. Logs, patches, replay
+results and fixture/revision hashes live under `p6/gate/fixture-note/`.
+
+
+## Phase 6 clean-tree gate (2026-10-12)
+
+Clean tested revision `5bb287d72` follows creation `dd6fa4016` and the test-only
+fixture closure. Production and checker/CI inputs are byte-identical to creation;
+complete creation-input check runs are reused with the archived equality audit.
+The fixture's original/moved repeated controls and mutation witnesses validate
+its changed scheduling against the same Step-0b identity baseline.
+
+| Gate | Archived result |
+|---|---|
+| Full suite; `nice -n 19 suite_evidence.py run ... --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true` | 13,193 success / 13 failure / 28 load error / 20 skip; exact baseline identity/outcome equality and official comparator PASS; zero added/missing/changed/newly skipped |
+| All Dart manifest self-tests, P6 self/current/at-creation, P1–P5 historical, Kotlin self-test | All 35 commands PASS; Kotlin 597 tests; current protection includes all 14 earlier destinations |
+| Analyzer, root and strict feature CI scope | 94 scoped occurrences / zero additions; infos, declaration identities and multiplicity preserved; comparator negatives and global allowlist PASS |
+| Format / size / architecture | Idempotent CI format; changed test format/analyzer PASS; 3,000 files / 140 ratchets; 1,668 migrated files and architecture negatives PASS; post-fixture current/size/architecture PASS |
+| Isolated parser audit | Every manifest invocation selects a fresh package under ignored `.dart_tool/vplayer_parser/`; copied kernels deleted; nested routing archived |
+| APK release, then macOS release; `nice -n 19 flutter build <target> --release --no-pub` | Both PASS on clean tested revision; APK, macOS executable and AOT hashes archived; existing macOS plugin SwiftPM notices remain warnings |
+
+Evidence is exclusively `refactor-evidence/vplayer/p6/gate/` in the git common
+directory: complete `suite-rerun.jsonl`/environment, strict delta, official
+comparison, fast/manifest logs, parser audit, build logs/results, creation-input
+reuse audit and `completion.json`. The first interrupted suite remains archived
+as incomplete and excluded. No changed expected outcome or failure allowance.
+Flutter 3.44.8 / Dart 3.12.2, pubspec and all frozen application hashes remain
+unchanged. The manual Simkl/MDBList movie/series threshold, resume, disabled and
+mid-session-disable checks plus earlier device/PiP items remain pending. Existing
+profile/cache/recovery gaps stay Follow-ups; no bug fixes or later moves.

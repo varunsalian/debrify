@@ -161,8 +161,8 @@ void main() {
     expect(sourceSwitch, contains('rebuilt.imdbId ??= carriedImdbId'));
     for (final reader in {
       '_currentEpisodeTraktPercent': '_host.',
-      '_currentEpisodeSimklPercent': '_',
-      '_currentEpisodeMdblistPercent': '_',
+      '_currentEpisodeSimklPercent': '_host.',
+      '_currentEpisodeMdblistPercent': '_host.',
     }.entries) {
       final body = vpSourceDeclaration('_VideoPlayerScreenState.${reader.key}');
       expect(
@@ -182,6 +182,28 @@ void main() {
       player,
       contains('String? get currentSeriesImdbId => _s._currentSeriesImdbId;'),
     );
+    // Bind each new adapter independently: another tracker's good forwarder
+    // cannot satisfy this assertion for a stale widget-identity forwarding.
+    for (final adapter in [
+      '_VpSimklScrobblerHostAdapter',
+      '_VpMdblistScrobblerHostAdapter',
+    ]) {
+      final body = _between(
+        player,
+        'class $adapter implements',
+        '\n}\n',
+      ).replaceAll(RegExp(r'\s+'), ' ');
+      expect(
+        body,
+        contains('String? get currentSeriesImdbId => _s._currentSeriesImdbId;'),
+      );
+      expect(
+        body,
+        contains(
+          'String? get episodeTrackerProgressImdbId => _s._episodeTrackerProgressImdbId;',
+        ),
+      );
+    }
     expect(player, contains('metadataReady: _episodeMetadataReady'));
 
     final resume = _between(

@@ -147,9 +147,15 @@ class FakePlayer implements mk.Player {
   Future<void> seek(Duration position) async {
     await operation('seek', position);
     state = state.copyWith(position: position, completed: false);
-    emit('position', position);
+    if (publishPositionOnSeekAcknowledgement) {
+      emit('position', position);
+    }
     emit('completed', false);
   }
+
+  /// Native progress can arrive before a command Future acknowledges it.
+  /// Tests that publish that real stream edge early can omit a duplicate edge.
+  bool publishPositionOnSeekAcknowledgement = true;
 
   @override
   Future<void> setRate(double rate) async {
