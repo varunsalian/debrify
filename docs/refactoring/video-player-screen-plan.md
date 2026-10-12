@@ -1277,6 +1277,34 @@ behaves as characterized (continuation, if any, is a recorded follow-up).
   after profile change/disposal. Phase-5 tests retain these original gaps;
   cancellation/generation/profile guards belong to a separate change.
 
+- Simkl loads enablement once; disabling its target while playback remains
+  active does not retire its pause/heartbeat/seek/exit sends. MDBList checks
+  policy at initialization and likewise continues its existing session.
+  Phase-6 characterization preserves both continuations.
+- A held Simkl success after route/profile retirement still invalidates the
+  global title revision. Its service-owned 409 recovery can retry after the
+  route is gone (25 seconds); a changed token rejects the old-profile retry.
+  A held MDBList completion after disposal can still publish its playback
+  revision; the captured capability rejects a retired profile instead.
+- An explicit source-playlist switch can open the incoming episode while an
+  outgoing MDBList checkpoint is held. Validation suppresses target switching,
+  so the original session can continue checkpointing the outgoing episode.
+  Phase 6 records the actual payloads; target handoff needs a separate fix.
+- Simkl/MDBList percentage readers share Trakt's string identity binder.
+  A→B→A can accept an older A snapshot, and public playlist selections can
+  attempt a late resume after profile handoff/disposal. MDBList capability
+  capture can also allocate an outgoing session after profile handoff; its
+  sends fail authorization while the idle session timer remains until disposal.
+  These Phase-6 original outcomes remain separate from this extraction.
+- A failed ordinary incoming open retains the incoming MDBList tracker target;
+  a failed source preparation can checkpoint an unplayed target before rollback
+  restores the outgoing session. Validation release while paused can also leave
+  the session's existing playing bit and heartbeat active. Phase-6 tests record
+  these original payloads and timers without repairing them.
+- A guide-only Simkl/MDBList read can warm its snapshot even when policy masks
+  that provider's progress. A later selected-provider resume can use that cached
+  value after storage changes; cache freshness is separate follow-up work.
+
 
 ## Progress
 
@@ -2210,6 +2238,46 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   draft, no production destinations or CI/theme changes. CI enables in the
   Step-1 commit creating both P6 scrobblers. Nice 19, isolated parser copies
   with copied kernels deleted, serialized suites; Step 0 continues separately.
+
+### 2026-10-12 — Phase 6 Step 0 (original secondary trackers; stop)
+
+- **Revision/base.** Follows tooling `80a47fa2b`; application re-measured at
+  `ea7901ead`, untouched in the main tree. Resulting revision, tested tree,
+  source hashes and commands are in `p6/step0/completion.json`. Both P6
+  destinations remain absent; the manifest stays draft.
+- **Coverage/proofs.** 142 new behavior cases across 21 files, reusing the
+  phase-5 isolate-wide transport, synthetic credentials and cipher barrier.
+  Real policy/capability/storage completions are held without private State
+  access; selections await public `finish()`. Protocols, all-tracker fan-out,
+  startup/validation/retirement races, target switches, async percentage readers
+  and every early initializer window are pinned through original callers.
+  All 24 moved declarations / 59 retained occurrences and 411 AST sites map
+  to 319 responsibility points plus one initialization-caller witness:
+  301 assertion kills, 15 source-proven equivalences with final-input replays,
+  two dormant defensive Simkl start branches and two PiP device references.
+  Every addition has a final case-file assertion witness on the detached
+  original; no compilation/load/error-only failure earns credit.
+- **Commands/results.** Serialized nice-19 original control: 144 cases pass
+  (142 additions plus two existing skip integrations). Final full suite with
+  `--no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`: 13,191 success / 13
+  pre-existing failure / 28 pre-existing load error / 20 skip. Official and
+  strict identity comparisons pass: exactly 142 passing additions, zero old
+  outcome changes or missing identities. Changed-test analyzer: no issues;
+  format: 25 files, zero changes; sizes: 2,998 files / 140 ratchets;
+  architecture: 1,666 migrated files pass. Unchanged application/tooling uses
+  Step T's 33 accepted manifest/history/self-tests and analyzer inventories.
+  Parser isolation/copy-kernel deletion and mutation restoration are audited.
+- **Attempts/scope.** Archived first sweep, fixture corrections and closure
+  replays. Three invalid dangling-await deletions were replaced by flow-valid
+  mutations; an empty-URL probe could not hold the intended await, replaced
+  by a real synthetic HTTP barrier. Normal-completion assertions exclude
+  error-only witnesses. Final audit refreshed one equivalence replay after
+  a reader test changed: all 29 selected cases pass. One fake opt-in permits
+  native position before seek acknowledgement; its existing default is
+  unchanged. No bug fix, real network, app/pubspec/CI/theme/size-baseline
+  change, failure allowlisting, push/merge/switch or device command. Original
+  continuation/cache/rollback gaps are in Follow-ups. Manual Simkl/MDBList
+  and PiP checklist remains pending. Stop at Step 0; no production moves.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
