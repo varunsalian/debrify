@@ -4570,3 +4570,31 @@ with their exact survivor replays/source equivalences recorded in Step 0b.
 Clean-tree full-suite/history/self-test/analyzer/format/architecture/build gate
 follows separately; manual Simkl/MDBList movie/series and PiP checks remain pending.
 Resulting revision and source/check hashes are recorded in `p6/step1/completion.json`.
+
+
+## Phase 6 gate fixture scheduling closure (2026-10-12)
+
+The first clean creation gate at `dd6fa4016` is incomplete and excluded: a
+pending MDBList profile-handoff test hung, then later cases inherited the blocked
+`runAsync`. The original application's isolated pair passed twice and reached an
+external 120-second deadline once. This is recorded as an original fixture
+scheduling flake, without a failure allowance, in `p6/gate/fixture-note/NOTE.json`.
+The fixture now pumps while awaiting the same public registry operations and
+incoming synthetic-token write, following Phase 5's `finish()` precedent. It
+preserves all 21 expectation calls, eight identities and HTTP response holds.
+Original and moved complete eight-case controls pass three times each (48 passes).
+The original production source is restored after the independent witnesses.
+
+| Original mutation on stabilized fixture | Result |
+|---|---|
+| `md-target-season`: change captured season to 99 | assertion-killed |
+| `md-switch-await`: remove target-switch await | assertion-killed |
+| `ref-34`: suppress disposal session close | assertion-killed |
+| `simkl-seek-api-0-progress`: send zero stop progress | assertion-killed |
+| `ref-28`, `simkl-seek-stop-heartbeat`, `md-init-session-capability` | survive this eight-case subset; broader original Step-0 witnesses remain unchanged; no supplemental kill claimed |
+
+These are supplemental fixture proofs, not additions to the original 320-point
+sweep or a changed independent-sample score. Full-suite Step-0b identities and
+outcomes remain the comparison baseline. No application, pubspec, assertion or
+expected-outcome change; fresh clean-tree gate follows. Logs, patches, replay
+results and fixture/revision hashes live under `p6/gate/fixture-note/`.

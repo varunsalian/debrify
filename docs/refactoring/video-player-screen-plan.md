@@ -2329,6 +2329,29 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   restored. No bug fix, pubspec change, new seam, network or device action.
   The clean-tree gate follows; human checklist remains pending.
 
+### 2026-10-12 — Phase 6 gate fixture scheduling closure (test/docs only)
+
+- **Finding/reproduction.** First clean `dd6fa4016` suite hung during the
+  pending-checkpoint profile handoff, cascading into later cases. It is archived
+  incomplete, never accepted. Original `6d2ac75d8` reproduces the scheduling
+  flake: two isolated passes, one 120-second external deadline; database-lock
+  warnings accompany the unpumped fake-zone transaction. NOTE/raw evidence in
+  `p6/gate/fixture-note/`.
+- **Fix/proof.** Await the same public profile registry operations and incoming
+  synthetic-token write through the existing pumping `finish()` helper. All
+  21 expectation calls and eight test identities remain unchanged. Entire file
+  original/moved 3× passes (24 + 24). Four original mutations assertion-kill:
+  MDBList season payload, target-switch await, disposal close, Simkl progress.
+  Three supplemental probes survive this eight-case subset; their wider
+  Step-0 witnesses are unchanged and no extra kills are claimed.
+- **Gate.** Original source restored; test format/analyzer/current checker pass.
+  No application/tooling/pubspec change or failure allowance. The same Step-0b
+  identity baseline is reused after original focused validation of this fixture.
+  All 35 creation-input Dart/history/Kotlin commands have completed successfully
+  (Kotlin 597 tests); unchanged application/tool inputs preserve those results.
+  A fresh full suite and both release builds follow on the clean fixture commit.
+  Resulting revision and test hashes are in `p6/gate/fixture-note/completion.json`.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

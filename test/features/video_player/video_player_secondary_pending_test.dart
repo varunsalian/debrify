@@ -1,18 +1,51 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/profiles/profile_policy_guard.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/subtitle_font_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'support/secondary_tracker_driver.dart';
 import 'support/trakt_transport.dart';
 import 'support/video_player_environment.dart';
-import 'video_player_skip_races_test.dart' show incomingProfile;
 import 'video_player_trakt_snapshots_test.dart'
     show traktPlaylist, traktBrowser;
+
+Future<void> _incomingProfile(WidgetTester t, VideoPlayerEnvironment f) async {
+  final scope = ProfileRuntime.capture();
+  // Pump existing fake-zone database continuations while each public operation
+  // waits for real I/O, including a periodic save already holding a transaction.
+  final actor = await f.finish(t, f.registry!.getProfile(scope.profileId));
+  final profile = await f.finish(
+    t,
+    f.registry!.createProfile(
+      name: 'Incoming skip profile',
+      role: UserProfileRole.admin,
+      actingProfileId: scope.profileId,
+      actingAuthorizationRevision: actor!.authorizationRevision,
+      actingSessionEpoch: scope.sessionEpoch,
+    ),
+  );
+  await f.finish(t, f.registry!.setActiveProfile(profile.id));
+  ProfileRuntime.publish(
+    ProfileScope(
+      profileId: profile.id,
+      dataGeneration: 1,
+      sessionEpoch: ProfileRuntime.nextEpoch,
+    ),
+  );
+  ProfilePolicyGuard.updateActiveProfile(profile);
+  SubtitleSettingsService.instance.resetProfileScope();
+  SubtitleFontService.instance.resetProfileScope();
+}
 
 void main() {
   TraktTestTransport.install();
@@ -58,7 +91,7 @@ void main() {
             expect(f.player.calls.where((c) => c.$1 == 'open'), hasLength(1));
           }
           if (retire == 'dispose') await d.retired();
-          if (retire == 'profile') await incomingProfile(t, f);
+          if (retire == 'profile') await _incomingProfile(t, f);
           expect(d.forTracker('mdblist'), hasLength(2));
           expect(MdblistService.instance.playbackRevision.value, revision);
           reply.complete(http.Response('{}', 201));
@@ -174,9 +207,10 @@ void main() {
             if (retire == 'dispose') {
               await d.retired();
             } else {
-              await incomingProfile(t, f);
-              await t.runAsync(
-                () => SimklStorage.setSimklAccessToken(
+              await _incomingProfile(t, f);
+              await f.finish(
+                t,
+                SimklStorage.setSimklAccessToken(
                   'vplayer-synthetic-incoming-simkl',
                 ),
               );
