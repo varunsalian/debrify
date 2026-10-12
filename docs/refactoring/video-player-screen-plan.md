@@ -1646,9 +1646,10 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 - **Coverage/results.** All 38 new display cases pass on the original and
   current application. Every case has an assertion-failing original witness.
   Systematic 170-point sweep covers all 16 moved declarations and each of
-  33 retained references: 157 assertion kills, three caller equivalences,
-  nine dormant points and one PiP device-pending reference. Added held reverse
-  orientation and aspect auto-hide cases close both async/action branches;
+  33 retained references: originally 157 kills / three equivalences; vp-rev4
+  corrects this to 158 kills / two equivalences, with nine dormant points and
+  one PiP device-pending reference. Added held reverse orientation and aspect
+  auto-hide cases close both async/action branches;
   HUD-after-dispose observes the rendered notifier's unchanged value.
 - **Commands.** Serialized `nice -n 19 flutter test` with no-pub, concurrency 1
   and `DEBRIFY_VP_TEST_HOOKS=true`; explicit P4 evidence overrides. Original
@@ -1679,8 +1680,9 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   define: 12,970 success / 13 failure / 28 error / 20 skip. Exactly 38 added
   successes versus original; zero missing/changed original identities or
   new failures/skips. Official comparator PASS; no allowlisting.
-- **Final checks.** All 38 cases mutation-proven; 157 kills / three equivalents /
-  nine dormant / one device-pending across 170 points and all 33 references.
+- **Final checks.** All 38 cases mutation-proven. The count of 157 kills and
+  three equivalent points is superseded by vp-rev4: 158 killed / two equivalent / nine
+  dormant / one device-pending across 170 points and all 33 references.
   All 31 tooling/self/history checks pass; format, analyzer probes and test
   analyzer, size/architecture pass. Explicit isolated parser audit: no
   violations. Main and original application/pubspec unchanged, original
@@ -1740,6 +1742,33 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   phone/Android TV Flutter/tvOS/desktop framing (incl. cinema zoom), rate/resume,
   phone temporary hold and orientation checklist. Dormant speed/menu branches
   remain classified. Phase 4 complete; stop before further production moves.
+
+### 2026-10-12 — Phase 4 vp-rev4 closure (test/docs-only; stop)
+
+- **Review/revision.** No P1s, one P2: defaults-await input exposes the aspect
+  initializer. The previous equivalence claim was wrong. This review-only
+  commit follows `794b1238c`; detached original is exactly `5e08bb3a3`.
+- **Characterization.** C39 holds real preference loading, presses A and pins
+  Cover HUD/icon, the preserved uninitialized-player zoom error, zero early
+  saves, 1.5 s clear, defaults override and working ready zoom/resume save.
+  C40 uses a real early pointer hold/release and pins the null-prior return.
+- **Initializer audit.** Aspect mutation assertion-fails Cover vs Fit Width;
+  speed mutation fails 1.0 vs 1.25 after defaults; non-null prior mutation fails
+  expected-no-error on early release. Landscape mutation survives both cases:
+  synchronous initState overwrites it before orientation/async work/input.
+  Named-source ordering and original restoration recorded; no private caller.
+- **Corrected matrix.** 40 display cases, every case mutation-proven; unchanged
+  170 points / 16 declarations / 33 references: 158 killed, two equivalent,
+  nine dormant, one PiP device-pending. Deps tables corrected; archived
+  original evidence retained, superseded by `p4/vp-rev4/coverage.json`.
+- **Commands/results.** Nice-19, serialized no-pub/hook-defined original
+  control/mutations and moved focused suite: 40 successes. Changed format and
+  test analyzer PASS; P4 current checker zero differences with an isolated
+  parser/copy-kernel deletion. Evidence `p4/vp-rev4/completion.json`.
+- **Scope/stop.** Test/docs-only; existing CI test files already registered.
+  Application/pubspec unchanged; early error preserved. No new seam, bug fix,
+  allowlisting, full-suite/build repeat, device commands, push, merge or switch.
+  Manual phone portrait/PiP/end-of-series checklist remains pending. Stop.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

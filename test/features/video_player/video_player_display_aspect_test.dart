@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
 import 'package:debrify/screens/video_player/models/hud_state.dart';
 import 'package:debrify/screens/video_player/widgets/aspect_ratio_hud.dart';
@@ -5,7 +7,12 @@ import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
+// Existing resolved interface; application dependencies stay frozen.
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
+import 'support/display_defaults_reads.dart';
 import 'support/display_mode_driver.dart';
 import 'support/fake_player.dart';
 import 'support/player_actions.dart';
@@ -80,6 +87,84 @@ const nextAspects = <(AspectMode, String, IconData, BoxFit, double?)>[
 ];
 
 void main() {
+  testWidgets(
+    'display early key A cycles the initializer while defaults wait and preserves the player error and blocked save',
+    (t) async {
+      final f = VideoPlayerEnvironment(native: true);
+      await t.runAsync(f.initialize);
+      final d = DisplayModeDriver(t, f);
+      final oldStore = SharedPreferencesStorePlatform.instance;
+      DisplayDefaultsReads? reads;
+      final errors = <Object>[];
+      try {
+        await d.defaults(aspect: 10);
+        reads = await t.runAsync(DisplayDefaultsReads.install);
+        t.view.physicalSize = const Size(1280, 800);
+        t.view.devicePixelRatio = 1;
+        await t.pumpWidget(
+          MaterialApp(
+            navigatorKey: f.navigator,
+            theme: ThemeData.dark(),
+            home: displayScreen(),
+          ),
+        );
+        await f.until(t, () => reads!.entered);
+        expect(f.creationOrder, ['media-kit-init']);
+        expect(f.players, isEmpty);
+        expect(f.controllers, isEmpty);
+        expect(find.byType(mkv.Video), findsNothing);
+        expect(find.byType(AspectRatioHud), findsNothing);
+        final errorZone = Zone.current.fork(
+          specification: ZoneSpecification(
+            handleUncaughtError: (self, parent, zone, error, stack) {
+              errors.add(error);
+            },
+          ),
+        );
+        await errorZone.run(() => t.sendKeyEvent(LogicalKeyboardKey.keyA));
+        await f.advance(t);
+        final hud = t.widget<AspectRatioHud>(find.byType(AspectRatioHud)).hud;
+        expect(hud.aspectRatio, 'Cover');
+        expect(hud.icon, Icons.crop_free_rounded);
+        expect(errors, hasLength(1));
+        expect(errors.single, isA<Error>());
+        expect(errors.single.toString(), contains("Field '_player"));
+        expect(errors.single.toString(), contains('has not been initialized'));
+        expect(f.players, isEmpty, reason: 'Early zoom cannot reach a player');
+        expect(
+          reads!.writes,
+          isEmpty,
+          reason: 'Not-ready resume save is blocked',
+        );
+        await f.advance(t, const Duration(milliseconds: 1499));
+        expect(find.byType(AspectRatioHud), findsOneWidget);
+        await f.advance(t, const Duration(milliseconds: 1));
+        expect(find.byType(AspectRatioHud), findsNothing);
+        expect(f.players, isEmpty);
+        expect(reads.writes, isEmpty);
+        reads.unblock();
+        await f.mount(t, displayScreen());
+        expect(f.players, hasLength(1));
+        d.expectAspect(AspectMode.cinemaZoom, BoxFit.contain, null);
+        expect(playerControls(t).speed, 1.0);
+        final native = f.player.platform as FakeNativePlayer;
+        expect(native.properties['video-zoom'], '0.415037');
+        await t.sendKeyEvent(LogicalKeyboardKey.keyA);
+        await f.advance(t);
+        d.expectAspect(AspectMode.contain, BoxFit.contain, null);
+        expect(native.properties['video-zoom'], '0.000000');
+        final saved = await d.record();
+        expect(saved['aspect'], 'contain');
+        expect(saved['speed'], 1.0);
+        expect(errors, hasLength(1));
+      } finally {
+        reads?.unblock();
+        await f.close(t);
+        SharedPreferencesStorePlatform.instance = oldStore;
+      }
+    },
+  );
+
   for (var index = 0; index < nextAspects.length; index++) {
     final expected = nextAspects[index];
     testWidgets(

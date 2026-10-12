@@ -1,12 +1,75 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+// Existing resolved interface; application dependencies stay frozen.
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
+import 'support/display_defaults_reads.dart';
 import 'support/display_mode_driver.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
 
 void main() {
+  testWidgets(
+    'display early paused pointer hold and release have no prior speed while defaults wait',
+    (t) async {
+      final f = VideoPlayerEnvironment();
+      await t.runAsync(f.initialize);
+      final d = DisplayModeDriver(t, f);
+      final oldStore = SharedPreferencesStorePlatform.instance;
+      DisplayDefaultsReads? reads;
+      try {
+        await d.defaults();
+        reads = await t.runAsync(DisplayDefaultsReads.install);
+        t.view.physicalSize = const Size(1280, 800);
+        t.view.devicePixelRatio = 1;
+        await t.pumpWidget(
+          MaterialApp(
+            navigatorKey: f.navigator,
+            theme: ThemeData.dark(),
+            home: displayScreen(),
+          ),
+        );
+        await f.until(t, () => reads!.entered);
+        expect(f.players, isEmpty);
+        expect(speedHudOpacity(t), 0.0);
+        final orientations = f.channels.where(
+          (call) => call.$2.method == 'SystemChrome.setPreferredOrientations',
+        );
+        expect(orientations.single.$2.arguments, [
+          'DeviceOrientation.landscapeLeft',
+          'DeviceOrientation.landscapeRight',
+        ]);
+        final pointer = await t.startGesture(const Offset(640, 400));
+        await t.pump(const Duration(milliseconds: 600));
+        expect(t.takeException(), isNull);
+        expect(speedHudOpacity(t), 0.0);
+        await pointer.up();
+        expect(
+          t.takeException(),
+          isNull,
+          reason: 'A paused loading hold has no prior rate to restore',
+        );
+        expect(speedHudOpacity(t), 0.0);
+        expect(f.players, isEmpty);
+        expect(reads!.writes, isEmpty);
+        reads.unblock();
+        await f.mount(t, displayScreen());
+        expect(f.players, hasLength(1));
+        expect(playerControls(t).speed, 1.0);
+        expect(playerControls(t).isLandscape, isTrue);
+        expect(d.rates, isEmpty);
+        await d.endHold();
+        expect(d.rates, isEmpty);
+      } finally {
+        reads?.unblock();
+        await f.close(t);
+        SharedPreferencesStorePlatform.instance = oldStore;
+      }
+    },
+  );
+
   for (final flags in [
     (true, true),
     (true, false),

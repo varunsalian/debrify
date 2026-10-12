@@ -2639,17 +2639,19 @@ The complete mutation patches, original AST declaration offsets, statements,
 branch/literal points and test hashes are in `step0/points.json`,
 `mutation-results.json` and per-point JSONL/stderr/patch files.
 
-38 cases pass on the original; every case has a completed assertion
-kill. The systematic sweep covers every moved declaration and each of the
-33 retained references: **170 points**, 3 equivalent, 157 killed, 9 dormant, 1 device pending.
+The 38 accepted cases plus C39/C40 from **vp-rev4** pass on the original;
+every case has a completed assertion kill. Corrected coverage spans every
+moved declaration and all 33 retained references: **170 points**, 2 equivalent,
+158 killed, 9 dormant, 1 device pending. Original logs remain archived;
+`vp-rev4/coverage.json` supersedes the false `field-aspect` equivalence.
 Compilation/load failures and uncaught-error-only runs are not credited.
 
 | Moved declaration (original) | Covered behavior / point groups |
 |---|---|
-| `_aspectMode` | field-aspect |
-| `_playbackSpeed` | field-speed |
-| `_speedBeforeHold` | field-hold |
-| `_landscapeLocked` | field-landscape |
+| `_aspectMode` | field-aspect; C39 defaults-held key A / HUD / zoom error / blocked save |
+| `_playbackSpeed` | field-speed; C39/C40 post-defaults 1.0 and ready save; early callers audited below |
+| `_speedBeforeHold` | field-hold; C40 real paused hold/release before player creation |
+| `_landscapeLocked` | field-landscape; C39/C40 early replay and synchronous initState overwrite proof |
 | `_applyAspectVideoZoom` | zoom-native, zoom-mode, zoom-log, zoom-base, zoom-property, zoom-precision, zoom-await, zoom-diagnostic |
 | `_cycleAspectMode` | cycle-mode-0, cycle-label-0, cycle-icon-0, cycle-mode-1, cycle-label-1, cycle-icon-1, cycle-mode-2, cycle-label-2, cycle-icon-2, cycle-mode-3, cycle-label-3, cycle-icon-3, cycle-mode-4, cycle-label-4, cycle-icon-4, cycle-mode-5, cycle-label-5, cycle-icon-5, cycle-mode-6, cycle-label-6, cycle-icon-6, cycle-mode-7, cycle-label-7, cycle-icon-7, cycle-mode-8, cycle-label-8, cycle-icon-8, cycle-mode-9, cycle-label-9, cycle-icon-9, cycle-mode-10, cycle-label-10, cycle-icon-10, cycle-dispatch-0, cycle-dispatch-1, cycle-dispatch-2, cycle-dispatch-3, cycle-dispatch-4, cycle-dispatch-5, cycle-dispatch-6, cycle-dispatch-7, cycle-dispatch-8, cycle-dispatch-9, cycle-dispatch-10, cycle-selector, cycle-state, cycle-rebuild, cycle-zoom, cycle-hud-label, cycle-hud-icon, cycle-hud-delay, cycle-hud-early, cycle-hud-mounted, cycle-hud-clear, cycle-autohide, cycle-save |
 | `_changeSpeed` | dormant-speed-rates, dormant-speed-index, dormant-speed-wrap, dormant-speed-rate, dormant-speed-state, dormant-speed-hide, dormant-speed-save |
@@ -2717,12 +2719,17 @@ Compilation/load failures and uncaught-error-only runs are not credited.
 | C37 | display playlist resume speed 1.0 restores aspect zoom and preserves the 1x skip | `r08-_maybeRestoreResume-_aspectMode` |
 | C38 | display playlist resume speed 2.0 restores aspect zoom and preserves the 1x skip | `r07-_maybeRestoreResume-_playbackSpeed` |
 
+| Case | New original-caller behavior | Assertion witness |
+|---|---|---|
+| C39 | Key A while defaults storage is held: Cover HUD/icon, one early-player error, no zoom transport/write; exact 1.5 s clear; defaults override and ready zoom/save | `field-aspect` |
+| C40 | Real paused pointer hold/release while defaults wait; null prior avoids player access; synchronous orientation seed; speed 1.0 after defaults | `field-hold`, `field-speed` |
+
 | Mutation point | Original statement/branch/literal → mutation | Result / case |
 |---|---|---|
-| `field-aspect` (_aspectMode:1433) | `AspectMode.contain` → `AspectMode.cover` | equivalent: Awaited defaults overwrite the inert initial value before player creation/rendering. |
-| `field-speed` (_playbackSpeed:1434) | `1.0` → `1.25` | killed: C16, C34 |
-| `field-hold` (_speedBeforeHold:1444) | `_speedBeforeHold;` → `_speedBeforeHold = 1.75;` | killed: C24, C34 |
-| `field-landscape` (_landscapeLocked:1448) | `false` → `true` | equivalent: initState assigns !startsInPortrait before it reads this value or builds controls. |
+| `field-aspect` (_aspectMode:1433) | `AspectMode.contain` → `AspectMode.cover` | killed: C39; defaults-held key A renders Cover rather than mutant Fit Width (vp-rev4 correction). |
+| `field-speed` (_playbackSpeed:1434) | `1.0` → `1.25` | killed: C16, C34, C40 |
+| `field-hold` (_speedBeforeHold:1444) | `_speedBeforeHold;` → `_speedBeforeHold = 1.75;` | killed: C24, C34, C40 |
+| `field-landscape` (_landscapeLocked:1448) | `false` → `true` | equivalent: synchronous initState assigns !startsInPortrait before orientation/async initialization/build; both early C39/C40 replay unchanged (vp-rev4). |
 | `zoom-native` (_applyAspectVideoZoom:2810) | `if (platform is! mk.NativePlayer) return;` → `if (platform is! mk.NativePlayer \|\| mounted) return;` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
 | `zoom-mode` (_applyAspectVideoZoom:2811) | `getScaleForMode(_aspectMode)` → `getScaleForMode(AspectMode.contain)` | killed: C10 |
 | `zoom-log` (_applyAspectVideoZoom:2812) | `math.log(scale) / math.ln2` → `scale` | killed: C01, C02, C03, C04, C05, C06, C07, C08, C09, C10, C11 |
@@ -2890,11 +2897,13 @@ Compilation/load failures and uncaught-error-only runs are not credited.
 | `r32-_buildPlayerMenuPanel-_aspectMode` (_buildPlayerMenuPanel:16739) | `_aspectMode` → `AspectMode.contain` | killed: C18 |
 | `r33-_buildPlayerMenuPanel-_setAspectModeDirect` (_buildPlayerMenuPanel:16740) | `_setAspectModeDirect` → `(AspectMode _) {}` | killed: C13, C18 |
 
-**Reachability/equivalence.** The inert aspect initializer is overwritten by
-awaited defaults before player creation; the landscape initializer is
-overwritten synchronously in `initState` before its first read. Both altered
-initial values pass the complete original controls. Gesture start is delivered
-on a mounted rendered State with a non-null `RenderBox`; the box-null fallback
+**Reachability/equivalence (corrected by vp-rev4).** The aspect initializer
+is inert but observable: key A cycles it while defaults await storage, and
+the HUD renders before readiness. C39 kills its mutation; the previous
+equivalence claim was wrong. The landscape initializer is overwritten
+synchronously in `initState` before orientation, async initialization and
+input dispatch; its mutation passes both early-window cases. Gesture start is
+delivered on a mounted rendered State with a non-null `RenderBox`; the box-null fallback
 is unreachable through the supported callers. Each candidate has a completed
 surviving replay and caller-order evidence, while its source remains frozen.
 The legacy speed cycle (all seven rates/index/wrap/effects) and the two disabled
@@ -2943,7 +2952,7 @@ original is the freshly measured `890df14d8`. Serialized `nice -n 19`
 | Original full suite | 12,932 successes / 13 failures / 28 errors / 20 skips; exact previous P3 gate outcomes plus its accepted incoming-profile test |
 | New full suite | 12,970 successes / 13 failures / 28 errors / 20 skips |
 | Identity delta | Exactly 38 added successes; zero missing identities, changed original outcomes, new failures or skips; official suite comparator PASS |
-| Focused / mutation coverage | 38 original and current display cases pass; all 38 have assertion-failing original witnesses. 170 points: 157 killed, three equivalent, nine dormant, one PiP device-pending |
+| Focused / mutation coverage | Recorded checkpoint: 38 cases pass with witnesses. vp-rev4 adds C39/C40 and corrects the current 170-point matrix to 158 killed, two equivalent, nine dormant, one PiP device-pending; see review closure below. |
 | Other checks | All 31 Dart/Kotlin self/history commands pass; complete virtual P4 split and original 868-span self-compare: zero differences. Analyzer forms/identities, optional-comma/idempotence proof, format, test/support analyzer, size and architecture pass |
 | Inputs / evidence | Clean tree throughout the suite, application and pubspec unchanged from original; original mutations restored; isolated parser audit has no violations. `p4/step0/completion.json`, `suite-delta.json`, suite/env/compare logs and detailed mutation artifacts |
 
@@ -3037,11 +3046,44 @@ Gate evidence is entirely `refactor-evidence/vplayer/p4/`.
 The 13 failures and 28 load errors remain pre-existing by identity; no allowlist
 is expanded and no passing baseline test regresses. Claude's separate sample is
 19/19 valid kills after the agreed g20 pure-computation equivalence; systematic
-170-point matrix remains 157 killed / three equivalent / nine dormant / one
-PiP device-pending. No bug fixes, new seams or assertion weakening.
+170-point matrix was recorded as 157 killed / three equivalent; vp-rev4
+corrects it to 158 killed / two equivalent / nine dormant / one PiP
+device-pending, as detailed below. No bug fixes, new seams or assertion weakening.
 
 End-of-series manual checklist remains pending on phone, Android TV Flutter
 player, tvOS and desktop: each aspect mode visibly changes framing (cinema zoom
 included), selected speed changes rate and survives resume, phone hold gives
 temporary 2×, phone orientation toggles, portrait-start seed and PiP restore of
 the lock. Legacy cycle/menu fallback paths stay dormant. Stop after this gate.
+
+## Phase 4 independent review closure — vp-rev4 (2026-10-12)
+
+Review: No P1s, one P2. The earlier `field-aspect` equivalence was incorrect:
+`_loadPlayerDefaults` awaits preferences while Focus already accepts key A;
+aspect HUD has no readiness guard. Tests now hold the real preference load
+instead of using the fixture's initialization-waiting mount for that window.
+Application code is unchanged, including the original early-player failure.
+
+| Initializer audit | Original observation / proof |
+|---|---|
+| `_aspectMode` | C39 key A renders Cover and crop-free icon before any player/controller/video exists. Zoom emits exactly one `LateInitializationError` for `_player`; not-ready resume save writes nothing. HUD clears at 1.5 s while storage remains held. Releasing cinema defaults overwrites the cycled value and applies zoom 0.415037; ready key A produces Contain, zoom 0.000000 and a real resume save at speed 1.0. Original initializer Cover mutant fails the HUD assertion: expected Cover, actual Fit Width. |
+| `_playbackSpeed` | Remains non-equivalent: defaults do not assign it. Controls/video are readiness-gated; early save is blocked by `!_isReady`, and hold start returns on `!_isPlaying`. C39/C40 then expose speed 1.0 without rate calls, and C39 saves it after readiness. The 1.25 initializer mutant assertion-fails C40 (expected 1.0, actual 1.25); existing C16/C34 remain covered. |
+| `_speedBeforeHold` | C40 real 600 ms pointer hold/release reaches the registered paused gesture callbacks before player creation. Null prior returns without rate/HUD/write/error. The 1.75 initializer mutant attempts early rate restore; C40 assertion fails on the captured framework error (expected null, actual uninitialized `_player`), rather than counting an uncaught-error-only run. |
+| `_landscapeLocked` | Equivalent: synchronous `void initState` assigns `!_startsInPortrait` before orientation and `_initializePlayer`; the getter reads only a platform predicate and cached preference. First input dispatch follows build. False→true mutation passes both early cases, including initial landscape-left/right channel arguments, and original C29 pins the seed later. Phone portrait seed remains device-pending. |
+
+Evidence `p4/vp-rev4/`: detached original HEAD `5e08bb3a3`, two-case control,
+three assertion-failing initializer patches and landscape replay in
+`mutation-results.json`; source restored. `initializer-audit.json` records
+named original statement lines and source hashes; `coverage.json` updates
+all 170 point fates and 40 case witnesses without rewriting original logs.
+Original application matches `890df14d8`; the current production still matches
+`794b1238c`. Both new cases live in existing registered display test files;
+only the preference double is new, so CI test-path registration is unchanged.
+
+Nice-19 serialized focused display suite: **40 successes**, zero failure/skip.
+Changed Dart format and test analyzer pass; P4 current checker has **zero
+differences**, with an isolated kernel-clean parser under `.dart_tool/vplayer_parser/`.
+Commands, test/source hashes and parser invocation are in `vp-rev4/completion.json`.
+No full-suite/build repeat for this test/docs-only review closure; the recorded
+production gate remains at `9cae15e31`. No bug fix, production move, seam,
+allowlisting, device command, push, merge or branch switch. Stop after commit.
