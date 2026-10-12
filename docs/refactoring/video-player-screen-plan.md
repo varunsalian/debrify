@@ -2352,6 +2352,38 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   A fresh full suite and both release builds follow on the clean fixture commit.
   Resulting revision and test hashes are in `p6/gate/fixture-note/completion.json`.
 
+### 2026-10-12 — Phase 6 clean-tree gate (stop)
+
+- **Revision.** Clean tested `5bb287d72`, creation `dd6fa4016`; Step-0b
+  `8c5a962c3`, original application `ea7901ead`. Gate revision, commands,
+  input-equality audit, SDK and artifact/evidence hashes are archived in
+  `p6/gate/completion.json`. Only the test fixture/docs changed after creation.
+- **Suite.** Nice-19 serialized hook-defined/no-pub `suite_evidence.py` full
+  run: 13,193 successes, unchanged 13 failures / 28 load errors / 20 skips.
+  Official and strict identity/outcome comparisons PASS; zero added, missing,
+  changed or newly skipped identities. First incomplete run remains excluded;
+  no failure allowance. Fixture closure has original/moved 3× controls and four
+  assertion-failing original witnesses, preserving every expectation.
+- **Checks.** All 35 Dart/Kotlin self/current/history commands PASS, including
+  P6 current/same-revision and P1–P5 at their named merges; Kotlin 597 tests.
+  Root and strict-CI analyzer comparators: 94 scoped occurrences, zero additions,
+  including infos/multiplicity; global allowlist and comparator negatives pass.
+  CI format idempotent; changed test format/analyzer pass. Size 3,000 files /
+  140 ratchets and architecture 1,668 migrated files plus negatives PASS.
+  Post-fixture current checker, size and architecture also pass. Reused checks
+  have identical production/tool/configuration inputs, archived explicitly.
+  All manifest invocations use fresh isolated ignored parser packages with
+  copied kernels deleted; routing audit archived.
+- **Builds.** `nice -n 19 flutter build apk --release --no-pub` and then
+  `nice -n 19 flutter build macos --release --no-pub` PASS on the clean tested
+  tree. APK, macOS executable and release AOT hashes archived. Flutter 3.44.8 /
+  Dart 3.12.2 unchanged; existing macOS plugin SwiftPM notices do not fail build.
+- **Stop/pending.** Phase 6 complete at this gate. Human Simkl/MDBList connected
+  movie/series start, pause, seek, stop, threshold watched/resume-elsewhere,
+  disabled-at-start and disabling-mid-session checks remain pending, along with
+  earlier device/PiP checklist items. No device execution, real tracker network,
+  pubspec change, bug fix, push, merge, branch switch or later production move.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

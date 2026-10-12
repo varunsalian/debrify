@@ -4598,3 +4598,31 @@ sweep or a changed independent-sample score. Full-suite Step-0b identities and
 outcomes remain the comparison baseline. No application, pubspec, assertion or
 expected-outcome change; fresh clean-tree gate follows. Logs, patches, replay
 results and fixture/revision hashes live under `p6/gate/fixture-note/`.
+
+
+## Phase 6 clean-tree gate (2026-10-12)
+
+Clean tested revision `5bb287d72` follows creation `dd6fa4016` and the test-only
+fixture closure. Production and checker/CI inputs are byte-identical to creation;
+complete creation-input check runs are reused with the archived equality audit.
+The fixture's original/moved repeated controls and mutation witnesses validate
+its changed scheduling against the same Step-0b identity baseline.
+
+| Gate | Archived result |
+|---|---|
+| Full suite; `nice -n 19 suite_evidence.py run ... --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true` | 13,193 success / 13 failure / 28 load error / 20 skip; exact baseline identity/outcome equality and official comparator PASS; zero added/missing/changed/newly skipped |
+| All Dart manifest self-tests, P6 self/current/at-creation, P1–P5 historical, Kotlin self-test | All 35 commands PASS; Kotlin 597 tests; current protection includes all 14 earlier destinations |
+| Analyzer, root and strict feature CI scope | 94 scoped occurrences / zero additions; infos, declaration identities and multiplicity preserved; comparator negatives and global allowlist PASS |
+| Format / size / architecture | Idempotent CI format; changed test format/analyzer PASS; 3,000 files / 140 ratchets; 1,668 migrated files and architecture negatives PASS; post-fixture current/size/architecture PASS |
+| Isolated parser audit | Every manifest invocation selects a fresh package under ignored `.dart_tool/vplayer_parser/`; copied kernels deleted; nested routing archived |
+| APK release, then macOS release; `nice -n 19 flutter build <target> --release --no-pub` | Both PASS on clean tested revision; APK, macOS executable and AOT hashes archived; existing macOS plugin SwiftPM notices remain warnings |
+
+Evidence is exclusively `refactor-evidence/vplayer/p6/gate/` in the git common
+directory: complete `suite-rerun.jsonl`/environment, strict delta, official
+comparison, fast/manifest logs, parser audit, build logs/results, creation-input
+reuse audit and `completion.json`. The first interrupted suite remains archived
+as incomplete and excluded. No changed expected outcome or failure allowance.
+Flutter 3.44.8 / Dart 3.12.2, pubspec and all frozen application hashes remain
+unchanged. The manual Simkl/MDBList movie/series threshold, resume, disabled and
+mid-session-disable checks plus earlier device/PiP items remain pending. Existing
+profile/cache/recovery gaps stay Follow-ups; no bug fixes or later moves.
