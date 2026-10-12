@@ -992,6 +992,98 @@ cinema zoom); speed menu changes rate and persists on resume;
 long-press 2× on phone; orientation toggle on phone; portrait-start seed
 and PiP restore of the lock on phone.
 
+## Phase 5 — trackers: Trakt, Simkl and MDBList scrobbling
+
+Branch `refactor/vplayer-p5` off the phase-4 merge `315028407`. Evidence
+`refactor-evidence/vplayer/p5/`. Names below; line numbers (at
+`890df14d8`, pre-phase-4) are indicative — re-measure at the phase base.
+
+Three sibling collaborators, one per tracker, each with its own narrow
+Host; no collaborator imports another. ≈ 700 lines leave the facade.
+
+### Moves
+
+**`vp_trakt_scrobbler.dart` — `VpTraktScrobbler` + `VpTraktScrobblerHost`
+(≈ 280 lines):** fields `_traktScrobbleEnabled`, `_launchTraktPercentSpent`,
+`_traktEpisodeProgress`, `_traktLastScrobbleAction`, `_traktHeartbeatTimer`
+(with their comments); methods `_initTraktScrobble`, `_traktProgress`,
+`_traktScrobble`, `_startTraktHeartbeat`, `_stopTraktHeartbeat`,
+`_traktScrobbleSeek`, `_currentEpisodeTraktPercent`.
+
+**`vp_simkl_scrobbler.dart` — `VpSimklScrobbler` + Host (≈ 250 lines):**
+fields `_simklScrobbleEnabled`, `_launchSimklPercentSpent`,
+`_simklEpisodeProgress`, `_simklLastScrobbleAction`, `_simklHeartbeatTimer`;
+methods `_initSimklScrobble`, `_simklSeriesSEUnresolved`, `_simklScrobble`,
+`_startSimklHeartbeat`, `_stopSimklHeartbeat`, `_simklScrobbleSeek`,
+`_currentEpisodeSimklPercent`.
+
+**`vp_mdblist_scrobbler.dart` — `VpMdblistScrobbler` + Host (≈ 200
+lines):** fields `_mdblistEpisodeProgress`, `_launchMdblistPercentSpent`,
+`_mdblistSession`; methods `_mdblistTarget`, `_initMdblistScrobble`,
+`_updateMdblistPosition`, `_mdblistPlay`, `_mdblistPause`, `_mdblistStop`,
+`_mdblistScrobbleSeek`, `_switchMdblistTarget`, `_currentEpisodeMdblistPercent`.
+
+Initializers: verify each is a literal/`null`/`const` (record proofs); any
+non-inert one (e.g. a session or `ValueNotifier` allocation) stays
+State-owned per the phase-3 rule.
+
+**Stay State-owned (shared across trackers, skip segments, guide,
+resume, episode navigation):** `_persistablePosition`,
+`_traktSeasonEpisode` (≥ 9 external readers incl. the skip Host),
+`_resumeTrackingAfterValidationGate` and `_bindEpisodeTrackerProgressIdentity`
+(cross-tracker orchestration: they call into all three collaborators in a
+fixed order that must not change), `_startAnalyticsHeartbeat` +
+`_analyticsHeartbeatTimer` (analytics, not a tracker; lifecycle phase), the
+widget's tracker callbacks/percent parameters (read through the Hosts as
+live `widget.` forwarders, phase-4 selector rule).
+
+**Hosts:** each lists exactly what its bodies read (measured at step T):
+typically `mounted`, `widget` tracker callbacks and percents (live),
+position/duration, `persistablePosition()`, `traktSeasonEpisode()`,
+effective content identity, playlist/series identity, playing state,
+validation-gate state, `setState` if used. Cross-tracker calls inside a
+moved body (if any) go through that collaborator's Host to the facade,
+which forwards to the sibling — never a sibling import.
+
+**Retained call sites** (re-pointed, same statement positions, same
+order): player subscriptions (play/pause/position → trakt/simkl/mdblist
+order preserved exactly), EOF/ended, startup/validation gate (3387…),
+source/episode switches (9339, 10309–10432), resume save percents
+(11994–12123), dispose (11719–11725 in place, each statement
+individually), the skip Host's three tracker seeks (re-pointed from State
+methods to `_trakt.`/`_simkl.`/`_mdblist.` via the adapter — a scaffolding
+patch of the P3 adapter, protected by history), initState.
+
+**Scaffolding:** patched State constructor appends three assignments in
+the order trakt, simkl, mdblist; three adapters; CI transition as phase 4
+(+ P4 `--at 315028407`).
+
+### Step 0 — characterization of the original
+
+Per tracker, through a fake HTTP/service layer (no application seam;
+reuse the existing test doubles for `TraktService`, `SimklService`,
+`MdblistService`/scrobble session or the HTTP override): enabled/disabled
+init; start/pause/stop/seek scrobble requests with exact action, progress
+percent and identity (movie, series, custom identity, unresolved S/E);
+heartbeat timing and stop on pause/EOF/dispose; launch-percent budget
+spent once; per-episode progress after a playlist switch; MDBList target
+switch on source/episode change; the validation gate suspending and
+resuming all three in order; the cross-tracker call order on
+play/pause/seek/EOF/dispose; resume-save percents; profile switch / route
+disposal during an in-flight scrobble (pin as-is; AGENTS async rules);
+failure paths logged, never surfaced. **Early windows (phase-4 review
+lesson):** every moved field initializer is pinned by a test that observes
+it before asynchronous settings/identity loads complete (input or events
+arriving while storage reads are suspended), or is justified unreachable. Mutation proofs, coverage matrix,
+Claude sample. This phase likely needs ≥ 2 Claude samples (three
+siblings); budget for step 0b.
+
+### Device checklist (end of series)
+
+With Trakt, Simkl and MDBList connected: start/pause/seek/stop reflect on
+each service for a movie and a series episode; progress resumes on
+another device; disabling a tracker stops its requests.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
