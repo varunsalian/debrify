@@ -150,6 +150,8 @@ def run(package):
     from test_dart_skip_moves import run as skip_tests
     from test_dart_display_moves import run as display_tests
     from test_dart_trakt_moves import run as trakt_tests
+    from test_dart_secondary_tracker_moves import run as secondary_tracker_tests
+    secondary_tracker_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

@@ -2182,6 +2182,35 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   switch or device command. Phase 5 complete; Phase 6 Simkl/MDBList is later.
 
 
+### 2026-10-12 — Phase 6 Step T (secondary tracker tooling checkpoint)
+
+- **Revision/base.** Follows approved `1c8ce8e7f`; original application
+  re-measured by name at `ea7901ead`: 846 disjoint spans, 24 moved,
+  820 retained and two patched declarations; 57 retained substitutions plus
+  two counted skip-adapter rewrites give all 59 references. Resulting revision
+  and commands are recorded in `p6/tooling/completion.json`.
+- **Proof.** Complete raw/formatted evidence-only splits compare with zero
+  differences. Eight false/null initializers, 19/15 live Hosts, eager Simkl
+  then MDBList construction, existing P5 skip forwarding and both complete
+  Trakt-progress chains are frozen. Existing opt-in expression projection
+  needs no shared-guard change; guard-only chain/leaf/capture negatives pass.
+  All 14 earlier destinations remain protected. Two optional commas inserted,
+  none deleted; format idempotent, zero formatting diagnostic changes.
+- **Commands/results.** All 33 accepted tooling checks pass: 26 existing
+  Dart manifest self-tests, universal P6 self-test/original self-comparison,
+  P1–P5 historical merge revisions and complete Kotlin self-test. Root/strict/
+  raw/formatted probe diagnostics: 84/153/94/94; prior mappings/maxima retained,
+  async-context identities unchanged. Size/architecture and parser audit pass.
+  Fresh original full suite: 13,049 successes, 13 failures, 28 load errors,
+  20 skips; exact P5 gate identities/outcomes, no allowlist changes.
+- **Attempts/scope.** One disposal negative initially used a nonexistent
+  textual pattern; corrected whole-statement witness and complete rerun pass.
+  A copied driver selected the P5 merge for P4; rejected attempt archived,
+  correct P4 `--at 315028407` passes. Application/pubspec unchanged, manifest
+  draft, no production destinations or CI/theme changes. CI enables in the
+  Step-1 commit creating both P6 scrobblers. Nice 19, isolated parser copies
+  with copied kernels deleted, serialized suites; Step 0 continues separately.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -3684,3 +3684,41 @@ sealed-platform PiP seek `ref-18`. Existing profile, A→B→A and post-disposal
 reader gaps stay in Follow-ups. No bug fix, new seam, real API network,
 allowlisting of failures, device command, push, merge or branch switch.
 Stop after this gate.
+
+## Phase 6 Step T — Simkl/MDBList tooling (2026-10-12)
+
+Original `ea7901ead`, approved design `1c8ce8e7f`; 846 original spans:
+24 moved / 820 retained / two patched. Complete draft `vplayer_p6.json`
+compares both raw and formatted evidence-only materializations with zero
+changes beyond counted edits. All 59 references are measured (57 retained,
+two in the whole patched skip adapter). P5's Trakt forwarding stays in that
+adapter; the P6 class projection carries two exact new rewrites. The State
+constructor eagerly appends Simkl then MDBList after Trakt.
+
+The eight field initializers are false literals or implicit null; no allocation,
+Host read, service call or scheduling moves into construction. Both Hosts
+(19 Simkl, 15 MDBList) and live widget selectors are frozen. The two complete
+`_trakt.traktProgress` chains project to `_host.traktProgress` only through
+explicit registrations. Guard-only missing registration, wrong leaf and
+`_host`/`_trakt`/`widget` capture negatives pass; existing manifests retain their
+behavior without a shared-guard implementation change. All 14 historical
+feature destinations stay protected.
+
+All 33 accepted tooling commands pass: all 26 existing Dart manifest self-tests,
+P6 universal negatives and all-retained original comparison, P1–P5 same-revision
+historical inputs, and complete Kotlin historical/compiled self-test. Root/
+strict/raw/formatted inventories record 84/153/94/94 occurrences, preserving
+all prior mappings/maxima and unchanged async-context identities. Five retained
+facade import warnings and five destination directive infos are probe effects;
+no suppression/import cleanup. Formatting inserts two AST-optional commas,
+deletes none, is idempotent and introduces zero diagnostic changes. Sizes and
+architecture pass. Parser flags and copy/kernel deletion are audited.
+
+Fresh original full-suite evidence at the named merge is clean and has exact
+P5 gate identities: 13,049 success / 13 failure / 28 load error / 20 skip. No new
+outcome or failure allowlist. Evidence: `p6/tooling/` and `p6/step0/base*`.
+Rejected development attempts remain archived: nonexistent disposal-negative
+pattern (fixed and complete self-test rerun), and wrong P4 revision in a copied
+driver (correct `--at 315028407` passes). Draft only; CI/source guard/theme/size
+transition belongs to the commit creating both production scrobblers. No app,
+pubspec, bug fix, real API network, push/merge/switch or device command.
