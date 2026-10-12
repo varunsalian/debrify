@@ -865,6 +865,133 @@ Skip intro / Skip credits button on a series with segments (phone, Android TV
 Flutter player, tvOS, desktop): appears, skips to the segment end, TV
 Select skips; switching episode does not flash the button.
 
+## Phase 4 — playback speed, aspect mode and orientation
+
+Branch `refactor/vplayer-p4` off the phase-3 merge `890df14d8`. Evidence
+`refactor-evidence/vplayer/p4/`. Line numbers at `d6e91c62a` (phase-3
+gate); re-measure at the phase base by name.
+
+### Moves → `presentation/legacy_video_player/vp_display_mode_controller.dart`
+
+`class VpDisplayModeController` + `abstract interface class VpDisplayModeHost`
+(≈ 290 lines).
+
+| Original | Kind | Fate |
+|---|---|---|
+| `// Aspect / speed` comment + `_aspectMode` 1433 | field `AspectMode.contain` (enum const) | moved → `aspectMode` |
+| `_playbackSpeed` 1434 | field `1.0` | moved → `playbackSpeed` |
+| `// Press-and-hold…` comment + `_speedBeforeHold` 1444 | field `null` | moved → `speedBeforeHold` |
+| `_landscapeLocked` 1448 | field `false` | moved → `landscapeLocked` |
+| `_applyAspectVideoZoom` 2808 | method | moved |
+| `_cycleAspectMode` 13503 | method | moved |
+| `_changeSpeed` 13588 | method | moved |
+| `_onSpeedButton` 13600, `_onAspectButton` 13608 | methods | moved |
+| `_setPlaybackSpeed` 13616, `_setAspectModeDirect` 13622 | methods | moved |
+| `_onLongPressStart` 13629, `_onLongPressEnd` 13659 | methods | moved |
+| `_toggleOrientation` 13669 | method | moved |
+| `_currentFit` 13687, `_getCustomAspectRatio` 13894 | methods | moved |
+
+All four initializers are literals/enum constants → inert (recorded).
+**Stay State-owned:** the `_aspectRatioHud` (1429) and `_speedHoldHud`
+(1445) `ValueNotifier`s (allocation-event order, phase-3 rule), reached
+through the Host; `_buildCustomAspectRatioVideo` (a build helper reading
+subtitle settings and the video controller; its calls to the two moved
+getters become `_display.` substitutions); `_controlsVisible`,
+`_isPlaying`, `_dockBand`, `_player`, `_saveResume`, `_scheduleAutoHide`,
+`_openPlayerMenuQuick`.
+
+**Host** `VpDisplayModeHost` (exact; verified at step T): `mounted`,
+`context` (State context — `_onLongPressStart` uses
+`context.findRenderObject()`; no builder-local context in the moved
+bodies), `setState` (→ `_vpSetState`), `mk.Player get player`,
+`void scheduleAutoHide()`, `Future<void> saveResume()` (the moved bodies
+call it unawaited exactly as the original), `void
+openPlayerMenuQuick(PlayerMenuSection)`, `ValueNotifier<AspectRatioHudState?>
+get aspectRatioHud`, `ValueNotifier<bool> get speedHoldHud`, `bool get
+isPlaying`, `ValueNotifier<bool> get controlsVisible` (verify type),
+`double dockBand(double base)` (verify signature), `bool get
+hideBackButton`, `bool get hideOptions` (the two `widget.` reads — live
+forwarders to `_s.widget.…`, read at the original moment). These
+`widget.hideOptions` → `_host.hideOptions` substitutions are a new shape
+(the widget guard recognises `_deps` *invocations*,
+`occurrence_field_bindings.py:289`, `check_settings_moves.py:417`): step T
+registers both complete selector substitutions in the real P4 manifest via
+`registered_occurrence_substitutions.py:17` (or a narrowly scoped
+extension), freezes the adapter bodies `_s.widget.hideBackButton` /
+`_s.widget.hideOptions`, adds rejection cases for a cached widget value and
+an altered lexical binding, and proves the complete P4 manifest before
+extraction. All 14 Host members have readers; `_controlsVisible` is
+`ValueNotifier<bool>`; `_dockBand(double legacy)` returns `double`. Imports:
+`dart:async`, `dart:math` as `math`, Flutter material + services,
+media_kit, `AspectModeUtils`/`AspectMode`, `AspectRatioHudState`,
+`PlayerMenuSection` + `kUnifiedPlayerMenuEnabled`.
+
+**Retained substitutions** (33 references on 32 lines, measured by the
+design review; retained resume/defaults assignments stay **direct field
+writes** `_display.playbackSpeed = …`, never routed through the action
+methods, which would add effects):
+`initState` 1657/1659 (`_landscapeLocked` writes/read), player creation
+2656 (`_applyAspectVideoZoom()`), player defaults 6208/6264 (aspect write
++ debug log read), PiP 11504, resume restore 12090–12093 (speed/aspect
+writes + zoom), resume save 12511/12514 (reads incl. `_speedBeforeHold
+?? _playbackSpeed`), controls dock 12914–12919, the TV/keyboard cycle at
+14486, `_buildCustomAspectRatioVideo` 13722 (`_getCustomAspectRatio()`) and 13723 (`_currentFit()`) + build 14751/14760,
+gestures 15013/15014 (`onLongPressStart: _display.onLongPressStart` —
+tear-offs; verify the gesture detector does not compare callback
+identity across rebuilds in a way that changes recognizer state), styled
+dock 15145–15152, unified menu 16737–16740. Resume code keeps reading
+and writing these values at the same statement positions (shared-state
+rule: the values move with their only state owner, the controller;
+resume sees them through `_display.`).
+
+**Scaffolding:** patched State constructor (keeps `_sleep`, `_skip`,
+appends `_display`); `late final VpDisplayModeController _display;` at
+slot 1433; `_VpDisplayModeHostAdapter`. CI: current → P4; P1 `--at 31a347ad2`, P2 `--at fc24e32ae`, P3 `--at 890df14d8`; earlier
+`--at` their merges; analyzer manifest + inventory → P4.
+
+### Step 0 — characterization of the original
+
+Aspect cycle order through all 11 modes with HUD label/icon and its
+1.5 s auto-clear (and no clear after dispose); `video-zoom` property per
+mode on a native platform, skipped on a non-native one, failure logged;
+speed cycle order and wrap, `setRate` calls, persistence via resume save
+(including the held 2× not persisted: `_speedBeforeHold ?? speed`);
+unified-menu speed/aspect selection, the no-op on the same aspect;
+long-press 2× gating (locked controls, paused, edge guard, visible
+controls top/bottom bars) and release restoring the prior speed, release
+after dispose; orientation toggle (both directions, immersive mode,
+`setState` only when mounted) via the method-channel recorder; resume
+restore applying speed + aspect + zoom; player defaults setting aspect;
+landscape lock seeded from `startsInPortrait`; PiP's read of the lock.
+Legacy cycle paths behind `kUnifiedPlayerMenuEnabled` recorded dead —
+`_changeSpeed` is **wholly dormant** (its only caller is the disabled
+branch, 13605); aspect cycling stays live through key A (14486).
+**Rendered aspect contract:** through the eleven-mode cycle assert the
+rendered `mkv.Video.fit`, the custom-ratio branch and the numeric
+`AspectRatio.aspectRatio` (13722/14751), not only HUD/zoom; native zoom
+`0.000000`, cinema zoom `0.415037`. **Resume sampling:** suspend an
+existing resume write (the preference transport barrier,
+`sleep_timer_driver.dart:55`), queue another save, change speed/aspect or
+start/end a hold, release, and assert the stored records (values are read
+inside `_saveResumeLocked`, 12511, not at action time); saved speed `1.0`
+skips both `setRate` and the assignment (12088). **Orientation async:** a
+suspended orientation request completed after disposal, overlapping
+toggles (both read the same initial lock), a rejected channel request —
+record channel arguments/order and the `_scheduleAutoHide` timer creation
+and draining (12673); preserve outcomes. One real pointer hold spanning a
+rebuild pins long-press delivery (tear-offs of the same instance compare
+equal; recognizers are reused by type). **Reachability:** the landscape
+seed is desktop-covered; the phone-only portrait seed (`PlatformUtil:92`
+uses real `dart:io Platform`) and PiP restore are device-pending.
+Mutation proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+Aspect modes visibly change framing on phone/TV/desktop/tvOS (incl.
+cinema zoom); speed menu changes rate and persists on resume;
+long-press 2× on phone; orientation toggle on phone; portrait-start seed
+and PiP restore of the lock on phone.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
@@ -1490,6 +1617,159 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   no deviations, production changes, device commands or push/merge/branch
   switch. Stop after this review closure.
 
+### 2026-10-12 — Phase 4 Step T (tooling checkpoint)
+
+- **Revision/base.** Tooling follows approved `b6f1c2c50`; original re-measured
+  by name at `890df14d8`: 868 original spans, 16 moves, 33 retained references.
+- **Commands/results.** Complete evidence-only P4 materialization and
+  all-retained self-compare report zero differences. Real-config widget
+  selector registration, binding-only capture negatives, frozen live adapters,
+  eager constructor/HUD/direct-write negatives pass. Evidence-only format is
+  idempotent with no optional-comma or diagnostic changes; controller 243 lines.
+  Root/strict/probe analyzer inventories: 81/149/82; async-context identities
+  unchanged by declaration. All existing Dart manifest and Kotlin self-tests
+  plus P1/P2/P3 merge-revision historical checks pass (`p4/tooling/checks.json`).
+- **Constraints/CI.** Every manifest uses an explicit isolated parser under
+  `.dart_tool/vplayer_parser/`, copied kernels deleted; heavy work uses nice 19.
+  P4 drafts only, application/pubspec unchanged. CI transition deferred to the
+  production Step-1 commit creating `vp_display_mode_controller.dart`.
+- **Deviations.** No guard extension needed: the existing opt-in complete
+  selector registration already preserves/rejects the required bindings.
+  Failed development probes are archived and uncredited. Step 0 follows;
+  no production moves.
+
+### 2026-10-12 — Phase 4 Step 0 (characterization checkpoint)
+
+- **Revision/base.** Follows tooling `1816a0ee5`; every mutation uses detached
+  original application `890df14d8`, restored after each run. Main application
+  and pubspec remain byte-identical to that named base.
+- **Coverage/results.** All 38 new display cases pass on the original and
+  current application. Every case has an assertion-failing original witness.
+  Systematic 170-point sweep covers all 16 moved declarations and each of
+  33 retained references: originally 157 kills / three equivalences; vp-rev4
+  corrects this to 158 kills / two equivalences, with nine dormant points and
+  one PiP device-pending reference. Added held reverse orientation and aspect
+  auto-hide cases close both async/action branches;
+  HUD-after-dispose observes the rendered notifier's unchanged value.
+- **Commands.** Serialized `nice -n 19 flutter test` with no-pub, concurrency 1
+  and `DEBRIFY_VP_TEST_HOOKS=true`; explicit P4 evidence overrides. Original
+  38-case control and current `display-focused.jsonl` pass; format and changed
+  test/support analyzer pass. Size/architecture: 2,996 files / 140 ratchets,
+  1,664 migrated files pass. Detailed coverage/mutation tables in deps;
+  `p4/step0/points.json`, `mutation-results.json`, `coverage.json` and logs.
+- **Attempts/deviations.** Invalid native-gate and uncaught-error-only witnesses
+  are uncredited and replaced by flow-valid assertion kills. Fixture corrections
+  preserve requested behavior assertions. Two preliminary runs inherited the
+  harness's P2 runtime default; only their 72 newly created directories were
+  relocated into P4 using exact run bounds (`runtime-routing-note.json`). All
+  accepted controls/mutations export P4. No assertion weakening or app fixes.
+- **Baseline/remaining.** Fresh original full suite re-measured at `890df14d8`:
+  12,932 success / 13 failure / 28 error / 20 skip; exact P3 gate outcomes plus
+  the accepted incoming-profile case. The new additions-only clean checkpoint
+  suite follows this commit. Phone portrait seed/PiP restoration and the
+  end-of-series device checklist remain pending; dormant speed cycle/old menu
+  fallback paths stay classified. CI transition and five-file registration
+  accompany Step-1 production creation. Stop before production moves.
+
+### 2026-10-12 — Phase 4 Step-0 baseline recorded (stop)
+
+- **Revision/evidence.** Tested clean `5e08bb3a3`, tooling `1816a0ee5`, freshly
+  re-measured original `890df14d8`; `p4/step0/completion.json` records SDK,
+  commands, hashes, coverage, constraints and parser audit.
+- **Suite.** Serialized nice-19 `suite_evidence.py run` with no-pub and hook
+  define: 12,970 success / 13 failure / 28 error / 20 skip. Exactly 38 added
+  successes versus original; zero missing/changed original identities or
+  new failures/skips. Official comparator PASS; no allowlisting.
+- **Final checks.** All 38 cases mutation-proven. The count of 157 kills and
+  three equivalent points is superseded by vp-rev4: 158 killed / two equivalent / nine
+  dormant / one device-pending across 170 points and all 33 references.
+  All 31 tooling/self/history checks pass; format, analyzer probes and test
+  analyzer, size/architecture pass. Explicit isolated parser audit: no
+  violations. Main and original application/pubspec unchanged, original
+  mutations restored, tree clean during complete suite, required trailers.
+- **Stop.** P4 remains draft; no production moves, CI activation, bug fixes,
+  builds/device commands, push, merge or branch switch. Five test registrations
+  and current/analyzer transition belong to Step-1 production creation.
+  Phone portrait/PiP and end-of-series device checklist remain pending.
+
+### 2026-10-12 — Phase 4 Step-1 production creation
+
+- **Revision.** Creation follows `61c081e33`; frozen sources/hashes/commands in
+  `p4/step1/completion.json`. Original remains named `890df14d8`.
+- **Independent review sample.** Original `5e08bb3a3`: 19/20 raw; g20 pure
+  enum-field read/scale computation is equivalent, agreed with Claude;
+  19/19 valid = 100%, assertion kills only. Deps table and
+  `p4/step1/independent-sample.json` record every witness. No addendum needed.
+- **Applied.** 16 frozen declarations, exact 14-member Host/adapter and eager
+  `_display` append; 33 retained occurrences; direct resume/default writes;
+  both HUD notifiers stay State-owned. Controller 243 lines; facade 17,592.
+- **Commands/results.** Nice-19 P4 current checker: zero differences. Serialized
+  hook-defined/no-pub affected suite: 189 successes, no failure/skip.
+  Exact CI format, 2,996-file size / 140 ratchets, 1,665-file architecture and
+  negatives pass. Scoped analyzer 82 / zero additions; root 1,778 with expected
+  probe-only +1 and identical outside identities. Existing warning allowlist
+  and all earlier analyzer mappings preserved.
+- **CI/source guards.** Current/self/analyzer → P4, P1/P2/P3 historical merges
+  retained; five display test files registered. Validating reader chains P4;
+  theme's three lists, rendered set and manifest extended. No assertion edits.
+- **Constraints/next.** Exact proven formatted bytes, zero optional-comma
+  changes and formatting diagnostics, pubspec unchanged; isolated parser and
+  evidence overrides. No bug fixes, push, merge, switch or device commands.
+  Clean creation gate follows; manual end-of-series checklist remains pending.
+
+### 2026-10-12 — Phase 4 clean-tree gate (stop)
+
+- **Revision.** Tested clean production `9cae15e31`; gate commit follows it.
+  Accepted original-caller baseline `5e08bb3a3`; original base `890df14d8`.
+- **Suite.** Serialized nice-19 `suite_evidence.py run vplayer/p4/p4-gate-suite`
+  with no-pub and `DEBRIFY_VP_TEST_HOOKS=true`: 12,970 success / 13 failure /
+  28 error / 20 skip. Exact Step-0 identities/outcomes, SDK and runner flags;
+  official comparator PASS. Zero new regressions/skips or allowlisting.
+- **Checks.** Scoped analyzer 82 / zero additions, root 1,778 with frozen +1;
+  outside identities exact and previous mappings retained. Exact CI format,
+  2,997-file size / 140 ratchets, 1,665-file architecture and negatives PASS.
+  All 32 self/current/history commands PASS: all existing Dart manifests,
+  universal real configurations/negatives, P4 current, historical P1/P2/P3,
+  Kotlin self-test. Every manifest parser isolated with copied kernels deleted.
+- **Builds.** Nice-19 `flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`: PASS on clean creation; artifacts
+  and AOT hashes/logs recorded. No install/run/device commands.
+- **Evidence/constraints.** `p4/gate/completion.json`, exact suite delta,
+  analyzer identities, checker ledger, parser audit, build results. Exact two
+  frozen application paths and pubspec unchanged; branch/trailers/clean tree
+  and original mutation restore verified. No bug fixes, push, merge or switch.
+- **Pending/stop.** Phone portrait seed and PiP restore; end-of-series manual
+  phone/Android TV Flutter/tvOS/desktop framing (incl. cinema zoom), rate/resume,
+  phone temporary hold and orientation checklist. Dormant speed/menu branches
+  remain classified. Phase 4 complete; stop before further production moves.
+
+### 2026-10-12 — Phase 4 vp-rev4 closure (test/docs-only; stop)
+
+- **Review/revision.** No P1s, one P2: defaults-await input exposes the aspect
+  initializer. The previous equivalence claim was wrong. This review-only
+  commit follows `794b1238c`; detached original is exactly `5e08bb3a3`.
+- **Characterization.** C39 holds real preference loading, presses A and pins
+  Cover HUD/icon, the preserved uninitialized-player zoom error, zero early
+  saves, 1.5 s clear, defaults override and working ready zoom/resume save.
+  C40 uses a real early pointer hold/release and pins the null-prior return.
+- **Initializer audit.** Aspect mutation assertion-fails Cover vs Fit Width;
+  speed mutation fails 1.0 vs 1.25 after defaults; non-null prior mutation fails
+  expected-no-error on early release. Landscape mutation survives both cases:
+  synchronous initState overwrites it before orientation/async work/input.
+  Named-source ordering and original restoration recorded; no private caller.
+- **Corrected matrix.** 40 display cases, every case mutation-proven; unchanged
+  170 points / 16 declarations / 33 references: 158 killed, two equivalent,
+  nine dormant, one PiP device-pending. Deps tables corrected; archived
+  original evidence retained, superseded by `p4/vp-rev4/coverage.json`.
+- **Commands/results.** Nice-19, serialized no-pub/hook-defined original
+  control/mutations and moved focused suite: 40 successes. Changed format and
+  test analyzer PASS; P4 current checker zero differences with an isolated
+  parser/copy-kernel deletion. Evidence `p4/vp-rev4/completion.json`.
+- **Scope/stop.** Test/docs-only; existing CI test files already registered.
+  Application/pubspec unchanged; early error preserved. No new seam, bug fix,
+  allowlisting, full-suite/build repeat, device commands, push, merge or switch.
+  Manual phone portrait/PiP/end-of-series checklist remains pending. Stop.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -1536,3 +1816,13 @@ order); HTTP harness transport, dormant replacement, web-only
 unavailable provider. P3s: concrete CI/manifest transition, patched State
 constructor, theme lists; line/label wording; frozen Host signatures and
 imports.
+
+## Phase 4 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+P2s folded: orientation completion after disposal / overlap / rejection;
+resume sampling across queued writes and the speed-1.0 skip; rendered
+aspect contract (fit, custom ratio, numeric ratio). P3s: explicit
+`widget.` selector registration with frozen adapter bodies and negatives;
+33-reference ledger incl. 13722, `_changeSpeed` dormant, portrait seed and
+PiP restore device-pending. Moving the four values (single storage
+location, retained callers write the controller fields directly) accepted.

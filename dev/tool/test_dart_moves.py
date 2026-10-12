@@ -148,8 +148,10 @@ def run(package):
     verify('required singleton record comma', {SOURCE: record.replace('(1)', '(1,)')}, snap, record)
     from test_dart_sleep_moves import run as sleep_tests
     from test_dart_skip_moves import run as skip_tests
+    from test_dart_display_moves import run as display_tests
     sleep_tests(package)
     skip_tests(package)
+    display_tests(package)
     history_tests(package)
     real_manifest = load_manifest('dev/tool/dart_moves/vplayer_p1.json')
     real_original = d.git_text(real_manifest['base'], real_manifest['source'])

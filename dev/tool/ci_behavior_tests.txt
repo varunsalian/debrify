@@ -451,3 +451,10 @@ test/features/video_player/video_player_skip_races_test.dart
 test/features/video_player/video_player_skip_segments_test.dart
 test/features/video_player/video_player_skip_settings_test.dart
 test/features/video_player/video_player_skip_tracking_test.dart
+
+# Phase 4 display characterization: aspect, speed, gestures and orientation.
+test/features/video_player/video_player_display_aspect_test.dart
+test/features/video_player/video_player_display_controls_test.dart
+test/features/video_player/video_player_display_gestures_test.dart
+test/features/video_player/video_player_display_orientation_test.dart
+test/features/video_player/video_player_display_speed_test.dart
