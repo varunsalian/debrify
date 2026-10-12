@@ -145,17 +145,29 @@ def check(manifest, original, sources, package):
     # for the whole declaration. Destination source is never rewritten.
     from dart_move_fixture import edited_text
     projected = {}
+    class_patches = set(manifest.get('patched_class_projection', []))
+    for key in class_patches:
+        row = next((r for r in rows if r['original'] == key), None)
+        node = original_nodes.get(key)
+        if (row is None or row['fate'] != 'patched' or not node
+                or node['owner'] or not node['kind'].startswith('ClassDeclaration')):
+            errors.append('class patch projection requires a patched facade class: ' + key)
     for row in rows:
         key = row['original']
         node = original_nodes.get(key)
         if row['fate'] == 'patched' and node and node['owner'] in manifest['split_containers']:
             text = edited_text(original, base[key], row['patches'])
             projected[key] = 'class ' + node['owner'] + ' { ' + text + ' }'
+        elif row['fate'] == 'patched' and key in class_patches and node and not node['owner']:
+            try:
+                projected[key] = edited_text(original, base[key], row['patches'])
+            except ValueError as error:
+                errors.append('class patch projection failed: ' + key + ': ' + str(error))
     if projected:
         units = parse(projected, package, occurrence_bindings=True)
         original_nodes = dict(original_nodes)
         for key, unit in units.items():
-            members = unit['declarations'][0]['members']
+            members = unit['declarations'] if key in class_patches else unit['declarations'][0]['members']
             if len(members) != 1 or members[0]['name'] != original_nodes[key]['name']:
                 errors.append('patch projection changed declaration ownership: ' + key)
             else:

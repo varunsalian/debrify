@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'features/video_player/support/vp_source_reader.dart';
+
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
   expect(from, isNonNegative, reason: 'Missing start marker: $start');
@@ -154,15 +156,32 @@ void main() {
       'Future<bool> _switchToSourcePlaylist(',
       '// Resume the SAME episode from the new source',
     );
-    final resumeGetters = _between(
-      player,
-      'void _bindEpisodeTrackerProgressIdentity',
-      '/// Load an external audio track',
-    );
 
     expect(sourceSwitch, contains('final carriedImdbId'));
     expect(sourceSwitch, contains('rebuilt.imdbId ??= carriedImdbId'));
-    expect(resumeGetters, contains('final imdbId = _currentSeriesImdbId'));
+    for (final reader in {
+      '_currentEpisodeTraktPercent': '_host.',
+      '_currentEpisodeSimklPercent': '_',
+      '_currentEpisodeMdblistPercent': '_',
+    }.entries) {
+      final body = vpSourceDeclaration('_VideoPlayerScreenState.${reader.key}');
+      expect(
+        body,
+        contains('final imdbId = ${reader.value}currentSeriesImdbId;'),
+      );
+      expect(
+        body,
+        contains(
+          'if (${reader.value}episodeTrackerProgressImdbId != imdbId) return null;',
+        ),
+      );
+    }
+    // The reader validates the complete current facade, including this frozen
+    // computed adapter, before it returns a moved percentage declaration.
+    expect(
+      player,
+      contains('String? get currentSeriesImdbId => _s._currentSeriesImdbId;'),
+    );
     expect(player, contains('metadataReady: _episodeMetadataReady'));
 
     final resume = _between(

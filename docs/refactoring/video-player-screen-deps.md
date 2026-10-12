@@ -3087,3 +3087,600 @@ Commands, test/source hashes and parser invocation are in `vp-rev4/completion.js
 No full-suite/build repeat for this test/docs-only review closure; the recorded
 production gate remains at `9cae15e31`. No bug fix, production move, seam,
 allowlisting, device command, push, merge or branch switch. Stop after commit.
+
+## Phase 5 Step T — Trakt ownership tooling (2026-10-12)
+
+Original `315028407`; tooling input `fc7196f78`. The P5 manifest is a complete
+**draft**, with no production moves: 855 disjoint original spans, 841 retained,
+12 moved and two patched (State constructor and whole skip Host adapter).
+All 32 retained references are enumerated in
+`p5/tooling/construction-and-references.json`; the skip adapter contributes
+one exact counted receiver patch, and Simkl contributes two retained progress
+substitutions. The original percentage documentation remains with its binder.
+
+The frozen `VpTraktScrobblerHost` has 21 computed readers. The five relocated
+initializers are inert: enabled/budget literal false; episode cache, last
+scrobble action and heartbeat implicit null. Constructors assign only and read
+no Host; the State eagerly appends Trakt after sleep, skip and display. The
+294-line formatted destination exists only in evidence. No shared seek guard
+or Simkl/MDBList declaration moves. History-derived protection covers all 13
+P1–P4 destinations.
+
+`check_dart_moves.py` adds opt-in exact projection for a patched whole facade
+class, through the existing token-edit/parser implementation. `test_dart_trakt_moves.py`
+rejects missing opt-in, wrong class/fate/count, undeclared skip-class changes,
+wrong forwarding receiver, missing widget registrations, cached widget/index
+values, wrong live identity, seek handover reordering/removal, late identity
+reads, changed initial enablement and missing eager construction. Old manifest
+behavior is unchanged. Complete raw/formatted splits and the exhaustive
+all-retained original comparison have zero differences. All 26 existing Dart
+self-tests, P5 universal/real-config tests, P1–P4 historical checks and Kotlin
+historical/compiled self-test pass. Commands and logs: `p5/tooling/checks.json`.
+
+Analyzer inventory preserves the earlier mappings and maxima; original root,
+strict original and complete compiling probe record 82/151/84 occurrences.
+The probe records the retained facade's now-unused Trakt import and new import
+ordering info; formatting introduces none. `use_build_context_synchronously`
+identities/multiplicities are unchanged by declaration. Full inventory and
+format/token/optional-comma/idempotence evidence: `p5/tooling/`. Parser routing,
+size and architecture checks pass. Failed development probes are archived and
+uncredited. CI, theme lists and source-guard retargets wait for Step 1.
+
+**Source guard retarget plan.** At Step 1, replace the percentage-reader slice
+in `android_tv_mdblist_progress_source_test.dart` with validated per-declaration
+reader calls for the Trakt, Simkl and MDBList readers, checking each live show
+identity capture and rejection at its current location. Preserve the retained
+TVMaze identity and rewatch assertions. The present source test remains intact.
+
+## Phase 5 Step 0 — original Trakt characterization (2026-10-12)
+
+Original application `315028407`, detached in `p5/step0/original`; Step T
+commit `5d074e762`. Trakt only: Simkl and MDBList stay in the State and are
+used solely to pin shared-percent forwarding, cache invalidation and seek
+ordering. The source guard retarget remains the Step-T plan above for Step 1.
+
+The isolate-wide delegating HTTP transport is installed before singleton
+use, dispatches each send to the active case, and never delegates to a real
+network. Synthetic storage credentials expire in 2100; profile/session and
+snapshot-service caches reset between cases. Cipher barriers call the actual
+cipher delegate. Storage/policy barriers delay delivery of actual decoded
+payloads/immutable policies through the original await continuation, without
+a production seam or private State call. The fixture adds only an optional
+fake-player setup callback, needed before the original open publishes state.
+
+75 new Trakt cases and the two existing skip integration cases pass
+on the original. Every new case has a completed **assertion-failing** original
+mutation witness matching its final case-file hash; supplementary final
+replays are tagged `final-` in the witness ledger. Compile/load failures
+and uncaught-error-only runs do not
+count. Original declaration offsets, executable patch context, commands,
+test/support hashes and full per-mutation JSONL/stderr are in
+`p5/step0/points.json`, `mutation-results.json` and `mutations/`. Earlier
+attempts remain in `mutation-results-first-pass.json`; invalid/comment-only
+edits are excluded and replaced by executable, flow-valid mutations.
+
+The systematic sweep covers all 12 moved declarations and all 32 retained
+occurrences: **191 scope points**, 180 killed, 10 equivalent, 1 device pending.
+An additional retained player-construction mutation proves the early
+policy-await disposal case; it is reported separately from the Trakt scope.
+
+| Moved declaration | Statement/branch/literal coverage |
+|---|---|
+| `_traktScrobbleEnabled` | `field-enabled` |
+| `_launchTraktPercentSpent` | `field-budget` |
+| `_traktEpisodeProgress` | `field-cache` |
+| `_traktLastScrobbleAction` | `field-action` |
+| `_traktHeartbeatTimer` | `field-timer` |
+| `_initTraktScrobble` | `init-flag`, `init-id`, `init-type`, `init-movie`, `init-series`, `init-content`, `init-target`, `init-auth`, `init-mounted`, `init-playing`, `init-duration`, `init-start`, `init-heartbeat`, `init-swallow-storage`, `init-enable-assignment`, `init-start-marker` |
+| `_traktProgress` | `progress-zero`, `progress-zero-value`, `progress-duration`, `progress-position`, `progress-units`, `progress-scale`, `progress-low`, `progress-high`, `progress-denominator` |
+| `_traktScrobble` | `send-validation`, `send-enabled`, `send-id`, `send-capture`, `send-percent`, `send-start-action`, `send-pause-action`, `send-threshold`, `send-upper`, `send-convert`, `send-dedup`, `send-remember`, `send-dispatch`, `send-ready`, `send-api-0-call`, `send-api-0-id`, `send-api-0-progress`, `send-api-0-season`, `send-api-0-episode`, `send-api-0-type`, `send-api-1-call`, `send-api-1-id`, `send-api-1-progress`, `send-api-1-season`, `send-api-1-episode`, `send-api-1-type`, `send-api-2-call`, `send-api-2-id`, `send-api-2-progress`, `send-api-2-season`, `send-api-2-episode`, `send-api-2-type`, `send-break-0`, `send-break-1`, `send-break-2` |
+| `_startTraktHeartbeat` | `beat-api-0-call`, `beat-api-0-id`, `beat-api-0-progress`, `beat-api-0-season`, `beat-api-0-episode`, `beat-api-0-type`, `beat-api-1-call`, `beat-api-1-id`, `beat-api-1-progress`, `beat-api-1-season`, `beat-api-1-episode`, `beat-api-1-type`, `beat-replace`, `beat-interval`, `beat-validation`, `beat-id`, `beat-playing`, `beat-duration`, `beat-capture`, `beat-percent`, `beat-threshold`, `beat-upper`, `beat-stop-action`, `beat-end`, `beat-precision`, `beat-stop-log`, `beat-start-action`, `beat-start-log`, `beat-enabled`, `beat-ready`, `beat-start-precision`, `beat-stop-return` |
+| `_stopTraktHeartbeat` | `stop-cancel`, `stop-null` |
+| `_traktScrobbleSeek` | `seek-api-0-call`, `seek-api-0-id`, `seek-api-0-progress`, `seek-api-0-season`, `seek-api-0-episode`, `seek-api-0-type`, `seek-api-1-call`, `seek-api-1-id`, `seek-api-1-progress`, `seek-api-1-season`, `seek-api-1-episode`, `seek-api-1-type`, `seek-deferred`, `seek-handover`, `seek-validation`, `seek-enabled`, `seek-id`, `seek-playing`, `seek-duration`, `seek-capture`, `seek-position`, `seek-scale`, `seek-low`, `seek-high`, `seek-threshold`, `seek-upper`, `seek-stop-action`, `seek-stop-beat`, `seek-start-action`, `seek-start-beat`, `seek-ready`, `seek-denominator` |
+| `_currentEpisodeTraktPercent` | `snapshot-policy-content`, `snapshot-policy-mask`, `snapshot-identity`, `snapshot-bind`, `snapshot-cache`, `snapshot-guard`, `snapshot-late-guard`, `snapshot-assign`, `snapshot-series`, `snapshot-index`, `snapshot-episode`, `snapshot-season`, `snapshot-fallback`, `snapshot-fallback-season`, `snapshot-fallback-episode`, `snapshot-key`, `snapshot-guide`, `snapshot-id-null`, `snapshot-playlist-null`, `snapshot-bounds`, `snapshot-negative`, `snapshot-ep-null`, `snapshot-coordinates`, `snapshot-loop-break`, `snapshot-add-mounted`, `snapshot-add-generation`, `snapshot-read`, `snapshot-early-index` |
+
+| Retained enclosing declaration | Individually classified occurrence (original line) |
+|---|---|
+| `initState` | `ref-01` (1683) |
+| `_simklScrobble` | `ref-02` (2036) |
+| `_startSimklHeartbeat` | `ref-03` (2089) |
+| `_resumeTrackingAfterValidationGate` | `ref-04` (2295), `ref-05` (2294), `ref-06` (2295) |
+| `_bindEpisodeTrackerProgressIdentity` | `ref-07` (2321) |
+| `_bindPlayerInstanceSubscriptions` | `ref-08` (3651), `ref-09` (3658), `ref-10` (3650), `ref-11` (3659), `ref-12` (3652), `ref-13` (3660) |
+| `_onPlaybackEnded` | `ref-14` (4988), `ref-15` (4987) |
+| `_loadPlaylistIndexAttempt` | `ref-16` (10393), `ref-17` (10392) |
+| `_onPipAction` | `ref-18` (11509) |
+| `dispose` | `ref-19` (11703), `ref-20` (11701) |
+| `_maybeRestoreResume` | `ref-21` (11976), `ref-22` (11977), `ref-23` (12004), `ref-24` (12103) |
+| `_tvScrubCommit` | `ref-25` (12786) |
+| `_buildTvControls` | `ref-26` (12855) |
+| `_handleDoubleTap` | `ref-27` (13343) |
+| `_onPanEnd` | `ref-28` (13441) |
+| `build` | `ref-29` (14425), `ref-30` (14439), `ref-31` (14977) |
+| `_VpSkipSegmentHostAdapter` | `ref-32` (17497) |
+
+| Case | Original caller / asserted behavior | Assertion-failing original witness |
+|---|---|---|
+| C01 | Trakt missing coordinates cannot resume from malformed null snapshot keys | `snapshot-coordinates` |
+| C02 | Trakt snapshot inner policy read rejects remote resume after outer policy has been captured | `final-snapshot-policy-mask` |
+| C03 | Trakt single-file snapshot uses effective episode coordinates and caches the first read | `snapshot-read` |
+| C04 | Trakt concurrent Simkl read changes shared identity and clears the outgoing Trakt cache | `final-ref-07` |
+| C05 | Trakt early policy await follows incoming profile credentials for the still-mounted outgoing route | `final-ref-01` |
+| C06 | Trakt dispose during policy preferences await starts no player heartbeat or send | `caller-init-mounted` |
+| C07 | Trakt guide mask smart is reloaded after held local resume and late episode metadata | `ref-22` |
+| C08 | Trakt guide mask local is reloaded after held local resume and late episode metadata | `snapshot-guide` |
+| C09 | Trakt guide mask custom is reloaded after held local resume and late episode metadata | `snapshot-policy-content` |
+| C10 | Trakt initialization flag gate prevents play seek heartbeat and dispose sends | `final-field-timer` |
+| C11 | Trakt initialization identity gate prevents play seek heartbeat and dispose sends | `final-init-id` |
+| C12 | Trakt initialization type gate prevents play seek heartbeat and dispose sends | `final-init-type` |
+| C13 | Trakt initialization target gate prevents play seek heartbeat and dispose sends | `final-init-target` |
+| C14 | Trakt initialization credential gate prevents play seek heartbeat and dispose sends | `final-init-auth` |
+| C15 | Trakt initialization custom gate prevents play seek heartbeat and dispose sends | `final-init-content` |
+| C16 | Trakt initialization coordinates gate prevents play seek heartbeat and dispose sends | `send-ready` |
+| C17 | Trakt held auth initialization playing completion samples live state | `init-heartbeat` |
+| C18 | Trakt held auth initialization paused completion samples live state | `final-ref-01` |
+| C19 | Trakt held auth initialization duration completion samples live state | `final-ref-01` |
+| C20 | Trakt held auth completion above eighty sends stop without arming heartbeat | `init-start-marker` |
+| C21 | Trakt held initialization dispose completion has no outgoing send | `final-ref-01` |
+| C22 | Trakt held initialization profile completion has no outgoing send | `final-ref-01` |
+| C23 | Trakt auth storage failure escapes initialization without enabling sends | `final-ref-01` |
+| C24 | Trakt seek samples target clamps progress and rejects paused or unknown duration | `final-seek-playing` |
+| C25 | Trakt progress samples held unlanded resume rather than the raw restart position | `final-ref-01` |
+| C26 | Trakt heartbeat live gates paused retain the original timer without sending or logging a checkpoint | `ref-10` |
+| C27 | Trakt heartbeat live gates duration retain the original timer without sending or logging a checkpoint | `ref-10` |
+| C28 | Trakt heartbeat live gates coordinates retain the original timer without sending or logging a checkpoint | `ref-10` |
+| C29 | Trakt heartbeat live gates identity retain the original timer without sending or logging a checkpoint | `ref-10` |
+| C30 | Trakt progress zero duration or position uses original clamped percent | `final-ref-01` |
+| C31 | Trakt progress negative duration or position uses original clamped percent | `final-ref-01` |
+| C32 | Trakt progress beyond duration or position uses original clamped percent | `final-ref-01` |
+| C33 | Trakt progress subsecond duration or position uses original clamped percent | `progress-duration` |
+| C34 | Trakt live widget identity and media type drive pause and heartbeat without reinitializing State | `beat-id` |
+| C35 | Trakt unresolved episode creates no latent seek or start heartbeat when coordinates arrive later | `send-ready` |
+| C36 | Trakt shared percent through Simkl pause retains current progress | `final-ref-02` |
+| C37 | Trakt shared percent through Simkl heartbeat retains current progress | `final-ref-03` |
+| C38 | Trakt seek rearms heartbeat and restores start dedup after a watched stop | `seek-start-action` |
+| C39 | Trakt protocol episode start pause stop bodies and duplicate edges | `init-enable-assignment` |
+| C40 | Trakt protocol movie start pause stop bodies and duplicate edges | `init-enable-assignment` |
+| C41 | Trakt pause transition at 80 percent keeps strict watched threshold | `ref-09` |
+| C42 | Trakt playing transition at 80 percent keeps strict watched threshold | `send-threshold` |
+| C43 | Trakt user seek at 80 percent bypasses dedup and owns heartbeat | `seek-denominator` |
+| C44 | Trakt pause transition at 81 percent keeps strict watched threshold | `ref-09` |
+| C45 | Trakt playing transition at 81 percent keeps strict watched threshold | `send-upper` |
+| C46 | Trakt user seek at 81 percent bypasses dedup and owns heartbeat | `seek-stop-action` |
+| C47 | Trakt heartbeat interval replaces previous timer bypasses dedup then stops above eighty | `beat-stop-return` |
+| C48 | Trakt pause cancels the heartbeat with exact final event | `ref-13` |
+| C49 | Trakt EOF cancels the heartbeat with exact final event | `ref-14` |
+| C50 | Trakt dispose cancels the heartbeat with exact final event | `ref-19` |
+| C51 | Trakt heartbeat restores start dedup after an implicit stop with a live timer | `ref-10` |
+| C52 | Trakt failed status send spends dedup before completion and seek retries | `ref-09` |
+| C53 | Trakt failed throw send spends dedup before completion and seek retries | `ref-09` |
+| C54 | Trakt failed held send spends dedup before completion and seek retries | `ref-09` |
+| C55 | Trakt seek target before landing is sent immediately without sampling the old position | `seek-position` |
+| C56 | Trakt disabled user key cancels deferred Stremio startup offset before duration arrives | `seek-deferred` |
+| C57 | Trakt disabled key releases held resume target before its early return | `seek-handover` |
+| C58 | Trakt validation-active key releases held resume target before its early return | `seek-handover` |
+| C59 | Trakt keyboard rewind seek sends the clamped target | `ref-29` |
+| C60 | Trakt double tap left seek reaches the original tracking caller | `ref-27` |
+| C61 | Trakt keyboard forward seek sends the clamped target | `ref-30` |
+| C62 | Trakt double tap right seek reaches the original tracking caller | `ref-27` |
+| C63 | Trakt horizontal pan completion sends the displayed seek target | `ref-28` |
+| C64 | Trakt TV scope seek forwards its target into the tracker | `ref-26` |
+| C65 | Trakt TV scrub confirm sends progress while the native pause is still suspended | `ref-25` |
+| C66 | Trakt playlist switch stops outgoing scrobble and timer before a held incoming open | `ref-16` |
+| C67 | Trakt snapshot missing episode rejects a changed public guide model during storage | `final-snapshot-ep-null` |
+| C68 | Trakt launch promise is spent once and later playlist items use their own snapshot | `snapshot-series` |
+| C69 | Trakt suspended snapshot episode reads current coordinates and preserves original identity guard | `snapshot-early-index` |
+| C70 | Trakt suspended snapshot show reads current coordinates and preserves original identity guard | `final-snapshot-bind` |
+| C71 | Trakt suspended snapshot A-B-A reads current coordinates and preserves original identity guard | `final-snapshot-add-generation` |
+| C72 | Trakt suspended snapshot profile reads current coordinates and preserves original identity guard | `snapshot-index` |
+| C73 | Trakt suspended snapshot dispose reads current coordinates and preserves original identity guard | `final-snapshot-add-mounted` |
+| C74 | Trakt startup validation release sends start and arms heartbeat after auth completed inside the gate | `ref-01` |
+| C75 | Trakt manual validation suppresses seek heartbeat and disposal scrobble despite live stream events | `send-validation` |
+| C76 | skip publishes clock before seek, queues tracking before haptic and preserves remote stop order | `ref-32` |
+| C77 | skip tracker seek order arms Trakt heartbeat before Simkl | `ref-01` |
+
+| Mutation point | Original statement/branch/literal → mutation | Result / case |
+|---|---|---|
+| `field-enabled` (_traktScrobbleEnabled:1483) | `false` → `true` | killed: C17, C18, C19 |
+| `field-budget` (_launchTraktPercentSpent:1486) | `false` → `true` | killed: C68 |
+| `field-cache` (_traktEpisodeProgress:1489) | `_traktEpisodeProgress;` → `_traktEpisodeProgress = {};` | equivalent: All cache reads follow the shared identity binder; the initially null identity guarantees the first binder resets all three caches before any read. Simkl/MDBList can bind first but perform the same reset. |
+| `field-action` (_traktLastScrobbleAction:1490) | `_traktLastScrobbleAction;` → `_traktLastScrobbleAction = 'start';` | killed: C39, C40 |
+| `field-timer` (_traktHeartbeatTimer:1491) | `Timer? _traktHeartbeatTimer;` → `late Timer? _traktHeartbeatTimer;` | killed: C10 |
+| `init-flag` (_initTraktScrobble:1740) | `if (!widget.traktScrobble) return;` → `// flag gate removed` | killed: C10 |
+| `init-id` (_initTraktScrobble:1741) | `if (widget.contentImdbId == null) return;` → `// identity gate removed` | killed: C11 |
+| `init-type` (_initTraktScrobble:1742) | `if (widget.contentType != 'movie' && widget.contentType != 'series') return;` → `// type gate removed` | killed: C12 |
+| `init-movie` (_initTraktScrobble:1742) | `widget.contentType != 'movie'` → `true` | killed: C40 |
+| `init-series` (_initTraktScrobble:1742) | `widget.contentType != 'series'` → `true` | killed: C39 |
+| `init-content` (_initTraktScrobble:1744) | `_effectiveContentImdbId` → `null` | killed: C15 |
+| `init-target` (_initTraktScrobble:1747) | `policy.scrobbles(TrackingSource.trakt)` → `true` | killed: C13 |
+| `init-auth` (_initTraktScrobble:1748) | `await TraktService.instance.isAuthenticated()` → `true` | killed: C14 |
+| `init-mounted` (_initTraktScrobble:1749) | `if (!mounted) return;` → `// mounted gate removed` | killed: C21 |
+| `init-playing` (_initTraktScrobble:1751) | `_traktScrobbleEnabled && _isPlaying && _duration > Duration.zero` → `_traktScrobbleEnabled && _duration > Duration.zero` | killed: C18 |
+| `init-duration` (_initTraktScrobble:1751) | `_traktScrobbleEnabled && _isPlaying && _duration > Duration.zero` → `_traktScrobbleEnabled && _isPlaying` | killed: C19 |
+| `init-start` (_initTraktScrobble:1752) | `_traktScrobble('start');` → `// initial start removed` | killed: C39, C40 |
+| `init-heartbeat` (_initTraktScrobble:1754) | `_startTraktHeartbeat();` → `// initial heartbeat removed` | killed: C17 |
+| `progress-zero` (_traktProgress:1784) | `if (_duration.inMilliseconds <= 0) return 0.0;` → `// zero-duration guard removed` | killed: C30 |
+| `progress-zero-value` (_traktProgress:1784) | `return 0.0;` → `return 1.0;` | killed: C30 |
+| `progress-duration` (_traktProgress:1784) | `_duration.inMilliseconds` → `_duration.inSeconds` | killed: C33 |
+| `progress-position` (_traktProgress:1785) | `_persistablePosition.inMilliseconds` → `_position.inMilliseconds` | killed: C25 |
+| `progress-units` (_traktProgress:1785) | `_persistablePosition.inMilliseconds` → `_persistablePosition.inSeconds` | killed: C39, C40 |
+| `progress-scale` (_traktProgress:1787) | `100)` → `10)` | killed: C39, C40 |
+| `progress-low` (_traktProgress:1788) | `0.0, 100.0` → `1.0, 100.0` | killed: C31 |
+| `progress-high` (_traktProgress:1788) | `0.0, 100.0` → `0.0, 90.0` | killed: C32 |
+| `send-validation` (_traktScrobble:1818) | `if (_validationGateActive) return;` → `// validation guard removed` | killed: C75 |
+| `send-enabled` (_traktScrobble:1819) | `!_traktScrobbleEnabled \|\| widget.contentImdbId == null` → `widget.contentImdbId == null` | killed: C10 |
+| `send-id` (_traktScrobble:1819) | `!_traktScrobbleEnabled \|\| widget.contentImdbId == null` → `!_traktScrobbleEnabled` | killed: C34 |
+| `send-capture` (_traktScrobble:1820) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C39, C40 |
+| `send-percent` (_traktScrobble:1821) | `final progress = _traktProgress();` → `final progress = 0.0;` | killed: C39, C40 |
+| `send-start-action` (_traktScrobble:1831) | `action == 'start'` → `action == 'ignored'` | killed: C45 |
+| `send-pause-action` (_traktScrobble:1831) | `action == 'pause'` → `action == 'ignored'` | killed: C44 |
+| `send-threshold` (_traktScrobble:1831) | `&& progress > 80` → `&& progress >= 80` | killed: C42 |
+| `send-upper` (_traktScrobble:1831) | `&& progress > 80` → `&& progress > 81` | killed: C45 |
+| `send-convert` (_traktScrobble:1832) | `action = 'stop';` → `action = 'start';` | killed: C45 |
+| `send-dedup` (_traktScrobble:1834) | `if (_traktLastScrobbleAction == action) return;` → `// dedup removed` | killed: C39, C40, C52, C53, C54 |
+| `send-remember` (_traktScrobble:1835) | `_traktLastScrobbleAction = action;` → `// last action removed` | killed: C39, C40, C52, C53, C54 |
+| `send-dispatch` (_traktScrobble:1836) | `switch (action)` → `switch ('stop')` | killed: C39, C40 |
+| `send-ready` (_traktScrobble:1823) | `if (!TraktService.isScrobbleReady( contentType: widget.contentType, season: se.season, …` → `// ready guard removed` | killed: C16, C35 |
+| `send-api-0-call` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `` | killed: C39, C40 |
+| `send-api-0-id` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( 'tt5999999', progress, season: se.season, episode:…` | killed: C39, C40 |
+| `send-api-0-progress` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, 0.0, season: se.season, episode: se.episod…` | killed: C39, C40 |
+| `send-api-0-season` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: 99, episode: se.episode,…` | killed: C39 |
+| `send-api-0-episode` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: 99, …` | killed: C39 |
+| `send-api-0-type` (_traktScrobble:1838) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` | killed: C39 |
+| `send-api-1-call` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `` | killed: C39, C40 |
+| `send-api-1-id` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobblePause( 'tt5999999', progress, season: se.season, episode:…` | killed: C39, C40 |
+| `send-api-1-progress` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobblePause( imdbId, 0.0, season: se.season, episode: se.episod…` | killed: C39, C40 |
+| `send-api-1-season` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobblePause( imdbId, progress, season: 99, episode: se.episode,…` | killed: C39 |
+| `send-api-1-episode` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: 99, …` | killed: C39 |
+| `send-api-1-type` (_traktScrobble:1847) | `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobblePause( imdbId, progress, season: se.season, episode: se.e…` | killed: C39 |
+| `send-api-2-call` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `` | killed: C39, C40 |
+| `send-api-2-id` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( 'tt5999999', progress, season: se.season, episode: …` | killed: C39, C40 |
+| `send-api-2-progress` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, 0.0, season: se.season, episode: se.episode…` | killed: C39, C40 |
+| `send-api-2-season` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: 99, episode: se.episode, …` | killed: C39 |
+| `send-api-2-episode` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: 99, c…` | killed: C39 |
+| `send-api-2-type` (_traktScrobble:1856) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` | killed: C39 |
+| `send-break-0` (_traktScrobble:1845) | `break;` → `// implicit break` | equivalent: Dart switch statements implicitly terminate non-empty cases; no fallthrough. Replay required. |
+| `send-break-1` (_traktScrobble:1854) | `break;` → `// implicit break` | equivalent: Dart switch statements implicitly terminate non-empty cases; no fallthrough. Replay required. |
+| `send-break-2` (_traktScrobble:1863) | `break;` → `// implicit break` | equivalent: Dart switch statements implicitly terminate non-empty cases; no fallthrough. Replay required. |
+| `beat-api-0-call` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `` | killed: C47 |
+| `beat-api-0-id` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( 'tt5999999', progress, season: se.season, episode: …` | killed: C47 |
+| `beat-api-0-progress` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, 0.0, season: se.season, episode: se.episode…` | killed: C47 |
+| `beat-api-0-season` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: 99, episode: se.episode, …` | killed: C47 |
+| `beat-api-0-episode` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: 99, c…` | killed: C47 |
+| `beat-api-0-type` (_startTraktHeartbeat:1890) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` | killed: C47 |
+| `beat-api-1-call` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `` | killed: C47 |
+| `beat-api-1-id` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( 'tt5999999', progress, season: se.season, episode:…` | killed: C47 |
+| `beat-api-1-progress` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, 0.0, season: se.season, episode: se.episod…` | killed: C47 |
+| `beat-api-1-season` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: 99, episode: se.episode,…` | killed: C47 |
+| `beat-api-1-episode` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: 99, …` | killed: C47 |
+| `beat-api-1-type` (_startTraktHeartbeat:1905) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` | killed: C47 |
+| `seek-api-0-call` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `` | killed: C46 |
+| `seek-api-0-id` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( 'tt5999999', progress, season: se.season, episode: …` | killed: C46 |
+| `seek-api-0-progress` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, 0.0, season: se.season, episode: se.episode…` | killed: C46 |
+| `seek-api-0-season` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: 99, episode: se.episode, …` | killed: C46 |
+| `seek-api-0-episode` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: 99, c…` | killed: C46 |
+| `seek-api-0-type` (_traktScrobbleSeek:1968) | `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` → `TraktService.instance.scrobbleStop( imdbId, progress, season: se.season, episode: se.ep…` | killed: C46 |
+| `seek-api-1-call` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `` | killed: C43 |
+| `seek-api-1-id` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( 'tt5999999', progress, season: se.season, episode:…` | killed: C43 |
+| `seek-api-1-progress` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, 0.0, season: se.season, episode: se.episod…` | killed: C43 |
+| `seek-api-1-season` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: 99, episode: se.episode,…` | killed: C43 |
+| `seek-api-1-episode` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: 99, …` | killed: C43 |
+| `seek-api-1-type` (_traktScrobbleSeek:1978) | `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` → `TraktService.instance.scrobbleStart( imdbId, progress, season: se.season, episode: se.e…` | killed: C43 |
+| `beat-replace` (_startTraktHeartbeat:1869) | `_traktHeartbeatTimer?.cancel();` → `// replacement cancel removed` | killed: C47 |
+| `beat-interval` (_startTraktHeartbeat:1870) | `minutes: 2` → `minutes: 1` | killed: C47 |
+| `beat-validation` (_startTraktHeartbeat:1871) | `_validationGateActive \|\|` → `false \|\|` | killed: C75 |
+| `beat-id` (_startTraktHeartbeat:1873) | `widget.contentImdbId == null` → `false` | killed: C34 |
+| `beat-playing` (_startTraktHeartbeat:1876) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `_duration.inMilliseconds <= 0` | killed: C26 |
+| `beat-duration` (_startTraktHeartbeat:1876) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `!_isPlaying` | killed: C27 |
+| `beat-capture` (_startTraktHeartbeat:1877) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C47 |
+| `beat-percent` (_startTraktHeartbeat:1878) | `final progress = _traktProgress();` → `final progress = 0.0;` | killed: C47 |
+| `beat-threshold` (_startTraktHeartbeat:1888) | `progress > 80` → `progress >= 80` | killed: C47 |
+| `beat-upper` (_startTraktHeartbeat:1888) | `progress > 80` → `progress > 81` | killed: C47 |
+| `beat-stop-action` (_startTraktHeartbeat:1889) | `_traktLastScrobbleAction = 'stop';` → `// stop marker removed` | killed: C47 |
+| `beat-end` (_startTraktHeartbeat:1900) | `_stopTraktHeartbeat();` → `// end heartbeat removed` | killed: C47 |
+| `beat-precision` (_startTraktHeartbeat:1898) | `toStringAsFixed(1)` → `toStringAsFixed(2)` | killed: C47 |
+| `beat-stop-log` (_startTraktHeartbeat:1898) | `Trakt: Heartbeat stop at` → `Trakt: Changed stop at` | killed: C47 |
+| `beat-start-action` (_startTraktHeartbeat:1904) | `_traktLastScrobbleAction = 'start';` → `// start marker removed` | killed: C51 |
+| `beat-start-log` (_startTraktHeartbeat:1913) | `Trakt: Heartbeat scrobble at` → `Trakt: Changed start at` | killed: C47 |
+| `beat-enabled` (_startTraktHeartbeat:1872) | `!_traktScrobbleEnabled \|\|` → `false \|\|` | equivalent: Only enabled start/seek/init paths install a heartbeat; enabled is assigned once during init, no later false assignment. Replay across all callers. |
+| `beat-ready` (_startTraktHeartbeat:1880) | `if (!TraktService.isScrobbleReady( contentType: widget.contentType, season: se.season, …` → `// ready guard removed` | killed: C28 |
+| `stop-cancel` (_stopTraktHeartbeat:1919) | `_traktHeartbeatTimer?.cancel();` → `// timer cancel removed` | killed: C50 |
+| `stop-null` (_stopTraktHeartbeat:1920) | `_traktHeartbeatTimer = null;` → `// canceled pointer retained` | equivalent: All readers only cancel/overwrite this pointer; repeated cancellation is idempotent, a canceled timer never fires. Replay required. |
+| `seek-deferred` (_traktScrobbleSeek:1946) | `_stremioTvStartupSeek.cancel();` → `// deferred cancel removed` | killed: C56 |
+| `seek-handover` (_traktScrobbleSeek:1947) | `_resumeWriteGuard.noteUserSeek();` → `// handover removed` | killed: C57, C58 |
+| `seek-validation` (_traktScrobbleSeek:1948) | `if (_validationGateActive) return;` → `// validation guard removed` | killed: C75 |
+| `seek-enabled` (_traktScrobbleSeek:1949) | `!_traktScrobbleEnabled \|\| widget.contentImdbId == null` → `widget.contentImdbId == null` | killed: C10 |
+| `seek-id` (_traktScrobbleSeek:1949) | `!_traktScrobbleEnabled \|\| widget.contentImdbId == null` → `!_traktScrobbleEnabled` | killed: C34 |
+| `seek-playing` (_traktScrobbleSeek:1950) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `_duration.inMilliseconds <= 0` | killed: C24 |
+| `seek-duration` (_traktScrobbleSeek:1950) | `!_isPlaying \|\| _duration.inMilliseconds <= 0` → `!_isPlaying` | killed: C24 |
+| `seek-capture` (_traktScrobbleSeek:1951) | `final imdbId = widget.contentImdbId!;` → `final imdbId = 'tt5999999';` | killed: C43, C46 |
+| `seek-position` (_traktScrobbleSeek:1953) | `seekTarget.inMilliseconds` → `_position.inMilliseconds` | killed: C55 |
+| `seek-scale` (_traktScrobbleSeek:1953) | `100).clamp` → `10).clamp` | killed: C43, C46 |
+| `seek-low` (_traktScrobbleSeek:1954) | `0.0, 100.0` → `1.0, 100.0` | killed: C24 |
+| `seek-high` (_traktScrobbleSeek:1954) | `0.0, 100.0` → `0.0, 90.0` | killed: C24 |
+| `seek-threshold` (_traktScrobbleSeek:1966) | `progress > 80` → `progress >= 80` | killed: C43 |
+| `seek-upper` (_traktScrobbleSeek:1966) | `progress > 80` → `progress > 81` | killed: C46 |
+| `seek-stop-action` (_traktScrobbleSeek:1967) | `_traktLastScrobbleAction = 'stop';` → `// stop marker removed` | killed: C46 |
+| `seek-stop-beat` (_traktScrobbleSeek:1975) | `_stopTraktHeartbeat();` → `// stop heartbeat removed` | killed: C46 |
+| `seek-start-action` (_traktScrobbleSeek:1977) | `_traktLastScrobbleAction = 'start';` → `// start marker removed` | killed: C38 |
+| `seek-start-beat` (_traktScrobbleSeek:1985) | `_startTraktHeartbeat();` → `// start heartbeat removed` | killed: C38 |
+| `seek-ready` (_traktScrobbleSeek:1958) | `if (!TraktService.isScrobbleReady( contentType: widget.contentType, season: se.season, …` → `// ready guard removed` | killed: C35 |
+| `snapshot-policy-content` (_currentEpisodeTraktPercent:2328) | `_effectiveContentImdbId` → `null` | killed: C09 |
+| `snapshot-policy-mask` (_currentEpisodeTraktPercent:2330) | `if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;` → `// mask removed` | killed: C02 |
+| `snapshot-identity` (_currentEpisodeTraktPercent:2331) | `final imdbId = _currentSeriesImdbId;` → `final imdbId = 'tt5999999';` | killed: C03 |
+| `snapshot-bind` (_currentEpisodeTraktPercent:2333) | `_bindEpisodeTrackerProgressIdentity(imdbId);` → `// bind removed` | killed: C70 |
+| `snapshot-cache` (_currentEpisodeTraktPercent:2338) | `if (_traktEpisodeProgress == null)` → `if (true)` | killed: C68 |
+| `snapshot-guard` (_currentEpisodeTraktPercent:2343) | `if (_episodeTrackerProgressImdbId != imdbId) return null;` → `// stale guard removed` | killed: C70 |
+| `snapshot-late-guard` (_currentEpisodeTraktPercent:2343) | `_episodeTrackerProgressImdbId != imdbId` → `_episodeTrackerProgressImdbId != _currentSeriesImdbId` | killed: C70 |
+| `snapshot-assign` (_currentEpisodeTraktPercent:2344) | `_traktEpisodeProgress = loaded;` → `_traktEpisodeProgress = {};` | killed: C68 |
+| `snapshot-series` (_currentEpisodeTraktPercent:2350) | `seriesPlaylist != null && seriesPlaylist.isSeries` → `seriesPlaylist != null && !seriesPlaylist.isSeries` | killed: C68 |
+| `snapshot-index` (_currentEpisodeTraktPercent:2361) | `e.originalIndex == _currentIndex` → `e.originalIndex == 0` | killed: C68, C72 |
+| `snapshot-episode` (_currentEpisodeTraktPercent:2368) | `episode = ep.seriesInfo.episode;` → `episode = 99;` | killed: C68 |
+| `snapshot-season` (_currentEpisodeTraktPercent:2367) | `season = ep.seriesInfo.season;` → `season = 99;` | killed: C68 |
+| `snapshot-fallback` (_currentEpisodeTraktPercent:2369) | `_effectiveContentType == 'series'` → `_effectiveContentType == 'movie'` | killed: C03 |
+| `snapshot-fallback-season` (_currentEpisodeTraktPercent:2373) | `season = _effectiveContentSeason;` → `season = 99;` | killed: C03 |
+| `snapshot-fallback-episode` (_currentEpisodeTraktPercent:2374) | `episode = _effectiveContentEpisode;` → `episode = 99;` | killed: C03 |
+| `snapshot-key` (_currentEpisodeTraktPercent:2378) | `'${season}_$episode'` → `'${episode}_$season'` | killed: C03 |
+| `snapshot-guide` (_currentEpisodeTraktPercent:2379) | `return forGuide ? policy.guideProgressFrom(TrackingSource.trakt, percent) : percent;` → `return percent;` | killed: C08, C09 |
+| `snapshot-id-null` (_currentEpisodeTraktPercent:2332) | `if (imdbId == null) return null;` → `if (imdbId == null) throw StateError('synthetic missing identity');` | killed: C11 |
+| `snapshot-playlist-null` (_currentEpisodeTraktPercent:2352) | `playlist == null \|\|` → `false \|\|` | equivalent: SeriesPlaylist is created only from the non-null active playlist; synthetic guides use a separate field. All assignment sites retained. |
+| `snapshot-bounds` (_currentEpisodeTraktPercent:2354) | `_currentIndex >= playlist.length` → `false` | equivalent: Series model creation uses only valid original playlist indices; an out-of-range current index cannot match a row and the later ep==null guard returns null. A replacement can temporarily retain the outgoing index, but invalidates/rebuilds the model first. No asynchronous gap inside the scan. |
+| `snapshot-negative` (_currentEpisodeTraktPercent:2353) | `_currentIndex < 0 \|\|` → `false \|\|` | equivalent: Launch indices are clamped and navigation validates indices; production-created active series rows have non-negative originalIndex. Any negative value would fail the row scan and the later ep==null guard. Synthetic absent-guide rows are held separately. |
+| `snapshot-ep-null` (_currentEpisodeTraktPercent:2366) | `if (ep == null) return null;` → `ep ??= seriesPlaylist.allEpisodes.first;` | killed: C67 |
+| `snapshot-coordinates` (_currentEpisodeTraktPercent:2376) | `if (season == null \|\| episode == null) return null;` → `// missing coordinate guard removed` | killed: C01 |
+| `snapshot-loop-break` (_currentEpisodeTraktPercent:2363) | `break;` → `// continue scanning` | equivalent: Original fromPlaylistEntries assigns distinct immutable originalIndex values from unique validIndices. TVMaze metadata changes seriesInfo, not indices; no original caller appends a duplicate active row. Continuing the synchronous scan cannot replace the matching row. |
+| `init-swallow-storage` (_initTraktScrobble:1743) | `final policy = (await TrackingSourcePolicy.load()).forContent( _effectiveContentImdbId,…` → `try { final policy = (await TrackingSourcePolicy.load()).forContent( _effectiveContentI…` | killed: C23 |
+| `snapshot-add-mounted` (_currentEpisodeTraktPercent:2344) | `_traktEpisodeProgress = loaded;` → `if (!mounted) return null; _traktEpisodeProgress = loaded;` | killed: C73 |
+| `snapshot-add-generation` (_currentEpisodeTraktPercent:2331) | `final imdbId = _currentSeriesImdbId;` → `final capturedNavigation = _episodeNavigationGeneration; final imdbId = _currentSeriesI…` | killed: C71 |
+| `beat-start-precision` (_startTraktHeartbeat:1913) | `toStringAsFixed(1)` → `toStringAsFixed(2)` | killed: C47 |
+| `init-enable-assignment` (_initTraktScrobble:1747) | `policy.scrobbles(TrackingSource.trakt) &&` → `false &&` | killed: C39, C40 |
+| `init-start-marker` (_initTraktScrobble:1753) | `if (_traktLastScrobbleAction == 'start')` → `if (true)` | killed: C20 |
+| `progress-denominator` (_traktProgress:1786) | `_duration.inMilliseconds` → `_duration.inSeconds` | killed: C33 |
+| `seek-denominator` (_traktScrobbleSeek:1953) | `_duration.inMilliseconds * 100` → `_duration.inSeconds * 100` | killed: C43, C46 |
+| `beat-stop-return` (_startTraktHeartbeat:1900) | `_stopTraktHeartbeat(); return;` → `_stopTraktHeartbeat();` | killed: C47 |
+| `snapshot-read` (_currentEpisodeTraktPercent:2378) | `_traktEpisodeProgress!['${season}_$episode']` → `0.0` | killed: C03 |
+| `snapshot-early-index` (_currentEpisodeTraktPercent:2331) | `final imdbId = _currentSeriesImdbId;` → `final capturedIndex = _currentIndex; final imdbId = _currentSeriesImdbId;` | killed: C69 |
+| `caller-init-mounted` (_initializePlayer:3129) | `if (!mounted) return;` → `// caller mounted gate removed` | killed: C06 |
+| `ref-01` (initState:1683) | `_initTraktScrobble();` → `` | killed: C05, C17, C18, C19, C21, C22, C23, C25, C26, C27, C28, C29, C30, C31, C32, C35, C39, C40, C41, C42, C43, C44, C45, C46, C47, C48, C49, C50, C51, C52, C53, C54, C55, C58, C68, C74, C75, C77 |
+| `ref-02` (_simklScrobble:2036) | `_traktProgress()` → `0.0` | killed: C36 |
+| `ref-03` (_startSimklHeartbeat:2089) | `_traktProgress()` → `0.0` | killed: C37 |
+| `ref-04` (_resumeTrackingAfterValidationGate:2295) | `_traktLastScrobbleAction` → `'stop'` | killed: C74 |
+| `ref-05` (_resumeTrackingAfterValidationGate:2294) | `_traktScrobble('start');` → `` | killed: C58, C74 |
+| `ref-06` (_resumeTrackingAfterValidationGate:2295) | `_startTraktHeartbeat();` → `` | killed: C74 |
+| `ref-07` (_bindEpisodeTrackerProgressIdentity:2321) | `_traktEpisodeProgress = null;` → `` | killed: C04 |
+| `ref-08` (_bindPlayerInstanceSubscriptions:3651) | `_traktLastScrobbleAction` → `'stop'` | killed: C47 |
+| `ref-09` (_bindPlayerInstanceSubscriptions:3658) | `_traktLastScrobbleAction` → `'stop'` | killed: C39, C40, C41, C42, C44, C45, C52, C53, C54 |
+| `ref-10` (_bindPlayerInstanceSubscriptions:3650) | `_traktScrobble('start');` → `` | killed: C26, C27, C28, C29, C42, C45, C51 |
+| `ref-11` (_bindPlayerInstanceSubscriptions:3659) | `_traktScrobble('pause');` → `` | killed: C39, C40, C41, C42, C44, C45, C52, C53, C54 |
+| `ref-12` (_bindPlayerInstanceSubscriptions:3652) | `_startTraktHeartbeat();` → `` | killed: C47 |
+| `ref-13` (_bindPlayerInstanceSubscriptions:3660) | `_stopTraktHeartbeat();` → `` | killed: C48 |
+| `ref-14` (_onPlaybackEnded:4988) | `_traktScrobble('stop');` → `` | killed: C49 |
+| `ref-15` (_onPlaybackEnded:4987) | `_stopTraktHeartbeat();` → `` | killed: C49 |
+| `ref-16` (_loadPlaylistIndexAttempt:10393) | `_traktScrobble('stop');` → `` | killed: C66 |
+| `ref-17` (_loadPlaylistIndexAttempt:10392) | `_stopTraktHeartbeat();` → `` | killed: C66 |
+| `ref-18` (_onPipAction:11509) | `_traktScrobbleSeek(position);` → `` | device_pending: Only installed behind sealed Android/iOS platform predicates; no platform seam. Human PiP seek checklist. |
+| `ref-19` (dispose:11703) | `_traktScrobble('stop');` → `` | killed: C39, C40, C50 |
+| `ref-20` (dispose:11701) | `_stopTraktHeartbeat();` → `` | killed: C50 |
+| `ref-21` (_maybeRestoreResume:11976) | `_launchTraktPercentSpent` → `true` | killed: C68 |
+| `ref-22` (_maybeRestoreResume:11977) | `_launchTraktPercentSpent = true;` → `` | killed: C07, C08, C09, C68 |
+| `ref-23` (_maybeRestoreResume:12004) | `_currentEpisodeTraktPercent();` → `Future<double?>.value(null);` | killed: C68 |
+| `ref-24` (_maybeRestoreResume:12103) | `_currentEpisodeTraktPercent(forGuide: true);` → `Future<double?>.value(null);` | killed: C07 |
+| `ref-25` (_tvScrubCommit:12786) | `_traktScrobbleSeek(target);` → `` | killed: C65 |
+| `ref-26` (_buildTvControls:12855) | `_traktScrobbleSeek(target);` → `` | killed: C64 |
+| `ref-27` (_handleDoubleTap:13343) | `_traktScrobbleSeek(clamped);` → `` | killed: C60, C62 |
+| `ref-28` (_onPanEnd:13441) | `_traktScrobbleSeek(target);` → `` | killed: C63 |
+| `ref-29` (build:14425) | `_traktScrobbleSeek(newPos);` → `` | killed: C59 |
+| `ref-30` (build:14439) | `_traktScrobbleSeek(newPos);` → `` | killed: C61 |
+| `ref-31` (build:14977) | `_traktScrobbleSeek(settledPosition);` → `` | killed: C43, C46, C55 |
+| `ref-32` (_VpSkipSegmentHostAdapter:17497) | `_traktScrobbleSeek` → `_simklScrobbleSeek` | killed: C76, C77 |
+
+**Early initializer audit.** Enabled stays false during held policy/auth:
+early playing and user seek cannot send or arm a heartbeat. Launch budget
+starts unspent and the first original resume caller consumes it once; later
+episodes use their own stored percentage. Last action starts null, allowing
+the first authenticated start. Heartbeat starts null and can be cancelled
+during disabled/early disposal. All four are non-equivalent and have literal
+or uninitialized-field assertion witnesses. The cache initializer null→empty
+is equivalent: the shared identity begins null, every reader invokes the
+binder before inspecting the cache, and its first different non-null identity
+clears all three caches. A Simkl/MDBList reader binding first also clears it.
+This is a caller-order proof, not reliance on initialization-waiting fixtures.
+
+**Other equivalents / reachability.** Dart switch cases terminate implicitly,
+so deleting the three explicit breaks cannot cause fallthrough. Only enabled
+init/play/seek paths install the heartbeat, and enabled is assigned once with
+no subsequent false write. A cancelled timer pointer is only cancelled again
+or overwritten; retained nulling cannot change a later callback. SeriesPlaylist
+is derived from a non-null active playlist; row indices come from valid entry
+indices, so an invalid current index also returns null through the later
+missing-row guard. Temporary playlist replacement invalidates/rebuilds its
+series cache before readers inspect it. Non-negative original indices are
+immutable and unique (generated absent guide rows use -1), so scanning after
+the first match cannot choose another valid current row. These candidates
+have completed surviving original replays; `equivalence-audit.json` records
+the original construction/assignment anchors and invariant reasons.
+Removing coordinate rejection is **not** equivalent: public snapshot storage
+accepts a malformed `null_null` key, now pinned through single-file resume.
+
+**Preserved asynchronous behavior / Follow-ups.** Late auth samples the live
+playing/duration/position state; >80 sends stop without a heartbeat. Init has
+no catch: cipher/storage errors escape, and a profile switch during cipher
+authorization emits the original ResourceAuthorizationException. A profile
+switch before the pending policy read resolves can use incoming credentials
+for the still-mounted outgoing route. No profile fix is included.
+Snapshot readers capture show identity before storage but read episode/index
+after it: same-show changes use the current episode, different-show results
+are rejected by the shared binder, A→B→A accepts old A over newer A, and a
+concurrent Simkl read resets the shared caches. Original ready playlist callers
+can attempt an outgoing resume seek after profile change/disposal; these gaps
+are explicitly retained, not fixed. The profile snapshot case holds the
+independent browser refresh HTTP request so its upstream error does not mask
+the percentage-reader assertion. Exploratory upstream service errors remain
+archived and uncredited. Ordinary protocol/seek cases explicitly assert no
+uncaught or framework error and drain disposal timers.
+
+**Device-pending / subsequent work.** PiP seek occurrence `ref-18` is installed
+behind sealed Android/iOS platform predicates; no new platform seam. End-of-series
+manual Trakt movie/series start, pause, seek, stop, >80 watched and cross-device
+resume remain pending. There are no dormant moved Trakt methods. Step 1 will
+register the ten new Trakt test files, enable P5 current/analyzer CI, and
+implement the validated source-guard retarget. Phase 6 will move Simkl/MDBList.
+
+**Evidence routing deviation.** One exploratory retry omitted the explicit
+evidence-root override and created nine fixture directories in the old P2
+default. All nine were relocated into `p5/step0/retry-evidence-correction/`;
+`retry-evidence-correction.json` records the exact paths. That run is uncredited.
+Accepted controls/mutations/baseline explicitly set the P5 root. No production
+move, application change, new seam, dependency change, allowlisting, device
+command, push, merge or branch switch.
+
+## Phase 5 Step 0b — independent sample and transient-duration closure (2026-10-12)
+
+Claude sampled original `1347a5ad8`: **17/18 valid killed (94%)**.
+Evidence: `p5/claude-sample/p5-claude-muts.json`, per-mutation logs and
+`results.json`. The one survivor feeds Trakt through the retained State-owned
+`_persistablePosition`; it is a real coverage gap, now closed without an
+application change.
+
+| Independent mutation | Original sample result | Assertion case(s) / closure |
+|---|---|---|
+| `h1` | killed | Trakt initialization type gate prevents play seek heartbeat and dispose sends |
+| `h2` | killed | Trakt initialization target gate prevents play seek heartbeat and dispose sends; Trakt initialization custom gate prevents play seek heartbeat and dispose sends |
+| `h3` | killed | Trakt held auth initialization paused completion samples live state |
+| `h4` | killed | Trakt unresolved episode creates no latent seek or start heartbeat when coordinates arrive later; Trakt held auth completion above eighty sends stop without arming heartbeat |
+| `h5` | killed | Trakt progress samples held unlanded resume rather than the raw restart position |
+| `h6` | killed | Trakt pause transition at 80 percent keeps strict watched threshold; Trakt playing transition at 80 percent keeps strict watched threshold; Trakt heartbeat interval replaces previous timer bypasses dedup then stops above eighty |
+| `h7` | killed | Trakt progress beyond duration or position uses original clamped percent; Trakt pause transition at 81 percent keeps strict watched threshold |
+| `h8` | killed | Trakt seek rearms heartbeat and restores start dedup after a watched stop; Trakt protocol episode start pause stop bodies and duplicate edges; Trakt protocol movie start pause stop bodies and duplicate edges; Trakt TV scrub confirm sends progress while the native pause is still suspended |
+| `h9` | killed | skip tracker seek order arms Trakt heartbeat before Simkl; Trakt seek rearms heartbeat and restores start dedup after a watched stop; Trakt heartbeat live gates paused retain the original timer without sending or logging a checkpoint; Trakt heartbeat live gates duration retain the original timer without sending or logging a checkpoint |
+| `h10` | killed | Trakt heartbeat live gates paused retain the original timer without sending or logging a checkpoint |
+| `h11` | killed | Trakt heartbeat interval replaces previous timer bypasses dedup then stops above eighty |
+| `h12` | killed | Trakt heartbeat restores start dedup after an implicit stop with a live timer |
+| `h13` | killed | Trakt validation-active key releases held resume target before its early return |
+| `h14` | killed | Trakt disabled key releases held resume target before its early return; Trakt validation-active key releases held resume target before its early return |
+| `h15` | killed | Trakt seek target before landing is sent immediately without sampling the old position; Trakt keyboard rewind seek sends the clamped target; Trakt double tap left seek reaches the original tracking caller; Trakt keyboard forward seek sends the clamped target |
+| `h16` | killed | skip tracker seek order arms Trakt heartbeat before Simkl; Trakt seek rearms heartbeat and restores start dedup after a watched stop |
+| `h17` | survived | C78/C79 now assertion-kill h17 on original application |
+| `h18` | killed | Trakt progress samples held unlanded resume rather than the raw restart position; Trakt protocol episode start pause stop bodies and duplicate edges; Trakt protocol movie start pause stop bodies and duplicate edges; Trakt pause transition at 80 percent keeps strict watched threshold |
+
+| Addendum case / retained dependency | Original behavior / assertion-failing witness |
+|---|---|
+| C78 — `_persistablePosition`, 750,000 ms duration | Requested resume 600,000 ms was held at the original 1,200,000 ms duration; seek fails and raw position remains 80 ms. At exactly 80% of the new duration, pause, play and heartbeat all report `80 / 750000 * 100`, with no automatic stop. Both h17 removal and `>=`→`>` assertion-fail this case. |
+| C79 — `_persistablePosition`, 600,000 ms duration | Held target becomes 100% of transient duration, but pause, play and heartbeat report `80 / 600000 * 100`; no watched/automatic-stop scrobble. h17 removal assertion-fails this case. |
+| `h17` closure | Delete held-target >=80% fallback: two assertion kills; original detached HEAD `1347a5ad8`, application source identical to `315028407`; restored after each run. |
+| `boundary-equality` | Change held-target >= to >: one assertion kill, exact-80 case. |
+
+The existing 191-point moved-declaration/retained-reference matrix remains
+180 killed / ten equivalent / one PiP device-pending. These two supplemental
+mutations cover a State-owned dependency and do not change those fates.
+New Trakt cases total 77 (plus two existing skip integration controls).
+The independent sample remains reported as 17/18; the separate h17 replay
+documents the closed survivor. Commands, control, assertion text, patches,
+test hashes and restoration: `p5/step0b/mutation-results.json`.
+
+Changed test format/analyzer pass. The new full-suite baseline runs on the
+clean addendum commit before any production move and compares by identity
+against Step 0, requiring exactly two passing additions and unchanged original
+outcomes. Baseline metadata/delta are in `p5/step0b/`. No bug fix, production
+move, seam, real network, dependency change or allowlisting.
+
+## Phase 5 Step 1 — frozen Trakt production creation (2026-10-12)
+
+Creation follows addendum `e0772d8d8`; application original `315028407`.
+The clean addendum baseline has 13,049 successes, unchanged 13 failures /
+28 load errors / 20 skips: exactly C78/C79 added, all previous outcomes identical
+(`p5/step0b/baseline*`, `suite-delta.json`). Commands/source hashes in
+`p5/step1/completion.json` and `materialization-application.json`.
+
+| Contract / check | Applied result |
+|---|---|
+| Ownership | Twelve Trakt declarations, `VpTraktScrobbler`, its frozen 21-member Host/adapter; eager State constructor appends `_trakt` after `_display`; current P5 checker zero differences |
+| Retained references | All 32 counted occurrences preserve statement order. Simkl's two progress calls forward to `_trakt.traktProgress()`. The entire skip adapter is P5 `patched` with one counted receiver rewrite, not an earlier-destination patch |
+| Shared lifecycle | Persistable-position code, season/episode resolution, both seek guard objects, shared identity and analytics timer stay State-owned; each dispose statement stays in its original position |
+| Byte/token proof | Both application paths equal Step-T formatted materialization exactly; archived optional-comma, idempotence, construction and diagnostic proof reused; all 13 earlier destinations protected |
+| Characterization / guards | 279 affected successes, no failure/skip: all video-player tests, auto-next routing, Android TV MDBList source guard and theme guards; new transient-duration cases pass on moved code |
+| Source retarget | Old binder→external-audio slice replaced by validated LIVE `_currentEpisodeTraktPercent`, `_currentEpisodeSimklPercent`, `_currentEpisodeMdblistPercent` declarations. Every body must capture the live show and reject mismatched binder identity; complete current-facade validation pins the computed Trakt adapter. Carried TVMaze identity, metadata readiness and rewatch assertions retained |
+| CI | P5 current/self/analyzer inventory; P1–P4 historical merges 31a347ad2/fc24e32ae/890df14d8/315028407; fetch-depth 0 and harness flag preserved; ten Trakt files registered; feature-wide format/analyze lists cover the new destination, retargeted root test added to format |
+| Themes / architecture | Manifest, rendered set and all three frozen source-guard lists extended; existing exact bridge, facade back-import prohibition, pure boundaries and 500-line cap apply; architecture and negatives pass |
+| Size | Facade 17,592→17,394, shrink-only dated baseline; controller/Host file 294 lines |
+| Analyzer | Root/CI scoped 84 with zero additions beyond frozen P5 probe maxima; P1–P4 mappings preserved. Exact retained Trakt import produces the probe's recorded unused-import warning; allowlist adds only that mechanical warning. Destination import-order info is likewise frozen |
+
+The first broad-root before/after check observed 51 removed diagnostics from
+unchanged test/vendor files and generated build paths; no outside additions.
+Every affected tracked source hash is unchanged. This analyzer scan variation
+is recorded in `step1/analyzer-delta.json`, without changing the scoped
+identity comparator, inventory maxima or production code. Initial strict
+outside-equality attempt remains archived in `checks-initial.json`.
+
+Clean-tree gate follows this creation commit: exact Step-0b suite identities,
+all Dart/Kotlin self-tests/current/history checks, root/CI analyzer comparators,
+format/size/architecture and both release builds. Additional source-guard
+negative witnesses validate wrong live reader/adapter rejection on a detached
+creation worktree. No bug fix, new seam or tracker redesign. Simkl/MDBList
+extraction stays Phase 6; original profile/race gaps and human Trakt/PiP
+checklist remain pending.
+
+## Phase 5 gate fixture scheduling closure (2026-10-12)
+
+First clean creation gate exposed one original load-sensitive profile snapshot
+observation: expected a 480 s resume seek, but the fixed drain ended before
+its public selection action completed. The identical assertion reproduced
+on original `1347a5ad8` (one failure, two passes in isolation); moved creation
+`edd4d9ca5` passed three isolation repeats. No production-body difference.
+
+The test now retains and awaits `SeriesBrowser.onEpisodeSelected` after the
+real storage barrier releases, for the five races and missing-row case. Every
+value, count, identity rejection, absence and error assertion stays. The entire
+eight-case file passes three times on original and moved code (24 + 24);
+six original mutation runs still assertion-kill `snapshot-index`,
+`snapshot-ep-null`, `snapshot-add-mounted`, `snapshot-add-generation`,
+`snapshot-early-index`, `snapshot-guard`. Original application restored.
+
+Evidence/NOTE: `p5/gate/profile-repeat/`, `profile-stabilization/` (commands,
+hashes, assertion logs, patches). First raw gate retained as `first-suite.*`.
+The recorded Step-0b expected identities remain unchanged; focused original
+replays revalidate the only modified fixture file. No failure allowlisting,
+no outcome acceptance and no application fix. The full clean-tree gate is
+rerun after this test/docs-only commit. Previously completed app/tool checks
+have identical inputs; their creation evidence is retained.
+
+## Phase 5 clean-tree gate (2026-10-12)
+
+Clean tested `09c43cb56`, production creation `edd4d9ca5`, baseline `e0772d8d8`;
+application original `315028407`. Evidence `p5/gate/completion.json` records
+all commands, sources, SDK/configuration, actual result identities and artifacts.
+
+| Gate | Result |
+|---|---|
+| Full suite | 13,049 success / 13 pre-existing failure / 28 pre-existing load error / 20 skip; **exact** Step-0b identities and outcomes, zero added/missing/changed; official suite comparator PASS |
+| Move/history/self-tests | 34 commands pass: all 26 existing Dart manifest self-tests, P5 universal real configurations/negatives, current and same-revision --at, P1–P4 --at merge revisions and complete Kotlin self-test |
+| Analyzer | Root/CI comparator: 84 scoped occurrences, zero beyond frozen P5 maxima; infos and multiplicities included, earlier mappings preserved; CI allowlist 47 recorded warnings, nothing new/stale |
+| Format / sizes / architecture | Exact CI format list, 2,998-file size check / 140 ratchets, architecture and negatives PASS; facade 17,394 / controller 294 |
+| Source guard | Detached creation control passes; changing moved reader to widget identity or computed adapter to widget identity assertion-fails the retargeted Android TV test; sources restored |
+| Release builds | Sequential nice-19 `flutter build apk --release --no-pub` and `flutter build macos --release --no-pub` PASS on clean creation; no install/run; APK/AOT hashes and build logs archived |
+| Constraints | Exact two frozen application paths, all 13 earlier destinations protected, pubspec unchanged, all commit trailers checked, isolated parser flags/copy-kernel deletion audit PASS, every original mutation restored |
+
+First gate failed one original timing flake; the identical assertion reproduced
+on original (1/3), moved isolation passed 3/3. Awaiting the real public selection
+Future preserves all assertions; original/moved full-file 3× controls and six
+original mutation witnesses pass. No failure allowlist. First run is archived
+as `first-suite.*`; this gate rerun has exact baseline outcomes.
+
+The broad-root diagnostic scan variation noted in Step 1 remains recorded:
+no outside additions in the accepted before/after scan, removals at unchanged
+files/generated paths. A later broad scan emitted each of 84 physical player
+diagnostics twice; that rejected attempt is archived. The canonical two-path
+root-config command used at Step T emits 84 once each and passes the unchanged
+comparator, as does CI. No deduplication or inventory expansion. No diagnostic allowance beyond the frozen P5 probe, and no test-failure allowlisting.
+Known failures/load errors are observed baseline identities, not count-only
+allowance. The independent sample stays 17/18 as observed, with h17 closed by
+separate original assertion witnesses C78/C79. All 77 new Trakt cases pass on
+moved code. Current ownership CI points to P5; Simkl/MDBList stay State-owned
+except the two declared shared-percent forwardings, pending Phase 6.
+
+Human end-of-series Trakt movie/episode start/pause/seek/stop, >80 watched,
+cross-device resume and disabled-seek handover checks remain pending, including
+sealed-platform PiP seek `ref-18`. Existing profile, A→B→A and post-disposal
+reader gaps stay in Follow-ups. No bug fix, new seam, real API network,
+allowlisting of failures, device command, push, merge or branch switch.
+Stop after this gate.

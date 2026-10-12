@@ -152,9 +152,14 @@ class _VideoPlayerMockClient extends MockClient {
 /// Uses existing profile/storage/platform boundaries. No extra State access,
 /// platform predicate or service injection is added to application code.
 class VideoPlayerEnvironment {
-  VideoPlayerEnvironment({this.native = false, this.committed = true});
+  VideoPlayerEnvironment({
+    this.native = false,
+    this.committed = true,
+    this.configurePlayer,
+  });
   final bool native;
   final bool committed;
+  final void Function(FakePlayer)? configurePlayer;
   final players = <FakePlayer>[];
   final controllers = <FakeVideoController>[];
   final creationOrder = <String>[];
@@ -264,6 +269,7 @@ class VideoPlayerEnvironment {
             player.publishFrame();
             controllers.last.publishFrame();
           };
+          configurePlayer?.call(player);
           return player;
         },
         createVideoController: (player, configuration) {

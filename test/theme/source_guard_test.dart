@@ -50,6 +50,7 @@ const List<String> kStillFrozenPaths = [
   'lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart',
   'lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart',
   'lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart',
+  'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
 ];
 
 /// Source-level tripwires for the containment rules a type system can't see.
@@ -234,6 +235,7 @@ void main() {
       'lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart',
       'lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart',
       'lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart',
+      'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
     ];
     final stray = kThemingPrepared
         .where((f) => !frozen.any(f.startsWith))
@@ -339,6 +341,7 @@ void main() {
         'lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart',
         'lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart',
         'lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart',
+        'lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart',
       ],
       reason:
           'only playback may sit outside the app palette by path. Changing '

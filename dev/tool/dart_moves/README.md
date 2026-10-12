@@ -200,3 +200,16 @@ adapter getters. CI selects P4 current/self and both analyzer arguments;
 P1/P2/P3 historical checks stay at their merge revisions. All five display
 behavior files and all three theme lists are registered. The validating reader
 chains P4 automatically; no moved legacy source anchor requires a retarget.
+
+
+Phase 5 Step 1 applies `vplayer_p5.json`: 12 Trakt declarations move into
+`VpTraktScrobbler` with a 21-member live Host and frozen adapter. State
+construction eagerly appends `_trakt` after `_display`. All 32 retained
+occurrences keep statement positions; the whole skip adapter is a patched
+facade declaration with one counted receiver rewrite. Simkl's two progress
+calls forward to Trakt, while all Simkl/MDBList ownership stays in State.
+The State-owned persistable-position and seek guards retain their code and
+lifetime. The percentage source guard reads each validated current declaration;
+TVMaze identity and rewatch assertions stay. CI selects P5 current/self/analyzer
+and P1–P4 historical merge revisions, with ten Trakt behavior files and all theme
+lists registered. No bug fixes or new seam.

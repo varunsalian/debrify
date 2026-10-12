@@ -454,7 +454,8 @@ starts.
 | 2 | Sleep timer (13826–13930) | 110 | low |
 | 3 | Skip segments (1797–1819, 1871–2040) | 250 | med |
 | 4 | Speed / aspect / orientation (13739–13825, 13931–14030 subset) | 230 | med |
-| 5 | Trackers: Trakt/Simkl/MDBList scrobble + heartbeats, analytics heartbeat, tracker percent helpers (2041–2750) | 700 | med |
+| 5 | Trakt scrobbling (2041–2750 Trakt subset) | 280 | med |
+| 5b→6 | Simkl + MDBList scrobbling — **inserted as phase 6**; every later phase below shifts by one (provisional numbering) | 350 | med |
 | 6 | Local completion (1820–1870, 10374–10478) | 160 | med |
 | 7 | PiP + background/wakelock (11635–11882) — PiP branches device-pending unless a reviewed predicate seam | 250 | high |
 | **M1** | integration gate: controls/tracker/lifecycle scenarios | | |
@@ -992,6 +993,140 @@ cinema zoom); speed menu changes rate and persists on resume;
 long-press 2× on phone; orientation toggle on phone; portrait-start seed
 and PiP restore of the lock on phone.
 
+## Phase 5 — Trakt scrobbling (trackers, part 1 of 2)
+
+Branch `refactor/vplayer-p5` off the phase-4 merge `315028407`. Evidence
+`refactor-evidence/vplayer/p5/`. Line numbers at `315028407`.
+
+**Split (design review P3):** the trackers run as two consecutive phases
+— **phase 5 Trakt**, **phase 6 Simkl + MDBList** — each with its own
+manifest, step 0, Claude sample, gate and review (two "phase 5"
+manifests would violate the history checker's uniqueness rule). Later
+phase numbers in the map shift by one; numbering stays provisional.
+
+### Moves → `presentation/legacy_video_player/vp_trakt_scrobbler.dart`
+
+`VpTraktScrobbler` + `VpTraktScrobblerHost` (≈ 280 lines; 228 method
+lines). Fields (1483–1491, with their comments; initial values `false` /
+implicit `null` — inert): `_traktScrobbleEnabled`,
+`_launchTraktPercentSpent`, `_traktEpisodeProgress`,
+`_traktLastScrobbleAction`, `_traktHeartbeatTimer`. Methods:
+`_initTraktScrobble`, `_traktProgress`, `_traktScrobble`,
+`_startTraktHeartbeat`, `_stopTraktHeartbeat`, `_traktScrobbleSeek`,
+`_currentEpisodeTraktPercent`. Leading comments follow checker ownership:
+the Trakt percentage documentation at 2315 currently belongs to the
+retained binder and stays with it unless the manifest reassigns it
+explicitly.
+
+**Stay State-owned:** `_persistablePosition`, `_traktSeasonEpisode`,
+`_resumeTrackingAfterValidationGate`, `_bindEpisodeTrackerProgressIdentity`,
+the analytics heartbeat, **`_resumeWriteGuard`, `_stremioTvStartupSeek`,
+`_episodeTrackerProgressImdbId`** (borrowed by `_traktScrobbleSeek`, which
+cancels deferred startup seeking and releases the resume-write guard
+**before** checking validation or Trakt enablement, 1945 — those actions
+must still run with Trakt disabled), all Simkl/MDBList members (phase 6).
+
+**Host `VpTraktScrobblerHost` (21 members, frozen at step T):** the common
+eleven — `mounted`, the validation-gate state, playing, duration, five
+nullable string identity getters, `({int? season, int? episode})
+traktSeasonEpisode()`, `bindEpisodeTrackerProgressIdentity(String)` — plus
+the `widget.traktScrobble` boolean (live P4 selector registration, along
+with `widget.contentImdbId`/`contentType`), `Duration get
+persistablePosition`, the two seek guards (typed getters), series/active
+playlist, current index, effective type/season/episode. No `context`,
+`setState`, player or callbacks. Simkl's two calls to `_traktProgress()`
+(2036, 2089) become `_trakt.traktProgress()` retained substitutions in
+phase 5 (Simkl is still in the State); in phase 6 they become a
+`double traktProgress()` member of the Simkl Host forwarded by the facade —
+never a sibling import.
+
+**Retained references** (from the review's 89-reference ledger, Trakt
+subset, re-measured at step T; statement order preserved): initialization
+1683; validation resumption/cache reset 2292–2302/2321–2323; player
+subscriptions 3582/3621/3627/3650–3682; EOF 4987–4991; switch
+restoration/advance 9321/10291/10392–10414; disposal 11701–11707 (each
+statement in place, with the analytics cancellation between the Trakt
+operations); launch budgets/percent reads 11976–11981/12004/12014/
+12029/12103–12105; seek dispatch 11509, 12786, 12855, 13343, 13441,
+14425–14441, 14977; Simkl's 2036/2089. The **skip adapter**
+(`_VpSkipSegmentHostAdapter`, in the facade at 17457, forwarder 17497)
+becomes a P5 **`patched`** facade declaration with one exact counted
+receiver rewrite (`_traktScrobbleSeek` → `_trakt.traktScrobbleSeek`),
+reason and test evidence — not an `earlier_patches` entry (that mechanism
+accepts only history-derived destination files, `dart_move_history.py:60`);
+the P3 controller/Host stay untouched.
+
+**Scaffolding:** patched State constructor appends `_trakt` after
+`_display`; `_VpTraktScrobblerHostAdapter`; CI: current/self-test and
+analyzer inputs → P5; P1–P4 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`,
+`315028407`); protect all 13 earlier destinations; theme manifests and
+every corresponding source-guard list; new tests in the curated CI list.
+
+**Source-text guard retarget:** `test/android_tv_mdblist_progress_source_test.dart:157`
+slices `_bindEpisodeTrackerProgressIdentity` … external-audio comment and
+expects `final imdbId = _currentSeriesImdbId`; the three percent readers
+leave that slice across phases 5–6. Use the validated source reader for
+each moved percentage declaration and assert its live
+`currentSeriesImdbId` forwarding and identity rejection; keep the retained
+TVMaze identity and rewatch assertions; never a file-existence check.
+
+### Step 0 — characterization of the original
+
+**Harness:** one delegating HTTP transport installed before any tracker
+singleton's first use and kept for the test isolate, dispatching to the
+current case's recorder/barriers (the existing adapter,
+`video_player_environment.dart:83`, records POST bodies and supports
+delayed/error replies); synthetic credentials seeded through the storage
+APIs; tracker caches/session revisions reset between cases; independent
+auth barriers via `DeviceKeyProvider.debugInstallCipher` (controllable
+`open`, `device_key_provider.dart:210`). No application seam.
+
+**Trakt protocol (exact requests and absences per event):** start on
+play, pause, stop with progress, the `> 80` transition (exactly 80 vs 81),
+heartbeat timing/stop on pause/EOF/dispose, repeated actions and
+`_traktLastScrobbleAction` dedup, failed sends and subsequent dedup,
+launch-percent budget spent once, per-episode progress after a playlist
+switch, custom identity and unresolved S/E. Initialization awaits
+policy/auth **without a catch** (1739): pin propagated
+initialization/storage errors separately from swallowed HTTP failures.
+**Seek:** a user seek with Trakt disabled and with validation active
+still cancels the deferred startup seek and releases the held resume
+position. **Async readers:** `_currentEpisodeTraktPercent` captures a show
+id, awaits storage, then reads the current episode, rejecting only on
+`_episodeTrackerProgressImdbId != imdbId` (2326) — pin same-show episode
+change, different-show rejection, A→B→A overlap, concurrent tracker reads
+resetting the shared cache, profile change/disposal during initialization
+and snapshot loading; gaps go to Follow-ups. **Early windows:** each moved
+initializer observed before async loads complete, or justified
+unreachable. Mutation proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+With Trakt connected: start/pause/seek/stop for a movie and a series
+episode; watched at > 80 %; progress resumes elsewhere; disabled → no
+requests, seeks still release resume.
+
+## Phase 6 — Simkl and MDBList scrobbling (trackers, part 2 of 2)
+
+Branch `refactor/vplayer-p6` off the phase-5 merge. Same rules, from the
+phase-5 design review: **Simkl** (5 fields 1494–1503, 7 methods, 205
+lines; Host 19 members incl. `double traktProgress()` forwarded to
+`_trakt`) and **MDBList** (3 fields 1499/1501/1504, 9 methods, 142 lines;
+Host 15 members incl. position, persistable position and `Future<void> get
+playerInitializationFuture`; the session is allocated inside
+initialization, not a field initializer — preserve that). Tracker-specific
+protocol to characterize: Simkl play stamps a local `start` without
+POSTing, heartbeats POST **pause**, its defensive `_simklScrobble('start')`
+branch has no live caller (dormant); MDBList play checkpoints through
+**pause**, sub-threshold exit sends pause (`mdblist_scrobble_session.dart:226`),
+completion uses **`>= 80`** (vs Trakt/Simkl `> 80`); MDBList catches only
+player-initialization failure; gated MDBList disposal (`_mdblistStop()` can
+return at its gate while `session.close()` still runs, 11707). MDBList's
+production singleton keeps the client from first construction
+(`mdblist_service.dart:58`) — the phase-5 isolate-wide delegating transport
+covers it. The detailed section is written and design-reviewed after the
+phase-5 merge.
+
 ## Follow-ups
 
 - **Service/data ownership exit** (D1): data contracts for resume,
@@ -1027,6 +1162,17 @@ and PiP restore of the lock on phone.
 - Shortening duration within the same whole-second skip key can clamp a skip
   seek below the cached segment end and leave its button visible. Phase-3
   characterization records this existing result without changing it.
+
+- Trakt initialization awaits the policy before resolving auth ownership: if
+  profile handoff completes during that await, the still-mounted outgoing route
+  can scrobble with incoming credentials. A handoff during cipher authorization
+  instead propagates ResourceAuthorizationException. Phase-5 characterization
+  pins both original outcomes; profile/session capture needs a separate fix.
+- The Trakt percentage reader captures show identity but only compares the
+  shared string binder after storage. A→B→A can accept an older A snapshot over
+  a newer A, and ready playlist callers can attempt an outgoing resume seek
+  after profile change/disposal. Phase-5 tests retain these original gaps;
+  cancellation/generation/profile guards belong to a separate change.
 
 
 ## Progress
@@ -1770,6 +1916,169 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   allowlisting, full-suite/build repeat, device commands, push, merge or switch.
   Manual phone portrait/PiP/end-of-series checklist remains pending. Stop.
 
+
+### 2026-10-12 — Phase 5 Step T (Trakt tooling checkpoint)
+
+- **Revision/base.** Committed `5d074e762` after approved `fc7196f78`; original application
+  re-measured by name at `315028407`: 855 disjoint spans, 12 Trakt moves,
+  32 retained occurrences (including the one patched skip-adapter receiver).
+- **Proof.** Complete raw/formatted evidence-only P5 splits compare with zero
+  differences; 21 live Host readers, five inert false/null initializers,
+  eager construction after `_display`, both retained Simkl progress calls and
+  all 13 earlier destinations are pinned. Opt-in whole facade-class patch
+  projection uses the existing counted-edit/parser core; no old manifest
+  behavior changes. Real-config class/receiver/widget/capture negatives pass.
+- **Commands/results.** `p5/tooling/checks.json`: all 26 existing Dart manifest
+  self-tests, P5 universal/self-compare, P1–P4 merge-revision `--at` and Kotlin
+  historical/compiled self-test pass. Format is idempotent; optional comma
+  sites recorded, zero introduced formatting diagnostics. Root/strict/probe
+  analyzer counts 82/151/84; two mechanical import diagnostics are recorded,
+  async-context identities unchanged, earlier inventories preserved. Size and
+  architecture pass. Parser audit: 167 unique packages, 144 copied kernels
+  deleted; 119 detached packages copied from the already-clean seed.
+- **Scope/CI.** Draft only; no production destination, application/pubspec or
+  CI/theme changes. P5 CI transition belongs to the Step-1 creation commit.
+  Heavy work nice 19; explicit isolated parser flags; serialized suites.
+  Evidence `p5/tooling/completion.json` records the resulting commit.
+
+
+### 2026-10-12 — Phase 5 Step 0 (original Trakt characterization; stop)
+
+- **Revision/base.** Follows Step T `5d074e762`; application re-measured at
+  `315028407`, detached under `p5/step0/original`. Resulting Step-0 revision
+  and tested tree are recorded in `p5/step0/completion.json`.
+- **Harness/behavior.** Isolate-wide delegating HTTP clients, synthetic storage
+  sessions, real-cipher and decoded-storage/policy continuation barriers;
+  no production seam. 75 new Trakt cases plus two existing skip integration
+  cases pass on the original: exact start/pause/stop bodies, 80/81, heartbeat,
+  failed-send dedup, launch budget, shared Simkl percent, disabled/validation
+  seek handover, held target, early init and show/episode/profile/dispose races.
+- **Sweep/proof.** All 12 declarations and 32 retained occurrences classified:
+  191 points = 180 assertion kills, ten equivalent, one PiP device-pending.
+  A separate player-construction mutation proves early-await disposal. Every
+  new case has an assertion kill matching its final case-file hash; invalid,
+  comment-only and uncaught-error-only attempts excluded. Original restored.
+  Deps tables and `p5/step0/coverage.json` contain cases, points and witnesses.
+- **Preserved gaps.** Early policy/profile handoff can use incoming credentials
+  for the outgoing route; init/storage failures escape; snapshot readers accept
+  old A in A→B→A and ready playlist callers attempt resume after profile/dispose.
+  No fixes. Cache null→empty is equivalent through the first identity binder;
+  index/scan candidates use original construction invariants, not mount waits.
+- **Commands/results.** Nice-19 serialized hook-defined/no-pub controls,
+  mutations and `suite_evidence.py run/compare`: 13,047 successes / 13 pre-existing failures / 28 pre-existing load errors / 20 skips,
+  **75 passing additions only**, every original identity unchanged.
+  Changed test analysis/format/idempotence, unchanged 75 facade diagnostic
+  identities, size/architecture and explicit isolated-parser audit PASS.
+  Step-T complete-materialization, all Dart/Kotlin self-tests and P1–P4
+  historical checks reused; application/tooling inputs are unchanged.
+- **Deviation.** One exploratory retry omitted the evidence override; nine
+  fixture directories were immediately moved from the old P2 default into
+  P5 and that run excluded (`retry-evidence-correction.json`). Accepted runs
+  use the explicit P5 root and isolated kernel-clean parser packages.
+- **Scope/stop.** Application/pubspec untouched; Trakt only, no production
+  moves, bug fixes, allowlisting, device commands, push, merge or branch switch.
+  Step 1 will apply P5, register the ten test files and retarget the named
+  source guard. Simkl/MDBList extraction is Phase 6. Manual Trakt movie/series
+  start/pause/seek/stop, >80 watched, cross-device resume and PiP remain pending.
+
+### 2026-10-12 — Phase 5 Step 0b addendum (independent sample closure)
+
+- **Original/revision.** Follows `1347a5ad8`; detached original at that exact
+  revision, application still `315028407`. Resulting addendum revision is
+  recorded in `p5/step0b/completion.json`.
+- **Sample/closure.** Claude 17/18 killed (94%); h17 was a real gap in the
+  State-owned persistable-position dependency. C78/C79 hold a failed ten-minute
+  resume at raw 80 ms, then shrink duration to 12.5/10 minutes. Pause, play and
+  heartbeat report raw progress, with no automatic watched stop. h17
+  assertion-kills both; >=→> kills the exact-80 case. Original restored.
+- **Commands/results.** Nice-19 serialized hook-defined/no-pub original
+  control and two mutations PASS; changed format/analyzer PASS. Deps sample,
+  mutation and supplemental coverage rows updated; 77 new Trakt cases total.
+  Clean addendum full-suite baseline follows before Step 1, compared to Step 0
+  for exactly two passing additions (`p5/step0b/baseline*`, `suite-delta.json`).
+- **Scope.** Test/docs only; no application/pubspec change, seam, fix,
+  allowlisting or real network. Existing profile/race gaps remain unchanged.
+
+
+### 2026-10-12 — Phase 5 Step-1 production creation
+
+- **Revision/base.** Follows addendum `e0772d8d8`; original `315028407`.
+  Resulting creation revision/hashes/commands in `p5/step1/completion.json`.
+- **Applied.** Twelve Trakt moves, exact 21-member live Host and frozen adapter;
+  eager `_trakt` append, all 32 retained occurrences, one counted skip-adapter
+  patch and Simkl's two progress forwardings. Shared seek guards/identity,
+  persistable-position and analytics/dispose statement order stay State-owned.
+  App bytes equal frozen Step-T formatted files; facade 17,394 / destination 294.
+- **Commands/results.** Nice-19 P5 current: zero differences. Serialized
+  hook-defined/no-pub affected suite: 279 successes, no failure/skip.
+  Format, size/architecture and negatives PASS; root/CI comparator 84 / zero
+  additions; previous inventory mappings preserved, one frozen unused Trakt
+  import warning allowlisted. Broad scan removed 51 unchanged-source/generated
+  diagnostics, with no outside additions; variation recorded, no suppression.
+- **CI/guards.** Current/self/analyzer→P5; P1–P4 merge-revision history checks;
+  ten Trakt files, all theme/source lists registered. Android TV percentage
+  guard validates each live reader/capture/rejection and current adapter;
+  retained TVMaze, metadata and rewatch checks stay.
+- **Baseline/sample.** Clean addendum baseline: 13,049 successes, unchanged
+  13 failures / 28 errors / 20 skips; two additions only. Independent sample
+  17/18; h17 closed separately on original `1347a5ad8`, no bug fix.
+- **Next/constraints.** Clean creation gate, detached source-guard negative
+  proof and both release builds follow. Pubspec unchanged, no new seams,
+  real API network, device commands, push, merge or switch. Human Trakt/PiP
+  checklist and original profile/race gaps remain pending; Phase 6 is later.
+
+
+### 2026-10-12 — Phase 5 gate fixture scheduling closure (test/docs only)
+
+- **Finding/reproduction.** First clean `edd4d9ca5` suite exposed a missing
+  profile snapshot seek before a fixed drain. Identical assertion reproduced
+  on original `1347a5ad8` (1/3 fails); moved isolation 3/3 passes. NOTE and
+  raw evidence in `p5/gate/profile-repeat`, `profile-stabilization`.
+- **Fix/proof.** Await the original public selection Future after releasing
+  held storage; all assertions retained. Entire eight-case file original/moved
+  3× passes (24 + 24); six original race/missing-row mutations assertion-kill.
+  Source restored, format/analyzer pass, application/tooling/pubspec unchanged.
+- **Gate.** No failure allowlist or changed expected identity. Step-0b baseline
+  reused with original focused validation of this changed fixture; first raw
+  failed suite archived. Fresh full gate on clean stabilization commit follows.
+  Creation app/tool checks have identical inputs and remain valid. No bug fix.
+
+
+### 2026-10-12 — Phase 5 clean-tree gate (stop)
+
+- **Revision.** Clean tested `09c43cb56`, creation `edd4d9ca5`; Step-0b baseline
+  `e0772d8d8`, application original `315028407`. Gate result/revision and
+  artifact/source hashes in `p5/gate/completion.json`.
+- **Suite.** Nice-19 serialized hook-defined/no-pub `suite_evidence.py`:
+  13,049 successes, unchanged 13 failures / 28 load errors / 20 skips.
+  Exact baseline identities/outcomes and official comparison PASS;
+  zero added/missing/changed tests, no failure allowlisting.
+- **Checks.** All 34 Dart/Kotlin self/current/history commands PASS;
+  P5 current/same-revision, historical P1–P4. Root/CI scoped analyzer
+  84 / zero additions, prior mappings preserved, CI warning allowlist 47
+  nothing new/stale. Exact CI format, 2,998-file size / 140 ratchets,
+  architecture and negatives PASS. Broad scan variation/duplicate output is
+  archived; unchanged Step-T two-path root command and CI report 84 without
+  deduplication or inventory expansion. App/tool compatibility inputs remain
+  byte-identical across the test-only stabilization commit.
+- **Fixture NOTE.** Original missing-seek timing flake reproduced (1/3);
+  real public selection Future now awaited, all assertions retained.
+  Original/moved full-file 3× plus six original mutations pass. First raw
+  gate archived, fresh full suite rerun, no failure allowlist.
+- **Source guard/builds.** Three percentage readers validate live capture
+  and identity rejection; wrong reader/adapter forwarding assertion-fails
+  on detached creation. Both nice-19 release APK/macOS builds PASS on
+  clean tree; logs/artifact/AOT hashes archived, no install/run.
+- **Constraints.** Exact frozen 12 moves / 32 references and two app paths;
+  eager construction, borrowed guards and per-statement dispose ordering;
+  pubspec and all 13 earlier destinations unchanged, trailers and isolated
+  parser audit PASS, every original/source-guard mutation restored.
+- **Pending/stop.** Human Trakt/PiP movie/series start/pause/seek/stop,
+  >80 watched and cross-device resume; original profile/A→B→A/disposal gaps
+  retained in Follow-ups. No fix, new seam, real API network, push, merge,
+  switch or device command. Phase 5 complete; Phase 6 Simkl/MDBList is later.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -1826,3 +2135,15 @@ aspect contract (fit, custom ratio, numeric ratio). P3s: explicit
 33-reference ledger incl. 13722, `_changeSpeed` dormant, portrait seed and
 PiP restore device-pending. Moving the four values (single storage
 location, retained callers write the controller fields directly) accepted.
+
+## Phase 5 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+Split into phase 5 (Trakt) and phase 6 (Simkl + MDBList). P2s folded:
+exact Hosts incl. borrowed seek guards (`_resumeWriteGuard`,
+`_stremioTvStartupSeek`, `_episodeTrackerProgressImdbId` State-owned) and
+the Simkl→`traktProgress` routing; skip adapter as a P5 `patched` facade
+declaration (not `earlier_patches`); isolate-wide delegating HTTP
+transport + credential seeding + cipher barrier; tracker-specific
+protocols and error propagation; async reader/initialization races;
+source-text guard retarget via the validating reader. P3s: staged phases,
+concrete CI/comment ownership.
