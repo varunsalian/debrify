@@ -4517,3 +4517,56 @@ load error / 20 skip**; official comparator and strict old-identity/outcome
 comparison PASS, exactly two passing additions, zero missing/changed/skipped old
 identities. New test analyzer/format pass. The application remains byte-identical
 to the named original; no manifest or CI transition in this addendum.
+
+## Phase 6 Step 1 — production creation (2026-10-12)
+
+Follows Step-0b `8c5a962c3`; original application `ea7901ead`. Only the three
+manifest-owned application paths change: the facade and the Simkl/MDBList
+controllers. All 24 original declarations move, all 59 retained references
+(57 substitutions plus two counted skip-adapter rewrites) retain their statement
+positions, and all 14 earlier destinations remain protected. Current-tree
+comparison passes with zero differences, including the resumed verification.
+Both controllers exactly match Step T's reviewed formatted materialization.
+
+| Responsibility / path | Production ownership |
+|---|---|
+| `presentation/legacy_video_player/vp_simkl_scrobbler.dart` | `VpSimklScrobbler` + 19-member Host; 283 lines; five fields / seven methods |
+| `presentation/legacy_video_player/vp_mdblist_scrobbler.dart` | `VpMdblistScrobbler` + 15-member Host; 187 lines; three fields / nine methods |
+| State constructor / adapters | Eager inert `_simkl` then `_mdblist` after `_trakt`; computed, frozen live getters; no constructor Host read or scheduling |
+| Shared Trakt progress / skip adapter | Two full `_trakt.traktProgress` chains become `_host.traktProgress`, forwarded by the facade; patched whole skip adapter carries P5's Trakt forwarder and two new counted rewrites; no sibling import |
+| Lifecycle / MDBList initialization | Original fan-out and each disposal statement stay in place; session close remains unawaited at its original position; policy → player-init await/catch → mounted → captured target → capability await → mounted → allocation/raw update/assignment/conditional play is unchanged |
+| Facade size | 17,394 → 17,087; `--update` shrink retained and dated P6 note appended with all previous notes preserved |
+
+`vplayer_p6.json` is applied. CI current/self-test and scoped analyzer switch to
+P6; P1–P5 `--at` remain `31a347ad2` / `fc24e32ae` / `890df14d8` / `315028407` /
+`ea7901ead`, checkout remains fetch-depth 0. The existing recursive `lib/features`
+format/analyze scope includes both new files and the explicit facade stays covered.
+The frozen P6 analyzer inventory already recorded at Step T preserves every
+previous mapping/maximum; it is not enlarged. Five exact retained-import warnings
+from that probe receive their allowlist entries. No import cleanup or suppression.
+All 22 P6 characterization files (144 added behavior cases) are registered once
+in `ci_behavior_tests.txt`; the test-hook define remains enabled. Both destinations
+are added to the theme manifest, route boundaries and all three frozen-path lists.
+
+Source guard retarget: `android_tv_mdblist_progress_source_test.dart` still uses
+the validating, chaining reader for all three original percentage declarations;
+Simkl/MDBList expected prefixes become `_host.`. Identity capture/rejection,
+carried TVMaze identity, metadata readiness and rewatch assertions remain.
+Each new adapter additionally has its own class-local live identity/binder
+assertions. In a detached evidence-only materialization the moved control passes;
+changing only Simkl's or only MDBList's computed current-series getter to the
+widget id independently assertion-fails. Complete patches/logs are in
+`p6/step1/source-guard/`; the original worktree is restored afterward.
+
+Creation checks: **167 focused tests pass** (all P6 behaviors, existing skip
+integrations, Android TV source guards and theme guards); root analyzer comparator
+passes **94 scoped occurrences, zero additions**, infos/multiplicities included;
+format idempotent, size **3,000 files / 140 ratchets**, architecture **1,668 migrated
+files** and real architecture negatives pass. The production application is the
+exact Step-T formatted split: its two optional commas, idempotence and zero
+formatting diagnostic delta are archived there. No new seam, bug fix, pubspec
+change, real network, device command or failure allowance. i2/i3 remain verbatim,
+with their exact survivor replays/source equivalences recorded in Step 0b.
+Clean-tree full-suite/history/self-test/analyzer/format/architecture/build gate
+follows separately; manual Simkl/MDBList movie/series and PiP checks remain pending.
+Resulting revision and source/check hashes are recorded in `p6/step1/completion.json`.

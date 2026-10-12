@@ -180,6 +180,8 @@ import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer
 import '../features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -388,6 +390,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _skip = VpSkipSegmentController(_VpSkipSegmentHostAdapter(this));
     _display = VpDisplayModeController(_VpDisplayModeHostAdapter(this));
     _trakt = VpTraktScrobbler(_VpTraktScrobblerHostAdapter(this));
+    _simkl = VpSimklScrobbler(_VpSimklScrobblerHostAdapter(this));
+    _mdblist = VpMdblistScrobbler(_VpMdblistScrobblerHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -1481,20 +1485,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
   late final VpTraktScrobbler _trakt;
+  late final VpSimklScrobbler _simkl;
+  late final VpMdblistScrobbler _mdblist;
 
-  // Simkl scrobble state — a fully parallel mirror of the Trakt fields above
-  // (independent dedup guard + heartbeat; the two trackers never share state).
-  bool _simklScrobbleEnabled = false;
-  bool _launchSimklPercentSpent = false;
-  // Per-episode Simkl cross-device snapshot ("season_episode" → 0-100),
-  // refreshed by the launcher and used when switching episodes in-session.
-  Map<String, double>? _simklEpisodeProgress;
-  Map<String, double>? _mdblistEpisodeProgress;
   String? _episodeTrackerProgressImdbId;
-  bool _launchMdblistPercentSpent = false;
-  String? _simklLastScrobbleAction;
-  Timer? _simklHeartbeatTimer;
-  MdblistScrobbleSession? _mdblistSession;
   // Keeps the analytics session alive during long, interaction-free playback.
   Timer? _analyticsHeartbeatTimer;
 
@@ -1674,8 +1668,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Check if Trakt scrobbling should be enabled for this playback
     _trakt.initTraktScrobble();
-    _initSimklScrobble();
-    _initMdblistScrobble();
+    _simkl.initSimklScrobble();
+    _mdblist.initMdblistScrobble();
   }
 
   Future<void> _loadLocalCompletionThresholds() async {
@@ -1794,330 +1788,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  // ── Simkl scrobble machine — fully parallel mirror of the Trakt one above.
-  // Zero shared state: its own enable flag, dedup guard and heartbeat, driven
-  // by the same (tracker-agnostic) _traktProgress()/_traktSeasonEpisode()
-  // helpers. See the Simkl integration plan.
-
-  Future<void> _initSimklScrobble() async {
-    if (!widget.simklScrobble) return;
-    if (widget.contentImdbId == null) return;
-    if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    _simklScrobbleEnabled =
-        policy.scrobbles(TrackingSource.simkl) &&
-        await SimklService.instance.isAuthenticated();
-    if (!mounted) return;
-    // Pause-centric model: do NOT POST Simkl's /scrobble/start. Unlike Trakt,
-    // it persists NO resumable position AND deletes the existing /sync/playback
-    // entry (verified: returns id:0, wipes the session). We leave the resume
-    // point untouched and let the pause-based heartbeat keep it current.
-    // BUT still stamp the marker 'start' (no POST) — the local action marker
-    // must read "playing" so a later user-pause / exit-stop isn't dedup-
-    // suppressed at _simklScrobble's guard. Mirrors the Trakt block and the TV
-    // launcher's self-healing marker. (Field assignment, NOT _simklScrobble
-    // ('start'), which now routes to a pause POST.)
-    if (!_validationGateActive &&
-        _simklScrobbleEnabled &&
-        _isPlaying &&
-        _duration > Duration.zero) {
-      _simklLastScrobbleAction = 'start';
-      _startSimklHeartbeat();
-    }
-  }
-
-  /// A series whose season/episode can't be resolved must NOT be scrobbled to
-  /// Simkl: [SimklService._scrobble] would send the show id in a movie-shaped
-  /// body, recording a bogus movie on the account. A movie legitimately has
-  /// (null, null), so this only blocks the series case. (Trakt has the same
-  /// latent gap; this guard is Simkl-only per the no-touch-Trakt convention.)
-  bool _simklSeriesSEUnresolved(({int? season, int? episode}) se) =>
-      widget.contentType == 'series' &&
-      (se.season == null || se.episode == null);
-
-  void _simklScrobble(String action) {
-    if (_validationGateActive) return;
-    if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
-    final imdbId = widget.contentImdbId!;
-    final progress = _trakt.traktProgress();
-    final se = _traktSeasonEpisode();
-    if (_simklSeriesSEUnresolved(se)) return;
-    // Simkl marks watched server-side at ≥80% on stop — mirror Trakt's rule
-    // and finalize instead of keeping a start/pause session alive.
-    if ((action == 'start' || action == 'pause') && progress > 80) {
-      action = 'stop';
-    }
-    if (_simklLastScrobbleAction == action) return;
-    _simklLastScrobbleAction = action;
-    switch (action) {
-      // 'start' shares the pause path (no caller passes it in the pause-centric
-      // model; play stamps the marker directly). Kept defensive and merged so
-      // the two can't silently diverge: NEVER send Simkl's /scrobble/start — it
-      // persists nothing and wipes the resume point, so a 'start' intent maps to
-      // a pause checkpoint.
-      case 'start':
-      case 'pause':
-        SimklService.instance.scrobblePause(
-          imdbId,
-          progress,
-          season: se.season,
-          episode: se.episode,
-        );
-        break;
-      case 'stop':
-        SimklService.instance.scrobbleStop(
-          imdbId,
-          progress,
-          season: se.season,
-          episode: se.episode,
-        );
-        break;
-    }
-  }
-
-  /// Periodic Simkl checkpoint — comfortably above Simkl's 20-second per-user
-  /// scrobble rate lock. Uses /scrobble/pause (NOT /scrobble/start): on Simkl,
-  /// start returns id:0 and persists NO resumable position — only pause/stop
-  /// create the /sync/playback entry that Continue Watching + episode-card
-  /// resume read. So the heartbeat pauses to keep a resume point current every
-  /// interval; a hard kill (SIGINT/power-off, no graceful stop) then still
-  /// resumes from the last checkpoint instead of the episode start.
-  void _startSimklHeartbeat() {
-    _simklHeartbeatTimer?.cancel();
-    _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (_validationGateActive ||
-          !_simklScrobbleEnabled ||
-          widget.contentImdbId == null) {
-        return;
-      }
-      if (!_isPlaying || _duration.inMilliseconds <= 0) return;
-      final imdbId = widget.contentImdbId!;
-      final progress = _trakt.traktProgress();
-      final se = _traktSeasonEpisode();
-      if (_simklSeriesSEUnresolved(se)) return;
-      if (progress > 80) {
-        _simklLastScrobbleAction = 'stop';
-        SimklService.instance.scrobbleStop(
-          imdbId,
-          progress,
-          season: se.season,
-          episode: se.episode,
-        );
-        debugPrint(
-          'Simkl: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)',
-        );
-        _stopSimklHeartbeat();
-        return;
-      }
-      // Force-send pause (direct call, bypasses dedup) to checkpoint a RESUMABLE
-      // position. Simkl's /scrobble/start saves nothing (id:0); only pause/stop
-      // persist to /sync/playback, so this must be pause to survive a hard kill.
-      // Leave the marker 'start' (live), NOT 'pause': stamping 'pause' here would
-      // make the user's real pause dedup-suppress at _simklScrobble and strand
-      // the true pause position at this (older) heartbeat %.
-      _simklLastScrobbleAction = 'start';
-      SimklService.instance.scrobblePause(
-        imdbId,
-        progress,
-        season: se.season,
-        episode: se.episode,
-      );
-      debugPrint(
-        'Simkl: Heartbeat pause checkpoint at ${progress.toStringAsFixed(1)}%',
-      );
-    });
-  }
-
-  void _stopSimklHeartbeat() {
-    _simklHeartbeatTimer?.cancel();
-    _simklHeartbeatTimer = null;
-  }
-
-  /// Simkl reaction to a user seek. Deliberately TRANSITION-ONLY, unlike
-  /// Trakt's seek handler which re-sends start with fresh progress on every
-  /// seek: Simkl's docs say not to call /scrobble/start on seek events (plus
-  /// a 20s rate lock), so this only acts when the seek changes the effective
-  /// action — crossing the 80% boundary (→ stop), or seeking back below it
-  /// after a stop (→ a new start). The 2-minute heartbeat carries fresh
-  /// progress either way.
-  void _simklScrobbleSeek(Duration seekTarget) {
-    if (_validationGateActive) return;
-    if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
-    if (!_isPlaying || _duration.inMilliseconds <= 0) return;
-    final imdbId = widget.contentImdbId!;
-    final progress =
-        (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(
-          0.0,
-          100.0,
-        );
-    final se = _traktSeasonEpisode();
-    if (_simklSeriesSEUnresolved(se)) return;
-    if (progress > 80 && _simklLastScrobbleAction != 'stop') {
-      _simklLastScrobbleAction = 'stop';
-      SimklService.instance.scrobbleStop(
-        imdbId,
-        progress,
-        season: se.season,
-        episode: se.episode,
-      );
-      _stopSimklHeartbeat();
-    } else if (progress <= 80 && _simklLastScrobbleAction == 'stop') {
-      // Seeked back under 80% after a finalize — re-establish a RESUMABLE
-      // session via pause (start would wipe it and persist nothing) and resume
-      // the heartbeat.
-      _simklLastScrobbleAction = 'pause';
-      SimklService.instance.scrobblePause(
-        imdbId,
-        progress,
-        season: se.season,
-        episode: se.episode,
-      );
-      _startSimklHeartbeat();
-    }
-  }
-
-  MdblistScrobbleTarget? _mdblistTarget() {
-    final imdbId = widget.contentImdbId;
-    if (imdbId == null || imdbId.isEmpty) return null;
-    final ids = MdblistMediaIds.forContent(imdbId);
-    if (widget.contentType == 'movie') {
-      return MdblistScrobbleTarget.movie(ids);
-    }
-    if (widget.contentType != 'series') return null;
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return null;
-    return MdblistScrobbleTarget.episode(
-      ids,
-      season: se.season!,
-      episode: se.episode!,
-    );
-  }
-
-  Future<void> _initMdblistScrobble() async {
-    debugPrint(
-      '[MDBListDiag] player init requested=${widget.mdblistScrobble} '
-      'flag=$kMdblistEnabled imdb=${widget.contentImdbId} '
-      'type=${widget.contentType}',
-    );
-    if (!widget.mdblistScrobble || !kMdblistEnabled) {
-      debugPrint('[MDBListDiag] player init skipped: tracking not requested');
-      return;
-    }
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    if (!policy.scrobbles(TrackingSource.mdblist)) return;
-    // Playlist launches resolve their requested/resume episode asynchronously.
-    // Before that finishes `_currentIndex` is still zero, so constructing the
-    // MDBList target here used to scrobble S1E1 while the player actually
-    // opened (for example) S1E8. Wait until `_initializePlayer` publishes the
-    // real initial index; its playing-state check below still starts tracking
-    // immediately when media became ready during the wait.
-    try {
-      await _playerInitializationFuture;
-    } catch (e) {
-      debugPrint('[MDBListDiag] player init skipped: player setup failed $e');
-      return;
-    }
-    if (!mounted) return;
-    // The launcher already resolved the effective sync+authentication setting
-    // before deciding both remote ownership and local-completion suppression.
-    // Re-resolving it here could disagree with that launch snapshot and leave
-    // the play tracked nowhere; the session capability below still prevents a
-    // stale profile/account from receiving writes.
-    final target = _mdblistTarget();
-    if (target == null) {
-      debugPrint('[MDBListDiag] player init skipped: invalid target metadata');
-      return;
-    }
-    final capability = await MdblistService.instance
-        .capturePlaybackCapability();
-    if (!mounted) {
-      debugPrint('[MDBListDiag] player init abandoned: player unmounted');
-      return;
-    }
-    final session = MdblistScrobbleSession.forService(
-      service: MdblistService.instance,
-      target: target,
-      capability: capability,
-    );
-    session.updatePosition(_position, _duration);
-    _mdblistSession = session;
-    debugPrint(
-      '[MDBListDiag] player session ready imdb=${target.ids.imdb} '
-      'episode=${target.isEpisode} playing=$_isPlaying '
-      'positionMs=${_position.inMilliseconds} '
-      'durationMs=${_duration.inMilliseconds}',
-    );
-    if (!_validationGateActive && _isPlaying && _duration > Duration.zero) {
-      session.play();
-    }
-  }
-
-  void _updateMdblistPosition() {
-    if (_validationGateActive) return;
-    // Held-target substitution, same reason as _traktProgress.
-    _mdblistSession?.updatePosition(_persistablePosition, _duration);
-  }
-
-  void _mdblistPlay() {
-    if (_validationGateActive) return;
-    _updateMdblistPosition();
-    _mdblistSession?.play();
-  }
-
-  void _mdblistPause() {
-    if (_validationGateActive) return;
-    _updateMdblistPosition();
-    _mdblistSession?.pause();
-  }
-
-  void _mdblistStop({bool complete = false}) {
-    if (_validationGateActive) return;
-    _updateMdblistPosition();
-    debugPrint(
-      '[MDBListDiag] player stop complete=$complete '
-      'session=${_mdblistSession != null} '
-      'positionMs=${_position.inMilliseconds} '
-      'durationMs=${_duration.inMilliseconds}',
-    );
-    if (complete) {
-      _mdblistSession?.complete();
-    } else {
-      _mdblistSession?.exit();
-    }
-  }
-
-  void _mdblistScrobbleSeek(Duration target) {
-    if (_validationGateActive) return;
-    _mdblistSession?.seek(target, _duration);
-  }
-
   void _resumeTrackingAfterValidationGate() {
     if (!mounted || _validationGateActive) return;
-    _updateMdblistPosition();
+    _mdblist.updateMdblistPosition();
     if (!_isPlaying || _duration <= Duration.zero) return;
     _trakt.traktScrobble('start');
     if (_trakt.traktLastScrobbleAction == 'start') _trakt.startTraktHeartbeat();
-    if (_simklScrobbleEnabled) {
+    if (_simkl.simklScrobbleEnabled) {
       // Simkl uses a local playing marker and pause-based checkpoints; sending
       // its remote "start" would erase the resumable playback entry.
-      _simklLastScrobbleAction = 'start';
-      _startSimklHeartbeat();
+      _simkl.simklLastScrobbleAction = 'start';
+      _simkl.startSimklHeartbeat();
     }
-    _mdblistPlay();
-  }
-
-  Future<void> _switchMdblistTarget() async {
-    if (_validationGateActive) return;
-    final target = _mdblistTarget();
-    if (target == null) {
-      _mdblistSession?.exit();
-      return;
-    }
-    await _mdblistSession?.switchTarget(target);
+    _mdblist.mdblistPlay();
   }
 
   /// The current episode's cross-device Trakt progress percent (0-100), or null.
@@ -2127,87 +1810,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_episodeTrackerProgressImdbId == imdbId) return;
     _episodeTrackerProgressImdbId = imdbId;
     _trakt.traktEpisodeProgress = null;
-    _simklEpisodeProgress = null;
-    _mdblistEpisodeProgress = null;
-  }
-
-  /// Current episode's Simkl snapshot percent. This mirrors the Trakt lookup
-  /// above but remains independently stored so remote unwatch changes never
-  /// mutate local playback history.
-  Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-
-    // Await before resolving the episode identity for the same race-safety as
-    // [_currentEpisodeTraktPercent].
-    if (_simklEpisodeProgress == null) {
-      final loaded =
-          await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
-            imdbId: imdbId,
-          );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _simklEpisodeProgress = loaded;
-    }
-
-    int? season;
-    int? episode;
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlist = _activePlaylist;
-      if (playlist == null ||
-          _currentIndex < 0 ||
-          _currentIndex >= playlist.length) {
-        return null;
-      }
-      SeriesEpisode? currentEpisode;
-      for (final candidate in seriesPlaylist.allEpisodes) {
-        if (candidate.originalIndex == _currentIndex) {
-          currentEpisode = candidate;
-          break;
-        }
-      }
-      if (currentEpisode == null) return null;
-      season = currentEpisode.seriesInfo.season;
-      episode = currentEpisode.seriesInfo.episode;
-    } else if (_effectiveContentType == 'series') {
-      season = _effectiveContentSeason;
-      episode = _effectiveContentEpisode;
-    }
-    if (season == null || episode == null) return null;
-
-    final percent = _simklEpisodeProgress!['${season}_$episode'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.simkl, percent)
-        : percent;
-  }
-
-  Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-    if (_mdblistEpisodeProgress == null) {
-      final loaded =
-          await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
-            imdbId: imdbId,
-          );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _mdblistEpisodeProgress = loaded;
-    }
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return null;
-    final percent = _mdblistEpisodeProgress!['${se.season}_${se.episode}'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.mdblist, percent)
-        : percent;
+    _simkl.simklEpisodeProgress = null;
+    _mdblist.mdblistEpisodeProgress = null;
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -3329,7 +2933,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _position = d;
       _observeServerWatch();
       _prepareNextDirectEpisode();
-      _updateMdblistPosition();
+      _mdblist.updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
       _skip.syncSkipSegmentsForCurrentContent();
       _skip.syncActiveSkipSegmentUi();
@@ -3368,13 +2972,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }),
         );
       }
-      _updateMdblistPosition();
+      _mdblist.updateMdblistPosition();
       // `playing=true` commonly arrives before libmpv publishes duration. In
       // that ordering the playing listener cannot arm MDBList, and no second
       // playing event is guaranteed. Treat the first usable duration as the
       // missing edge so the initial durable pause checkpoint is sent.
       if (!hadDuration && d > Duration.zero && _isPlaying) {
-        _mdblistPlay();
+        _mdblist.mdblistPlay();
       }
       _playbackUiClock.updateDuration(d);
       if (d > Duration.zero) _skip.skipSegmentsMediaReady = true;
@@ -3410,26 +3014,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _trakt.stopTraktHeartbeat();
       }
       if (!_validationGateActive &&
-          _simklScrobbleEnabled &&
+          _simkl.simklScrobbleEnabled &&
           p &&
           _duration > Duration.zero) {
-        _simklLastScrobbleAction = 'start';
-        _startSimklHeartbeat();
+        _simkl.simklLastScrobbleAction = 'start';
+        _simkl.startSimklHeartbeat();
       } else if (!_validationGateActive &&
           !p &&
           wasPlaying &&
           !_isTransitioning &&
-          _simklLastScrobbleAction != 'stop') {
-        _simklScrobble('pause');
-        _stopSimklHeartbeat();
+          _simkl.simklLastScrobbleAction != 'stop') {
+        _simkl.simklScrobble('pause');
+        _simkl.stopSimklHeartbeat();
       }
       if (!_validationGateActive && p && _duration > Duration.zero) {
-        _mdblistPlay();
+        _mdblist.mdblistPlay();
       } else if (!_validationGateActive &&
           !p &&
           wasPlaying &&
           !_isTransitioning) {
-        _mdblistPause();
+        _mdblist.mdblistPause();
       }
       if (p && _transitionRunning) {
         _transitionStopTimer?.cancel();
@@ -4736,9 +4340,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Scrobble stop to Trakt when movie finishes
     _trakt.stopTraktHeartbeat();
     _trakt.traktScrobble('stop');
-    _stopSimklHeartbeat();
-    _simklScrobble('stop');
-    _mdblistStop(complete: true);
+    _simkl.stopSimklHeartbeat();
+    _simkl.simklScrobble('stop');
+    _mdblist.mdblistStop(complete: true);
 
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
@@ -9068,7 +8672,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _activeHttpHeaders = outgoingHeaders;
         }),
       );
-      if (restored) await _switchMdblistTarget();
+      if (restored) await _mdblist.switchMdblistTarget();
     }
     if (request?.isCurrent == false) return false;
 
@@ -10038,7 +9642,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _activeMediaUserPaused = outgoingPaused;
           _isAutoAdvancing = false;
         });
-        if (restored) await _switchMdblistTarget();
+        if (restored) await _mdblist.switchMdblistTarget();
       }
     }
   }
@@ -10141,12 +9745,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Scrobble stop for the current episode before switching
     _trakt.stopTraktHeartbeat();
     _trakt.traktScrobble('stop');
-    _stopSimklHeartbeat();
-    _simklScrobble('stop');
+    _simkl.stopSimklHeartbeat();
+    _simkl.simklScrobble('stop');
     // Keep the MDBList session's playing bit until switchTarget captures it.
     // Calling exit here would make the incoming episode look paused and would
     // prevent its initial checkpoint/timer from starting.
-    _updateMdblistPosition();
+    _mdblist.updateMdblistPosition();
 
     // Callers that already checkpointed the outgoing episode (e.g. a source
     // switch, which saves BEFORE swapping the playlist) skip this save so it
@@ -10161,7 +9765,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // re-issuing the outgoing item's target against the new one.
     _resumeWriteGuard.clear();
     _currentIndex = index;
-    await _switchMdblistTarget();
+    await _mdblist.switchMdblistTarget();
     if (!mounted || request?.isCurrent == false) return false;
     _resetLocalCompletionState();
 
@@ -11257,8 +10861,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final position = Duration(milliseconds: target);
       unawaited(_player.seek(position));
       _trakt.traktScrobbleSeek(position);
-      _simklScrobbleSeek(position);
-      _mdblistScrobbleSeek(position);
+      _simkl.simklScrobbleSeek(position);
+      _mdblist.mdblistScrobbleSeek(position);
       return;
     }
     switch (action) {
@@ -11451,10 +11055,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trakt.stopTraktHeartbeat();
     _analyticsHeartbeatTimer?.cancel();
     _trakt.traktScrobble('stop');
-    _stopSimklHeartbeat();
-    _simklScrobble('stop');
-    _mdblistStop();
-    unawaited(_mdblistSession?.close() ?? Future.value());
+    _simkl.stopSimklHeartbeat();
+    _simkl.simklScrobble('stop');
+    _mdblist.mdblistStop();
+    unawaited(_mdblist.mdblistSession?.close() ?? Future.value());
 
     // Save the current state before disposing
     _saveResume();
@@ -11725,10 +11329,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // before marking it spent so it can't apply to a later switched-to episode.
     final firstLoad = !_trakt.launchTraktPercentSpent;
     _trakt.launchTraktPercentSpent = true;
-    final simklFirstLoad = !_launchSimklPercentSpent;
-    _launchSimklPercentSpent = true;
-    final mdblistFirstLoad = !_launchMdblistPercentSpent;
-    _launchMdblistPercentSpent = true;
+    final simklFirstLoad = !_simkl.launchSimklPercentSpent;
+    _simkl.launchSimklPercentSpent = true;
+    final mdblistFirstLoad = !_mdblist.launchMdblistPercentSpent;
+    _mdblist.launchMdblistPercentSpent = true;
 
     await _waitForDuration();
     final dur = _duration;
@@ -11761,7 +11365,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ? widget.mdblistProgressPercent
           : null;
       final mdblistPct =
-          explicitMdblistPct ?? await _currentEpisodeMdblistPercent();
+          explicitMdblistPct ?? await _mdblist.currentEpisodeMdblistPercent();
       mdblistProviderPct = mdblistPct;
       if (mdblistPct != null && (traktPct == null || mdblistPct > traktPct)) {
         traktPct = mdblistPct;
@@ -11776,7 +11380,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final explicitSimklPct = simklFirstLoad
           ? widget.simklProgressPercent
           : null;
-      final simklPct = explicitSimklPct ?? await _currentEpisodeSimklPercent();
+      final simklPct =
+          explicitSimklPct ?? await _simkl.currentEpisodeSimklPercent();
       simklProviderPct = simklPct;
       if (simklPct != null && (traktPct == null || simklPct > traktPct)) {
         traktPct = simklPct;
@@ -11853,8 +11458,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       traktProviderPct ??= await _trakt.currentEpisodeTraktPercent(
         forGuide: true,
       );
-      simklProviderPct ??= await _currentEpisodeSimklPercent(forGuide: true);
-      mdblistProviderPct ??= await _currentEpisodeMdblistPercent(
+      simklProviderPct ??= await _simkl.currentEpisodeSimklPercent(
+        forGuide: true,
+      );
+      mdblistProviderPct ??= await _mdblist.currentEpisodeMdblistPercent(
         forGuide: true,
       );
       if (hasActiveTraktEpisodeRewatch(
@@ -12536,8 +12143,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (generation != _tvScrubGeneration || !mounted) return;
     _player.seek(target);
     _trakt.traktScrobbleSeek(target);
-    _simklScrobbleSeek(target);
-    _mdblistScrobbleSeek(target);
+    _simkl.simklScrobbleSeek(target);
+    _mdblist.mdblistScrobbleSeek(target);
     if (_tvScrubWasPlaying) _player.play();
     if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
     // Fresh interval: the countdown that was running belonged to the scrub,
@@ -12605,8 +12212,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         seek: (target) {
           _player.seek(target);
           _trakt.traktScrobbleSeek(target);
-          _simklScrobbleSeek(target);
-          _mdblistScrobbleSeek(target);
+          _simkl.simklScrobbleSeek(target);
+          _mdblist.mdblistScrobbleSeek(target);
           _scheduleAutoHide();
         },
         // `_` on purpose: `context` inside must keep resolving to the State's
@@ -13093,8 +12700,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         : (target > maxPos ? maxPos : target);
     await _player.seek(clamped);
     _trakt.traktScrobbleSeek(clamped);
-    _simklScrobbleSeek(clamped);
-    _mdblistScrobbleSeek(clamped);
+    _simkl.simklScrobbleSeek(clamped);
+    _mdblist.mdblistScrobbleSeek(clamped);
     _ripple = DoubleTapRipple(
       center: localPos,
       icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
@@ -13191,8 +12798,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final target = _seekHud.value!.target;
       _player.seek(target);
       _trakt.traktScrobbleSeek(target);
-      _simklScrobbleSeek(target);
-      _mdblistScrobbleSeek(target);
+      _simkl.simklScrobbleSeek(target);
+      _mdblist.mdblistScrobbleSeek(target);
     }
     _mode = GestureMode.none;
     Future.delayed(const Duration(milliseconds: 250), () {
@@ -14175,8 +13782,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   : (candidate > _duration ? _duration : candidate);
               _player.seek(newPos);
               _trakt.traktScrobbleSeek(newPos);
-              _simklScrobbleSeek(newPos);
-              _mdblistScrobbleSeek(newPos);
+              _simkl.simklScrobbleSeek(newPos);
+              _mdblist.mdblistScrobbleSeek(newPos);
               // Don't show controls or any overlay for keyboard seeking
               return KeyEventResult.handled;
             }
@@ -14189,8 +13796,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   : (candidate > _duration ? _duration : candidate);
               _player.seek(newPos);
               _trakt.traktScrobbleSeek(newPos);
-              _simklScrobbleSeek(newPos);
-              _mdblistScrobbleSeek(newPos);
+              _simkl.simklScrobbleSeek(newPos);
+              _mdblist.mdblistScrobbleSeek(newPos);
               // Don't show controls or any overlay for keyboard seeking
               return KeyEventResult.handled;
             }
@@ -14727,8 +14334,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       final settledPosition =
                                           _lastSliderSeekPos!;
                                       _trakt.traktScrobbleSeek(settledPosition);
-                                      _simklScrobbleSeek(settledPosition);
-                                      _mdblistScrobbleSeek(settledPosition);
+                                      _simkl.simklScrobbleSeek(settledPosition);
+                                      _mdblist.mdblistScrobbleSeek(
+                                        settledPosition,
+                                      );
                                       _lastSliderSeekPos = null;
                                       // A settled seek is a handoff moment:
                                       // persist and let sync flush promptly.
@@ -17172,6 +16781,88 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 }
 
+class _VpMdblistScrobblerHostAdapter implements VpMdblistScrobblerHost {
+  _VpMdblistScrobblerHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  String? get contentType => _s.widget.contentType;
+  @override
+  String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override
+  String? get episodeTrackerProgressImdbId => _s._episodeTrackerProgressImdbId;
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  void bindEpisodeTrackerProgressIdentity(String imdbId) =>
+      _s._bindEpisodeTrackerProgressIdentity(imdbId);
+  @override
+  bool get mdblistScrobble => _s.widget.mdblistScrobble;
+  @override
+  Duration get position => _s._position;
+  @override
+  Duration get persistablePosition => _s._persistablePosition;
+  @override
+  Future<void> get playerInitializationFuture => _s._playerInitializationFuture;
+}
+
+class _VpSimklScrobblerHostAdapter implements VpSimklScrobblerHost {
+  _VpSimklScrobblerHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  String? get contentType => _s.widget.contentType;
+  @override
+  String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override
+  String? get episodeTrackerProgressImdbId => _s._episodeTrackerProgressImdbId;
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  void bindEpisodeTrackerProgressIdentity(String imdbId) =>
+      _s._bindEpisodeTrackerProgressIdentity(imdbId);
+  @override
+  bool get simklScrobble => _s.widget.simklScrobble;
+  @override
+  double traktProgress() => _s._trakt.traktProgress();
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+}
+
 class _VpTraktScrobblerHostAdapter implements VpTraktScrobblerHost {
   _VpTraktScrobblerHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
@@ -17298,9 +16989,11 @@ class _VpSkipSegmentHostAdapter implements VpSkipSegmentHost {
   void traktScrobbleSeek(Duration target) =>
       _s._trakt.traktScrobbleSeek(target);
   @override
-  void simklScrobbleSeek(Duration target) => _s._simklScrobbleSeek(target);
+  void simklScrobbleSeek(Duration target) =>
+      _s._simkl.simklScrobbleSeek(target);
   @override
-  void mdblistScrobbleSeek(Duration target) => _s._mdblistScrobbleSeek(target);
+  void mdblistScrobbleSeek(Duration target) =>
+      _s._mdblist.mdblistScrobbleSeek(target);
 }
 
 class _VpSleepTimerHostAdapter implements VpSleepTimerHost {

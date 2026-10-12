@@ -7,7 +7,8 @@
 # 2026-10-12 vplayer P3 Step 1: 17 frozen skip moves; facade ratchet lowered 17932 -> 17766; exit: remaining phases 4–25.
 # 2026-10-12 vplayer P4 Step 1: 16 frozen display moves; facade ratchet lowered 17766 -> 17592; exit: remaining phases 5–25.
 # 2026-10-12 vplayer P5 Step 1: 12 frozen Trakt moves; facade ratchet lowered 17592 -> 17394; exit: remaining declared video-player phases (D6).
-17394 lib/screens/video_player_screen.dart
+# 2026-10-12 vplayer P6 Step 1: 24 frozen Simkl/MDBList moves; facade ratchet lowered 17394 -> 17087; exit: remaining declared video-player phases (D6).
+17087 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

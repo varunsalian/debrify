@@ -2304,6 +2304,31 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   and hashes/deviation recorded explicitly. Mutation/suite logs remain intact.
   No application/pubspec/bug fix/failure allowlist/production move in this commit.
 
+### 2026-10-12 — Phase 6 Step-1 production creation
+
+- **Revision/scope.** Follows `8c5a962c3`, application original `ea7901ead`;
+  resulting revision/check hashes are in `p6/step1/completion.json`. Exactly
+  24 moves / 59 retained occurrences; only facade plus two production paths.
+  Simkl/MDBList are 283/187 lines, with 19/15 frozen live Hosts, eager inert
+  construction in that order, full Trakt-progress chains and the patched skip
+  adapter preserving P5 plus two new rewrites. Captured MDBList locals/init
+  sequence and every fan-out/disposal position stay unchanged.
+- **Transition.** Manifest applied; CI current/self-test/analyzer → P6 with
+  P1–P5 historical merges and fetch-depth 0 preserved. Frozen inventory keeps
+  all mappings/maxima; five recorded retained-import warnings added to the
+  allowlist. All 22 P6 behavior files registered; hooks define retained.
+  Theme/source-guard lists include both new destinations. Facade ratchet
+  17,394 → 17,087, all historical notes preserved and P6 note appended.
+- **Checks.** Current checker rerun after interruption: zero differences,
+  all 14 earlier destinations protected; application matches reviewed formatted
+  materialization exactly. 167 focused tests pass. Root comparator: 94 scoped,
+  zero additions; format idempotent; 3,000-file size / 140 ratchets and
+  1,668-file architecture/negatives pass. Validating percentage-reader prefixes
+  updated; each new adapter has independent class-local assertions and an
+  assertion-failing getter mutation with passing moved control. Originals
+  restored. No bug fix, pubspec change, new seam, network or device action.
+  The clean-tree gate follows; human checklist remains pending.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -97,3 +97,10 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 
 # 2026-10-12 video_player P5: exact retained import now unused; frozen Step-T receiver probe.
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive
+
+# 2026-10-12 video_player P6: five exact retained imports become unused; frozen Step-T probe identities.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive
