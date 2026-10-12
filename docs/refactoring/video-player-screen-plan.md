@@ -1150,9 +1150,12 @@ at step T): common — `mounted`, validation-gate state, playing, duration,
 five nullable identity getters, `traktSeasonEpisode()`,
 `bindEpisodeTrackerProgressIdentity(String)`; Simkl adds the
 `widget.simklScrobble` selector, **`double traktProgress()`** (facade
-forwards to `_trakt.traktProgress()` — replaces phase 5's two retained
-`_trakt.traktProgress()` substitutions with Host calls inside the moved
-body), playlist/index/effective-episode members; MDBList adds the
+forwards to `_trakt.traktProgress()`; step T registers the full chain
+`_trakt.traktProgress` → `_host.traktProgress` at both occurrences (1844,
+1897) via `registered_occurrence_substitutions.py:17`, freezes the adapter
+body `double traktProgress() => _s._trakt.traktProgress();` and adds
+receiver/capture negatives — ordinary host property bindings reconstruct
+only bare names), playlist/index/effective-episode members; MDBList adds the
 `widget.mdblistScrobble` selector, position, persistable position and
 `Future<void> get playerInitializationFuture`.
 
@@ -1165,16 +1168,18 @@ and the Trakt → Simkl → MDBList order in every fan-out): initState
 percent reads (11728–11731, 11764/11779, 11856/11857); seek dispatch
 (11260/11261, 12539/12540, 12608/12609, 13096/13097, 13194/13195,
 14178–14193, 14730/14731); the skip adapter's two remaining tracker
-forwarders (17301/17303) → a P6 `patched` facade declaration with two
-counted receiver rewrites; the `_VpTraktScrobblerHostAdapter`'s
+forwarders (17301/17303) → a P6 `patched` facade declaration keeping P5's
+Trakt rewrite and adding two counted receiver rewrites (carry the P5
+`patched_class_projection` registration forward; no `earlier_patches`); the `_VpTraktScrobblerHostAdapter`'s
 `bindEpisodeTrackerProgressIdentity` unchanged.
 
 **Scaffolding:** patched State constructor appends `_simkl`, then
 `_mdblist`; two adapters; CI current → P6, P1–P5 `--at` (`31a347ad2`, `fc24e32ae`, `890df14d8`, `315028407`, `ea7901ead`); protect all 14
-earlier destinations; theme/source-guard lists; the
-`android_tv_mdblist_progress_source_test.dart` slice for the Simkl and
-MDBList percentage readers moves to the validating reader (equal or
-stronger, as phase 5 did for Trakt).
+earlier destinations; theme/source-guard lists; in
+`android_tv_mdblist_progress_source_test.dart` (already on the validating
+reader since P5) the Simkl/MDBList expected prefixes change from `_` to
+`_host.`, keeping the capture/rejection and TVMaze/rewatch assertions, with
+an independent failing mutation of each new adapter.
 
 ### Step 0 — characterization of the original
 
@@ -1195,13 +1200,35 @@ on play/pause/seek/EOF/dispose across all three trackers (Trakt now moved);
 async percent readers (same-show episode change, different-show
 rejection, A→B→A, concurrent reads resetting the shared cache, profile
 change/disposal during init and snapshot load); early windows for every
-moved initializer. Mutation proofs, coverage matrix, Claude sample.
+moved initializer. **Disabled vs disabling:** both initially disabled
+playback and disabling each tracker while its session stays active (Simkl
+loads enablement once, 1809, and its send path does not recheck targets,
+`simkl_service.dart:1101`; MDBList checks policy only at init) — record
+actual requests after pause, heartbeat, seek and exit; any continuation is
+a Follow-up, never fixed here. **Pending work:** hold an outgoing MDBList
+checkpoint, start an episode/source switch, dispose or change profile,
+release — assert outgoing/incoming target payloads, later requests,
+revision notifications and timer cleanup (`switchTarget` and `close` wait
+for sends, session 134/171; disposal closes unawaited, 11457); hold a Simkl
+response across retirement incl. the service-owned 409 recovery (25 s
+retry outliving the route, `simkl_service.dart:1183`); drain pending work
+before attaching another fixture. **Startup and heartbeat:** auth
+before/after playing and positive duration (Simkl arms its heartbeat only
+when playing with positive duration, 1822; the first usable-duration event
+starts MDBList, 3377); MDBList init while player setup is suspended (its
+sequence at 1998 — policy, player-init await, mounted, captured target,
+capability await, mounted, allocation, raw-position update, assignment,
+conditional play — and captured locals preserved); the 2-minute interval,
+cancellation on pause/EOF/dispose, Simkl's heartbeat keeping the local
+`start` marker so a later real pause still sends, same-side seek silence vs
+threshold crossings. Mutation proofs, coverage matrix, Claude sample.
 
 ### Device checklist (end of series)
 
 With Simkl and MDBList connected: start/pause/seek/stop for a movie and
 a series episode, watched at the threshold, progress visible elsewhere;
-disabled trackers send nothing.
+trackers disabled before playback send nothing; disabling one mid-playback
+behaves as characterized (continuation, if any, is a recorded follow-up).
 
 ## Follow-ups
 
@@ -2223,3 +2250,13 @@ transport + credential seeding + cipher barrier; tracker-specific
 protocols and error propagation; async reader/initialization races;
 source-text guard retarget via the validating reader. P3s: staged phases,
 concrete CI/comment ownership.
+
+## Phase 6 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+(Two "model at capacity" interruptions; resumed in the same session.) P2s
+folded: disabled-at-start vs disabled-mid-session characterized as-is;
+pending MDBList checkpoints across switch/dispose/profile change and held
+Simkl responses incl. the 409 recovery; startup ordering and heartbeat
+contracts. P3s: full `_trakt.traktProgress` → `_host.traktProgress` chain
+registration with frozen adapter body; accurate source-guard prefix update.
+Membership confirmed: 24 moves, 59 retained references; Hosts 19/15.
