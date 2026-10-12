@@ -2279,6 +2279,31 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   continuation/cache/rollback gaps are in Follow-ups. Manual Simkl/MDBList
   and PiP checklist remains pending. Stop at Step 0; no production moves.
 
+### 2026-10-12 — Phase 6 Step 0b (independent sample survivor audit)
+
+- **Original/sample.** Application `6d2ac75d8` equals `ea7901ead`; Claude's
+  independent sample records 18/20 assertion kills (90%). i2/i3 already match
+  the Step-0 init-marker and unresolved-episode equivalence proofs.
+- **Closure.** Added two original-caller tests: auth resolves while already
+  playing, then pause/exit checkpoint exactly 25%; incomplete season-only
+  launch rejects pause/heartbeat/seek/EOF/dispose. Detached-original controls
+  pass; exact i2/i3 survive. Neighboring pause-marker/whole-guard mutations
+  assertion-fail, with logs/patches/test hashes in `p6/step0b/`. Init is called
+  once, false enablement prevents earlier pause/stop writes, and no await
+  separates enablement from the stamp. The resolver accepts complete pairs
+  or bounded parsed episodes; `(season != null, episode == null)` is unreachable.
+  Both original statements remain unchanged by the extraction; no forged State
+  or direct private-method test is used to manufacture a kill.
+- **Evidence/scope.** Broader original control: 146 passing cases (144 new plus
+  two existing skip integrations); exact survivors retain equivalent status.
+  Full suite: 13,193 success / 13 pre-existing failure / 28 pre-existing load
+  error / 20 skip; exactly two passing additions, every old identity/outcome
+  unchanged. Analyzer/format pass. Baseline and resulting revision are in
+  `p6/step0b/completion.json`. Initial addendum runner accidentally replaced the
+  old raw control log; accepted ledger restored exactly, replacement archived
+  and hashes/deviation recorded explicitly. Mutation/suite logs remain intact.
+  No application/pubspec/bug fix/failure allowlist/production move in this commit.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

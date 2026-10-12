@@ -4432,3 +4432,88 @@ Stop after Step 0; no production move or bug fix.
 | `ast-333` (_currentEpisodeSimklPercent:2162) | `if (seriesPlaylist != null && seriesPlaylist.isSeries) {       final playlist = _activePlaylis…` → `if (seriesPlaylist != null && seriesPlaylist.isSeries) {       final playlist = _activePlaylis…` | killed: C108 |
 | `ast-389` (_currentEpisodeMdblistPercent:2198) | `final loaded =           await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(       …` → `final loaded = <String, double>{};` | killed: C079, C081, C077, C080, C078, C071, C075 |
 | `caller-init-mounted` (_initializePlayer:2879) | `if (!mounted) return;` → `` | killed: C039 |
+
+## Phase 6 Step 0b — independent sample and survivor audit (2026-10-12)
+
+Claude sampled application original `6d2ac75d8` (byte-identical to `ea7901ead`):
+**18/20 assertion kills (90%)**, no compile-error credit. Raw sample evidence is
+`p6/claude-sample/{p6-claude-muts.json,p6-claude-run.log,results.json}`. Both
+survivors match existing Step-0 equivalence entries, not newly accepted gaps.
+The exact mutations were replayed against detached `6d2ac75d8` with focused
+public-caller tests. Those tests pass on the original and both exact survivors;
+two neighboring non-equivalent mutations assertion-fail. No artificial private
+State writes, second initialization or forged resolver record is credited.
+
+| Sample | Observed result | Original witness / closure |
+|---|---|---|
+| `i1` | killed | Assertion kill: Secondary simkl custom identity policy disables otherwise enabled tracking before authentication, Simkl initially disabled policy cannot install even a silent heartbeat before any input |
+| `i2` | survived | Survives; equivalent to `simkl-init-marker`; new authentication-mid-playback pause/exit case passes unchanged; `i2-marker-pause-negative` assertion-kills |
+| `i3` | survived | Survives; equivalent to `simkl-unresolved-episode`; new incomplete season-only launch case rejects pause/heartbeat/seek/EOF/dispose; `i3-whole-guard-negative` assertion-kills |
+| `i4` | killed | Assertion kill: Secondary pause at 80 preserves Simkl strict and MDBList inclusive completion thresholds, Secondary simkl suspended snapshot episode pins late coordinates and original identity guard |
+| `i5` | killed | Assertion kill: Simkl EOF then disposal deduplicates the already sent stop checkpoint, Simkl held 201 stop across dispose pins response revisions and service-owned recovery |
+| `i6` | killed | Assertion kill: Secondary all-tracker pause fanout preserves ordered timer ownership and tracker-specific payloads, Secondary seek at 80 crosses tracker thresholds and seeking back rearms checkpoints |
+| `i7` | killed | Assertion kill: Secondary all-tracker pause fanout preserves ordered timer ownership and tracker-specific payloads, Secondary all-tracker seek fanout preserves ordered timer ownership and tracker-specific payloads |
+| `i8` | killed | Assertion kill: Simkl public seek endpoints send exactly one hundred then zero and a reverse seek at eighty remains resumable |
+| `i9` | killed | Assertion kill: Secondary seek at 80 crosses tracker thresholds and seeking back rearms checkpoints, Secondary seek at 81 crosses tracker thresholds and seeking back rearms checkpoints |
+| `i10` | killed | Assertion kill: Simkl public seek endpoints send exactly one hundred then zero and a reverse seek at eighty remains resumable, skip tracker seek order arms Trakt heartbeat before Simkl |
+| `i11` | killed | Assertion kill: Secondary mdblist initialization type gate preserves absent checkpoints |
+| `i12` | killed | Assertion kill: Secondary mdblist custom identity policy disables otherwise enabled tracking before authentication, Secondary mdblist initialization target gate preserves absent checkpoints |
+| `i13` | killed | Assertion kill: MDBList startup policy precedes suspended player setup and none preserves the captured setting, MDBList startup policy precedes suspended player setup and dispose preserves the captured setting |
+| `i14` | killed | Assertion kill: MDBList startup policy precedes suspended player setup and none preserves the captured setting, MDBList captured target before capability widget completion retains original allocation and guards |
+| `i15` | killed | Assertion kill: MDBList capability finishing paused allocates without starting until the real playing edge |
+| `i16` | killed | Assertion kill: Secondary held resume pins MDBList raw initialization then persistable pause and stop diagnostics, MDBList held resume play samples its promised position before any intervening native position event |
+| `i17` | killed | Assertion kill: Secondary all-tracker EOF fanout preserves ordered timer ownership and tracker-specific payloads |
+| `i18` | killed | Assertion kill: MDBList live seek and duration edge during manual validation keeps its original checkpoint at early-close |
+| `i19` | killed | Assertion kill: MDBList episode selection with newly invalid live identity exits then continues its outgoing target |
+| `i20` | killed | Assertion kill: Secondary held resume pins MDBList raw initialization then persistable pause and stop diagnostics |
+
+**i2 proof.** `_initSimklScrobble` has one original caller, `initState` (1677).
+Enablement remains false until its awaited policy/auth result is assigned; all
+pause/stop/seek writers reject false enablement. Between that assignment and
+the initializer's start stamp there is no await, callback or effectful getter.
+The marker is therefore null or already start; both differ from every live
+pause/stop action. No live caller passes start to `_simklScrobble`. The first
+pause/stop writes its own action, and timer/playing/validation callers overwrite
+the marker independently. Removing only the init stamp cannot suppress the
+first pause. Changing it to pause does suppress that pause and assertion-fails
+the new test. The original stamp remains verbatim in production.
+
+**i3 proof.** `_traktSeasonEpisode` accepts playlist and launch coordinates only
+when both are non-null (1758–1781). Its last fallback uses `parseFilename`.
+All paired regex groups are bounded decimal digits (1–2 season / 1–3 episode),
+so both parse; one-group episode patterns parse a bounded episode before any
+season inference. Anime sets season only after parsing an episode, and special
+content sets both together. No later parser assignment removes an episode.
+Thus the season-only launch input falls back to (null, null); episode-only
+filenames can produce (null, episode), but (season, null) is unreachable from
+original callers. Removing the episode operand is equivalent. A direct forged
+record/private-call test would violate original-caller characterization and is
+not used. The original two-operand guard remains verbatim in production.
+
+| New caller case | Original control | Exact survivor | Assertion-failing negative |
+|---|---|---|---|
+| Authentication arrives while already playing with positive duration; no later playing edge; user pause sends 25%, cancels timer, disposal sends stop 25% | PASS | `i2` PASS | `i2-marker-pause-negative` killed |
+| Season-only launch without an episode; pause, heartbeat, seek above 80%, EOF and disposal send no Simkl request | PASS | `i3` PASS | `i3-whole-guard-negative` killed |
+
+Evidence: `p6/step0b/closure-results.json` records the commands, test hashes,
+completed names and assertion messages; per-mutation patches and logs remain.
+The broader original control passes **146 cases** (144 new P6 cases plus two
+existing skip integrations). Existing 320-point Step-0 classifications stay
+301 killed / 15 equivalent / two dormant / two device-pending; the new cases
+have two additional non-equivalent assertion witnesses, without relabeling the
+exact survivor replays as kills. The observed independent score stays 18/20.
+
+One evidence-path error is explicit: the first addendum control reused Step 0's
+raw `mutations/control.jsonl` path. Its accepted ledger was restored byte-for-byte,
+and all mutation logs/full-suite baselines remain intact; the old raw control
+is superseded by `step0b/full-control.jsonl` (146 passing cases), not reconstructed.
+`step0b/evidence-path-note.json` and `step0/accepted-raw-control-superseded.json`
+record the old expected hash and actual replacement. No outcome was allowlisted.
+The new suite baseline and resulting revision are recorded in Step-0b completion
+once the additions-only comparison is complete. Application/pubspec unchanged.
+
+Step-0b full suite: **13,193 success / 13 pre-existing failure / 28 pre-existing
+load error / 20 skip**; official comparator and strict old-identity/outcome
+comparison PASS, exactly two passing additions, zero missing/changed/skipped old
+identities. New test analyzer/format pass. The application remains byte-identical
+to the named original; no manifest or CI transition in this addendum.
