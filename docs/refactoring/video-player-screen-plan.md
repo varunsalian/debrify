@@ -2044,6 +2044,41 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   Creation app/tool checks have identical inputs and remain valid. No bug fix.
 
 
+### 2026-10-12 — Phase 5 clean-tree gate (stop)
+
+- **Revision.** Clean tested `09c43cb56`, creation `edd4d9ca5`; Step-0b baseline
+  `e0772d8d8`, application original `315028407`. Gate result/revision and
+  artifact/source hashes in `p5/gate/completion.json`.
+- **Suite.** Nice-19 serialized hook-defined/no-pub `suite_evidence.py`:
+  13,049 successes, unchanged 13 failures / 28 load errors / 20 skips.
+  Exact baseline identities/outcomes and official comparison PASS;
+  zero added/missing/changed tests, no failure allowlisting.
+- **Checks.** All 34 Dart/Kotlin self/current/history commands PASS;
+  P5 current/same-revision, historical P1–P4. Root/CI scoped analyzer
+  84 / zero additions, prior mappings preserved, CI warning allowlist 47
+  nothing new/stale. Exact CI format, 2,998-file size / 140 ratchets,
+  architecture and negatives PASS. Broad scan variation/duplicate output is
+  archived; unchanged Step-T two-path root command and CI report 84 without
+  deduplication or inventory expansion. App/tool compatibility inputs remain
+  byte-identical across the test-only stabilization commit.
+- **Fixture NOTE.** Original missing-seek timing flake reproduced (1/3);
+  real public selection Future now awaited, all assertions retained.
+  Original/moved full-file 3× plus six original mutations pass. First raw
+  gate archived, fresh full suite rerun, no failure allowlist.
+- **Source guard/builds.** Three percentage readers validate live capture
+  and identity rejection; wrong reader/adapter forwarding assertion-fails
+  on detached creation. Both nice-19 release APK/macOS builds PASS on
+  clean tree; logs/artifact/AOT hashes archived, no install/run.
+- **Constraints.** Exact frozen 12 moves / 32 references and two app paths;
+  eager construction, borrowed guards and per-statement dispose ordering;
+  pubspec and all 13 earlier destinations unchanged, trailers and isolated
+  parser audit PASS, every original/source-guard mutation restored.
+- **Pending/stop.** Human Trakt/PiP movie/series start/pause/seek/stop,
+  >80 watched and cross-device resume; original profile/A→B→A/disposal gaps
+  retained in Follow-ups. No fix, new seam, real API network, push, merge,
+  switch or device command. Phase 5 complete; Phase 6 Simkl/MDBList is later.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

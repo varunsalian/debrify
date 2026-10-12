@@ -3643,3 +3643,44 @@ replays revalidate the only modified fixture file. No failure allowlisting,
 no outcome acceptance and no application fix. The full clean-tree gate is
 rerun after this test/docs-only commit. Previously completed app/tool checks
 have identical inputs; their creation evidence is retained.
+
+## Phase 5 clean-tree gate (2026-10-12)
+
+Clean tested `09c43cb56`, production creation `edd4d9ca5`, baseline `e0772d8d8`;
+application original `315028407`. Evidence `p5/gate/completion.json` records
+all commands, sources, SDK/configuration, actual result identities and artifacts.
+
+| Gate | Result |
+|---|---|
+| Full suite | 13,049 success / 13 pre-existing failure / 28 pre-existing load error / 20 skip; **exact** Step-0b identities and outcomes, zero added/missing/changed; official suite comparator PASS |
+| Move/history/self-tests | 34 commands pass: all 26 existing Dart manifest self-tests, P5 universal real configurations/negatives, current and same-revision --at, P1–P4 --at merge revisions and complete Kotlin self-test |
+| Analyzer | Root/CI comparator: 84 scoped occurrences, zero beyond frozen P5 maxima; infos and multiplicities included, earlier mappings preserved; CI allowlist 47 recorded warnings, nothing new/stale |
+| Format / sizes / architecture | Exact CI format list, 2,998-file size check / 140 ratchets, architecture and negatives PASS; facade 17,394 / controller 294 |
+| Source guard | Detached creation control passes; changing moved reader to widget identity or computed adapter to widget identity assertion-fails the retargeted Android TV test; sources restored |
+| Release builds | Sequential nice-19 `flutter build apk --release --no-pub` and `flutter build macos --release --no-pub` PASS on clean creation; no install/run; APK/AOT hashes and build logs archived |
+| Constraints | Exact two frozen application paths, all 13 earlier destinations protected, pubspec unchanged, all commit trailers checked, isolated parser flags/copy-kernel deletion audit PASS, every original mutation restored |
+
+First gate failed one original timing flake; the identical assertion reproduced
+on original (1/3), moved isolation passed 3/3. Awaiting the real public selection
+Future preserves all assertions; original/moved full-file 3× controls and six
+original mutation witnesses pass. No failure allowlist. First run is archived
+as `first-suite.*`; this gate rerun has exact baseline outcomes.
+
+The broad-root diagnostic scan variation noted in Step 1 remains recorded:
+no outside additions in the accepted before/after scan, removals at unchanged
+files/generated paths. A later broad scan emitted each of 84 physical player
+diagnostics twice; that rejected attempt is archived. The canonical two-path
+root-config command used at Step T emits 84 once each and passes the unchanged
+comparator, as does CI. No deduplication or inventory expansion. No diagnostic allowance beyond the frozen P5 probe, and no test-failure allowlisting.
+Known failures/load errors are observed baseline identities, not count-only
+allowance. The independent sample stays 17/18 as observed, with h17 closed by
+separate original assertion witnesses C78/C79. All 77 new Trakt cases pass on
+moved code. Current ownership CI points to P5; Simkl/MDBList stay State-owned
+except the two declared shared-percent forwardings, pending Phase 6.
+
+Human end-of-series Trakt movie/episode start/pause/seek/stop, >80 watched,
+cross-device resume and disabled-seek handover checks remain pending, including
+sealed-platform PiP seek `ref-18`. Existing profile, A→B→A and post-disposal
+reader gaps stay in Follow-ups. No bug fix, new seam, real API network,
+allowlisting of failures, device command, push, merge or branch switch.
+Stop after this gate.
