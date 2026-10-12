@@ -4626,3 +4626,42 @@ Flutter 3.44.8 / Dart 3.12.2, pubspec and all frozen application hashes remain
 unchanged. The manual Simkl/MDBList movie/series threshold, resume, disabled and
 mid-session-disable checks plus earlier device/PiP items remain pending. Existing
 profile/cache/recovery gaps stay Follow-ups; no bug fixes or later moves.
+
+
+## Phase 7 Step T — local completion tooling (2026-10-13)
+
+The named original is `2defa5100` (facade 17,087 lines), following approved
+`7498196ca`. Re-measurement is archived in `p7/tooling/inventory.json` and
+`probe/remeasured.json`: 828 exhaustive declarations, 14 moved, 813 retained,
+one patched State constructor and exactly 11 retained references at their
+original statement positions. Six fields are inert: four false literals and
+two references to `LocalCompletionStorage.defaultLocalCompletionThreshold`,
+which is `static const int` 80. Per-field source/line proofs are archived.
+
+The draft complete manifest freezes 21 live Host getters, the adapter and the
+eager `_completion` assignment after `_mdblist`. All 16 earlier destinations
+are protected. No sibling patch or shared guard change is needed. Raw and
+formatted complete evidence materializations compare with zero differences;
+optional comma insertion/deletion is zero, formatting idempotent, introduced
+formatting diagnostics zero. Real P7 positives, ten body/constructor/selector/
+retained negatives and independent binding-only registration/capture negatives
+pass. Every previous Dart configuration retains its behavior.
+
+All 34 required tooling commands pass: 26 existing Dart manifest self-tests,
+P7 universal/self-original (all 828 declarations), historical P1–P6 at
+`31a347ad2` / `fc24e32ae` / `890df14d8` / `315028407` / `ea7901ead` /
+`2defa5100`, plus Kotlin (597 tests). Root/strict/raw/formatted analyzer probes
+record 94/165/98/98 scoped diagnostics; earlier mappings and maxima retained.
+The episode marker's `empty_catches` identity and multiplicity one are preserved,
+not merely a total count. Async-context identities are unchanged; comparator
+negatives pass. Size 3,000 files / 140 ratchets and architecture 1,668 pass.
+Tool-only packages are isolated under ignored `.dart_tool/vplayer_parser/`,
+with copied kernels deleted and routing recorded under P7 evidence.
+
+A driver inventory-seed typo was rejected before analyzer execution, archived,
+and corrected to P6. The original full-suite baseline is reused from the P6
+clean gate after exact application/pubspec/analysis configuration equality with
+`2defa5100`, using the same Flutter/Dart SDK. No new failures accepted. Manifest
+stays draft, application/pubspec unchanged and production destination absent.
+CI current/self/analyzer transition and test/theme registration wait for the
+Step-1 commit creating `vp_local_completion.dart`. Step 0 remains separate.

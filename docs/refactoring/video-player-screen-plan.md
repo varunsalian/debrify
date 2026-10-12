@@ -2503,6 +2503,35 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   earlier device/PiP checklist items. No device execution, real tracker network,
   pubspec change, bug fix, push, merge, branch switch or later production move.
 
+### 2026-10-13 — Phase 7 Step T (local completion tooling checkpoint)
+
+- **Base/inventory.** Approved `7498196ca`; application re-measured by name at
+  `2defa5100`: 828 disjoint declarations, 14 moved / 813 retained / one patched
+  constructor, exactly 11 retained occurrences. Six inert initializers (four
+  false flags, two references to the storage `static const int` 80), 21 live
+  Host getters, eager `_completion` after `_mdblist`; 16 earlier destinations
+  protected. Revision/commands/hashes in `p7/tooling/completion.json`.
+- **Proof.** Draft manifest, raw and formatted evidence-only complete splits
+  compare with zero differences. No optional commas inserted/deleted; formatter
+  idempotent and zero introduced diagnostics. Real P7 positive plus ten body/
+  scaffolding/order negatives and binding-only selector/capture negatives pass.
+  Existing opt-ins suffice; no comparison-core change.
+- **Checks.** All 34 required commands PASS: 26 existing Dart manifest
+  self-tests, P7 universal/self-original comparison (all 828 classified), six
+  named P1–P6 merges and Kotlin self-test (597 tests). Analyzer root/strict/raw/
+  formatted counts 94/165/98/98; earlier mappings/maxima retained. The moved
+  `empty_catches` identity remains `_markCurrentEpisodeAsFinished`, multiplicity
+  one; async-context identities unchanged. Comparator negatives pass. Size
+  3,000 / 140 ratchets and architecture 1,668 pass. Isolated parser copies and
+  copied-kernel deletion are recorded.
+- **Scope/deviation.** First analyzer driver pointed its inventory seed at the
+  not-yet-created P7 file; rejected before execution, archived and corrected to
+  P6. Original suite baseline reused from P6 gate after exact application/pubspec/
+  analysis-config equality at the named P7 base; SDK unchanged. Application and
+  pubspec unchanged, no production destination, CI/theme/size-baseline changes.
+  CI current/self/analyzer → P7 and test/theme registration enable only in Step 1
+  creating `vp_local_completion.dart`. Step 0 follows separately; no moves.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
