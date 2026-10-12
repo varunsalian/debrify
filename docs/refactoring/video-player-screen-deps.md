@@ -4665,3 +4665,398 @@ clean gate after exact application/pubspec/analysis configuration equality with
 stays draft, application/pubspec unchanged and production destination absent.
 CI current/self/analyzer transition and test/theme registration wait for the
 Step-1 commit creating `vp_local_completion.dart`. Step 0 remains separate.
+
+## Phase 7 Step 0 — original local completion characterization (2026-10-13)
+
+Application original `2defa5100`; tooling checkpoint `98bf408f4`. Controls and
+mutations use the detached `p7/step0/original/` worktree. The main application,
+pubspec, CI/theme/source-guard registrations and size baseline stay unchanged;
+`vplayer_p7.json` remains a draft and `vp_local_completion.dart` is absent.
+
+The Phase 5–6 synthetic HTTP transport, credential seeding, profile-policy mirror
+and pumping `finish()` helper are reused. A new test-only await-delivery observer
+holds actual storage results at executed callers. Its completion-loader barrier
+accepts only the two-element `List<int>`, so player defaults and construction can
+finish independently. Physical preferences use the real preference transport;
+profile-specific resume rows are inspected in each actual SQLite database.
+The fake frame-position opt-in preserves its previous 80 ms default.
+
+Coverage pins thresholds and both loader arrival orders, all sixteen policy
+combinations, native identities and channel exclusions, live widget selectors,
+movie completion/rewatch, single-file and parsed playlists, validation/zero
+position/zero duration, caller resets and legacy resume/speed restoration. All
+six moved initializers have early-window witnesses, including both directions
+of the default-80 threshold mutation. EOF is independently covered: episodes
+ignore local enablement and the position one-shot, whereas movies keep their
+tracking/identity/one-shot gates. Repeated and overlapping EOF writes pin stamps
+and revisions; all three tracker stops precede awaited episode/movie work and
+the sleep-stop decision. Physical resume cleanup also pins playback-sync rather
+than ordinary library notification, including a later EOF with a fresh bookmark.
+
+The cross-profile cases hold A's real read, finish the public B handoff, then
+release while mounted or disposed. They assert both profiles' physical contents,
+A's unrelated records copied into B, B's unrelated records lost, notifications,
+cleanup and Continue Watching. Scoped resume removal separately deletes A's row
+and preserves B's row. These pre-existing writes remain unchanged. Caught movie
+and episode failures spend their guards; rejected preference writes can update
+the cache while physical contents remain old. SQL and preference failures pin
+partial `Future.wait` cleanup. The unawaited rewatch failure remains uncaught;
+a held unmark can remove a later completed marker without restoring resume saves.
+
+Two additional original windows are preserved in the plan's Follow-ups. A first
+movie jump above default 80 can be unmarked when 90 arrives if the rewatch flag
+was never spent; ordinary earlier low progress preserves its marker. A source
+replacement publishes its rebuilt cache before URL resolution and reset: an
+outgoing index that still fits can mark an unplayed incoming episode, while an
+out-of-range index spends the episode guard without writing. The missing-title
+return is therefore **not equivalent**: its absence spends the old guard and
+suppresses that later incoming write. Both source cases use public guide selection,
+a held synthetic TorBox response and `finish()`, without private State access.
+
+The statement/branch/literal inventory covers all 14 moved declarations and the
+frozen 11 retained occurrences. `ast-site-matrix.json` maps every one of 189
+original analyzer AST sites to concrete mutations. All six initializers have
+eight probes, including both threshold directions. The first 113-point sweep
+recorded 97 assertion kills, 15 survivors and one nullable-promotion compilation
+failure. The latter receives no kill credit and is replaced by a null-safe
+conjunction at the same fallback branch. Real gaps and omitted name selectors
+are closed with original caller tests and separate replay records. Three
+invariances have source proofs and passing final-input replays: removing either
+playlist coordinate null check throws inside the same empty catch before any
+service call, after the guard was spent; removing the outer movie one-shot still
+hits the synchronous identical check in its callee before any side effect.
+The extra retained resume-result mutation pins the unfinished restore path.
+
+Rejected development attempts stay archived. The copied first runner selected
+`ea7901ead` instead of the named P7 base; that control and its preflight-rejected
+sweep are excluded. The corrected runner verifies the application SHA against
+`git show 2defa5100` before every invocation and restores it after every mutation.
+Expanded-control fixture assumptions (cache versus physical write failure,
+auto-resume overriding a requested index, and a stale preference instance during
+cache refill) are corrected in separate final logs. Refilling the current cache
+then kills removal of the failed-rewatch guard directly. No error-only,
+load-failing, compilation-failing, timed-out or incomplete run is counted as
+an assertion kill.
+
+The final canonical sweep has **114 assertion-killed points and three evidenced
+equivalences (117 total)**, including four supplemental witnesses. All **98 new
+behavior identities** have an assertion-failing original witness with their final
+case-file and support-file hashes. The per-case table and `coverage.json` record
+the exact run, not just a suite failure count. No source-text test receives
+behavior coverage credit.
+
+### New characterization files
+
+| File under `test/features/video_player/` | Cases |
+|---|---|
+| `video_player_completion_basic_test.dart` | 11 |
+| `video_player_completion_checkpoint_test.dart` | 1 |
+| `video_player_completion_eof_test.dart` | 10 |
+| `video_player_completion_failures_test.dart` | 6 |
+| `video_player_completion_inputs_test.dart` | 12 |
+| `video_player_completion_loads_test.dart` | 31 |
+| `video_player_completion_playlist_boundaries_test.dart` | 3 |
+| `video_player_completion_playlist_test.dart` | 9 |
+| `video_player_completion_profiles_test.dart` | 6 |
+| `video_player_completion_resets_test.dart` | 5 |
+| `video_player_completion_resume_test.dart` | 2 |
+| `video_player_completion_source_window_test.dart` | 2 |
+
+### Declaration and retained-reference coverage
+
+| Original declaration (State owner) | Original caller / observable coverage | Points |
+|---|---|---|
+| `_currentEpisodeMarkedAsFinished` | Early first completion, position one-shot, repeated/overlapping EOF, incomplete metadata and all caller resets | 1 |
+| `_currentMovieMarkedAsFinished` | Early first completion, cleanup once, caught failures, external bookmark preservation and direct EOF | 1 |
+| `_currentMovieRewatchStarted` | Initial low progress, exact first-threshold input, public marker refill after failed unmark and all resets | 1 |
+| `_movieCompletionThreshold` | Default 80 before selective delivery; 70/90 initializer probes, 50/70/80/100 configured equality and both arrival orders | 2 |
+| `_episodeCompletionThreshold` | Default 80 before selective delivery; 70/90 initializer probes, asymmetric settings and paused re-evaluation | 2 |
+| `_loadLocalCompletionThresholds` | Actual independent reads/indexes/writes, lower/higher delivery without another tick, uncaught malformed storage and disposal | 8 |
+| `_usesLocalCompletionTracking` | Sixteen configurations, native/media-library ownership, channel exclusions and public flag retirement | 8 |
+| `_forceLocalCompletionTracking` | Policy held before delivery with tracker intent, native identities, sixteen settings/flag combinations and live selectors | 1 |
+| `_loadTrackingPolicy` | Content identity, all three live flags, independent arrival orders, immediate re-evaluation and disposal | 8 |
+| `_currentLocalMovieImdbId` | Non-movie/null/empty/space/trim identity; mark/unmark physical contents and finished/unfinished resume decisions | 5 |
+| `_resetLocalCompletionState` | MagicTV, Stremio TV and playlist callbacks; rewatch and incoming completion on the existing State | 3 |
+| `_markCurrentEpisodeAsFinished` | Single-file title/coordinates/ID; parsed/enriched/fallback playlist; missing metadata, old-index window, repeated/overlapping/tracker EOF, catches and cross-profile physical writes | 31 |
+| `_markCurrentMovieAsFinished` | Tracking/identity/one-shot gates, marker/CW/map/scoped-resume cleanup, playback-sync notification and partial/caught failures | 10 |
+| `_checkAndApplyLocalCompletion` | Validation, zero position/duration, percent arithmetic and equality, rewatch/held failure, both series suppliers and position-only one-shot | 24 |
+
+| Frozen reference | Original containing declaration | Original line / read or call | Witness |
+|---|---|---|---|
+| `ref-00` | `initState` | 1630: `_loadLocalCompletionThresholds()` | `final2-ref-00` |
+| `ref-01` | `initState` | 1628: `_loadTrackingPolicy()` | `ref-01` |
+| `ref-02` | `_bindPlayerInstanceSubscriptions` | 2940: `_checkAndApplyLocalCompletion()` | `ref-02` |
+| `ref-03` | `_onPlaybackEnded` | 4348: `_markCurrentEpisodeAsFinished()` | `witness-ref-03` |
+| `ref-04` | `_onPlaybackEnded` | 4352: `_markCurrentMovieAsFinished()` | `witness-ref-04` |
+| `ref-05` | `_goToNextEpisode` | 5237: `_resetLocalCompletionState()` | `ref-05` |
+| `ref-06` | `_switchToStremioTvChannel` | 9030: `_resetLocalCompletionState()` | `ref-06` |
+| `ref-07` | `_loadPlaylistIndexAttempt` | 9770: `_resetLocalCompletionState()` | `ref-07` |
+| `ref-08` | `_maybeRestoreResume` | 11404: `_currentLocalMovieImdbId` | `ref-08` |
+| `ref-09` | `_saveResumeLocked` | 11848: `_currentMovieMarkedAsFinished` | `ref-09` |
+| `ref-10` | `_saveResumeLocked` | 11848: `_currentLocalMovieImdbId` | `ref-10` |
+
+The 11-occurrence ledger remains unchanged. Supplemental mutations cover the
+whole tracking predicate in both directions, the transient upper-index guard and
+the retained finished-movie resume decision; they introduce no production edit.
+
+### Canonical original mutation table
+
+| Point | Declaration / original line | Mutation (complete patch in evidence) | Result / recorded run |
+|---|---|---|---|
+| `field-currentEpisodeMarkedAsFinished` | `_currentEpisodeMarkedAsFinished`:1392 | `false` → `true` | KILL, 8 assertions; `field-currentEpisodeMarkedAsFinished` |
+| `field-currentMovieMarkedAsFinished` | `_currentMovieMarkedAsFinished`:1393 | `false` → `true` | KILL, 10 assertions; `field-currentMovieMarkedAsFinished` |
+| `field-currentMovieRewatchStarted` | `_currentMovieRewatchStarted`:1394 | `false` → `true` | KILL, 5 assertions; `field-currentMovieRewatchStarted` |
+| `field-forceLocalCompletionTracking` | `_forceLocalCompletionTracking`:1696 | `false` → `true` | KILL, 4 assertions; `field-forceLocalCompletionTracking` |
+| `field-movieCompletionThreshold-70` | `_movieCompletionThreshold`:1396 | `LocalCompletionStorage.defaultLocalCompletionThreshold` → `70` | KILL, 1 assertions; `field-movieCompletionThreshold-70` |
+| `field-movieCompletionThreshold-90` | `_movieCompletionThreshold`:1396 | `LocalCompletionStorage.defaultLocalCompletionThreshold` → `90` | KILL, 2 assertions; `field-movieCompletionThreshold-90` |
+| `field-episodeCompletionThreshold-70` | `_episodeCompletionThreshold`:1398 | `LocalCompletionStorage.defaultLocalCompletionThreshold` → `70` | KILL, 1 assertions; `field-episodeCompletionThreshold-70` |
+| `field-episodeCompletionThreshold-90` | `_episodeCompletionThreshold`:1398 | `LocalCompletionStorage.defaultLocalCompletionThreshold` → `90` | KILL, 2 assertions; `field-episodeCompletionThreshold-90` |
+| `threshold-movie-read` | `_loadLocalCompletionThresholds`:1677 | `LocalCompletionStorage.getMovieCompletionThreshold()` → `LocalCompletionStorage.getEpisodeCompletionThreshold()` | KILL, 1 assertions; `threshold-movie-read` |
+| `threshold-episode-read` | `_loadLocalCompletionThresholds`:1678 | `LocalCompletionStorage.getEpisodeCompletionThreshold()` → `LocalCompletionStorage.getMovieCompletionThreshold()` | KILL, 2 assertions; `threshold-episode-read` |
+| `threshold-mounted` | `_loadLocalCompletionThresholds`:1680 | `if (!mounted) return;` → `` | KILL, 1 assertions; `witness-threshold-mounted` |
+| `threshold-movie-index` | `_loadLocalCompletionThresholds`:1681 | `values[0]` → `values[1]` | KILL, 1 assertions; `threshold-movie-index` |
+| `threshold-episode-index` | `_loadLocalCompletionThresholds`:1682 | `values[1]` → `values[0]` | KILL, 2 assertions; `threshold-episode-index` |
+| `threshold-movie-write` | `_loadLocalCompletionThresholds`:1681 | `_movieCompletionThreshold = values[0];` → `` | KILL, 1 assertions; `final2-threshold-movie-write` |
+| `threshold-episode-write` | `_loadLocalCompletionThresholds`:1682 | `_episodeCompletionThreshold = values[1];` → `` | KILL, 3 assertions; `threshold-episode-write` |
+| `threshold-reevaluate` | `_loadLocalCompletionThresholds`:1685 | `_checkAndApplyLocalCompletion();` → `` | KILL, 4 assertions; `threshold-reevaluate` |
+| `policy-load` | `_loadTrackingPolicy`:1699 | `await TrackingSourcePolicy.load()` → `(await TrackingSourcePolicy.load()).forContent('medialibrary:mutant')` | KILL, 7 assertions; `policy-load` |
+| `policy-content` | `_loadTrackingPolicy`:1700 | `_effectiveContentImdbId` → `null` | KILL, 2 assertions; `policy-content` |
+| `policy-mounted` | `_loadTrackingPolicy`:1702 | `if (!mounted) return;` → `` | KILL, 1 assertions; `witness-policy-mounted` |
+| `policy-force` | `_loadTrackingPolicy`:1703 | `policy.usesLocalCompletionTracking(` → `false && policy.usesLocalCompletionTracking(` | KILL, 5 assertions; `witness-policy-force` |
+| `policy-trakt` | `_loadTrackingPolicy`:1704 | `traktScrobble: widget.traktScrobble` → `traktScrobble: false` | KILL, 1 assertions; `policy-trakt` |
+| `policy-simkl` | `_loadTrackingPolicy`:1705 | `simklScrobble: widget.simklScrobble` → `simklScrobble: false` | KILL, 1 assertions; `policy-simkl` |
+| `policy-mdblist` | `_loadTrackingPolicy`:1706 | `mdblistScrobble: widget.mdblistScrobble` → `mdblistScrobble: false` | KILL, 1 assertions; `policy-mdblist` |
+| `policy-reevaluate` | `_loadTrackingPolicy`:1711 | `_checkAndApplyLocalCompletion();` → `` | KILL, 3 assertions; `policy-reevaluate` |
+| `uses-force` | `_usesLocalCompletionTracking`:1689 | `_forceLocalCompletionTracking` → `false` | KILL, 10 assertions; `uses-force` |
+| `uses-trakt` | `_usesLocalCompletionTracking`:1690 | `!widget.traktScrobble` → `true` | KILL, 6 assertions; `uses-trakt` |
+| `uses-simkl` | `_usesLocalCompletionTracking`:1691 | `!widget.simklScrobble` → `true` | KILL, 2 assertions; `uses-simkl` |
+| `uses-mdblist` | `_usesLocalCompletionTracking`:1692 | `!widget.mdblistScrobble` → `true` | KILL, 2 assertions; `uses-mdblist` |
+| `uses-tv` | `_usesLocalCompletionTracking`:1693 | `widget.stremioTvChannels == null` → `true` | KILL, 1 assertions; `witness-uses-tv` |
+| `uses-iptv` | `_usesLocalCompletionTracking`:1694 | `_effectiveIptvChannels == null` → `true` | KILL, 1 assertions; `witness-uses-iptv` |
+| `movie-id-type` | `_currentLocalMovieImdbId`:1715 | `if (_effectiveContentType != 'movie') return null;` → `` | KILL, 2 assertions; `movie-id-type` |
+| `movie-id-capture` | `_currentLocalMovieImdbId`:1716 | `_effectiveContentImdbId?.trim()` → `'tt7199999'` | KILL, 46 assertions; `witness-movie-id-capture` |
+| `movie-id-trim` | `_currentLocalMovieImdbId`:1716 | `_effectiveContentImdbId?.trim()` → `_effectiveContentImdbId` | KILL, 1 assertions; `movie-id-trim` |
+| `movie-id-empty` | `_currentLocalMovieImdbId`:1717 | `imdbId == null \|\| imdbId.isEmpty` → `imdbId == null` | KILL, 2 assertions; `movie-id-empty` |
+| `reset-currentEpisodeMarkedAsFinished` | `_resetLocalCompletionState`:1721 | `_currentEpisodeMarkedAsFinished = false;` → `` | KILL, 3 assertions; `witness-reset-currentEpisodeMarkedAsFinished` |
+| `reset-currentMovieMarkedAsFinished` | `_resetLocalCompletionState`:1722 | `_currentMovieMarkedAsFinished = false;` → `` | KILL, 1 assertions; `witness-reset-currentMovieMarkedAsFinished` |
+| `reset-currentMovieRewatchStarted` | `_resetLocalCompletionState`:1723 | `_currentMovieRewatchStarted = false;` → `` | KILL, 1 assertions; `witness-reset-currentMovieRewatchStarted` |
+| `episode-snapshot` | `_markCurrentEpisodeAsFinished`:9461 | `final seriesPlaylist = _seriesPlaylist;` → `final seriesPlaylist = null as SeriesPlaylist?;` | KILL, 7 assertions; `episode-snapshot` |
+| `episode-single-series` | `_markCurrentEpisodeAsFinished`:9464 | `widget.contentType == 'series'` → `true` | KILL, 5 assertions; `final-series-episode-single-series` |
+| `episode-single-season` | `_markCurrentEpisodeAsFinished`:9465 | `widget.contentSeason != null` → `true` | KILL, 1 assertions; `closure2-episode-single-season` |
+| `episode-single-episode` | `_markCurrentEpisodeAsFinished`:9466 | `widget.contentEpisode != null` → `true` | KILL, 1 assertions; `closure2-episode-single-episode` |
+| `episode-single-id` | `_markCurrentEpisodeAsFinished`:9467 | `widget.contentImdbId != null` → `true` | KILL, 1 assertions; `closure2-episode-single-id` |
+| `episode-single-flag` | `_markCurrentEpisodeAsFinished`:9468 | `_currentEpisodeMarkedAsFinished = true;` → `` | KILL, 4 assertions; `episode-single-flag` |
+| `episode-single-title` | `_markCurrentEpisodeAsFinished`:9471 | `widget.contentTitle ?? widget.title` → `widget.title` | KILL, 8 assertions; `final-series-episode-single-title` |
+| `episode-single-fallback` | `_markCurrentEpisodeAsFinished`:9471 | `widget.contentTitle ?? widget.title` → `widget.contentTitle ?? 'changed title'` | KILL, 1 assertions; `episode-single-fallback` |
+| `episode-single-season-value` | `_markCurrentEpisodeAsFinished`:9472 | `season: widget.contentSeason!` → `season: 99` | KILL, 10 assertions; `episode-single-season-value` |
+| `episode-single-episode-value` | `_markCurrentEpisodeAsFinished`:9473 | `episode: widget.contentEpisode!` → `episode: 99` | KILL, 10 assertions; `episode-single-episode-value` |
+| `episode-single-id-value` | `_markCurrentEpisodeAsFinished`:9474 | `imdbId: widget.contentImdbId` → `imdbId: 'tt7199999'` | KILL, 2 assertions; `witness-episode-single-id-value` |
+| `episode-single-catch` | `_markCurrentEpisodeAsFinished`:9476 | `catch (_) {}` → `catch (_) { rethrow; }` | KILL, 1 assertions; `final2-episode-single-catch` |
+| `episode-playlist-return` | `_markCurrentEpisodeAsFinished`:9481 | `seriesPlaylist.seriesTitle == null` → `false` | KILL, 1 assertions; `closure2-episode-playlist-return` |
+| `episode-index-low` | `_markCurrentEpisodeAsFinished`:9487 | `_currentIndex >= 0` → `_currentIndex > 0` | KILL, 6 assertions; `episode-index-low` |
+| `episode-index-high` | `_markCurrentEpisodeAsFinished`:9487 | `_currentIndex < _activePlaylist!.length` → `_currentIndex < _activePlaylist!.length - 1` | KILL, 1 assertions; `episode-index-high` |
+| `episode-index-match` | `_markCurrentEpisodeAsFinished`:9489 | `episode.originalIndex == _currentIndex` → `episode.originalIndex == 99` | KILL, 2 assertions; `episode-index-match` |
+| `episode-fallback` | `_markCurrentEpisodeAsFinished`:9490 | `orElse: () => seriesPlaylist.allEpisodes.first` → `orElse: () => seriesPlaylist.allEpisodes.last` | KILL, 1 assertions; `episode-fallback` |
+| `episode-playlist-title` | `_markCurrentEpisodeAsFinished`:9496 | `seriesTitle: seriesPlaylist.seriesTitle!` → `seriesTitle: 'changed title'` | KILL, 3 assertions; `final-series-episode-playlist-title` |
+| `episode-playlist-season` | `_markCurrentEpisodeAsFinished`:9497 | `season: currentEpisode.seriesInfo.season!` → `season: 99` | KILL, 6 assertions; `episode-playlist-season` |
+| `episode-playlist-episode` | `_markCurrentEpisodeAsFinished`:9498 | `episode: currentEpisode.seriesInfo.episode!` → `episode: 99` | KILL, 6 assertions; `episode-playlist-episode` |
+| `episode-playlist-id` | `_markCurrentEpisodeAsFinished`:9499 | `imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId` → `imdbId: 'tt7199999'` | KILL, 2 assertions; `witness-episode-playlist-id` |
+| `episode-playlist-id-fallback` | `_markCurrentEpisodeAsFinished`:9499 | `imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId` → `imdbId: seriesPlaylist.imdbId` | KILL, 1 assertions; `episode-playlist-id-fallback` |
+| `episode-playlist-id-preference` | `_markCurrentEpisodeAsFinished`:9499 | `imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId` → `imdbId: widget.contentImdbId` | KILL, 1 assertions; `episode-playlist-id-preference` |
+| `episode-playlist-catch` | `_markCurrentEpisodeAsFinished`:9503 | `catch (e) {}` → `catch (e) { rethrow; }` | KILL, 1 assertions; `closure2-episode-playlist-catch` |
+| `episode-playlist-flag` | `_markCurrentEpisodeAsFinished`:9484 | `_currentEpisodeMarkedAsFinished = true;` → `` | KILL, 2 assertions; `witness-episode-playlist-flag` |
+| `episode-metadata-season` | `_markCurrentEpisodeAsFinished`:9493 | `currentEpisode.seriesInfo.season != null` → `true` | EQUIVALENT, 0 assertions; `closure2-episode-metadata-season` |
+| `episode-metadata-episode` | `_markCurrentEpisodeAsFinished`:9494 | `currentEpisode.seriesInfo.episode != null` → `true` | EQUIVALENT, 0 assertions; `closure2-episode-metadata-episode` |
+| `movie-mark-tracking` | `_markCurrentMovieAsFinished`:9508 | `!_usesLocalCompletionTracking \|\|` → `false \|\|` | KILL, 7 assertions; `closure2-movie-mark-tracking` |
+| `movie-mark-marked` | `_markCurrentMovieAsFinished`:9509 | `_currentMovieMarkedAsFinished \|\|` → `false \|\|` | KILL, 1 assertions; `closure2-movie-mark-marked` |
+| `movie-mark-id` | `_markCurrentMovieAsFinished`:9507 | `final imdbId = _currentLocalMovieImdbId;` → `final imdbId = _currentLocalMovieImdbId ?? '';` | KILL, 2 assertions; `closure2-movie-mark-id` |
+| `movie-mark-flag` | `_markCurrentMovieAsFinished`:9515 | `_currentMovieMarkedAsFinished = true;` → `` | KILL, 5 assertions; `movie-mark-flag` |
+| `movie-mark-movie-write` | `_markCurrentMovieAsFinished`:9518 | `MovieProgressStorage.markMovieAsFinished(imdbId)` → `Future<void>.value()` | KILL, 7 assertions; `movie-mark-movie-write` |
+| `movie-mark-resume-remove` | `_markCurrentMovieAsFinished`:9519 | `VideoResumeStorage.removeVideoResume( _resumeKey, playbackCheckpoint: true, )` → `Future<void>.value()` | KILL, 5 assertions; `movie-mark-resume-remove` |
+| `movie-mark-resume-key` | `_markCurrentMovieAsFinished`:9520 | `_resumeKey` → `'wrong-key'` | KILL, 5 assertions; `movie-mark-resume-key` |
+| `movie-mark-checkpoint` | `_markCurrentMovieAsFinished`:9521 | `playbackCheckpoint: true` → `playbackCheckpoint: false` | KILL, 1 assertions; `closure2-movie-mark-checkpoint` |
+| `movie-mark-catch` | `_markCurrentMovieAsFinished`:9525 | `// Playback remains usable if local storage is temporarily unavailable.` → `rethrow;` | KILL, 3 assertions; `final2-movie-mark-catch` |
+| `dispatch-movie-identity` | `_checkAndApplyLocalCompletion`:9541 | `final movieImdbId = _currentLocalMovieImdbId;` → `final movieImdbId = null as String?;` | KILL, 13 assertions; `dispatch-movie-identity` |
+| `dispatch-validation` | `_checkAndApplyLocalCompletion`:9533 | `_validationGateActive \|\|` → `false \|\|` | KILL, 1 assertions; `witness-dispatch-validation` |
+| `dispatch-tracking` | `_checkAndApplyLocalCompletion`:9534 | `!_usesLocalCompletionTracking \|\|` → `false \|\|` | KILL, 1 assertions; `closure2-dispatch-tracking` |
+| `dispatch-duration` | `_checkAndApplyLocalCompletion`:9535 | `_duration <= Duration.zero` → `false` | KILL, 1 assertions; `witness-dispatch-duration` |
+| `dispatch-position` | `_checkAndApplyLocalCompletion`:9536 | `_position <= Duration.zero` → `false` | KILL, 1 assertions; `witness-dispatch-position` |
+| `dispatch-numerator` | `_checkAndApplyLocalCompletion`:9540 | `_position.inMicroseconds` → `_position.inMilliseconds` | KILL, 20 assertions; `dispatch-numerator` |
+| `dispatch-denominator` | `_checkAndApplyLocalCompletion`:9540 | `_duration.inMicroseconds` → `_duration.inMilliseconds` | KILL, 17 assertions; `dispatch-denominator` |
+| `dispatch-scale` | `_checkAndApplyLocalCompletion`:9540 | `* 100` → `* 10` | KILL, 20 assertions; `dispatch-scale` |
+| `dispatch-rewatch-flag` | `_checkAndApplyLocalCompletion`:9543 | `!_currentMovieRewatchStarted &&` → `true &&` | KILL, 1 assertions; `final2-dispatch-rewatch-flag` |
+| `dispatch-rewatch-threshold` | `_checkAndApplyLocalCompletion`:9543 | `percent < _movieCompletionThreshold` → `percent <= _movieCompletionThreshold` | KILL, 1 assertions; `closure2-dispatch-rewatch-threshold` |
+| `dispatch-rewatch-assignment` | `_checkAndApplyLocalCompletion`:9547 | `_currentMovieRewatchStarted = true;` → `` | KILL, 1 assertions; `dispatch-rewatch-assignment` |
+| `dispatch-unmark` | `_checkAndApplyLocalCompletion`:9548 | `unawaited(MovieProgressStorage.unmarkMovieAsFinished(movieImdbId));` → `` | KILL, 7 assertions; `dispatch-unmark` |
+| `dispatch-movie-threshold` | `_checkAndApplyLocalCompletion`:9551 | `percent >= _movieCompletionThreshold` → `percent > _movieCompletionThreshold` | KILL, 3 assertions; `dispatch-movie-threshold` |
+| `dispatch-movie-call` | `_checkAndApplyLocalCompletion`:9552 | `unawaited(_markCurrentMovieAsFinished());` → `` | KILL, 11 assertions; `dispatch-movie-call` |
+| `dispatch-series-type` | `_checkAndApplyLocalCompletion`:9558 | `_effectiveContentType == 'series'` → `false` | KILL, 5 assertions; `dispatch-series-type` |
+| `dispatch-series-playlist` | `_checkAndApplyLocalCompletion`:9558 | `_seriesPlaylist?.isSeries == true` → `false` | KILL, 1 assertions; `closure2-dispatch-series-playlist` |
+| `dispatch-series-flag` | `_checkAndApplyLocalCompletion`:9560 | `_currentEpisodeMarkedAsFinished \|\|` → `false \|\|` | KILL, 6 assertions; `dispatch-series-flag` |
+| `dispatch-series-threshold` | `_checkAndApplyLocalCompletion`:9561 | `percent < _episodeCompletionThreshold` → `percent <= _episodeCompletionThreshold` | KILL, 10 assertions; `dispatch-series-threshold` |
+| `dispatch-series-call` | `_checkAndApplyLocalCompletion`:9564 | `unawaited(_markCurrentEpisodeAsFinished());` → `` | KILL, 9 assertions; `dispatch-series-call` |
+| `dispatch-movie-flag` | `_checkAndApplyLocalCompletion`:9550 | `!_currentMovieMarkedAsFinished &&` → `true &&` | EQUIVALENT, 0 assertions; `final2-dispatch-movie-flag` |
+| `ref-00` | `initState`:1630 | `_loadLocalCompletionThresholds()` → `Future<void>.value()` | KILL, 1 assertions; `final2-ref-00` |
+| `ref-01` | `initState`:1628 | `_loadTrackingPolicy()` → `Future<void>.value()` | KILL, 11 assertions; `ref-01` |
+| `ref-02` | `_bindPlayerInstanceSubscriptions`:2940 | `_checkAndApplyLocalCompletion()` → `(() {})()` | KILL, 3 assertions; `ref-02` |
+| `ref-03` | `_onPlaybackEnded`:4348 | `_markCurrentEpisodeAsFinished()` → `Future<void>.value()` | KILL, 2 assertions; `witness-ref-03` |
+| `ref-04` | `_onPlaybackEnded`:4352 | `_markCurrentMovieAsFinished()` → `Future<void>.value()` | KILL, 1 assertions; `witness-ref-04` |
+| `ref-05` | `_goToNextEpisode`:5237 | `_resetLocalCompletionState()` → `(() {})()` | KILL, 3 assertions; `ref-05` |
+| `ref-06` | `_switchToStremioTvChannel`:9030 | `_resetLocalCompletionState()` → `(() {})()` | KILL, 1 assertions; `ref-06` |
+| `ref-07` | `_loadPlaylistIndexAttempt`:9770 | `_resetLocalCompletionState()` → `(() {})()` | KILL, 1 assertions; `ref-07` |
+| `ref-08` | `_maybeRestoreResume`:11404 | `_currentLocalMovieImdbId` → `(null as String?)` | KILL, 2 assertions; `ref-08` |
+| `ref-09` | `_saveResumeLocked`:11848 | `_currentMovieMarkedAsFinished` → `false` | KILL, 1 assertions; `ref-09` |
+| `ref-10` | `_saveResumeLocked`:11848 | `_currentLocalMovieImdbId` → `(null as String?)` | KILL, 1 assertions; `ref-10` |
+| `ast-056` | `_currentLocalMovieImdbId`:1717 | `return imdbId == null \|\| imdbId.isEmpty ? null : imdbId;` → `return 'changed';` | KILL, 45 assertions; `ast-056` |
+| `ast-072` | `_markCurrentEpisodeAsFinished`:9463 | `seriesPlaylist == null \|\| !seriesPlaylist.isSeries` → `seriesPlaylist == null && !(seriesPlaylist?.isSeries ?? false)` | KILL, 1 assertions; `closure2-ast-072` |
+| `ast-091` | `_markCurrentEpisodeAsFinished`:9477 | `return;` → `throw StateError('completion return mutation');` | KILL, 18 assertions; `ast-091` |
+| `ast-094` | `_markCurrentEpisodeAsFinished`:9479 | `if (seriesPlaylist == null \|\| !seriesPlaylist.isSeries \|\| seriesPlaylist.seriesTitle == null) { return; }` → `if (seriesPlaylist == null \|\| !seriesPlaylist.isSeries \|\| seriesPlaylist.seriesTitle == null) { throw S...` | KILL, 1 assertions; `final-series-ast-094` |
+| `ast-127` | `_markCurrentMovieAsFinished`:9510 | `if (!_usesLocalCompletionTracking \|\| _currentMovieMarkedAsFinished \|\| imdbId == null) { return; }` → `if (!_usesLocalCompletionTracking \|\| _currentMovieMarkedAsFinished \|\| imdbId == null) { throw StateErro...` | KILL, 11 assertions; `ast-127` |
+| `ast-146` | `_checkAndApplyLocalCompletion`:9537 | `return;` → `throw StateError('completion return mutation');` | KILL, 88 assertions; `ast-146` |
+| `ast-153` | `_checkAndApplyLocalCompletion`:9542 | `if (movieImdbId != null) { if (!_currentMovieRewatchStarted && percent < _movieCompletionThreshold) { // Th...` → `if (movieImdbId != null) { if (!_currentMovieRewatchStarted && percent < _movieCompletionThreshold) { // Th...` | KILL, 44 assertions; `ast-153` |
+| `ast-179` | `_checkAndApplyLocalCompletion`:9559 | `if (!isSeries) return;` → `if (!isSeries) throw StateError('completion guarded return');` | KILL, 4 assertions; `ast-179` |
+| `ast-185` | `_checkAndApplyLocalCompletion`:9562 | `return;` → `throw StateError('completion return mutation');` | KILL, 21 assertions; `ast-185` |
+| `uses-always-off` | `_usesLocalCompletionTracking`:1689 | `(_forceLocalCompletionTracking \|\| (!widget.traktScrobble && !widget.simklScrobble && !widget.mdblistScrob...` → `false` | KILL, 9 assertions; `closure2-uses-always-off` |
+| `uses-always-on` | `_usesLocalCompletionTracking`:1689 | `(_forceLocalCompletionTracking \|\| (!widget.traktScrobble && !widget.simklScrobble && !widget.mdblistScrob...` → `true` | KILL, 7 assertions; `closure2-uses-always-on` |
+| `episode-index-upper-guard-removed` | `_markCurrentEpisodeAsFinished`:9487 | `_currentIndex < _activePlaylist!.length` → `true` | KILL, 1 assertions; `closure2-episode-index-upper-guard-removed` |
+| `resume-finished-result` | `_maybeRestoreResume`:11408 | `MovieProgressStorage.isMovieFinished(localMovieImdbId)` → `Future<bool>.value(true)` | KILL, 1 assertions; `witness-resume-finished-result` |
+
+### Final-input case witnesses
+
+| Passing original case | Case file | Assertion-failing original run |
+|---|---|---|
+| Completion EOF does not invent an episode for non-series type collection | `video_player_completion_eof_test.dart` | `final-series-episode-single-series` |
+| Completion EOF does not invent an episode for non-series type collection local | `video_player_completion_eof_test.dart` | `final-series-episode-single-series` |
+| Completion EOF does not invent an episode for non-series type movie | `video_player_completion_eof_test.dart` | `final-series-episode-single-series` |
+| Completion EOF does not invent an episode for non-series type movie local | `video_player_completion_eof_test.dart` | `witness-movie-id-capture` |
+| Completion EOF does not invent an episode for non-series type null | `video_player_completion_eof_test.dart` | `final-series-episode-single-series` |
+| Completion EOF does not invent an episode for non-series type null local | `video_player_completion_eof_test.dart` | `final-series-episode-single-series` |
+| Completion EOF fanout awaits episode then movie cleanup before the end-of-item stop | `video_player_completion_eof_test.dart` | `witness-ref-04` |
+| Completion MagicTV next resets movie completion and rewatch flags on the existing State | `video_player_completion_resets_test.dart` | `witness-reset-currentMovieRewatchStarted` |
+| Completion MagicTV next resets series completion and rewatch flags on the existing State | `video_player_completion_resets_test.dart` | `witness-reset-currentEpisodeMarkedAsFinished` |
+| Completion Stremio channel reset rearms episode position marking when the public guide input retires | `video_player_completion_resets_test.dart` | `witness-reset-currentEpisodeMarkedAsFinished` |
+| Completion blank movie identity 0 leaves ordinary resume active | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion blank movie identity 3 leaves ordinary resume active | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion blank movie identity null leaves ordinary resume active | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion caught episode failure spends position one-shot but EOF retries the physical write | `video_player_completion_failures_test.dart` | `final2-episode-single-catch` |
+| Completion caught movie marker failure preserves partial cleanup and spends the resume-suppression guard | `video_player_completion_failures_test.dart` | `final2-movie-mark-catch` |
+| Completion caught movie playback cleanup failure preserves partial cleanup and spends the resume-suppression guard | `video_player_completion_failures_test.dart` | `final2-movie-mark-catch` |
+| Completion caught movie resume cleanup failure preserves partial cleanup and spends the resume-suppression guard | `video_player_completion_failures_test.dart` | `final2-movie-mark-catch` |
+| Completion caught playlist write failure spends the position guard and EOF retries after storage recovers | `video_player_completion_playlist_boundaries_test.dart` | `closure2-episode-playlist-catch` |
+| Completion content policy forces the native local owner for medialibrary:fixture-movie despite tracker intent | `video_player_completion_loads_test.dart` | `witness-policy-force` |
+| Completion content policy forces the native local owner for tmdb:movie:7100000 despite tracker intent | `video_player_completion_loads_test.dart` | `witness-policy-force` |
+| Completion early direct movie jump can be unmarked by a higher threshold while the completion guard remains spent | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion early movie default 80 then 50 re-evaluates while paused without another clock tick | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion early movie default 80 then 90 re-evaluates while paused without another clock tick | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion early movie initializer remains below 80 then marks at exact default equality before delivery | `video_player_completion_inputs_test.dart` | `witness-movie-id-capture` |
+| Completion early series default 80 then 50 re-evaluates while paused without another clock tick | `video_player_completion_loads_test.dart` | `final-series-episode-single-title` |
+| Completion early series default 80 then 90 re-evaluates while paused without another clock tick | `video_player_completion_loads_test.dart` | `final-series-episode-single-title` |
+| Completion early series initializer remains below 80 then marks at exact default equality before delivery | `video_player_completion_inputs_test.dart` | `final-series-episode-single-title` |
+| Completion first eligible movie position at exact threshold never starts a rewatch unmark | `video_player_completion_inputs_test.dart` | `closure2-dispatch-rewatch-threshold` |
+| Completion forced local still excludes IPTV channels | `video_player_completion_loads_test.dart` | `witness-uses-iptv` |
+| Completion forced local still excludes Stremio channels | `video_player_completion_loads_test.dart` | `witness-uses-tv` |
+| Completion held episode read from A writes its map into B disposed=false and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `final-series-episode-single-title` |
+| Completion held episode read from A writes its map into B disposed=true and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `final-series-episode-single-title` |
+| Completion held mark read from A writes its map into B disposed=false and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `witness-movie-id-capture` |
+| Completion held mark read from A writes its map into B disposed=true and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `witness-movie-id-capture` |
+| Completion held rewatch unmark can remove the marker after a later completion without reviving resume saves | `video_player_completion_inputs_test.dart` | `witness-movie-id-capture` |
+| Completion held unmark read from A writes its map into B disposed=false and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `witness-movie-id-capture` |
+| Completion held unmark read from A writes its map into B disposed=true and pins physical cleanup and resume ownership | `video_player_completion_profiles_test.dart` | `witness-movie-id-capture` |
+| Completion independent policy-first loader delivery with configured 70 pins the early mark and late rewatch | `video_player_completion_loads_test.dart` | `witness-policy-force` |
+| Completion independent policy-first loader delivery with configured 90 pins the early mark and late rewatch | `video_player_completion_loads_test.dart` | `witness-policy-force` |
+| Completion independent threshold-first loader delivery with configured 70 pins the early mark and late rewatch | `video_player_completion_loads_test.dart` | `witness-policy-force` |
+| Completion independent threshold-first loader delivery with configured 90 pins the early mark and late rewatch | `video_player_completion_loads_test.dart` | `final2-threshold-movie-write` |
+| Completion live mdblist widget selector permits local progress when the flag retires | `video_player_completion_inputs_test.dart` | `witness-movie-id-capture` |
+| Completion live simkl widget selector permits local progress when the flag retires | `video_player_completion_inputs_test.dart` | `witness-movie-id-capture` |
+| Completion live trakt widget selector permits local progress when the flag retires | `video_player_completion_inputs_test.dart` | `witness-movie-id-capture` |
+| Completion local movie identity gates legacy resume and speed restoration finished=false | `video_player_completion_resume_test.dart` | `witness-resume-finished-result` |
+| Completion local movie identity gates legacy resume and speed restoration finished=true | `video_player_completion_resume_test.dart` | `witness-movie-id-capture` |
+| Completion malformed threshold read is uncaught and leaves both default thresholds usable | `video_player_completion_failures_test.dart` | `final2-ref-00` |
+| Completion missing current playlist metadata falls back to the first remaining episode and EOF later retries the restored entry | `video_player_completion_playlist_test.dart` | `final-series-episode-playlist-title` |
+| Completion missing single-file episode does not spend the guard and public widget delivery retries | `video_player_completion_inputs_test.dart` | `closure2-episode-single-episode` |
+| Completion missing single-file identity does not spend the guard and public widget delivery retries | `video_player_completion_inputs_test.dart` | `closure2-episode-single-id` |
+| Completion missing single-file season does not spend the guard and public widget delivery retries | `video_player_completion_inputs_test.dart` | `closure2-episode-single-season` |
+| Completion missing single-file type does not spend the guard and public widget delivery retries | `video_player_completion_inputs_test.dart` | `final-series-episode-single-title` |
+| Completion movie identity is trimmed before local completion and suppressing resume | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion movie rewatch removes the marker once and preserves a subsequent external marker | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion movie threshold 100 uses equality and performs cleanup only once | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion movie threshold 50 uses equality and performs cleanup only once | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion movie threshold 70 uses equality and performs cleanup only once | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion movie threshold 80 uses equality and performs cleanup only once | `video_player_completion_basic_test.dart` | `witness-movie-id-capture` |
+| Completion nameless forced series playlist remains unmarked on positions and repeated EOF | `video_player_completion_playlist_boundaries_test.dart` | `final-series-ast-094` |
+| Completion nameless source replacement observes transient old index 0 before URL resolution and completion reset | `video_player_completion_source_window_test.dart` | `closure2-episode-playlist-return` |
+| Completion nameless source replacement observes transient old index 1 before URL resolution and completion reset | `video_player_completion_source_window_test.dart` | `closure2-episode-index-upper-guard-removed` |
+| Completion non-series playlist still uses single-file launch coordinates when catalog type is series | `video_player_completion_playlist_test.dart` | `closure2-ast-072` |
+| Completion overlapping EOFs each write and an older completion can overwrite the newer timestamp | `video_player_completion_eof_test.dart` | `witness-ref-03` |
+| Completion parsed series playlist supplies completion when catalog type is absent | `video_player_completion_playlist_boundaries_test.dart` | `closure2-dispatch-series-playlist` |
+| Completion playlist missing episode spends its position guard before metadata and EOF is the later retry | `video_player_completion_playlist_test.dart` | `witness-episode-playlist-flag` |
+| Completion playlist missing season spends its position guard before metadata and EOF is the later retry | `video_player_completion_playlist_test.dart` | `witness-episode-playlist-flag` |
+| Completion playlist switch resets the position one-shot after target switching and marks the incoming episode | `video_player_completion_playlist_test.dart` | `witness-reset-currentEpisodeMarkedAsFinished` |
+| Completion playlist uses parsed coordinates and enriched identity | `video_player_completion_playlist_test.dart` | `witness-episode-playlist-id` |
+| Completion playlist uses parsed coordinates and launch fallback identity | `video_player_completion_playlist_test.dart` | `witness-episode-playlist-id` |
+| Completion policy result delivered after disposal cannot mark the retained position | `video_player_completion_loads_test.dart` | `witness-policy-mounted` |
+| Completion policy truth table flags=0 local=false | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=0 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=1 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=1 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=2 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=2 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=3 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=3 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=4 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=4 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=5 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=5 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=6 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=6 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion policy truth table flags=7 local=false | `video_player_completion_loads_test.dart` | `closure2-movie-mark-tracking` |
+| Completion policy truth table flags=7 local=true | `video_player_completion_loads_test.dart` | `witness-movie-id-capture` |
+| Completion position and EOF while startup open is held obey validation even with known duration | `video_player_completion_inputs_test.dart` | `witness-dispatch-validation` |
+| Completion public stale playlist index -5 is clamped before marking | `video_player_completion_playlist_test.dart` | `final-series-episode-playlist-title` |
+| Completion public stale playlist index 99 is clamped before marking | `video_player_completion_playlist_test.dart` | `final-series-episode-playlist-title` |
+| Completion resume cleanup wakes playback sync for its profile rather than ordinary library scheduling | `video_player_completion_checkpoint_test.dart` | `closure2-movie-mark-checkpoint` |
+| Completion series EOF ignores local enablement and position one-shot tracked=false | `video_player_completion_eof_test.dart` | `final-series-episode-single-title` |
+| Completion series EOF ignores local enablement and position one-shot tracked=true | `video_player_completion_eof_test.dart` | `final-series-episode-single-title` |
+| Completion single-file series chooses content title and exact episode coordinates | `video_player_completion_basic_test.dart` | `witness-episode-single-id-value` |
+| Completion single-file series chooses fallback title and exact episode coordinates | `video_player_completion_basic_test.dart` | `witness-episode-single-id-value` |
+| Completion threshold result delivered after disposal cannot mark the retained position | `video_player_completion_loads_test.dart` | `witness-threshold-mounted` |
+| Completion unawaited rewatch failure escapes but its flag prevents another unmark | `video_player_completion_failures_test.dart` | `final2-dispatch-rewatch-flag` |
+| Completion zero duration after a MagicTV reset cannot mark a positive position as infinite progress | `video_player_completion_resets_test.dart` | `witness-dispatch-duration` |
+| Completion zero position after a MagicTV reset leaves the watched marker until real rewatch progress | `video_player_completion_resets_test.dart` | `witness-dispatch-position` |
+
+### Baseline, checks and stop
+
+The observed original baseline at the named merge reuses the P6 clean gate after
+exact application/pubspec/analysis-config equality (recorded in
+`p7/original/reuse.json`). Flutter 3.44.8 / Dart 3.12.2 are unchanged. The final
+staged test tree `fc7da4dd02a78df9245b89688308bf66b500085a` records **13,291 success / 13 failure /
+28 load error / 20 skip**. `suite_evidence.py compare` and the stricter comparison
+of every old identity/outcome both pass: exactly **98 passing additions**, zero
+changed/missing/fixed/newly skipped old identities. All additions are the declared
+completion cases. The suite's exit 1 is the same original failures/load errors;
+no failure allowlist or `test_baseline.py --record` is used. The suite has its final
+completion event, and `final-suite.env.json` records no tree change during the run.
+Subsequent edits are documentation/evidence only; all tested application and test
+blobs remain exact. Commands: `nice -n 19 python3 dev/tool/suite_evidence.py run
+vplayer/p7/step0/final-suite --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; `suite_evidence.py compare --against
+<p7>/original/baseline.jsonl <p7>/step0/final-suite.jsonl`. Full-suite nested
+manifest/source-reader processes use the evidence wrapper's fresh isolated parser
+packages with copied kernels deleted; Flutter suite processes are serialized.
+
+| Check | Result |
+|---|---|
+| Original focused controls and systematic/replay commands (`nice -n 19 flutter test … --concurrency=1 --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json`) | Final 98-case control passes; 114 canonical points have assertion kills; three equivalence replays pass |
+| Changed test/support `dart format --output=none --set-exit-if-changed` and `dart analyze` (both `nice -n 19`) | Fourteen files, zero formatting changes; no analyzer issues |
+| `check_file_sizes.py`; `check_search_architecture.py` | 3,000 files / 140 ratchets; 1,668 migrated files pass; no baseline change |
+| Step T manifest/history/analyzer checks reused | All 34 accepted commands still apply: no application/tool/manifest/config change since `98bf408f4`; all Dart self-tests, Kotlin 597 tests and P1–P6 named `--at` checks included |
+| Original/source restoration and parser routing | All mutation runs use the verified named-base source and restore it; every manifest CLI and nested source parse uses its isolated `.dart_tool/vplayer_parser/` package with copied `*.dill` deleted |
+
+Evidence: `p7/step0/points.json`, `ast-site-matrix.json`, `mutation-results.json`,
+`coverage.json`, `equivalence-proofs.json`, `mutations/` and final suite/check logs.
+Revision and tested-input hashes are recorded in `p7/step0/completion.json`.
+No application/pubspec/CI/theme/source-guard/size-baseline changes, production
+destination, bug fix, real network, push/merge/branch switch or device command.
+The end-of-series manual local movie/episode/rewatch/This-device checklist remains
+pending. Step 1, its registrations and its clean-tree gate are future work.
+Stop after Step 0.

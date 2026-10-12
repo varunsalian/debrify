@@ -16,6 +16,7 @@ class FakePlayer implements mk.Player {
   final events = <String, StreamController<dynamic>>{};
   final disposed = Completer<void>();
   bool readyDelivered = false;
+  Duration framePosition = const Duration(milliseconds: 80);
   void Function()? onOpen;
 
   Stream<T> channel<T>(String name) => events
@@ -83,7 +84,7 @@ class FakePlayer implements mk.Player {
   void publishFrame({Duration duration = const Duration(minutes: 20)}) {
     state = state.copyWith(
       duration: duration,
-      position: const Duration(milliseconds: 80),
+      position: framePosition,
       width: 1280,
       height: 720,
       videoParams: const mk.VideoParams(w: 1280, h: 720),

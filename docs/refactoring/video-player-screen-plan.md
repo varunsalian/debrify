@@ -1317,8 +1317,9 @@ short-circuits, resets, resume reads — plus, from the design review:
   preserve EOF order: tracker stops → awaited episode mark → awaited movie
   mark → sleep/advance.
 - **Early threshold, both directions, selective barrier:** arriving
-  preferences re-evaluate but never undo an earlier mark (85 % under the
-  default 80 stays finished when 90 arrives); a lower configured threshold
+  preferences re-evaluate (85 % under the default 80 stays finished when 90
+  arrives after the ordinary earlier rewatch progress; the direct-jump
+  exception discovered in Step 0 is recorded in Follow-ups); a lower configured threshold
   can trigger on delivery. Hold only the completion loader's `List<int>`
   (the shared cold-preferences barrier, `display_defaults_reads.dart:27`,
   also stalls player defaults awaited before player construction, 2321);
@@ -1350,6 +1351,19 @@ locally even with trackers on.
   write profile A's map (incl. unrelated entries) into profile B; the
   stale-instance guard does not catch a freshly obtained B instance. Needs a
   captured-scope write path (AGENTS profile rules) and its own tests.
+
+- An early movie jump can cross the default threshold before the completion
+  preferences arrive without first spending the rewatch flag below threshold.
+  A higher configured threshold then starts an unawaited unmark even though the
+  completion guard remains spent; subsequent local resume saves stay suppressed.
+  Phase-7 original tests pin this direct-jump ordering as well as the ordinary
+  earlier-low-position path that preserves the completed marker. No fix here.
+
+- A source-playlist replacement publishes its rebuilt series cache before URL
+  resolution and the later completion reset. A paused position tick can mark the
+  unplayed incoming episode if the outgoing index fits the shorter replacement;
+  an out-of-range outgoing index instead spends the episode guard without a
+  write. Phase-7 original caller tests pin both windows. No fix here.
 
 - **Service/data ownership exit** (D1): data contracts for resume,
   trackers, subtitles, sources and IPTV replace the bridge's direct service,
@@ -2531,6 +2545,43 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   pubspec unchanged, no production destination, CI/theme/size-baseline changes.
   CI current/self/analyzer → P7 and test/theme registration enable only in Step 1
   creating `vp_local_completion.dart`. Step 0 follows separately; no moves.
+
+### 2026-10-13 — Phase 7 Step 0 (original local completion; stop)
+
+- **Scope/revision.** Application `2defa5100`, tooling `98bf408f4`; Step-0 revision,
+  commands and hashes in `p7/step0/completion.json`. Twelve behavior files / 98
+  cases plus the completion driver and opt-in fake frame position (default
+  unchanged). All 14 moves and the frozen 11 references are covered through
+  original callers; no source-text coverage credit.
+- **Proof.** 189 AST sites, 117 canonical points: 114 assertion kills and three
+  source-proven equivalences with passing replays. Every addition has a final
+  case/support-hash assertion witness; final original 98-case control passes.
+  Early windows cover all six initializers and both threshold directions.
+  Cross-profile A→B writes, both physical profiles, scoped resume removal,
+  disposal, EOF/overlap/fan-out order, partial cleanup and caught/uncaught failures
+  are pinned as-is. Coverage, mutation and per-case tables are in the deps report.
+- **Findings.** A direct early jump can be unmarked by higher arriving settings;
+  a rebuilt source cache can mark an unplayed incoming episode before URL
+  resolution/reset, while an invalid old index spends the guard without writing.
+  The missing-title return is non-equivalent in that source window. Rejected
+  writes can update preference caches; refilling the current cache directly
+  proves the failed-rewatch flag stays spent. Follow-ups record these originals;
+  no fix.
+- **Baseline/checks.** Full suite: 13,291 success / 13 failure / 28 load error /
+  20 skip. Official and strict identity comparisons both pass: exactly 98 passing
+  additions, every old outcome unchanged, tested tree stable. Fourteen test/support
+  files format with zero changes and analyze with no issues; size 3,000 / 140 and
+  architecture 1,668 pass. All 34 Step-T commands remain valid (Dart self-tests,
+  Kotlin 597 tests, P1–P6 histories and analyzer probe); app/tooling unchanged.
+  Parser routing audit: 172 isolated copies, 2,660 invocation/parse records.
+- **Deviations/stop.** The first copied runner selected the prior base; its control
+  and preflight-rejected sweep are excluded. One nullable-promotion mutant is
+  invalid, then replaced by a flow-valid conjunction. Fixture assumptions about
+  auto-resume and old/current preference caches are corrected in archived runs.
+  Evidence only under `p7/`. Pubspec, application, CI/theme/source guards and size
+  baseline unchanged. No production destination, bug fix, real network, push,
+  merge, branch switch or device command. Stop here; Step 1 and its gate are later.
+  The end-of-series local movie/episode/rewatch/This-device checklist stays pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
