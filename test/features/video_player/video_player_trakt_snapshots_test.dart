@@ -42,7 +42,11 @@ Future<void> pickTraktEpisode(
   SeriesBrowser b,
   int episode,
 ) async {
-  unawaited(b.onEpisodeSelected(1, episode));
+  final task = d.f.actions.start<void>(
+    'episode selection',
+    () => b.onEpisodeSelected(1, episode),
+  );
+  await d.f.finish(t, task.future);
   await d.drain();
   // The sheet closes itself at selection; the original callback remains a
   // valid caller for an overlapping action while its previous load awaits.
@@ -61,16 +65,19 @@ void main() {
         await d.mount(traktScreen(playlist: traktPlaylist, percent: 50));
         final b = await traktBrowser(t, f);
         f.player.delays['open'] = open;
-        unawaited(b.onEpisodeSelected(1, 2));
-        await f.until(
+        final selection = await f.actions.entered<void>(
           t,
+          'held incoming open',
+          () => b.onEpisodeSelected(1, 2),
           () => f.player.calls.where((c) => c.$1 == 'open').length == 2,
         );
+
         await d.drain();
         expect(d.actions, ['start', 'stop']);
         d.expectRequest(1, 'stop', 50, season: 1, episode: 1);
         expect(d.heartbeats.where((timer) => timer.isActive), isEmpty);
         open.complete();
+        await f.finish(t, selection.future);
         await d.drain();
       } finally {
         if (!open.isCompleted) open.complete();
@@ -99,7 +106,13 @@ void main() {
             traktScreen(enabled: false, playlist: traktPlaylist, percent: 50),
           );
           final b = await traktBrowser(t, f);
-          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
+          final selection = f.actions
+              .start<void>(
+                'held episode selection',
+                () => reads.run(() => b.onEpisodeSelected(1, 2)),
+                held: true,
+              )
+              .future;
           await f.until(t, () => reads.pending.isNotEmpty);
           final before = d.seeks.length;
           b.seriesPlaylist.allEpisodes.removeWhere((e) => e.originalIndex == 1);
@@ -212,7 +225,13 @@ void main() {
               ),
             );
           }
-          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
+          final selection = f.actions
+              .start<void>(
+                'held episode selection',
+                () => reads.run(() => b.onEpisodeSelected(1, 2)),
+                held: true,
+              )
+              .future;
           await f.until(
             t,
             () => reads.pending.isNotEmpty,

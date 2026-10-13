@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'vp_fixture_actions.dart';
+
 import 'package:debrify/services/tracking_source_policy.dart';
 
 /// Delays delivery of an actual immutable policy, leaving subsequent reads
@@ -17,7 +19,12 @@ class TraktPolicyReads {
             value is TrackingSourcePolicy &&
             (R.toString() == 'void' || R.toString() == 'dynamic')) {
           armed = false;
-          pending.add(() => zone.runUnary(callback, value));
+          pending.add(
+            VpFixtureActions.heldCallback(
+              'trakt_policy_reads.dart',
+              () => zone.runUnary(callback, value),
+            ),
+          );
           return null as R;
         }
         return callback(value);

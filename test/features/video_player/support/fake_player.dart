@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:media_kit/media_kit.dart' as mk;
 
+import 'vp_fixture_actions.dart';
+
 /// Broadcast streams stay open until fixture cleanup, allowing a replaced
 /// instance to emit late events after production has cancelled its listeners.
 class FakePlayer implements mk.Player {
-  FakePlayer(this.configuration, {bool native = false}) {
+  FakePlayer(this.configuration, {bool native = false, this.actions}) {
     platform = native ? FakeNativePlayer(this) : FakePlatformPlayer(this);
   }
 
+  final VpFixtureActions? actions;
   final mk.PlayerConfiguration configuration;
   final calls = <(String, Object?)>[];
   final delays = <String, Completer<void>>{};
@@ -69,9 +72,17 @@ class FakePlayer implements mk.Player {
   mk.PlayerStream get streams => stream;
 
   Future<void> operation(String name, [Object? value]) async {
-    calls.add((name, value));
-    await delays[name]?.future;
-    if (failures.containsKey(name)) throw failures.remove(name)!;
+    final activity = actions?.begin(
+      'player:$name',
+      held: delays[name] != null && !delays[name]!.isCompleted,
+    );
+    try {
+      calls.add((name, value));
+      await delays[name]?.future;
+      if (failures.containsKey(name)) throw failures.remove(name)!;
+    } finally {
+      activity?.complete();
+    }
   }
 
   /// Called by the fixture only after player/controller assignments and binds.
@@ -242,9 +253,17 @@ class FakeNativePlayer extends FakePlatformPlayer implements mk.NativePlayer {
   final failures = <String, Object>{};
 
   Future<void> operation(String name, Object? value) async {
-    calls.add((name, value));
-    await delays[name]?.future;
-    if (failures.containsKey(name)) throw failures.remove(name)!;
+    final activity = player.actions?.begin(
+      'native:$name',
+      held: delays[name] != null && !delays[name]!.isCompleted,
+    );
+    try {
+      calls.add((name, value));
+      await delays[name]?.future;
+      if (failures.containsKey(name)) throw failures.remove(name)!;
+    } finally {
+      activity?.complete();
+    }
   }
 
   @override

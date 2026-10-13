@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'vp_fixture_actions.dart';
+
 import 'package:debrify/services/tracking_source_policy.dart';
 
 /// Holds the real immutable policy at this player's MDBList init await.
@@ -26,7 +28,12 @@ class MdblistPolicyReads {
             value is TrackingSourcePolicy &&
             (R.toString() == 'void' || R.toString() == 'dynamic')) {
           armed = false;
-          pending.add(() => zone.runUnary(callback, value));
+          pending.add(
+            VpFixtureActions.heldCallback(
+              'secondary_policy_reads.dart',
+              () => zone.runUnary(callback, value),
+            ),
+          );
           return null as R;
         }
         return callback(value);

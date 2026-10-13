@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'vp_fixture_actions.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -41,6 +43,10 @@ class TraktTestTransport extends HttpOverrides {
       return _DelegatingClient((request) async {
         final current = recorder ?? (throw StateError('No active HTTP case'));
         current.requests.add(request);
+        final activity = current.actions?.begin(
+          'http:${request.method} ${request.url.host}${request.url.path}',
+          held: true,
+        );
         final pending = current.pendingByClient.putIfAbsent(id, () => []);
         final reply = Completer<http.Response>();
         pending.add(reply);
@@ -54,6 +60,7 @@ class TraktTestTransport extends HttpOverrides {
           return await reply.future;
         } finally {
           pending.remove(reply);
+          activity?.complete();
         }
       }, () => recorder?.closedClients.add(id));
     });
@@ -93,13 +100,18 @@ class TraktCipherReads implements DeviceSecretCipher {
     required List<int> associatedData,
   }) async {
     opens++;
-    final gate = Completer<void>();
-    if (hold) {
-      held.add(gate);
-      await gate.future;
+    final activity = VpFixtureActions.current?.begin('cipher:open', held: hold);
+    try {
+      final gate = Completer<void>();
+      if (hold) {
+        held.add(gate);
+        await gate.future;
+      }
+      if (failure != null) throw failure!;
+      return await delegate.open(envelope, associatedData: associatedData);
+    } finally {
+      activity?.complete();
     }
-    if (failure != null) throw failure!;
-    return delegate.open(envelope, associatedData: associatedData);
   }
 
   void releaseAll() {

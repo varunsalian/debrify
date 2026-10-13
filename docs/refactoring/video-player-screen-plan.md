@@ -2824,6 +2824,26 @@ unchanged assertions) — scheduled as test-only step H at the start of phase
 8, before milestone M1; (2) size summaries corrected to 3,001 files. Claude
 sample 20/20. Merged.
 
+### 2026-10-13 — Phase 8 Step H (shared fixture hardening; test-only)
+
+- **Revision/scope.** Input `e42e152a4`, original application `491bf1fea`;
+  test-only shared action lifetimes distinguish held-boundary entry from
+  completion, retain case-specific guide barriers, and drain before stream/
+  transport cleanup. Timer observation and uncaught-error collection unchanged.
+- **Proof.** Existing names/expectation tokens preserved. Original detached
+  assertion audit records the intended pending action per race, including held
+  incoming open, held seek, snapshots, credentials and cross-profile completion.
+  Five serial nice-19 stress replays under CPU load: 313 cases × 5 PASS; loading
+  events excluded. Five representative original mutations assertion-killed;
+  restored control PASS. Tables/commands/logs: `p8/h/` and deps Step H.
+- **Checks/deviations.** Test analyzer (zero issues), format, exhaustive P7
+  current guard, size/architecture and diff PASS. Explicit `void` fixes an
+  intermediate inference-only warning. One preliminary run used the old P2
+  runtime fallback; excluded and its 55 case directories relocated to P8 by
+  birth-time ledger. Fallback corrected; all accepted runs explicitly use P8.
+  Application/pubspec unchanged; no T, Step 0 or production move. S2 follows
+  separately and then stops for independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

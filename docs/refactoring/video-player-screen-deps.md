@@ -5166,3 +5166,37 @@ builds pass; SDK unchanged, artifact hashes archived. Earlier move-check inputs
 remain identical after the test-only fixture commit. Gate revision, commands,
 all logs/hashes and equality audit: `p7/gate/completion.json`. Human local
 completion/rewatch/This-device and prior device/PiP checklist remains pending.
+
+
+## Phase 8 Step H — shared fixture hardening (2026-10-13)
+
+Input `e42e152a4`; application remains byte-identical to original `491bf1fea`.
+The shared action observer separates entry into a held boundary from completion.
+Unheld actions settle; explicit held selections remain pending until their case
+releases them. Normal public episode selections await completion. Fake player,
+HTTP, cipher and storage-delivery lifetimes drain before streams close or the
+transport resets. Existing timer observers and uncaught-error collectors remain
+unchanged. Guide-refresh interception remains case-specific with the same
+release and fallback response. No production code or dependency changed.
+
+| Proof | Result / evidence |
+| --- | --- |
+| Existing names and assertions | Scanner-token identical across every existing video-player case; original shared-support expectations preserved when moved to the action helper. `p8/h/token-proof.json` |
+| Pending assertions | Evidence-only logging before existing expectations on original application code; expanded case names, assertion sites and pending operation labels recorded per case in `p8/h/race-assertions.json` and final audit. Held incoming open and held seek remain concurrent; no global completion wait before their release. |
+| Serial stress under load | Five complete replays of 43 tracker/completion/snapshot files, 313 behavior cases per replay (1,565 passes). File-loading events excluded from the case count. Concurrent nice-19 SHA-256 worker; zero assertion/error/load failures. `p8/h/closure-results.json` |
+| Original mutation: Trakt exactly-80 conversion | `> 80` → `>= 80`: assertion failures in pause/start/heartbeat protocol expectations. |
+| Original mutation: Simkl snapshot percent | Percent → percent+1: eight assertion failures against unchanged seek durations. |
+| Original mutation: MDBList snapshot percent | Percent → percent+1: eight assertion failures against unchanged seek durations. |
+| Original mutation: completion threshold | `>= movieCompletionThreshold` → `>`: five assertion failures against physical completion contents. |
+| Original mutation: Trakt heartbeat cancellation | Remove cancellation from `stopTraktHeartbeat`: assertion failures including active timer during held incoming open. |
+| Restoration / checks | All mutated production files restored; final control passes. Test analyzer has no issues; format, P7 exhaustive current guard, size and architecture pass. |
+
+Mutation definitions and complete Expected/Actual logs are archived under
+`p8/h/`; Flutter wraps assertion failures in generic `isFailure:false` runner
+errors, so classification uses the actual TestFailure diagnostic and completed
+run, not that flag. An initial inference attempt produced four dead-code warnings
+(`Never` from dynamic callbacks); explicit `void` resolves them. A preliminary
+focused run omitted the evidence-root variable and used the old P2 runtime
+fallback: excluded from accepted proof; its 55 case directories were relocated
+into P8, and the fixture fallback is now P8. The narrow birth-time relocation
+ledger is `p8/h/runtime-path-note.json`; unrelated evidence was not touched.

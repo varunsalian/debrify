@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'vp_fixture_actions.dart';
 import 'dart:convert';
 
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -36,7 +38,12 @@ class TraktSnapshotReads {
           }
           if (!multiple) armed = false;
           deliveries++;
-          pending.add(() => zone.runUnary(callback, value));
+          pending.add(
+            VpFixtureActions.heldCallback(
+              'trakt_snapshot_reads.dart',
+              () => zone.runUnary(callback, value),
+            ),
+          );
           return null as R;
         }
         return callback(value);
