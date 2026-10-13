@@ -107,3 +107,8 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 # vplayer P7: original imports retained by the frozen facade directive list.
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive
+
+# 2026-10-14 vplayer P9: three frozen retained imports become unused; identities recorded in the Step-T receiver probe.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive

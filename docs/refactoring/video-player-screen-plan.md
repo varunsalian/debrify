@@ -3404,6 +3404,25 @@ checkpoint. Step T/0 proceed without production moves.
 - Application, pubspec, shared H fixture and applied P8 CI unchanged. Step 1
   and the clean-tree gate follow this separately committed addendum.
 
+### 2026-10-14 — Phase 9 Step 1 (production creation checkpoint)
+
+- Follows addendum `2b64e2f19`; final revision in `p9/step1/commit.json`. Applied
+  the frozen 21 moves to the 305-line `VpSubtitleAutoSync`/Host bridge. Exhaustive
+  807-span classification; 33 retained substitutions, constructor after PiP,
+  exact live Host and State-owned fields/teardowns. Earlier 18 destinations and
+  PiP adapter unchanged. Facade ratchet 16,829 →16,603 via size update.
+- CI current/self-test and both analyzer inputs now P9; P1–P8 histories and
+  S/S2/S2b remain. Six test files registered with the harness flag; theme and all
+  three source-guard lists extended. Validating reader already chains P9; no
+  moved source-text anchor needs retargeting. Three frozen probe import warnings
+  recorded; no suppression, import cleanup or older mapping change.
+- Nice19 serial focused suite: 82/82 PASS. Current/history/seams and structural
+  checks: 14/14 PASS. Scoped CI analyzer/allowlist PASS; comparator 104 identities/
+  occurrences, zero additions. Format/idempotence PASS; exact Step-T formatted
+  bytes and three optional-comma sites reused with no diagnostic change.
+- Evidence `p9/step1/`; no pubspec or behaviour change. Clean-tree full gate
+  (all manifest self-tests and both release builds included) follows separately.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

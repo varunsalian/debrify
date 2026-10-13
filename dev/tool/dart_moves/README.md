@@ -250,3 +250,14 @@ analyzer inputs, add P8 `--at 0df6ccd4e`, retain P1–P7 named history and S/S2/
 proofs, register the behavior files and new destination in every theme list,
 and lower the facade size ratchet. T/0 do not enable the draft against the
 original application.
+
+Phase 9 Step 1 applies the frozen manifest: 21 declarations into the combined
+305-line `VpSubtitleAutoSync` bridge, the exact 14-member live Host and eager
+State construction after PiP. Five null/false initializers are inert. Settings,
+external path, overlay flag and notifier remain State-owned; the local path
+snapshot and live position callback stay intact. All 33 retained references and
+the two ordered teardown protocols retain their statement positions. The PiP
+adapter and 18 earlier destinations are unchanged. CI selects P9 current/self
+and both analyzer inputs, P1–P8 histories and S/S2/S2b proofs; six behaviour files
+and every theme/source-guard destination list are registered. The validating
+reader discovers P9 automatically; no moved source-text anchor needs a retarget.

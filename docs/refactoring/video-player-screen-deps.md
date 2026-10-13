@@ -6444,3 +6444,39 @@ final native/session/UI assertions are retained. Fresh additions-only baseline
 versus Step 0: **13,465 success /13 failure /28 load error /20 skip**, exactly
 two passing additions and zero changed/missing/new skips; evidence
 `step0b/baseline*`. No allowlist change. CI remains P8 until production Step 1.
+
+
+## Phase 9 Step 1 — frozen production split (2026-10-14)
+
+The applied manifest classifies **807 original spans: 21 moved, 785 retained,
+one patched constructor**. The combined
+`lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart`
+is **305 lines**; facade **16,829 →16,603** (size ratchet updated). All 33
+retained occurrences retain their statement positions. Settings, external path,
+overlay flag, notifier allocation/disposal and fade cache remain State-owned.
+The exact 14-member live Host forwards through the frozen adapter and `_vpSetState`;
+its constructor and five false/null initializers perform no Host read or effect.
+State construction appends `_subtitleSync` after `_pip`. Both teardown protocols,
+external-path snapshot, live player-position callback, PiP adapter and all 18
+earlier destinations are preserved by exhaustive token/body/binding comparison.
+Original comments retain their frozen span ownership.
+
+CI now selects P9 for current/self-test and both analyzer arguments, retains
+P1–P7 named histories, adds P8 at `0df6ccd4e`, and retains S/S2/S2b proofs and
+the harness define. All six subtitle suites are registered. Theme manifest,
+rendered boundaries and all three source-guard lists cover the new destination.
+No moved legacy source anchor required a textual retarget; the existing
+validating reader discovers/chains applied P9 without weakening any assertion.
+The frozen facade import list exposes three already-probed unused imports;
+the global warning allowlist records exactly those identities. Earlier analyzer
+mappings/maxima and the P9 inventory are preserved.
+
+Step-1 verification: **82 focused subtitle/theme cases PASS** (72 original
+behaviours plus ten unchanged theme guards); **14 mechanical jobs PASS**
+(current P9, P1–P8 historical checks, S/S2/S2b, size/architecture/negatives).
+Scoped CI analysis and the warning allowlist PASS; the P9 comparator observes
+**104 scoped diagnostics, zero additions**, including infos and multiplicity.
+Formatting is idempotent; production files are byte-identical to the Step-T
+formatted proof (three AST-optional commas inserted, none deleted, zero
+format-induced diagnostic changes). Evidence `p9/step1/`. No app bug fix,
+dependency change or release build here. The clean-tree gate follows this commit.
