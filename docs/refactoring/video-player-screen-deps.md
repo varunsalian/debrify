@@ -5677,3 +5677,51 @@ Pristine S2 full-suite `original-suite.jsonl` reproduced an unrelated pre-existi
 As-is findings: backgrounding before output creation does not latch the first open; a pending old background pause can finish after resume and win; the old user-pause save writes its captured physical profile, with no new background save. A held iOS subtitle preparation can start entry after State/owner loss; after real replacement its late service handle can let an old-handle action pause the fresh player until the fresh entry rebases it. Restore continues platform writes across handoff before its final State-owner check; profile changes do not cancel these State-owned operations. These are preserved and recorded in Follow-ups.
 
 Development controls with wrong fixture assumptions, an incomplete loader/promotion mutant, error-only removals and a failed control are archived and uncredited. Guide close itself cancels replay; final test leaves it open during backgrounding. Nullable-promotion mutant replaced by a flow-valid `false` conjunction. Two fixture-copy commands used the detached cwd and raised SameFileError; corrected copies and complete controls are archived. Final characterization files format and analyze cleanly, size/architecture pass; all Step-T historical/self/S/S2/analyzer proofs remain valid because tooling and application are unchanged. Dependency files unchanged; no production move, build/run/install, device command, real network, push, merge or branch switch. Stop at Step 0.
+
+## Phase 8 independent sample and Step-0b closure (2026-10-13)
+
+Claude's independent sample at `6785b4985` (application identical to S2)
+killed **18/20 valid mutations (90%)**. Evidence:
+`p8/claude-sample/{p8-claude-muts.json,p8-claude-run.log,results.json}` and
+per-mutation logs. No compile-error exclusion or equivalence credit.
+
+| Sample points | Independent result | Addendum evidence |
+| --- | --- | --- |
+| k1, k3–k18, k20 | 18 assertion kills | Independent per-mutation logs |
+| k19: live-rejoin threshold 30 → 3 seconds | Survived sample; assertion killed by addendum | `step0b/k19-results.json`, `k19.jsonl`, `k19.patch`; original detached `6785b4985` |
+| k2: post-handle captured-player identity guard removed | Survived; prerequisite unresolved | `step0b/k2-reachability.json`; no assertion-kill credit |
+
+The new public-lifecycle case waits five real seconds after backgrounding a live
+IPTV channel, then asserts one existing open, exactly one in-buffer play, no
+`lifecycle-rejoin` diagnostic, the unchanged channel and no uncaught error. It
+checks that the observed wait lies strictly between 3 and 30 seconds. The
+existing >30-second case remains and asserts a retune, no direct play and the
+exact rejoin diagnostic. The complete projection control passes; the new case
+passes in the detached original and assertion-fails with k19 there. No clock
+seam or production change. This adds one case and one literal mutation witness
+to the `_resumeFromBackground` coverage row; the original upper-threshold
+witness (30 → 300) remains valid.
+
+k2 requires replacement **inside the same State** while handle delivery is
+held. The only player assignments are initial setup and
+`_fallbackExplicitRendererToAutomatic`; the latter's eligibility uses real
+`Platform.isAndroid`, outside S2. Renderer settings loading is likewise guarded
+by real Android. Ordinary media/playlist updates reuse the same instance;
+route replacement changes State/owner and is rejected by the remaining owner
+guard, so it cannot witness this mutation. No private State call, duplicate
+`initState`, reflection or new application predicate has been used to manufacture
+the condition. The separately reviewed seam prerequisite is pending; k2 retains
+its existing device-pending classification rather than being reported killed or
+equivalent. Step 1 has not started.
+
+The fresh completed addendum suite records **13,387 successes / 13 failures /
+28 load errors / 20 skips**. Official and strict comparisons against Step 0
+PASS: exactly one passing addition, no changed/missing/fixed/newly skipped old
+identity. Test inputs and tracked tree stayed stable throughout the run.
+Projection format/analyze and diff checks PASS. Evidence:
+`step0b/{projection-control.jsonl,control.jsonl,k19-results.json,final-suite.jsonl,
+final-suite.env.json,baseline-compare.log,baseline-strict.json,coverage.json}`.
+The un-applied two-site prerequisite proposal is
+`step0b/seam-prerequisite-proposal.patch`; it changes neither hook defaults nor
+installation and is not credited as an original behavior witness. k2, the
+production move and gate remain pending the seam direction.

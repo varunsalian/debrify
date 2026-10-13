@@ -271,6 +271,60 @@ void main() {
     },
   );
   testWidgets(
+    'PiP live background between three and thirty real seconds resumes the buffer without a rejoin',
+    (t) async {
+      final f = VideoPlayerEnvironment();
+      final d = PipLifecycleDriver(t, f);
+      await d.initialize();
+      final diagnostics = <String?>[];
+      final previousPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        diagnostics.add(message);
+        previousPrint(message, wrapWidth: wrapWidth);
+      };
+      final live = IptvChannel(
+        name: 'Lifecycle buffered live',
+        url: 'https://live-edge.test/live/2.ts',
+        contentType: 'live',
+      );
+      try {
+        await d.mount(
+          VideoPlayerScreen(
+            videoUrl: live.url,
+            title: live.name,
+            iptvChannels: [live],
+          ),
+        );
+        await background(d);
+        expect(d.operations('open'), hasLength(1));
+        expect(f.player.state.playing, isFalse);
+        final elapsed = Stopwatch()..start();
+        // The original samples DateTime.now; fake frame time cannot pin this.
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(seconds: 5)),
+        );
+        expect(elapsed.elapsed, greaterThan(const Duration(seconds: 3)));
+        expect(elapsed.elapsed, lessThan(const Duration(seconds: 30)));
+        await foreground(d);
+        await d.settle();
+        expect(d.operations('open'), hasLength(1));
+        expect(d.operations('play'), hasLength(1));
+        expect(
+          diagnostics.whereType<String>().any(
+            (m) => m.contains('source=lifecycle-rejoin'),
+          ),
+          isFalse,
+        );
+        expect(f.player.state.playlist.medias.single.uri, live.url);
+        expect(f.player.state.playing, isTrue);
+        expect(d.errors, isEmpty);
+      } finally {
+        debugPrint = previousPrint;
+        await d.close();
+      }
+    },
+  );
+  testWidgets(
     'PiP live background longer than thirty real seconds retunes once instead of playing stale buffer',
     (t) async {
       final f = VideoPlayerEnvironment();

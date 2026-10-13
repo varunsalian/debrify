@@ -2953,6 +2953,38 @@ checkpoint. Step T/0 proceed without production moves.
   new seam, real network, build/run/install, device command, push, merge or
   branch switch. Stop before Claude's sample and production moves.
 
+### 2026-10-13 — Phase 8 k19 addendum; k2 prerequisite (test/docs only)
+
+- **Revision/base.** Follows accepted Step 0 `6785b4985`; application remains
+  byte-identical to S2 `21b19c944`. Claude's independent original sample killed
+  18/20 (90%); recorded in the deps table with both survivors distinguished.
+- **k19 closed.** Public lifecycle callbacks on a live IPTV channel after five
+  real seconds now pin in-buffer play, one existing open, no rejoin diagnostic
+  and the unchanged channel. The existing >30-second retune case is retained.
+  New case passes on detached original `6785b4985`; 30 → 3 seconds produces an
+  assertion failure there (`p8/step0b/k19-results.json`). This strengthens the
+  existing threshold point with its lower-bound literal variant; 91 Phase-8
+  behavior cases now have original assertion witnesses.
+- **Checks.** Nice-19 serialized projection control, detached original control
+  and mutation use `flutter test --concurrency=1 --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json`. Exact commands and
+  hashes archived. Format/analyze/diff PASS. Fresh
+  `suite_evidence.py run vplayer/p8/step0b/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` completed; official and strict
+  comparison versus Step 0 PASS: **13,387 success / 13 failure / 28 load error /
+  20 skip**, exactly one passing addition, no changed/missing/fixed/new skip.
+  Inputs stable; no new flake or allowance.
+- **k2 pending; no Step 1/gate.** Same-State replacement only occurs in the
+  Android renderer fallback, whose eligibility and settings load use real
+  `Platform.isAndroid` outside the approved S2 sites. Route replacement changes
+  State/owner and cannot kill this player-identity mutation. Reachability proof
+  and an un-applied two-site S2 prerequisite patch are under `p8/step0b/`.
+  A direction question remains pending: separately reviewed seam extension,
+  or explicit device-pending classification before continuing. No private
+  State call, extra initialization, source-text behavior test or application
+  change manufactures the missing condition. No bug fix, pubspec change,
+  real network, build/run/install, device command, push, merge or branch switch.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
