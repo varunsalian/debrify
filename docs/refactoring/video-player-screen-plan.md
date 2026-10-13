@@ -475,7 +475,7 @@ starts.
 | 8 | Subtitle engine I: subtitle settings, sync overlay, auto-sync pill/notice (2940–3088 auto-sync part only, 6380–6626) | 450 | med |
 | 9 | Subtitle engine II: apply + diagnostics + failure + rollback (5014–5200, `_SubtitleApplyAttempt` users) | 300 | high |
 | 10 | Subtitle sources and preferences: restore, default audio/subtitle language, forced, addon fetch/auto-select, Stremio download, priority (17164–18044) | 880 | high |
-| **M2** | subtitle integration gate: one state-ownership map for phases 8–10; apply/failure/persistence/audio-policy races | | |
+| **M2** | subtitle integration gate after phases 9–11 (renumbered) — see the phase-9 section | | |
 | 11 | Identify title + subtitle search sheet (15932–16645) | 720 | med |
 | 12 | Tracks sheet + unified player menu (16647–17162) | 520 | med |
 | 13 | Resume: keys, restore, seek/verify/landing, enhanced state, save + write guard (12093–12905) | 810 | high |
@@ -1533,49 +1533,119 @@ merge; M1 is test-only) — re-measure by name.
 Subtitle work is split over phases 9–11 with one **state-ownership map**
 (below) and integration milestone **M2** after phase 11.
 
-### Subtitle state-ownership map (phases 9–11)
+### Subtitle state-ownership map (phases 9–11) — revised by the design review
 
-| State | Owner after phase 11 | Notes |
+| State | Owner | Notes |
 |---|---|---|
-| `_subtitleSettings` (1295) | **State** (read by build 12446/12461, menus, apply paths, overlay) | shared; forwarded |
-| `_activeExternalSubtitlePath` (1322) | State | read by apply/failure (phase 10), preferences (phase 11), PiP |
-| `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer`, `_autoSyncPillLastShown` (1330–1341) | **phase 9 controller** | `_autoSyncPill` (1334, a `ValueNotifier`) stays State-owned (allocation-order rule) |
-| `_showSyncOverlay` (654) | phase 9 controller or State by reader count (step T) | build reads it |
-| apply-attempt / diagnostic generation / selection-correction state | phase 10 controller | `VpSubtitleApplyAttempt` already a model |
-| addon/Stremio subtitle fetch, temp files, priority, track preferences | phase 11 controllers | |
+| `_subtitleSettings` (1295) | **State** | all six writers move in P9; three retained view methods read it; Host getter/setter |
+| `_activeExternalSubtitlePath` (1322) | **State** | 3 reading methods, 2 writers incl. renderer fallback; its **setter** `_setActiveExternalSubtitlePath` moves with P9 (it coordinates auto-sync activation) |
+| `_showSyncOverlay` (654) | **State** | 4 readers / 3 writers (overlay actions, build/back, subtitle reset) |
+| `_autoSyncPill` (1334, notifier) | **State** (allocation and disposal) | allocation-order rule |
+| `_autoSyncPillLastShown` (1341) | **State** | sole reader/writer is retained `build` (13640, fade cache) |
+| `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer` | **P9 controller** | inert initializers |
+| `_subtitleSelectionCorrection` (1109, notifier) | **State** (allocation) | P10 manipulates its value through a Host |
+| apply-attempt / diagnostic generation | P10 | |
+| addon/Stremio fetch, temp files, priority, track preferences | P11 | |
 
-### Moves → `presentation/legacy_video_player/vp_subtitle_auto_sync.dart` (+ `vp_subtitle_sync_overlay.dart` if > 400 lines)
+### Moves → one combined bridge `presentation/legacy_video_player/vp_subtitle_auto_sync.dart`
 
-Auto-sync: `_installSubtitleAutoSyncForPlayer` 1951, `_disposeSubtitleAutoSync`
-1984, `_applyAutoSubtitleSyncOffset` 1991, `_showSubtitleAutoSyncNotice`
-2009, `_openAutoSyncPillWindow` 2046, `_showAutoSyncPillResult` 2062,
-`_hideAutoSyncPill` 2074, `_setActiveExternalSubtitlePath` 2083 (writes the
-State-owned path — or stays State-owned if its readers dominate; step T).
-Settings/overlay: `_loadSubtitleSettings` 5403, `_onSubtitleStyleChanged`
-5549, `_applySubtitleSyncOffset` 5566, `_resetSubtitleSyncOffset` 5573,
-`_showSyncOverlayPanel` 5594, `_hideSyncOverlay` 5602, `_buildSyncOverlay`
-5606, `_buildSliderSyncOverlay` 5631 (widget builders — move to a
-presentation helper with live Host reads; builder-local `context` stays
-lexical). Fields per the map. ≈ 300 lines out.
+**One file, one owner (design review P2):** both overlay builders call
+`_subtitleAutoSync?.manualOffsetChanged`, an owner-scoped moved field; a
+separate helper reaching it through a Host is rejected by
+`occurrence_field_bindings.py:150`. The combined file stays well under
+400 lines (≈ 260 moved lines). Neither factory has a lexical `context`; the
+retained pill builder and existing overlay widgets keep theirs; the local
+`externalPath` snapshot and the line picker's live player-position callback
+are preserved; no widget wrapper or key change.
 
-**Retained references:** player creation installs auto-sync (≈ 2870–2897),
-dispose (timers cancel in place; auto-sync dispose), build (sync overlay,
-subtitle view config), menus (style changed, sync requested), PiP subtitle
-visibility (via the phase-8 Host — a patched adapter if it reads moved
-members), apply/failure paths (phase 10, still in State). Measured at
-step T.
+**21 moves:** 16 methods — `_installSubtitleAutoSyncForPlayer` 1951,
+`_disposeSubtitleAutoSync` 1984, `_applyAutoSubtitleSyncOffset` 1991,
+`_showSubtitleAutoSyncNotice` 2009, `_openAutoSyncPillWindow` 2046,
+`_showAutoSyncPillResult` 2062, `_hideAutoSyncPill` 2074,
+`_setActiveExternalSubtitlePath` 2083, `_loadSubtitleSettings` 5403,
+`_onSubtitleStyleChanged` 5549, `_applySubtitleSyncOffset` 5566,
+`_resetSubtitleSyncOffset` 5573, `_showSyncOverlayPanel` 5594,
+`_hideSyncOverlay` 5602, `_buildSyncOverlay` 5606,
+`_buildSliderSyncOverlay` 5631 — and the five auto-sync fields above.
+
+**Host (exact):** `mounted`, `setState` (→ `_vpSetState`), player,
+position, playing, audio-passthrough enablement, settings getter/setter,
+external-path getter/setter, pill notifier, controls notifier,
+overlay-flag setter, TV focus-release action. No widget selectors,
+`BuildContext` or owner-identity substitution. The PiP adapter (16406)
+forwards to `_setNativeSubtitleVisibilityForTrack`, which is not moved in
+P9 — the adapter is unchanged now; its exact facade patch is declared when
+that method moves in P10.
+
+**Teardown protocols frozen in place:** renderer replacement calls
+`_disposeSubtitleAutoSync` (clears the engine, hides the pill, awaits
+disposal before old-player teardown); facade `dispose` cancels the pill
+timers and disposes the notifier (10574) and then snapshots/nulls the
+engine (10723) — **not** routed through the helper (it would hide an
+already-disposed notifier).
+
+**Retained references (33 occurrences):** settings startup 1622;
+passthrough suspend/rearm 2130/2147; initial/replacement installation
+2430/3439; position/audio subscriptions 2870/2886/2897; replacement
+disposal 3404; apply-failure path 4174; enablement write/log 5481/5484;
+disposal timers and engine snapshot/clear 10574/10575/10723/10724;
+Back/Escape/build 11938/13163/14283; track/menu callbacks 15102, 15111,
+15120, 15121, 15257, 15370, 15406, 15458, 15475, 15476; reset/selection/
+preference paths 15519, 15524, 15826, 16307. Collaborator constructed after
+`_pip`; notifier slot and all disposal statements preserved.
+
+**CI:** current/self-test and both analyzer inputs → P9; P8 `--at
+0df6ccd4e`; S/S2/S2b proofs; protect all 18 earlier destinations; new
+tests and the destination in the theme manifest, rendered list and all
+three source-guard lists.
 
 ### Step 0 — characterization of the original
 
-Auto-sync: enablement from settings, install per player instance (old
-instance's engine disposed on replacement), offset application clamped and
-persisted into settings, notice/pill phases (announce 5 s auto-dismiss,
-result hold, hide), window active flag, disposal mid-window, external path
-changes; settings load (profile-scoped subtitle settings service), style
-changes propagating to the view config, manual sync offset apply/reset,
-overlay show/hide incl. TV focus release, slider overlay; early windows;
-async/profile cases (settings load across a profile switch). Mutation
-proofs, coverage matrix, Claude sample.
+- **Real engine activation (not just a fake instance):** seed auto-sync
+  enablement through storage before mount, `native: true`, select a real
+  fixture SRT through the existing public subtitle action; drive the
+  production path by recording the `af add` filter and its metadata-file
+  path and appending deterministic `ametadata` records (or reject the file
+  filter and feed the registered `af-metadata/debrify_autosync` observer
+  through the real fallback); known speech/cue patterns produce actual
+  alignment results. Cover listening, checking, still-listening, synced,
+  failed and silent-resync states; the 5 s announce, 2,400 ms result hold
+  and 350 ms fade. File I/O and `compute` need completion waits (step H's
+  entered/completed distinction; no large blind advances). The desktop
+  platform supports auto-sync; S2 does not override
+  `supportsSubtitleAutoSync` or the installer's raw Android passthrough
+  predicate — state those coverage limits.
+- **Teardown and startup windows:** held filter installation/removal and
+  alignment across renderer replacement, subtitle changes and disposal
+  (cleanup before old-player disposal and output-lease release); selection
+  before engine installation (`_setActiveExternalSubtitlePath` stores the
+  path with no engine; installation does not activate it; repeating the
+  same path returns early); audio-track restarts; passthrough stop/rearm
+  order.
+- **Settings, corrected:** the timing offset is **session memory only**
+  (`subtitle_settings_service.dart:332`, no preference write; it resets on
+  subtitle/content change and at startup); style settings persist. Races:
+  pending preference initialization across reset and an incoming load;
+  pending font lookup while the cached `_prefs` is cleared/replaced
+  (profile handoff clears it, `profile_app_lifecycle_participant.dart:88`;
+  the service reads the shared field after awaits, `:388`); an
+  already-returned snapshot delivered after profile handoff (facade accepts
+  on `mounted` only, 5404); overlapping routes resetting the singleton
+  offset. Assert rendered settings, native `sub-delay`, migration/style
+  writes and propagated errors. Saved overlay callbacks after dismissal,
+  content replacement and disposal (they perform engine/pill/native effects
+  **before** the mounted check, 5614; `_onSubtitleStyleChanged` checks
+  first); native property failures outside the auto-offset catch.
+- **TV focus** via `PlatformUtil.debugSetAndroidTvCached`/`debugSetTvOS`:
+  first-key delivery, held-repeat, Back dismissal, unchanged overlay element
+  identity.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
+
+**M2 (after phase 11)** combines auto-sync, manual override during
+alignment, apply failure/rollback restoring the previous path,
+source/content reset, audio-policy changes, renderer replacement, profile
+handoff and the retained PiP visibility caller; preserves both native
+properties and the rendered subtitle configuration.
 
 ### Device checklist (end of series)
 
@@ -3345,3 +3415,12 @@ explicit async boundary matrix; wakelock queued-write semantics. P3s:
 ownership (`_isPipActive`, `_pausedByLifecycle`, `_lifecycle` State-owned;
 `_backgroundedAt` moves), exact Host signatures, 7 `pipOwner`
 substitutions, 22-occurrence ledger, concrete M1 and CI.
+
+## Phase 9 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: one combined bridge file (owned-field guard); session-only
+offset and settings/profile race cases; real engine activation with fixture
+subtitles and metadata; both teardown protocols frozen in place plus
+startup windows. P3s: revised ownership map (settings, external path,
+overlay flag, pill notifier and fade cache State-owned; selection-correction
+notifier State-owned), exact Host, 33-occurrence ledger, CI, executable M2.
