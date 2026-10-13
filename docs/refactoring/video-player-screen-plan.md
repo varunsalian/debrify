@@ -422,6 +422,15 @@ order. No new hook or installer. Exact declaration patches, independent site
 default/order negatives, source guard and S/S2 proofs are required as for S2.
 S2b stops for its own independent review before k2 characterization or moves.
 
+**Phase-10 platform checkpoint S2c.** Extend the same `VpS2Hooks.isAndroid`
+getter at only the renderer rejection guard in
+`_setSubtitleTrackWithDiagnostics`. The hook and installer, S and the accepted
+S2/S2b ledger stay frozen. A Phase-10 checkpoint ledger declares the single
+before→after patch against `5c7b704bd`, retains every other facade declaration
+and protects earlier destinations through history. Independent site negatives
+and actual-body native-default/order witnesses precede independent review;
+bitmap rejection/acceptance characterization follows at Step 0.
+
 **Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
 work, and resources"): each stateful phase's step 0 pins, where its
 members participate, captured-scope writes, profile switch/deletion during
@@ -1714,6 +1723,11 @@ site mutation-proven) before step 0. Then characterize bitmap/image
 rejection on incompatible renderers, acceptance on `directMediaCodec`, and
 the Android-TV exemption (`FakeNativePlayer` records visibility effects;
 decoded bitmap rendering stays device-pending).
+
+The S2c ledger is `dev/tool/dart_moves/vplayer_p10_seam.json` (zero moves).
+CI's current/self-test and analyzer manifest select that checkpoint, retaining
+the P9 diagnostic inventory and adding P9 `--at 5c7b704bd`. This is checkpoint
+wiring only; Step T and the production P10 transition follow independent review.
 
 ### Step 0 — characterization of the original (at S2c)
 
@@ -3559,6 +3573,36 @@ verification is 90 s after a verdict, beyond the 2.4 s hold); m4/m14
 closures valid. P3: passthrough mutation notes p018/p021 corrected to the
 passthrough-off Android case (still device-pending). Claude sample 16/20 →
 18/18 valid after closures. Merged.
+
+### 2026-10-14 — Phase 10 S2c seam extension checkpoint (STOP)
+
+- **Input/scope.** Approved design `e1e73b811`, application base `5c7b704bd`;
+  final revision receipt in `p10/s2c/commit.json`. Application delta is exactly
+  one `Platform.isAndroid` → `VpS2Hooks.isAndroid` read in the subtitle renderer
+  rejection guard. Original current-check/short-circuit order, all other app
+  bytes, hook/installer and pubspec preserved. No production move or bug fix.
+- **Ledger/CI.** Checkpoint classifies 789 spans: 788 retained, one patched,
+  no scaffolding/destinations. Exact patch and earlier destination protection;
+  accepted S2/S2b ledger unchanged. CI current/self-test and analyzer manifest
+  select S2c with the unchanged P9 inventory; P9 historical check added.
+- **Proof/checks.** Nice19 S and S2/S2b/S2c self-proofs, current checkpoint,
+  CI universal self-test and P9/S2b same-revision history PASS. All 23 prior
+  independent negatives preserved plus eight S2c negatives. Extracted hook/guard:
+  five mode controls
+  (debug flag/no flag, assertions off, profile, compiled release) PASS; eight
+  independent site mutations assertion-killed. Serialized S/S2 guard suites,
+  hooks true and false: 7/7 PASS each, complete logs and stable input trees.
+  Analyzer retains all 104 identities/occurrences; zero formatting additions or
+  comma edits. Guard analysis, format/idempotence, size, architecture and diff
+  PASS. Isolated copied parser packages with kernels removed; commands/results
+  and exact application delta archived under `p10/s2c/`.
+- **Notes/stop.** Preliminary checks exposed a reporting-only assumption in
+  S's scaffold summary and a negative matching both current-check guards.
+  Summary now uses S's accepted ledger; the negative is scoped to the renderer
+  guard. Assertions preserved; rejected attempts archived uncredited, complete
+  final runs pass. No T, Step 0, full-suite gate, app build, push/merge/switch
+  or device action.
+  STOP for S2c independent review; native bitmap rendering remains device-pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

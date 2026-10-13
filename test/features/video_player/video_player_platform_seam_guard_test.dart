@@ -27,6 +27,7 @@ void main() {
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
     expect(result.stdout, contains('"s2_declarations_preserved": 9'));
     expect(result.stdout, contains('"s2b_sites": 2'));
+    expect(result.stdout, contains('"s2c_sites": 1'));
     for (final site in ['_initializePlayer', '_canFallbackExplicitRenderer']) {
       for (final negative in [
         'wrong predicate',
@@ -37,6 +38,21 @@ void main() {
       ]) {
         expect(result.stdout, contains('S2b $site: $negative'));
       }
+    }
+    for (final negative in [
+      'wrong predicate',
+      'override bypassed',
+      'predicate twice',
+      'operand order',
+      'TV predicate changed',
+      'current guard order',
+      'native rendering predicate changed',
+      'renderer mode changed',
+    ]) {
+      expect(
+        result.stdout,
+        contains('S2c _setSubtitleTrackWithDiagnostics: $negative'),
+      );
     }
   });
 

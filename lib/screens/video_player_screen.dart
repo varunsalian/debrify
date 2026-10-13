@@ -3927,7 +3927,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool Function()? isCurrent,
   }) async {
     if (isCurrent != null && !isCurrent()) return false;
-    if (Platform.isAndroid &&
+    if (VpS2Hooks.isAndroid &&
         !PlatformUtil.isAndroidTvCached &&
         requiresNativeSubtitleRendering(track) &&
         _androidVideoRendererMode !=

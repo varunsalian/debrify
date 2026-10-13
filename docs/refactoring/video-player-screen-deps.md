@@ -6513,3 +6513,63 @@ mobile/web capabilities and Android compressed passthrough stop/PCM rearm need
 physical target validation; none is claimed from these fake-platform tests.
 The two session-persistence catch diagnostics and five legacy-sheet paths remain
 dormant as previously classified. M2 follows phases 9–11; no M2 work here.
+
+## Phase 10 S2c — renderer rejection seam checkpoint (2026-10-14)
+
+Application base `5c7b704bd`; approved design `e1e73b811`. Only the first Android
+predicate in `_setSubtitleTrackWithDiagnostics` changes to
+`VpS2Hooks.isAndroid`. The preceding current-attempt guard, TV exemption,
+`requiresNativeSubtitleRendering(track)` and renderer-mode comparison retain
+short-circuit order. S, the hook/getter/installer and the accepted S2/S2b ledger
+are unchanged. No new hook, installer, production collaborator or behavior fix.
+
+`dev/tool/dart_moves/vplayer_p10_seam.json` is an exhaustive checkpoint against
+the phase-9 merge: **789 spans, 788 retained, one patched, zero moves/scaffolds**.
+Its single exact token patch includes the Android/TV guard context and count 1;
+the whole declaration is compared, and history protects every earlier
+video-player destination. Current CI and analyzer-manifest inputs use this
+checkpoint with P9's unchanged inventory, plus P9 `--at 5c7b704bd`. The accepted
+P8 checkpoint remains frozen byte-for-byte; S2/S2b proofs are preserved.
+The S proof's summary now names its own accepted scaffolding ledger, allowing
+an all-retained current checkpoint without changing its assertions.
+
+Independent source/default/installation guard: **31 negatives**, all 23 prior
+ones plus eight for S2c. Existing guard-test names/assertions remain; the source
+guard additionally requires the S2c count and all eight new negative receipts.
+Actual hook and guard bodies extracted from the parser run with controlled
+native predicates/operands. Five complete controls pass: debug with flag,
+without flag, assertions disabled, profile, and compiled release. The 432
+combined truth-table cases pin nullable/current validation, native/default or
+live/partial override selection, once-only calls, TV/rendering/mode order and
+short-circuiting. Each runtime mutant below compiles and fails a checked
+assertion; none is credited from a load/compile error.
+
+| S2c site mutation | Assertion-failing runtime witness under `p10/s2c/` |
+| --- | --- |
+| Override bypassed with raw `Platform.isAndroid` | `negative-override-bypassed.log` (reader/order) |
+| Android getter replaced with iOS | `negative-wrong-predicate.log` (result/order) |
+| Android read duplicated | `negative-predicate-twice.log` (once-only order) |
+| TV operand evaluated before Android | `negative-operand-order.log` (short-circuit order) |
+| TV exemption bypassed | `negative-TV-bypassed.log` (result/order) |
+| Preceding current guard removed | `negative-current-guard-removed.log` (result/order) |
+| Native-rendering predicate bypassed | `negative-rendering-bypassed.log` (result/order) |
+| Renderer comparison inverted | `negative-mode-inverted.log` (result) |
+
+Evidence `p10/s2c/`: `S.json`, `S2-S2b-S2c.json`, current/P9/S2b historical
+checks, passing CI checkpoint universal self-test, commands/results,
+isolated-parser routing and runtime extracted bodies,
+controls and witnesses. Serialized `suite_evidence.py` runs on the existing
+S/S2 guard files pass **7/7 each** with the compile-time flag true and false;
+both complete and their tested trees remain stable. Original/current scoped
+analysis has **104 identical diagnostic occurrences**, including infos and
+multiplicity; zero additions, zero formatting diagnostics or comma edits.
+Guard-test analysis, format/idempotence, size, architecture and diff pass.
+The unchanged facade remains 16,603 lines; no size allowance or pubspec change.
+
+Two preliminary rejected attempts are archived uncredited: a summary assumed
+new scaffolding in the current ledger, and one negative matched both identical
+current-check statements. Corrected summary and exact renderer context preserve
+all assertions; complete final runs pass. Step T, Step 0, production moves,
+full-suite gate and builds are deferred until independent S2c review. Android
+bitmap rejection/acceptance and TV exemption are Step-0 caller cases; decoded
+bitmap rendering stays device-pending. Final revision: `p10/s2c/commit.json`.

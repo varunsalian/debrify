@@ -74,8 +74,9 @@ jobs:
       - run: python3 dev/tool/vplayer_architecture_test.py
       # First production video_player files: exhaustive ownership/history and
       # frozen scaffolding checks use separate tool-only parser packages.
-      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p9.json --self-test --parser-package .dart_tool/vplayer_parser/ci_moves_self/.dart_tool/package_config.json
-      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p9.json --parser-package .dart_tool/vplayer_parser/ci_moves_current/.dart_tool/package_config.json
+      # S2c checkpoint owns the facade until the Phase-10 production move.
+      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p10_seam.json --self-test --parser-package .dart_tool/vplayer_parser/ci_moves_self/.dart_tool/package_config.json
+      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p10_seam.json --parser-package .dart_tool/vplayer_parser/ci_moves_current/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p1.json --at 31a347ad2 --parser-package .dart_tool/vplayer_parser/ci_moves_p1_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p2.json --at fc24e32ae --parser-package .dart_tool/vplayer_parser/ci_moves_p2_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p3.json --at 890df14d8 --parser-package .dart_tool/vplayer_parser/ci_moves_p3_history/.dart_tool/package_config.json
@@ -84,7 +85,8 @@ jobs:
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p6.json --at 2defa5100 --parser-package .dart_tool/vplayer_parser/ci_moves_p6_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p7.json --at 491bf1fea --parser-package .dart_tool/vplayer_parser/ci_moves_p7_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p8.json --at 0df6ccd4e --parser-package .dart_tool/vplayer_parser/ci_moves_p8_history/.dart_tool/package_config.json
-      # S remains frozen; the S2/S2b proof preserves the platform checkpoints.
+      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p9.json --at 5c7b704bd --parser-package .dart_tool/vplayer_parser/ci_moves_p9_history/.dart_tool/package_config.json
+      # S remains frozen; S2/S2b/S2c preserve all platform checkpoints.
       - run: python3 dev/tool/vplayer_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_seam/.dart_tool/package_config.json
       - run: python3 dev/tool/vplayer_platform_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_platform_seam/.dart_tool/package_config.json
       - run: python3 dev/tool/recordings_architecture_test.py
@@ -102,7 +104,7 @@ jobs:
           set -o pipefail
           flutter analyze --no-fatal-infos --no-fatal-warnings lib/features lib/screens/settings_screen.dart lib/screens/video_player_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart lib/widgets/iptv/iptv_results_view.dart lib/screens/torbox/torbox_downloads_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/pikpak/pikpak_files_screen.dart lib/screens/settings/external_player_settings_page.dart lib/screens/settings/iptv_settings_page.dart lib/screens/playlist_content_view_screen.dart lib/screens/merged_series_detail_screen.dart lib/screens/addons/addon_hub_screen.dart lib/widgets/detail/showcase_parts.dart lib/widgets/home/spotlight_board.dart lib/widgets/episodes_panel.dart lib/screens/catalog_item_detail_screen.dart lib/screens/magic_tv_screen.dart lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart lib/screens/settings/widgets/settings_widgets.dart lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart lib/screens/stremio_tv/stremio_tv_screen.dart lib/screens/profiles/edit_profile_screen.dart lib/widgets/iptv/spotlight/spotlight_live_timeline.dart test/support/iptv_spotlight_timeline_*.dart lib/screens/settings/iptv_settings_two_pane.dart lib/features/iptv_settings_two_pane test/support/iptv_settings_two_pane_*.dart lib/screens/settings/recordings_page.dart lib/screens/premiumize/premiumize_files_screen.dart test/support/premiumize_*.dart lib/screens/alldebrid/alldebrid_files_screen.dart test/support/alldebrid_files_*.dart | tee analyze.txt
           python3 dev/tool/check_analyzer_allowlist.py analyze.txt
-          python3 dev/tool/check_vplayer_analyzer.py analyze.txt --manifest dev/tool/dart_moves/vplayer_p9.json --inventory dev/tool/dart_moves/vplayer_p9_analyzer.json --self-test --parser-package .dart_tool/vplayer_parser/ci_analyzer/.dart_tool/package_config.json
+          python3 dev/tool/check_vplayer_analyzer.py analyze.txt --manifest dev/tool/dart_moves/vplayer_p10_seam.json --inventory dev/tool/dart_moves/vplayer_p9_analyzer.json --self-test --parser-package .dart_tool/vplayer_parser/ci_analyzer/.dart_tool/package_config.json
           python3 dev/tool/check_recordings_analyzer.py analyze.txt --parser-package .dart_tool/recordings_parser/ci_analyzer/.dart_tool/package_config.json
           python3 dev/tool/check_stremio_tv_tuner_analyzer.py analyze.txt --parser-package .dart_tool/stremio_tv_tuner_parser/ci_analyzer/.dart_tool/package_config.json
           python3 dev/tool/check_iptv_spotlight_timeline_analyzer.py analyze.txt --parser-package .dart_tool/iptv_spotlight_timeline_parser/ci_analyzer/.dart_tool/package_config.json
