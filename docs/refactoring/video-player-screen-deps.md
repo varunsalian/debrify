@@ -6480,3 +6480,36 @@ Formatting is idempotent; production files are byte-identical to the Step-T
 formatted proof (three AST-optional commas inserted, none deleted, zero
 format-induced diagnostic changes). Evidence `p9/step1/`. No app bug fix,
 dependency change or release build here. The clean-tree gate follows this commit.
+
+
+## Phase 9 clean-tree gate (2026-10-14)
+
+Tested production checkpoint `a2be68e2d` on a clean, stable tree. Full fresh
+`suite_evidence.py run vplayer/p9/gate/flutter-gate --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true` has exactly the Step-0b baseline
+identities/outcomes: **13,465 success /13 failure /28 load error /20 skip**;
+zero changed, added, missing, fixed or newly skipped identities. Same SDK/flags.
+No flake stabilization, failure recording or test allowlist change.
+
+**42 mechanical jobs PASS:** all 26 other Dart manifest self-tests, P9 universal
+self-tests plus exhaustive all-retained original comparison, current P9,
+P1–P8 named same-revision historical checks, Kotlin compiled/ownership/history
+self-tests, S and S2/S2b proofs, size, architecture and architecture negatives.
+All primary/nested parser runs use isolated copied packages under the worktree's
+`.dart_tool/vplayer_parser/`; copied kernels removed and routing audited.
+CI-scope analysis/allowlist PASS, P9 comparator **104 scoped occurrences /zero
+additions**, infos and multiplicity included. CI formatting plus the theme guard
+is idempotent. Size **3003 checked /140 ratcheted**; migrated architecture passes.
+
+Both **`flutter build apk --release --no-pub`** and
+**`flutter build macos --release --no-pub`** complete successfully under nice19.
+No run/install/device command, production change during the gate, dependency
+change, push, merge or branch switch. Evidence `p9/gate/completion.json`,
+`checks-results.json`, `run-results.json`, `suite-strict.json`, analyzer/format
+logs, `build-results.json` and both complete build logs.
+
+Device checklist remains honest: native audio DSP/decoded alignment, raw
+mobile/web capabilities and Android compressed passthrough stop/PCM rearm need
+physical target validation; none is claimed from these fake-platform tests.
+The two session-persistence catch diagnostics and five legacy-sheet paths remain
+dormant as previously classified. M2 follows phases 9–11; no M2 work here.

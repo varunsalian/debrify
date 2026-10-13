@@ -3423,6 +3423,27 @@ checkpoint. Step T/0 proceed without production moves.
 - Evidence `p9/step1/`; no pubspec or behaviour change. Clean-tree full gate
   (all manifest self-tests and both release builds included) follows separately.
 
+### 2026-10-14 — Phase 9 gate (complete; STOP)
+
+- Tested clean Step-1 revision `a2be68e2d`; gate receipt in
+  `p9/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,465 success, identical 13 failures/28 load errors/20 skips, zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree, same SDK
+  and flags. No flake stabilization or failure allowlisting.
+- 42/42 mechanical checks PASS: every other Dart manifest self-test, P9
+  universal/all-retained self-comparison and current check, P1–P8 named histories,
+  complete Kotlin self-test, S/S2/S2b proofs, size/architecture and negatives.
+  Every parser call uses an isolated copied package; kernel deletion/routing
+  audited. Facade 16,603, combined bridge 305 lines; size ratchet enforced.
+- CI analysis/allowlist and P9 comparator PASS (104 scoped occurrences, zero
+  additions); full CI formatting plus changed theme guard PASS. Both release
+  builds, apk and macOS, PASS without install/run. Application hashes and
+  pubspec remain unchanged throughout the gate. Evidence `p9/gate/`.
+- Native DSP/decoded alignment, raw mobile/web predicates and Android
+  compressed-passthrough transitions remain device-pending; dormant paths
+  unchanged. M2 is after phase 11. No push/merge/switch or production bug fix.
+  STOP after the gate commit for independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
