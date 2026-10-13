@@ -5129,8 +5129,8 @@ Test-only stabilization holds the existing guide HTTP completer for every
 snapshot race until the assertions finish, preserving the profile case and its
 404 completion/cleanup. Earlier seek-wait and ordinal-boundary attempts failed
 and are excluded. All 19 existing expectation calls and test-name tokens are
-AST-identical. Entire file original/moved 3× controls pass (54 + 54), then the
-final restored-original 18-case control passes. No added identity, deleted
+AST-identical. Entire file original/moved 3× controls pass (48 + 48), then the
+final restored-original 16-case control passes. No added identity, deleted
 assertion, application change or failure allowance. Format/analyzer pass.
 The accepted Step-0 baseline remains the comparison target.
 
@@ -5143,3 +5143,26 @@ Evidence: `p7/gate/fixture-note/` reproduction logs, rejected candidates,
 non-credit traces, 3× controls, AST assertion proof, patches and mutation logs;
 revision/input hashes in `completion.json`. The systematic P7 and independent
 sample totals remain unchanged. New clean gate evidence follows separately.
+
+## Phase 7 clean gate — local completion extraction (2026-10-13)
+
+Clean fixture `dd2899773`, production `cc430295d`; comparison baseline is
+accepted Step-0 `e62a3a41f` (original application `2defa5100`). Fresh full suite
+matches all identities/outcomes: 13,291 success / 13 pre-existing failure /
+28 pre-existing load error / 20 skip, zero additions/missing/changes. First
+failed run remains excluded. The snapshot fixture NOTE counts are corrected:
+16 behavior identities (loading/setup excluded), 48 original + 48 moved passes
+across three controls, then 16 restored-original passes; all 19 expectations and
+names are unchanged. Independent sample remains 20/20; systematic 114 kills /
+three equivalences unchanged. No failure allowance or application bug fix.
+
+All 36 manifest/Kotlin commands pass: 26 existing Dart self-tests, P7 universal
+self/current/same-revision, six named histories and Kotlin 597 tests. Additional
+post-fixture current check passes. Scoped analyzer: 98 occurrences / zero
+additions, original empty-catch identity/multiplicity preserved; global warning
+allowlist/negative tests, CI format, size and architecture pass. Parser copies
+are isolated, kernels deleted, routing audited. Both clean APK and macOS release
+builds pass; SDK unchanged, artifact hashes archived. Earlier move-check inputs
+remain identical after the test-only fixture commit. Gate revision, commands,
+all logs/hashes and equality audit: `p7/gate/completion.json`. Human local
+completion/rewatch/This-device and prior device/PiP checklist remains pending.

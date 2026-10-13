@@ -2621,7 +2621,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   existing completer until race assertions finish, then release the existing
   404/cleanup path. Production is untouched. Earlier wait/reader-ordinal
   candidates failed and remain excluded; diagnostic sources restored.
-- **Proof/checks.** Entire 18-case file original/moved 3× passes (54 + 54), plus
+- **Proof/checks.** Entire 16-case file original/moved 3× passes (48 + 48), plus
   restored final original control. Isolated AST proof preserves all 19 expectation
   calls and test-name tokens. Simkl and MDBList percent+1 mutations on the original
   assertion-fail against unchanged duration expectations; both sources restored.
@@ -2632,6 +2632,37 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   validation. Fresh clean full suite/builds follow this test/docs commit; manifest
   matrix continues with unchanged production/tool/configuration inputs. Human
   device checklist pending; no bug fix, pubspec change or device execution.
+
+### 2026-10-13 — Phase 7 clean-tree gate (stop)
+
+- **Revision/evidence.** Production `cc430295d`, original-proven fixture
+  `dd2899773` (clean tested tree), Step-0 baseline `e62a3a41f`, original application
+  `2defa5100`. Resulting gate revision, commands, SDK, tree/input equality,
+  parser routing and artifact/evidence hashes: `p7/gate/completion.json`.
+- **Suite.** Nice-19 serialized hook-defined/no-pub full suite: 13,291 success /
+  unchanged 13 failure / 28 load error / 20 skip. Official and strict comparisons
+  PASS: zero added, missing, changed or newly skipped identities. First completed
+  failed gate is excluded. Original-proven guide-refresh fixture preserves all
+  19 expectation calls and names; 16 behavior cases original/moved 3× (48 + 48),
+  final restored original control and two assertion-killing original mutations.
+  Fixture-note counts corrected to exclude loading/setup events; no new allowance.
+- **Checks.** All 36 manifest/Kotlin commands PASS: 26 existing Dart manifests,
+  P7 self/current/same-revision and P1–P6 at the named merges; Kotlin 597 tests.
+  Post-fixture P7 current guard also PASS. Production/tool/configuration inputs
+  unchanged by the fixture closure, audited. CI format idempotent; root/strict-CI
+  scoped comparator: 98 occurrences, zero additions, including moved
+  `empty_catches` identity/multiplicity. Global 54-warning allowlist, comparator
+  negatives, size 3,000 files / 140 ratchets and architecture 1,669 / negatives
+  PASS. Isolated CLI parser packages and copied-kernel deletion are archived.
+- **Builds.** Clean `nice -n 19 flutter build apk --release --no-pub` and then
+  `flutter build macos --release --no-pub` both PASS. APK/macOS executable/AOT
+  hashes archived. Same Flutter 3.44.8 / Dart 3.12.2; existing plugin SwiftPM
+  notices do not fail the build.
+- **Stop/pending.** Phase 7 stops at this gate. Human local movie/episode threshold,
+  rewatch/Continue Watching and This-device-with-trackers checks remain pending,
+  alongside earlier device/PiP items. Original cross-profile completion writes
+  remain preserved and documented in Follow-ups. No bug fix, pubspec change,
+  real tracker network, device execution, push, merge, branch switch or later move.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
