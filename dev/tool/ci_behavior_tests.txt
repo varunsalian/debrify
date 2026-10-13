@@ -517,3 +517,5 @@ test/features/video_player/video_player_pip_handoffs_test.dart
 test/features/video_player/video_player_pip_projection_test.dart
 test/features/video_player/video_player_pip_retained_test.dart
 test/features/video_player/video_player_pip_recovery_test.dart
+
+test/features/video_player/video_player_pip_renderer_test.dart

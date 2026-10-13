@@ -3047,6 +3047,45 @@ checkpoint. Step T/0 proceed without production moves.
   acceptance, refresh the Phase-8 draft/probe against S2b before continuing;
   prior S2 materialization is not claimed as current evidence.
 
+### 2026-10-13 — S2b independent review and Phase-8 k2 closure
+
+- **Accepted original.** Fresh review `vp-rev8s2b`: no P1/P2/P3. S2b
+  `866cbaf03` is the ORIGINAL for further Phase-8 behavior and mutation proofs.
+  Existing k19 closure `652def541` remains recorded; no production move here.
+- **k2.** Public controls start iOS-style entry with a held old handle; the
+  original player error subscription triggers Android renderer fallback via
+  S2/S2b. Same State and PiP owner, two distinct players/handles, old disposal
+  and the Automatic preference are asserted. Releasing the old handle produces
+  no subtitle preparation on either instance, no state push and no native
+  entry. Unmodified original passes; removing the post-handle identity guard
+  assertion-fails in the detached S2b checkout (`p8/k2/results.json`).
+- **Reachability refresh.** S2b also opens the other previously deferred
+  renderer paths. Four additional public-caller cases pin no-player entry,
+  renderer-gap pause/latch, created-player pause, foreground during held audio,
+  first live in-buffer resume and consumed long-absence timestamps. All new
+  cases have original assertion witnesses. The final player check is killed
+  by the held-handle case too. Remaining resume-created/mounted guard is
+  source-proven redundant for registered lifecycle dispatch, with a complete
+  original replay; preserved in production. Updated matrix: 154 canonical
+  assertion kills / 13 equivalences, 167 points; native presentation/recording/
+  power checks remain device-pending. 96 Phase-8 behavior cases in 11 files.
+- **Tooling.** Draft P8 manifest re-measured/materialized against S2b: 14 moves,
+  22 retained occurrences, seven owners, frozen scaffolding and all earlier
+  destinations. Optional-comma/idempotence proof PASS. Refreshed analyzer
+  root/strict/probe 98/170/99; earlier identity mappings retained. Evidence
+  `p8/refresh/`; draft only, no production change. New renderer test registered
+  in the existing harness-flag CI list.
+- **Validation/deviations.** Nice-19 serialized controls/mutations use
+  `--no-pub --concurrency=1 --dart-define=DEBRIFY_VP_TEST_HOOKS=true`. Exact
+  commands, patches, assertions and hashes under `p8/k2/`. Test analysis/format
+  PASS. Initial zero-position startup stalled before reaching the scenario;
+  that interrupted run gets no credit. Initial detached setup lacked its
+  ignored package graph; corrected without pubspec changes. Initial renderer
+  controls over-counted Video pauses and included unrelated decoder reads;
+  final assertions pin the observed renderer-gap behavior and subtitle writes.
+  All rejected/development runs archived. Full additions-only baseline follows
+  before Step 1. No bug fix, real network, run/install/device, push/merge/switch.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

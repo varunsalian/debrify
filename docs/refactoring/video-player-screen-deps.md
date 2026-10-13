@@ -5768,3 +5768,68 @@ production move, k2 test, CI transition, pubspec change, real network or device
 action. S2b stops for independent review. After acceptance, refresh the draft
 P8 manifest/probe against the S2b original before k2 and production work; the
 old S2 Step-T materialization is not a current-tree proof of this extension.
+
+## Phase 8 S2b original — k2 and renderer reachability closure (2026-10-13)
+
+Fresh independent review `vp-rev8s2b`: no P1/P2/P3. S2b `866cbaf03` is
+the behavior ORIGINAL. The held iOS-style entry uses S/S2/S2b, the real controls
+callback, real player-error subscription and renderer fallback inside the same
+State. It asserts unchanged State/owner, old disposal, distinct handles, the new
+open and persisted Automatic renderer. Only after replacement setup finishes
+does it release the old handle; subtitle writes on both players, state pushes
+and native entry counts stay unchanged. Removing the post-handle player check
+produces an assertion failure on the detached original; unmodified control
+passes (`p8/k2/{results.json,control.jsonl,k2.jsonl,k2.patch}`). No private calls.
+
+S2b also makes the old deferred renderer points reachable. Four registered
+caller tests cover a captured entry during disposal, backgrounding before and
+after replacement creation, foregrounding while native audio configuration is
+held, first live-buffer resume and reuse of a consumed long-absence timestamp.
+Assertions are evaluated while the specified disposal/audio boundary is held.
+The renderer gap removes the Video subtree: no extra old-player pause; a created
+player receives the State's one pause before setup completes. This is pinned
+as-is rather than assuming the two pauses of an ordinary ready screen.
+
+| Previously deferred point | Final S2b result / original witness |
+| --- | --- |
+| `enterPip-post-player` | killed; `k2/k2` |
+| `enterPip-created` | killed; `k2/renderer-mutations/enterPip-created` |
+| `enterPip-finally-player` | killed; `k2/renderer-mutations/enterPip-finally-player` |
+| `field-time` | killed; `k2/renderer-mutations/field-time` |
+| `pauseForBackground-renderer` | killed; `k2/renderer-mutations/pauseForBackground-renderer` |
+| `pauseForBackground-renderer-latch` | killed; `k2/renderer-mutations/pauseForBackground-renderer-latch` |
+| `pauseForBackground-renderer-pause` | killed; `k2/renderer-mutations/pauseForBackground-renderer-pause` |
+| `resumeFromBackground-renderer` | killed; `k2/renderer-mutations/resumeFromBackground-renderer` |
+| `resumeFromBackground-time-clear` | killed; `k2/renderer-mutations/resumeFromBackground-time-clear` |
+| `resumeFromBackground-created` | equivalent; `k2/renderer-mutations/resumeFromBackground-created` |
+
+The resume-created/mounted guard is redundant on current registered lifecycle
+callers: the only absent-player states are initial setup (latch false) and
+renderer fallback (preceding guard returns); fallback restores/creates the
+player before clearing its flag. Disposal unregisters the synchronous listener
+before unmount, with no awaited/captured resume callback or synchronous element
+unmount during the current application's lifecycle dispatch. The complete
+original renderer/held-entry replay passes after removing that guard. Full
+source reasoning and SDK path: `resume-created-equivalence.json`. It remains
+frozen in production; no removal is authorized by this classification.
+
+Updated canonical matrix: **154 assertion kills / 13 equivalences / 167 points**;
+the earlier 327-site inventory and 22 retained occurrence ledger still apply,
+with these ten historical S2 classifications superseded. **96 behavior cases in
+11 files**, each with an original assertion witness. Native presentation, real
+recording tee ordering, and native power/decoder integration remain genuine
+device checklist work; no renderer statement is mislabeled device-only after
+S2b. k19's lower-threshold witness remains recorded alongside its existing
+upper-threshold witness; independent sample is now fully closed (original
+18/20, both survivors assertion-proven), without claiming a new independent
+sample run. `coverage.json` links the canonical and per-case witnesses.
+
+The draft move manifest and analyzer inventory were refreshed against S2b,
+materialized in `p8/refresh/` only. 14 moves, 22 retained occurrences, seven
+State-owner substitutions and earlier destinations compare with zero diffs.
+Optional-comma and format idempotence proof PASS; root/strict/probe 98/170/99,
+prior mappings preserved. New renderer file registered in the existing flag
+command list. Rejected startup/package setup controls and initial fixture count
+assumptions are archived and uncredited; final original controls and all credited
+mutation logs complete without load errors. Test analysis/format clean. Full
+additions-only baseline follows before production moves.

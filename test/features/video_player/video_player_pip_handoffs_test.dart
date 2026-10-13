@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:debrify/models/android_video_renderer_mode.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 
 import 'package:debrify/screens/video_player_screen.dart';
@@ -13,6 +15,93 @@ import 'support/video_player_environment.dart';
 import 'video_player_skip_races_test.dart' show incomingProfile;
 
 void main() {
+  testWidgets(
+    'PiP held iOS handle rejects the stale entry after same-State Android renderer fallback',
+    (t) async {
+      var created = 0;
+      final f = VideoPlayerEnvironment(
+        native: true,
+        configurePlayer: (player) {
+          if (++created > 1) player.framePosition = Duration.zero;
+        },
+      );
+      final d = PipLifecycleDriver(t, f, ios: true);
+      await d.initialize();
+      final gate = Completer<void>();
+      try {
+        // Independently select the approved renderer and iOS handle paths.
+        VpS2Hooks.install(VpS2Hooks(ios: () => true, android: () => true));
+        await f.finish<void>(
+          t,
+          PlayerSettingsStorage.setAndroidVideoRendererMode(
+            AndroidVideoRendererMode.directSurface,
+          ),
+        );
+        await d.mount();
+        final owner = d.stateOwner!;
+        final old = f.player;
+        old.delays['handle'] = gate;
+        final dynamic callback = playerControls(t).onPip;
+        expect(callback, isNotNull);
+        final pending = d.observe<dynamic>(() => callback());
+        await f.until(t, () => d.operations('handle', old).isNotEmpty);
+        expect(gate.isCompleted, isFalse);
+        expect(d.named('enterPip'), isEmpty);
+
+        // The original error subscription owns and performs the replacement.
+        old.state = old.state.copyWith(position: Duration.zero);
+        old.emit('position', Duration.zero);
+        await f.advance(t);
+        old.emit('error', 'synthetic MediaCodec video output failure');
+        await f.until(t, () => f.players.length == 2);
+        final fresh = f.player;
+        fresh.deliverReady();
+        await f.until(t, () => d.operations('rate', fresh).isNotEmpty);
+        await d.settle();
+        await f.advance(t, const Duration(milliseconds: 200));
+        await d.settle();
+        expect(t.state(find.byType(VideoPlayerScreen)), same(owner));
+        expect(PipService.isOwner(owner), isTrue);
+        expect(old.disposed.isCompleted, isTrue);
+        expect(fresh.handleValue, isNot(old.handleValue));
+        expect(d.operations('open', fresh), hasLength(1));
+        expect(
+          await f.finish(
+            t,
+            PlayerSettingsStorage.getAndroidVideoRendererMode(),
+          ),
+          AndroidVideoRendererMode.automatic,
+        );
+        final oldNative = old.platform! as FakeNativePlayer;
+        final freshNative = fresh.platform! as FakeNativePlayer;
+        int subtitleWrites(FakeNativePlayer platform) => platform.calls
+            .where(
+              (c) =>
+                  c.$1 == 'setProperty' &&
+                  (c.$2 as (String, String)).$1 == 'sub-visibility',
+            )
+            .length;
+        final oldSubtitleWrites = subtitleWrites(oldNative);
+        final freshSubtitleWrites = subtitleWrites(freshNative);
+        final pushes = d.named('updatePlaybackState').length;
+        final entries = d.named('enterPip').length;
+        expect(gate.isCompleted, isFalse);
+
+        gate.complete();
+        await f.finish<dynamic>(t, pending as Future<dynamic>);
+        await d.settle();
+        expect(subtitleWrites(oldNative), oldSubtitleWrites);
+        expect(subtitleWrites(freshNative), freshSubtitleWrites);
+        expect(d.named('updatePlaybackState'), hasLength(pushes));
+        expect(d.named('enterPip'), hasLength(entries));
+        expect(PipService.isOwner(owner), isTrue);
+        expect(d.errors, isEmpty);
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        await d.close();
+      }
+    },
+  );
   for (final handoff in ['dispose', 'owner', 'profile']) {
     testWidgets(
       'PiP held support across $handoff preserves original late registration',

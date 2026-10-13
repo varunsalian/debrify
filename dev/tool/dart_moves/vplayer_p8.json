@@ -3,7 +3,7 @@
   "series": "vplayer",
   "phase": 8,
   "status": "draft",
-  "base": "21b19c944",
+  "base": "866cbaf03",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
   "split_containers": [

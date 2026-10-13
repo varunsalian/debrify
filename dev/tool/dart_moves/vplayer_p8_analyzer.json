@@ -1,6 +1,6 @@
 {
-  "base": "21b19c944",
-  "procedure": "P1/P2/P3/P4/P5/P6/P7 frozen identities preserved; maximum per identity with S2 original root, byte-identical strict original, complete compiling receiver/rename materialization",
+  "base": "866cbaf03",
+  "procedure": "P1/P2/P3/P4/P5/P6/P7 frozen identities preserved; maximum per identity with S2b original root, byte-identical strict original, complete compiling receiver/rename materialization",
   "entries": [
     {
       "severity": "info",
@@ -713,7 +713,7 @@
         }
       ],
       "source_hashes": {
-        "lib/screens/video_player_screen.dart": "db5ef570e8c1ce91095328a486de72d1b9105b81f0b20d0183935539a608373b",
+        "lib/screens/video_player_screen.dart": "c0ba439cc80e91b05fe6b2b07cc0475434a0068aeef1fce2ef844580dbaed20e",
         "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
         "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
         "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
@@ -741,8 +741,8 @@
         "flutter",
         "analyze",
         "--no-pub",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-strict/lib/screens/video_player_screen.dart",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-strict/lib/features/video_player"
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-strict/lib/screens/video_player_screen.dart",
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-strict/lib/features/video_player"
       ],
       "exit": 1,
       "count": 170,
@@ -1106,7 +1106,7 @@
         }
       ],
       "source_hashes": {
-        "lib/screens/video_player_screen.dart": "db5ef570e8c1ce91095328a486de72d1b9105b81f0b20d0183935539a608373b",
+        "lib/screens/video_player_screen.dart": "c0ba439cc80e91b05fe6b2b07cc0475434a0068aeef1fce2ef844580dbaed20e",
         "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
         "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
         "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
@@ -1134,8 +1134,8 @@
         "flutter",
         "analyze",
         "--no-pub",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-probe/lib/screens/video_player_screen.dart",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-probe/lib/features/video_player"
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-probe/lib/screens/video_player_screen.dart",
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-probe/lib/features/video_player"
       ],
       "exit": 1,
       "count": 99,
@@ -1478,7 +1478,7 @@
         }
       ],
       "source_hashes": {
-        "lib/screens/video_player_screen.dart": "661e9916ea5f8a9055bc290b560700586551821a7e15ebd6bcc2ddb526bd791b",
+        "lib/screens/video_player_screen.dart": "f7acbd76582515ba8bf9695765c9bcb01bb93ee99e4f9c05303261a576945658",
         "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
         "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
         "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
@@ -1507,8 +1507,8 @@
         "flutter",
         "analyze",
         "--no-pub",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-probe/lib/screens/video_player_screen.dart",
-        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/tooling/analyzer-probe/lib/features/video_player"
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-probe/lib/screens/video_player_screen.dart",
+        "/Users/varunbsalian/Documents/Projects/debrify/.git/refactor-evidence/vplayer/p8/refresh/analyzer-probe/lib/features/video_player"
       ],
       "exit": 1,
       "count": 99,
