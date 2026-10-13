@@ -5893,3 +5893,42 @@ presentation/restoration, real recording teardown and wake/decoder power
 checks remain device-pending; M1 is after merge. No application bug fix,
 allowance, dependency change, live application request, run/install/device
 command or push/merge/branch switch. Stop for independent Phase-8 review.
+
+## Integration milestone M1 (2026-10-13)
+
+The one new scenario uses one State/player for two episodes with local progress
+ownership and all three enabled synthetic-credential scrobble targets. It
+observes synchronous tracker order through timer ownership and independently
+checks asynchronous protocol delivery, seek, persisted speed/restore, completion
+threshold/one-shot writes, EOF sleep suppression, S2 background/foreground,
+explicit play and episode reset. Final test bytes pass unchanged on original
+`13df9a261` lib/ and merged `0df6ccd4e`. No production code changes.
+
+| Original mutation witness | Phase | Assertion pinned | Result |
+|---|---|---|---|
+| `p2-eof-sleep-latch` | 2 retained EOF site | sleep stop forbids foreground play | killed |
+| `p3-skip-fanout-order` | 3 | tracker timer-owner cancellation order | killed |
+| `p4-resume-native-rate` | 4 retained resume site | saved 1.5x reaches incoming native rate | killed |
+| `p5-trakt-seek-stop` | 5 | three stop protocols and exact progress | killed |
+| `p6-mdblist-seek` | 6 | third tracker consumes the skip seek | killed |
+| `p7-episode-one-shot-reset` | 7 | incoming episode marks after outgoing completion | killed |
+| `p8-resume-sleep-guard` | 8 | sleep latch wins over lifecycle resume | killed |
+| `p2-explicit-play-latch` | 2 retained play site | next foreground resumes after explicit play | killed |
+
+Eight of eight valid mutations assertion-killed across seven phases; original
+control and restored control pass. Final file hashes, complete JSON logs and
+patches: `m1/scenario/`, `m1/mutations/`. No failed-load mutation credited.
+
+A full-suite Simkl snapshot/profile SQLite lock was reproduced on unmodified
+original, before a test-only registry-wait stabilization. The `incomingProfile`
+helper now uses shared `finish()` while pending widget-zone transactions progress;
+operation order/arguments, held readers/guide barriers and all test assertions
+remain. Entire main test body byte-identical. Five final original 34-case
+replays PASS; `m1/flake/` and `gate/fixture-note.md` archive diagnosis, assertion
+proof and uncredited interrupted attempts. No production stale-result fix.
+
+Final full suite vs Phase-8 gate is additions-only: 13,393 success / 13 failure /
+28 load error / 20 skip, exactly one passing M1 addition and no changed/missing
+old identity. Analyzer, format, size/architecture, all 38 mechanical jobs and
+both release builds PASS; `m1/gate/completion.json`. Native PiP presentation,
+recording and wake/decoder power checks remain device-pending. M1 complete.

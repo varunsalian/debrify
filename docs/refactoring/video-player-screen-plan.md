@@ -3150,6 +3150,42 @@ checkpoint. Step T/0 proceed without production moves.
   fix, allowance, pubspec change, live application request, run/install/device,
   push/merge/branch switch. Stop for Phase-8 independent review.
 
+### 2026-10-13 — Integration milestone M1 (after Phase 8 merge)
+
+- **Inputs/scope.** Merged application `0df6ccd4e`; original application
+  `13df9a261` lib/ in detached `m1/original/`. One new 409-line scenario,
+  `video_player_m1_integration_test.dart`, registered with the existing harness
+  flag in `ci_behavior_tests.txt`. No production/dependency change.
+- **Scenario/parity.** One State/player, two episodes; explicit local progress
+  ownership plus all three synthetic-credential tracker targets. Public skip
+  action pins Trakt→Simkl→MDBList timer-owner order separately from asynchronous
+  HTTP delivery and checks protocol/identity/progress. A real speed save feeds
+  incoming resume against a different outgoing rate. Threshold/one-shot local
+  marks, EOF sleep suppression, S2 lifecycle sleep-latch precedence, explicit
+  play and independent episode-reset latch clearing all assert observable
+  calls/storage. Same final file passes original and merged; eight valid
+  original mutations across phases 2–8 assertion-killed, restored control PASS.
+  Table/patches/logs `m1/mutations/`, final SHA/parity `scenario/parity.json`.
+- **Fixture stabilization.** The first suite attempt exposed a pre-existing
+  Simkl snapshot/profile SQLite lock, reproduced on unmodified original (same
+  warning/hang; terminated after 240s). Test-owned `incomingProfile` now uses
+  Step-H `finish()` for three registry waits, preserving ordering/arguments and
+  all test bodies/assertions byte-for-byte. Five serial final original replay
+  groups: 34 cases × 5 PASS under checker load. Fixture analysis clean. Failed
+  and early interrupted attempts archived uncredited; final suite restarted.
+- **Gate.** Complete `m1/gate/`: suite by identity against Phase-8 gate:
+  13,393 success / 13 failure / 28 load error / 20 skip; exactly one passing
+  addition (M1), zero changed/missing/fixed/newly skipped identities. SDK equal,
+  tested tree stable. Analyzer 99 scoped diagnostics / zero additions; shared
+  54-warning allowlist unchanged. Format, size/architecture and real negatives,
+  all 38 Dart/Kotlin/history/seam jobs and APK/macOS release builds PASS.
+  Commands/results and artifact hashes in `completion.json`; every manifest
+  uses an isolated copied parser package with copied kernels deleted.
+- **Limitations/stop.** M1 automated milestone complete. Native Android/iOS PiP
+  presentation/restoration, real recording teardown and wake/decoder power
+  behavior remain device-pending. No app bug fix, allowance, pubspec change,
+  live application request, run/install/device, push/merge/branch switch. Stop.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -12,9 +12,10 @@ import 'support/video_player_environment.dart';
 
 Future<void> incomingProfile(WidgetTester t, VideoPlayerEnvironment f) async {
   final scope = ProfileRuntime.capture();
-  final actor = await t.runAsync(() => f.registry!.getProfile(scope.profileId));
-  final profile = await t.runAsync(
-    () => f.registry!.createProfile(
+  final actor = await f.finish(t, f.registry!.getProfile(scope.profileId));
+  final profile = await f.finish(
+    t,
+    f.registry!.createProfile(
       name: 'Incoming skip profile',
       role: UserProfileRole.admin,
       actingProfileId: scope.profileId,
@@ -22,10 +23,10 @@ Future<void> incomingProfile(WidgetTester t, VideoPlayerEnvironment f) async {
       actingSessionEpoch: scope.sessionEpoch,
     ),
   );
-  await t.runAsync(() => f.registry!.setActiveProfile(profile!.id));
+  await f.finish(t, f.registry!.setActiveProfile(profile.id));
   ProfileRuntime.publish(
     ProfileScope(
-      profileId: profile!.id,
+      profileId: profile.id,
       dataGeneration: 1,
       sessionEpoch: ProfileRuntime.nextEpoch,
     ),
