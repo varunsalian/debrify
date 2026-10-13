@@ -5958,3 +5958,422 @@ allowlist change yet. Formatting preserves identities exactly (104), adds
 zero diagnostics, records every AST optional-comma site and is idempotent.
 Application, dependencies, size ratchet and CI current selection unchanged;
 production application of this draft belongs to Step 1, after characterization.
+
+
+## Phase 9 Step 0 — original subtitle engine I
+
+Original application `bd671bd09`; tooling checkpoint `9d36d7c83`.
+One production engine is activated through public subtitle selection, parses
+fixture SRT, observes deterministic audio metadata at its actual property
+fallback, and returns actual isolate-computed alignments. File-filter install
+and removal barriers exercise the real lifecycle queue separately. No fake
+engine, synthetic notices, private State calls or source-text behaviour tests.
+
+| Original declaration | Behaviour through original caller |
+|---|---|
+| `_subtitleAutoSyncEnabled` | stored enablement both ways; early defaults overwrite audit |
+| `_subtitleAutoSync` | selection before installation, identical-path early return, replacement clear gap, late old callbacks |
+| `_autoSyncWindowActive` | cold late-offset/reset case; manual hide then suppressed new selection; all notice states |
+| `_autoSyncPillHold` | exact 2400 ms result, rearm cancellation, manual/off cancellation and dispose |
+| `_autoSyncPillPhaseTimer` | exact 5 s announcement, fresh listening cancellation and dispose |
+| `_installSubtitleAutoSyncForPlayer` | enabled/disabled, nonnative, exact diagnostic, desktop raw-Android negative; engine live readers |
+| `_disposeSubtitleAutoSync` | held installation/removal, renderer clear before new audio configuration and old player/lease release |
+| `_applyAutoSubtitleSyncOffset` | actual 1869 ms result/native/session/UI rebuild; unawaited native rejection remains outside persistence catch |
+| `_showSubtitleAutoSyncNotice` | listening/checking/still-listening/synced/failed/silent-resynced, exact diagnostic messages |
+| `_openAutoSyncPillWindow` | 5 s announce boundary, fresh subtitle/audio restart during old deadlines |
+| `_showAutoSyncPillResult` | actual computed verdicts, 2400 ms hold and retained 350 ms fade |
+| `_hideAutoSyncPill` | off/manual/renderer cleanup, fresh selection cannot inherit old callback |
+| `_setActiveExternalSubtitlePath` | no-engine early path, same-path guard, null deactivation, automatic source priority, foreign-audio retirement and decoder rollback |
+| `_loadSubtitleSettings` | actual migration/style, nonzero session offset before engine, null model before returned snapshot, disposed rejection, accepted stale profile snapshot, font/prefs races |
+| `_onSubtitleStyleChanged` | appearance rendering, equal-offset preservation, changed-offset generation retirement, saved callback after disposal |
+| `_applySubtitleSyncOffset` | exact three-decimal signed seconds, native/nonnative, propagated native errors |
+| `_resetSubtitleSyncOffset` | physical session-only reset; UI/native reset via track, content and menu callers |
+| `_showSyncOverlayPanel` | sync menu action, transport opacity, TV first key/focus release |
+| `_hideSyncOverlay` | overlay dismiss, Escape and TV PopScope route Back; playback stays mounted |
+| `_buildSyncOverlay` | external path snapshot, live player position, late callbacks across dismissal/replacement/disposal, null settings and manual feedback during alignment |
+| `_buildSliderSyncOverlay` | signed offset, both clamp boundaries, null model default, late callbacks, TV repeats and stable element |
+
+Original behaviours intentionally retained: session offset is a singleton and
+an overlapping route resets it while an outgoing model remains nonzero; stale
+mounted settings snapshots cross profile handoff; font loading can read incoming
+prefs or throw after reset; stale prefs init can overwrite the shared cache with
+a stale wrapper. Saved line callbacks can affect a replacement player; after
+disposal their service write precedes a disposed-notifier error/native call.
+Quiet saved stepper callbacks can still write native properties after disposal.
+Native property rejection propagates separately while session/model/verdict
+continue. Retired seek results can leave Checking until a later event.
+
+Device/dormant limits: no real native audio DSP/decoded timing claim; Android
+compressed passthrough stop/PCM rearm and web/native-platform support predicates
+are not overridden by S2. The constant unified-menu early return makes the legacy
+TracksSheet branch and five ledger occurrences dormant. Existing native widgets,
+keys and retained factories keep their original identity. M2 remains later work.
+
+The exhaustive AST inventory has **190 statement/branch/literal/return/case
+sites over all 21 declarations**. Its 170 canonical mutation candidates are
+**151 assertion-killed, 12 replayed equivalents, two raw-Android device-pending,
+two dormant persistence-catch diagnostics and three compiler-invalid operator
+candidates**. The invalid nullable-flow reversals are not credited; their
+parent null/path branches and snapshots have separate valid kills. Null/case
+AST sites are grouped with their enclosing assignment/branch/dispatch; all
+five enum notice routes run through the real engine. Three nullable fields
+have no alternative inert non-null constant; their creation/use/disposal
+protocols are executable, and T freezes their exact initializers.
+
+All **26 reachable retained occurrences** have individual assertion-failing
+mutations. Five legacy-sheet occurrences are dead behind
+`kUnifiedPlayerMenuEnabled`; two raw-Android passthrough occurrences remain
+pending. Three additional live engine readers (position, playing, offset),
+the disposed settings guard and uncaught storage-error propagation have
+independent kills. Every one of the **70 final new tests** has a completed
+assertion-failing original witness with matching final test-file hashes.
+
+Evidence: `p9/step0/coverage.json`, AST/retained inventories, source snapshots,
+per-mutation patches/JSON/stderr, controls and input hashes. The original and
+restored controls pass; detached application code is restored to `bd671bd09`.
+No compile/load failure, timeout, interruption or error without an assertion
+is counted. Earlier exploratory input/logs are retained with their actual
+status, not promoted to final evidence. The final corpus uses shared H support
+without edits; no production code, pubspec, CI current selection or ratchet edit.
+
+Two preliminary focused commands inherited the shared fixture's P8 runtime
+fallback; their exact birthtime-matched fixture directories were moved into P9
+and those runs excluded. Accepted controls/replays/full suite set the P9 root
+explicitly. An early new-case expected offset was corrected to the deterministic
+original result (2.121 s after re-arm), and pointer checks wait the recognizer's
+300 ms deadline. Assertions were not loosened. Two throwing-return variants
+timed out and are excluded; finite unwanted-pill exit variants supply actual
+assertion kills instead. No application fix or new seam.
+
+### Retained-occurrence coverage
+
+| Frozen occurrence | Original declaration / line | Caller mutation / classification | Witness |
+|---|---|---|---|
+| `r01` `_loadSubtitleSettings` | `initState`:1622 | assertion killed | subtitle overlapping route resets singleton offset while the outgoing route retains its model |
+| `r02` `_subtitleAutoSync` | `_applyPassthroughFlip`:2130 | device-pending | Live Android passthrough guards are raw Platform predicates, outside S2. |
+| `r03` `_subtitleAutoSync` | `_applyPassthroughFlip`:2147 | device-pending | Live Android passthrough guards are raw Platform predicates, outside S2. |
+| `r04` `_installSubtitleAutoSyncForPlayer` | `_initializePlayer`:2430 | assertion killed | subtitle off then new selection cannot inherit an old announcement hide |
+| `r05` `_subtitleAutoSync` | `_bindPlayerInstanceSubscriptions`:2870 | assertion killed | subtitle held alignment handles the retained seek jump subscription |
+| `r06` `_subtitleAutoSyncEnabled` | `_bindPlayerInstanceSubscriptions`:2886 | assertion killed | subtitle held alignment handles the retained new audio subscription |
+| `r07` `_subtitleAutoSync` | `_bindPlayerInstanceSubscriptions`:2897 | assertion killed | subtitle held alignment handles the retained new audio subscription |
+| `r08` `_disposeSubtitleAutoSync` | `_fallbackExplicitRendererToAutomatic`:3404 | assertion killed | subtitle replacement clears the disposed engine before incoming audio setup and a saved selection |
+| `r09` `_installSubtitleAutoSyncForPlayer` | `_fallbackExplicitRendererToAutomatic`:3439 | assertion killed | subtitle replacement clears the disposed engine before incoming audio setup and a saved selection |
+| `r10` `_setActiveExternalSubtitlePath` | `_handleSubtitleApplyFailure`:4174 | assertion killed | subtitle late decoder rollback restores the previous external path and reactivates the real engine |
+| `r11` `_subtitleAutoSyncEnabled` | `_loadPlayerDefaults`:5481 | assertion killed | subtitle rollback held through disposal sees the cleared engine before the mounted UI guard |
+| `r12` `_subtitleAutoSyncEnabled` | `_loadPlayerDefaults`:5484 | assertion killed | subtitle stored enablement false gates actual installation and selection |
+| `r13` `_autoSyncPillHold` | `dispose`:10574 | assertion killed | subtitle dispose cancels result hold before notifier disposal |
+| `r14` `_autoSyncPillPhaseTimer` | `dispose`:10575 | assertion killed | subtitle dispose cancels announcement before notifier disposal |
+| `r15` `_subtitleAutoSync` | `dispose`:10723 | assertion killed | subtitle pending filter removal across disposal preserves the lifecycle queue |
+| `r16` `_subtitleAutoSync` | `dispose`:10724 | assertion killed | subtitle rollback held through disposal sees the cleared engine before the mounted UI guard |
+| `r17` `_hideSyncOverlay` | `_closeTopPlayerOverlay`:11938 | assertion killed | subtitle route Back dismisses the top sync overlay before leaving playback |
+| `r18` `_hideSyncOverlay` | `build`:13163 | assertion killed | subtitle TV Android TV first key repeat and Back retain overlay element |
+| `r19` `_buildSyncOverlay` | `build`:14283 | assertion killed | subtitle early stepper reads zero while the original settings snapshot is suspended |
+| `r20` `_setActiveExternalSubtitlePath` | `_showTracksSheet`:15102 | dormant | _showTracksSheet returns through the const unified menu before the legacy TracksSheet call. |
+| `r21` `_resetSubtitleSyncOffset` | `_showTracksSheet`:15111 | dormant | _showTracksSheet returns through the const unified menu before the legacy TracksSheet call. |
+| `r22` `_onSubtitleStyleChanged` | `_showTracksSheet`:15120 | dormant | _showTracksSheet returns through the const unified menu before the legacy TracksSheet call. |
+| `r23` `_showSyncOverlayPanel` | `_showTracksSheet`:15121 | dormant | _showTracksSheet returns through the const unified menu before the legacy TracksSheet call. |
+| `r24` `_setActiveExternalSubtitlePath` | `_menuApplyTrackChange`:15257 | assertion killed | subtitle off then new selection cannot inherit an old announcement hide |
+| `r25` `_setActiveExternalSubtitlePath` | `_menuSelectAddonSubtitle`:15370 | assertion killed | subtitle off then new selection cannot inherit an old announcement hide |
+| `r26` `_setActiveExternalSubtitlePath` | `_applyStremioSubtitleFromTracksSheet`:15406 | dormant | _showTracksSheet returns through the const unified menu before the legacy TracksSheet call. |
+| `r27` `_resetSubtitleSyncOffset` | `_buildPlayerMenuPanel`:15458 | assertion killed | subtitle timing reset clears session and skips nonnative property |
+| `r28` `_onSubtitleStyleChanged` | `_buildPlayerMenuPanel`:15475 | assertion killed | subtitle style callback renders appearance without restarting unchanged timing |
+| `r29` `_showSyncOverlayPanel` | `_buildPlayerMenuPanel`:15476 | assertion killed | subtitle early stepper reads zero while the original settings snapshot is suspended |
+| `r30` `_setActiveExternalSubtitlePath` | `_resetSubtitleState`:15519 | assertion killed | subtitle content replacement clears timing and path but a saved line callback targets the new playback |
+| `r31` `_resetSubtitleSyncOffset` | `_resetSubtitleState`:15524 | assertion killed | subtitle content replacement clears timing and path but a saved line callback targets the new playback |
+| `r32` `_setActiveExternalSubtitlePath` | `_refreshSubtitleAudioPolicy`:15826 | assertion killed | subtitle automatic source priority retires on preferred audio |
+| `r33` `_setActiveExternalSubtitlePath` | `_applySubtitlePriorityUpdate`:16307 | assertion killed | subtitle automatic source priority activates the real engine through its retained caller |
+
+### Mutation table
+
+| Point | Original declaration / line | Before → after | Classification / evidence |
+|---|---|---|---|
+| `p001` | `_subtitleAutoSyncEnabled`:1330 | `false → true` | equivalent; `final-closure/p001` |
+| `p002` | `_autoSyncWindowActive`:1337 | `false → true` | killed; `closure/p002` |
+| `p003` | `_installSubtitleAutoSyncForPlayer`:1952 | `!_subtitleAutoSyncEnabled \|\| !PlatformUtil.supportsSubtitleAutoSync → false && (!_subtitleAutoSyncEnabled \|\| !PlatformUtil.supportsSubtitleAutoSync)` | killed; `sweep/p003` |
+| `p004` | `_installSubtitleAutoSyncForPlayer`:1952 | `\|\| → &&` | killed; `sweep/p004` |
+| `p005` | `_installSubtitleAutoSyncForPlayer`:1953 | `debugPrint(         'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '         'web=$kIsWeb platfor… → <removed>` | killed; `sweep/p005` |
+| `p006` | `_installSubtitleAutoSyncForPlayer`:1954 | `'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled ' → 'MUTSubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '` | killed; `sweep/p006` |
+| `p007` | `_installSubtitleAutoSyncForPlayer`:1955 | `'web=$kIsWeb platform=${Platform.operatingSystem}' → 'MUTweb=$kIsWeb platform=${Platform.operatingSystem}'` | killed; `sweep/p007` |
+| `p008` | `_installSubtitleAutoSyncForPlayer`:1957 | `return; → <removed>` | killed; `sweep/p008` |
+| `p009` | `_installSubtitleAutoSyncForPlayer`:1959 | `final platform = player.platform; → final platform = null as mk.PlatformPlayer?;` | killed; `sweep/p009` |
+| `p010` | `_installSubtitleAutoSyncForPlayer`:1960 | `platform is! mk.NativePlayer → platform is! mk.NativePlayer \|\| _subtitleAutoSyncEnabled` | killed; `final-closure/p010-valid` |
+| `p011` | `_installSubtitleAutoSyncForPlayer`:1961 | `debugPrint(         'SubtitleAutoSync: not installing — player backend is not NativePlayer '         '(${platform.runtim… → <removed>` | killed; `closure/p011` |
+| `p012` | `_installSubtitleAutoSyncForPlayer`:1962 | `'SubtitleAutoSync: not installing — player backend is not NativePlayer ' → "SubtitleAutoSync: not installing — player backend is not NativePlayer  mutant"` | killed; `closure/p012` |
+| `p013` | `_installSubtitleAutoSyncForPlayer`:1963 | `'(${platform.runtimeType})' → 'MUT(${platform.runtimeType})'` | killed; `closure/p013` |
+| `p014` | `_installSubtitleAutoSyncForPlayer`:1965 | `return; → return _openAutoSyncPillWindow();` | killed; `extra/p014-exit-effect` |
+| `p015` | `_installSubtitleAutoSyncForPlayer`:1967 | `debugPrint(       'SubtitleAutoSync: controller installed '       '(passthrough=${!kIsWeb && Platform.isAndroid && _audi… → <removed>` | killed; `sweep/p015` |
+| `p016` | `_installSubtitleAutoSyncForPlayer`:1968 | `'SubtitleAutoSync: controller installed ' → "SubtitleAutoSync: controller installed  mutant"` | killed; `sweep/p016` |
+| `p017` | `_installSubtitleAutoSyncForPlayer`:1969 | `'(passthrough=${!kIsWeb && Platform.isAndroid && _audioPassthroughEnabled})' → 'MUT(passthrough=${!kIsWeb && Platform.isAndroid && _audioPassthroughEnabled})'` | killed; `sweep/p017` |
+| `p018` | `_installSubtitleAutoSyncForPlayer`:1969 | `&& → \|\|` | device-pending; `closure/p018` |
+| `p019` | `_installSubtitleAutoSyncForPlayer`:1969 | `&& → \|\|` | killed; `sweep/p019` |
+| `p020` | `_installSubtitleAutoSyncForPlayer`:1971 | `_subtitleAutoSync = MediaKitSubtitleAutoSync(       player: platform,       enabled: _subtitleAutoSyncEnabled,       pas… → <removed>` | killed; `sweep/p020` |
+| `p021` | `_installSubtitleAutoSyncForPlayer`:1975 | `&& → \|\|` | device-pending; `closure/p021` |
+| `p022` | `_installSubtitleAutoSyncForPlayer`:1975 | `&& → \|\|` | killed; `sweep/p022` |
+| `p023` | `_installSubtitleAutoSyncForPlayer`:1978 | `0 → 1` | killed; `sweep/p023` |
+| `p024` | `_disposeSubtitleAutoSync`:1985 | `final controller = _subtitleAutoSync; → final controller = null as MediaKitSubtitleAutoSync?;` | killed; `sweep/p024` |
+| `p025` | `_disposeSubtitleAutoSync`:1986 | `_subtitleAutoSync = null; → <removed>` | killed; `closure/p025` |
+| `p027` | `_disposeSubtitleAutoSync`:1987 | `_hideAutoSyncPill(); → <removed>` | killed; `sweep/p027` |
+| `p028` | `_disposeSubtitleAutoSync`:1988 | `await controller?.dispose(); → <removed>` | killed; `sweep/p028` |
+| `p029` | `_applyAutoSubtitleSyncOffset`:1992 | `final clamped = milliseconds.clamp(       SubtitleSettingsService.syncOffsetMinMs,       SubtitleSettingsService.syncOff… → final clamped = 0;` | killed; `sweep/p029` |
+| `p030` | `_applyAutoSubtitleSyncOffset`:1996 | `!mounted → (!mounted) \|\| true` | killed; `sweep/p030` |
+| `p031` | `_applyAutoSubtitleSyncOffset`:1996 | `return; → <removed>` | killed; `sweep/p031` |
+| `p032` | `_applyAutoSubtitleSyncOffset`:1997 | `_subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: clamped); → <removed>` | killed; `sweep/p032` |
+| `p033` | `_applyAutoSubtitleSyncOffset`:1998 | `_applySubtitleSyncOffset(clamped); → <removed>` | killed; `sweep/p033` |
+| `p034` | `_applyAutoSubtitleSyncOffset`:1999 | `setState(() {}); → <removed>` | killed; `closure/p034` |
+| `p035` | `_applyAutoSubtitleSyncOffset`:2001 | `await SubtitleSettingsService.instance.setSyncOffsetMs(clamped); → <removed>` | killed; `sweep/p035` |
+| `p036` | `_applyAutoSubtitleSyncOffset`:2005 | `debugPrint('SubtitleAutoSync: offset persistence failed: $error'); → <removed>` | dormant; `closure/p036` |
+| `p037` | `_applyAutoSubtitleSyncOffset`:2005 | `'SubtitleAutoSync: offset persistence failed: $error' → 'MUTSubtitleAutoSync: offset persistence failed: $error'` | dormant; `closure/p037` |
+| `p038` | `_showSubtitleAutoSyncNotice`:2010 | `!mounted → (!mounted) \|\| true` | killed; `witness/p038` |
+| `p039` | `_showSubtitleAutoSyncNotice`:2010 | `return; → <removed>` | killed; `sweep/p039` |
+| `p040` | `_showSubtitleAutoSyncNotice`:2012 | `debugPrint('SubtitleAutoSync: ${notice.message}'); → <removed>` | killed; `sweep/p040` |
+| `p041` | `_showSubtitleAutoSyncNotice`:2012 | `'SubtitleAutoSync: ${notice.message}' → 'MUTSubtitleAutoSync: ${notice.message}'` | killed; `closure/p041` |
+| `p043` | `_showSubtitleAutoSyncNotice`:2016 | `_openAutoSyncPillWindow(); → <removed>` | killed; `sweep/p043` |
+| `p045` | `_showSubtitleAutoSyncNotice`:2020 | `_autoSyncWindowActive → false && (_autoSyncWindowActive)` | killed; `sweep/p045` |
+| `p046` | `_showSubtitleAutoSyncNotice`:2021 | `_autoSyncPillPhaseTimer?.cancel(); → <removed>` | equivalent; `final-closure/p046` |
+| `p047` | `_showSubtitleAutoSyncNotice`:2022 | `_autoSyncPill.value = const AutoSyncPillModel(             AutoSyncPillPhase.checking,           ); → <removed>` | killed; `sweep/p047` |
+| `p049` | `_showSubtitleAutoSyncNotice`:2028 | `_autoSyncWindowActive &&             _autoSyncPill.value?.phase == AutoSyncPillPhase.checking → false && (_autoSyncWindowActive &&             _autoSyncPill.value?.phase == AutoSyncPillPhase.checking)` | killed; `sweep/p049` |
+| `p050` | `_showSubtitleAutoSyncNotice`:2028 | `&& → \|\|` | equivalent; `final-closure/p050` |
+| `p051` | `_showSubtitleAutoSyncNotice`:2029 | `== → !=` | killed; `sweep/p051` |
+| `p052` | `_showSubtitleAutoSyncNotice`:2030 | `_autoSyncPill.value = null; → <removed>` | killed; `sweep/p052` |
+| `p055` | `_showSubtitleAutoSyncNotice`:2035 | `notice.kind == SubtitleAutoSyncNoticeKind.resynced &&             !_autoSyncWindowActive &&             _autoSyncPill.va… → false && (notice.kind == SubtitleAutoSyncNoticeKind.resynced &&             !_autoSyncWindowActive &&             _autoS…` | killed; `sweep/p055` |
+| `p056` | `_showSubtitleAutoSyncNotice`:2035 | `&& → \|\|` | killed; `closure/p056` |
+| `p057` | `_showSubtitleAutoSyncNotice`:2035 | `&& → \|\|` | killed; `closure/p057` |
+| `p058` | `_showSubtitleAutoSyncNotice`:2035 | `== → !=` | killed; `sweep/p058` |
+| `p059` | `_showSubtitleAutoSyncNotice`:2037 | `== → !=` | killed; `sweep/p059` |
+| `p061` | `_showSubtitleAutoSyncNotice`:2038 | `return; → <removed>` | killed; `sweep/p061` |
+| `p062` | `_showSubtitleAutoSyncNotice`:2040 | `_showAutoSyncPillResult(AutoSyncPillPhase.synced); → <removed>` | killed; `sweep/p062` |
+| `p064` | `_showSubtitleAutoSyncNotice`:2042 | `_showAutoSyncPillResult(AutoSyncPillPhase.failed); → <removed>` | killed; `sweep/p064` |
+| `p065` | `_openAutoSyncPillWindow`:2047 | `_autoSyncPillHold?.cancel(); → <removed>` | killed; `closure/p065` |
+| `p066` | `_openAutoSyncPillWindow`:2048 | `_autoSyncPillHold = null; → <removed>` | equivalent; `final-closure/p066` |
+| `p068` | `_openAutoSyncPillWindow`:2049 | `_autoSyncWindowActive = true; → <removed>` | killed; `sweep/p068` |
+| `p069` | `_openAutoSyncPillWindow`:2049 | `true → false` | killed; `sweep/p069` |
+| `p070` | `_openAutoSyncPillWindow`:2050 | `_autoSyncPill.value = const AutoSyncPillModel(AutoSyncPillPhase.announce); → <removed>` | killed; `sweep/p070` |
+| `p071` | `_openAutoSyncPillWindow`:2051 | `_autoSyncPillPhaseTimer?.cancel(); → <removed>` | killed; `closure/p071` |
+| `p072` | `_openAutoSyncPillWindow`:2052 | `_autoSyncPillPhaseTimer = Timer(const Duration(seconds: 5), () {       // The sentence had its moment; the screen goes q… → <removed>` | killed; `closure/p072` |
+| `p073` | `_openAutoSyncPillWindow`:2052 | `5 → 6` | killed; `closure/p073` |
+| `p074` | `_openAutoSyncPillWindow`:2055 | `_autoSyncWindowActive &&           _autoSyncPill.value?.phase == AutoSyncPillPhase.announce → false && (_autoSyncWindowActive &&           _autoSyncPill.value?.phase == AutoSyncPillPhase.announce)` | killed; `sweep/p074` |
+| `p075` | `_openAutoSyncPillWindow`:2055 | `&& → \|\|` | equivalent; `final-closure/p075` |
+| `p076` | `_openAutoSyncPillWindow`:2056 | `== → !=` | killed; `sweep/p076` |
+| `p077` | `_openAutoSyncPillWindow`:2057 | `_autoSyncPill.value = null; → <removed>` | killed; `sweep/p077` |
+| `p079` | `_showAutoSyncPillResult`:2063 | `_autoSyncWindowActive = false; → <removed>` | equivalent; `final-closure/p079` |
+| `p080` | `_showAutoSyncPillResult`:2063 | `false → true` | equivalent; `final-closure/p080` |
+| `p081` | `_showAutoSyncPillResult`:2064 | `_autoSyncPillPhaseTimer?.cancel(); → <removed>` | equivalent; `final-closure/p081` |
+| `p082` | `_showAutoSyncPillResult`:2065 | `_autoSyncPillPhaseTimer = null; → <removed>` | equivalent; `final-closure/p082` |
+| `p084` | `_showAutoSyncPillResult`:2066 | `_autoSyncPillHold?.cancel(); → <removed>` | equivalent; `final-closure/p084` |
+| `p085` | `_showAutoSyncPillResult`:2067 | `_autoSyncPill.value = AutoSyncPillModel(phase); → <removed>` | killed; `sweep/p085` |
+| `p086` | `_showAutoSyncPillResult`:2068 | `_autoSyncPillHold = Timer(       const Duration(milliseconds: 2400),       _hideAutoSyncPill,     ); → <removed>` | killed; `closure/p086` |
+| `p087` | `_showAutoSyncPillResult`:2069 | `2400 → 2401` | killed; `closure/p087` |
+| `p088` | `_hideAutoSyncPill`:2075 | `_autoSyncWindowActive = false; → <removed>` | killed; `final-closure/p088` |
+| `p089` | `_hideAutoSyncPill`:2075 | `false → true` | killed; `sweep/p089` |
+| `p090` | `_hideAutoSyncPill`:2076 | `_autoSyncPillPhaseTimer?.cancel(); → <removed>` | killed; `closure/p090` |
+| `p091` | `_hideAutoSyncPill`:2077 | `_autoSyncPillPhaseTimer = null; → <removed>` | equivalent; `final-closure/p091` |
+| `p093` | `_hideAutoSyncPill`:2078 | `_autoSyncPillHold?.cancel(); → <removed>` | killed; `closure/p093` |
+| `p094` | `_hideAutoSyncPill`:2079 | `_autoSyncPillHold = null; → <removed>` | equivalent; `final-closure/p094` |
+| `p096` | `_hideAutoSyncPill`:2080 | `_autoSyncPill.value != null → false && (_autoSyncPill.value != null)` | killed; `sweep/p096` |
+| `p097` | `_hideAutoSyncPill`:2080 | `!= → ==` | killed; `sweep/p097` |
+| `p099` | `_hideAutoSyncPill`:2080 | `_autoSyncPill.value = null; → {}` | killed; `closure/p099-block` |
+| `p101` | `_setActiveExternalSubtitlePath`:2084 | `_activeExternalSubtitlePath == path → (_activeExternalSubtitlePath == path) \|\| true` | killed; `witness/p101` |
+| `p102` | `_setActiveExternalSubtitlePath`:2084 | `== → !=` | killed; `sweep/p102` |
+| `p103` | `_setActiveExternalSubtitlePath`:2084 | `return; → <removed>` | killed; `sweep/p103` |
+| `p104` | `_setActiveExternalSubtitlePath`:2085 | `_activeExternalSubtitlePath = path; → <removed>` | killed; `sweep/p104` |
+| `p105` | `_setActiveExternalSubtitlePath`:2086 | `final controller = _subtitleAutoSync; → final controller = null as MediaKitSubtitleAutoSync?;` | killed; `sweep/p105` |
+| `p106` | `_setActiveExternalSubtitlePath`:2087 | `debugPrint(       'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '       '(controller=${contro… → <removed>` | killed; `sweep/p106` |
+| `p107` | `_setActiveExternalSubtitlePath`:2088 | `'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} ' → 'MUTSubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '` | killed; `sweep/p107` |
+| `p108` | `_setActiveExternalSubtitlePath`:2088 | `path == null → !(path == null)` | killed; `sweep/p108` |
+| `p109` | `_setActiveExternalSubtitlePath`:2088 | `== → !=` | killed; `sweep/p109` |
+| `p111` | `_setActiveExternalSubtitlePath`:2088 | `'cleared' → "cleared mutant"` | killed; `closure/p111` |
+| `p112` | `_setActiveExternalSubtitlePath`:2088 | `'set' → "set mutant"` | killed; `sweep/p112` |
+| `p113` | `_setActiveExternalSubtitlePath`:2089 | `'(controller=${controller == null ? 'MISSING' : 'present'})' → 'MUT(controller=${controller == null ? 'MISSING' : 'present'})'` | killed; `sweep/p113` |
+| `p114` | `_setActiveExternalSubtitlePath`:2089 | `controller == null → !(controller == null)` | killed; `sweep/p114` |
+| `p115` | `_setActiveExternalSubtitlePath`:2089 | `== → !=` | killed; `sweep/p115` |
+| `p117` | `_setActiveExternalSubtitlePath`:2089 | `'MISSING' → "MISSING mutant"` | killed; `sweep/p117` |
+| `p118` | `_setActiveExternalSubtitlePath`:2089 | `'present' → "present mutant"` | killed; `sweep/p118` |
+| `p119` | `_setActiveExternalSubtitlePath`:2091 | `controller == null → controller == null \|\| _subtitleAutoSyncEnabled` | killed; `final-closure/p119-valid` |
+| `p120` | `_setActiveExternalSubtitlePath`:2091 | `== → !=` | invalid-candidate; `sweep/p120` |
+| `p122` | `_setActiveExternalSubtitlePath`:2091 | `return; → return _openAutoSyncPillWindow();` | killed; `extra/p122-exit-effect` |
+| `p123` | `_setActiveExternalSubtitlePath`:2092 | `path == null → path == null \|\| _subtitleAutoSyncEnabled` | killed; `final-closure/p123-valid` |
+| `p124` | `_setActiveExternalSubtitlePath`:2092 | `== → !=` | invalid-candidate; `sweep/p124` |
+| `p126` | `_setActiveExternalSubtitlePath`:2093 | `unawaited(controller.deactivateSubtitle()); → <removed>` | killed; `sweep/p126` |
+| `p127` | `_setActiveExternalSubtitlePath`:2094 | `_hideAutoSyncPill(); → <removed>` | killed; `closure/p127` |
+| `p128` | `_setActiveExternalSubtitlePath`:2096 | `unawaited(controller.activateSubtitle(path)); → <removed>` | killed; `sweep/p128` |
+| `p129` | `_loadSubtitleSettings`:5405 | `final settings = await SubtitleSettingsService.instance.loadAll(); → final settings = (await SubtitleSettingsService.instance.loadAll()).copyWith(colorIndex: 0, syncOffsetMs: 0);` | killed; `witness/p129` |
+| `p130` | `_loadSubtitleSettings`:5406 | `mounted → false && (mounted)` | killed; `sweep/p130` |
+| `p131` | `_loadSubtitleSettings`:5407 | `setState(() {         _subtitleSettings = settings;       }); → <removed>` | killed; `sweep/p131` |
+| `p132` | `_loadSubtitleSettings`:5408 | `_subtitleSettings = settings; → <removed>` | killed; `sweep/p132` |
+| `p133` | `_loadSubtitleSettings`:5410 | `settings.syncOffsetMs != 0 → false && (settings.syncOffsetMs != 0)` | killed; `closure/p133` |
+| `p134` | `_loadSubtitleSettings`:5410 | `!= → ==` | killed; `sweep/p134` |
+| `p135` | `_loadSubtitleSettings`:5410 | `0 → 1` | killed; `sweep/p135` |
+| `p136` | `_loadSubtitleSettings`:5411 | `_applySubtitleSyncOffset(settings.syncOffsetMs); → <removed>` | killed; `closure/p136` |
+| `p137` | `_onSubtitleStyleChanged`:5553 | `!mounted → false && !mounted` | killed; `witness/p137-unguarded` |
+| `p138` | `_onSubtitleStyleChanged`:5553 | `return; → {}` | killed; `final-closure/p138-valid` |
+| `p139` | `_onSubtitleStyleChanged`:5554 | `final offsetChanged =         _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs; → final offsetChanged = false;` | killed; `sweep/p139` |
+| `p140` | `_onSubtitleStyleChanged`:5555 | `!= → ==` | killed; `sweep/p140` |
+| `p141` | `_onSubtitleStyleChanged`:5556 | `setState(() {       _subtitleSettings = settings;     }); → <removed>` | killed; `sweep/p141` |
+| `p142` | `_onSubtitleStyleChanged`:5557 | `_subtitleSettings = settings; → <removed>` | killed; `sweep/p142` |
+| `p143` | `_onSubtitleStyleChanged`:5559 | `offsetChanged → false && (offsetChanged)` | killed; `sweep/p143` |
+| `p144` | `_onSubtitleStyleChanged`:5560 | `_subtitleAutoSync?.manualOffsetChanged(settings.syncOffsetMs); → <removed>` | killed; `closure/p144` |
+| `p145` | `_onSubtitleStyleChanged`:5561 | `_hideAutoSyncPill(); → <removed>` | killed; `sweep/p145` |
+| `p146` | `_onSubtitleStyleChanged`:5562 | `_applySubtitleSyncOffset(settings.syncOffsetMs); → <removed>` | killed; `sweep/p146` |
+| `p147` | `_applySubtitleSyncOffset`:5567 | `final platform = _player.platform; → final platform = null as mk.PlatformPlayer?;` | killed; `witness/p147` |
+| `p148` | `_applySubtitleSyncOffset`:5568 | `platform is mk.NativePlayer → false && (platform is mk.NativePlayer)` | killed; `sweep/p148` |
+| `p149` | `_applySubtitleSyncOffset`:5569 | `platform.setProperty('sub-delay', (ms / 1000.0).toStringAsFixed(3)); → <removed>` | killed; `sweep/p149` |
+| `p150` | `_applySubtitleSyncOffset`:5569 | `'sub-delay' → "sub-delay mutant"` | killed; `sweep/p150` |
+| `p151` | `_applySubtitleSyncOffset`:5569 | `/ → *` | killed; `sweep/p151` |
+| `p152` | `_applySubtitleSyncOffset`:5569 | `1000.0 → 2000.0` | killed; `sweep/p152` |
+| `p153` | `_applySubtitleSyncOffset`:5569 | `3 → 4` | killed; `sweep/p153` |
+| `p154` | `_resetSubtitleSyncOffset`:5578 | `SubtitleSettingsService.instance.resetSyncOffset(); → <removed>` | killed; `witness/p154` |
+| `p155` | `_resetSubtitleSyncOffset`:5581 | `_subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: 0); → <removed>` | killed; `sweep/p155` |
+| `p156` | `_resetSubtitleSyncOffset`:5581 | `0 → 1` | killed; `sweep/p156` |
+| `p157` | `_resetSubtitleSyncOffset`:5582 | `_applySubtitleSyncOffset(0); → <removed>` | killed; `sweep/p157` |
+| `p158` | `_resetSubtitleSyncOffset`:5582 | `0 → 1` | killed; `sweep/p158` |
+| `p159` | `_showSyncOverlayPanel`:5595 | `_tvReleaseFocusForOverlay(); → <removed>` | killed; `sweep/p159` |
+| `p160` | `_showSyncOverlayPanel`:5596 | `setState(() {       _showSyncOverlay = true;       _controlsVisible.value = false;     }); → <removed>` | killed; `witness/p160` |
+| `p161` | `_showSyncOverlayPanel`:5597 | `_showSyncOverlay = true; → <removed>` | killed; `sweep/p161` |
+| `p162` | `_showSyncOverlayPanel`:5597 | `true → false` | killed; `sweep/p162` |
+| `p163` | `_showSyncOverlayPanel`:5598 | `_controlsVisible.value = false; → <removed>` | killed; `final-closure/p163` |
+| `p164` | `_showSyncOverlayPanel`:5598 | `false → true` | killed; `closure/p164` |
+| `p165` | `_hideSyncOverlay`:5603 | `setState(() => _showSyncOverlay = false); → <removed>` | killed; `closure/p165` |
+| `p166` | `_hideSyncOverlay`:5603 | `false → true` | killed; `closure/p166` |
+| `p167` | `_buildSyncOverlay`:5607 | `final externalPath = _activeExternalSubtitlePath; → final externalPath = null as String?;` | killed; `sweep/p167` |
+| `p168` | `_buildSyncOverlay`:5608 | `externalPath != null → externalPath != null && !_subtitleAutoSyncEnabled` | killed; `final-closure/p168-valid` |
+| `p169` | `_buildSyncOverlay`:5608 | `!= → ==` | invalid-candidate; `sweep/p169` |
+| `p171` | `_buildSyncOverlay`:5609 | `return SubtitleLinePickerOverlay(         subtitleFilePath: externalPath,         getCurrentPositionMs: () => _player.st… → return const SizedBox.shrink();` | killed; `sweep/p171` |
+| `p172` | `_buildSyncOverlay`:5612 | `0 → 1` | killed; `closure/p172` |
+| `p173` | `_buildSyncOverlay`:5614 | `await SubtitleSettingsService.instance.setSyncOffsetMs(ms); → <removed>` | killed; `sweep/p173` |
+| `p174` | `_buildSyncOverlay`:5615 | `_subtitleAutoSync?.manualOffsetChanged(ms); → <removed>` | killed; `closure/p174` |
+| `p175` | `_buildSyncOverlay`:5616 | `_hideAutoSyncPill(); → <removed>` | killed; `sweep/p175` |
+| `p176` | `_buildSyncOverlay`:5617 | `_applySubtitleSyncOffset(ms); → <removed>` | killed; `sweep/p176` |
+| `p177` | `_buildSyncOverlay`:5618 | `mounted → false && (mounted)` | killed; `sweep/p177` |
+| `p178` | `_buildSyncOverlay`:5619 | `setState(() {               _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: ms);             }); → <removed>` | killed; `sweep/p178` |
+| `p179` | `_buildSyncOverlay`:5620 | `_subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: ms); → <removed>` | killed; `sweep/p179` |
+| `p180` | `_buildSyncOverlay`:5628 | `return _buildSliderSyncOverlay(); → return const SizedBox.shrink();` | killed; `sweep/p180` |
+| `p181` | `_buildSliderSyncOverlay`:5632 | `return SyncStepperOverlay(       offsetMs: _subtitleSettings?.syncOffsetMs ?? 0,       onOffsetChanged: (ms) async {    … → return const SizedBox.shrink();` | killed; `sweep/p181` |
+| `p182` | `_buildSliderSyncOverlay`:5633 | `0 → 1` | killed; `closure/p182` |
+| `p183` | `_buildSliderSyncOverlay`:5635 | `final clamped = ms.clamp(           SubtitleSettingsService.syncOffsetMinMs,           SubtitleSettingsService.syncOffse… → final clamped = 0;` | killed; `sweep/p183` |
+| `p184` | `_buildSliderSyncOverlay`:5639 | `await SubtitleSettingsService.instance.setSyncOffsetMs(clamped); → <removed>` | killed; `sweep/p184` |
+| `p185` | `_buildSliderSyncOverlay`:5640 | `_subtitleAutoSync?.manualOffsetChanged(clamped); → <removed>` | killed; `closure/p185` |
+| `p186` | `_buildSliderSyncOverlay`:5641 | `_hideAutoSyncPill(); → <removed>` | killed; `closure/p186` |
+| `p187` | `_buildSliderSyncOverlay`:5642 | `_applySubtitleSyncOffset(clamped); → <removed>` | killed; `sweep/p187` |
+| `p188` | `_buildSliderSyncOverlay`:5643 | `mounted → false && (mounted)` | killed; `sweep/p188` |
+| `p189` | `_buildSliderSyncOverlay`:5644 | `setState(() {             _subtitleSettings = _subtitleSettings?.copyWith(               syncOffsetMs: clamped,         … → <removed>` | killed; `sweep/p189` |
+| `p190` | `_buildSliderSyncOverlay`:5645 | `_subtitleSettings = _subtitleSettings?.copyWith(               syncOffsetMs: clamped,             ); → <removed>` | killed; `sweep/p190` |
+
+### Equivalence and coverage limits
+
+| Candidate | Classification / original caller proof |
+|---|---|
+| `p001` | equivalent: Defaults are awaited before create/bind/install; the initializer has no read before that assignment. A defaults failure aborts construction. The 33-reference AST ledger exhausts readers. |
+| `p018` | device-pending: The outer Android AND operand differs only for an Android-owned true passthrough field. The desktop storage preference is not loaded into this field; raw Android menu/loader guards are outside S2. |
+| `p021` | device-pending: Same raw-Android true-field limit for engine constructor. Inner conjunction mutation is separately killed; no positive passthrough coverage claimed. |
+| `p036` | dormant: setSyncOffsetMs only clamps/stores session int and has no throwing persistence transport; native property rejection occurs before this try. No preference failure can reach this diagnostic via original callers. |
+| `p037` | dormant: Same unreachable session-only persistence catch as p036. Diagnostic preserved verbatim. |
+| `p046` | equivalent: No facade runNow caller. Announcement expires at 5s; first checking is >=8s. A restart cancels the old announce and starts a fresh 8s ladder. No active phase timer remains at checking. |
+| `p050` | equivalent: A stillListening notice follows checking within the same run/generation; active window then has checking model. Quiet cold window has neither. Manual/path/audio retirement invalidates that run; no mixed-operand state reaches the notice. |
+| `p066` | equivalent: After cancel, this private Timer reference is only canceled again or overwritten; no identity/activity consumer. No callback survives cancel. |
+| `p075` | equivalent: At announce deadline, an active phase timer belongs to the latest listening window. Any terminal/manual/path hide cancels it. No active timer observes one false operand and one true operand. |
+| `p079` | equivalent: A verdict cancels the 8s ladder. Its 2400ms hold clears the flag before any new >=8s ladder checking; fresh listening overwrites true, and verification >=90s follows hide. No other window reader during result hold. |
+| `p080` | equivalent: Same result-hold/ladder/verification ordering as p079. |
+| `p081` | equivalent: No active 5s announce timer at the first >=8s verdict; checking already canceled it. Verification never creates a phase timer. |
+| `p082` | equivalent: Canceled/expired phase reference is never tested/read for identity; next scheduling replaces it. |
+| `p084` | equivalent: The old result hold ends after2400ms, before any subsequent >=8s verdict or >=90s verification. Fresh listening cancels the hold. No two live verdict-hold callbacks can overlap through original engine callers. |
+| `p091` | equivalent: After cancel, the phase Timer reference is only canceled again or overwritten; no identity consumer. |
+| `p094` | equivalent: After cancel, hold Timer reference is only canceled again or overwritten; no identity consumer. |
+| `p120` | invalid-candidate: flow/type/syntax violation; no kill credit. Parent branch/snapshot/body behaviour has separate valid mutations. |
+| `p124` | invalid-candidate: flow/type/syntax violation; no kill credit. Parent branch/snapshot/body behaviour has separate valid mutations. |
+| `p169` | invalid-candidate: flow/type/syntax violation; no kill credit. Parent branch/snapshot/body behaviour has separate valid mutations. |
+
+### Final per-test mutation witnesses
+
+| New behaviour test (unchanged final input) | Original assertion-failing witness |
+|---|---|
+| real subtitle engine announces then aligns fixture metadata | `retained/r04` |
+| subtitle TV Android TV first key repeat and Back retain overlay element | `retained/r18` |
+| subtitle TV line picker receives the first Select through the focus release | `retained/r29` |
+| subtitle TV tvOS first key repeat and Back retain overlay element | `retained/r29` |
+| subtitle already returned snapshot after disposal is rejected | `retained/r01` |
+| subtitle already returned snapshot after profile handoff is accepted by mounted only | `retained/r01` |
+| subtitle audio track event restarts announcement and manual offset cancels the ladder | `retained/r06` |
+| subtitle auto verdict rebuilds an already open sync overlay with the computed offset | `retained/r04` |
+| subtitle automatic source priority activates the real engine through its retained caller | `retained/r33` |
+| subtitle automatic source priority retires on preferred audio | `retained/r32` |
+| subtitle checking stays visible until real alignment finishes | `retained/r04` |
+| subtitle cold window remains quiet when a late session offset suppresses listening then a track reset releases the ladder | `retained/r11` |
+| subtitle content replacement clears timing and path but a saved line callback targets the new playback | `retained/r30` |
+| subtitle desktop passthrough preference still uses the raw Android predicate | `retained/r11` |
+| subtitle dispose cancels announcement before notifier disposal | `retained/r11` |
+| subtitle dispose cancels result hold before notifier disposal | `retained/r11` |
+| subtitle early stepper reads zero while the original settings snapshot is suspended | `retained/r19` |
+| subtitle enabled nonnative backend records rejection and stores the external path without an engine | `retained/r11` |
+| subtitle engine offset before settings delivery keeps null UI model and accepts the old snapshot later | `retained/r11` |
+| subtitle exhausted unrelated metadata produces a failed result | `retained/r04` |
+| subtitle file filter installation held across disposal is removed before player teardown | `retained/r15` |
+| subtitle file filter installation held across subtitle change is removed before player teardown | `witness/p101` |
+| subtitle fresh audio listening cancels a failed verdict hold | `retained/r04` |
+| subtitle fresh listening cancels the preceding announcement deadline | `retained/r04` |
+| subtitle held alignment handles the retained new audio subscription | `retained/r06` |
+| subtitle held alignment handles the retained same audio subscription | `witness/p147` |
+| subtitle held alignment handles the retained seek jump subscription | `retained/r05` |
+| subtitle held alignment handles the retained small position subscription | `witness/p147` |
+| subtitle intermediate no verdict quietly keeps listening | `retained/r04` |
+| subtitle late decoder rollback restores the previous external path and reactivates the real engine | `retained/r10` |
+| subtitle line picker updates session and native delay and dismisses | `retained/r29` |
+| subtitle manual hide keeps a later offset-suppressed selection quiet when its ladder is rearmed | `retained/r11` |
+| subtitle native auto property rejection escapes the persistence catch and still reports synced | `retained/r11` |
+| subtitle native manual property rejection escapes while session and UI still update | `witness/p147` |
+| subtitle off then new selection cannot inherit an old announcement hide | `retained/r04` |
+| subtitle off then new selection cannot inherit an old result hide | `retained/r04` |
+| subtitle overlapping route resets singleton offset while the outgoing route retains its model | `retained/r01` |
+| subtitle pending filter removal across disposal preserves the lifecycle queue | `retained/r15` |
+| subtitle pending filter removal across subtitle change preserves the lifecycle queue | `witness/p101` |
+| subtitle pending font lookup after shared prefs reset propagates null prefs error | `retained/r01` |
+| subtitle pending font lookup after shared prefs reset reads incoming prefs and font | `retained/r01` |
+| subtitle real alignment held across disposal cannot apply the retired result | `witness/p101` |
+| subtitle real alignment held across renderer replacement cannot apply the retired result | `retained/r08` |
+| subtitle real alignment held across subtitle change cannot apply the retired result | `witness/p101` |
+| subtitle renderer replacement awaits engine filter removal before old player disposal | `retained/r08` |
+| subtitle replacement clears the disposed engine before incoming audio setup and a saved selection | `retained/r08` |
+| subtitle rollback held through disposal sees the cleared engine before the mounted UI guard | `retained/r11` |
+| subtitle route Back dismisses the top sync overlay before leaving playback | `retained/r17` |
+| subtitle saved line manual callback cancels a held real alignment and hides checking | `witness/p147` |
+| subtitle saved line picker callback after dismissal keeps original effect order | `witness/p147` |
+| subtitle saved line picker callback after disposal keeps original effect order | `witness/p101` |
+| subtitle saved line picker callback after replacement keeps original effect order | `witness/p147` |
+| subtitle saved stepper callback after dismissal keeps original effect order | `witness/p147` |
+| subtitle saved stepper callback after disposal keeps original effect order | `witness/p147` |
+| subtitle saved stepper callback after replacement keeps original effect order | `witness/p147` |
+| subtitle saved stepper manual callback cancels a held real alignment and hides checking | `witness/p147` |
+| subtitle selected before engine installation remains inactive even when the same path is selected again | `witness/p101` |
+| subtitle stepper clamps callback -4000000 before native and rendered writes | `witness/p147` |
+| subtitle stepper clamps callback 4000000 before native and rendered writes | `witness/p147` |
+| subtitle stepper updates session and native delay and dismisses | `retained/r29` |
+| subtitle stored enablement false gates actual installation and selection | `retained/r12` |
+| subtitle stored enablement true gates actual installation and selection | `retained/r11` |
+| subtitle style callback renders appearance without restarting unchanged timing | `retained/r28` |
+| subtitle style callback saved before disposal skips all later effects | `witness/p137-unguarded` |
+| subtitle style timing feedback invalidates a held real alignment before its offset can win | `retained/r04` |
+| subtitle suspended prefs initialization can overwrite incoming cache with a stale profile wrapper | `extra/e-load-error` |
+| subtitle timing is session only while appearance migrates and persists | `witness/p147` |
+| subtitle timing reset clears session and native property | `retained/r27` |
+| subtitle timing reset clears session and skips nonnative property | `retained/r27` |
+| subtitle verification corrects later drift silently after the result pill fades | `retained/r04` |
+
+
+Each evidence path above is relative to `p9/step0/`; full patches and assertion
+messages are archived there. Production creation, CI/theme/source-guard
+registration, source-test retargets, size reduction, release builds and M2 remain
+unstarted. Step 1 registers these six test files in `ci_behavior_tests.txt` and
+moves the current manifest/analyzer inputs to P9; Step 0 leaves applied P8 active.
+
+
+### Step-0 additions-only suite baseline
+
+Fresh complete `suite_evidence.py run vplayer/p9/step0/baseline --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true` (nice19) completes in 923 seconds.
+Comparison with M1's recorded baseline **PASS**: **13,463 success / 13 failure /
+28 load error / 20 skip**, exactly **70 passing additions** and no changed,
+missing, newly skipped or fixed old identity. Same Flutter3.44.8/Dart3.12.2;
+tracked tested tree stable during the run. `baseline-additions.json` records
+all identities. No baseline/allowlist recording used to accept a regression.
+Final new-file analysis and formatting, size and architecture checks PASS;
+Step T's 38 mechanical jobs and S/S2/S2b proofs remain valid with unchanged
+application/tool inputs. No new test flake required a stabilization.

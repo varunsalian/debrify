@@ -3342,6 +3342,49 @@ checkpoint. Step T/0 proceed without production moves.
   rerun PASS. No comparator relaxation. CI remains on applied P8 until the
   P9 production creation commit. Step 0 characterizes the original next.
 
+
+### 2026-10-13 — Phase 9 Step 0 (complete; stop before production moves)
+
+- **Revision/input.** Follows tooling checkpoint `9d36d7c83`; original
+  application re-measured at `bd671bd09`. Evidence `p9/step0/completion.json`
+  and its commit receipt record the final revision. Library and pubspec files
+  remain byte-identical to the original. No seam extension, production move,
+  CI transition, ratchet change or release build in Step 0.
+- **Characterization.** Six new suites/support driver provide 70 original-caller
+  cases: real SRT/metadata/compute activation, every pill phase and exact
+  5s/2400ms/350ms timing, held install/remove/alignment and renderer teardown,
+  early no-engine/null-model/cold-window paths, session-only timing and actual
+  style/migration writes, profile/prefs/font races, saved callbacks, native
+  failures and TV first-key/repeats/Back/element identity. H support is reused
+  unchanged. A rollback held across disposal observes the nulled engine before
+  its mounted UI guard; no lifecycle/profile bug is fixed.
+- **Systematic proof.** 21 declarations /190 AST sites /170 canonical candidates:
+  151 assertion-killed, 12 source-audited equivalents replayed, two raw-Android
+  device-pending, two dormant session-persistence diagnostics, three invalid
+  nullable-flow operator candidates excluded. All 26 reachable retained
+  occurrences and three live engine readers killed; remaining seven occurrences
+  are two Android sites and five dead legacy-sheet sites. Every final test has
+  a matching-file-hash assertion-failing witness on detached original lib/;
+  original/restored controls PASS. Coverage and mutation tables are in the deps
+  report; patches, complete JSON logs and source adjudications are archived.
+- **Commands/results.** Serial nice19 Flutter controls/mutations with no-pub
+  and DEBRIFY_VP_TEST_HOOKS=true; final test `dart analyze`, format, size and
+  architecture PASS. Fresh full suite via `suite_evidence.py` vs M1 by identity
+  PASS: 13,463 successes, unchanged 13 failures/28 load errors/20 skips; exactly
+  70 passing additions, zero changed/missing/new skips, stable tested tree and
+  same SDK. Step T's 38 mechanical checks/analyzer inventories remain valid;
+  app/tool inputs unchanged. Every parser invocation uses isolated copied
+  packages with kernels removed; evidence routing is recorded.
+- **Deviations/limits.** Two preliminary focused commands inherited the P8
+  runtime fallback; identified fixture data moved into P9, those runs excluded.
+  New-case expectations/waits were corrected to original deterministic results,
+  preserving assertions. Two throwing-return variants timed out and are not
+  credited; finite unwanted-pill exit mutations supplied actual assertion kills.
+  No flaky test stabilization needed. Native DSP/audio/rendering, raw mobile/web
+  capability checks and compressed passthrough stop/rearm remain device-pending.
+  CI stays on applied P8 until the Step-1 production creation commit, which
+  registers the six new test files. M2 remains after phases 9–11. STOP here.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
