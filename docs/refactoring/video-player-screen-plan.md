@@ -3444,6 +3444,13 @@ checkpoint. Step T/0 proceed without production moves.
   unchanged. M2 is after phase 11. No push/merge/switch or production bug fix.
   STOP after the gate commit for independent review.
 
+2026-10-14 — **Phase 9 independent review (Codex `vp-rev9`): no P1/P2 — "No P1s".**
+m7/m8 equivalences confirmed (restarts invalidate held alignments; the first
+verification is 90 s after a verdict, beyond the 2.4 s hold); m4/m14
+closures valid. P3: passthrough mutation notes p018/p021 corrected to the
+passthrough-off Android case (still device-pending). Claude sample 16/20 →
+18/18 valid after closures. Merged.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

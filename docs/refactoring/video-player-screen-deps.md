@@ -6263,8 +6263,8 @@ assertion kills instead. No application fix or new seam.
 | Candidate | Classification / original caller proof |
 |---|---|
 | `p001` | equivalent: Defaults are awaited before create/bind/install; the initializer has no read before that assignment. A defaults failure aborts construction. The 33-reference AST ledger exhausts readers. |
-| `p018` | device-pending: The outer Android AND operand differs only for an Android-owned true passthrough field. The desktop storage preference is not loaded into this field; raw Android menu/loader guards are outside S2. |
-| `p021` | device-pending: Same raw-Android true-field limit for engine constructor. Inner conjunction mutation is separately killed; no positive passthrough coverage claimed. |
+| `p018` | device-pending: the mutation replaces the final `&&` with `||`; on native Android with passthrough **off** it turns `false` into `true` (with passthrough on both return `true`). The desktop storage preference is not loaded into this field; raw Android menu/loader guards are outside S2, so the passthrough-off Android case is device-pending. (Corrected after vp-rev9 P3.) |
+| `p021` | device-pending: same `&&`→`||` change in the engine constructor's passthrough argument — differs on native Android with passthrough **off** (`false`→`true`); raw Android guards are outside S2, so device-pending. Inner conjunction mutation is separately killed; no positive passthrough coverage claimed. (Corrected after vp-rev9 P3.) |
 | `p036` | dormant: setSyncOffsetMs only clamps/stores session int and has no throwing persistence transport; native property rejection occurs before this try. No preference failure can reach this diagnostic via original callers. |
 | `p037` | dormant: Same unreachable session-only persistence catch as p036. Diagnostic preserved verbatim. |
 | `p046` | equivalent: No facade runNow caller. Announcement expires at 5s; first checking is >=8s. A restart cancels the old announce and starts a fresh 8s ladder. No active phase timer remains at checking. |
