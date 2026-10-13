@@ -475,7 +475,7 @@ starts.
 | 8 | Subtitle engine I: subtitle settings, sync overlay, auto-sync pill/notice (2940–3088 auto-sync part only, 6380–6626) | 450 | med |
 | 9 | Subtitle engine II: apply + diagnostics + failure + rollback (5014–5200, `_SubtitleApplyAttempt` users) | 300 | high |
 | 10 | Subtitle sources and preferences: restore, default audio/subtitle language, forced, addon fetch/auto-select, Stremio download, priority (17164–18044) | 880 | high |
-| **M2** | subtitle integration gate: one state-ownership map for phases 8–10; apply/failure/persistence/audio-policy races | | |
+| **M2** | subtitle integration gate after phases 9–11 (renumbered) — see the phase-9 section | | |
 | 11 | Identify title + subtitle search sheet (15932–16645) | 720 | med |
 | 12 | Tracks sheet + unified player menu (16647–17162) | 520 | med |
 | 13 | Resume: keys, restore, seek/verify/landing, enhanced state, save + write guard (12093–12905) | 810 | high |
@@ -1523,6 +1523,135 @@ end-of-item sleep suppresses advance; lifecycle resume respects the sleep
 latch (through S2); a later explicit play and episode reset clear the
 latch and completion flags. Mobile coverage as provided by S2; native PiP
 device-pending.
+
+## Phase 9 — subtitle engine I: auto-sync, sync overlay and subtitle settings
+
+Branch `refactor/vplayer-p9` off the M1 merge `bd671bd09`. Evidence
+`refactor-evidence/vplayer/p9/`. Line numbers at `0df6ccd4e` (phase-8
+merge; M1 is test-only) — re-measure by name.
+
+Subtitle work is split over phases 9–11 with one **state-ownership map**
+(below) and integration milestone **M2** after phase 11.
+
+### Subtitle state-ownership map (phases 9–11) — revised by the design review
+
+| State | Owner | Notes |
+|---|---|---|
+| `_subtitleSettings` (1295) | **State** | all six writers move in P9; three retained view methods read it; Host getter/setter |
+| `_activeExternalSubtitlePath` (1322) | **State** | 3 reading methods, 2 writers incl. renderer fallback; its **setter** `_setActiveExternalSubtitlePath` moves with P9 (it coordinates auto-sync activation) |
+| `_showSyncOverlay` (654) | **State** | 4 readers / 3 writers (overlay actions, build/back, subtitle reset) |
+| `_autoSyncPill` (1334, notifier) | **State** (allocation and disposal) | allocation-order rule |
+| `_autoSyncPillLastShown` (1341) | **State** | sole reader/writer is retained `build` (13640, fade cache) |
+| `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer` | **P9 controller** | inert initializers |
+| `_subtitleSelectionCorrection` (1109, notifier) | **State** (allocation) | P10 manipulates its value through a Host |
+| apply-attempt / diagnostic generation | P10 | |
+| addon/Stremio fetch, temp files, priority, track preferences | P11 | |
+
+### Moves → one combined bridge `presentation/legacy_video_player/vp_subtitle_auto_sync.dart`
+
+**One file, one owner (design review P2):** both overlay builders call
+`_subtitleAutoSync?.manualOffsetChanged`, an owner-scoped moved field; a
+separate helper reaching it through a Host is rejected by
+`occurrence_field_bindings.py:150`. The combined file stays well under
+400 lines (≈ 260 moved lines). Neither factory has a lexical `context`; the
+retained pill builder and existing overlay widgets keep theirs; the local
+`externalPath` snapshot and the line picker's live player-position callback
+are preserved; no widget wrapper or key change.
+
+**21 moves:** 16 methods — `_installSubtitleAutoSyncForPlayer` 1951,
+`_disposeSubtitleAutoSync` 1984, `_applyAutoSubtitleSyncOffset` 1991,
+`_showSubtitleAutoSyncNotice` 2009, `_openAutoSyncPillWindow` 2046,
+`_showAutoSyncPillResult` 2062, `_hideAutoSyncPill` 2074,
+`_setActiveExternalSubtitlePath` 2083, `_loadSubtitleSettings` 5403,
+`_onSubtitleStyleChanged` 5549, `_applySubtitleSyncOffset` 5566,
+`_resetSubtitleSyncOffset` 5573, `_showSyncOverlayPanel` 5594,
+`_hideSyncOverlay` 5602, `_buildSyncOverlay` 5606,
+`_buildSliderSyncOverlay` 5631 — and the five auto-sync fields above.
+
+**Host (exact):** `mounted`, `setState` (→ `_vpSetState`), player,
+position, playing, audio-passthrough enablement, settings getter/setter,
+external-path getter/setter, pill notifier, controls notifier,
+overlay-flag setter, TV focus-release action. No widget selectors,
+`BuildContext` or owner-identity substitution. The PiP adapter (16406)
+forwards to `_setNativeSubtitleVisibilityForTrack`, which is not moved in
+P9 — the adapter is unchanged now; its exact facade patch is declared when
+that method moves in P10.
+
+**Teardown protocols frozen in place:** renderer replacement calls
+`_disposeSubtitleAutoSync` (clears the engine, hides the pill, awaits
+disposal before old-player teardown); facade `dispose` cancels the pill
+timers and disposes the notifier (10574) and then snapshots/nulls the
+engine (10723) — **not** routed through the helper (it would hide an
+already-disposed notifier).
+
+**Retained references (33 occurrences):** settings startup 1622;
+passthrough suspend/rearm 2130/2147; initial/replacement installation
+2430/3439; position/audio subscriptions 2870/2886/2897; replacement
+disposal 3404; apply-failure path 4174; enablement write/log 5481/5484;
+disposal timers and engine snapshot/clear 10574/10575/10723/10724;
+Back/Escape/build 11938/13163/14283; track/menu callbacks 15102, 15111,
+15120, 15121, 15257, 15370, 15406, 15458, 15475, 15476; reset/selection/
+preference paths 15519, 15524, 15826, 16307. Collaborator constructed after
+`_pip`; notifier slot and all disposal statements preserved.
+
+**CI:** current/self-test and both analyzer inputs → P9; P8 `--at
+0df6ccd4e`; S/S2/S2b proofs; protect all 18 earlier destinations; new
+tests and the destination in the theme manifest, rendered list and all
+three source-guard lists.
+
+### Step 0 — characterization of the original
+
+- **Real engine activation (not just a fake instance):** seed auto-sync
+  enablement through storage before mount, `native: true`, select a real
+  fixture SRT through the existing public subtitle action; drive the
+  production path by recording the `af add` filter and its metadata-file
+  path and appending deterministic `ametadata` records (or reject the file
+  filter and feed the registered `af-metadata/debrify_autosync` observer
+  through the real fallback); known speech/cue patterns produce actual
+  alignment results. Cover listening, checking, still-listening, synced,
+  failed and silent-resync states; the 5 s announce, 2,400 ms result hold
+  and 350 ms fade. File I/O and `compute` need completion waits (step H's
+  entered/completed distinction; no large blind advances). The desktop
+  platform supports auto-sync; S2 does not override
+  `supportsSubtitleAutoSync` or the installer's raw Android passthrough
+  predicate — state those coverage limits.
+- **Teardown and startup windows:** held filter installation/removal and
+  alignment across renderer replacement, subtitle changes and disposal
+  (cleanup before old-player disposal and output-lease release); selection
+  before engine installation (`_setActiveExternalSubtitlePath` stores the
+  path with no engine; installation does not activate it; repeating the
+  same path returns early); audio-track restarts; passthrough stop/rearm
+  order.
+- **Settings, corrected:** the timing offset is **session memory only**
+  (`subtitle_settings_service.dart:332`, no preference write; it resets on
+  subtitle/content change and at startup); style settings persist. Races:
+  pending preference initialization across reset and an incoming load;
+  pending font lookup while the cached `_prefs` is cleared/replaced
+  (profile handoff clears it, `profile_app_lifecycle_participant.dart:88`;
+  the service reads the shared field after awaits, `:388`); an
+  already-returned snapshot delivered after profile handoff (facade accepts
+  on `mounted` only, 5404); overlapping routes resetting the singleton
+  offset. Assert rendered settings, native `sub-delay`, migration/style
+  writes and propagated errors. Saved overlay callbacks after dismissal,
+  content replacement and disposal (they perform engine/pill/native effects
+  **before** the mounted check, 5614; `_onSubtitleStyleChanged` checks
+  first); native property failures outside the auto-offset catch.
+- **TV focus** via `PlatformUtil.debugSetAndroidTvCached`/`debugSetTvOS`:
+  first-key delivery, held-repeat, Back dismissal, unchanged overlay element
+  identity.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
+
+**M2 (after phase 11)** combines auto-sync, manual override during
+alignment, apply failure/rollback restoring the previous path,
+source/content reset, audio-policy changes, renderer replacement, profile
+handoff and the retained PiP visibility caller; preserves both native
+properties and the rendered subtitle configuration.
+
+### Device checklist (end of series)
+
+Auto subtitle sync on a mistimed external subtitle (pill announces, result
+shows, offset applied); manual sync slider and reset; subtitle style
+changes apply live (phone, TV, desktop, tvOS).
 
 ## Follow-ups
 
@@ -3186,6 +3315,142 @@ checkpoint. Step T/0 proceed without production moves.
   behavior remain device-pending. No app bug fix, allowance, pubspec change,
   live application request, run/install/device, push/merge/branch switch. Stop.
 
+### 2026-10-13 — Phase 9 Step T (subtitle engine I)
+
+- **Input/checkpoint.** Base `bd671bd09`, design parent `6e9b187c8`;
+  evidence `p9/stepT/completion.json`. Application and pubspec unchanged.
+  The evidence-only split classifies all 807 original spans, moves exactly
+  21 declarations into one combined bridge, qualifies all 33 retained
+  occurrences and protects all 18 earlier destinations. Constructor appends
+  the inert collaborator after PiP; five false/null initializers and the exact
+  live Host/adapter are frozen. Both teardown protocols remain in place.
+- **Commands/results.** Nice-19 `draft_vplayer_subtitle_sync_moves.py
+  --parser-package <isolated> --probe <p9/stepT/probe>` compares with zero
+  differences. All 38 mechanical jobs PASS: every existing Dart-manifest
+  self-test, complete P9 self-test/all-retained self-compare, Kotlin's 597
+  self-tests, P1–P8 at their named merges and S/S2/S2b proofs. Copied parser
+  kernels deleted; isolated packages and commands recorded.
+- **Analyzer/format.** Original root/strict/probe 99/171/104 diagnostics;
+  earlier identities preserved, no new async-context identity. The probe
+  records three mechanically unused facade imports and two destination
+  directive infos; no allowance or production import edit in T. Formatted
+  probe also 104, identical identities: zero formatting additions. AST comma
+  sites and idempotence archived. Real negatives cover setter targets, live
+  reads/snapshots, notifier ownership, constructor inertness and teardown.
+- **Deviation/next.** The first P9 self-test stopped on a materialized scaffold
+  spacing mismatch in a fixture needle; corrected matching, complete self-test
+  rerun PASS. No comparator relaxation. CI remains on applied P8 until the
+  P9 production creation commit. Step 0 characterizes the original next.
+
+
+### 2026-10-13 — Phase 9 Step 0 (complete; stop before production moves)
+
+- **Revision/input.** Follows tooling checkpoint `9d36d7c83`; original
+  application re-measured at `bd671bd09`. Evidence `p9/step0/completion.json`
+  and its commit receipt record the final revision. Library and pubspec files
+  remain byte-identical to the original. No seam extension, production move,
+  CI transition, ratchet change or release build in Step 0.
+- **Characterization.** Six new suites/support driver provide 70 original-caller
+  cases: real SRT/metadata/compute activation, every pill phase and exact
+  5s/2400ms/350ms timing, held install/remove/alignment and renderer teardown,
+  early no-engine/null-model/cold-window paths, session-only timing and actual
+  style/migration writes, profile/prefs/font races, saved callbacks, native
+  failures and TV first-key/repeats/Back/element identity. H support is reused
+  unchanged. A rollback held across disposal observes the nulled engine before
+  its mounted UI guard; no lifecycle/profile bug is fixed.
+- **Systematic proof.** 21 declarations /190 AST sites /170 canonical candidates:
+  151 assertion-killed, 12 source-audited equivalents replayed, two raw-Android
+  device-pending, two dormant session-persistence diagnostics, three invalid
+  nullable-flow operator candidates excluded. All 26 reachable retained
+  occurrences and three live engine readers killed; remaining seven occurrences
+  are two Android sites and five dead legacy-sheet sites. Every final test has
+  a matching-file-hash assertion-failing witness on detached original lib/;
+  original/restored controls PASS. Coverage and mutation tables are in the deps
+  report; patches, complete JSON logs and source adjudications are archived.
+- **Commands/results.** Serial nice19 Flutter controls/mutations with no-pub
+  and DEBRIFY_VP_TEST_HOOKS=true; final test `dart analyze`, format, size and
+  architecture PASS. Fresh full suite via `suite_evidence.py` vs M1 by identity
+  PASS: 13,463 successes, unchanged 13 failures/28 load errors/20 skips; exactly
+  70 passing additions, zero changed/missing/new skips, stable tested tree and
+  same SDK. Step T's 38 mechanical checks/analyzer inventories remain valid;
+  app/tool inputs unchanged. Every parser invocation uses isolated copied
+  packages with kernels removed; evidence routing is recorded.
+- **Deviations/limits.** Two preliminary focused commands inherited the P8
+  runtime fallback; identified fixture data moved into P9, those runs excluded.
+  New-case expectations/waits were corrected to original deterministic results,
+  preserving assertions. Two throwing-return variants timed out and are not
+  credited; finite unwanted-pill exit mutations supplied actual assertion kills.
+  No flaky test stabilization needed. Native DSP/audio/rendering, raw mobile/web
+  capability checks and compressed passthrough stop/rearm remain device-pending.
+  CI stays on applied P8 until the Step-1 production creation commit, which
+  registers the six new test files. M2 remains after phases 9–11. STOP here.
+
+### 2026-10-14 — Phase 9 Step 0b (independent sample closure)
+
+- Follows original checkpoint `122896451`; commit receipt in
+  `p9/step0b/commit.json`. Claude sample: 16/20 killed (80%). Added two behaviour
+  cases and mutation-proved m4/m14 on detached original lib/. Cumulative real
+  verification can exceed the per-pass aligner bound; native/session/overlay
+  clamp pinned. A late negative session write reaches the suspended settings
+  load despite startup reset; native -1.500 and later reset/rearm pinned.
+- m7/m8 equivalent under the audited notice generation/timer invariants;
+  all 72 cases replay successfully for both. Final sample 18/18 valid killed.
+  Deps table records every sample row, source audit, commands, assertions and
+  file-hash witnesses. Fixture development attempts excluded and explained.
+- Nice19 serial controls/mutations with no-pub and harness define; new-file
+  analysis/format PASS. Fresh full suite by identity versus Step 0 PASS:
+  13,465 success, unchanged 13 failures/28 load errors/20 skips, exactly two
+  passing additions. Evidence `p9/step0b/baseline*`; no allowlisting.
+- Application, pubspec, shared H fixture and applied P8 CI unchanged. Step 1
+  and the clean-tree gate follow this separately committed addendum.
+
+### 2026-10-14 — Phase 9 Step 1 (production creation checkpoint)
+
+- Follows addendum `2b64e2f19`; final revision in `p9/step1/commit.json`. Applied
+  the frozen 21 moves to the 305-line `VpSubtitleAutoSync`/Host bridge. Exhaustive
+  807-span classification; 33 retained substitutions, constructor after PiP,
+  exact live Host and State-owned fields/teardowns. Earlier 18 destinations and
+  PiP adapter unchanged. Facade ratchet 16,829 →16,603 via size update.
+- CI current/self-test and both analyzer inputs now P9; P1–P8 histories and
+  S/S2/S2b remain. Six test files registered with the harness flag; theme and all
+  three source-guard lists extended. Validating reader already chains P9; no
+  moved source-text anchor needs retargeting. Three frozen probe import warnings
+  recorded; no suppression, import cleanup or older mapping change.
+- Nice19 serial focused suite: 82/82 PASS. Current/history/seams and structural
+  checks: 14/14 PASS. Scoped CI analyzer/allowlist PASS; comparator 104 identities/
+  occurrences, zero additions. Format/idempotence PASS; exact Step-T formatted
+  bytes and three optional-comma sites reused with no diagnostic change.
+- Evidence `p9/step1/`; no pubspec or behaviour change. Clean-tree full gate
+  (all manifest self-tests and both release builds included) follows separately.
+
+### 2026-10-14 — Phase 9 gate (complete; STOP)
+
+- Tested clean Step-1 revision `a2be68e2d`; gate receipt in
+  `p9/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,465 success, identical 13 failures/28 load errors/20 skips, zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree, same SDK
+  and flags. No flake stabilization or failure allowlisting.
+- 42/42 mechanical checks PASS: every other Dart manifest self-test, P9
+  universal/all-retained self-comparison and current check, P1–P8 named histories,
+  complete Kotlin self-test, S/S2/S2b proofs, size/architecture and negatives.
+  Every parser call uses an isolated copied package; kernel deletion/routing
+  audited. Facade 16,603, combined bridge 305 lines; size ratchet enforced.
+- CI analysis/allowlist and P9 comparator PASS (104 scoped occurrences, zero
+  additions); full CI formatting plus changed theme guard PASS. Both release
+  builds, apk and macOS, PASS without install/run. Application hashes and
+  pubspec remain unchanged throughout the gate. Evidence `p9/gate/`.
+- Native DSP/decoded alignment, raw mobile/web predicates and Android
+  compressed-passthrough transitions remain device-pending; dormant paths
+  unchanged. M2 is after phase 11. No push/merge/switch or production bug fix.
+  STOP after the gate commit for independent review.
+
+2026-10-14 — **Phase 9 independent review (Codex `vp-rev9`): no P1/P2 — "No P1s".**
+m7/m8 equivalences confirmed (restarts invalidate held alignments; the first
+verification is 90 s after a verdict, beyond the 2.4 s hold); m4/m14
+closures valid. P3: passthrough mutation notes p018/p021 corrected to the
+passthrough-off Android case (still device-pending). Claude sample 16/20 →
+18/18 valid after closures. Merged.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -3286,3 +3551,12 @@ explicit async boundary matrix; wakelock queued-write semantics. P3s:
 ownership (`_isPipActive`, `_pausedByLifecycle`, `_lifecycle` State-owned;
 `_backgroundedAt` moves), exact Host signatures, 7 `pipOwner`
 substitutions, 22-occurrence ledger, concrete M1 and CI.
+
+## Phase 9 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: one combined bridge file (owned-field guard); session-only
+offset and settings/profile race cases; real engine activation with fixture
+subtitles and metadata; both teardown protocols frozen in place plus
+startup windows. P3s: revised ownership map (settings, external path,
+overlay flag, pill notifier and fade cache State-owned; selection-correction
+notifier State-owned), exact Host, 33-occurrence ledger, CI, executable M2.

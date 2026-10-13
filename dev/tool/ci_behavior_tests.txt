@@ -520,3 +520,11 @@ test/features/video_player/video_player_pip_recovery_test.dart
 
 test/features/video_player/video_player_pip_renderer_test.dart
 test/features/video_player/video_player_m1_integration_test.dart
+
+# Video player P9: real auto-sync engine, teardown, overlays and settings races.
+test/features/video_player/video_player_subtitle_sync_boundaries_test.dart
+test/features/video_player/video_player_subtitle_sync_engine_test.dart
+test/features/video_player/video_player_subtitle_sync_overlay_test.dart
+test/features/video_player/video_player_subtitle_sync_races_test.dart
+test/features/video_player/video_player_subtitle_sync_settings_test.dart
+test/features/video_player/video_player_subtitle_sync_sources_test.dart

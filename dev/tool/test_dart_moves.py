@@ -156,6 +156,8 @@ def run(package):
     completion_tests(package)
     from test_dart_pip_moves import run as pip_tests
     pip_tests(package)
+    from test_dart_subtitle_sync_moves import run as subtitle_sync_tests
+    subtitle_sync_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

@@ -184,6 +184,7 @@ import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrob
 import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_local_completion.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -396,6 +397,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _mdblist = VpMdblistScrobbler(_VpMdblistScrobblerHostAdapter(this));
     _completion = VpLocalCompletion(_VpLocalCompletionHostAdapter(this));
     _pip = VpPipLifecycle(_VpPipLifecycleHostAdapter(this));
+    _subtitleSync = VpSubtitleAutoSync(_VpSubtitleAutoSyncHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -1327,16 +1329,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _subtitlePreferredAudio;
   String? _subtitleSelectedAudio;
   int _subtitleAudioRevision = 0;
-  bool _subtitleAutoSyncEnabled = false;
-  MediaKitSubtitleAutoSync? _subtitleAutoSync;
+  late final VpSubtitleAutoSync _subtitleSync;
+
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
   final ValueNotifier<AutoSyncPillModel?> _autoSyncPill =
-      ValueNotifier<AutoSyncPillModel?>(null);
-  // True from listening until a verdict/terminal hide: the engine is trying.
-  bool _autoSyncWindowActive = false;
-  Timer? _autoSyncPillHold; // result auto-hide
-  Timer? _autoSyncPillPhaseTimer; // announce auto-dismiss
+      ValueNotifier<AutoSyncPillModel?>(null); // announce auto-dismiss
   // Last non-null model, kept so the dismiss fade has content to fade out.
   AutoSyncPillModel? _autoSyncPillLastShown;
 
@@ -1619,7 +1617,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // process-wide singleton — clear it at the start of every player session so
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
     SubtitleSettingsService.instance.resetSyncOffset();
-    _loadSubtitleSettings();
+    _subtitleSync.loadSubtitleSettings();
     unawaited(_completion.loadTrackingPolicy());
     unawaited(_skip.loadSkipSegmentSettings());
     unawaited(_completion.loadLocalCompletionThresholds());
@@ -1948,155 +1946,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_display.applyAspectVideoZoom());
   }
 
-  void _installSubtitleAutoSyncForPlayer(mk.Player player) {
-    if (!_subtitleAutoSyncEnabled || !PlatformUtil.supportsSubtitleAutoSync) {
-      debugPrint(
-        'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '
-        'web=$kIsWeb platform=${Platform.operatingSystem}',
-      );
-      return;
-    }
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) {
-      debugPrint(
-        'SubtitleAutoSync: not installing — player backend is not NativePlayer '
-        '(${platform.runtimeType})',
-      );
-      return;
-    }
-    debugPrint(
-      'SubtitleAutoSync: controller installed '
-      '(passthrough=${!kIsWeb && Platform.isAndroid && _audioPassthroughEnabled})',
-    );
-    _subtitleAutoSync = MediaKitSubtitleAutoSync(
-      player: platform,
-      enabled: _subtitleAutoSyncEnabled,
-      passthroughEnabled:
-          !kIsWeb && Platform.isAndroid && _audioPassthroughEnabled,
-      currentPositionMs: () => _position.inMilliseconds,
-      isPlaying: () => _isPlaying,
-      currentOffsetMs: () => _subtitleSettings?.syncOffsetMs ?? 0,
-      applyOffsetMs: _applyAutoSubtitleSyncOffset,
-      onNotice: _showSubtitleAutoSyncNotice,
-    );
-  }
-
-  Future<void> _disposeSubtitleAutoSync() async {
-    final controller = _subtitleAutoSync;
-    _subtitleAutoSync = null;
-    _hideAutoSyncPill();
-    await controller?.dispose();
-  }
-
-  Future<void> _applyAutoSubtitleSyncOffset(int milliseconds) async {
-    final clamped = milliseconds.clamp(
-      SubtitleSettingsService.syncOffsetMinMs,
-      SubtitleSettingsService.syncOffsetMaxMs,
-    );
-    if (!mounted) return;
-    _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: clamped);
-    _applySubtitleSyncOffset(clamped);
-    setState(() {});
-    try {
-      await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
-    } catch (error) {
-      // The live player already has the safe, bounded offset. A preference
-      // write failure must not escape a timer callback or affect playback.
-      debugPrint('SubtitleAutoSync: offset persistence failed: $error');
-    }
-  }
-
-  void _showSubtitleAutoSyncNotice(SubtitleAutoSyncNotice notice) {
-    if (!mounted) return;
-    // Full detail (offsets, advice) lives here; the pill stays number-free.
-    debugPrint('SubtitleAutoSync: ${notice.message}');
-    switch (notice.kind) {
-      case SubtitleAutoSyncNoticeKind.listening:
-        // A fresh window: announce for ~5s, then go quiet until an event.
-        _openAutoSyncPillWindow();
-      case SubtitleAutoSyncNoticeKind.checking:
-        // An alignment pass is genuinely running — surface it, even if the
-        // pill was idle-hidden in the meantime.
-        if (_autoSyncWindowActive) {
-          _autoSyncPillPhaseTimer?.cancel();
-          _autoSyncPill.value = const AutoSyncPillModel(
-            AutoSyncPillPhase.checking,
-          );
-        }
-      case SubtitleAutoSyncNoticeKind.stillListening:
-        // The pass ended with no verdict: leave the screen quiet again.
-        if (_autoSyncWindowActive &&
-            _autoSyncPill.value?.phase == AutoSyncPillPhase.checking) {
-          _autoSyncPill.value = null;
-        }
-      case SubtitleAutoSyncNoticeKind.synced ||
-          SubtitleAutoSyncNoticeKind.resynced:
-        // A verify-pass re-sync corrects silently; only the first sync speaks.
-        if (notice.kind == SubtitleAutoSyncNoticeKind.resynced &&
-            !_autoSyncWindowActive &&
-            _autoSyncPill.value == null) {
-          return;
-        }
-        _showAutoSyncPillResult(AutoSyncPillPhase.synced);
-      case SubtitleAutoSyncNoticeKind.failed:
-        _showAutoSyncPillResult(AutoSyncPillPhase.failed);
-    }
-  }
-
-  void _openAutoSyncPillWindow() {
-    _autoSyncPillHold?.cancel();
-    _autoSyncPillHold = null;
-    _autoSyncWindowActive = true;
-    _autoSyncPill.value = const AutoSyncPillModel(AutoSyncPillPhase.announce);
-    _autoSyncPillPhaseTimer?.cancel();
-    _autoSyncPillPhaseTimer = Timer(const Duration(seconds: 5), () {
-      // The sentence had its moment; the screen goes quiet until a real
-      // event (a checking pass or a verdict) has something to say.
-      if (_autoSyncWindowActive &&
-          _autoSyncPill.value?.phase == AutoSyncPillPhase.announce) {
-        _autoSyncPill.value = null;
-      }
-    });
-  }
-
-  void _showAutoSyncPillResult(AutoSyncPillPhase phase) {
-    _autoSyncWindowActive = false;
-    _autoSyncPillPhaseTimer?.cancel();
-    _autoSyncPillPhaseTimer = null;
-    _autoSyncPillHold?.cancel();
-    _autoSyncPill.value = AutoSyncPillModel(phase);
-    _autoSyncPillHold = Timer(
-      const Duration(milliseconds: 2400),
-      _hideAutoSyncPill,
-    );
-  }
-
-  void _hideAutoSyncPill() {
-    _autoSyncWindowActive = false;
-    _autoSyncPillPhaseTimer?.cancel();
-    _autoSyncPillPhaseTimer = null;
-    _autoSyncPillHold?.cancel();
-    _autoSyncPillHold = null;
-    if (_autoSyncPill.value != null) _autoSyncPill.value = null;
-  }
-
-  void _setActiveExternalSubtitlePath(String? path) {
-    if (_activeExternalSubtitlePath == path) return;
-    _activeExternalSubtitlePath = path;
-    final controller = _subtitleAutoSync;
-    debugPrint(
-      'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '
-      '(controller=${controller == null ? 'MISSING' : 'present'})',
-    );
-    if (controller == null) return;
-    if (path == null) {
-      unawaited(controller.deactivateSubtitle());
-      _hideAutoSyncPill();
-    } else {
-      unawaited(controller.activateSubtitle(path));
-    }
-  }
-
   /// Serializes live passthrough flips: each runs WHOLE, in order. Without
   /// this a rapid double-toggle could interleave two aid cycles and leave
   /// the newer one reading `aid=no` mid-way through the older one's cycle —
@@ -2127,7 +1976,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // PCM decoder. Remove the passive analysis chain before the aid cycle;
       // when passthrough is disabled, re-arm only after PCM output is restored.
       if (enabled) {
-        await _subtitleAutoSync?.setPassthroughEnabled(true);
+        await _subtitleSync.subtitleAutoSync?.setPassthroughEnabled(true);
       }
       final platform = _player.platform;
       if (platform is! mk.NativePlayer) return;
@@ -2144,7 +1993,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await platform.setProperty('aid', aid);
       }
       if (!enabled) {
-        await _subtitleAutoSync?.setPassthroughEnabled(false);
+        await _subtitleSync.subtitleAutoSync?.setPassthroughEnabled(false);
       }
     } catch (e) {
       debugPrint('VideoPlayer: live passthrough toggle failed: $e');
@@ -2427,7 +2276,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     _createPlayerInstance(_androidVideoRendererMode);
     await _configurePlayerAudio(_player);
-    _installSubtitleAutoSyncForPlayer(_player);
+    _subtitleSync.installSubtitleAutoSyncForPlayer(_player);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
     // finished file being publishable at all. Below API 29 there is no
@@ -2867,7 +2716,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _pip.lastIosPipPositionSecond = d.inSeconds;
         _pip.pushPipState();
       }
-      _subtitleAutoSync?.observePosition(d.inMilliseconds);
+      _subtitleSync.subtitleAutoSync?.observePosition(d.inMilliseconds);
       _iptvDiag.onProgress(d, playing: _isPlaying);
       // _isPlaying tracks mpv's pause property: a cache-stall keeps it true
       // (stall detector armed), a user pause flips it false (excluded).
@@ -2883,7 +2732,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _skip.syncActiveSkipSegmentUi();
       _completion.checkAndApplyLocalCompletion();
     });
-    if (_subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
+    if (_subtitleSync.subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
       var lastAudioTrackId = player.state.track.audio.id;
       var lastAudioLanguage = player.state.track.audio.language;
       _trackSub = player.stream.track.listen((track) {
@@ -2894,7 +2743,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           lastAudioTrackId = audioTrackId;
           lastAudioLanguage = track.audio.language;
           unawaited(_refreshSubtitleAudioPolicy());
-          _subtitleAutoSync?.audioTrackChanged();
+          _subtitleSync.subtitleAutoSync?.audioTrackChanged();
         }
       });
     }
@@ -3401,7 +3250,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       await _cancelPlayerInstanceSubscriptions();
-      await _disposeSubtitleAutoSync();
+      await _subtitleSync.disposeSubtitleAutoSync();
       _activeExternalSubtitlePath = null;
       _releaseAudioEffectSession();
       try {
@@ -3436,7 +3285,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!mounted) return;
       _createPlayerInstance(AndroidVideoRendererMode.automatic);
       await _configurePlayerAudio(_player);
-      _installSubtitleAutoSyncForPlayer(_player);
+      _subtitleSync.installSubtitleAutoSyncForPlayer(_player);
       await _attachAudioEffectSession();
       if (!mounted) return;
       setState(() {});
@@ -4171,7 +4020,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _selectedStremioSubtitleId = restoredOriginalSelection
         ? attempt.previousStremioId
         : null;
-    _setActiveExternalSubtitlePath(
+    _subtitleSync.setActiveExternalSubtitlePath(
       restoredOriginalSelection ? attempt.previousExternalPath : null,
     );
     final String restoredSelection;
@@ -5400,19 +5249,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }).toList();
   }
 
-  /// Load subtitle style settings
-  Future<void> _loadSubtitleSettings() async {
-    final settings = await SubtitleSettingsService.instance.loadAll();
-    if (mounted) {
-      setState(() {
-        _subtitleSettings = settings;
-      });
-      if (settings.syncOffsetMs != 0) {
-        _applySubtitleSyncOffset(settings.syncOffsetMs);
-      }
-    }
-  }
-
   /// Load default player settings (aspect)
   /// The vertical band at the bottom of the screen the dock occupies.
   ///
@@ -5478,10 +5314,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
     _subtitlePreferredAudio =
         await SubtitleSettingsStorage.getDefaultAudioLanguage();
-    _subtitleAutoSyncEnabled =
+    _subtitleSync.subtitleAutoSyncEnabled =
         await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
     debugPrint(
-      'SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled',
+      'SubtitleAutoSync: pref loaded, enabled=${_subtitleSync.subtitleAutoSyncEnabled}',
     );
     // Load default aspect index
     final aspectIndex =
@@ -5546,42 +5382,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     debugPrint('VideoPlayer: Loaded defaults - aspect=${_display.aspectMode}');
   }
 
-  /// Update subtitle style settings
-  void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
-    // Style saves are awaited before this fires, so it can land after the
-    // whole player route is gone (close right after adjusting a style).
-    if (!mounted) return;
-    final offsetChanged =
-        _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
-    setState(() {
-      _subtitleSettings = settings;
-    });
-    if (offsetChanged) {
-      _subtitleAutoSync?.manualOffsetChanged(settings.syncOffsetMs);
-      _hideAutoSyncPill();
-      _applySubtitleSyncOffset(settings.syncOffsetMs);
-    }
-  }
-
-  void _applySubtitleSyncOffset(int ms) {
-    final platform = _player.platform;
-    if (platform is mk.NativePlayer) {
-      platform.setProperty('sub-delay', (ms / 1000.0).toStringAsFixed(3));
-    }
-  }
-
-  /// Reset the sync offset to 0. The offset belongs to the specific subtitle it
-  /// was dialed in against, so it must reset whenever the subtitle or the
-  /// content changes. mpv's `sub-delay` is push-based, so zero it explicitly
-  /// rather than relying on a stale in-memory value carrying over.
-  void _resetSubtitleSyncOffset() {
-    SubtitleSettingsService.instance.resetSyncOffset();
-    // Keep the UI model in sync (no setState needed: the sync overlay is closed
-    // on these transitions and no style rendering depends on the offset).
-    _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: 0);
-    _applySubtitleSyncOffset(0);
-  }
-
   /// Overlays inside the player share its route scope, which already has a
   /// focused child (the player root) — so their `autofocus` is silently
   /// discarded and the first OK does nothing. Releasing the current focus as
@@ -5589,67 +5389,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _tvReleaseFocusForOverlay() {
     if (!PlatformUtil.isTelevision) return;
     FocusManager.instance.primaryFocus?.unfocus();
-  }
-
-  void _showSyncOverlayPanel() {
-    _tvReleaseFocusForOverlay();
-    setState(() {
-      _showSyncOverlay = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  void _hideSyncOverlay() {
-    setState(() => _showSyncOverlay = false);
-  }
-
-  Widget _buildSyncOverlay() {
-    final externalPath = _activeExternalSubtitlePath;
-    if (externalPath != null) {
-      return SubtitleLinePickerOverlay(
-        subtitleFilePath: externalPath,
-        getCurrentPositionMs: () => _player.state.position.inMilliseconds,
-        currentOffsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
-        onOffsetChanged: (ms) async {
-          await SubtitleSettingsService.instance.setSyncOffsetMs(ms);
-          _subtitleAutoSync?.manualOffsetChanged(ms);
-          _hideAutoSyncPill();
-          _applySubtitleSyncOffset(ms);
-          if (mounted) {
-            setState(() {
-              _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: ms);
-            });
-          }
-        },
-        onDismiss: _hideSyncOverlay,
-      );
-    }
-
-    return _buildSliderSyncOverlay();
-  }
-
-  Widget _buildSliderSyncOverlay() {
-    return SyncStepperOverlay(
-      offsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
-      onOffsetChanged: (ms) async {
-        final clamped = ms.clamp(
-          SubtitleSettingsService.syncOffsetMinMs,
-          SubtitleSettingsService.syncOffsetMaxMs,
-        );
-        await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
-        _subtitleAutoSync?.manualOffsetChanged(clamped);
-        _hideAutoSyncPill();
-        _applySubtitleSyncOffset(clamped);
-        if (mounted) {
-          setState(() {
-            _subtitleSettings = _subtitleSettings?.copyWith(
-              syncOffsetMs: clamped,
-            );
-          });
-        }
-      },
-      onDismiss: _hideSyncOverlay,
-    );
   }
 
   /// Show channel guide overlay
@@ -10571,8 +10310,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
     _iptvReconnectText.dispose();
-    _autoSyncPillHold?.cancel();
-    _autoSyncPillPhaseTimer?.cancel();
+    _subtitleSync.autoSyncPillHold?.cancel();
+    _subtitleSync.autoSyncPillPhaseTimer?.cancel();
     _autoSyncPill.dispose();
     // The sleep timer belongs to this playback session — a pending one must not
     // outlive the player and fire against a disposed state.
@@ -10720,8 +10459,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
     _screenDisposed = true;
-    final subtitleAutoSync = _subtitleAutoSync;
-    _subtitleAutoSync = null;
+    final subtitleAutoSync = _subtitleSync.subtitleAutoSync;
+    _subtitleSync.subtitleAutoSync = null;
     if (_playerCreated) {
       // The slot frees only once the native output has actually gone, not when
       // disposal is requested — the same rule the trailer engines follow.
@@ -11935,7 +11674,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Still open means the press was spent on a pane change.
       if (_showPlayerMenu) return;
     } else if (_showSyncOverlay) {
-      _hideSyncOverlay();
+      _subtitleSync.hideSyncOverlay();
     } else if (_showChannelGuide) {
       _hideChannelGuideOverlay();
     } else if (_showIptvChannelSheet) {
@@ -13160,7 +12899,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (_showSyncOverlay) {
               if (key == LogicalKeyboardKey.escape ||
                   key == LogicalKeyboardKey.goBack) {
-                _hideSyncOverlay();
+                _subtitleSync.hideSyncOverlay();
                 return KeyEventResult.handled;
               }
               return KeyEventResult.ignored;
@@ -14280,7 +14019,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 if (_showPlayerMenu && !inPip)
                   Positioned.fill(child: _buildPlayerMenuPanel()),
                 // Subtitle sync overlay
-                if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
+                if (_showSyncOverlay && !inPip)
+                  _subtitleSync.buildSyncOverlay(),
               ],
             ),
             builder: (context, controlsVisible, child) {
@@ -15099,7 +14839,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onTrackChanged: (audioId, subtitleId) async {
         _userManuallySelectedSubtitle = true;
         if (!subtitleId.startsWith('stremio:')) {
-          _setActiveExternalSubtitlePath(null);
+          _subtitleSync.setActiveExternalSubtitlePath(null);
         }
         // Remember the chosen audio language for this IPTV series (carries to
         // later episodes and future sessions). No-op off IPTV.
@@ -15108,7 +14848,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       },
       // Fires only on a genuine subtitle switch (not audio, not re-select, not a
       // failed load): the sync offset was calibrated for the previous subtitle.
-      onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      onSubtitleTrackChanged: _subtitleSync.resetSubtitleSyncOffset,
       // Android bitstream passthrough, applied LIVE (same stored setting as
       // the Playback Defaults row).
       audioPassthrough: !kIsWeb && Platform.isAndroid
@@ -15117,8 +14857,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
           ? _setAudioPassthroughLive
           : null,
-      onSubtitleStyleChanged: _onSubtitleStyleChanged,
-      onSyncOverlayRequested: _showSyncOverlayPanel,
+      onSubtitleStyleChanged: _subtitleSync.onSubtitleStyleChanged,
+      onSyncOverlayRequested: _subtitleSync.showSyncOverlayPanel,
       contentImdbId: effectiveImdbId,
       contentType: effectiveContentType,
       contentSeason: subtitleSeason,
@@ -15254,7 +14994,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
     _userManuallySelectedSubtitle = true;
     if (!subtitleId.startsWith('stremio:')) {
-      _setActiveExternalSubtitlePath(null);
+      _subtitleSync.setActiveExternalSubtitlePath(null);
     }
     _captureIptvAudioLanguage(audioId);
     await _persistTrackChoice(audioId, subtitleId);
@@ -15367,7 +15107,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
-      _setActiveExternalSubtitlePath(filePath);
+      _subtitleSync.setActiveExternalSubtitlePath(filePath);
       await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
       return true;
     } catch (e) {
@@ -15403,7 +15143,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _setActiveExternalSubtitlePath(filePath);
+      _subtitleSync.setActiveExternalSubtitlePath(filePath);
       return true;
     } catch (e) {
       debugPrint('TracksSheet: subtitle apply failed - $e');
@@ -15455,7 +15195,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onSubtitlesOff: _menuSubtitlesOff,
       onEmbeddedSubtitleSelected: _menuSelectEmbeddedSubtitle,
       onAddonSubtitleSelected: _menuSelectAddonSubtitle,
-      onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      onSubtitleTrackChanged: _subtitleSync.resetSubtitleSyncOffset,
       contentImdbId: _menuImdbId,
       contentType: _menuContentType,
       contentSeason: _menuSeason,
@@ -15472,8 +15212,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       },
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
       subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
-      onSubtitleStyleChanged: _onSubtitleStyleChanged,
-      onSyncRequested: _showSyncOverlayPanel,
+      onSubtitleStyleChanged: _subtitleSync.onSubtitleStyleChanged,
+      onSyncRequested: _subtitleSync.showSyncOverlayPanel,
       showSpeed: !_iptvZapBannerOwnsIdentity,
       speed: _display.playbackSpeed,
       onSpeedSelected: _display.setPlaybackSpeed,
@@ -15516,12 +15256,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _subtitleDiagnosticGeneration++;
     _activeSubtitleApplyAttempt = null;
     _cleanupTempSubtitleFilesSync();
-    _setActiveExternalSubtitlePath(null);
+    _subtitleSync.setActiveExternalSubtitlePath(null);
     _showSyncOverlay = false;
     // The menu's subtitle pane is keyed to the outgoing item's identity.
     _showPlayerMenu = false;
     // Content changed: the previous item's sync offset no longer applies.
-    _resetSubtitleSyncOffset();
+    _subtitleSync.resetSubtitleSyncOffset();
   }
 
   /// Restore audio and subtitle track preferences
@@ -15823,7 +15563,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!_audioAllowsAutomaticSubtitles) {
       _embeddedSubtitleApplied = false;
       _selectedStremioSubtitleId = null;
-      _setActiveExternalSubtitlePath(null);
+      _subtitleSync.setActiveExternalSubtitlePath(null);
       await _setSubtitleTrackWithDiagnostics(
         mk.SubtitleTrack.no(),
         source: 'audio-language-off',
@@ -16304,7 +16044,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!valid() || result == null) return;
       if (result.addon case final sub?) {
         _selectedStremioSubtitleId = sub.id;
-        _setActiveExternalSubtitlePath(selectedPath!);
+        _subtitleSync.setActiveExternalSubtitlePath(selectedPath!);
       } else if (!result.provisional) {
         _embeddedSubtitleApplied = true;
       }
@@ -16367,6 +16107,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
   }
+}
+
+class _VpSubtitleAutoSyncHostAdapter implements VpSubtitleAutoSyncHost {
+  _VpSubtitleAutoSyncHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  mk.Player get player => _s._player;
+  @override
+  Duration get position => _s._position;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get audioPassthroughEnabled => _s._audioPassthroughEnabled;
+  @override
+  SubtitleSettingsData? get subtitleSettings => _s._subtitleSettings;
+  @override
+  set subtitleSettings(SubtitleSettingsData? v) => _s._subtitleSettings = v;
+  @override
+  String? get activeExternalSubtitlePath => _s._activeExternalSubtitlePath;
+  @override
+  set activeExternalSubtitlePath(String? v) =>
+      _s._activeExternalSubtitlePath = v;
+  @override
+  ValueNotifier<AutoSyncPillModel?> get autoSyncPill => _s._autoSyncPill;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  set showSyncOverlay(bool v) => _s._showSyncOverlay = v;
+  @override
+  void tvReleaseFocusForOverlay() => _s._tvReleaseFocusForOverlay();
 }
 
 class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
