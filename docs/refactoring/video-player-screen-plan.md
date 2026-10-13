@@ -1342,6 +1342,77 @@ watched and leaves Continue Watching; a rewatch below it restores it; an
 episode past its threshold is marked finished; "This device" mode marks
 locally even with trackers on.
 
+## Phase 8 — PiP, background pause/resume and wakelock
+
+Branch `refactor/vplayer-p8` off the phase-7 merge `491bf1fea`. Evidence
+`refactor-evidence/vplayer/p8/`. Names below; line numbers at the
+phase-7 base (pre-move ≈ 10716–10970) — re-measure by name.
+
+### Moves → `presentation/legacy_video_player/vp_pip_lifecycle.dart`
+
+`VpPipLifecycle` + Host (≈ 270 lines): the iOS PiP block declared
+mid-class — `_iosPipStarting`, `_iosPipDetached`, `_iosPipSession`
+(`PlayerPipSession?`, null), `_lastIosPipPositionSecond` (-1) — `_enterPip`, `_armPipAutoEnter`, `_pushPipState`,
+`_onPipModeChanged`, `_restoreIosPipPlayer`, `_onPipAction`,
+`_pauseForBackground`, `_resumeFromBackground`, `_syncWakelock`. Whether
+`_isPipActive` (read by subtitles 3976/12855, decoder 4118, build 13548,
+player subscriptions 2992) and `_pausedByLifecycle` (read by recovery 708, open/resume 3503/3537,
+IPTV recovery 9845/9849) move or stay
+State-owned is decided at step T by reader count (shared-state rule;
+default: stay State-owned, forwarded). `_lifecycle` (`AppLifecycleListener`
+created in `initState` with tear-offs of the background methods) stays
+State-owned; its callbacks become `_pip.` tear-offs at the same position.
+
+**Owner identity:** `PipService.isOwner(this)` and any `this` passed to
+`PipService`/`PlayerVisibility` become `host.pipOwner` (rule 3, pinned by
+occurrence).
+
+**Reachability (key decision for the design review):** PiP branches are
+gated on real `dart:io Platform` (iOS/Android) — unreachable on the macOS
+harness. Options: (a) move verbatim (checker-proven token identity),
+characterize every desktop-reachable path (background pause/resume via
+the lifecycle listener, wakelock sync on play/pause/dispose, PiP
+"unsupported" early returns, `_pushPipState` payloads where reachable)
+and record PiP-active branches **device-pending**; or (b) a second
+reviewed test-only seam (platform predicate override confined to these
+members, same installation/proof rules as S). Claude recommends (a)
+unless the review finds wiring risk that only (b) can cover.
+
+### Step H — shared fixture hardening (test-only, first)
+
+From the phase-7 review P3: the snapshot/secondary fixtures were stabilized
+separately in phases 5, 6 and 7 for different triggers. Consolidate
+action-completion waits (the pumping `finish` helper), guide-refresh
+barriers and cleanup into shared support (`trakt_player_driver.dart:59`'s
+fixed drain replaced by awaited completion), keep every assertion and test
+name token-identical, prove each touched file on the original and the
+moved code, and stress-replay (≥ 5 serial full runs of the tracker,
+completion and snapshot files under load) before step 0.
+
+### Step 0 — characterization of the original
+
+Lifecycle: inactive/hidden/paused → pause-for-background (pauses, saves,
+latches `_pausedByLifecycle`), resumed → resume-from-background (resumes
+only if it paused, respects the sleep latch, iOS PiP exemptions as
+reachable), repeated/overlapping transitions, disposal during a pending
+save; wakelock writes on play/pause/EOF/dispose via the display-controls
+channel recorder; PiP service calls/payloads that are reachable on
+desktop (unsupported platform → no-op); owner identity passed to
+services; early windows. Mutation proofs, coverage matrix (with the
+device-pending list), Claude sample.
+
+### Device checklist (end of series)
+
+Android: home → PiP auto-enter, PiP play/pause actions, return restores
+controls; iOS: PiP start/stop, player restore; background/foreground
+pauses and resumes correctly; screen stays awake while playing and
+sleeps when paused.
+
+**Integration milestone M1** runs after this phase merges: full suite,
+both release builds, and a cross-phase scenario pass over phases 2–8
+(sleep + skip + display + trackers + completion + lifecycle together on
+one playback).
+
 ## Follow-ups
 
 - **Cross-profile completion writes (found in phase 7 design review,
