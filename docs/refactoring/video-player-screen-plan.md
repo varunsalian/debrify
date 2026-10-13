@@ -1656,57 +1656,111 @@ changes apply live (phone, TV, desktop, tvOS).
 ## Phase 10 — subtitle engine II: apply, diagnostics and failure rollback
 
 Branch `refactor/vplayer-p10` off the phase-9 merge `5c7b704bd`. Evidence
-`refactor-evidence/vplayer/p10/`. Line numbers at `03cd721d0` (phase-9
-gate) — re-measure by name. Ownership per the phase-9 map.
+`refactor-evidence/vplayer/p10/`. Line numbers at `5c7b704bd`.
 
-### Moves → `presentation/legacy_video_player/vp_subtitle_apply.dart`
+### Ownership and moves (frozen by the design review)
 
-`_waitForSubtitleTracks` 3889, `_setNativeSubtitleVisibilityForTrack`
-3906, `_setSubtitleTrackWithDiagnostics` 3924, `_handleSubtitleApplyFailure`
-(≈ 3968), `_showSubtitleFailureMessage` 4052, plus the fields
-`_subtitleDiagnosticGeneration` 1109 and `_activeSubtitleApplyAttempt` 1110
-(inert initializers) — exact membership by reader/writer count at step T
-(the generation is bumped by content reset 10426 and track restore 15256;
-the attempt is read by preference persistence 16072 and the player-error
-path 2665/2667; if most readers stay outside, the fields stay State-owned
-with Host getters/setters). `_subtitleSelectionCorrection` (1111, a
-`ValueNotifier`) **stays State-owned** (allocation-order rule; phase-9 map)
-and is manipulated through the Host. ≈ 280 lines.
+**Five methods move** → `presentation/legacy_video_player/vp_subtitle_apply.dart`
+(≈ 183 existing lines): `_waitForSubtitleTracks` 3889,
+`_setNativeSubtitleVisibilityForTrack` 3906,
+`_setSubtitleTrackWithDiagnostics` 3924, `_handleSubtitleApplyFailure`
+(≈ 3968), `_showSubtitleFailureMessage` 4052.
 
-**Patched earlier scaffolding:** the phase-8 PiP adapter's
-`setNativeSubtitleVisibilityForTrack` forwarder (≈ 16181) is re-pointed to
-the new controller — a P10 `patched` facade declaration with one counted
-receiver rewrite (phase-5 precedent; not `earlier_patches`).
+**State-owned:** `_subtitleDiagnosticGeneration` and
+`_activeSubtitleApplyAttempt` (readers/writers span apply, failure,
+disposal, content reset, the subscription binder and preference
+persistence — two of the attempt's three readers stay outside), and the
+`_subtitleSelectionCorrection` notifier (allocation slot). The six
+external field occurrences stay unchanged.
 
-**Retained references (≈ 30, measured at step T):** the player error
-stream (2665/2667), native visibility calls from subscriptions/recovery
-(3959, 4002, 4011), track waits (8491, 15278), the 16 apply call sites
-across startup/source switching/episode navigation/menus/preferences
-(5066, 8721, 8933, 9062, 14888, 15049, 15070, 15412, 15567, 15595, 15637,
-15648, 15676, 15717, 15818), failure messages from menus (15065–15150),
-content reset (10425–10427), track restore (15256/15257), preference
-persistence (16072). Statement positions preserved; Host calls only.
+**Host (17 names / 20 declarations):** `mounted`, `context`, `setState`
+(→ `_vpSetState`), `player`, `addonSubtitleFetchToken`, `isIOS`,
+`isPipActive`, `iosPipStarting`, `androidVideoRendererMode`,
+`selectedStremioSubtitleId` getter/setter, `activeExternalSubtitlePath`
+getter, `subtitleSelectionCorrection`, `playerMenuKey`,
+`setActiveExternalSubtitlePath(String?)`,
+`Future<void> persistTrackChoice(String audio, String subtitle)`, and
+getter/setter pairs for both diagnostic fields. `GlobalKey<PlayerMenuPanelState>`
+and `ValueNotifier<String?>` identities preserved. Three complete chain
+substitutions registered (`registered_occurrence_substitutions.py:17`
+precedent): `VpS2Hooks.isIOS`, `_pip.iosPipStarting`,
+`_subtitleSync.setActiveExternalSubtitlePath` → their Host forms, adapters
+reading the live facade; no sibling imports.
 
-### Step 0 — characterization of the original
+**Patched facade adapter:** `_VpPipLifecycleHostAdapter` registered in
+`patched_class_projection` (`check_dart_moves.py:148`) with one counted
+rewrite of its `setNativeSubtitleVisibilityForTrack` forwarder (16180).
 
-Apply success (native track set, visibility per text/bitmap/external,
-diagnostics generation increment, persisted preference matching the
-attempt — `vpSubtitlePreferenceMatchesAttempt`), Android renderer
-rejection, apply failure from the player error stream with rollback to the
-previous track / Stremio id / external path (the phase-9 external-path
-setter), one-shot handling (failed/handled/successReturned flags), late
-failure after a newer attempt (stale generation ignored), the selection
-correction notifier publishing to the menu (null-arming between two
-identical rollbacks), user-visible failure messages by source,
-`_waitForSubtitleTracks` timeout/arrival; disposal and player replacement
-mid-apply; profile handoff during persistence (pin as-is). Early windows;
-mutation proofs; coverage matrix; Claude sample. These feed M2.
+**Retained references (23 executable):** 15 apply calls, 5 failure-message
+calls, 1 failure-handler call, 1 track-wait call, 1 PiP-adapter forwarder
+(3959/4002/4011 are internal moved-body calls; 8491 is a comment;
+10426/10427 are disposal invalidation and 15256/15257 content reset, both
+State-owned field writes left unchanged). Diagnostic-log subscription
+cancellation and notifier disposal stay in place.
+
+**CI:** current/self-test and both analyzer inputs → P10; P9 `--at
+5c7b704bd`; protect all 19 earlier destinations; tests and the destination
+in `ci_behavior_tests.txt`, the theme manifest, rendered set and all three
+source-guard lists. Collaborator assigned after `_subtitleSync`.
+
+### Step S2c — one-predicate seam extension (reviewed separately)
+
+The Android renderer rejection guard (3930) still uses raw
+`Platform.isAndroid`, outside S2/S2b (`vplayer_platform_seam_proof.py:27`).
+**Decision:** a separately reviewed **S2c** checkpoint replaces this one
+predicate occurrence with `VpS2Hooks.isAndroid` (short-circuit order and
+once-only default evaluation preserved; S/S2/S2b proofs retained; the new
+site mutation-proven) before step 0. Then characterize bitmap/image
+rejection on incompatible renderers, acceptance on `directMediaCodec`, and
+the Android-TV exemption (`FakeNativePlayer` records visibility effects;
+decoded bitmap rendering stays device-pending).
+
+### Step 0 — characterization of the original (at S2c)
+
+- **Apply success:** native track set, visibility per text/bitmap/external,
+  generation increment, persisted preference matching the attempt.
+- **Correction delivery:** `kUnifiedPlayerMenuEnabled` is constant true, so
+  the facade returns before `TracksSheet.show` (14822) — the notifier's only
+  listener. Characterize repeated corrections through
+  `PlayerMenuPanelState.reconcileSubtitleSelection` (4045), incl. a
+  dismissed/reopened menu. Notifier-listener delivery and its null-arm
+  purpose are **dormant compatibility behaviour**, protected by the verbatim
+  proof; notifier construction, assignments and disposal unchanged.
+- **Three distinct late-failure behaviours (pin actual outcomes, add no
+  guards, record defects in Follow-ups):** (1) the decoder-log subscription
+  reads the *current* attempt (2665; logs carry no generation), so an old
+  log arriving after attempt B starts can roll **B** back; (2) a delayed
+  exception from A's apply carries A's object and is rejected by the entry
+  guard (3986); (3) a rollback of A admitted before B starts has no
+  generation recheck after its awaits. Barriers at native visibility, track
+  application, rollback visibility/track application and the 50 ms success
+  delay, crossed by content reset, profile handoff, disposal and renderer
+  replacement. After visibility, apply rereads the live player (3961);
+  replacement invalidates subscriptions but not the apply attempt (3252) —
+  preserve the captured-platform vs later-live-read distinction.
+- **Persistence/completion race matrix:** `_persistTrackChoice` (16071)
+  sets `persisted` and assigns `persistenceDone` before writing, swallows
+  write errors and completes its completer in `finally`; a second matching
+  write can replace the completer; rollback awaits the current one (4036)
+  then samples content again. Cover a decoder failure during an optimistic
+  write, failed writes still completing, two matching writes released out
+  of order, rollback persistence after content/profile changes. Exact
+  attempt and completer identities. **Physical writes in both profiles'
+  `playback_state_v1`** incl. unrelated entries (track storage reads a map,
+  `track_preferences_storage.dart:60`, then `PlaybackStateStore`
+  reacquires preferences, `playback_state_store.dart:33` — the same
+  cross-profile risk as phase 7's Follow-up). Existing `CompletionDelivery`,
+  preference transport doubles and step-H pending-action helpers suffice.
+- **S2c cases** above; `_waitForSubtitleTracks` timeout/arrival; early
+  windows; mutation proofs; coverage matrix; Claude sample. Feeds M2 (after
+  phase 11).
 
 ### Device checklist (end of series)
 
 Selecting embedded, addon and external subtitles applies them; a broken
-subtitle reverts to the previous one with a message; bitmap (PGS) subtitles
-show; the menu reflects the corrected selection.
+subtitle reverts to the previous one with a message; bitmap (PGS)
+subtitles show, and are rejected with a message on an incompatible Android
+renderer; the menu reflects the corrected selection.
 
 ## Follow-ups
 
@@ -3615,3 +3669,13 @@ subtitles and metadata; both teardown protocols frozen in place plus
 startup windows. P3s: revised ownership map (settings, external path,
 overlay flag, pill notifier and fade cache State-owned; selection-correction
 notifier State-owned), exact Host, 33-occurrence ledger, CI, executable M2.
+
+## Phase 10 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: both diagnostic fields State-owned, five moves, frozen 17-name
+Host and chain substitutions, PiP adapter patch registration; S2c chosen
+for the Android renderer rejection guard (separately reviewed); notifier
+listener classified dormant, corrections characterized via the unified
+menu; three distinct late-failure behaviours pinned as-is; persistence race
+matrix with physical writes in both profiles. P3s: 23-reference ledger;
+explicit CI transition.
