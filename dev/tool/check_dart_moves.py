@@ -196,7 +196,27 @@ def check(manifest, original, sources, package):
             if builder_context_signature(before, receivers) != builder_context_signature(after, receivers):
                 errors.append('builder context changed: ' + row['original_name'])
             if row['destination_file'] != source and before['owner'] in manifest['split_containers']:
-                if any(t['text'] == 'this' for t in after['tokens'] if not t['comment']):
+                code = [t['text'] for t in after['tokens'] if not t['comment']]
+                ownership = next(r for r in rows if r['original'] == row['original_name'])
+                qualified = {}
+                for name, count in ownership.get('owned_this_fields', {}).items():
+                    field = next((r for r in rows if r['original'] == before['owner'] + '.' + name), None)
+                    target = field.get('target', '') if field else ''
+                    owner, _, public = target.rpartition('.')
+                    original_node = original_nodes.get(before['owner'] + '.' + name, {})
+                    if (ownership['fate'] != 'moved' or not field or field['fate'] != 'moved'
+                            or field['destination'] != row['destination_file']
+                            or owner != row['destination_class']
+                            or not original_node.get('kind', '').startswith('FieldDeclaration')
+                            or dict(before=[name], after=['this', '.', public], count=count)
+                               not in ownership.get('substitutions', [])):
+                        errors.append('invalid owned this qualification: ' + row['original_name'])
+                        continue
+                    sites = [i for i in range(len(code)) if code[i:i+3] == ['this', '.', public]]
+                    if len(sites) != count:
+                        errors.append('owned this qualification count changed: ' + row['original_name'])
+                    qualified.update(dict.fromkeys(sites, public))
+                if any(v == 'this' and i not in qualified for i, v in enumerate(code)):
                     errors.append('unsubstituted owner-identity this: ' + row['original_name'])
     return errors
 

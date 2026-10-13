@@ -2869,6 +2869,33 @@ sample 20/20. Merged.
   no T, Step 0, production moves, push, merge, branch switch or device action.
   Stop here for S2 independent review, as approved by the Phase-8 resolution.
 
+2026-10-13 — **Phase 8 independent H/S2 review (`vp-rev8s2`): no P1/P2/P3.**
+H `ef663d89d` and S2 `21b19c944` accepted. S2 is the ORIGINAL for Phase-8
+behavior and mutation proofs; the phase-7 merge remains the historical merge
+checkpoint. Step T/0 proceed without production moves.
+
+### 2026-10-13 — Phase 8 Step T (tooling checkpoint; no production move)
+
+- **Revision/base.** Follows independently accepted S2 `21b19c944` (behavior
+  ORIGINAL). Full draft materialization: 14 moves, 22 retained occurrences,
+  seven State-owner projections, 33 frozen Host members, 17 earlier files.
+  State constructor appends `_pip` after completion; onPause closure/order
+  preserved. Initializers separately inert; exact live predicate/tracker/display
+  chains registered. Application and pubspec remain exactly S2.
+- **Tooling.** Captured `backgroundedAt` needs two explicit owned-field `this`
+  qualifications. New opt-in validates the exact field/owner/count while other
+  owner-identity `this` remains rejected; missing/wrong opt-in and binding-only
+  capture/chain negatives PASS, existing manifests unchanged.
+- **Checks.** All 26 existing Dart manifest self-tests, P1–P7 at named merges,
+  Kotlin (34 commands), universal Dart self-test/real P8 configuration, S/S2
+  proofs PASS. Root/strict/probe analyzer 98/170/99; one receiver-induced async
+  context info in `_enterPip` recorded by identity; earlier mappings preserved.
+  Raw/formatted token comparison and idempotence PASS; zero format diagnostics.
+  Size/architecture/diff PASS. Nice-19, isolated parser routing: `p8/tooling/`.
+- **Next.** Step 0 at S2, no production moves or CI transition. Pristine S2
+  suite has one guide/profile race also observed on the original; excluded
+  pending replay/fixture closure, never allowlisted. `p8/step0/` records it.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

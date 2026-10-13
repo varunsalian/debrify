@@ -5257,3 +5257,54 @@ analyzer command are excluded; corrected complete runs are archived. Pubspec,
 original S, all earlier destinations and every other application file unchanged.
 Native PiP presentation remains device-pending. No Phase-8 T, Step 0 or production
 move; S2 stops for its independent review.
+
+
+## Phase 8 Step T — PiP/lifecycle tooling (2026-10-13)
+
+H/S2 independent review `vp-rev8s2`: no P1/P2/P3. Behavior ORIGINAL is S2
+`21b19c944`; historical phase-7 merge `491bf1fea` stays the named `--at` target.
+Complete `vplayer_p8.json` draft materializes only in `p8/tooling/`: all 818
+original spans classified, 14 moves (including `_backgroundedAt`), 22 retained
+occurrences, seven `PipService.isOwner(this)` → `_host.pipOwner` projections.
+`Object get pipOwner => _s;` and all 33 Host interface members/adapter bodies
+are frozen, including both live S2 predicates and exact tracker/display chains.
+The State constructor appends `_pip` after `_completion`; the retained onPause
+closure keeps recording teardown first and substitutes only its inner background
+call. Five moved field initializers are inert, separately listed in
+`p8/tooling/initializers.json`; no constructor or field initializer reads Host.
+
+A necessary narrow opt-in extends the ownership layer: two explicit
+`this.backgroundedAt` qualifications in `_resumeFromBackground` preserve the
+captured local `backgroundedAt`. Without them, private→public renaming captures
+the local and fails the binding guard. `owned_this_fields` validates a declared
+exact counted substitution to a moved field in the same destination owner;
+other `this` occurrences remain forbidden. Existing manifests have no opt-in
+and retain their prior behavior. Negatives cover omitted/wrong field/count,
+local capture, unsubstituted owner, cached/wrong predicate, wrong frozen owner,
+constructor removal, captured player/time, fan-out/order, retained onPause and
+dispose edits. Binding-only negatives independently reject unqualified time,
+missing chain registration, bare predicate and tracker receiver changes.
+
+All 26 existing Dart manifest self-tests, P1–P7 at
+31a347ad2/fc24e32ae/890df14d8/315028407/ea7901ead/2defa5100/491bf1fea, and
+Kotlin self-test PASS (34 commands); universal Dart self-test with the real P8
+configuration/current S2 ledger, S and S2 proofs also PASS. Every Dart CLI parse
+has an isolated copied package under ignored `.dart_tool/vplayer_parser`, copied
+kernels deleted; nice-19 processes. `p8/tooling/checks.json`, `self.log`, S/S2
+logs and parser routing record the commands/results.
+
+Analyzer S2 root/strict/probe: 98/170/99 occurrences. The Host receiver adds one
+`use_build_context_synchronously` info at original identity
+`_VideoPlayerScreenState._enterPip`, with the unrelated-mounted-guard message;
+existing `_enterPip` and earlier identities/multiplicities remain preserved in
+the P8 inventory. Raw/formatted probe: 99, zero format-induced diagnostics.
+AST optional-comma sites and formatter idempotence are archived; raw and
+formatted splits compare with zero differences and protect all 17 earlier
+files. Size/architecture/diff PASS. No production destination, application edit,
+CI transition or pubspec change; Step 0 proceeds at S2.
+
+An unmodified S2 full-suite pre-characterization run reproduces one unrelated
+existing guide/profile race in the MDBList pending-checkpoint case: scoped
+Trakt guide refresh raises `Profile session changed before async completion`.
+No allowance; run excluded while original replays/fixture-only closure are
+investigated in Step 0. Details under `p8/step0/`.
