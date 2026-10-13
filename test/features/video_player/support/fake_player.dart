@@ -7,10 +7,17 @@ import 'vp_fixture_actions.dart';
 /// Broadcast streams stay open until fixture cleanup, allowing a replaced
 /// instance to emit late events after production has cancelled its listeners.
 class FakePlayer implements mk.Player {
-  FakePlayer(this.configuration, {bool native = false, this.actions}) {
+  FakePlayer(
+    this.configuration, {
+    bool native = false,
+    this.actions,
+    int? handle,
+  }) : handleValue = handle ?? _nextHandle++ {
     platform = native ? FakeNativePlayer(this) : FakePlatformPlayer(this);
   }
 
+  static int _nextHandle = 71;
+  final int handleValue;
   final VpFixtureActions? actions;
   final mk.PlayerConfiguration configuration;
   final calls = <(String, Object?)>[];
@@ -198,7 +205,11 @@ class FakePlayer implements mk.Player {
   }
 
   @override
-  Future<int> get handle async => 71;
+  Future<int> get handle async {
+    await operation('handle');
+    return handleValue;
+  }
+
   @override
   Future<void> dispose() async {
     await operation('dispose');

@@ -1578,7 +1578,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // ready (see the player `ready` callback), so pressing Home never shrinks
     // a black/loading frame. Skipped when options are hidden — that context
     // deliberately suppresses the PiP button and tap controls.
-    if ((Platform.isAndroid || (Platform.isIOS && !PlatformUtil.isTvOS)) &&
+    if ((VpS2Hooks.isAndroid || (VpS2Hooks.isIOS && !PlatformUtil.isTvOS)) &&
         !widget.hideOptions) {
       PipService.resolveSupport().then((ok) {
         if (!mounted || !ok) return;
@@ -2865,7 +2865,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _posSub = player.stream.position.listen((d) {
       if (!isCurrent()) return;
-      if (Platform.isIOS && d.inSeconds != _lastIosPipPositionSecond) {
+      if (VpS2Hooks.isIOS && d.inSeconds != _lastIosPipPositionSecond) {
         _lastIosPipPositionSecond = d.inSeconds;
         _pushPipState();
       }
@@ -3919,7 +3919,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
         await platform.setProperty(
           'sub-visibility',
-          Platform.isIOS && (_isPipActive || _iosPipStarting) ? 'yes' : 'no',
+          VpS2Hooks.isIOS && (_isPipActive || _iosPipStarting) ? 'yes' : 'no',
         );
       } catch (error) {
         debugPrint('Player: subtitle visibility reset failed: $error');
@@ -4061,7 +4061,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (platform is! mk.NativePlayer) return;
     final nativeRendering =
         requiresNativeSubtitleRendering(track) ||
-        (Platform.isIOS && (_isPipActive || _iosPipStarting));
+        (VpS2Hooks.isIOS && (_isPipActive || _iosPipStarting));
     await platform.setProperty(
       'sub-visibility',
       nativeRendering ? 'yes' : 'no',
@@ -10567,13 +10567,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _isPipActive)
       return;
     final player = _player;
-    if (Platform.isIOS) setState(() => _iosPipStarting = true);
+    if (VpS2Hooks.isIOS) setState(() => _iosPipStarting = true);
     var entered = false;
     try {
-      final handle = Platform.isIOS ? await player.handle : null;
+      final handle = VpS2Hooks.isIOS ? await player.handle : null;
       if (!mounted || !PipService.isOwner(this) || !identical(player, _player))
         return;
-      if (Platform.isIOS) {
+      if (VpS2Hooks.isIOS) {
         await _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle);
       }
       _pushPipState();
@@ -10586,7 +10586,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('PiP entry failed: $error');
     } finally {
       if (mounted && PipService.isOwner(this) && identical(player, _player)) {
-        if (Platform.isIOS) {
+        if (VpS2Hooks.isIOS) {
           setState(() => _iosPipStarting = false);
           unawaited(
             _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle),
@@ -10613,7 +10613,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// aspect so the auto-entered window matches the video shape. No-op unless
   /// this screen is the active, supported PiP owner.
   void _armPipAutoEnter() {
-    if (Platform.isIOS) return; // iOS prepares its renderer on explicit entry.
+    if (VpS2Hooks.isIOS) return; // iOS prepares its renderer on explicit entry.
     if (!PipService.isOwner(this)) return;
     final w = _player.state.width ?? 0;
     final h = _player.state.height ?? 0;
@@ -10649,7 +10649,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _pushPipState();
     }
     setState(() => _isPipActive = inPip);
-    if (Platform.isIOS && _playerCreated) {
+    if (VpS2Hooks.isIOS && _playerCreated) {
       if (inPip && (_iosPipSession?.park() ?? false)) {
         _iosPipDetached = true;
         unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
@@ -10725,8 +10725,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// desktop power budgets are not why this exists. PiP never gets here: a
   /// visible PiP activity stays at `inactive` (see [_lifecycle]).
   void _pauseForBackground() {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) return;
+    if (!VpS2Hooks.isAndroid && !VpS2Hooks.isIOS) return;
+    if (VpS2Hooks.isIOS && (_isPipActive || _iosPipStarting)) return;
     // Even paused playback can have a Start Over probe in flight. Cancel
     // before the playing/transition checks, including recording teardown.
     _cancelPendingIptvCatchup(hideFeedback: false);
@@ -12691,7 +12691,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // transient and the elevation setting already exists for exactly this
   // preference, so subtitles stay where the user put them.
   mkv.SubtitleViewConfiguration _buildSubtitleViewConfig() {
-    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) {
+    if (VpS2Hooks.isIOS && (_isPipActive || _iosPipStarting)) {
       return const mkv.SubtitleViewConfiguration(visible: false);
     }
     final settings = _subtitleSettings;
@@ -16971,4 +16971,34 @@ class VideoPlayerScreenTestHooks {
         ? mkv.VideoController(player, configuration: configuration)
         : hooks.createVideoController(player, configuration);
   }
+}
+
+/// Platform predicates for the separately reviewed PiP characterization seam.
+@visibleForTesting
+class VpS2Hooks {
+  const VpS2Hooks({this.ios, this.android});
+  final bool Function()? ios;
+  final bool Function()? android;
+  static VpS2Hooks? _installed;
+
+  static void install(VpS2Hooks? hooks) {
+    if (kReleaseMode || kProfileMode) {
+      throw StateError(
+        'Video player platform hooks require an assertion-enabled test',
+      );
+    }
+    if (!const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) {
+      throw StateError(
+        'Video player platform hooks require DEBRIFY_VP_TEST_HOOKS',
+      );
+    }
+    assert(() {
+      _installed = hooks;
+      return true;
+    }());
+  }
+
+  static bool get isIOS => _installed?.ios?.call() ?? Platform.isIOS;
+  static bool get isAndroid =>
+      _installed?.android?.call() ?? Platform.isAndroid;
 }

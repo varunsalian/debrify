@@ -2844,6 +2844,31 @@ sample 20/20. Merged.
   Application/pubspec unchanged; no T, Step 0 or production move. S2 follows
   separately and then stops for independent review.
 
+### 2026-10-13 — Phase 8 S2 (second characterization checkpoint; stop)
+
+- **Revision/scope.** H `ef663d89d`, original `491bf1fea`. Separate `VpS2Hooks`
+  covers exactly 15 predicates in nine declarations, native defaults/live
+  callbacks and original short-circuit order. S is untouched and its proof
+  passes. Fake players gain distinct stable, held/failed controllable handles.
+- **Proof/checks.** Exhaustive 817-span checkpoint (nine patched declarations, frozen hook,
+  zero moves), current + P7 historical guard, 13 independent source/default/
+  installer negatives PASS. Five actual-body mode controls (debug flag/no flag,
+  assert-disabled, profile, compiled release) PASS; seven runtime mutations fail
+  their checks. Hook-defined focused 40 cases and no-flag seven cases PASS.
+  Analyzer: unchanged diagnostic identities, 98 occurrences; raw/final format identity proof
+  PASS, two optional commas, idempotence; size/architecture/diff PASS. `p8/s2/`.
+- **Integration.** CI/source reader select the S2 checkpoint; current/self-test
+  and analyzer manifest use it with unchanged P7 inventory, P7 `--at 491bf1fea`
+  added. Applied owners sort after same-phase seams (old S-only ordering has an
+  assertion witness). Guard test registered; existing harness flag retained.
+  Dated facade allowance +30 lines (16,974 → 17,004); no feature file created.
+- **Notes/stop.** Longer names produced format-only brace infos; final compact
+  hook preserves original guard formatting without analyzer allowance changes. Rejected
+  filename/raw-root command attempts retained and replaced with complete runs.
+  Pubspec and other application files unchanged. Native PiP device-pending;
+  no T, Step 0, production moves, push, merge, branch switch or device action.
+  Stop here for S2 independent review, as approved by the Phase-8 resolution.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

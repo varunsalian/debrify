@@ -5200,3 +5200,60 @@ focused run omitted the evidence-root variable and used the old P2 runtime
 fallback: excluded from accepted proof; its 55 case directories were relocated
 into P8, and the fixture fallback is now P8. The narrow birth-time relocation
 ledger is `p8/h/runtime-path-note.json`; unrelated evidence was not touched.
+
+
+## Phase 8 S2 — second characterization checkpoint (2026-10-13)
+
+Follows test-only H `ef663d89d`; original application `491bf1fea`.
+`VpS2Hooks` is separate from `VideoPlayerScreenTestHooks` (S), whose source,
+installer and three interception points remain unchanged. It replaces only the
+15 approved `Platform.isIOS/isAndroid` predicate occurrences in nine retained
+facade declarations. Default getters call the same native predicate once; optional
+callbacks are live. Installation has an explicit release/profile rejection,
+`DEBRIFY_VP_TEST_HOOKS` rejection, then its sole assignment inside an assert.
+No PiP/background implementation moved and the State constructor is unchanged.
+
+| Patched original declaration | iOS / Android substitutions |
+| --- | --- |
+| `initState` (PiP registration) | 1 / 1 |
+| `_bindPlayerInstanceSubscriptions` | 1 / 0 |
+| `_openMedia` | 1 / 0 |
+| `_setNativeSubtitleVisibilityForTrack` | 1 / 0 |
+| `_buildSubtitleViewConfig` | 1 / 0 |
+| `_enterPip` | 4 / 0 |
+| `_armPipAutoEnter` | 1 / 0 |
+| `_onPipModeChanged` | 1 / 0 |
+| `_pauseForBackground` | 2 / 1 |
+
+The exhaustive `vplayer_p8_seam.json` checkpoint classifies all 817 original
+spans: nine patched declarations, all remaining spans retained, one frozen hook
+scaffold, no destinations. Exact before→after/count patches preserve native
+predicate evaluation and short-circuit order; tvOS checks stay unchanged. History
+protects all 17 earlier destinations. CI current/self-test and analyzer manifest
+select this checkpoint, retaining the unchanged P7 analyzer inventory and adding
+P7 `--at 491bf1fea`; the P8 production ledger remains for Step 1. The validating
+reader orders any checkpoint before its same-phase applied owner, preserving S
+and supporting S2; restoring its former S-only ordering assertion-fails the new
+registration case. The new source guard is registered with the existing hook flag.
+
+| Proof / check | Result |
+| --- | --- |
+| Exhaustive checkpoint / original S | Zero ownership differences; S self-test and frozen-content/default proof PASS. |
+| Independent S2 source/default/install guard | 13 negatives rejected: wrong native predicates, ignored/eager/twice override paths, missing release/profile/flag, outside-assert/second/other-member assignment, other-lib or facade installer reference. |
+| Actual hook-body runtime controls | Five modes PASS: debug with flag, debug without flag, assertions disabled with flag, profile, compiled release. Native truth matrix and 16 registration short-circuit combinations pin defaults, order and counts; live/partial overrides pin callback counts. |
+| Runtime mutations (independent from frozen-token comparison) | Seven assertion/error witnesses: wrong iOS native default; wrong Android native default; duplicate iOS default; installation outside assert; missing release rejection; missing profile rejection; missing flag rejection. All valid compilations; each fails a non-assert probe check with a `Bad state` diagnostic. |
+| Fake player contract | Automatically distinct stable handles; explicit handle values and existing held/failed-operation controls. A held old handle returns its own value after the replacement handle arrives. Five new guard/contract cases PASS. |
+| Focused hook-defined suite | 40 behavior cases PASS (S2, S, original mount smoke, Trakt snapshots, secondary boundary, validating source reader). Seven no-flag guard cases PASS separately. |
+| Analyzer / formatter | 98 existing diagnostic occurrences, zero additions against P7 inventory. Raw/final declaration identities identical; two AST-optional inserted commas archived with offsets; no deleted commas; format idempotent. |
+| Size / architecture / P7 history | PASS; facade 16,974 → 17,004 lines, explicit dated +30 seam allowance. No feature file added. |
+
+Evidence is `p8/s2/`: manifests/source snapshots, token/comma proof, runtime
+controls/negative compilations, complete suite logs, comparator/source-reader
+results and hashes. Two longer candidate hook names caused formatter-induced
+brace infos (four, then one); rejected candidates remain archived. Final name
+`VpS2Hooks` preserves the original one-line guards and adds no diagnostics. A
+focused command with a nonexistent smoke filename and an incorrectly rooted raw
+analyzer command are excluded; corrected complete runs are archived. Pubspec,
+original S, all earlier destinations and every other application file unchanged.
+Native PiP presentation remains device-pending. No Phase-8 T, Step 0 or production
+move; S2 stops for its independent review.

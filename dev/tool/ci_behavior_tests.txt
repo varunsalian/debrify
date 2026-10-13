@@ -430,6 +430,7 @@ test/features/premiumize_files/presentation/legacy_premiumize/premiumize_review_
 # Video-player P1: original-caller characterization, including second-sample
 # negative offsets and exact rejection diagnostics; requires DEBRIFY_VP_TEST_HOOKS.
 test/features/video_player/video_player_seam_guard_test.dart
+test/features/video_player/video_player_platform_seam_guard_test.dart
 test/features/video_player/video_player_catchup_caller_test.dart
 test/features/video_player/video_player_catchup_gate_test.dart
 test/features/video_player/video_player_identity_test.dart
