@@ -5866,3 +5866,30 @@ are three recorded infos (two original brace infos, one receiver-induced async
 context info); no new warning allowlist entry. Evidence `p8/step1/`; full
 clean-tree suite, all manifest checks and both release builds follow at the
 gate. No bug fix or dependency change.
+
+## Phase 8 clean-tree gate (2026-10-13)
+
+Production revision `901d08edd`, against addendum original baseline
+`13df9a261` (S2b application `866cbaf03`): complete full suite
+13,392 success / 13 failure / 28 load error / 20 skip. Official and strict
+identity comparisons PASS: no changed, added, missing or newly skipped case;
+identical SDK, clean stable tested tree. No flake or fixture change.
+
+All 38 manifest/history/seam jobs PASS, including every existing Dart
+manifest self-test, P8 self-test/current, Kotlin's 597 tests, P1–P7 named
+historical revisions and S/S2/S2b proofs. Format, size/architecture and real
+architecture negatives PASS. Analyzer comparator: 99 scoped diagnostics,
+zero additions; complete CI scope has the same scoped diagnostics and its
+54 recorded pre-existing warnings pass the shared allowlist. Both nice-19
+release builds (APK and macOS, `--no-pub`) PASS. Evidence `p8/gate/`, with
+`completion.json`, full identity outcomes, commands, isolated parser audit
+and artifact hashes. The facade remains 16,829 lines; destination 318.
+
+The size updater's removed provenance comments are restored with the P8
+ratchet note. Invalid supplemental allowlist inputs (narrow log/unexpanded
+glob) are archived uncredited; corrected CI scope passes. Gate commit
+changes only documentation/size-baseline comments. Native Android/iOS PiP
+presentation/restoration, real recording teardown and wake/decoder power
+checks remain device-pending; M1 is after merge. No application bug fix,
+allowance, dependency change, live application request, run/install/device
+command or push/merge/branch switch. Stop for independent Phase-8 review.

@@ -3115,6 +3115,41 @@ checkpoint. Step T/0 proceed without production moves.
   Full clean-tree gate follows; no gate result claimed in this creation commit.
   No bug fix, pubspec change, real network, run/install/device, push/merge/switch.
 
+### 2026-10-13 — Phase 8 clean-tree gate
+
+- **Revision/evidence.** Production `901d08edd`; original S2b `866cbaf03`,
+  addendum baseline `13df9a261`. Complete gate evidence `p8/gate/`:
+  `completion.json`, `suite-strict.json`, `checks-results.json`, analyzer and
+  build results. Checks ran on the clean production tree; gate changes are
+  documentation and restored size-baseline provenance comments only.
+- **Suite parity.** Nice-19 serialized full suite with `--no-pub` and
+  `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`: 13,392 success / 13 failure /
+  28 load error / 20 skip. `suite_evidence.py compare --against
+  p8/k2/baseline.jsonl` and strict identity comparison PASS: zero changed,
+  added or missing identities; SDK equal, tested tree stable. The failures
+  and load errors are the original baseline set. No flake or test fix.
+- **Static/mechanical checks.** Format 124 files, zero changes; size and
+  architecture plus their real negative fixtures PASS. Full CI analyzer
+  scope: 494 diagnostics, shared allowlist's 54 pre-existing warnings,
+  nothing new; its 99 video-player diagnostics exactly match the scoped
+  declaration comparator (zero additions, negative self-tests PASS).
+  All 38 move/seam jobs PASS: 26 existing Dart-manifest self-tests, P8
+  exhaustive self-test and current comparison, Kotlin self-test, P1–P7 at
+  their named merges, S and S2/S2b proofs. Every manifest invocation uses
+  an isolated copied parser package with copied kernels deleted.
+- **Builds/checklist.** `flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`, nice-19, both PASS; artifacts
+  hashed in `completion.json`. Android Home/auto-enter/actions/restored
+  controls, iOS native PiP start/stop/player restore, real recording stop
+  on background and native wake/decoder power behavior remain device-pending.
+  M1 is after this phase merges and was not executed at this checkpoint.
+- **Deviations/stop.** Supplemental global-allowlist attempts using a scoped
+  log and an unexpanded CI wildcard were invalid inputs, archived uncredited;
+  corrected complete CI scope passes. The shrink-only size updater dropped
+  dated comments, restored here with the P8 ratchet note. No application
+  fix, allowance, pubspec change, live application request, run/install/device,
+  push/merge/branch switch. Stop for Phase-8 independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

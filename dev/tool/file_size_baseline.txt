@@ -1,5 +1,16 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
+# 2026-10-11 vplayer P1 (a): formatter-only growth, 18 AST-optional commas; exit: phase-25 facade measurement.
+# 2026-10-11 vplayer S: frozen H1 test-hook scaffolding; legacy responsibilities retained until phases 1–25.
+# 2026-10-11 vplayer P1 Step 1: 16 frozen moves; facade ratchet lowered 18251 -> 18018; exit: remaining phases 2–25.
+# 2026-10-11 vplayer P2 Step 1: 12 frozen sleep-timer moves; facade ratchet lowered 18018 -> 17932; exit: remaining phases 3–25.
+# 2026-10-12 vplayer P3 Step 1: 17 frozen skip moves; facade ratchet lowered 17932 -> 17766; exit: remaining phases 4–25.
+# 2026-10-12 vplayer P4 Step 1: 16 frozen display moves; facade ratchet lowered 17766 -> 17592; exit: remaining phases 5–25.
+# 2026-10-12 vplayer P5 Step 1: 12 frozen Trakt moves; facade ratchet lowered 17592 -> 17394; exit: remaining declared video-player phases (D6).
+# 2026-10-12 vplayer P6 Step 1: 24 frozen Simkl/MDBList moves; facade ratchet lowered 17394 -> 17087; exit: remaining declared video-player phases (D6).
+# 2026-10-13 vplayer P7 Step 1: 14 frozen local-completion moves; facade ratchet lowered 17087 -> 16974; exit: remaining declared video-player phases (D6).
+# 2026-10-13 vplayer S2: frozen platform hook and receiver-wrap formatting; +30 lines; exit: remaining declared phases; seam retirement after migration verification.
+# 2026-10-13 vplayer P8 Step 1: 14 frozen PiP/lifecycle moves; facade ratchet lowered 17004 -> 16829; exit: remaining declared video-player phases (D6).
 16829 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
