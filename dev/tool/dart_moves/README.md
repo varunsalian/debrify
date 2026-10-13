@@ -233,3 +233,20 @@ register the new behavior files and both destinations in every theme list,
 retarget the Simkl/MDBList source-reader prefix assertions with independent
 adapter witnesses, and lower the facade size ratchet. T/0 do not enable CI
 against this draft.
+
+Phase 9 Step T freezes `vplayer_p9.json` as **draft**, base `bd671bd09`.
+`draft_vplayer_subtitle_sync_moves.py --parser-package <isolated>
+--probe <git-common-dir>/refactor-evidence/vplayer/p9/<directory>` materializes
+the complete split in evidence only: 21 declarations, 33 retained occurrences,
+18 earlier destinations and the eager constructor assignment after PiP.
+One combined bridge owns the five inert auto-sync fields and sixteen methods;
+settings, external path, overlay flag and notifier remain State-owned through
+the exact live Host. Both teardown protocols keep their individual statement
+positions. The real configuration negatives cover captured/live reads, setter
+targets, constructor inertness, notifier ownership and each teardown.
+
+**P9 production creation commit only:** select P9 current/self-test and both
+analyzer inputs, add P8 `--at 0df6ccd4e`, retain P1–P7 named history and S/S2/S2b
+proofs, register the behavior files and new destination in every theme list,
+and lower the facade size ratchet. T/0 do not enable the draft against the
+original application.

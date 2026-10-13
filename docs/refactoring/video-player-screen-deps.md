@@ -5932,3 +5932,29 @@ Final full suite vs Phase-8 gate is additions-only: 13,393 success / 13 failure 
 old identity. Analyzer, format, size/architecture, all 38 mechanical jobs and
 both release builds PASS; `m1/gate/completion.json`. Native PiP presentation,
 recording and wake/decoder power checks remain device-pending. M1 complete.
+
+## Phase 9 Step T — subtitle engine I (2026-10-13)
+
+Original `bd671bd09` (M1), design parent `6e9b187c8`; draft
+`dev/tool/dart_moves/vplayer_p9.json`. Evidence `p9/stepT/completion.json`
+contains commands, results and initializer proofs; `probe/remeasured.json`
+and `retained-ledger.json` re-measure the frozen names, not historical lines.
+807 exhaustive spans, 21 moves (five inert fields, sixteen methods), 33 retained
+occurrences, one combined bridge, exact 14-declaration Host/adapter and all
+18 earlier destinations compare with zero differences. Settings, external path,
+overlay flag and notifier stay State-owned. Each renderer/facade disposal
+statement remains in position; the latter does not call the hide helper after
+notifier disposal. Constructor appends after PiP, without a Host read.
+
+Every existing Dart-manifest self-test, the complete P9 real/global self-test,
+807-span original self-compare, Kotlin's 597 tests, named P1–P8 historical
+checks and S/S2/S2b proofs PASS (38 jobs). All parser packages isolated with
+copied kernels deleted. One initial fixture needle omitted a scanner-rendered
+space in `mk . Player`; corrected only the fixture, complete P9 rerun PASS.
+Analyzer root/strict/probe 99/171/104; earlier mappings preserved, no new
+async-context identity. Three unused facade imports induced by the planned
+move and two new directive infos are recorded in the probe inventory. No
+allowlist change yet. Formatting preserves identities exactly (104), adds
+zero diagnostics, records every AST optional-comma site and is idempotent.
+Application, dependencies, size ratchet and CI current selection unchanged;
+production application of this draft belongs to Step 1, after characterization.

@@ -3315,6 +3315,33 @@ checkpoint. Step T/0 proceed without production moves.
   behavior remain device-pending. No app bug fix, allowance, pubspec change,
   live application request, run/install/device, push/merge/branch switch. Stop.
 
+### 2026-10-13 — Phase 9 Step T (subtitle engine I)
+
+- **Input/checkpoint.** Base `bd671bd09`, design parent `6e9b187c8`;
+  evidence `p9/stepT/completion.json`. Application and pubspec unchanged.
+  The evidence-only split classifies all 807 original spans, moves exactly
+  21 declarations into one combined bridge, qualifies all 33 retained
+  occurrences and protects all 18 earlier destinations. Constructor appends
+  the inert collaborator after PiP; five false/null initializers and the exact
+  live Host/adapter are frozen. Both teardown protocols remain in place.
+- **Commands/results.** Nice-19 `draft_vplayer_subtitle_sync_moves.py
+  --parser-package <isolated> --probe <p9/stepT/probe>` compares with zero
+  differences. All 38 mechanical jobs PASS: every existing Dart-manifest
+  self-test, complete P9 self-test/all-retained self-compare, Kotlin's 597
+  self-tests, P1–P8 at their named merges and S/S2/S2b proofs. Copied parser
+  kernels deleted; isolated packages and commands recorded.
+- **Analyzer/format.** Original root/strict/probe 99/171/104 diagnostics;
+  earlier identities preserved, no new async-context identity. The probe
+  records three mechanically unused facade imports and two destination
+  directive infos; no allowance or production import edit in T. Formatted
+  probe also 104, identical identities: zero formatting additions. AST comma
+  sites and idempotence archived. Real negatives cover setter targets, live
+  reads/snapshots, notifier ownership, constructor inertness and teardown.
+- **Deviation/next.** The first P9 self-test stopped on a materialized scaffold
+  spacing mismatch in a fixture needle; corrected matching, complete self-test
+  rerun PASS. No comparator relaxation. CI remains on applied P8 until the
+  P9 production creation commit. Step 0 characterizes the original next.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
