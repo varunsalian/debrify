@@ -431,6 +431,11 @@ test/features/premiumize_files/presentation/legacy_premiumize/premiumize_review_
 # negative offsets and exact rejection diagnostics; requires DEBRIFY_VP_TEST_HOOKS.
 test/features/video_player/video_player_seam_guard_test.dart
 test/features/video_player/video_player_platform_seam_guard_test.dart
+test/features/video_player/video_player_pip_android_test.dart
+test/features/video_player/video_player_pip_ios_test.dart
+test/features/video_player/video_player_pip_lifecycle_test.dart
+test/features/video_player/video_player_pip_races_test.dart
+test/features/video_player/video_player_wakelock_test.dart
 test/features/video_player/video_player_catchup_caller_test.dart
 test/features/video_player/video_player_catchup_gate_test.dart
 test/features/video_player/video_player_identity_test.dart
@@ -507,3 +512,8 @@ test/features/video_player/video_player_completion_profiles_test.dart
 test/features/video_player/video_player_completion_resets_test.dart
 test/features/video_player/video_player_completion_resume_test.dart
 test/features/video_player/video_player_completion_source_window_test.dart
+test/features/video_player/video_player_pip_boundaries_test.dart
+test/features/video_player/video_player_pip_handoffs_test.dart
+test/features/video_player/video_player_pip_projection_test.dart
+test/features/video_player/video_player_pip_retained_test.dart
+test/features/video_player/video_player_pip_recovery_test.dart

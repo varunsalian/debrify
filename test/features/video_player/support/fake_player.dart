@@ -23,6 +23,8 @@ class FakePlayer implements mk.Player {
   final calls = <(String, Object?)>[];
   final delays = <String, Completer<void>>{};
   final failures = <String, Object>{};
+  FutureOr<void> Function(String name, Object? value)? beforeOperation;
+  bool Function(String name, Object? value)? heldOperation;
   final events = <String, StreamController<dynamic>>{};
   final disposed = Completer<void>();
   bool readyDelivered = false;
@@ -81,10 +83,13 @@ class FakePlayer implements mk.Player {
   Future<void> operation(String name, [Object? value]) async {
     final activity = actions?.begin(
       'player:$name',
-      held: delays[name] != null && !delays[name]!.isCompleted,
+      held:
+          (heldOperation?.call(name, value) ?? false) ||
+          (delays[name] != null && !delays[name]!.isCompleted),
     );
     try {
       calls.add((name, value));
+      if (beforeOperation != null) await beforeOperation!(name, value);
       await delays[name]?.future;
       if (failures.containsKey(name)) throw failures.remove(name)!;
     } finally {
@@ -262,14 +267,19 @@ class FakeNativePlayer extends FakePlatformPlayer implements mk.NativePlayer {
   final calls = <(String, Object?)>[];
   final delays = <String, Completer<void>>{};
   final failures = <String, Object>{};
+  FutureOr<void> Function(String name, Object? value)? beforeOperation;
+  bool Function(String name, Object? value)? heldOperation;
 
   Future<void> operation(String name, Object? value) async {
     final activity = player.actions?.begin(
       'native:$name',
-      held: delays[name] != null && !delays[name]!.isCompleted,
+      held:
+          (heldOperation?.call(name, value) ?? false) ||
+          (delays[name] != null && !delays[name]!.isCompleted),
     );
     try {
       calls.add((name, value));
+      if (beforeOperation != null) await beforeOperation!(name, value);
       await delays[name]?.future;
       if (failures.containsKey(name)) throw failures.remove(name)!;
     } finally {

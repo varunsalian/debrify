@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
+import 'package:debrify/services/episode_tracker_snapshot_service.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -70,6 +71,18 @@ void main() {
           );
           await d.waitCheckpoint('mdblist', 1);
           final b = await traktBrowser(t, f);
+          if (retire == 'profile') {
+            final id = b.imdbId ?? b.seriesPlaylist.imdbId;
+            expect(id, isNotNull);
+            await f.finish(
+              t,
+              Future.wait([
+                EpisodeTrackerSnapshotService.refreshTrakt(id!),
+                EpisodeTrackerSnapshotService.refreshSimkl(id),
+                EpisodeTrackerSnapshotService.refreshMdblistHistory(id),
+              ]),
+            );
+          }
           f.network.handler = (r) {
             if (r.url.host == 'api.mdblist.com' &&
                 r.url.path == '/scrobble/pause' &&

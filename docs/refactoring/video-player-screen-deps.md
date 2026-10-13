@@ -5308,3 +5308,372 @@ existing guide/profile race in the MDBList pending-checkpoint case: scoped
 Trakt guide refresh raises `Profile session changed before async completion`.
 No allowance; run excluded while original replays/fixture-only closure are
 investigated in Step 0. Details under `p8/step0/`.
+
+## Phase 8 Step 0 — original PiP, background and wakelock (2026-10-13)
+
+Behavior ORIGINAL is independently reviewed S2 `21b19c944` (`vp-rev8s2`: no P1/P2/P3). Step T is `fcdfa03eb`; no production move. Ten behavior files / 90 cases use the real screen, its retained callbacks, lifecycle listener, real iOS route/session and synthetic channel/player/storage transports. No private State calls or source-text coverage credit.
+
+All 327 statement/branch/literal/invocation/await AST sites in the 14 moves are inventoried in `p8/step0/ast-site-matrix.json`. Canonical overlap and guard/return grouping are explicit, with capture/transport explanations. The frozen 22 retained occurrences each have an independent point. The final inventory is **167 canonical points: 145 assertion kills, 12 source-proven equivalences with passing replays, 10 device-pending points**. Four additional contract/fixture witnesses also assertion-fail on original application files. Compilation errors and error-only failures are excluded; every one of the 90 new cases has an original assertion witness. Full commands, patches, complete JSONL logs, assertions and input hashes are under `p8/step0/`.
+
+Ordinary mounts join the original six-second autosave registration before disposal; early-window assertions execute before that registration and only cleanup joins it. The fixture observes timers, never cancels application timers. It drains the playback/independent-owner queue before restoring both wakelock plugin interface references. The real Video widget has its own lifecycle and wakelock behavior: two pauses at normal background (State + Video), one Video pause when iOS State PiP suppresses its own pause; direct Video toggle writes are pinned alongside queued display-control writes.
+
+### Coverage matrix — moved declarations
+
+| Original declaration | Original caller / observable proof | Points: killed / equivalent / pending |
+| --- | --- | --- |
+| `_backgroundedAt` | Normal mobile pause stamps real wall time; a 31-second live absence retunes instead of playing. First renderer-replacement timestamp window remains pending. | 0 / 0 / 1 |
+| `_iosPipStarting` | Early ready while audio setup is held; duplicate entry, background suppression, exact open/native/Flutter subtitle visibility; failure resets it. | 1 / 0 / 0 |
+| `_iosPipDetached` | Parking, restored fullscreen owner loss, detached-owner close and replacement wake exemptions. | 1 / 0 / 0 |
+| `_iosPipSession` | Inherited live assignment, null session, park/restore/dismiss, parked episode result and scoped State disposal while route remains mounted. | 0 / 1 / 0 |
+| `_lastIosPipPositionSecond` | Initial second zero plus repeated/successive millisecond position ticks; exact iOS position/duration payload. | 1 / 0 / 0 |
+| `_enterPip` | Public entry, lost owner, transition/starting/active guards; handle/subtitle/entry held across disposal, profile and real route replacement; errors and exact retry diagnostic/toast. | 22 / 2 / 3 |
+| `_armPipAutoEnter` | Native readiness and late support, Android aspect/zero fallback payload; iOS no-op and lost-owner arming count. | 8 / 0 / 0 |
+| `_pushPipState` | Playing and position streams, mode/entry, exact Android/iOS payloads and owner gate. | 9 / 0 / 0 |
+| `_onPipModeChanged` | Collapse/auto-hide cancellation; native subtitle writes; real route park, edge-to-edge/all orientation order, dismissal and lifetime. | 12 / 1 / 0 |
+| `_restoreIosPipPlayer` | Real landscape/portrait restore; held orientation across dispose/owner/profile/replacement; final frame ownership check and rejected orientation propagation. | 11 / 3 / 0 |
+| `_onPipAction` | Every command/invalid input; redundant play/pause checked after each step; exact relative seek rounding/clamps; three-tracker payloads and timer cancellation order; early no-player callback. | 26 / 5 / 0 |
+| `_pauseForBackground` | Valid transitions, no background resume write, user-pause physical A/B contents, pending/rejected pause, held playlist/Start Over, early next-key transition, recovery cancellation/pill clear; native recording/renderer paths pending. | 16 / 0 / 3 |
+| `_resumeFromBackground` | Latch cleared before playing callback; user pause, late pause winner, sleep stop, real-clock live rejoin with exact diagnostic. | 10 / 0 / 3 |
+| `_syncWakelock` | Initial acquisition; playing/buffering, pause/disposal, EOF with/without playing-false, held/rejected queue, independent owners and both replacement exemptions. | 1 / 0 / 0 |
+
+### Frozen retained ledger — all 22 occurrences
+
+| Occurrence point | Declaration / effect | Witness result |
+| --- | --- | --- |
+| `retained-session` | `_VideoPlayerScreenState.didChangeDependencies` at S2 line 1019 | killed: `retained-session` |
+| `retained-pause` | `_VideoPlayerScreenState.initState` at S2 line 1545 | killed: `retained-pause` |
+| `retained-resume` | `_VideoPlayerScreenState.initState` at S2 line 1547 | killed: `retained-resume` |
+| `retained-mode` | `_VideoPlayerScreenState.initState` at S2 line 1587 | killed: `retained-mode` |
+| `retained-action` | `_VideoPlayerScreenState.initState` at S2 line 1588 | killed: `retained-action` |
+| `retained-restore` | `_VideoPlayerScreenState.initState` at S2 line 1589 | killed: `retained-restore` |
+| `retained-support-arm` | `_VideoPlayerScreenState.initState` at S2 line 1594 | killed: `retained-support-arm` |
+| `retained-ready-arm` | `_VideoPlayerScreenState._onPlayerInstanceReady` at S2 line 2229 | killed: `closure3-retained-ready-arm` |
+| `retained-second-read` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions` at S2 line 2868 | killed: `retained-second-read` |
+| `retained-second-write` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions` at S2 line 2869 | killed: `retained-second-write` |
+| `retained-position-push` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions` at S2 line 2870 | killed: `retained-position-push` |
+| `retained-playing-wake` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions` at S2 line 2946 | killed: `retained-playing-wake` |
+| `retained-playing-push` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions` at S2 line 2947 | killed: `final-retained-playing-push` |
+| `retained-open-starting` | `_VideoPlayerScreenState._openMedia` at S2 line 3922 | killed: `closure3-retained-open-starting` |
+| `retained-subtitle-starting` | `_VideoPlayerScreenState._setNativeSubtitleVisibilityForTrack` at S2 line 4064 | killed: `retained-subtitle-starting` |
+| `retained-result-park` | `_VideoPlayerScreenState._handleSeriesNextEpisode` at S2 line 5376 | killed: `retained-result-park` |
+| `retained-result-close` | `_VideoPlayerScreenState._handleSeriesNextEpisode` at S2 line 5377 | killed: `retained-result-close` |
+| `retained-dispose-detached` | `_VideoPlayerScreenState.dispose` at S2 line 10818 | killed: `retained-dispose-detached` |
+| `retained-dispose-replaced` | `_VideoPlayerScreenState.dispose` at S2 line 10817 | killed: `retained-dispose-replaced` |
+| `retained-dispose-close` | `_VideoPlayerScreenState.dispose` at S2 line 10819 | killed: `closure3-retained-dispose-close` |
+| `retained-view-starting` | `_VideoPlayerScreenState._buildSubtitleViewConfig` at S2 line 12694 | killed: `closure3-retained-view-starting` |
+| `retained-controls` | `_VideoPlayerScreenState.build` at S2 line 14280 | killed: `retained-controls` |
+
+The retained onPause closure remains recording teardown first, then background pause; it never saves resume. Its order is frozen by the Step-T token comparison. Actual native mpv tee teardown cannot be reached on desktop: `DesktopRecordingService.isSupported` uses real `dart:io Platform` outside S2. It is explicitly device-pending, not counted as behavior-covered.
+
+### Mutation table — canonical points
+
+| Point | Original declaration / site | Mutation | Result / evidence run |
+| --- | --- | --- | --- |
+| `field-starting` | `_VideoPlayerScreenState._iosPipStarting`:10556 | `false` → `true` | killed; `field-starting` |
+| `field-detached` | `_VideoPlayerScreenState._iosPipDetached`:10557 | `false` → `true` | killed; `field-detached` |
+| `field-second` | `_VideoPlayerScreenState._lastIosPipPositionSecond`:10559 | `-1` → `0` | killed; `field-second` |
+| `field-session` | `_VideoPlayerScreenState._iosPipSession`:10558 | `PlayerPipSession? _iosPipSession;` → `PlayerPipSession? _iosPipSession = PlayerPipSession((_) => const SizedBox());` | equivalent; `field-session` |
+| `field-time` | `_VideoPlayerScreenState._backgroundedAt`:675 | `DateTime? _backgroundedAt;` → `DateTime? _backgroundedAt = DateTime(2000);` | device_pending; `device checklist` |
+| `enterPip-owner` | `_VideoPlayerScreenState._enterPip`:10563 | `!PipService.isOwner(this) \|\|` → `false \|\|` | killed; `closure3-enterPip-owner` |
+| `enterPip-created` | `_VideoPlayerScreenState._enterPip`:10564 | `!_playerCreated \|\|` → `false \|\|` | device_pending; `device checklist` |
+| `enterPip-transition` | `_VideoPlayerScreenState._enterPip`:10565 | `_isTransitioning \|\|` → `false \|\|` | killed; `enterPip-transition` |
+| `enterPip-starting` | `_VideoPlayerScreenState._enterPip`:10566 | `_iosPipStarting \|\|` → `false \|\|` | killed; `enterPip-starting` |
+| `enterPip-active` | `_VideoPlayerScreenState._enterPip`:10567 | `_isPipActive)` → `false)` | killed; `enterPip-active` |
+| `enterPip-start` | `_VideoPlayerScreenState._enterPip`:10570 | `setState(() => _iosPipStarting = true)` → `setState(() => _iosPipStarting = false)` | killed; `enterPip-start` |
+| `enterPip-handle` | `_VideoPlayerScreenState._enterPip`:10573 | `await player.handle` → `0` | killed; `case-enterPip-handle` |
+| `enterPip-post-mounted` | `_VideoPlayerScreenState._enterPip`:10574 | `!mounted \|\| !PipService.isOwner(this) \|\| !identical(player, _player)` → `!PipService.isOwner(this) \|\| !identical(player, _player)` | equivalent; `enterPip-post-mounted` |
+| `enterPip-post-owner` | `_VideoPlayerScreenState._enterPip`:10574 | `!mounted \|\| !PipService.isOwner(this) \|\| !identical(player, _player)` → `!mounted \|\| !identical(player, _player)` | killed; `enterPip-post-owner` |
+| `enterPip-post-player` | `_VideoPlayerScreenState._enterPip`:10574 | `!mounted \|\| !PipService.isOwner(this) \|\| !identical(player, _player)` → `!mounted \|\| !PipService.isOwner(this)` | device_pending; `device checklist` |
+| `enterPip-subtitle` | `_VideoPlayerScreenState._enterPip`:10577 | `await _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle);` → `<removed>` | killed; `case-enterPip-subtitle` |
+| `enterPip-push` | `_VideoPlayerScreenState._enterPip`:10579 | `_pushPipState();` → `<removed>` | killed; `enterPip-push` |
+| `enterPip-width` | `_VideoPlayerScreenState._enterPip`:10581 | `aspectWidth: player.state.width` → `aspectWidth: player.state.height` | killed; `enterPip-width` |
+| `enterPip-height` | `_VideoPlayerScreenState._enterPip`:10582 | `aspectHeight: player.state.height` → `aspectHeight: player.state.width` | killed; `enterPip-height` |
+| `enterPip-native-handle` | `_VideoPlayerScreenState._enterPip`:10583 | `playerHandle: handle` → `playerHandle: null` | killed; `enterPip-native-handle` |
+| `enterPip-diagnostic` | `_VideoPlayerScreenState._enterPip`:10586 | `debugPrint('PiP entry failed: $error');` → `<removed>` | killed; `enterPip-diagnostic` |
+| `enterPip-finally-mounted` | `_VideoPlayerScreenState._enterPip`:10588 | `mounted && PipService.isOwner(this) && identical(player, _player)` → `PipService.isOwner(this) && identical(player, _player)` | equivalent; `enterPip-finally-mounted` |
+| `enterPip-finally-owner` | `_VideoPlayerScreenState._enterPip`:10588 | `mounted && PipService.isOwner(this) && identical(player, _player)` → `mounted && identical(player, _player)` | killed; `enterPip-finally-owner` |
+| `enterPip-finally-player` | `_VideoPlayerScreenState._enterPip`:10588 | `mounted && PipService.isOwner(this) && identical(player, _player)` → `mounted && PipService.isOwner(this)` | device_pending; `device checklist` |
+| `enterPip-clear` | `_VideoPlayerScreenState._enterPip`:10590 | `setState(() => _iosPipStarting = false);` → `<removed>` | killed; `enterPip-clear` |
+| `enterPip-failure` | `_VideoPlayerScreenState._enterPip`:10595 | `if (!entered)` → `if (entered)` | killed; `case-enterPip-failure` |
+| `enterPip-toast` | `_VideoPlayerScreenState._enterPip`:10603 | `Picture in Picture could not start. Please try again.` → `Changed retry` | killed; `enterPip-toast` |
+| `enterPip-paused` | `_VideoPlayerScreenState._enterPip`:10597 | `AppLifecycleState.paused` → `AppLifecycleState.resumed` | killed; `enterPip-paused` |
+| `enterPip-pause` | `_VideoPlayerScreenState._enterPip`:10598 | `_pauseForBackground();` → `<removed>` | killed; `enterPip-pause` |
+| `armPipAutoEnter-ios` | `_VideoPlayerScreenState._armPipAutoEnter`:10616 | `if (VpS2Hooks.isIOS) return;` → `<removed>` | killed; `armPipAutoEnter-ios` |
+| `armPipAutoEnter-owner` | `_VideoPlayerScreenState._armPipAutoEnter`:10617 | `if (!PipService.isOwner(this)) return;` → `<removed>` | killed; `closure3-armPipAutoEnter-owner` |
+| `armPipAutoEnter-width` | `_VideoPlayerScreenState._armPipAutoEnter`:10618 | `final w = _player.state.width ?? 0;` → `final w = _player.state.height ?? 0;` | killed; `armPipAutoEnter-width` |
+| `armPipAutoEnter-height` | `_VideoPlayerScreenState._armPipAutoEnter`:10619 | `final h = _player.state.height ?? 0;` → `final h = _player.state.width ?? 0;` | killed; `armPipAutoEnter-height` |
+| `armPipAutoEnter-width-zero` | `_VideoPlayerScreenState._armPipAutoEnter`:10618 | `width ?? 0` → `width ?? 5` | killed; `armPipAutoEnter-width-zero` |
+| `armPipAutoEnter-height-zero` | `_VideoPlayerScreenState._armPipAutoEnter`:10619 | `height ?? 0` → `height ?? 5` | killed; `armPipAutoEnter-height-zero` |
+| `armPipAutoEnter-enable` | `_VideoPlayerScreenState._armPipAutoEnter`:10620 | `setAutoEnter(true` → `setAutoEnter(false` | killed; `armPipAutoEnter-enable` |
+| `armPipAutoEnter-arm` | `_VideoPlayerScreenState._armPipAutoEnter`:10620 | `unawaited(PipService.setAutoEnter(true, aspectWidth: w, aspectHeight: h));` → `<removed>` | killed; `closure3-armPipAutoEnter-arm` |
+| `pushPipState-owner` | `_VideoPlayerScreenState._pushPipState`:10627 | `if (!PipService.isOwner(this)) return;` → `<removed>` | killed; `pushPipState-owner` |
+| `pushPipState-width-zero` | `_VideoPlayerScreenState._pushPipState`:10628 | `width ?? 0` → `width ?? 5` | killed; `pushPipState-width-zero` |
+| `pushPipState-height-zero` | `_VideoPlayerScreenState._pushPipState`:10629 | `height ?? 0` → `height ?? 5` | killed; `pushPipState-height-zero` |
+| `pushPipState-playing` | `_VideoPlayerScreenState._pushPipState`:10632 | `isPlaying: _isPlaying` → `isPlaying: !_isPlaying` | killed; `pushPipState-playing` |
+| `pushPipState-next` | `_VideoPlayerScreenState._pushPipState`:10633 | `hasNext: _hasAnyNext` → `hasNext: false` | killed; `pushPipState-next` |
+| `pushPipState-position` | `_VideoPlayerScreenState._pushPipState`:10634 | `positionMs: _player.state.position.inMilliseconds` → `positionMs: 0` | killed; `pushPipState-position` |
+| `pushPipState-duration` | `_VideoPlayerScreenState._pushPipState`:10635 | `durationMs: _player.state.duration.inMilliseconds` → `durationMs: 0` | killed; `pushPipState-duration` |
+| `pushPipState-width` | `_VideoPlayerScreenState._pushPipState`:10636 | `aspectWidth: w` → `aspectWidth: h` | killed; `pushPipState-width` |
+| `pushPipState-height` | `_VideoPlayerScreenState._pushPipState`:10637 | `aspectHeight: h` → `aspectHeight: w` | killed; `pushPipState-height` |
+| `onPipModeChanged-mounted` | `_VideoPlayerScreenState._onPipModeChanged`:10645 | `if (!mounted) return;` → `<removed>` | equivalent; `onPipModeChanged-mounted` |
+| `onPipModeChanged-cancel` | `_VideoPlayerScreenState._onPipModeChanged`:10647 | `_hideTimer?.cancel();` → `<removed>` | killed; `onPipModeChanged-cancel` |
+| `onPipModeChanged-hide` | `_VideoPlayerScreenState._onPipModeChanged`:10648 | `_controlsVisible.value = false;` → `_controlsVisible.value = true;` | killed; `onPipModeChanged-hide` |
+| `onPipModeChanged-push` | `_VideoPlayerScreenState._onPipModeChanged`:10649 | `_pushPipState();` → `<removed>` | killed; `onPipModeChanged-push` |
+| `onPipModeChanged-active` | `_VideoPlayerScreenState._onPipModeChanged`:10651 | `setState(() => _isPipActive = inPip);` → `setState(() => _isPipActive = false);` | killed; `onPipModeChanged-active` |
+| `onPipModeChanged-ios` | `_VideoPlayerScreenState._onPipModeChanged`:10652 | `VpS2Hooks.isIOS && _playerCreated` → `false` | killed; `onPipModeChanged-ios` |
+| `onPipModeChanged-park` | `_VideoPlayerScreenState._onPipModeChanged`:10653 | `_iosPipSession?.park() ?? false` → `false` | killed; `case-onPipModeChanged-park` |
+| `onPipModeChanged-detached` | `_VideoPlayerScreenState._onPipModeChanged`:10654 | `_iosPipDetached = true;` → `<removed>` | killed; `onPipModeChanged-detached` |
+| `onPipModeChanged-ui` | `_VideoPlayerScreenState._onPipModeChanged`:10655 | `SystemUiMode.edgeToEdge` → `SystemUiMode.immersiveSticky` | killed; `onPipModeChanged-ui` |
+| `onPipModeChanged-orientations` | `_VideoPlayerScreenState._onPipModeChanged`:10657 | `DeviceOrientation.values` → `const [DeviceOrientation.portraitUp]` | killed; `onPipModeChanged-orientations` |
+| `onPipModeChanged-close` | `_VideoPlayerScreenState._onPipModeChanged`:10662 | `_iosPipSession?.close();` → `<removed>` | killed; `onPipModeChanged-close` |
+| `onPipModeChanged-close-branch` | `_VideoPlayerScreenState._onPipModeChanged`:10659 | `!inPip && (_iosPipSession?.isParked ?? false)` → `false` | killed; `onPipModeChanged-close-branch` |
+| `onPipModeChanged-subtitle` | `_VideoPlayerScreenState._onPipModeChanged`:10666 | `_setNativeSubtitleVisibilityForTrack(_player.state.track.subtitle)` → `Future<void>.value()` | killed; `onPipModeChanged-subtitle` |
+| `restoreIosPipPlayer-mounted` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10672 | `!mounted \|\| !PipService.isOwner(this)` → `!PipService.isOwner(this)` | equivalent; `restoreIosPipPlayer-mounted` |
+| `restoreIosPipPlayer-owner` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10672 | `!mounted \|\| !PipService.isOwner(this)` → `!mounted` | equivalent; `restoreIosPipPlayer-owner` |
+| `restoreIosPipPlayer-session` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10674 | `if (session == null) return false;` → `if (session == null) return true;` | killed; `restoreIosPipPlayer-session` |
+| `restoreIosPipPlayer-restore` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10675 | `session.isParked && !session.restore()` → `session.isParked` | killed; `restoreIosPipPlayer-restore` |
+| `restoreIosPipPlayer-detached` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10676 | `_iosPipDetached = false;` → `<removed>` | killed; `closure3-restoreIosPipPlayer-detached` |
+| `restoreIosPipPlayer-orientation` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10678 | `_display.landscapeLocked` → `!_display.landscapeLocked` | killed; `case-restoreIosPipPlayer-orientation` |
+| `restoreIosPipPlayer-left` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10680 | `DeviceOrientation.landscapeLeft` → `DeviceOrientation.portraitDown` | killed; `restoreIosPipPlayer-left` |
+| `restoreIosPipPlayer-right` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10681 | `DeviceOrientation.landscapeRight` → `DeviceOrientation.portraitDown` | killed; `restoreIosPipPlayer-right` |
+| `restoreIosPipPlayer-portrait` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10683 | `DeviceOrientation.portraitUp` → `DeviceOrientation.portraitDown` | killed; `restoreIosPipPlayer-portrait` |
+| `restoreIosPipPlayer-ui` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10685 | `SystemUiMode.immersiveSticky` → `SystemUiMode.edgeToEdge` | killed; `restoreIosPipPlayer-ui` |
+| `restoreIosPipPlayer-frame` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10686 | `await WidgetsBinding.instance.endOfFrame;` → `<removed>` | killed; `restoreIosPipPlayer-frame` |
+| `restoreIosPipPlayer-return-mounted` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10687 | `return mounted && PipService.isOwner(this);` → `return PipService.isOwner(this);` | equivalent; `restoreIosPipPlayer-return-mounted` |
+| `restoreIosPipPlayer-return-owner` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10687 | `return mounted && PipService.isOwner(this);` → `return mounted;` | killed; `restoreIosPipPlayer-return-owner` |
+| `onPipAction-mounted` | `_VideoPlayerScreenState._onPipAction`:10692 | `!mounted \|\| !_playerCreated` → `!_playerCreated` | equivalent; `onPipAction-mounted` |
+| `onPipAction-created` | `_VideoPlayerScreenState._onPipAction`:10692 | `!mounted \|\| !_playerCreated` → `!mounted` | killed; `closure3-onPipAction-created` |
+| `onPipAction-prefix` | `_VideoPlayerScreenState._onPipAction`:10693 | `startsWith('seek:')` → `startsWith('seek')` | killed; `closure3-onPipAction-prefix` |
+| `onPipAction-parse` | `_VideoPlayerScreenState._onPipAction`:10694 | `substring(5)` → `substring(4)` | killed; `closure3-onPipAction-parse` |
+| `onPipAction-finite` | `_VideoPlayerScreenState._onPipAction`:10695 | `seconds == null \|\| !seconds.isFinite \|\| _isTransitioning` → `seconds == null \|\| _isTransitioning` | killed; `closure3-onPipAction-finite` |
+| `onPipAction-transition` | `_VideoPlayerScreenState._onPipAction`:10695 | `seconds == null \|\| !seconds.isFinite \|\| _isTransitioning` → `seconds == null \|\| !seconds.isFinite` | killed; `onPipAction-transition` |
+| `onPipAction-sum` | `_VideoPlayerScreenState._onPipAction`:10697 | `_player.state.position.inMilliseconds +` → `<removed>` | killed; `onPipAction-sum` |
+| `onPipAction-scale` | `_VideoPlayerScreenState._onPipAction`:10697 | `seconds * 1000` → `seconds * 100` | killed; `onPipAction-scale` |
+| `onPipAction-round` | `_VideoPlayerScreenState._onPipAction`:10697 | `(seconds * 1000).round()` → `(seconds * 1000).truncate()` | killed; `onPipAction-round` |
+| `onPipAction-lower` | `_VideoPlayerScreenState._onPipAction`:10698 | `.clamp(0,` → `.clamp(1,` | killed; `onPipAction-lower` |
+| `onPipAction-upper` | `_VideoPlayerScreenState._onPipAction`:10698 | `_player.state.duration.inMilliseconds);` → `_player.state.duration.inMilliseconds + 1);` | killed; `onPipAction-upper` |
+| `onPipAction-seek` | `_VideoPlayerScreenState._onPipAction`:10700 | `unawaited(_player.seek(position));` → `<removed>` | killed; `onPipAction-seek` |
+| `onPipAction-trakt` | `_VideoPlayerScreenState._onPipAction`:10701 | `_trakt.traktScrobbleSeek(position);` → `<removed>` | killed; `onPipAction-trakt` |
+| `onPipAction-simkl` | `_VideoPlayerScreenState._onPipAction`:10702 | `_simkl.simklScrobbleSeek(position);` → `<removed>` | killed; `onPipAction-simkl` |
+| `onPipAction-mdblist` | `_VideoPlayerScreenState._onPipAction`:10703 | `_mdblist.mdblistScrobbleSeek(position);` → `<removed>` | killed; `onPipAction-mdblist` |
+| `onPipAction-order` | `_VideoPlayerScreenState._onPipAction`:10701 | `_trakt.traktScrobbleSeek(position);       _simkl.simklScrobbleSeek(position);` → `_simkl.simklScrobbleSeek(position);       _trakt.traktScrobbleSeek(position);` | killed; `onPipAction-order` |
+| `onPipAction-play` | `_VideoPlayerScreenState._onPipAction`:10707 | `case 'play':` → `case 'changed-play':` | killed; `onPipAction-play` |
+| `onPipAction-play-gate` | `_VideoPlayerScreenState._onPipAction`:10708 | `if (!_isPlaying) _togglePlay();` → `_togglePlay();` | killed; `closure3-onPipAction-play-gate` |
+| `onPipAction-pause` | `_VideoPlayerScreenState._onPipAction`:10710 | `case 'pause':` → `case 'changed-pause':` | killed; `onPipAction-pause` |
+| `onPipAction-pause-gate` | `_VideoPlayerScreenState._onPipAction`:10711 | `if (_isPlaying) _togglePlay();` → `_togglePlay();` | killed; `closure3-onPipAction-pause-gate` |
+| `onPipAction-toggle` | `_VideoPlayerScreenState._onPipAction`:10713 | `case 'playpause':         _togglePlay();` → `case 'playpause':         break;` | killed; `onPipAction-toggle` |
+| `onPipAction-next` | `_VideoPlayerScreenState._onPipAction`:10717 | `if (_hasAnyNext) _goToNextEpisode();` → `<removed>` | killed; `closure3-onPipAction-next` |
+| `pauseForBackground-mobile` | `_VideoPlayerScreenState._pauseForBackground`:10728 | `if (!VpS2Hooks.isAndroid && !VpS2Hooks.isIOS) return;` → `<removed>` | killed; `pauseForBackground-mobile` |
+| `pauseForBackground-pip` | `_VideoPlayerScreenState._pauseForBackground`:10729 | `(_isPipActive \|\| _iosPipStarting)` → `false` | killed; `pauseForBackground-pip` |
+| `pauseForBackground-cancel` | `_VideoPlayerScreenState._pauseForBackground`:10732 | `_cancelPendingIptvCatchup(hideFeedback: false);` → `<removed>` | killed; `pauseForBackground-cancel` |
+| `pauseForBackground-feedback` | `_VideoPlayerScreenState._pauseForBackground`:10732 | `hideFeedback: false` → `hideFeedback: true` | killed; `pauseForBackground-feedback` |
+| `pauseForBackground-renderer` | `_VideoPlayerScreenState._pauseForBackground`:10736 | `if (_rendererFallbackInProgress)` → `if (false)` | device_pending; `device checklist` |
+| `pauseForBackground-renderer-latch` | `_VideoPlayerScreenState._pauseForBackground`:10737 | `_pausedByLifecycle = true;` → `<removed>` | device_pending; `device checklist` |
+| `pauseForBackground-renderer-pause` | `_VideoPlayerScreenState._pauseForBackground`:10738 | `if (_playerCreated) unawaited(_player.pause());` → `<removed>` | device_pending; `device checklist` |
+| `pauseForBackground-created` | `_VideoPlayerScreenState._pauseForBackground`:10750 | `!_playerCreated \|\|` → `false \|\|` | killed; `closure3-pauseForBackground-created` |
+| `pauseForBackground-playing` | `_VideoPlayerScreenState._pauseForBackground`:10751 | `!_isPlaying && !_isTransitioning && !openingStartOver` → `!_isTransitioning && !openingStartOver` | killed; `pauseForBackground-playing` |
+| `pauseForBackground-transition` | `_VideoPlayerScreenState._pauseForBackground`:10751 | `!_isPlaying && !_isTransitioning && !openingStartOver` → `!_isPlaying && !openingStartOver` | killed; `pauseForBackground-transition` |
+| `pauseForBackground-startover` | `_VideoPlayerScreenState._pauseForBackground`:10751 | `!_isPlaying && !_isTransitioning && !openingStartOver` → `!_isPlaying && !_isTransitioning` | killed; `pauseForBackground-startover` |
+| `pauseForBackground-time` | `_VideoPlayerScreenState._pauseForBackground`:10756 | `_backgroundedAt = DateTime.now();` → `<removed>` | killed; `pauseForBackground-time` |
+| `pauseForBackground-recovery` | `_VideoPlayerScreenState._pauseForBackground`:10757 | `_iptvLiveRecovery.cancel();` → `<removed>` | killed; `closure3-pauseForBackground-recovery` |
+| `pauseForBackground-reconnect` | `_VideoPlayerScreenState._pauseForBackground`:10758 | `_iptvReconnectText.value = null;` → `<removed>` | killed; `closure3-pauseForBackground-reconnect` |
+| `pause-primary-latch` | `_VideoPlayerScreenState._pauseForBackground`:10759 | `_pausedByLifecycle = true;` → `<removed>` | killed; `case-pause-primary-latch` |
+| `pause-primary-call` | `_VideoPlayerScreenState._pauseForBackground`:10760 | `unawaited(_player.pause());` → `<removed>` | killed; `pause-primary-call` |
+| `resumeFromBackground-latch` | `_VideoPlayerScreenState._resumeFromBackground`:10767 | `if (!_pausedByLifecycle) return;` → `<removed>` | killed; `resumeFromBackground-latch` |
+| `resumeFromBackground-clear` | `_VideoPlayerScreenState._resumeFromBackground`:10771 | `_pausedByLifecycle = false;` → `<removed>` | killed; `resumeFromBackground-clear` |
+| `resumeFromBackground-renderer` | `_VideoPlayerScreenState._resumeFromBackground`:10775 | `if (_rendererFallbackInProgress) return;` → `<removed>` | device_pending; `device checklist` |
+| `resumeFromBackground-created` | `_VideoPlayerScreenState._resumeFromBackground`:10776 | `if (!_playerCreated \|\| !mounted) return;` → `<removed>` | device_pending; `device checklist` |
+| `resumeFromBackground-sleep` | `_VideoPlayerScreenState._resumeFromBackground`:10780 | `if (_sleepStopLatched) return;` → `<removed>` | killed; `resumeFromBackground-sleep` |
+| `resumeFromBackground-time-clear` | `_VideoPlayerScreenState._resumeFromBackground`:10786 | `_backgroundedAt = null;` → `<removed>` | device_pending; `device checklist` |
+| `resumeFromBackground-live` | `_VideoPlayerScreenState._resumeFromBackground`:10787 | `_currentIptvChannel?.isLive == true` → `false` | killed; `resumeFromBackground-live` |
+| `resumeFromBackground-startover` | `_VideoPlayerScreenState._resumeFromBackground`:10788 | `!_iptvStartOverActive &&` → `false &&` | killed; `resumeFromBackground-startover` |
+| `resumeFromBackground-absent` | `_VideoPlayerScreenState._resumeFromBackground`:10789 | `backgroundedAt != null &&` → `backgroundedAt != null && false &&` | killed; `closure3-resumeFromBackground-absent` |
+| `resumeFromBackground-threshold` | `_VideoPlayerScreenState._resumeFromBackground`:10791 | `const Duration(seconds: 30)` → `const Duration(seconds: 300)` | killed; `resumeFromBackground-threshold` |
+| `resumeFromBackground-retry` | `_VideoPlayerScreenState._resumeFromBackground`:10792 | `_iptvLiveRecovery.userRetry('lifecycle-rejoin');` → `<removed>` | killed; `resumeFromBackground-retry` |
+| `resumeFromBackground-source` | `_VideoPlayerScreenState._resumeFromBackground`:10792 | `userRetry('lifecycle-rejoin')` → `userRetry('changed')` | killed; `closure3-resumeFromBackground-source` |
+| `resumeFromBackground-play` | `_VideoPlayerScreenState._resumeFromBackground`:10795 | `unawaited(_player.play());` → `<removed>` | killed; `resumeFromBackground-play` |
+| `sync-wake` | `_VideoPlayerScreenState._syncWakelock`:10806 | `setWakelock(playing)` → `setWakelock(!playing)` | killed; `sync-wake` |
+| `retained-session` | `_VideoPlayerScreenState.didChangeDependencies`:1019 | `_iosPipSession = PlayerPipSession.of(context);` → `_iosPipSession = null;` | killed; `retained-session` |
+| `retained-pause` | `_VideoPlayerScreenState.initState`:1545 | `_pauseForBackground();` → `<removed>` | killed; `retained-pause` |
+| `retained-resume` | `_VideoPlayerScreenState.initState`:1547 | `onResume: _resumeFromBackground` → `onResume: () {}` | killed; `retained-resume` |
+| `retained-mode` | `_VideoPlayerScreenState.initState`:1587 | `onMode: _onPipModeChanged` → `onMode: (_) {}` | killed; `retained-mode` |
+| `retained-action` | `_VideoPlayerScreenState.initState`:1588 | `onAction: _onPipAction` → `onAction: (_) {}` | killed; `retained-action` |
+| `retained-restore` | `_VideoPlayerScreenState.initState`:1589 | `onRestore: _restoreIosPipPlayer` → `onRestore: () async => false` | killed; `retained-restore` |
+| `retained-support-arm` | `_VideoPlayerScreenState.initState`:1594 | `if (_isReady) _armPipAutoEnter();` → `<removed>` | killed; `retained-support-arm` |
+| `retained-ready-arm` | `_VideoPlayerScreenState._onPlayerInstanceReady`:2229 | `_armPipAutoEnter();` → `<removed>` | killed; `closure3-retained-ready-arm` |
+| `retained-second-read` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions`:2868 | `d.inSeconds != _lastIosPipPositionSecond` → `d.inSeconds == _lastIosPipPositionSecond` | killed; `retained-second-read` |
+| `retained-second-write` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions`:2869 | `_lastIosPipPositionSecond = d.inSeconds;` → `<removed>` | killed; `retained-second-write` |
+| `retained-position-push` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions`:2870 | `_pushPipState();` → `<removed>` | killed; `retained-position-push` |
+| `retained-playing-wake` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions`:2946 | `_syncWakelock(p);` → `<removed>` | killed; `retained-playing-wake` |
+| `retained-playing-push` | `_VideoPlayerScreenState._bindPlayerInstanceSubscriptions`:2947 | `_pushPipState();` → `<removed>` | killed; `final-retained-playing-push` |
+| `retained-open-starting` | `_VideoPlayerScreenState._openMedia`:3922 | `_isPipActive \|\| _iosPipStarting` → `_isPipActive` | killed; `closure3-retained-open-starting` |
+| `retained-subtitle-starting` | `_VideoPlayerScreenState._setNativeSubtitleVisibilityForTrack`:4064 | `_isPipActive \|\| _iosPipStarting` → `_isPipActive` | killed; `retained-subtitle-starting` |
+| `retained-result-park` | `_VideoPlayerScreenState._handleSeriesNextEpisode`:5376 | `_iosPipSession?.isParked ?? false` → `false` | killed; `retained-result-park` |
+| `retained-result-close` | `_VideoPlayerScreenState._handleSeriesNextEpisode`:5377 | `_iosPipSession!.close(result);` → `<removed>` | killed; `retained-result-close` |
+| `retained-dispose-detached` | `_VideoPlayerScreenState.dispose`:10818 | `_iosPipDetached && !PipService.isOwner(this)` → `false` | killed; `retained-dispose-detached` |
+| `retained-dispose-replaced` | `_VideoPlayerScreenState.dispose`:10817 | `_iosPipSession?.wasReplaced ?? false` → `false` | killed; `retained-dispose-replaced` |
+| `retained-dispose-close` | `_VideoPlayerScreenState.dispose`:10819 | `_iosPipSession?.close();` → `<removed>` | killed; `closure3-retained-dispose-close` |
+| `retained-view-starting` | `_VideoPlayerScreenState._buildSubtitleViewConfig`:12694 | `_isPipActive \|\| _iosPipStarting` → `_isPipActive` | killed; `closure3-retained-view-starting` |
+| `retained-controls` | `_VideoPlayerScreenState.build`:14280 | `? _enterPip` → `? () async {}` | killed; `retained-controls` |
+| `enterPip-entered-default` | `_VideoPlayerScreenState._enterPip`:10571 | `var entered = false;` → `var entered = true;` | killed; `enterPip-entered-default` |
+| `enterPip-finally-subtitle` | `_VideoPlayerScreenState._enterPip`:10592 | `_setNativeSubtitleVisibilityForTrack(player.state.track.subtitle)` → `Future<void>.value()` | killed; `enterPip-finally-subtitle` |
+| `onPipAction-position-unit` | `_VideoPlayerScreenState._onPipAction`:10699 | `Duration(milliseconds: target)` → `Duration(microseconds: target)` | killed; `onPipAction-position-unit` |
+| `onPipAction-next-label` | `_VideoPlayerScreenState._onPipAction`:10716 | `case 'next':` → `case 'changed-next':` | killed; `onPipAction-next-label` |
+| `onPipAction-play-break` | `_VideoPlayerScreenState._onPipAction`:10709 | `break;` → `<removed>` | equivalent; `onPipAction-play-break` |
+| `onPipAction-pause-break` | `_VideoPlayerScreenState._onPipAction`:10709 | `break;` → `<removed>` | equivalent; `onPipAction-pause-break` |
+| `onPipAction-toggle-break` | `_VideoPlayerScreenState._onPipAction`:10709 | `break;` → `<removed>` | equivalent; `onPipAction-toggle-break` |
+| `onPipAction-next-break` | `_VideoPlayerScreenState._onPipAction`:10718 | `break;` → `<removed>` | equivalent; `onPipAction-next-break` |
+| `pauseForBackground-opening-active` | `_VideoPlayerScreenState._pauseForBackground`:10747 | `_iptvStartOverActive &&` → `false &&` | killed; `pauseForBackground-opening-active` |
+| `pauseForBackground-opening-intent` | `_VideoPlayerScreenState._pauseForBackground`:10748 | `_activeMediaShouldPlay &&` → `false &&` | killed; `pauseForBackground-opening-intent` |
+| `pauseForBackground-opening-paused` | `_VideoPlayerScreenState._pauseForBackground`:10749 | `!_activeMediaUserPaused` → `false` | killed; `pauseForBackground-opening-paused` |
+| `onPipAction-no-next-guard` | `_VideoPlayerScreenState._onPipAction`:10717 | `if (_hasAnyNext) _goToNextEpisode();` → `_goToNextEpisode();` | killed; `closure3-onPipAction-no-next-guard` |
+| `onPipAction-default` | `_VideoPlayerScreenState._onPipAction`:10716 | `case 'next':         if (_hasAnyNext) _goToNextEpisode();         break;` → `case 'next':         if (_hasAnyNext) _goToNextEpisode();         break;       default: _togglePlay(` | killed; `onPipAction-default` |
+| `retained-hidden-options` | `_VideoPlayerScreenState.initState`:1582 | `!widget.hideOptions` → `true` | killed; `retained-hidden-options` |
+| `retained-support-accept` | `_VideoPlayerScreenState.initState`:1584 | `if (!mounted \|\| !ok) return;` → `if (!mounted) return;` | killed; `retained-support-accept` |
+| `retained-pending-user-save` | `_VideoPlayerScreenState._togglePlay`:12658 | `unawaited(_saveResume(positionOverride: _position));` → `<removed>` | killed; `retained-pending-user-save` |
+| `retained-support-mounted` | `_VideoPlayerScreenState.initState`:1584 | `if (!mounted \|\| !ok) return;` → `if (!ok) return;` | killed; `case-retained-support-mounted` |
+| `onPipAction-null-input` | `_VideoPlayerScreenState._onPipAction`:10694 | `double.tryParse(action.substring(5))` → `double.tryParse(action.substring(5)) ?? 0.0` | killed; `case-onPipAction-null-input` |
+| `enterPip-native-call` | `_VideoPlayerScreenState._enterPip`:10580 | `entered = await PipService.enterPip(         aspectWidth: player.state.width,         aspectHeight: ` → `entered = false;` | killed; `case-enterPip-native-call` |
+| `restoreIosPipPlayer-native-orientation` | `_VideoPlayerScreenState._restoreIosPipPlayer`:10677 | `await SystemChrome.setPreferredOrientations(       _display.landscapeLocked           ? const [     ` → `await Future<void>.value();` | killed; `case-restoreIosPipPlayer-native-orientation` |
+| `retained-registered-owner` | `_VideoPlayerScreenState.initState`:1585 | `PipService.attach(           this,` → `PipService.attach(           Object(),` | killed; `case-retained-registered-owner` |
+
+### Equivalence resolutions
+
+| Point | Source/runtime proof (tokens remain frozen) |
+| --- | --- |
+| `field-session` | State.didChangeDependencies synchronously assigns PlayerPipSession.of(context) before first build or any async support callback; the inactive initial session is never read or registered. |
+| `enterPip-post-mounted` | The remaining isOwner(this) guard rejects disposal: dispose synchronously detaches the State before unmount, and late support registration itself checks mounted. No await in disposal between detach and unmount permits a false mounted/true owner result. |
+| `enterPip-finally-mounted` | Same owner-implies-mounted invariant; both old State disposal and live owner replacement remain rejected by the remaining owner test. |
+| `onPipModeChanged-mounted` | Only PipService invokes this callback: native mode dispatch and previousOnMode(false) on attach are synchronous. State disposal detaches its callbacks before unmount; no callback is captured across an await. |
+| `restoreIosPipPlayer-mounted` | Initial restore invocation is synchronous through the currently registered onRestore callback, removed by State disposal. There is no async gap before this guard. |
+| `restoreIosPipPlayer-owner` | PipService stores owner and onRestore together; synchronous dispatch invokes only that owner's callback. No await precedes the guard. The final post-await owner guard remains necessary and is independently killed. |
+| `restoreIosPipPlayer-return-mounted` | The remaining isOwner(this) final guard implies mounted because dispose detaches before unmount, including disposal while orientation or endOfFrame is pending. |
+| `onPipAction-mounted` | PipService dispatches onAction synchronously and clears it during State disposal before unmount; no retained/public action callback bypasses this registration. |
+| `onPipAction-play-break` | Dart 3 implicitly exits a nonempty switch case. Removing its explicit terminal break does not fall through; SDK runtime proof and original replays pin all commands. |
+| `onPipAction-pause-break` | Same implicit case-exit rule; independent original replay and runtime command trace. |
+| `onPipAction-toggle-break` | Same implicit case-exit rule; independent original replay and runtime command trace. |
+| `onPipAction-next-break` | Same rule, also final case with no statement after the switch. |
+
+`switch-probe.log` verifies implicit case exit on the pinned Dart SDK; four independent original break-removal replays also pass. Ownership/mounted proofs rely on synchronous service dispatch, callback replacement and detach-before-unmount; they do not authorize guard removal, changed registration/disposal or combined mutants.
+
+### Device-pending and early-window classification
+
+| Point | Limitation / required original device scenario |
+| --- | --- |
+| `field-time` | Normal pause overwrites the implicit null; a first pause during real-Android renderer replacement can expose the initializer after recovery finishes. Non-equivalence is device-pending, not counted equivalent. |
+| `enterPip-created` | Player replacement inside one live State requires real-Android renderer paths outside S2; route replacement changes State and does not establish this branch. |
+| `enterPip-post-player` | Player replacement inside one live State requires real-Android renderer paths outside S2; route replacement changes State and does not establish this branch. |
+| `enterPip-finally-player` | Player replacement inside one live State requires real-Android renderer paths outside S2; route replacement changes State and does not establish this branch. |
+| `pauseForBackground-renderer` | Entry is real dart:io Platform.isAndroid in renderer fallback, deliberately outside approved S2; must not extend seam. |
+| `pauseForBackground-renderer-latch` | Entry is real dart:io Platform.isAndroid in renderer fallback, deliberately outside approved S2; must not extend seam. |
+| `pauseForBackground-renderer-pause` | Entry is real dart:io Platform.isAndroid in renderer fallback, deliberately outside approved S2; must not extend seam. |
+| `resumeFromBackground-renderer` | Entry is real dart:io Platform.isAndroid in renderer fallback, deliberately outside approved S2; must not extend seam. |
+| `resumeFromBackground-created` | Player replacement inside one live State requires real-Android renderer paths outside S2; route replacement changes State and does not establish this branch. |
+| `resumeFromBackground-time-clear` | Player replacement inside one live State requires real-Android renderer paths outside S2; route replacement changes State and does not establish this branch. |
+
+All five moved initializers are audited: starting/detached/initial second have early caller kills; nullable session is synchronously overwritten before any consumer; `_backgroundedAt` is overwritten by normal pause, but its first renderer-replacement pause window can expose its default and remains **non-equivalent/device-pending**. Native presentation (Android Home/return/actions; iOS AVKit start/stop/restore), real renderer recreation with/without a live instance, native recording clear-before-pause and native wake/power behavior remain on the device checklist. No new platform or clock seam is introduced.
+
+### Per-case assertion witnesses
+
+| New case | Original assertion-failing mutation run(s) |
+| --- | --- |
+| PiP Android readiness arms aspect, State identity and explicit entry payload | `armPipAutoEnter-enable`, `closure3-armPipAutoEnter-arm`, `closure3-retained-ready-arm` |
+| PiP Android mode collapses chrome, cancels auto-hide and preserves active owner on exit | `onPipModeChanged-push`, `onPipModeChanged-active`, `retained-mode` |
+| PiP Android hidden options registration stays absent supported=false | `retained-hidden-options` |
+| PiP Android hidden options registration stays absent supported=true | `retained-hidden-options` |
+| PiP Android action play pins action dispatch and invalid seek gates | `onPipAction-play`, `retained-action` |
+| PiP Android action pause pins action dispatch and invalid seek gates | `onPipAction-pause`, `retained-action` |
+| PiP Android action playpause pins action dispatch and invalid seek gates | `onPipAction-toggle`, `retained-action` |
+| PiP Android action next pins action dispatch and invalid seek gates | `closure3-onPipAction-no-next-guard` |
+| PiP Android action unknown pins action dispatch and invalid seek gates | `onPipAction-default` |
+| PiP Android action seek:NaN pins action dispatch and invalid seek gates | `closure3-onPipAction-finite` |
+| PiP Android action seek:Infinity pins action dispatch and invalid seek gates | `closure3-onPipAction-finite` |
+| PiP Android action seek:oops pins action dispatch and invalid seek gates | `case-onPipAction-null-input` |
+| PiP Android action seek pins action dispatch and invalid seek gates | `onPipAction-default`, `closure3-onPipAction-prefix` |
+| PiP Android relative seek -10000.0 rounds milliseconds and clamps to the engine duration | `onPipAction-lower`, `onPipAction-seek` |
+| PiP Android relative seek -0.2506 rounds milliseconds and clamps to the engine duration | `onPipAction-seek`, `onPipAction-position-unit`, `closure3-onPipAction-parse` |
+| PiP Android relative seek 12.3456 rounds milliseconds and clamps to the engine duration | `onPipAction-round`, `onPipAction-seek`, `onPipAction-position-unit` |
+| PiP Android relative seek 10000.0 rounds milliseconds and clamps to the engine duration | `onPipAction-upper`, `onPipAction-seek`, `onPipAction-position-unit` |
+| PiP Android lost owner prevents entry, auto-enter and playing state pushes | `pushPipState-owner`, `closure3-armPipAutoEnter-owner` |
+| PiP background cancels held Start Over probe while user-paused=false without hiding its feedback | `pauseForBackground-cancel`, `pauseForBackground-feedback` |
+| PiP background cancels held Start Over probe while user-paused=true without hiding its feedback | `pauseForBackground-cancel`, `pauseForBackground-feedback` |
+| PiP background during held playlist opening latches playing intent and pauses its late playing event | `pauseForBackground-transition`, `onPipAction-next-label`, `closure3-onPipAction-next` |
+| PiP Start Over held open arms background intent even with user-paused=false before the new playing event | `case-pause-primary-latch` |
+| PiP Start Over held open arms background intent even with user-paused=true before the new playing event | `pauseForBackground-opening-intent`, `pauseForBackground-opening-paused`, `case-pause-primary-latch` |
+| PiP held support across dispose preserves original late registration | `case-retained-support-mounted` |
+| PiP held support across owner preserves original late registration | `retained-support-arm` |
+| PiP held support across profile preserves original late registration | `retained-support-arm` |
+| PiP Android resolved support=false controls public entry availability | `retained-support-accept` |
+| PiP Android resolved support=true controls public entry availability | `case-retained-registered-owner` |
+| PiP iOS held handle across real route replacement preserves handles and wake exemption | `case-onPipModeChanged-park` |
+| PiP iOS held subtitle across real route replacement preserves handles and wake exemption | `case-onPipModeChanged-park` |
+| PiP iOS held entry across real route replacement preserves handles and wake exemption | `case-onPipModeChanged-park` |
+| PiP iOS held orientation across real route replacement preserves handles and wake exemption | `case-onPipModeChanged-park` |
+| PiP held support across real route replacement cannot reclaim the fresh State or handle | `closure3-retained-support-mounted` |
+| PiP iOS entry prepares native subtitles once, sends its distinct handle and leaves auto-enter unarmed | `retained-subtitle-starting`, `retained-controls`, `enterPip-finally-subtitle` |
+| PiP iOS real route parks and restores the same player with landscape=true orientation and native visibility | `retained-mode`, `retained-restore`, `closure3-restoreIosPipPlayer-detached` |
+| PiP iOS real route parks and restores the same player with landscape=false orientation and native visibility | `retained-mode`, `retained-restore`, `closure3-restoreIosPipPlayer-detached` |
+| PiP iOS repeated true mode while parked keeps the session and dismissal completes disposal | `onPipModeChanged-park`, `onPipModeChanged-close`, `onPipModeChanged-close-branch` |
+| PiP iOS timeline pushes once per changed second including the initial zero second | `retained-second-read`, `retained-second-write`, `retained-position-push` |
+| PiP iOS active window and a starting entry suppress background pause and catchup cancellation | `pauseForBackground-pip` |
+| PiP iOS lost owner rejects a saved entry before handle delivery or starting subtitle suppression | `closure3-enterPip-owner` |
+| PiP lifecycle Android valid transitions pause only at paused and clear the latch before play without saving | `resumeFromBackground-play`, `retained-pause`, `retained-resume` |
+| PiP lifecycle iOS valid transitions pause only at paused and clear the latch before play without saving | `resumeFromBackground-play`, `retained-pause`, `retained-resume` |
+| PiP lifecycle preserves a user pause and its real held resume write across background and foreground | `resumeFromBackground-latch`, `retained-pending-user-save` |
+| PiP lifecycle resume may play before an older background pause completes and the late pause wins | `case-pause-primary-latch` |
+| PiP lifecycle rejected background pause remains uncaught and resume still plays once | `case-pause-primary-latch` |
+| PiP lifecycle sleep stop between background and foreground suppresses automatic play | `resumeFromBackground-sleep` |
+| PiP pending user-pause save across profile and lifecycle writes its captured physical profile once | `retained-pending-user-save` |
+| PiP pending user-pause save across dispose and lifecycle writes its captured physical profile once | `retained-pending-user-save` |
+| PiP early callbacks while a prior output lease is held ignore actions and do not latch the first background open | `closure3-onPipAction-created` |
+| PiP early next-key transition before output creation still ignores a synchronous background callback | `closure3-pauseForBackground-created` |
+| PiP seek fans out to Trakt Simkl MDBList in order with the exact rounded target | `onPipAction-simkl`, `onPipAction-mdblist`, `onPipAction-order` |
+| PiP Android native aspect payload width=0 height=0 retains zero fallback | `armPipAutoEnter-enable` |
+| PiP Android native aspect payload width=null height=null retains zero fallback | `armPipAutoEnter-enable`, `pushPipState-width-zero`, `pushPipState-height-zero` |
+| PiP Android native aspect payload width=1920 height=800 retains zero fallback | `armPipAutoEnter-enable`, `pushPipState-width`, `pushPipState-height` |
+| PiP iOS plain screen has no session yet restore returns false without platform requests | `restoreIosPipPlayer-session` |
+| PiP desktop predicate leaves State lifecycle pause and resume inactive | `pauseForBackground-mobile` |
+| PiP play and pause commands are idempotent at the matching playing state | `closure3-onPipAction-play-gate`, `closure3-onPipAction-pause-gate`, `final-retained-playing-push` |
+| PiP early audio setup uses false starting and detached defaults before open or readiness | `field-starting`, `field-detached`, `retained-controls` |
+| PiP live background longer than thirty real seconds retunes once instead of playing stale buffer | `resumeFromBackground-retry`, `closure3-resumeFromBackground-absent`, `closure3-resumeFromBackground-source` |
+| PiP iOS held handle across dispose preserves original entry and finalization boundaries | `case-enterPip-handle` |
+| PiP iOS held handle across owner preserves original entry and finalization boundaries | `enterPip-post-owner` |
+| PiP iOS held handle across profile preserves original entry and finalization boundaries | `case-enterPip-handle` |
+| PiP iOS held subtitle across dispose preserves original entry and finalization boundaries | `case-enterPip-subtitle` |
+| PiP iOS held subtitle across owner preserves original entry and finalization boundaries | `enterPip-finally-owner` |
+| PiP iOS held subtitle across profile preserves original entry and finalization boundaries | `case-enterPip-subtitle` |
+| PiP iOS held entry across dispose preserves original entry and finalization boundaries | `case-enterPip-native-call` |
+| PiP iOS held entry across owner preserves original entry and finalization boundaries | `case-enterPip-native-call` |
+| PiP iOS held entry across profile preserves original entry and finalization boundaries | `case-enterPip-native-call` |
+| PiP iOS restore orientation held across dispose continues platform writes then checks State ownership | `case-restoreIosPipPlayer-orientation` |
+| PiP iOS restore orientation held across owner continues platform writes then checks State ownership | `restoreIosPipPlayer-return-owner` |
+| PiP iOS restore orientation held across profile continues platform writes then checks State ownership | `case-restoreIosPipPlayer-orientation` |
+| PiP iOS starting handle prevents duplicate entries and background pauses until completion | `field-starting`, `enterPip-starting`, `pauseForBackground-pip` |
+| PiP iOS handle rejection resets starting state and displays the original retry message | `enterPip-failure`, `enterPip-toast`, `enterPip-entered-default` |
+| PiP iOS subtitle rejection resets starting state and displays the original retry message | `case-enterPip-failure` |
+| PiP iOS entry rejection resets starting state and displays the original retry message | `retained-controls` |
+| PiP failed iOS entry while background pause is held invokes the State fallback before retry toast and resume | `enterPip-paused`, `enterPip-pause`, `retained-controls` |
+| PiP restore waits for the frame and observes owner replacement in that frame | `restoreIosPipPlayer-frame` |
+| PiP rejected restore orientation propagates its channel error after reattaching and before immersive mode | `case-restoreIosPipPlayer-native-orientation` |
+| PiP background cancels an active live recovery and clears its reconnect pill before resuming | `closure3-pauseForBackground-recovery`, `closure3-pauseForBackground-reconnect` |
+| PiP iOS starting entry hides Flutter subtitles and keeps native subtitles during a playlist open | `enterPip-clear`, `closure3-retained-open-starting`, `closure3-retained-view-starting` |
+| PiP parked next episode completes its original route result without reopening or returning fullscreen | `retained-result-park`, `retained-result-close` |
+| PiP scoped State disposal completes its session while the hosting route remains present | `closure3-retained-dispose-close` |
+| PiP wakelock follows initial acquisition, playing and pause, while buffering does not release it | `sync-wake`, `retained-playing-wake` |
+| PiP wakelock independent owner prevents a pause or disposal release until that owner leaves | `wake-independent-owner` |
+| PiP wakelock held first toggle samples latest queued playback requests after rapid pause play and disposal | `sync-wake`, `wake-latest-queue` |
+| PiP wakelock native rejection is swallowed and subsequent queued requests still complete | `sync-wake`, `retained-playing-wake`, `wake-native-rejection` |
+| PiP wakelock EOF playing-false=false releases only on the playing stream | `sync-wake` |
+| PiP wakelock EOF playing-false=true releases only on the playing stream | `sync-wake`, `retained-playing-wake` |
+| PiP detached owner handoff keeps playback wake requested when the old parked session closes | `onPipModeChanged-detached`, `retained-dispose-detached` |
+| PiP replaced parked route keeps wake for a hidden-options incoming player while its setup is held | `retained-dispose-replaced` |
+
+### Contracts, baseline and preserved findings
+
+`contract-results.json`: `wake-independent-owner`, `wake-latest-queue`, `wake-native-rejection` and `pending-fixture-protocol` all KILLED by assertions. The native rejection case explicitly rejects a queued public display-control request so Video’s own exception handler cannot conceal the service contract. The other owner keeps wake after player pause/disposal; queued writes sample the latest intent at execution.
+
+Pristine S2 full-suite `original-suite.jsonl` reproduced an unrelated pre-existing guide/profile race in the MDBList outgoing checkpoint test. Three unchanged original isolated replays pass; the fixture joins Trakt/Simkl/MDBList public guide refreshes **before** starting the tested held POST. Original names/assertions are retained (`pending-token-proof.json`); the denominator mutation independently kills its existing protocol assertion. No allowlist or application fix. Complete stabilized original baseline: 13,296 success / 13 failure / 28 load error / 20 skip, exactly the five S2 additions versus P7. Final full suite: **13,386 success / 13 failure / 28 load error / 20 skip**. Official and strict identity comparisons PASS: exactly 90 passing additions, no changed, missing, fixed or skipped old identity. Tested inputs stayed stable during the completed run. The sole later test-input change removes one duplicate analyzer-ignore comment; `post-suite-input-proof.json` proves the exact byte delta leaves all executable bytes unchanged, and final targeted analysis is clean. `coverage.json`, `final-audit.log` and `completion.json` revalidate the selected complete mutation logs, baseline and unchanged original application.
+
+As-is findings: backgrounding before output creation does not latch the first open; a pending old background pause can finish after resume and win; the old user-pause save writes its captured physical profile, with no new background save. A held iOS subtitle preparation can start entry after State/owner loss; after real replacement its late service handle can let an old-handle action pause the fresh player until the fresh entry rebases it. Restore continues platform writes across handoff before its final State-owner check; profile changes do not cancel these State-owned operations. These are preserved and recorded in Follow-ups.
+
+Development controls with wrong fixture assumptions, an incomplete loader/promotion mutant, error-only removals and a failed control are archived and uncredited. Guide close itself cancels replay; final test leaves it open during backgrounding. Nullable-promotion mutant replaced by a flow-valid `false` conjunction. Two fixture-copy commands used the detached cwd and raised SameFileError; corrected copies and complete controls are archived. Final characterization files format and analyze cleanly, size/architecture pass; all Step-T historical/self/S/S2/analyzer proofs remain valid because tooling and application are unchanged. Dependency files unchanged; no production move, build/run/install, device command, real network, push, merge or branch switch. Stop at Step 0.

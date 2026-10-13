@@ -1497,6 +1497,22 @@ device-pending.
 
 ## Follow-ups
 
+- **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
+  before output creation does not latch the first open; an older held
+  background pause can complete after foreground play and win. A user-pause
+  save retains its captured physical profile; background pause adds no save.
+  A held iOS subtitle preparation can continue PiP entry after State/owner
+  loss. After route replacement, its late old handle can replace the service
+  handle and an old-handle action can pause the fresh player until fresh entry
+  rebases it. Restore continues platform writes across disposal, replacement
+  and profile handoff before its final State-owner check. Phase-8 original
+  caller tests pin these outcomes; cancellation/ownership fixes are separate.
+- A pending MDBList checkpoint fixture exposed an unrelated guide refresh
+  rejecting an outgoing profile scope during handoff. Three unchanged original
+  isolated replays pass; the fixture now joins public guide refreshes before
+  the tested held POST, preserving pending-action assertions. Production stale
+  refresh/error handling remains unchanged; see Phase-8 `fixture-note.md`.
+
 - **Cross-profile completion writes (found in phase 7 design review,
   pre-existing, not fixed):** a profile switch between the read and the
   re-acquired write in `EpisodeCompletionStorage.markEpisodeAsFinished` /
@@ -2895,6 +2911,47 @@ checkpoint. Step T/0 proceed without production moves.
 - **Next.** Step 0 at S2, no production moves or CI transition. Pristine S2
   suite has one guide/profile race also observed on the original; excluded
   pending replay/fixture closure, never allowlisted. `p8/step0/` records it.
+
+### 2026-10-13 — Phase 8 Step 0 (original characterization checkpoint; stop)
+
+- **Revision/base.** This Step-0 checkpoint follows Step T `fcdfa03eb`;
+  application ORIGINAL is independently accepted S2 `21b19c944`, not the
+  phase-7 merge. H/S2 review `vp-rev8s2` found no P1/P2/P3. Application and
+  pubspec are byte-identical to S2; no production moves or CI transition.
+- **Coverage.** Ten registered behavior files add 90 passing cases through
+  real screen callbacks, lifecycle transitions, iOS route/session, distinct
+  handles, channels, player/storage transports and timers. The deps report
+  records all 14 moved declarations and 22 retained occurrences: 327 AST
+  sites grouped into 167 canonical points, **145 assertion kills / 12 proven
+  equivalences / 10 device-pending**. Every new case has an assertion-failing
+  original mutation witness; four additional wakelock/fixture witnesses pass
+  the same kill criterion. Invalid, interrupted and error-only runs get no
+  credit. Native recording order, renderer recreation and actual native PiP/
+  power behavior remain on the device checklist.
+- **Commands/results.** Serialized nice-19 original controls/mutations use
+  `flutter test --concurrency=1 --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json`; exact file/name
+  selectors and input hashes are in `p8/step0/mutation-results.json`.
+  `suite_evidence.py run vplayer/p8/step0/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` completed; official `compare` and
+  strict identity comparison PASS against the completed stabilized original:
+  **13,386 successes / 13 failures / 28 load errors / 20 skips**, exactly
+  90 passing additions, no changed/missing/fixed/newly skipped old identity.
+  Targeted Dart format/analyze, size/architecture and diff checks PASS.
+  Step-T historical, self-test, seam and analyzer evidence remains applicable;
+  no tooling/application change. Evidence: `<git-common-dir>/refactor-evidence/
+  vplayer/p8/step0/`; matrix, mutation table and commands in the deps report.
+- **Deviations/findings.** A complete pristine original suite exposed the
+  unrelated guide/profile race. Three unchanged isolated replays pass;
+  joining public guide refreshes before its held POST stabilizes only the
+  fixture. All old names/assertions retained, independent protocol mutation
+  killed; no allowlist. Failed development controls and copy/promotion errors
+  are archived and uncredited. Final full-suite inputs stayed stable during
+  execution; afterward only a duplicate analyzer-ignore comment was removed,
+  with exact byte-delta proof and clean analysis. Existing early-background,
+  late-pause and stale PiP/restore outcomes are recorded in Follow-ups. No fix,
+  new seam, real network, build/run/install, device command, push, merge or
+  branch switch. Stop before Claude's sample and production moves.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
