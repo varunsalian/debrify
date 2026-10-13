@@ -1230,7 +1230,140 @@ a series episode, watched at the threshold, progress visible elsewhere;
 trackers disabled before playback send nothing; disabling one mid-playback
 behaves as characterized (continuation, if any, is a recorded follow-up).
 
+## Phase 7 — local completion tracking
+
+Branch `refactor/vplayer-p7` off the phase-6 merge `2defa5100`. Evidence
+`refactor-evidence/vplayer/p7/`. Line numbers at `6d2ac75d8` (pre-phase-6
+moves; ≈ −360 after phase 6) — re-measure by name.
+
+### Moves → `presentation/legacy_video_player/vp_local_completion.dart`
+
+`VpLocalCompletion` + `VpLocalCompletionHost` (≈ 190 lines).
+
+| Original | Kind |
+|---|---|
+| `_currentEpisodeMarkedAsFinished` 1388, `_currentMovieMarkedAsFinished` 1389, `_currentMovieRewatchStarted` 1390 | fields `false` |
+| `_movieCompletionThreshold` 1391, `_episodeCompletionThreshold` 1393 | fields initialized from storage constants (verify `const`/static → inert, else stay State-owned) |
+| `_forceLocalCompletionTracking` 1702 (declared mid-class, after its getter) | field `false` |
+| `_loadLocalCompletionThresholds` 1681, `_loadTrackingPolicy` 1704 | async loaders |
+| `_usesLocalCompletionTracking` 1694, `_currentLocalMovieImdbId` 1720 | getters |
+| `_resetLocalCompletionState` 1726 | method |
+| `_markCurrentEpisodeAsFinished` 9855, `_markCurrentMovieAsFinished` 9901, `_checkAndApplyLocalCompletion` 9925 | methods |
+
+**Stay State-owned:** `_resumeKey` (read by the movie mark), playlist /
+index / effective identity, position/duration, validation gate.
+
+**Host** (exact at step T): `mounted`, widget `traktScrobble` /
+`simklScrobble` / `mdblistScrobble` / `stremioTvChannels` / `contentType` /
+`contentSeason` / `contentEpisode` / `contentImdbId` / `contentTitle` /
+`title` (live selectors), `effectiveIptvChannels`, `effectiveContentImdbId`,
+`effectiveContentType`, `seriesPlaylist`, `activePlaylist`, `currentIndex`,
+`position`, `duration`, `validationGateActive`, `resumeKey`.
+
+**Membership (re-measured at `2defa5100`, 14 declarations):** flags
+1392/1393/1394, thresholds 1395/1397 (both reference the `static const int`
+`LocalCompletionStorage.defaultLocalCompletionThreshold`,
+`local_completion_storage.dart:29` — inert), mid-class force-local flag 1696,
+loaders 1675/1698, getters 1688/1714, reset/episode mark/movie mark/check
+1720/9460/9506/9532. ≈ 163 lines move; 21 Host getters (live widget
+selectors, the local `seriesPlaylist` snapshot preserved); no `context`,
+`_vpSetState`, owner identity or sibling collaborator; no tracker adapter
+needs patching. Imports: `dart:async`, the four completion/resume storage
+modules, tracking policy, the three legacy playlist/channel types.
+
+**Retained references (11 occurrences, frozen ledger):**
+
+| Responsibility | Facade lines |
+|---|---|
+| Policy / threshold startup (skip-settings call stays between them) | 1628, 1630 |
+| Position dispatch | 2940 |
+| EOF episode / movie marks | 4348, 4352 |
+| MagicTV / Stremio TV / playlist resets (playlist reset after MDBList target switching and the mounted/request check) | 5237, 9030, 9770 |
+| Resume restore movie identity | 11404 |
+| Resume-save flag and identity reads | 11848 (twice) |
+
+**Scaffolding / CI:** patched State constructor appends `_completion` after
+`_mdblist`; adapter; switch current/self-test (`checks.yml:77`) and **both**
+analyzer manifest and inventory (line 99) to P7; P1–P6 `--at` incl. P6
+`2defa5100`; protect all 16 earlier destinations; register tests in
+`ci_behavior_tests.txt` and the destination in `theme_surface_manifest.txt`,
+`theme_rendered_set.py` and all three lists in
+`test/theme/source_guard_test.dart`; preserve the moved episode method's
+`empty_catches` diagnostic identity (not a changed count).
+
+### Step 0 — characterization of the original
+
+Threshold load and tracking-policy load (forced local while scrobbling),
+`_usesLocalCompletionTracking` truth table, movie rewatch/mark, series
+single-file vs playlist paths, validation/zero-position/zero-duration
+short-circuits, resets, resume reads — plus, from the design review:
+
+- **Cross-profile writes (pin as-is):** hold delivery after profile A's
+  read in the episode mark (`episode_completion_storage.dart:20` →
+  `playback_state_store.dart:33` re-acquires preferences) and the movie
+  mark/unmark (`movie_progress_storage.dart:55`, `:82`), complete the public
+  profile handoff, release; assert **both** profiles' physical preference
+  contents, completion notifications, cleanup and resume records; include
+  disposal while held. The stale-instance guard
+  (`profile_preferences.dart:296`) does not reject a newly obtained B
+  instance, so A's map can land in B — **recorded in Follow-ups, preserved
+  by this move**. Check the resume-removal branch separately (scoped
+  database operations).
+- **One-shot is position-dispatch only:** the episode mark checks neither
+  its flag nor local-tracking enablement (9460) and EOF calls it directly
+  (4348); the playlist path sets the flag before validating index/metadata.
+  Cover threshold→EOF, repeated/overlapping EOF, tracker-enabled EOF,
+  missing metadata/index; assert writes, timestamps/revisions, later retry;
+  preserve EOF order: tracker stops → awaited episode mark → awaited movie
+  mark → sleep/advance.
+- **Early threshold, both directions, selective barrier:** arriving
+  preferences re-evaluate (85 % under the default 80 stays finished when 90
+  arrives after the ordinary earlier rewatch progress; the direct-jump
+  exception discovered in Step 0 is recorded in Follow-ups); a lower configured threshold
+  can trigger on delivery. Hold only the completion loader's `List<int>`
+  (the shared cold-preferences barrier, `display_defaults_reads.dart:27`,
+  also stalls player defaults awaited before player construction, 2321);
+  thresholds above/below 80, exact equality, both policy/threshold arrival
+  orders; test-only barriers, no production seam.
+- **Failure state:** caught mark failures (flag stays set; resume saves
+  then suppressed at 11848 even if persistence failed) vs the **uncaught**
+  unawaited rewatch unmark (9548; flag stays spent); hold an unmark across a
+  later completion; one movie cleanup branch failing while the other
+  succeeds (`Future.wait`). Use the pumping `finish` helper
+  (`video_player_environment.dart:307`, P6 stabilization precedent).
+
+Early windows for every moved initializer. Mutation proofs, coverage
+matrix, Claude sample.
+
+### Device checklist (end of series)
+
+With no tracker connected: a movie past the configured threshold shows as
+watched and leaves Continue Watching; a rewatch below it restores it; an
+episode past its threshold is marked finished; "This device" mode marks
+locally even with trackers on.
+
 ## Follow-ups
+
+- **Cross-profile completion writes (found in phase 7 design review,
+  pre-existing, not fixed):** a profile switch between the read and the
+  re-acquired write in `EpisodeCompletionStorage.markEpisodeAsFinished` /
+  `MovieProgressStorage.markMovieAsFinished`/`unmarkMovieAsFinished` can
+  write profile A's map (incl. unrelated entries) into profile B; the
+  stale-instance guard does not catch a freshly obtained B instance. Needs a
+  captured-scope write path (AGENTS profile rules) and its own tests.
+
+- An early movie jump can cross the default threshold before the completion
+  preferences arrive without first spending the rewatch flag below threshold.
+  A higher configured threshold then starts an unawaited unmark even though the
+  completion guard remains spent; subsequent local resume saves stay suppressed.
+  Phase-7 original tests pin this direct-jump ordering as well as the ordinary
+  earlier-low-position path that preserves the completed marker. No fix here.
+
+- A source-playlist replacement publishes its rebuilt series cache before URL
+  resolution and the later completion reset. A paused position tick can mark the
+  unplayed incoming episode if the outgoing index fits the shorter replacement;
+  an out-of-range outgoing index instead spends the episode guard without a
+  write. Phase-7 original caller tests pin both windows. No fix here.
 
 - **Service/data ownership exit** (D1): data contracts for resume,
   trackers, subtitles, sources and IPTV replace the bridge's direct service,
@@ -2384,6 +2517,160 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   earlier device/PiP checklist items. No device execution, real tracker network,
   pubspec change, bug fix, push, merge, branch switch or later production move.
 
+### 2026-10-13 — Phase 7 Step T (local completion tooling checkpoint)
+
+- **Base/inventory.** Approved `7498196ca`; application re-measured by name at
+  `2defa5100`: 828 disjoint declarations, 14 moved / 813 retained / one patched
+  constructor, exactly 11 retained occurrences. Six inert initializers (four
+  false flags, two references to the storage `static const int` 80), 21 live
+  Host getters, eager `_completion` after `_mdblist`; 16 earlier destinations
+  protected. Revision/commands/hashes in `p7/tooling/completion.json`.
+- **Proof.** Draft manifest, raw and formatted evidence-only complete splits
+  compare with zero differences. No optional commas inserted/deleted; formatter
+  idempotent and zero introduced diagnostics. Real P7 positive plus ten body/
+  scaffolding/order negatives and binding-only selector/capture negatives pass.
+  Existing opt-ins suffice; no comparison-core change.
+- **Checks.** All 34 required commands PASS: 26 existing Dart manifest
+  self-tests, P7 universal/self-original comparison (all 828 classified), six
+  named P1–P6 merges and Kotlin self-test (597 tests). Analyzer root/strict/raw/
+  formatted counts 94/165/98/98; earlier mappings/maxima retained. The moved
+  `empty_catches` identity remains `_markCurrentEpisodeAsFinished`, multiplicity
+  one; async-context identities unchanged. Comparator negatives pass. Size
+  3,000 / 140 ratchets and architecture 1,668 pass. Isolated parser copies and
+  copied-kernel deletion are recorded.
+- **Scope/deviation.** First analyzer driver pointed its inventory seed at the
+  not-yet-created P7 file; rejected before execution, archived and corrected to
+  P6. Original suite baseline reused from P6 gate after exact application/pubspec/
+  analysis-config equality at the named P7 base; SDK unchanged. Application and
+  pubspec unchanged, no production destination, CI/theme/size-baseline changes.
+  CI current/self/analyzer → P7 and test/theme registration enable only in Step 1
+  creating `vp_local_completion.dart`. Step 0 follows separately; no moves.
+
+### 2026-10-13 — Phase 7 Step 0 (original local completion; stop)
+
+- **Scope/revision.** Application `2defa5100`, tooling `98bf408f4`; Step-0 revision,
+  commands and hashes in `p7/step0/completion.json`. Twelve behavior files / 98
+  cases plus the completion driver and opt-in fake frame position (default
+  unchanged). All 14 moves and the frozen 11 references are covered through
+  original callers; no source-text coverage credit.
+- **Proof.** 189 AST sites, 117 canonical points: 114 assertion kills and three
+  source-proven equivalences with passing replays. Every addition has a final
+  case/support-hash assertion witness; final original 98-case control passes.
+  Early windows cover all six initializers and both threshold directions.
+  Cross-profile A→B writes, both physical profiles, scoped resume removal,
+  disposal, EOF/overlap/fan-out order, partial cleanup and caught/uncaught failures
+  are pinned as-is. Coverage, mutation and per-case tables are in the deps report.
+- **Findings.** A direct early jump can be unmarked by higher arriving settings;
+  a rebuilt source cache can mark an unplayed incoming episode before URL
+  resolution/reset, while an invalid old index spends the guard without writing.
+  The missing-title return is non-equivalent in that source window. Rejected
+  writes can update preference caches; refilling the current cache directly
+  proves the failed-rewatch flag stays spent. Follow-ups record these originals;
+  no fix.
+- **Baseline/checks.** Full suite: 13,291 success / 13 failure / 28 load error /
+  20 skip. Official and strict identity comparisons both pass: exactly 98 passing
+  additions, every old outcome unchanged, tested tree stable. Fourteen test/support
+  files format with zero changes and analyze with no issues; size 3,000 / 140 and
+  architecture 1,668 pass. All 34 Step-T commands remain valid (Dart self-tests,
+  Kotlin 597 tests, P1–P6 histories and analyzer probe); app/tooling unchanged.
+  Parser routing audit: 172 isolated copies, 2,660 invocation/parse records.
+- **Deviations/stop.** The first copied runner selected the prior base; its control
+  and preflight-rejected sweep are excluded. One nullable-promotion mutant is
+  invalid, then replaced by a flow-valid conjunction. Fixture assumptions about
+  auto-resume and old/current preference caches are corrected in archived runs.
+  Evidence only under `p7/`. Pubspec, application, CI/theme/source guards and size
+  baseline unchanged. No production destination, bug fix, real network, push,
+  merge, branch switch or device command. Stop here; Step 1 and its gate are later.
+  The end-of-series local movie/episode/rewatch/This-device checklist stays pending.
+
+### 2026-10-13 — Phase 7 independent sample and Step-1 production creation
+
+- **Sample.** Claude's accepted original `e62a3a41f` sample kills 20/20 valid
+  mutations (100%); no exclusions or addendum. Deps table records each identity
+  and original-caller assertion witness. Results/run summary agree; per-mutation
+  logs retain tails. Systematic Step-0 matrix stays 114 kills / three equivalences.
+- **Move/revision.** Original `2defa5100`; resulting revision, commands and hashes
+  in `p7/step1/completion.json`. Fourteen declarations move to the 208-line
+  `VpLocalCompletion` with 21 frozen live Host getters. Six inert initializers,
+  eager construction after `_mdblist`, local series-playlist snapshot and all 11
+  retained statement positions (EOF order/reset/resume reads) are preserved.
+  Applied manifest compares with zero differences; all 16 earlier destinations
+  protected. Production matches the checked Step-T formatted split exactly.
+- **Transition.** CI current/self-test and analyzer manifest **and inventory**
+  select P7; P1–P6 histories/fetch-depth 0 retained. Twelve completion behavior
+  files registered with the hooks define. Theme surface/rendered/all three source
+  guard lists include the new file. Facade ratchet 17,087 → 16,974; no new size
+  exception. Two probe-recorded unused retained imports are allowlisted.
+- **Checks/scope.** 143 focused completion/theme/source-contract tests pass.
+  Scoped analyzer comparator/self-negatives: 98 occurrences, zero additions,
+  moved `empty_catches` identity/multiplicity preserved. Format zero changes;
+  size 3,001 files / 140 ratchets, architecture 1,669 and its negatives pass.
+  No behavior/test assertion change, bug fix, pubspec change, real network,
+  push/merge/switch or device execution. Clean-tree gate follows; end-of-series
+  local movie/episode/rewatch/This-device and earlier device checklists pending.
+
+### 2026-10-13 — Phase 7 gate fixture closure (test/docs only)
+
+- **Reproduction.** First clean `cc430295d` suite completed and is rejected:
+  exactly one changed identity, Simkl suspended episode snapshot (600 s instead
+  of 360 s); all 98 completion cases pass. Unmodified original `2defa5100`
+  reproduces it on isolated run two, after one passing run. No failure allowance.
+- **Cause/fix.** Guide background refresh can persist the synthetic empty Simkl
+  response over the seeded snapshot; an original diagnostic trace observes the
+  concurrent player reader loading `{}`. Hold guide HTTP refreshes with the
+  existing completer until race assertions finish, then release the existing
+  404/cleanup path. Production is untouched. Earlier wait/reader-ordinal
+  candidates failed and remain excluded; diagnostic sources restored.
+- **Proof/checks.** Entire 16-case file original/moved 3× passes (48 + 48), plus
+  restored final original control. Isolated AST proof preserves all 19 expectation
+  calls and test-name tokens. Simkl and MDBList percent+1 mutations on the original
+  assertion-fail against unchanged duration expectations; both sources restored.
+  Test format/analyzer pass. The first token-audit attempt omitted ownership
+  output and rejected before mutation execution; corrected with a fresh parser.
+  Commands/hashes/revision and NOTE in `p7/gate/fixture-note/`.
+- **Gate.** Same accepted Step-0 identity baseline retained after original fixture
+  validation. Fresh clean full suite/builds follow this test/docs commit; manifest
+  matrix continues with unchanged production/tool/configuration inputs. Human
+  device checklist pending; no bug fix, pubspec change or device execution.
+
+### 2026-10-13 — Phase 7 clean-tree gate (stop)
+
+- **Revision/evidence.** Production `cc430295d`, original-proven fixture
+  `dd2899773` (clean tested tree), Step-0 baseline `e62a3a41f`, original application
+  `2defa5100`. Resulting gate revision, commands, SDK, tree/input equality,
+  parser routing and artifact/evidence hashes: `p7/gate/completion.json`.
+- **Suite.** Nice-19 serialized hook-defined/no-pub full suite: 13,291 success /
+  unchanged 13 failure / 28 load error / 20 skip. Official and strict comparisons
+  PASS: zero added, missing, changed or newly skipped identities. First completed
+  failed gate is excluded. Original-proven guide-refresh fixture preserves all
+  19 expectation calls and names; 16 behavior cases original/moved 3× (48 + 48),
+  final restored original control and two assertion-killing original mutations.
+  Fixture-note counts corrected to exclude loading/setup events; no new allowance.
+- **Checks.** All 36 manifest/Kotlin commands PASS: 26 existing Dart manifests,
+  P7 self/current/same-revision and P1–P6 at the named merges; Kotlin 597 tests.
+  Post-fixture P7 current guard also PASS. Production/tool/configuration inputs
+  unchanged by the fixture closure, audited. CI format idempotent; root/strict-CI
+  scoped comparator: 98 occurrences, zero additions, including moved
+  `empty_catches` identity/multiplicity. Global 54-warning allowlist, comparator
+  negatives, size 3,001 files / 140 ratchets and architecture 1,669 / negatives
+  PASS. Isolated CLI parser packages and copied-kernel deletion are archived.
+- **Builds.** Clean `nice -n 19 flutter build apk --release --no-pub` and then
+  `flutter build macos --release --no-pub` both PASS. APK/macOS executable/AOT
+  hashes archived. Same Flutter 3.44.8 / Dart 3.12.2; existing plugin SwiftPM
+  notices do not fail the build.
+- **Stop/pending.** Phase 7 stops at this gate. Human local movie/episode threshold,
+  rewatch/Continue Watching and This-device-with-trackers checks remain pending,
+  alongside earlier device/PiP items. Original cross-profile completion writes
+  remain preserved and documented in Follow-ups. No bug fix, pubspec change,
+  real tracker network, device execution, push, merge, branch switch or later move.
+
+2026-10-13 — **Phase 7 independent review (Codex `vp-rev7`): no P1/P2 — "No P1s".**
+P3s: (1) harden the shared asynchronous fixtures once (action-completion
+waits, guide-refresh barriers, cleanup in shared support; stress-replay with
+unchanged assertions) — scheduled as test-only step H at the start of phase
+8, before milestone M1; (2) size summaries corrected to 3,001 files. Claude
+sample 20/20. Merged.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -2462,3 +2749,13 @@ Simkl responses incl. the 409 recovery; startup ordering and heartbeat
 contracts. P3s: full `_trakt.traktProgress` → `_host.traktProgress` chain
 registration with frozen adapter body; accurate source-guard prefix update.
 Membership confirmed: 24 moves, 59 retained references; Hosts 19/15.
+
+## Phase 7 design review resolution (Codex `vp-design`, 2026-10-12) — "No P1s"
+
+P2s folded: concrete cross-profile write characterization (pre-existing
+corruption risk recorded in Follow-ups, preserved); one-shot scoped to
+position dispatch with EOF/overlap/tracker cases and EOF order; early
+threshold in both directions with a selective loader barrier; caught vs
+uncaught failure state and partial cleanup failure. P3s: corrected
+11-occurrence ledger (no playlist-index caller of the episode mark);
+explicit CI/theme/analyzer transition.

@@ -61,17 +61,17 @@ void main() {
                 mdblistPercent: simkl ? null : 50,
               ),
             );
-            if (race == 'profile') {
-              f.network.handler = (r) =>
-                  r.method == 'GET' &&
-                      [
-                        'api.trakt.tv',
-                        'api.simkl.com',
-                        'api.mdblist.com',
-                      ].contains(r.url.host)
-                  ? remote.future
-                  : secondaryReply(r);
-            }
+            // Keep guide refreshes pending: its synthetic empty response must
+            // not erase the seeded store while the player-reader race runs.
+            f.network.handler = (r) =>
+                r.method == 'GET' &&
+                    [
+                      'api.trakt.tv',
+                      'api.simkl.com',
+                      'api.mdblist.com',
+                    ].contains(r.url.host)
+                ? remote.future
+                : secondaryReply(r);
             final b = (await runZonedGuarded(
               () => traktBrowser(t, f),
               (e, s) => errors.add(e),
