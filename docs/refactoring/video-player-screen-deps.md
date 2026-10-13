@@ -5725,3 +5725,46 @@ The un-applied two-site prerequisite proposal is
 `step0b/seam-prerequisite-proposal.patch`; it changes neither hook defaults nor
 installation and is not credited as an original behavior witness. k2, the
 production move and gate remain pending the seam direction.
+
+## Phase 8 S2b — approved renderer predicate seam extension (2026-10-13)
+
+Claude, as plan owner, approved the two-site extension as a separate checkpoint:
+k2 requires same-State player replacement, available only through Android
+renderer fallback; the later player-engine phase also needs these predicates
+covered. The Characterization harness and Phase-8 S2/S2b decision record this
+rationale. Application diff from `652def541` is exactly two substitutions:
+
+| Declaration | Exact predicate patch, once | Independent site negatives |
+| --- | --- | --- |
+| `_initializePlayer` | `if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached)` → `if (VpS2Hooks.isAndroid && !PlatformUtil.isAndroidTvCached)` | Wrong predicate, bypassed override, twice, operand order, changed TV predicate |
+| `_canFallbackExplicitRenderer` | `isAndroid: Platform.isAndroid` → `isAndroid: VpS2Hooks.isAndroid` | Wrong predicate, bypassed override, twice, argument order, changed TV predicate |
+
+The scoped token patches keep both other Android reads in `_initializePlayer`
+unchanged. S2's existing getter defaults, callback evaluation, installer,
+release/profile rejection, assert-only assignment and compile-time flag are
+byte/token-identical. No new hook/installer. The manifest remains a checkpoint:
+817 exhaustive original spans, 11 patched declarations / 13 counted patches /
+17 predicate occurrences. All nine accepted S2 declarations and their patches
+are preserved; the original S interception proof remains unchanged. Independent
+site guards pin one getter read in the original short-circuit/named-argument
+order, separately from the move comparison core. The frozen getter evaluates
+the original native predicate once when no override is installed.
+
+Evidence under `p8/s2b/`: S and S2/S2b self-proofs, current seam checker and
+historical S2 checker `--at 21b19c944` PASS, each with a fresh isolated copied
+parser package and deleted copied kernels. The 23 independent negatives include
+the original 13 plus five per new site. Existing S/S2 guard tests pass in both
+flag modes (7 cases each), including native defaults, live once-only overrides
+and flag-disabled installation rejection. Their names and prior assertions
+remain; the source guard additionally requires both new negative sets.
+
+Targeted root analyzer retains **98 scoped diagnostics / zero additions** by
+identity and multiplicity; comparator self-tests PASS. Updated guard test
+analysis is clean. Dart format and idempotence, size, architecture and diff
+checks PASS. Initial manifest drafts with a broad three-occurrence pattern and
+missing patch metadata were rejected, archived separately and uncredited;
+final scoped patches include the required reason/test fields. No app bug fix,
+production move, k2 test, CI transition, pubspec change, real network or device
+action. S2b stops for independent review. After acceptance, refresh the draft
+P8 manifest/probe against the S2b original before k2 and production work; the
+old S2 Step-T materialization is not a current-tree proof of this extension.

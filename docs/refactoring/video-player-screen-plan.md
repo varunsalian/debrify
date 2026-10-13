@@ -409,6 +409,19 @@ Options, in order of preference — **the design review must settle this**:
 The harness also provides a widget pump with the storage/service fakes, a
 method-channel recorder, and helpers to drive TV keys, taps and timers.
 
+**Phase-8 platform checkpoints S2 / S2b.** S remains unchanged. S2 adds
+only the approved PiP/background predicate sites below. On 2026-10-13 Claude,
+the plan owner, approved **S2b** as a separately committed seam extension:
+reuse `VpS2Hooks.isAndroid` at the renderer-mode load in `_initializePlayer`
+and the renderer fallback eligibility argument in `_canFallbackExplicitRenderer`.
+These two real Android guards otherwise prevent a desktop S2 test from creating
+a replacement player inside the same State while iOS handle delivery is held
+(sample k2); the later player-engine phase also needs these predicates covered.
+Native defaults still evaluate the original predicate once and in its original
+order. No new hook or installer. Exact declaration patches, independent site
+default/order negatives, source guard and S/S2 proofs are required as for S2.
+S2b stops for its own independent review before k2 characterization or moves.
+
 **Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
 work, and resources"): each stateful phase's step 0 pins, where its
 members participate, captured-scope writes, profile switch/deletion during
@@ -1358,7 +1371,8 @@ presentation stays device-pending.
 ### Order of steps
 
 H (shared fixture hardening, test-only) → S2 (seam checkpoint) → T → 0 →
-Claude sample → 0b → 1 → gate → review → **M1**.
+Claude sample → 0b (k19) → S2b (approved extension; independent review) →
+0b (k2; refreshed original/tooling/baseline) → 1 → gate → review → **M1**.
 
 ### Step H — shared fixture hardening (test-only)
 
@@ -1394,6 +1408,21 @@ getters** (no destination imports the facade). Tests use the existing
 through `IosPipPlayerRoute` for session wiring; `fake_player.dart:190`
 gains **distinct controllable handles** (it returns `71` for every player,
 which cannot distinguish stale iOS handle callbacks).
+
+**S2b decision (Claude, plan owner, 2026-10-13).** Approve exactly two
+additional predicate substitutions: `_initializePlayer`'s
+`Platform.isAndroid && !PlatformUtil.isAndroidTvCached` at 2266 and
+`_canFallbackExplicitRenderer`'s `isAndroid: Platform.isAndroid` at 3330
+(line numbers at S2). Each becomes `VpS2Hooks.isAndroid`, with the other
+operands/arguments and their evaluation order unchanged. Same-State player
+replacement is available only through Android renderer fallback, which k2
+needs while the iOS handle is held; the later player-engine phase needs
+this coverage too. Reuse the existing hook/getter/installer unchanged;
+extend the seam manifest/proof by one exact patch per declaration and add
+independent default/count/order negatives for both sites. Preserve all S2
+patches, native default behavior, S proof and the source guard. S2b is a
+separate seam extension checkpoint, then **stop for independent review**;
+no k2 test, production move, Step-1 CI transition or gate in that checkpoint.
 
 ### Moves → `presentation/legacy_video_player/vp_pip_lifecycle.dart`
 
@@ -2984,6 +3013,39 @@ checkpoint. Step T/0 proceed without production moves.
   State call, extra initialization, source-text behavior test or application
   change manufactures the missing condition. No bug fix, pubspec change,
   real network, build/run/install, device command, push, merge or branch switch.
+
+### 2026-10-13 — S2b seam extension checkpoint (stop for independent review)
+
+- **Revision/decision.** Follows `652def541`. Claude, plan owner, approved
+  exactly the two Android renderer guards so k2 can exercise replacement in
+  the same State and the later player-engine phase can reuse the coverage.
+  Decision/rationale recorded in Characterization harness and Phase 8.
+- **Change/proof.** Only `_initializePlayer`'s renderer condition and
+  `_canFallbackExplicitRenderer`'s Android argument now read
+  `VpS2Hooks.isAndroid`. Existing hook/getters/installer and all nine S2
+  declaration patches stay frozen; no new installer. Native predicate once,
+  short-circuit/argument order and all other application bytes preserved.
+  Extended seam ledger: 817 spans, 11 patched declarations, 13 counted patches,
+  17 occurrences. Ten new independent site negatives, 23 total, PASS.
+- **Commands/results.** Nice-19 `vplayer_seam_proof.py --self-test`,
+  `vplayer_platform_seam_proof.py --self-test`, current seam
+  `check_dart_moves.py` and historical `--at 21b19c944` PASS; every command
+  uses an isolated copied `--parser-package` under `.dart_tool/vplayer_parser/`
+  with copied kernels removed. Serialized `suite_evidence.py run` on the
+  existing S/S2 guard files with `--no-pub --concurrency=1` and
+  `--dart-define=DEBRIFY_VP_TEST_HOOKS=true/false`: 7/7 PASS in each mode.
+  Scoped root analysis: 98 diagnostics, zero new identities/counts;
+  analyzer comparator/self-tests and guard-test analysis PASS. Dart format /
+  idempotence, size, architecture and diff PASS. Commands, JSONL, input/SDK
+  metadata, exact delta and proof outputs: `p8/s2b/`.
+- **Deviations/stop.** Two rejected manifest drafts (broad matching and
+  incomplete patch metadata) archived without passing credit; exact scoped
+  patches corrected. No k2 characterization, production move, Step-1 CI
+  transition or gate. Application diff is the two approved predicates;
+  pubspec unchanged. No bug fix, real network, run/install/device action,
+  push, merge or branch switch. Stop for S2b independent review. After
+  acceptance, refresh the Phase-8 draft/probe against S2b before continuing;
+  prior S2 materialization is not claimed as current evidence.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S2 ownership, platform default/installation and application-reference guards."""
+"""S2/S2b ownership, native default/order and installation/reference guards."""
 import argparse
 import json
 import re
@@ -8,12 +8,12 @@ from pathlib import Path
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
 from check_dart_moves import run_manifest
 from check_settings_moves import tokens
-from dart_move_history import load_manifest
+from dart_move_history import git_text, load_manifest
 
 SOURCE = 'lib/screens/video_player_screen.dart'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p8_seam.json'
 HOOK = 'VpS2Hooks'
-SITES = {
+S2_SITES = {
     'initState': {'isIOS': 1, 'isAndroid': 1},
     '_bindPlayerInstanceSubscriptions': {'isIOS': 1},
     '_openMedia': {'isIOS': 1},
@@ -23,6 +23,28 @@ SITES = {
     '_armPipAutoEnter': {'isIOS': 1},
     '_onPipModeChanged': {'isIOS': 1},
     '_pauseForBackground': {'isIOS': 2, 'isAndroid': 1},
+}
+S2B_SITES = {
+    '_initializePlayer': {'isAndroid': 1},
+    '_canFallbackExplicitRenderer': {'isAndroid': 1},
+}
+SITES = {**S2_SITES, **S2B_SITES}
+S2B_CONTEXTS = {
+    '_initializePlayer': ['if', '(', HOOK, '.', 'isAndroid', '&&', '!',
+                          'PlatformUtil', '.', 'isAndroidTvCached', ')'],
+    '_canFallbackExplicitRenderer': [
+        'AndroidRendererStartupFallback', '.', 'shouldArm', '(', 'isAndroid',
+        ':', HOOK, '.', 'isAndroid', ',', 'isAndroidTv', ':', 'PlatformUtil',
+        '.', 'isAndroidTvCached', ','],
+}
+S2B_PATCHES = {
+    '_initializePlayer': dict(
+        before=['if', '(', 'Platform', '.', 'isAndroid', '&&', '!',
+                'PlatformUtil', '.', 'isAndroidTvCached', ')'],
+        after=S2B_CONTEXTS['_initializePlayer'], count=1),
+    '_canFallbackExplicitRenderer': dict(
+        before=['isAndroid', ':', 'Platform', '.', 'isAndroid'],
+        after=['isAndroid', ':', HOOK, '.', 'isAndroid'], count=1),
 }
 
 
@@ -60,6 +82,16 @@ def installation_errors(members):
     return errors
 
 
+def renderer_site_errors(members):
+    """Independent of manifest substitutions: once-only reads in original order."""
+    errors = []
+    for name, context in S2B_CONTEXTS.items():
+        body = members.get(name, [])
+        if len(includes(body, context)) != 1 or body.count(HOOK) != 1:
+            errors.append('renderer predicate default/count/order changed: ' + name)
+    return errors
+
+
 def source_errors(sources):
     errors = ['platform hook reference outside facade: ' + path for path, source in sources.items()
               if path != SOURCE and HOOK in source]
@@ -74,8 +106,19 @@ def prove(package, self_test=False):
     expected = { '_VideoPlayerScreenState.' + name: counts for name, counts in SITES.items() }
     assert set(r['original'] for r in patched) == set(expected)
     for row in patched:
-        assert row['patches'] == [dict(before=['Platform', '.', name], after=[HOOK, '.', name], count=count)
-                                   for name, count in expected[row['original']].items()]
+        name = row['original'].split('.')[-1]
+        declared = ([S2B_PATCHES[name]] if name in S2B_PATCHES else
+                    [dict(before=['Platform', '.', predicate], after=[HOOK, '.', predicate], count=count)
+                     for predicate, count in expected[row['original']].items()])
+        assert row['patches'] == declared
+    # Preserve the accepted S2 declaration patches and hook/installer verbatim.
+    accepted_s2 = json.loads(git_text('21b19c944', MANIFEST))
+    accepted_patches = {r['original']: r['patches'] for r in accepted_s2['declarations']
+                        if r['fate'] == 'patched'}
+    assert set(accepted_patches) == {'_VideoPlayerScreenState.' + name for name in S2_SITES}
+    current_patches = {r['original']: r['patches'] for r in patched}
+    assert all(current_patches[name] == patches for name, patches in accepted_patches.items())
+    assert checkpoint['scaffolding'] == accepted_s2['scaffolding']
     applied = []
     for path in (ROOT / 'dev/tool/dart_moves').glob('*.json'):
         candidate = json.loads(path.read_text())
@@ -90,6 +133,10 @@ def prove(package, self_test=False):
     assert tokens(hook) == checkpoint['scaffolding'][SOURCE][HOOK]
     members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']] for n in hook['members']}
     errors += default_errors(members) + installation_errors(members)
+    state = next(n for n in unit['declarations'] if n['name'] == '_VideoPlayerScreenState')
+    renderer_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                        for n in state['members'] if n['name'] in S2B_SITES}
+    errors += renderer_site_errors(renderer_members)
     negatives = []
     if self_test:
         import copy
@@ -116,8 +163,35 @@ def prove(package, self_test=False):
         mutated = copy.deepcopy(members);mutated['other'] = ['_installed', '=', 'hooks', ';'];assert installation_errors(mutated);negatives.append('assignment in other member')
         assert source_errors({SOURCE:sources[SOURCE], 'lib/other.dart':HOOK + '.install(null);'});negatives.append('other lib reference')
         assert source_errors({SOURCE:sources[SOURCE] + '\n' + HOOK + '.install(null);'});negatives.append('facade installer reference')
+        for site, context in S2B_CONTEXTS.items():
+            for name in ['wrong predicate', 'override bypassed', 'predicate twice',
+                         'operand order', 'TV predicate changed']:
+                mutated = copy.deepcopy(renderer_members)
+                body = mutated[site]
+                start = includes(body, context)[0]
+                hook_at = start + context.index(HOOK)
+                if name == 'wrong predicate':
+                    body[hook_at + 2] = 'isIOS'
+                elif name == 'override bypassed':
+                    body[hook_at] = 'Platform'
+                elif name == 'predicate twice':
+                    body[hook_at:hook_at] = [HOOK, '.', 'isAndroid', '&&']
+                elif name == 'operand order':
+                    end = start + len(context)
+                    reordered = (['if', '(', '!', 'PlatformUtil', '.', 'isAndroidTvCached',
+                                  '&&', HOOK, '.', 'isAndroid', ')']
+                                 if site == '_initializePlayer' else
+                                 ['AndroidRendererStartupFallback', '.', 'shouldArm', '(',
+                                  'isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached', ',',
+                                  'isAndroid', ':', HOOK, '.', 'isAndroid', ','])
+                    body[start:end] = reordered
+                else:
+                    body[body.index('isAndroidTvCached', start)] = 'isTelevision'
+                assert renderer_site_errors(mutated), 'independent site guard accepted ' + site + ': ' + name
+                negatives.append('S2b ' + site + ': ' + name)
     return errors, dict(patched_declarations=len(patched), counted_patches=sum(len(r['patches']) for r in patched), predicate_occurrences=sum(sum(c.values()) for c in SITES.values()),
-                        classified_spans=len(checkpoint['declarations']), active_phase=active['phase'], independent_negatives=negatives)
+                        classified_spans=len(checkpoint['declarations']), active_phase=active['phase'], independent_negatives=negatives,
+                        s2_declarations_preserved=len(accepted_patches), s2b_sites=len(S2B_SITES))
 
 
 def main():

@@ -25,6 +25,19 @@ void main() {
       '${Directory.current.path}/.dart_tool/vplayer_parser/platform_seam_guard/.dart_tool/package_config.json',
     ]);
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    expect(result.stdout, contains('"s2_declarations_preserved": 9'));
+    expect(result.stdout, contains('"s2b_sites": 2'));
+    for (final site in ['_initializePlayer', '_canFallbackExplicitRenderer']) {
+      for (final negative in [
+        'wrong predicate',
+        'override bypassed',
+        'predicate twice',
+        'operand order',
+        'TV predicate changed',
+      ]) {
+        expect(result.stdout, contains('S2b $site: $negative'));
+      }
+    }
   });
 
   test('S2 native defaults are unchanged without an installed override', () {

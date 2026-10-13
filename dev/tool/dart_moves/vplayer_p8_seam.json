@@ -3181,7 +3181,40 @@
     },
     {
       "original": "_VideoPlayerScreenState._initializePlayer",
-      "fate": "retained"
+      "fate": "patched",
+      "patches": [
+        {
+          "before": [
+            "if",
+            "(",
+            "Platform",
+            ".",
+            "isAndroid",
+            "&&",
+            "!",
+            "PlatformUtil",
+            ".",
+            "isAndroidTvCached",
+            ")"
+          ],
+          "after": [
+            "if",
+            "(",
+            "VpS2Hooks",
+            ".",
+            "isAndroid",
+            "&&",
+            "!",
+            "PlatformUtil",
+            ".",
+            "isAndroidTvCached",
+            ")"
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Approved S2b renderer-mode loading predicate; single native default read and original short-circuit order retained.",
+      "test": "test/features/video_player/video_player_platform_seam_guard_test.dart"
     },
     {
       "original": "_VideoPlayerScreenState._watchStremioTvStartup",
@@ -3246,7 +3279,28 @@
     },
     {
       "original": "_VideoPlayerScreenState._canFallbackExplicitRenderer",
-      "fate": "retained"
+      "fate": "patched",
+      "patches": [
+        {
+          "before": [
+            "isAndroid",
+            ":",
+            "Platform",
+            ".",
+            "isAndroid"
+          ],
+          "after": [
+            "isAndroid",
+            ":",
+            "VpS2Hooks",
+            ".",
+            "isAndroid"
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Approved S2b renderer fallback eligibility predicate; single native default read and named-argument evaluation order retained.",
+      "test": "test/features/video_player/video_player_platform_seam_guard_test.dart"
     },
     {
       "original": "_VideoPlayerScreenState._fallbackExplicitRendererToAutomatic",
@@ -4601,6 +4655,6 @@
       "fate": "retained"
     }
   ],
-  "checkpoint": "S2",
-  "checkpoint_reason": "Platform predicates; no production move"
+  "checkpoint": "S2b",
+  "checkpoint_reason": "S2 platform predicates plus the separately approved two-site S2b Android renderer extension; no production move or new installer."
 }

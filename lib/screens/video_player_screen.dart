@@ -2266,7 +2266,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Load default player settings
     await _loadPlayerDefaults();
     unawaited(_loadDockPrefs());
-    if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
+    if (VpS2Hooks.isAndroid && !PlatformUtil.isAndroidTvCached) {
       _androidVideoRendererMode =
           await PlayerSettingsStorage.getAndroidVideoRendererMode();
     }
@@ -3330,7 +3330,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     required int mediaGeneration,
   }) =>
       AndroidRendererStartupFallback.shouldArm(
-        isAndroid: Platform.isAndroid,
+        isAndroid: VpS2Hooks.isAndroid,
         isAndroidTv: PlatformUtil.isAndroidTvCached,
         mode: _androidVideoRendererMode,
         alreadyValidated: _rendererValidatedForSession,
