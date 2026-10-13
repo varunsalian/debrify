@@ -5833,3 +5833,36 @@ command list. Rejected startup/package setup controls and initial fixture count
 assumptions are archived and uncredited; final original controls and all credited
 mutation logs complete without load errors. Test analysis/format clean. Full
 additions-only baseline follows before production moves.
+
+## Phase 8 Step 1 production creation (2026-10-13)
+
+Addendum `13df9a261` full baseline completes at 13,392 success / 13 failure /
+28 load error / 20 skip: exactly five passing additions versus the prior k19
+baseline; no changed, missing, fixed or newly skipped old identity. Both
+identity comparisons PASS, inputs stable. S2b remains the behavior original.
+
+The applied P8 manifest moves 14 declarations into the 318-line
+`vp_pip_lifecycle.dart`; eager State constructor assignment after completion,
+narrow live Host/adapter, seven State-owner substitutions and all 22 retained
+occurrences compare with zero differences. The onPause closure remains in the
+facade, recording teardown before its substituted inner pause call. Disposal
+statements keep their original position. Five initializers and constructor
+remain inert; callbacks/visibility registration and borrowed state stay owned
+by State. No earlier destination changes. The optional-comma proof and
+idempotence archive every permitted format delta; zero format diagnostics.
+
+CI current/self-test and both analyzer inputs use P8; named P1–P7 historical
+checks remain, S and S2/S2b proofs enabled. Existing feature-directory format/
+analyze coverage includes the new file. The eleven behavior files include
+the registered renderer file; existing harness commands retain the compile
+flag. Theme manifest, rendered set and all three source-guard path lists gain
+the new destination. There is no additional direct anchor in another source
+test for these moved declarations; the validating reader continues to follow
+the applied manifest. No assertion deleted. Facade cap lowered 17,004 → 16,829.
+
+Focused moved PiP/lifecycle/wakelock/renderer, seam and theme guards pass
+111/111. Current checker, format and architecture PASS. Destination diagnostics
+are three recorded infos (two original brace infos, one receiver-induced async
+context info); no new warning allowlist entry. Evidence `p8/step1/`; full
+clean-tree suite, all manifest checks and both release builds follow at the
+gate. No bug fix or dependency change.

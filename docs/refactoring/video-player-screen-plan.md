@@ -3086,6 +3086,35 @@ checkpoint. Step T/0 proceed without production moves.
   All rejected/development runs archived. Full additions-only baseline follows
   before Step 1. No bug fix, real network, run/install/device, push/merge/switch.
 
+### 2026-10-13 — Phase 8 addendum baseline and Step 1 creation
+
+- **Revisions/base.** Addendum `13df9a261`, behavior ORIGINAL S2b `866cbaf03`.
+  Complete `p8/k2/baseline.jsonl`: 13,392 success / 13 failure / 28 load error /
+  20 skip. Official and strict comparisons versus the k19 baseline PASS:
+  exactly five passing additions, no changed/missing/fixed/newly skipped old
+  identity. Stable clean-tree inputs; no allowance or flaky fixture change.
+- **Production move.** `VpPipLifecycle` + narrow Host, 318 lines, owns exactly
+  the 14 frozen declarations. Eager State constructor appends `_pip` after
+  completion, all fields/constructor inert. Frozen adapter forwards live S2
+  predicates, trackers and landscape state; seven owner substitutions use the
+  State. All 22 retained occurrences stay in place, including only the inner
+  call in the recording-first onPause closure and each disposal statement.
+  Current checker: zero differences; previous 17 destinations protected.
+- **CI/theme.** Current/self-test and both analyzer inputs now P8; P1–P7
+  named `--at` gates retained, S proof added explicitly, S2/S2b proof enabled.
+  Existing `lib/features` format/analyze lists include the new file. Eleven
+  behavior files registered with harness flag. Theme manifest/rendered set
+  and all three source-guard lists extended. No moved declaration has another
+  direct source-test anchor requiring retarget; source reader validates the
+  applied ownership ledger. Facade size baseline 17,004 → 16,829.
+- **Checks.** Nice-19 current-tree move comparison, optional-comma/idempotence
+  proof, format and architecture PASS. Serialized focused PiP/renderer/wake,
+  seam and theme guards: 111/111 PASS on moved code (`p8/step1/`). Original
+  controls/mutation witnesses remain archived. Probe/root identity inventory
+  preserved; three destination infos are recorded, no new warning allowance.
+  Full clean-tree gate follows; no gate result claimed in this creation commit.
+  No bug fix, pubspec change, real network, run/install/device, push/merge/switch.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
