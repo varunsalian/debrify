@@ -457,7 +457,7 @@ starts.
 | 5 | Trakt scrobbling (2041–2750 Trakt subset) | 280 | med |
 | 5b→6 | Simkl + MDBList scrobbling — **inserted as phase 6**; every later phase below shifts by one (provisional numbering) | 350 | med |
 | 6 | Local completion (1820–1870, 10374–10478) | 160 | med |
-| 7 | PiP + background/wakelock (11635–11882) — PiP branches device-pending unless a reviewed predicate seam | 250 | high |
+| 7→8 | PiP + background/wakelock (11635–11882) — reviewed platform-predicate seam S2 (renumbered: phase 8) | 250 | high |
 | **M1** | integration gate: controls/tracker/lifecycle scenarios | | |
 | 8 | Subtitle engine I: subtitle settings, sync overlay, auto-sync pill/notice (2940–3088 auto-sync part only, 6380–6626) | 450 | med |
 | 9 | Subtitle engine II: apply + diagnostics + failure + rollback (5014–5200, `_SubtitleApplyAttempt` users) | 300 | high |
@@ -1345,73 +1345,155 @@ locally even with trackers on.
 ## Phase 8 — PiP, background pause/resume and wakelock
 
 Branch `refactor/vplayer-p8` off the phase-7 merge `491bf1fea`. Evidence
-`refactor-evidence/vplayer/p8/`. Names below; line numbers at the
-phase-7 base (pre-move ≈ 10716–10970) — re-measure by name.
+`refactor-evidence/vplayer/p8/`. Line numbers at `491bf1fea`.
+
+**Decision (design review P2): option (b).** On the desktop harness
+`_pauseForBackground` returns immediately (10728) and production PiP
+callback registration is behind a mobile guard (1581), so a verbatim move
+characterized on desktop could not exercise background pause/resume,
+callback wiring or their races. A separately reviewed test-only
+platform-predicate seam **S2** covers the Dart wiring; native PiP
+presentation stays device-pending.
+
+### Order of steps
+
+H (shared fixture hardening, test-only) → S2 (seam checkpoint) → T → 0 →
+Claude sample → 0b → 1 → gate → review → **M1**.
+
+### Step H — shared fixture hardening (test-only)
+
+From the phase-7 review: consolidate fixture support once, without
+changing what the race tests exercise. Separate **"wait until the action
+entered its held boundary"** from **"await the action's completion"**:
+`trakt_snapshots_test.dart:64` deliberately leaves selection pending
+behind an open barrier, and `secondary_tracker_driver.dart:140` releases a
+held seek only after the earlier helper returns — awaiting completion
+there would deadlock or serialize the race. Keep guide-refresh barriers
+case-specific with their existing release behaviour; preserve timer
+observation and uncaught-error collection; drain pending operations before
+resetting transports or closing streams. Proof: test names and assertions
+token-identical; **assertions still evaluated while the intended action is
+pending** (recorded per race test); representative existing mutation
+witnesses re-run and still killed; ≥ 5 serial stress replays of the
+tracker/completion/snapshot files under load.
+
+### Step S2 — platform-predicate seam checkpoint (reviewed separately)
+
+A second test-only hook, **separate from S** (`vplayer_seam_proof.py:61`
+requires S's exact content; S stays untouched): one facade-level hook
+object overriding only the `dart:io Platform` predicates evaluated by (i)
+the moved PiP/background methods, (ii) the retained PiP registration guard
+(1581) and (iii) the retained predicate sites at 2868, 3922, 4064 and
+12694 (subtitle/timeline). Native defaults unchanged; predicate
+evaluation order frozen; assert-only installation, release/profile
+rejection and the `DEBRIFY_VP_TEST_HOOKS` gate as for S; a source guard;
+independent default-path and installation negatives; S's proof still
+passes. Moved bodies read the predicates through **live Host predicate
+getters** (no destination imports the facade). Tests use the existing
+`PipService.debugPlatform`, channel mocks, and mount the real screen
+through `IosPipPlayerRoute` for session wiring; `fake_player.dart:190`
+gains **distinct controllable handles** (it returns `71` for every player,
+which cannot distinguish stale iOS handle callbacks).
 
 ### Moves → `presentation/legacy_video_player/vp_pip_lifecycle.dart`
 
-`VpPipLifecycle` + Host (≈ 270 lines): the iOS PiP block declared
-mid-class — `_iosPipStarting`, `_iosPipDetached`, `_iosPipSession`
-(`PlayerPipSession?`, null), `_lastIosPipPositionSecond` (-1) — `_enterPip`, `_armPipAutoEnter`, `_pushPipState`,
-`_onPipModeChanged`, `_restoreIosPipPlayer`, `_onPipAction`,
-`_pauseForBackground`, `_resumeFromBackground`, `_syncWakelock`. Whether
-`_isPipActive` (read by subtitles 3976/12855, decoder 4118, build 13548,
-player subscriptions 2992) and `_pausedByLifecycle` (read by recovery 708, open/resume 3503/3537,
-IPTV recovery 9845/9849) move or stay
-State-owned is decided at step T by reader count (shared-state rule;
-default: stay State-owned, forwarded). `_lifecycle` (`AppLifecycleListener`
-created in `initState` with tear-offs of the background methods) stays
-State-owned; its callbacks become `_pip.` tear-offs at the same position.
+14 declarations (252 physical lines; destination ≈ 310–330 with Host and
+imports, under the 500 cap): the iOS PiP block 10556–10559
+(`_iosPipStarting`, `_iosPipDetached`, `_iosPipSession`,
+`_lastIosPipPositionSecond` — inert), `_backgroundedAt` (675, inert
+nullable; used only by the two moved background methods), `_enterPip`
+10562, `_armPipAutoEnter` 10615, `_pushPipState` 10626,
+`_onPipModeChanged` 10644, `_restoreIosPipPlayer` 10671, `_onPipAction`
+10691, `_pauseForBackground` 10727, `_resumeFromBackground` 10766,
+`_syncWakelock` 10805.
 
-**Owner identity:** `PipService.isOwner(this)` and any `this` passed to
-`PipService`/`PlayerVisibility` become `host.pipOwner` (rule 3, pinned by
-occurrence).
+**Stay State-owned:** `_isPipActive` (7 reading members, 5 retained),
+`_pausedByLifecycle` (5, 4 retained), `_lifecycle` (combines recording and
+playback; registers an observer in `initState`). Live Host getters/setters.
 
-**Reachability (key decision for the design review):** PiP branches are
-gated on real `dart:io Platform` (iOS/Android) — unreachable on the macOS
-harness. Options: (a) move verbatim (checker-proven token identity),
-characterize every desktop-reachable path (background pause/resume via
-the lifecycle listener, wakelock sync on play/pause/dispose, PiP
-"unsupported" early returns, `_pushPipState` payloads where reachable)
-and record PiP-active branches **device-pending**; or (b) a second
-reviewed test-only seam (platform predicate override confined to these
-members, same installation/proof rules as S). Claude recommends (a)
-unless the review finds wiring risk that only (b) can cover.
+**Owner identity:** the 7 moved `PipService.isOwner(this)` occurrences →
+`host.pipOwner`, frozen as `Object get pipOwner => _s;`. No moved
+`PlayerVisibility` calls; retained registration/visibility/detach keep the
+State identity.
 
-### Step H — shared fixture hardening (test-only, first)
+**Host (exact, frozen at step T):** player and flags, `setState` (→
+`_vpSetState`), `context`/`mounted`, timers/notifiers, recovery/channel
+dependencies, the S2 predicate getters, and actions with these exact
+signatures: `Future<void> setNativeSubtitleVisibilityForTrack(mk.SubtitleTrack track)`,
+`Future<void> goToNextEpisode()`,
+`void cancelPendingIptvCatchup({bool hideFeedback = true})`,
+`void traktScrobbleSeek(Duration position)` (likewise Simkl/MDBList — the
+three tracker calls and `_display.landscapeLocked` are Host projections
+registered by exact chain and occurrence). No moved body reads `widget`.
 
-From the phase-7 review P3: the snapshot/secondary fixtures were stabilized
-separately in phases 5, 6 and 7 for different triggers. Consolidate
-action-completion waits (the pumping `finish` helper), guide-refresh
-barriers and cleanup into shared support (`trakt_player_driver.dart:59`'s
-fixed drain replaced by awaited completion), keep every assertion and test
-name token-identical, prove each touched file on the original and the
-moved code, and stress-replay (≥ 5 serial full runs of the tracker,
-completion and snapshot files under load) before step 0.
+**Retained references (22 occurrences):** session assignment 1019;
+lifecycle callbacks 1545/1547 — the `onPause` **closure is retained**
+(it first starts recording teardown, then calls the background pause;
+only that inner call becomes `_pip.`), `onResume` is a direct tear-off;
+PiP registration/readiness callbacks 1587–1589/1594/2229;
+position/playing subscriptions 2868–2870/2946/2947; native/subtitle
+starting-state reads 3922/4064/12694; parked result handling 5376/5377;
+disposal fields 10817–10819 (in place); controls callback 14280.
+Listener and session construction/disposal stay at their original sites.
 
-### Step 0 — characterization of the original
+**Scaffolding / CI:** patched State constructor appends `_pip` after
+`_completion`; adapter; switch current/self-test and both analyzer inputs
+to P8; P1–P7 `--at` incl. P7 `491bf1fea`; protect all 17 earlier
+destinations; tests, theme paths and all three theme source-guard lists;
+probe receiver-induced async-context diagnostics and preserve `_enterPip`'s
+existing diagnostic identities.
 
-Lifecycle: inactive/hidden/paused → pause-for-background (pauses, saves,
-latches `_pausedByLifecycle`), resumed → resume-from-background (resumes
-only if it paused, respects the sleep latch, iOS PiP exemptions as
-reachable), repeated/overlapping transitions, disposal during a pending
-save; wakelock writes on play/pause/EOF/dispose via the display-controls
-channel recorder; PiP service calls/payloads that are reachable on
-desktop (unsupported platform → no-op); owner identity passed to
-services; early windows. Mutation proofs, coverage matrix (with the
-device-pending list), Claude sample.
+### Step 0 — characterization of the original (at S2)
+
+- **Lifecycle:** valid transitions — inactive/hidden do **not** pause;
+  paused → background pause (latches `_pausedByLifecycle`; **no resume
+  save** — the user-pause save belongs to `_togglePlay`, 12658, so
+  pending-save cases come from an existing user action or autosave);
+  resumed → resume only if it paused, respecting the sleep latch; the
+  retained `onPause` closure's recording teardown runs first.
+- **Async boundary matrix (pin effects, errors and actual pending-save
+  writes; defects documented separately):** background pause pending when
+  resume issues play, then the old pause released; backgrounding during
+  renderer replacement or Start Over, incl. no live player yet; sleep
+  expiry between pause and resume; support resolution, player-handle
+  delivery, native subtitle preparation, PiP entry and restore orientation
+  held across replacement, disposal or profile handoff (`_enterPip` 10569
+  checks player identity after handle delivery but then awaits subtitle
+  preparation; `_restoreIosPipPlayer` 10677 continues platform requests
+  across awaits before its final owner check — player/State ownership, not
+  profile ownership).
+- **Wakelock queued-write semantics** (`player_display_controls.dart:90`
+  samples the latest request and independent owners when each queued write
+  runs): a held/rejected native toggle, rapid play/pause/dispose,
+  buffering, another wake owner keeping the lock, completion with and
+  without a playing-false event (EOF alone does not call
+  `_syncWakelock(false)`); initial acquisition and the `replacedPip`
+  disposal exemption; drain the queue before restoring platform interfaces
+  so cleanup cannot supply a release a mutation should expose.
+- **PiP (through S2):** auto-enter arming, enter/exit state pushes and
+  payloads, mode changes, actions, iOS restore with distinct handles,
+  owner identity passed to services; native presentation device-pending.
+- Early windows; mutation proofs; coverage matrix with an honest
+  device-pending list; Claude sample.
 
 ### Device checklist (end of series)
 
 Android: home → PiP auto-enter, PiP play/pause actions, return restores
-controls; iOS: PiP start/stop, player restore; background/foreground
-pauses and resumes correctly; screen stays awake while playing and
-sleeps when paused.
+controls; iOS: PiP start/stop and player restore; background/foreground
+pauses and resumes correctly (recording stops on background); screen stays
+awake while playing and sleeps when paused.
 
-**Integration milestone M1** runs after this phase merges: full suite,
-both release builds, and a cross-phase scenario pass over phases 2–8
-(sleep + skip + display + trackers + completion + lifecycle together on
-one playback).
+### Integration milestone M1 (after phase 8 merges)
+
+Full suite, both release builds, and one cross-phase scenario on a single
+playback with **local progress ownership plus enabled scrobble targets**
+seeded (`tracking_source_policy.dart:133`; otherwise completion stays
+disabled): skip-segment seek fans out to all three trackers in order;
+speed persists across resume; completion marks at threshold;
+end-of-item sleep suppresses advance; lifecycle resume respects the sleep
+latch (through S2); a later explicit play and episode reset clear the
+latch and completion flags. Mobile coverage as provided by S2; native PiP
+device-pending.
 
 ## Follow-ups
 
@@ -2830,3 +2912,15 @@ threshold in both directions with a selective loader barrier; caught vs
 uncaught failure state and partial cleanup failure. P3s: corrected
 11-occurrence ledger (no playlist-index caller of the episode mark);
 explicit CI/theme/analyzer transition.
+
+## Phase 8 design review resolution (Codex `vp-design`, 2026-10-13) — "No P1s"
+
+Chose option (b): seam S2 (platform predicates, separate from S) so
+mobile background pause/resume and PiP wiring are characterized; native
+presentation device-pending. P2s folded: retained `onPause` closure
+(recording teardown) and no background resume save; Step H separates
+"entered held boundary" from "completed" and proves races stay concurrent;
+explicit async boundary matrix; wakelock queued-write semantics. P3s:
+ownership (`_isPipActive`, `_pausedByLifecycle`, `_lifecycle` State-owned;
+`_backgroundedAt` moves), exact Host signatures, 7 `pipOwner`
+substitutions, 22-occurrence ledger, concrete M1 and CI.
