@@ -1524,6 +1524,65 @@ latch (through S2); a later explicit play and episode reset clear the
 latch and completion flags. Mobile coverage as provided by S2; native PiP
 device-pending.
 
+## Phase 9 — subtitle engine I: auto-sync, sync overlay and subtitle settings
+
+Branch `refactor/vplayer-p9` off the M1 merge `bd671bd09`. Evidence
+`refactor-evidence/vplayer/p9/`. Line numbers at `0df6ccd4e` (phase-8
+merge; M1 is test-only) — re-measure by name.
+
+Subtitle work is split over phases 9–11 with one **state-ownership map**
+(below) and integration milestone **M2** after phase 11.
+
+### Subtitle state-ownership map (phases 9–11)
+
+| State | Owner after phase 11 | Notes |
+|---|---|---|
+| `_subtitleSettings` (1295) | **State** (read by build 12446/12461, menus, apply paths, overlay) | shared; forwarded |
+| `_activeExternalSubtitlePath` (1322) | State | read by apply/failure (phase 10), preferences (phase 11), PiP |
+| `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer`, `_autoSyncPillLastShown` (1330–1341) | **phase 9 controller** | `_autoSyncPill` (1334, a `ValueNotifier`) stays State-owned (allocation-order rule) |
+| `_showSyncOverlay` (654) | phase 9 controller or State by reader count (step T) | build reads it |
+| apply-attempt / diagnostic generation / selection-correction state | phase 10 controller | `VpSubtitleApplyAttempt` already a model |
+| addon/Stremio subtitle fetch, temp files, priority, track preferences | phase 11 controllers | |
+
+### Moves → `presentation/legacy_video_player/vp_subtitle_auto_sync.dart` (+ `vp_subtitle_sync_overlay.dart` if > 400 lines)
+
+Auto-sync: `_installSubtitleAutoSyncForPlayer` 1951, `_disposeSubtitleAutoSync`
+1984, `_applyAutoSubtitleSyncOffset` 1991, `_showSubtitleAutoSyncNotice`
+2009, `_openAutoSyncPillWindow` 2046, `_showAutoSyncPillResult` 2062,
+`_hideAutoSyncPill` 2074, `_setActiveExternalSubtitlePath` 2083 (writes the
+State-owned path — or stays State-owned if its readers dominate; step T).
+Settings/overlay: `_loadSubtitleSettings` 5403, `_onSubtitleStyleChanged`
+5549, `_applySubtitleSyncOffset` 5566, `_resetSubtitleSyncOffset` 5573,
+`_showSyncOverlayPanel` 5594, `_hideSyncOverlay` 5602, `_buildSyncOverlay`
+5606, `_buildSliderSyncOverlay` 5631 (widget builders — move to a
+presentation helper with live Host reads; builder-local `context` stays
+lexical). Fields per the map. ≈ 300 lines out.
+
+**Retained references:** player creation installs auto-sync (≈ 2870–2897),
+dispose (timers cancel in place; auto-sync dispose), build (sync overlay,
+subtitle view config), menus (style changed, sync requested), PiP subtitle
+visibility (via the phase-8 Host — a patched adapter if it reads moved
+members), apply/failure paths (phase 10, still in State). Measured at
+step T.
+
+### Step 0 — characterization of the original
+
+Auto-sync: enablement from settings, install per player instance (old
+instance's engine disposed on replacement), offset application clamped and
+persisted into settings, notice/pill phases (announce 5 s auto-dismiss,
+result hold, hide), window active flag, disposal mid-window, external path
+changes; settings load (profile-scoped subtitle settings service), style
+changes propagating to the view config, manual sync offset apply/reset,
+overlay show/hide incl. TV focus release, slider overlay; early windows;
+async/profile cases (settings load across a profile switch). Mutation
+proofs, coverage matrix, Claude sample.
+
+### Device checklist (end of series)
+
+Auto subtitle sync on a mistimed external subtitle (pill announces, result
+shows, offset applied); manual sync slider and reset; subtitle style
+changes apply live (phone, TV, desktop, tvOS).
+
 ## Follow-ups
 
 - **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
