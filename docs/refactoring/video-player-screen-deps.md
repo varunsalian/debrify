@@ -6573,3 +6573,41 @@ all assertions; complete final runs pass. Step T, Step 0, production moves,
 full-suite gate and builds are deferred until independent S2c review. Android
 bitmap rejection/acceptance and TV exemption are Step-0 caller cases; decoded
 bitmap rendering stays device-pending. Final revision: `p10/s2c/commit.json`.
+
+
+## Phase 10 Step T — subtitle apply draft and approved Host correction
+
+Original application checkpoint: S2c `a2e034cb3`; P9 historical merge
+`5c7b704bd`. Claude accepted `vp-rev10s2c` with no P1/P2/P3 and approved
+`p10/stepT/host-correction-proposal.json` (plan checkpoint `2adc21ec2`). The
+frozen Host is 18 names /21 declarations, with a live `isAndroid` getter
+forwarding exactly to `VpS2Hooks.isAndroid` and four registered complete chains.
+The destination has no facade import.
+
+The evidence-only materialization classifies all 789 original spans: 782
+retained, five moved and two patched (State constructor and PiP Host adapter).
+The 23 retained references comprise 22 ordinary substitutions and the one
+counted PiP adapter rewrite. Both diagnostics fields and the correction notifier
+remain State-owned; reset/disposal statements and resource ordering remain in
+place. The constructor appends the inert collaborator after `_subtitleSync`.
+All 19 earlier destinations are derived from historical manifests and protected.
+The formatted hypothetical destination is 223 lines; the facade is 16,477 lines.
+Application code and current CI still select the accepted S2c checkpoint.
+
+`p10/stepT/probe/`, `formatted/`, `remeasured.json` and the draft manifest freeze
+imports, member order, Host/adapter bodies and substitutions. Formatting inserts
+one AST-optional trailing comma in the destination and none in the facade;
+zero token differences, idempotence and zero introduced diagnostic identities.
+The original root and probe each have 104 scoped diagnostics; the strict original
+has 176. The P10 inventory preserves every P1–P9 identity and canonical mapping;
+no receiver-induced async-context diagnostic in the five moved methods.
+`format-diagnostics.json`, `async-context-identities.json` and analyzer logs record
+identity correspondence by declaration, not line counts.
+
+Real-config negatives cover live/cached platform and player getters, all four
+chain registrations, shared field/setter/increment ownership, captured locals,
+constructor effects, PiP projection, teardown preservation, notifier identity
+and facade imports. The new fixture is registered in the universal Dart checker
+self-test. Commands and completed results are archived in `p10/stepT/`; the 36
+unchanged prerequisite checks (26 existing Dart manifests, P1–P9 `--at`, Kotlin)
+are reused from `independent-results.json`.

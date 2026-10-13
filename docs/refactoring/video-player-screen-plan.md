@@ -3640,6 +3640,29 @@ no destination facade import, production change or CI transition. Plan-only
 checkpoint; Step T and full Step 0 continue against `a2e034cb3` application code.
 Validation: exact diff and `git diff --check`.
 
+### 2026-10-14 — Phase 10 Step T complete (application still S2c)
+
+- Revision: original `a2e034cb3`, plan-owner correction `2adc21ec2`; this tooling
+  checkpoint is archived in `p10/stepT/commit.json`. Complete draft materializes
+  five moves, 782 retained and two patched spans (789 exhaustive); 23 retained
+  occurrences, exact 18-name /21-declaration Host and four registered chains.
+  Hypothetical destination 223 lines; State fields and teardown stay in place.
+- Commands/results: `draft_vplayer_subtitle_apply_moves.py`, real-config fixture
+  and universal `check_dart_moves --self-test --self-compare-original`, all-retained
+  self-compare, S and S2/S2b/S2c proofs PASS. P1–P9 named `--at`, 26 existing
+  Dart manifest self-tests and Kotlin self-test PASS in the unchanged prerequisite
+  evidence. All 19 earlier destinations protected; isolated copied parsers,
+  copied kernels removed, nice19 throughout.
+- Root/probe analyzer 104 scoped identities, strict original 176; inventory
+  preserves every earlier mapping. Optional-comma proof: one destination comma,
+  zero facade comma edits, idempotence, zero formatting diagnostic additions.
+  Evidence: `p10/stepT/` commands, complete logs and identity reports.
+- Deviation: first universal command completed its assertion phase but rejected
+  the draft in its CLI postamble without `--self-compare-original`. That attempt
+  is archived uncredited; the full corrected command completed with exit 0.
+  Final generator replay produces the identical manifest. No application,
+  pubspec or production CI transition; Step 0 continues on S2c.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
