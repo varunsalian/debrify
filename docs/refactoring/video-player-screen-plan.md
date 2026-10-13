@@ -3604,6 +3604,32 @@ passthrough-off Android case (still device-pending). Claude sample 16/20 →
   or device action.
   STOP for S2c independent review; native bitmap rendering remains device-pending.
 
+2026-10-14 — **Phase 10 independent S2c review (`vp-rev10s2c`): no P1/P2/P3.**
+Checkpoint `a2e034cb3` accepted. S2c is the ORIGINAL for Phase-10 behavior and
+mutation proofs; `5c7b704bd` remains the phase-9 historical merge checkpoint.
+
+### 2026-10-14 — Phase 10 prerequisites; frozen Host correction pending
+
+- S2c original re-measured: five methods, 150 AST statement/branch/literal sites,
+  exactly 23 retained executable references. All 36 independent nice19 checks
+  PASS: 26 existing Dart manifest self-tests, P1–P9 at their named merges and
+  Kotlin self-test. Every Dart invocation uses an isolated copied parser with
+  copied kernels removed. Evidence `p10/stepT/independent-results.json`.
+- Complete S2c original suite by identity versus P9 gate PASS: 13,465 successes,
+  unchanged 13 failures/28 load errors/20 skips, zero added/missing/changed/fixed
+  identities. SDK identical; tested tree stable. `p10/step0/original-suite*`.
+- **Blocking design mismatch:** the explicitly frozen 17-name /20-declaration
+  Host and three chains omit `isAndroid`, now required by the accepted S2c
+  predicate inside the moved diagnostics method. Preserving it without a facade
+  back-import needs `bool get isAndroid => VpS2Hooks.isAndroid;` and the fourth
+  exact chain. Proposed correction is 18 names /21 declarations /four chains;
+  `p10/stepT/host-correction-proposal.json`. Direction requested; not applied.
+- Step T materialization/probe/commit and full Step 0 remain incomplete.
+  Eighteen caller-case development controls and two pilot assertion witnesses
+  are preserved only in the detached original/evidence; they are not credited
+  as a completed coverage matrix or final mutation sweep. Main application,
+  pubspec and CI unchanged; no production move, push/merge/switch or device work.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
