@@ -25,6 +25,7 @@ class SubtitleSyncDriver {
   SubtitleSyncDriver({
     bool native = true,
     this.fileTransport = false,
+    this.speechWindows = const [],
     void Function(FakePlayer)? configurePlayer,
   }) : fixture = VideoPlayerEnvironment(
          native: native,
@@ -46,6 +47,7 @@ class SubtitleSyncDriver {
          },
        );
   final bool fileTransport;
+  final List<SpeechSpan> speechWindows;
   final VideoPlayerEnvironment fixture;
   final logs = <String>[];
   final errors = <Object>[];
@@ -126,12 +128,21 @@ class SubtitleSyncDriver {
       result.add((start: time, end: time + length));
       time += length + 400 + random.nextInt(2200);
     }
-    return result;
+    return speechWindows.isEmpty
+        ? result
+        : result
+              .where(
+                (span) => speechWindows.any(
+                  (window) =>
+                      span.start >= window.start && span.end <= window.end,
+                ),
+              )
+              .toList();
   }
 
   String srt(List<SpeechSpan> spans, {int offsetMs = 2000}) {
     String stamp(int ms) {
-      final d = Duration(milliseconds: ms.clamp(0, 10000000));
+      final d = Duration(milliseconds: ms < 0 ? 0 : ms);
       String pad(int n, int width) => n.toString().padLeft(width, '0');
       return '${pad(d.inHours, 2)}:${pad(d.inMinutes % 60, 2)}:'
           '${pad(d.inSeconds % 60, 2)},${pad(d.inMilliseconds % 1000, 3)}';

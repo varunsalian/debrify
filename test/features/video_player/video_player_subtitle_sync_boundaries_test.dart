@@ -190,77 +190,83 @@ void main() {
     },
   );
 
-  testWidgets(
-    'subtitle cold window remains quiet when a late session offset suppresses listening then a track reset releases the ladder',
-    (t) async {
-      // A callback belonging to the outgoing route changes only the shared
-      // session offset. It cannot reset the incoming route's window flag.
-      final old = SubtitleSyncDriver();
-      await old.initialize(t, enabled: false);
-      await old.mount(t);
-      final oldMenu = await openPlayerMenu(t, old.fixture);
-      oldMenu.onClose();
-      oldMenu.onSyncRequested!();
-      await old.fixture.advance(t);
-      final dynamic callback = t
-          .widget<SyncStepperOverlay>(find.byType(SyncStepperOverlay))
-          .onOffsetChanged;
-      await old.close(t);
+  for (final sessionOffset in [1500, -1500]) {
+    testWidgets(
+      sessionOffset > 0
+          ? 'subtitle cold window remains quiet when a late session offset suppresses listening then a track reset releases the ladder'
+          : 'subtitle cold negative session offset is applied by the suspended settings load and suppresses listening',
+      (t) async {
+        // A callback belonging to the outgoing route changes only the shared
+        // session offset. It cannot reset the incoming route's window flag.
+        final old = SubtitleSyncDriver();
+        await old.initialize(t, enabled: false);
+        await old.mount(t);
+        final oldMenu = await openPlayerMenu(t, old.fixture);
+        oldMenu.onClose();
+        oldMenu.onSyncRequested!();
+        await old.fixture.advance(t);
+        final dynamic callback = t
+            .widget<SyncStepperOverlay>(find.byType(SyncStepperOverlay))
+            .onOffsetChanged;
+        await old.close(t);
 
-      final d = SubtitleSyncDriver();
-      final font = CompletionDelivery('loadAll', (v) => v is int);
-      final alignment = CompletionDelivery(
-        '_runAlignment',
-        (v) => v is SubtitleAlignResult,
-      );
-      await d.initialize(t);
-      try {
-        await font.run(() => d.mount(t));
-        await d.fixture.until(t, () => font.pending.isNotEmpty);
-        await offset(t, old, callback, 1500);
-        expect(
-          await d.fixture.finish(
+        final d = SubtitleSyncDriver();
+        final font = CompletionDelivery('loadAll', (v) => v is int);
+        final alignment = CompletionDelivery(
+          '_runAlignment',
+          (v) => v is SubtitleAlignResult,
+        );
+        await d.initialize(t);
+        try {
+          await font.run(() => d.mount(t));
+          await d.fixture.until(t, () => font.pending.isNotEmpty);
+          await offset(t, old, callback, sessionOffset);
+          expect(
+            await d.fixture.finish(
+              t,
+              SubtitleSettingsService.instance.getSyncOffsetMs(),
+            ),
+            sessionOffset,
+          );
+          font.release();
+          await d.fixture.until(
             t,
-            SubtitleSettingsService.instance.getSyncOffsetMs(),
-          ),
-          1500,
-        );
-        font.release();
-        await d.fixture.until(
-          t,
-          () => d.native.properties['sub-delay'] == '1.500',
-        );
-        final menu = await alignment.run(() => d.select(t));
-        await d.feed(t);
-        expect(d.logs.where((v) => v.contains('Trying to sync')), isEmpty);
-        expect(
-          d.logs.join('\n'),
-          contains('listening suppressed — stored offset 1500ms'),
-        );
-        expect(d.pill, isNull);
-        // This is the panel's callback after its accepted track-change Future.
-        // A slow preference write can place it after engine activation.
-        menu.onSubtitleTrackChanged!();
-        await d.fixture.advance(t);
-        expect(d.native.properties['sub-delay'], '0.000');
-        await d.fixture.advance(t, const Duration(seconds: 8));
-        await d.fixture.until(t, () => alignment.pending.isNotEmpty);
-        expect(d.pill, isNull);
-        alignment.release();
-        await d.fixture.until(
-          t,
-          () => d.pill?.phase == AutoSyncPillPhase.synced,
-        );
-        expect(d.native.properties['sub-delay'], '1.869');
-        expect(d.errors, isEmpty);
-        expect(old.errors, isEmpty);
-      } finally {
-        font.release();
-        alignment.release();
-        await d.close(t);
-      }
-    },
-  );
+            () =>
+                d.native.properties['sub-delay'] ==
+                (sessionOffset / 1000).toStringAsFixed(3),
+          );
+          final menu = await alignment.run(() => d.select(t));
+          await d.feed(t);
+          expect(d.logs.where((v) => v.contains('Trying to sync')), isEmpty);
+          expect(
+            d.logs.join('\n'),
+            contains('listening suppressed — stored offset ${sessionOffset}ms'),
+          );
+          expect(d.pill, isNull);
+          // This is the panel's callback after its accepted track-change Future.
+          // A slow preference write can place it after engine activation.
+          menu.onSubtitleTrackChanged!();
+          await d.fixture.advance(t);
+          expect(d.native.properties['sub-delay'], '0.000');
+          await d.fixture.advance(t, const Duration(seconds: 8));
+          await d.fixture.until(t, () => alignment.pending.isNotEmpty);
+          expect(d.pill, isNull);
+          alignment.release();
+          await d.fixture.until(
+            t,
+            () => d.pill?.phase == AutoSyncPillPhase.synced,
+          );
+          expect(d.native.properties['sub-delay'], '1.869');
+          expect(d.errors, isEmpty);
+          expect(old.errors, isEmpty);
+        } finally {
+          font.release();
+          alignment.release();
+          await d.close(t);
+        }
+      },
+    );
+  }
   for (final enabled in [false, true]) {
     testWidgets(
       'subtitle stored enablement $enabled gates actual installation and selection',

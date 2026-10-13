@@ -5978,13 +5978,13 @@ engine, synthetic notices, private State calls or source-text behaviour tests.
 | `_autoSyncPillPhaseTimer` | exact 5 s announcement, fresh listening cancellation and dispose |
 | `_installSubtitleAutoSyncForPlayer` | enabled/disabled, nonnative, exact diagnostic, desktop raw-Android negative; engine live readers |
 | `_disposeSubtitleAutoSync` | held installation/removal, renderer clear before new audio configuration and old player/lease release |
-| `_applyAutoSubtitleSyncOffset` | actual 1869 ms result/native/session/UI rebuild; unawaited native rejection remains outside persistence catch |
+| `_applyAutoSubtitleSyncOffset` | actual 1869 ms result/native/session/UI rebuild; cumulative verification clamp beyond +1 hour (m4); unawaited native rejection remains outside persistence catch |
 | `_showSubtitleAutoSyncNotice` | listening/checking/still-listening/synced/failed/silent-resynced, exact diagnostic messages |
 | `_openAutoSyncPillWindow` | 5 s announce boundary, fresh subtitle/audio restart during old deadlines |
 | `_showAutoSyncPillResult` | actual computed verdicts, 2400 ms hold and retained 350 ms fade |
 | `_hideAutoSyncPill` | off/manual/renderer cleanup, fresh selection cannot inherit old callback |
 | `_setActiveExternalSubtitlePath` | no-engine early path, same-path guard, null deactivation, automatic source priority, foreign-audio retirement and decoder rollback |
-| `_loadSubtitleSettings` | actual migration/style, nonzero session offset before engine, null model before returned snapshot, disposed rejection, accepted stale profile snapshot, font/prefs races |
+| `_loadSubtitleSettings` | actual migration/style, positive and negative late session offset before engine (m14), null model before returned snapshot, disposed rejection, accepted stale profile snapshot, font/prefs races |
 | `_onSubtitleStyleChanged` | appearance rendering, equal-offset preservation, changed-offset generation retirement, saved callback after disposal |
 | `_applySubtitleSyncOffset` | exact three-decimal signed seconds, native/nonnative, propagated native errors |
 | `_resetSubtitleSyncOffset` | physical session-only reset; UI/native reset via track, content and menu callers |
@@ -6377,3 +6377,70 @@ all identities. No baseline/allowlist recording used to accept a regression.
 Final new-file analysis and formatting, size and architecture checks PASS;
 Step T's 38 mechanical jobs and S/S2/S2b proofs remain valid with unchanged
 application/tool inputs. No new test flake required a stabilization.
+
+
+## Phase 9 Step 0b — independent sample closure
+
+Claude independent sample on original `122896451`: **16/20 reported kills (80%)**. The
+addendum adds two original-caller behaviours without production changes. The
+aligner bounds each pass (90s wide /10s residual), but the engine sums residuals;
+it does **not** bound cumulative offsets. The fixture supplies isolated speech
+windows through real SRT/parser/metadata/compute and advances the real playback
+clock, then pins 41 successive corrections and the final native/session/overlay
+clamp. Sparse windows keep the two narrow misses deterministic before each wide
+verdict; no result/notice is forged. The negative load case uses the existing
+font barrier and an outgoing saved stepper callback after incoming startup reset.
+
+The two notice predicates are equivalent for the original's production caller
+graph: `stillListening` follows the same generation's Checking, whereas resync
+starts at 90s, after the 2400ms result hide. Fresh activation/audio events retire
+old generations; holding compute cannot create a mixed-generation notice. All
+window writers and engine notice/teardown paths were audited. Full source copies,
+hashes and detailed invariants are in `p9/step0b/adjudications.json`; m7/m8
+replay all 72 cases with complete successful controls. This is not a synthetic
+notice test or a device-pending classification.
+
+| Sample | Final classification | Witness / reason |
+|---|---|---|
+| `m1` | killed in independent sample | subtitle stored enablement false gates actual installation and selection |
+| `m2` | killed in independent sample | subtitle manual hide keeps a later offset-suppressed selection quiet when its ladder is rearmed; subtitle cold window remains quiet when a late session offset suppresses listening then a track reset releases the ladder; subtitle verification corrects later drift silently after the result pill fades |
+| `m3` | killed in independent sample | subtitle renderer replacement awaits engine filter removal before old player disposal |
+| `m4` | killed in addendum | Non-equivalent. Per-pass searchMs=90000 is not a total bound: verification centers cues at the previous applied offset and calls applyOffsetMs(applied + result.offsetMs). The real-caller test feeds 41 disjoint speech/metadata windows with +89s successive drift; two narrow NoMatch results precede each wide actual Synced result. The last verdict exceeds +3600000; native, overlay model and session retain the clamp. No forged result or notice. |
+| `m5` | killed in independent sample | subtitle auto verdict rebuilds an already open sync overlay with the computed offset; subtitle verification corrects later drift silently after the result pill fades |
+| `m6` | killed in independent sample | subtitle manual hide keeps a later offset-suppressed selection quiet when its ladder is rearmed; subtitle cold window remains quiet when a late session offset suppresses listening then a track reset releases the ladder |
+| `m7` | equivalent; original-caller audit + 72-case replay | Equivalent under original callers. Every stillListening call is synchronous after this same run emitted checking, passed disposed/generation/run/path/reliability guards, and returned NoMatch/NotEnoughAudio. In an active window checking cancels the announcement timer and installs Checking. A fresh listening event requires activation/audio restart, both increment generation/run before emitting listening; that makes the old result stale. A hold/result cannot be created by another run while this run owns _running; the ladder tests _running before tap failure. Manual/path/disposal hide paths clear the window or retire the run. Thus the only active-window value at stillListening is Checking; quiet windows cause no write in either version, and null-to-null assignments notify nobody. |
+| `m8` | equivalent; original-caller audit + 72-case replay | Equivalent under original callers. After synced, showAutoSyncPillResult sets window false and arms the 2400ms hide; only afterward does the engine arm its first verification for 90s, then 120s. No same-generation ladder remains armed after success. Holding the verification result only extends this gap; it cannot keep the expired result pill visible. Fresh listening/result from subtitle/audio/passthrough/replacement operations retires the old generation/controller before it can emit resynced. Manual hide clears the pill. For a surviving resynced event in an inactive window, the pill is null; both guards return. Counterexamples would require forging a notice or suppressing an already due earlier timer independently of the original scheduler. |
+| `m9` | killed in independent sample | subtitle fresh audio listening cancels a failed verdict hold; subtitle exhausted unrelated metadata produces a failed result |
+| `m10` | killed in independent sample | subtitle off then new selection cannot inherit an old announcement hide; subtitle fresh listening cancels the preceding announcement deadline; real subtitle engine announces then aligns fixture metadata; subtitle audio track event restarts announcement and manual offset cancels the ladder |
+| `m11` | killed in independent sample | subtitle off then new selection cannot inherit an old result hide; subtitle fresh audio listening cancels a failed verdict hold; subtitle verification corrects later drift silently after the result pill fades; real subtitle engine announces then aligns fixture metadata |
+| `m12` | killed in independent sample | subtitle selected before engine installation remains inactive even when the same path is selected again |
+| `m13` | killed in independent sample | subtitle off then new selection cannot inherit an old announcement hide; subtitle off then new selection cannot inherit an old result hide; subtitle automatic source priority retires on preferred audio; subtitle pending filter removal across subtitle change preserves the lifecycle queue |
+| `m14` | killed in addendum | Non-equivalent. Startup resets the session singleton, but an outgoing saved public stepper callback can write -1500 after that reset while the incoming font lookup is suspended before loadAll reads session memory. Its returned settings snapshot applies -1.500 native sub-delay, suppresses listening, and a public track-reset callback releases the real ladder. The >0 mutation fails that native assertion. |
+| `m15` | killed in independent sample | subtitle style timing feedback invalidates a held real alignment before its offset can win |
+| `m16` | killed in independent sample | subtitle saved stepper manual callback cancels a held real alignment and hides checking; subtitle manual hide keeps a later offset-suppressed selection quiet when its ladder is rearmed; subtitle saved line manual callback cancels a held real alignment and hides checking; subtitle content replacement clears timing and path but a saved line callback targets the new playback |
+| `m17` | killed in independent sample | subtitle content replacement clears timing and path but a saved line callback targets the new playback; subtitle timing is session only while appearance migrates and persists; subtitle timing reset clears session and skips nonnative property; subtitle timing reset clears session and native property |
+| `m18` | killed in independent sample | subtitle stepper updates session and native delay and dismisses; subtitle line picker updates session and native delay and dismisses |
+| `m19` | killed in independent sample | subtitle content replacement clears timing and path but a saved line callback targets the new playback; subtitle line picker updates session and native delay and dismisses |
+| `m20` | killed in independent sample | subtitle stepper clamps callback -4000000 before native and rendered writes; subtitle stepper clamps callback 4000000 before native and rendered writes |
+
+Final independent sample closure: **18 killed /18 non-equivalent (100%)**;
+`m7` and `m8` excluded by the source invariants above. First sweep totals remain
+151 kills /12 equivalent /2 raw-Android pending /2 dormant /3 invalid; the
+additional sample candidates supply two new kills and two proven equivalents.
+The 21-declaration matrix and 33-reference ledger remain exhaustive. Every prior
+test name/assertion is preserved; 72 cases total. New-case original witnesses:
+
+| New behaviour | Original assertion-failing mutation |
+|---|---|
+| cumulative real verification clamps native/session/overlay at +3600000 | `step0b/m4.patch`, `m4.jsonl` |
+| cold negative session offset reaches native load and suppresses listening | `step0b/m14.patch`, `m14.jsonl` |
+
+Both controls bracket the detached original application, byte-identical to
+`122896451` (`bd671bd09` lib/); final case-file hashes and commands are recorded
+in `step0b/results.json`. Development controls 1–8 are excluded: an initial
+self-copy/no-matching case, one-shot barrier not rearmed, insufficient cue overlap,
+and a mistaken fixture timestamp stride. These were fixture construction issues;
+final native/session/UI assertions are retained. Fresh additions-only baseline
+versus Step 0: **13,465 success /13 failure /28 load error /20 skip**, exactly
+two passing additions and zero changed/missing/new skips; evidence
+`step0b/baseline*`. No allowlist change. CI remains P8 until production Step 1.

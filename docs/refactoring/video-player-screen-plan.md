@@ -3385,6 +3385,25 @@ checkpoint. Step T/0 proceed without production moves.
   CI stays on applied P8 until the Step-1 production creation commit, which
   registers the six new test files. M2 remains after phases 9–11. STOP here.
 
+### 2026-10-14 — Phase 9 Step 0b (independent sample closure)
+
+- Follows original checkpoint `122896451`; commit receipt in
+  `p9/step0b/commit.json`. Claude sample: 16/20 killed (80%). Added two behaviour
+  cases and mutation-proved m4/m14 on detached original lib/. Cumulative real
+  verification can exceed the per-pass aligner bound; native/session/overlay
+  clamp pinned. A late negative session write reaches the suspended settings
+  load despite startup reset; native -1.500 and later reset/rearm pinned.
+- m7/m8 equivalent under the audited notice generation/timer invariants;
+  all 72 cases replay successfully for both. Final sample 18/18 valid killed.
+  Deps table records every sample row, source audit, commands, assertions and
+  file-hash witnesses. Fixture development attempts excluded and explained.
+- Nice19 serial controls/mutations with no-pub and harness define; new-file
+  analysis/format PASS. Fresh full suite by identity versus Step 0 PASS:
+  13,465 success, unchanged 13 failures/28 load errors/20 skips, exactly two
+  passing additions. Evidence `p9/step0b/baseline*`; no allowlisting.
+- Application, pubspec, shared H fixture and applied P8 CI unchanged. Step 1
+  and the clean-tree gate follow this separately committed addendum.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

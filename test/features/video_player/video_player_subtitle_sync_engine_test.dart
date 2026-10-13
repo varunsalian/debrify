@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:debrify/screens/video_player/services/subtitle_aligner.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/screens/video_player/widgets/auto_sync_pill.dart';
@@ -227,6 +228,173 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'subtitle cumulative real verification clamps the native and session offset at the positive bound',
+    (t) async {
+      final d = SubtitleSyncDriver(
+        speechWindows: [
+          (start: 0, end: 180000),
+          for (var pass = 1; pass <= 41; pass++)
+            (start: 600000 + pass * 511000, end: 675000 + pass * 511000),
+        ],
+      );
+      final held = CompletionDelivery(
+        '_verify',
+        (v) => v is SubtitleAlignResult,
+      );
+      const length = 30000000;
+      final spans = d.speech(durationMs: length);
+      await d.initialize(t);
+      try {
+        await d.mount(t);
+        await held.run(() => d.select(t, durationMs: length));
+        await d.feed(t);
+        await d.fixture.advance(t, const Duration(seconds: 8));
+        await d.fixture.until(
+          t,
+          () => d.pill?.phase == AutoSyncPillPhase.synced,
+        );
+        await d.timerEdge(t, const Duration(milliseconds: 2400));
+        var resyncs = 0;
+        for (var pass = 1; pass <= 41; pass++) {
+          final position = 600000 + pass * 600000;
+          final shift = pass * 89000;
+          d.fixture.player.state = d.fixture.player.state.copyWith(
+            position: Duration(milliseconds: position),
+          );
+          d.fixture.player.emit('position', d.fixture.player.state.position);
+          await d.fixture.advance(t);
+          final observer =
+              d.native.mapObservers['af-metadata/debrify_autosync']!;
+          var cursor = 0;
+          final random = math.Random(7);
+          // Feed real metadata, anchored by the production position observer.
+          // Disjoint windows keep old offsets out of the verification snapshot.
+          d.observe(() {
+            for (var i = position ~/ 32; i < (position + 180000) ~/ 32; i++) {
+              final sourceTime = i * 32 - shift;
+              while (cursor < spans.length && spans[cursor].end < sourceTime) {
+                cursor++;
+              }
+              final spoken =
+                  cursor < spans.length &&
+                  sourceTime >= spans[cursor].start &&
+                  sourceTime <= spans[cursor].end;
+              var energy = 0.002 + random.nextDouble() * 0.001;
+              if (spoken) {
+                energy +=
+                    0.12 * ((i ~/ 6).isEven ? 1 : 0.25) +
+                    random.nextDouble() * 0.01;
+              }
+              observer({
+                'lavfi.astats.Overall.RMS_level':
+                    '${20 * math.log(energy) / math.ln10}',
+                'lavfi.astats.Overall.Number_of_samples': '1536',
+                'lavfi.aspectralstats.1.centroid': '1700',
+              });
+            }
+          });
+          await d.fixture.advance(t);
+          // Verification selects segments through the current playback clock.
+          // Advance it to the end of the fed audio before taking the snapshot.
+          d.fixture.player.state = d.fixture.player.state.copyWith(
+            position: Duration(milliseconds: position + 180000),
+          );
+          d.fixture.player.emit('position', d.fixture.player.state.position);
+          await d.fixture.advance(t);
+          for (var attempt = 0; attempt < 3; attempt++) {
+            held.armed = true;
+            final timersBefore = d.timed
+                .where((v) => v.$2 == const Duration(seconds: 120))
+                .length;
+            await d.timerEdge(
+              t,
+              Duration(seconds: pass == 1 && attempt == 0 ? 90 : 120),
+            );
+            await d.fixture.until(
+              t,
+              () => held.pending.isNotEmpty,
+              reason:
+                  'pass $pass attempt $attempt: ${d.logs.reversed.take(6).join(" | ")}',
+            );
+            expect(
+              held.values.last,
+              attempt < 2
+                  ? isA<SubtitleAlignNoMatch>()
+                  : isA<SubtitleAlignSynced>(),
+              reason:
+                  'pass $pass attempt $attempt ${held.values.last is SubtitleAlignNoMatch ? (held.values.last as SubtitleAlignNoMatch).bestOffsetMs : null}/${held.values.last is SubtitleAlignNoMatch ? (held.values.last as SubtitleAlignNoMatch).bestZ : null}/${held.values.last is SubtitleAlignNoMatch ? (held.values.last as SubtitleAlignNoMatch).bestPsr : null}',
+            );
+            held.release();
+            if (attempt < 2) {
+              await d.fixture.until(
+                t,
+                () =>
+                    d.timed
+                        .where((v) => v.$2 == const Duration(seconds: 120))
+                        .length >
+                    timersBefore,
+              );
+            } else {
+              await d.fixture.until(
+                t,
+                () =>
+                    d.logs
+                        .where((v) => v.contains('Subtitles re-synced'))
+                        .length >
+                    resyncs,
+              );
+            }
+          }
+          resyncs++;
+          expect(
+            d.logs.where((v) => v.contains('Subtitles re-synced')),
+            hasLength(resyncs),
+          );
+          final expected = (2000 + shift).clamp(
+            SubtitleSettingsService.syncOffsetMinMs,
+            SubtitleSettingsService.syncOffsetMaxMs,
+          );
+          final settings = await d.fixture.finish(
+            t,
+            SubtitleSettingsService.instance.loadAll(),
+          );
+          if (pass < 41) {
+            expect(settings.syncOffsetMs, closeTo(expected, 500));
+            expect(
+              double.parse(d.native.properties['sub-delay']!) * 1000,
+              closeTo(expected, 500),
+            );
+          } else {
+            expect(
+              settings.syncOffsetMs,
+              SubtitleSettingsService.syncOffsetMaxMs,
+            );
+            expect(d.native.properties['sub-delay'], '3600.000');
+            final menu = await openPlayerMenu(t, d.fixture);
+            menu.onClose();
+            menu.onSyncRequested!();
+            await d.fixture.advance(t);
+            expect(
+              t
+                  .widget<SubtitleLinePickerOverlay>(
+                    find.byType(SubtitleLinePickerOverlay),
+                  )
+                  .currentOffsetMs,
+              SubtitleSettingsService.syncOffsetMaxMs,
+            );
+          }
+          expect(d.pill, isNull);
+        }
+        expect(d.errors, isEmpty);
+      } finally {
+        held.release();
+        await d.close(t);
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 8)),
+  );
+
   testWidgets(
     'subtitle verification corrects later drift silently after the result pill fades',
     (t) async {
