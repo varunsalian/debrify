@@ -1682,17 +1682,17 @@ persistence — two of the attempt's three readers stay outside), and the
 `_subtitleSelectionCorrection` notifier (allocation slot). The six
 external field occurrences stay unchanged.
 
-**Host (17 names / 20 declarations):** `mounted`, `context`, `setState`
-(→ `_vpSetState`), `player`, `addonSubtitleFetchToken`, `isIOS`,
+**Host (18 names / 21 declarations):** `mounted`, `context`, `setState`
+(→ `_vpSetState`), `player`, `addonSubtitleFetchToken`, `isIOS`, `isAndroid`,
 `isPipActive`, `iosPipStarting`, `androidVideoRendererMode`,
 `selectedStremioSubtitleId` getter/setter, `activeExternalSubtitlePath`
 getter, `subtitleSelectionCorrection`, `playerMenuKey`,
 `setActiveExternalSubtitlePath(String?)`,
 `Future<void> persistTrackChoice(String audio, String subtitle)`, and
 getter/setter pairs for both diagnostic fields. `GlobalKey<PlayerMenuPanelState>`
-and `ValueNotifier<String?>` identities preserved. Three complete chain
+and `ValueNotifier<String?>` identities preserved. Four complete chain
 substitutions registered (`registered_occurrence_substitutions.py:17`
-precedent): `VpS2Hooks.isIOS`, `_pip.iosPipStarting`,
+precedent): `VpS2Hooks.isIOS`, `VpS2Hooks.isAndroid`, `_pip.iosPipStarting`,
 `_subtitleSync.setActiveExternalSubtitlePath` → their Host forms, adapters
 reading the live facade; no sibling imports.
 
@@ -3630,6 +3630,16 @@ mutation proofs; `5c7b704bd` remains the phase-9 historical merge checkpoint.
   as a completed coverage matrix or final mutation sweep. Main application,
   pubspec and CI unchanged; no production move, push/merge/switch or device work.
 
+### 2026-10-14 — Phase 10 plan-owner Host correction approved
+
+Claude approved the proposal recorded in
+`p10/stepT/host-correction-proposal.json`: 18 Host names /21 declarations,
+four registered chains, and live `isAndroid` forwarded to `VpS2Hooks.isAndroid`
+at the original read. Frozen ownership and the resolution now match S2c;
+no destination facade import, production change or CI transition. Plan-only
+checkpoint; Step T and full Step 0 continue against `a2e034cb3` application code.
+Validation: exact diff and `git diff --check`.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -3742,10 +3752,17 @@ notifier State-owned), exact Host, 33-occurrence ledger, CI, executable M2.
 
 ## Phase 10 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
 
-P2s folded: both diagnostic fields State-owned, five moves, frozen 17-name
+P2s folded: both diagnostic fields State-owned, five moves, frozen 18-name
 Host and chain substitutions, PiP adapter patch registration; S2c chosen
 for the Android renderer rejection guard (separately reviewed); notifier
 listener classified dormant, corrections characterized via the unified
 menu; three distinct late-failure behaviours pinned as-is; persistence race
 matrix with physical writes in both profiles. P3s: 23-reference ledger;
 explicit CI transition.
+
+Plan-owner correction (Claude, 2026-10-14): the accepted S2c Android
+predicate requires the live `bool get isAndroid` Host projection with adapter
+body `VpS2Hooks.isAndroid`, read at the original moment. The corrected frozen
+Host has 18 names /21 declarations and four complete registered chains. This
+preserves S2c without a destination-to-facade import; proposal and exact patch:
+`refactor-evidence/vplayer/p10/stepT/host-correction-proposal.json`.
