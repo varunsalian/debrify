@@ -1653,6 +1653,61 @@ Auto subtitle sync on a mistimed external subtitle (pill announces, result
 shows, offset applied); manual sync slider and reset; subtitle style
 changes apply live (phone, TV, desktop, tvOS).
 
+## Phase 10 — subtitle engine II: apply, diagnostics and failure rollback
+
+Branch `refactor/vplayer-p10` off the phase-9 merge `5c7b704bd`. Evidence
+`refactor-evidence/vplayer/p10/`. Line numbers at `03cd721d0` (phase-9
+gate) — re-measure by name. Ownership per the phase-9 map.
+
+### Moves → `presentation/legacy_video_player/vp_subtitle_apply.dart`
+
+`_waitForSubtitleTracks` 3889, `_setNativeSubtitleVisibilityForTrack`
+3906, `_setSubtitleTrackWithDiagnostics` 3924, `_handleSubtitleApplyFailure`
+(≈ 3968), `_showSubtitleFailureMessage` 4052, plus the fields
+`_subtitleDiagnosticGeneration` 1109 and `_activeSubtitleApplyAttempt` 1110
+(inert initializers) — exact membership by reader/writer count at step T
+(the generation is bumped by content reset 10426 and track restore 15256;
+the attempt is read by preference persistence 16072 and the player-error
+path 2665/2667; if most readers stay outside, the fields stay State-owned
+with Host getters/setters). `_subtitleSelectionCorrection` (1111, a
+`ValueNotifier`) **stays State-owned** (allocation-order rule; phase-9 map)
+and is manipulated through the Host. ≈ 280 lines.
+
+**Patched earlier scaffolding:** the phase-8 PiP adapter's
+`setNativeSubtitleVisibilityForTrack` forwarder (≈ 16181) is re-pointed to
+the new controller — a P10 `patched` facade declaration with one counted
+receiver rewrite (phase-5 precedent; not `earlier_patches`).
+
+**Retained references (≈ 30, measured at step T):** the player error
+stream (2665/2667), native visibility calls from subscriptions/recovery
+(3959, 4002, 4011), track waits (8491, 15278), the 16 apply call sites
+across startup/source switching/episode navigation/menus/preferences
+(5066, 8721, 8933, 9062, 14888, 15049, 15070, 15412, 15567, 15595, 15637,
+15648, 15676, 15717, 15818), failure messages from menus (15065–15150),
+content reset (10425–10427), track restore (15256/15257), preference
+persistence (16072). Statement positions preserved; Host calls only.
+
+### Step 0 — characterization of the original
+
+Apply success (native track set, visibility per text/bitmap/external,
+diagnostics generation increment, persisted preference matching the
+attempt — `vpSubtitlePreferenceMatchesAttempt`), Android renderer
+rejection, apply failure from the player error stream with rollback to the
+previous track / Stremio id / external path (the phase-9 external-path
+setter), one-shot handling (failed/handled/successReturned flags), late
+failure after a newer attempt (stale generation ignored), the selection
+correction notifier publishing to the menu (null-arming between two
+identical rollbacks), user-visible failure messages by source,
+`_waitForSubtitleTracks` timeout/arrival; disposal and player replacement
+mid-apply; profile handoff during persistence (pin as-is). Early windows;
+mutation proofs; coverage matrix; Claude sample. These feed M2.
+
+### Device checklist (end of series)
+
+Selecting embedded, addon and external subtitles applies them; a broken
+subtitle reverts to the previous one with a message; bitmap (PGS) subtitles
+show; the menu reflects the corrected selection.
+
 ## Follow-ups
 
 - **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
