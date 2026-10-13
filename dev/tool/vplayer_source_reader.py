@@ -46,13 +46,18 @@ def live_text(identity, manifests, sources, package):
     return dict(path=path, declaration=target, source=nodes[target]['text'], chain=traces)
 
 
+def registration_order(item):
+    # A separately reviewed seam precedes its same-phase production owner.
+    return item[1]['phase'], item[1].get('status') == 'applied'
+
+
 def read(identity, package):
     registered = []
     for path in sorted((ROOT / 'dev/tool/dart_moves').glob('*.json')):
         value = load_manifest(path)
         if value.get('schema') == 1 and value.get('series') == 'vplayer' and value.get('status') in {'applied', 'checkpoint'}:
             registered.append((path, value))
-    registered.sort(key=lambda item: (item[1]['phase'], 0 if item[1].get('checkpoint') == 'S' else 1))
+    registered.sort(key=registration_order)
     if not registered:
         raise ValueError('no current ownership checkpoint')
     manifests = [m for _, m in registered]
@@ -68,6 +73,13 @@ def read(identity, package):
 
 
 def self_test(package):
+    registrations = [('p1-applied', dict(phase=1, status='applied')),
+                     ('S', dict(phase=1, status='checkpoint', checkpoint='S')),
+                     ('p8-applied', dict(phase=8, status='applied')),
+                     ('S2', dict(phase=8, status='checkpoint', checkpoint='S2'))]
+    assert [name for name, _ in sorted(registrations, key=registration_order)] == [
+        'S', 'p1-applied', 'S2', 'p8-applied']
+
     from check_dart_moves import check
     from dart_move_fixture import materialize
     from dart_move_history import git_text

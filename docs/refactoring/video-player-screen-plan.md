@@ -409,6 +409,19 @@ Options, in order of preference — **the design review must settle this**:
 The harness also provides a widget pump with the storage/service fakes, a
 method-channel recorder, and helpers to drive TV keys, taps and timers.
 
+**Phase-8 platform checkpoints S2 / S2b.** S remains unchanged. S2 adds
+only the approved PiP/background predicate sites below. On 2026-10-13 Claude,
+the plan owner, approved **S2b** as a separately committed seam extension:
+reuse `VpS2Hooks.isAndroid` at the renderer-mode load in `_initializePlayer`
+and the renderer fallback eligibility argument in `_canFallbackExplicitRenderer`.
+These two real Android guards otherwise prevent a desktop S2 test from creating
+a replacement player inside the same State while iOS handle delivery is held
+(sample k2); the later player-engine phase also needs these predicates covered.
+Native defaults still evaluate the original predicate once and in its original
+order. No new hook or installer. Exact declaration patches, independent site
+default/order negatives, source guard and S/S2 proofs are required as for S2.
+S2b stops for its own independent review before k2 characterization or moves.
+
 **Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
 work, and resources"): each stateful phase's step 0 pins, where its
 members participate, captured-scope writes, profile switch/deletion during
@@ -457,7 +470,7 @@ starts.
 | 5 | Trakt scrobbling (2041–2750 Trakt subset) | 280 | med |
 | 5b→6 | Simkl + MDBList scrobbling — **inserted as phase 6**; every later phase below shifts by one (provisional numbering) | 350 | med |
 | 6 | Local completion (1820–1870, 10374–10478) | 160 | med |
-| 7 | PiP + background/wakelock (11635–11882) — PiP branches device-pending unless a reviewed predicate seam | 250 | high |
+| 7→8 | PiP + background/wakelock (11635–11882) — reviewed platform-predicate seam S2 (renumbered: phase 8) | 250 | high |
 | **M1** | integration gate: controls/tracker/lifecycle scenarios | | |
 | 8 | Subtitle engine I: subtitle settings, sync overlay, auto-sync pill/notice (2940–3088 auto-sync part only, 6380–6626) | 450 | med |
 | 9 | Subtitle engine II: apply + diagnostics + failure + rollback (5014–5200, `_SubtitleApplyAttempt` users) | 300 | high |
@@ -1342,7 +1355,192 @@ watched and leaves Continue Watching; a rewatch below it restores it; an
 episode past its threshold is marked finished; "This device" mode marks
 locally even with trackers on.
 
+## Phase 8 — PiP, background pause/resume and wakelock
+
+Branch `refactor/vplayer-p8` off the phase-7 merge `491bf1fea`. Evidence
+`refactor-evidence/vplayer/p8/`. Line numbers at `491bf1fea`.
+
+**Decision (design review P2): option (b).** On the desktop harness
+`_pauseForBackground` returns immediately (10728) and production PiP
+callback registration is behind a mobile guard (1581), so a verbatim move
+characterized on desktop could not exercise background pause/resume,
+callback wiring or their races. A separately reviewed test-only
+platform-predicate seam **S2** covers the Dart wiring; native PiP
+presentation stays device-pending.
+
+### Order of steps
+
+H (shared fixture hardening, test-only) → S2 (seam checkpoint) → T → 0 →
+Claude sample → 0b (k19) → S2b (approved extension; independent review) →
+0b (k2; refreshed original/tooling/baseline) → 1 → gate → review → **M1**.
+
+### Step H — shared fixture hardening (test-only)
+
+From the phase-7 review: consolidate fixture support once, without
+changing what the race tests exercise. Separate **"wait until the action
+entered its held boundary"** from **"await the action's completion"**:
+`trakt_snapshots_test.dart:64` deliberately leaves selection pending
+behind an open barrier, and `secondary_tracker_driver.dart:140` releases a
+held seek only after the earlier helper returns — awaiting completion
+there would deadlock or serialize the race. Keep guide-refresh barriers
+case-specific with their existing release behaviour; preserve timer
+observation and uncaught-error collection; drain pending operations before
+resetting transports or closing streams. Proof: test names and assertions
+token-identical; **assertions still evaluated while the intended action is
+pending** (recorded per race test); representative existing mutation
+witnesses re-run and still killed; ≥ 5 serial stress replays of the
+tracker/completion/snapshot files under load.
+
+### Step S2 — platform-predicate seam checkpoint (reviewed separately)
+
+A second test-only hook, **separate from S** (`vplayer_seam_proof.py:61`
+requires S's exact content; S stays untouched): one facade-level hook
+object overriding only the `dart:io Platform` predicates evaluated by (i)
+the moved PiP/background methods, (ii) the retained PiP registration guard
+(1581) and (iii) the retained predicate sites at 2868, 3922, 4064 and
+12694 (subtitle/timeline). Native defaults unchanged; predicate
+evaluation order frozen; assert-only installation, release/profile
+rejection and the `DEBRIFY_VP_TEST_HOOKS` gate as for S; a source guard;
+independent default-path and installation negatives; S's proof still
+passes. Moved bodies read the predicates through **live Host predicate
+getters** (no destination imports the facade). Tests use the existing
+`PipService.debugPlatform`, channel mocks, and mount the real screen
+through `IosPipPlayerRoute` for session wiring; `fake_player.dart:190`
+gains **distinct controllable handles** (it returns `71` for every player,
+which cannot distinguish stale iOS handle callbacks).
+
+**S2b decision (Claude, plan owner, 2026-10-13).** Approve exactly two
+additional predicate substitutions: `_initializePlayer`'s
+`Platform.isAndroid && !PlatformUtil.isAndroidTvCached` at 2266 and
+`_canFallbackExplicitRenderer`'s `isAndroid: Platform.isAndroid` at 3330
+(line numbers at S2). Each becomes `VpS2Hooks.isAndroid`, with the other
+operands/arguments and their evaluation order unchanged. Same-State player
+replacement is available only through Android renderer fallback, which k2
+needs while the iOS handle is held; the later player-engine phase needs
+this coverage too. Reuse the existing hook/getter/installer unchanged;
+extend the seam manifest/proof by one exact patch per declaration and add
+independent default/count/order negatives for both sites. Preserve all S2
+patches, native default behavior, S proof and the source guard. S2b is a
+separate seam extension checkpoint, then **stop for independent review**;
+no k2 test, production move, Step-1 CI transition or gate in that checkpoint.
+
+### Moves → `presentation/legacy_video_player/vp_pip_lifecycle.dart`
+
+14 declarations (252 physical lines; destination ≈ 310–330 with Host and
+imports, under the 500 cap): the iOS PiP block 10556–10559
+(`_iosPipStarting`, `_iosPipDetached`, `_iosPipSession`,
+`_lastIosPipPositionSecond` — inert), `_backgroundedAt` (675, inert
+nullable; used only by the two moved background methods), `_enterPip`
+10562, `_armPipAutoEnter` 10615, `_pushPipState` 10626,
+`_onPipModeChanged` 10644, `_restoreIosPipPlayer` 10671, `_onPipAction`
+10691, `_pauseForBackground` 10727, `_resumeFromBackground` 10766,
+`_syncWakelock` 10805.
+
+**Stay State-owned:** `_isPipActive` (7 reading members, 5 retained),
+`_pausedByLifecycle` (5, 4 retained), `_lifecycle` (combines recording and
+playback; registers an observer in `initState`). Live Host getters/setters.
+
+**Owner identity:** the 7 moved `PipService.isOwner(this)` occurrences →
+`host.pipOwner`, frozen as `Object get pipOwner => _s;`. No moved
+`PlayerVisibility` calls; retained registration/visibility/detach keep the
+State identity.
+
+**Host (exact, frozen at step T):** player and flags, `setState` (→
+`_vpSetState`), `context`/`mounted`, timers/notifiers, recovery/channel
+dependencies, the S2 predicate getters, and actions with these exact
+signatures: `Future<void> setNativeSubtitleVisibilityForTrack(mk.SubtitleTrack track)`,
+`Future<void> goToNextEpisode()`,
+`void cancelPendingIptvCatchup({bool hideFeedback = true})`,
+`void traktScrobbleSeek(Duration position)` (likewise Simkl/MDBList — the
+three tracker calls and `_display.landscapeLocked` are Host projections
+registered by exact chain and occurrence). No moved body reads `widget`.
+
+**Retained references (22 occurrences):** session assignment 1019;
+lifecycle callbacks 1545/1547 — the `onPause` **closure is retained**
+(it first starts recording teardown, then calls the background pause;
+only that inner call becomes `_pip.`), `onResume` is a direct tear-off;
+PiP registration/readiness callbacks 1587–1589/1594/2229;
+position/playing subscriptions 2868–2870/2946/2947; native/subtitle
+starting-state reads 3922/4064/12694; parked result handling 5376/5377;
+disposal fields 10817–10819 (in place); controls callback 14280.
+Listener and session construction/disposal stay at their original sites.
+
+**Scaffolding / CI:** patched State constructor appends `_pip` after
+`_completion`; adapter; switch current/self-test and both analyzer inputs
+to P8; P1–P7 `--at` incl. P7 `491bf1fea`; protect all 17 earlier
+destinations; tests, theme paths and all three theme source-guard lists;
+probe receiver-induced async-context diagnostics and preserve `_enterPip`'s
+existing diagnostic identities.
+
+### Step 0 — characterization of the original (at S2)
+
+- **Lifecycle:** valid transitions — inactive/hidden do **not** pause;
+  paused → background pause (latches `_pausedByLifecycle`; **no resume
+  save** — the user-pause save belongs to `_togglePlay`, 12658, so
+  pending-save cases come from an existing user action or autosave);
+  resumed → resume only if it paused, respecting the sleep latch; the
+  retained `onPause` closure's recording teardown runs first.
+- **Async boundary matrix (pin effects, errors and actual pending-save
+  writes; defects documented separately):** background pause pending when
+  resume issues play, then the old pause released; backgrounding during
+  renderer replacement or Start Over, incl. no live player yet; sleep
+  expiry between pause and resume; support resolution, player-handle
+  delivery, native subtitle preparation, PiP entry and restore orientation
+  held across replacement, disposal or profile handoff (`_enterPip` 10569
+  checks player identity after handle delivery but then awaits subtitle
+  preparation; `_restoreIosPipPlayer` 10677 continues platform requests
+  across awaits before its final owner check — player/State ownership, not
+  profile ownership).
+- **Wakelock queued-write semantics** (`player_display_controls.dart:90`
+  samples the latest request and independent owners when each queued write
+  runs): a held/rejected native toggle, rapid play/pause/dispose,
+  buffering, another wake owner keeping the lock, completion with and
+  without a playing-false event (EOF alone does not call
+  `_syncWakelock(false)`); initial acquisition and the `replacedPip`
+  disposal exemption; drain the queue before restoring platform interfaces
+  so cleanup cannot supply a release a mutation should expose.
+- **PiP (through S2):** auto-enter arming, enter/exit state pushes and
+  payloads, mode changes, actions, iOS restore with distinct handles,
+  owner identity passed to services; native presentation device-pending.
+- Early windows; mutation proofs; coverage matrix with an honest
+  device-pending list; Claude sample.
+
+### Device checklist (end of series)
+
+Android: home → PiP auto-enter, PiP play/pause actions, return restores
+controls; iOS: PiP start/stop and player restore; background/foreground
+pauses and resumes correctly (recording stops on background); screen stays
+awake while playing and sleeps when paused.
+
+### Integration milestone M1 (after phase 8 merges)
+
+Full suite, both release builds, and one cross-phase scenario on a single
+playback with **local progress ownership plus enabled scrobble targets**
+seeded (`tracking_source_policy.dart:133`; otherwise completion stays
+disabled): skip-segment seek fans out to all three trackers in order;
+speed persists across resume; completion marks at threshold;
+end-of-item sleep suppresses advance; lifecycle resume respects the sleep
+latch (through S2); a later explicit play and episode reset clear the
+latch and completion flags. Mobile coverage as provided by S2; native PiP
+device-pending.
+
 ## Follow-ups
+
+- **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
+  before output creation does not latch the first open; an older held
+  background pause can complete after foreground play and win. A user-pause
+  save retains its captured physical profile; background pause adds no save.
+  A held iOS subtitle preparation can continue PiP entry after State/owner
+  loss. After route replacement, its late old handle can replace the service
+  handle and an old-handle action can pause the fresh player until fresh entry
+  rebases it. Restore continues platform writes across disposal, replacement
+  and profile handoff before its final State-owner check. Phase-8 original
+  caller tests pin these outcomes; cancellation/ownership fixes are separate.
+- A pending MDBList checkpoint fixture exposed an unrelated guide refresh
+  rejecting an outgoing profile scope during handoff. Three unchanged original
+  isolated replays pass; the fixture now joins public guide refreshes before
+  the tested held POST, preserving pending-action assertions. Production stale
+  refresh/error handling remains unchanged; see Phase-8 `fixture-note.md`.
 
 - **Cross-profile completion writes (found in phase 7 design review,
   pre-existing, not fixed):** a profile switch between the read and the
@@ -2671,6 +2869,287 @@ unchanged assertions) — scheduled as test-only step H at the start of phase
 8, before milestone M1; (2) size summaries corrected to 3,001 files. Claude
 sample 20/20. Merged.
 
+### 2026-10-13 — Phase 8 Step H (shared fixture hardening; test-only)
+
+- **Revision/scope.** Input `e42e152a4`, original application `491bf1fea`;
+  test-only shared action lifetimes distinguish held-boundary entry from
+  completion, retain case-specific guide barriers, and drain before stream/
+  transport cleanup. Timer observation and uncaught-error collection unchanged.
+- **Proof.** Existing names/expectation tokens preserved. Original detached
+  assertion audit records the intended pending action per race, including held
+  incoming open, held seek, snapshots, credentials and cross-profile completion.
+  Five serial nice-19 stress replays under CPU load: 313 cases × 5 PASS; loading
+  events excluded. Five representative original mutations assertion-killed;
+  restored control PASS. Tables/commands/logs: `p8/h/` and deps Step H.
+- **Checks/deviations.** Test analyzer (zero issues), format, exhaustive P7
+  current guard, size/architecture and diff PASS. Explicit `void` fixes an
+  intermediate inference-only warning. One preliminary run used the old P2
+  runtime fallback; excluded and its 55 case directories relocated to P8 by
+  birth-time ledger. Fallback corrected; all accepted runs explicitly use P8.
+  Application/pubspec unchanged; no T, Step 0 or production move. S2 follows
+  separately and then stops for independent review.
+
+### 2026-10-13 — Phase 8 S2 (second characterization checkpoint; stop)
+
+- **Revision/scope.** H `ef663d89d`, original `491bf1fea`. Separate `VpS2Hooks`
+  covers exactly 15 predicates in nine declarations, native defaults/live
+  callbacks and original short-circuit order. S is untouched and its proof
+  passes. Fake players gain distinct stable, held/failed controllable handles.
+- **Proof/checks.** Exhaustive 817-span checkpoint (nine patched declarations, frozen hook,
+  zero moves), current + P7 historical guard, 13 independent source/default/
+  installer negatives PASS. Five actual-body mode controls (debug flag/no flag,
+  assert-disabled, profile, compiled release) PASS; seven runtime mutations fail
+  their checks. Hook-defined focused 40 cases and no-flag seven cases PASS.
+  Analyzer: unchanged diagnostic identities, 98 occurrences; raw/final format identity proof
+  PASS, two optional commas, idempotence; size/architecture/diff PASS. `p8/s2/`.
+- **Integration.** CI/source reader select the S2 checkpoint; current/self-test
+  and analyzer manifest use it with unchanged P7 inventory, P7 `--at 491bf1fea`
+  added. Applied owners sort after same-phase seams (old S-only ordering has an
+  assertion witness). Guard test registered; existing harness flag retained.
+  Dated facade allowance +30 lines (16,974 → 17,004); no feature file created.
+- **Notes/stop.** Longer names produced format-only brace infos; final compact
+  hook preserves original guard formatting without analyzer allowance changes. Rejected
+  filename/raw-root command attempts retained and replaced with complete runs.
+  Pubspec and other application files unchanged. Native PiP device-pending;
+  no T, Step 0, production moves, push, merge, branch switch or device action.
+  Stop here for S2 independent review, as approved by the Phase-8 resolution.
+
+2026-10-13 — **Phase 8 independent H/S2 review (`vp-rev8s2`): no P1/P2/P3.**
+H `ef663d89d` and S2 `21b19c944` accepted. S2 is the ORIGINAL for Phase-8
+behavior and mutation proofs; the phase-7 merge remains the historical merge
+checkpoint. Step T/0 proceed without production moves.
+
+### 2026-10-13 — Phase 8 Step T (tooling checkpoint; no production move)
+
+- **Revision/base.** Follows independently accepted S2 `21b19c944` (behavior
+  ORIGINAL). Full draft materialization: 14 moves, 22 retained occurrences,
+  seven State-owner projections, 33 frozen Host members, 17 earlier files.
+  State constructor appends `_pip` after completion; onPause closure/order
+  preserved. Initializers separately inert; exact live predicate/tracker/display
+  chains registered. Application and pubspec remain exactly S2.
+- **Tooling.** Captured `backgroundedAt` needs two explicit owned-field `this`
+  qualifications. New opt-in validates the exact field/owner/count while other
+  owner-identity `this` remains rejected; missing/wrong opt-in and binding-only
+  capture/chain negatives PASS, existing manifests unchanged.
+- **Checks.** All 26 existing Dart manifest self-tests, P1–P7 at named merges,
+  Kotlin (34 commands), universal Dart self-test/real P8 configuration, S/S2
+  proofs PASS. Root/strict/probe analyzer 98/170/99; one receiver-induced async
+  context info in `_enterPip` recorded by identity; earlier mappings preserved.
+  Raw/formatted token comparison and idempotence PASS; zero format diagnostics.
+  Size/architecture/diff PASS. Nice-19, isolated parser routing: `p8/tooling/`.
+- **Next.** Step 0 at S2, no production moves or CI transition. Pristine S2
+  suite has one guide/profile race also observed on the original; excluded
+  pending replay/fixture closure, never allowlisted. `p8/step0/` records it.
+
+### 2026-10-13 — Phase 8 Step 0 (original characterization checkpoint; stop)
+
+- **Revision/base.** This Step-0 checkpoint follows Step T `fcdfa03eb`;
+  application ORIGINAL is independently accepted S2 `21b19c944`, not the
+  phase-7 merge. H/S2 review `vp-rev8s2` found no P1/P2/P3. Application and
+  pubspec are byte-identical to S2; no production moves or CI transition.
+- **Coverage.** Ten registered behavior files add 90 passing cases through
+  real screen callbacks, lifecycle transitions, iOS route/session, distinct
+  handles, channels, player/storage transports and timers. The deps report
+  records all 14 moved declarations and 22 retained occurrences: 327 AST
+  sites grouped into 167 canonical points, **145 assertion kills / 12 proven
+  equivalences / 10 device-pending**. Every new case has an assertion-failing
+  original mutation witness; four additional wakelock/fixture witnesses pass
+  the same kill criterion. Invalid, interrupted and error-only runs get no
+  credit. Native recording order, renderer recreation and actual native PiP/
+  power behavior remain on the device checklist.
+- **Commands/results.** Serialized nice-19 original controls/mutations use
+  `flutter test --concurrency=1 --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json`; exact file/name
+  selectors and input hashes are in `p8/step0/mutation-results.json`.
+  `suite_evidence.py run vplayer/p8/step0/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` completed; official `compare` and
+  strict identity comparison PASS against the completed stabilized original:
+  **13,386 successes / 13 failures / 28 load errors / 20 skips**, exactly
+  90 passing additions, no changed/missing/fixed/newly skipped old identity.
+  Targeted Dart format/analyze, size/architecture and diff checks PASS.
+  Step-T historical, self-test, seam and analyzer evidence remains applicable;
+  no tooling/application change. Evidence: `<git-common-dir>/refactor-evidence/
+  vplayer/p8/step0/`; matrix, mutation table and commands in the deps report.
+- **Deviations/findings.** A complete pristine original suite exposed the
+  unrelated guide/profile race. Three unchanged isolated replays pass;
+  joining public guide refreshes before its held POST stabilizes only the
+  fixture. All old names/assertions retained, independent protocol mutation
+  killed; no allowlist. Failed development controls and copy/promotion errors
+  are archived and uncredited. Final full-suite inputs stayed stable during
+  execution; afterward only a duplicate analyzer-ignore comment was removed,
+  with exact byte-delta proof and clean analysis. Existing early-background,
+  late-pause and stale PiP/restore outcomes are recorded in Follow-ups. No fix,
+  new seam, real network, build/run/install, device command, push, merge or
+  branch switch. Stop before Claude's sample and production moves.
+
+### 2026-10-13 — Phase 8 k19 addendum; k2 prerequisite (test/docs only)
+
+- **Revision/base.** Follows accepted Step 0 `6785b4985`; application remains
+  byte-identical to S2 `21b19c944`. Claude's independent original sample killed
+  18/20 (90%); recorded in the deps table with both survivors distinguished.
+- **k19 closed.** Public lifecycle callbacks on a live IPTV channel after five
+  real seconds now pin in-buffer play, one existing open, no rejoin diagnostic
+  and the unchanged channel. The existing >30-second retune case is retained.
+  New case passes on detached original `6785b4985`; 30 → 3 seconds produces an
+  assertion failure there (`p8/step0b/k19-results.json`). This strengthens the
+  existing threshold point with its lower-bound literal variant; 91 Phase-8
+  behavior cases now have original assertion witnesses.
+- **Checks.** Nice-19 serialized projection control, detached original control
+  and mutation use `flutter test --concurrency=1 --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --reporter=json`. Exact commands and
+  hashes archived. Format/analyze/diff PASS. Fresh
+  `suite_evidence.py run vplayer/p8/step0b/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true` completed; official and strict
+  comparison versus Step 0 PASS: **13,387 success / 13 failure / 28 load error /
+  20 skip**, exactly one passing addition, no changed/missing/fixed/new skip.
+  Inputs stable; no new flake or allowance.
+- **k2 pending; no Step 1/gate.** Same-State replacement only occurs in the
+  Android renderer fallback, whose eligibility and settings load use real
+  `Platform.isAndroid` outside the approved S2 sites. Route replacement changes
+  State/owner and cannot kill this player-identity mutation. Reachability proof
+  and an un-applied two-site S2 prerequisite patch are under `p8/step0b/`.
+  A direction question remains pending: separately reviewed seam extension,
+  or explicit device-pending classification before continuing. No private
+  State call, extra initialization, source-text behavior test or application
+  change manufactures the missing condition. No bug fix, pubspec change,
+  real network, build/run/install, device command, push, merge or branch switch.
+
+### 2026-10-13 — S2b seam extension checkpoint (stop for independent review)
+
+- **Revision/decision.** Follows `652def541`. Claude, plan owner, approved
+  exactly the two Android renderer guards so k2 can exercise replacement in
+  the same State and the later player-engine phase can reuse the coverage.
+  Decision/rationale recorded in Characterization harness and Phase 8.
+- **Change/proof.** Only `_initializePlayer`'s renderer condition and
+  `_canFallbackExplicitRenderer`'s Android argument now read
+  `VpS2Hooks.isAndroid`. Existing hook/getters/installer and all nine S2
+  declaration patches stay frozen; no new installer. Native predicate once,
+  short-circuit/argument order and all other application bytes preserved.
+  Extended seam ledger: 817 spans, 11 patched declarations, 13 counted patches,
+  17 occurrences. Ten new independent site negatives, 23 total, PASS.
+- **Commands/results.** Nice-19 `vplayer_seam_proof.py --self-test`,
+  `vplayer_platform_seam_proof.py --self-test`, current seam
+  `check_dart_moves.py` and historical `--at 21b19c944` PASS; every command
+  uses an isolated copied `--parser-package` under `.dart_tool/vplayer_parser/`
+  with copied kernels removed. Serialized `suite_evidence.py run` on the
+  existing S/S2 guard files with `--no-pub --concurrency=1` and
+  `--dart-define=DEBRIFY_VP_TEST_HOOKS=true/false`: 7/7 PASS in each mode.
+  Scoped root analysis: 98 diagnostics, zero new identities/counts;
+  analyzer comparator/self-tests and guard-test analysis PASS. Dart format /
+  idempotence, size, architecture and diff PASS. Commands, JSONL, input/SDK
+  metadata, exact delta and proof outputs: `p8/s2b/`.
+- **Deviations/stop.** Two rejected manifest drafts (broad matching and
+  incomplete patch metadata) archived without passing credit; exact scoped
+  patches corrected. No k2 characterization, production move, Step-1 CI
+  transition or gate. Application diff is the two approved predicates;
+  pubspec unchanged. No bug fix, real network, run/install/device action,
+  push, merge or branch switch. Stop for S2b independent review. After
+  acceptance, refresh the Phase-8 draft/probe against S2b before continuing;
+  prior S2 materialization is not claimed as current evidence.
+
+### 2026-10-13 — S2b independent review and Phase-8 k2 closure
+
+- **Accepted original.** Fresh review `vp-rev8s2b`: no P1/P2/P3. S2b
+  `866cbaf03` is the ORIGINAL for further Phase-8 behavior and mutation proofs.
+  Existing k19 closure `652def541` remains recorded; no production move here.
+- **k2.** Public controls start iOS-style entry with a held old handle; the
+  original player error subscription triggers Android renderer fallback via
+  S2/S2b. Same State and PiP owner, two distinct players/handles, old disposal
+  and the Automatic preference are asserted. Releasing the old handle produces
+  no subtitle preparation on either instance, no state push and no native
+  entry. Unmodified original passes; removing the post-handle identity guard
+  assertion-fails in the detached S2b checkout (`p8/k2/results.json`).
+- **Reachability refresh.** S2b also opens the other previously deferred
+  renderer paths. Four additional public-caller cases pin no-player entry,
+  renderer-gap pause/latch, created-player pause, foreground during held audio,
+  first live in-buffer resume and consumed long-absence timestamps. All new
+  cases have original assertion witnesses. The final player check is killed
+  by the held-handle case too. Remaining resume-created/mounted guard is
+  source-proven redundant for registered lifecycle dispatch, with a complete
+  original replay; preserved in production. Updated matrix: 154 canonical
+  assertion kills / 13 equivalences, 167 points; native presentation/recording/
+  power checks remain device-pending. 96 Phase-8 behavior cases in 11 files.
+- **Tooling.** Draft P8 manifest re-measured/materialized against S2b: 14 moves,
+  22 retained occurrences, seven owners, frozen scaffolding and all earlier
+  destinations. Optional-comma/idempotence proof PASS. Refreshed analyzer
+  root/strict/probe 98/170/99; earlier identity mappings retained. Evidence
+  `p8/refresh/`; draft only, no production change. New renderer test registered
+  in the existing harness-flag CI list.
+- **Validation/deviations.** Nice-19 serialized controls/mutations use
+  `--no-pub --concurrency=1 --dart-define=DEBRIFY_VP_TEST_HOOKS=true`. Exact
+  commands, patches, assertions and hashes under `p8/k2/`. Test analysis/format
+  PASS. Initial zero-position startup stalled before reaching the scenario;
+  that interrupted run gets no credit. Initial detached setup lacked its
+  ignored package graph; corrected without pubspec changes. Initial renderer
+  controls over-counted Video pauses and included unrelated decoder reads;
+  final assertions pin the observed renderer-gap behavior and subtitle writes.
+  All rejected/development runs archived. Full additions-only baseline follows
+  before Step 1. No bug fix, real network, run/install/device, push/merge/switch.
+
+### 2026-10-13 — Phase 8 addendum baseline and Step 1 creation
+
+- **Revisions/base.** Addendum `13df9a261`, behavior ORIGINAL S2b `866cbaf03`.
+  Complete `p8/k2/baseline.jsonl`: 13,392 success / 13 failure / 28 load error /
+  20 skip. Official and strict comparisons versus the k19 baseline PASS:
+  exactly five passing additions, no changed/missing/fixed/newly skipped old
+  identity. Stable clean-tree inputs; no allowance or flaky fixture change.
+- **Production move.** `VpPipLifecycle` + narrow Host, 318 lines, owns exactly
+  the 14 frozen declarations. Eager State constructor appends `_pip` after
+  completion, all fields/constructor inert. Frozen adapter forwards live S2
+  predicates, trackers and landscape state; seven owner substitutions use the
+  State. All 22 retained occurrences stay in place, including only the inner
+  call in the recording-first onPause closure and each disposal statement.
+  Current checker: zero differences; previous 17 destinations protected.
+- **CI/theme.** Current/self-test and both analyzer inputs now P8; P1–P7
+  named `--at` gates retained, S proof added explicitly, S2/S2b proof enabled.
+  Existing `lib/features` format/analyze lists include the new file. Eleven
+  behavior files registered with harness flag. Theme manifest/rendered set
+  and all three source-guard lists extended. No moved declaration has another
+  direct source-test anchor requiring retarget; source reader validates the
+  applied ownership ledger. Facade size baseline 17,004 → 16,829.
+- **Checks.** Nice-19 current-tree move comparison, optional-comma/idempotence
+  proof, format and architecture PASS. Serialized focused PiP/renderer/wake,
+  seam and theme guards: 111/111 PASS on moved code (`p8/step1/`). Original
+  controls/mutation witnesses remain archived. Probe/root identity inventory
+  preserved; three destination infos are recorded, no new warning allowance.
+  Full clean-tree gate follows; no gate result claimed in this creation commit.
+  No bug fix, pubspec change, real network, run/install/device, push/merge/switch.
+
+### 2026-10-13 — Phase 8 clean-tree gate
+
+- **Revision/evidence.** Production `901d08edd`; original S2b `866cbaf03`,
+  addendum baseline `13df9a261`. Complete gate evidence `p8/gate/`:
+  `completion.json`, `suite-strict.json`, `checks-results.json`, analyzer and
+  build results. Checks ran on the clean production tree; gate changes are
+  documentation and restored size-baseline provenance comments only.
+- **Suite parity.** Nice-19 serialized full suite with `--no-pub` and
+  `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`: 13,392 success / 13 failure /
+  28 load error / 20 skip. `suite_evidence.py compare --against
+  p8/k2/baseline.jsonl` and strict identity comparison PASS: zero changed,
+  added or missing identities; SDK equal, tested tree stable. The failures
+  and load errors are the original baseline set. No flake or test fix.
+- **Static/mechanical checks.** Format 124 files, zero changes; size and
+  architecture plus their real negative fixtures PASS. Full CI analyzer
+  scope: 494 diagnostics, shared allowlist's 54 pre-existing warnings,
+  nothing new; its 99 video-player diagnostics exactly match the scoped
+  declaration comparator (zero additions, negative self-tests PASS).
+  All 38 move/seam jobs PASS: 26 existing Dart-manifest self-tests, P8
+  exhaustive self-test and current comparison, Kotlin self-test, P1–P7 at
+  their named merges, S and S2/S2b proofs. Every manifest invocation uses
+  an isolated copied parser package with copied kernels deleted.
+- **Builds/checklist.** `flutter build apk --release --no-pub` and
+  `flutter build macos --release --no-pub`, nice-19, both PASS; artifacts
+  hashed in `completion.json`. Android Home/auto-enter/actions/restored
+  controls, iOS native PiP start/stop/player restore, real recording stop
+  on background and native wake/decoder power behavior remain device-pending.
+  M1 is after this phase merges and was not executed at this checkpoint.
+- **Deviations/stop.** Supplemental global-allowlist attempts using a scoped
+  log and an unexpanded CI wildcard were invalid inputs, archived uncredited;
+  corrected complete CI scope passes. The shrink-only size updater dropped
+  dated comments, restored here with the P8 ratchet note. No application
+  fix, allowance, pubspec change, live application request, run/install/device,
+  push/merge/branch switch. Stop for Phase-8 independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -2759,3 +3238,15 @@ threshold in both directions with a selective loader barrier; caught vs
 uncaught failure state and partial cleanup failure. P3s: corrected
 11-occurrence ledger (no playlist-index caller of the episode mark);
 explicit CI/theme/analyzer transition.
+
+## Phase 8 design review resolution (Codex `vp-design`, 2026-10-13) — "No P1s"
+
+Chose option (b): seam S2 (platform predicates, separate from S) so
+mobile background pause/resume and PiP wiring are characterized; native
+presentation device-pending. P2s folded: retained `onPause` closure
+(recording teardown) and no background resume save; Step H separates
+"entered held boundary" from "completed" and proves races stay concurrent;
+explicit async boundary matrix; wakelock queued-write semantics. P3s:
+ownership (`_isPipActive`, `_pausedByLifecycle`, `_lifecycle` State-owned;
+`_backgroundedAt` moves), exact Host signatures, 7 `pipOwner`
+substitutions, 22-occurrence ledger, concrete M1 and CI.

@@ -183,6 +183,7 @@ import '../features/video_player/presentation/legacy_video_player/vp_trakt_scrob
 import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_local_completion.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -394,6 +395,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _simkl = VpSimklScrobbler(_VpSimklScrobblerHostAdapter(this));
     _mdblist = VpMdblistScrobbler(_VpMdblistScrobblerHostAdapter(this));
     _completion = VpLocalCompletion(_VpLocalCompletionHostAdapter(this));
+    _pip = VpPipLifecycle(_VpPipLifecycleHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -669,10 +671,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Bottom-center reconnect pill text; null = hidden.
   final ValueNotifier<String?> _iptvReconnectText = ValueNotifier(null);
-
-  /// Wall time we were backgrounded; a live channel resumed after more than
-  /// 30s away re-tunes to the live edge instead of resuming stale bytes.
-  DateTime? _backgroundedAt;
 
   late final IptvLiveRecovery _iptvLiveRecovery = IptvLiveRecovery(
     isEligible: _iptvRecoveryEligible,
@@ -1016,7 +1014,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _iosPipSession = PlayerPipSession.of(context);
+    _pip.iosPipSession = PlayerPipSession.of(context);
     _refreshDockGeometry();
   }
 
@@ -1542,9 +1540,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _lifecycle = AppLifecycleListener(
       onPause: () {
         unawaited(_stopRecording(userInitiated: false));
-        _pauseForBackground();
+        _pip.pauseForBackground();
       },
-      onResume: _resumeFromBackground,
+      onResume: _pip.resumeFromBackground,
     );
 
     // Observe, don't sample: see [_desktopRecordingRevisionListener].
@@ -1578,20 +1576,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // ready (see the player `ready` callback), so pressing Home never shrinks
     // a black/loading frame. Skipped when options are hidden — that context
     // deliberately suppresses the PiP button and tap controls.
-    if ((Platform.isAndroid || (Platform.isIOS && !PlatformUtil.isTvOS)) &&
+    if ((VpS2Hooks.isAndroid || (VpS2Hooks.isIOS && !PlatformUtil.isTvOS)) &&
         !widget.hideOptions) {
       PipService.resolveSupport().then((ok) {
         if (!mounted || !ok) return;
         PipService.attach(
           this,
-          onMode: _onPipModeChanged,
-          onAction: _onPipAction,
-          onRestore: _restoreIosPipPlayer,
+          onMode: _pip.onPipModeChanged,
+          onAction: _pip.onPipAction,
+          onRestore: _pip.restoreIosPipPlayer,
         );
         // Reveal the PiP button now that support is known.
         setState(() {});
         // If the player became ready before native support resolved, arm now.
-        if (_isReady) _armPipAutoEnter();
+        if (_isReady) _pip.armPipAutoEnter();
       });
     }
 
@@ -2226,7 +2224,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _onPlayerInstanceReady(int instanceGeneration) {
     if (!mounted || instanceGeneration != _playerInstanceGeneration) return;
     _isReady = true;
-    _armPipAutoEnter();
+    _pip.armPipAutoEnter();
     if (PlatformUtil.isTelevision && _controlsVisible.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Never while a guide/sheet is up: on tvOS IPTV the instance becomes
@@ -2266,7 +2264,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Load default player settings
     await _loadPlayerDefaults();
     unawaited(_loadDockPrefs());
-    if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
+    if (VpS2Hooks.isAndroid && !PlatformUtil.isAndroidTvCached) {
       _androidVideoRendererMode =
           await PlayerSettingsStorage.getAndroidVideoRendererMode();
     }
@@ -2865,9 +2863,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _posSub = player.stream.position.listen((d) {
       if (!isCurrent()) return;
-      if (Platform.isIOS && d.inSeconds != _lastIosPipPositionSecond) {
-        _lastIosPipPositionSecond = d.inSeconds;
-        _pushPipState();
+      if (VpS2Hooks.isIOS && d.inSeconds != _pip.lastIosPipPositionSecond) {
+        _pip.lastIosPipPositionSecond = d.inSeconds;
+        _pip.pushPipState();
       }
       _subtitleAutoSync?.observePosition(d.inMilliseconds);
       _iptvDiag.onProgress(d, playing: _isPlaying);
@@ -2943,8 +2941,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _isPlaying = p;
       _observeServerWatch();
       ProfileLockController.instance.setPlaybackActive(p);
-      _syncWakelock(p);
-      _pushPipState();
+      _pip.syncWakelock(p);
+      _pip.pushPipState();
       if (p) _noteLiveChannelPlaying();
       if (!_validationGateActive && p && _duration > Duration.zero) {
         _trakt.traktScrobble('start');
@@ -3330,7 +3328,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     required int mediaGeneration,
   }) =>
       AndroidRendererStartupFallback.shouldArm(
-        isAndroid: Platform.isAndroid,
+        isAndroid: VpS2Hooks.isAndroid,
         isAndroidTv: PlatformUtil.isAndroidTvCached,
         mode: _androidVideoRendererMode,
         alreadyValidated: _rendererValidatedForSession,
@@ -3919,7 +3917,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
         await platform.setProperty(
           'sub-visibility',
-          Platform.isIOS && (_isPipActive || _iosPipStarting) ? 'yes' : 'no',
+          VpS2Hooks.isIOS && (_isPipActive || _pip.iosPipStarting)
+              ? 'yes'
+              : 'no',
         );
       } catch (error) {
         debugPrint('Player: subtitle visibility reset failed: $error');
@@ -4061,7 +4061,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (platform is! mk.NativePlayer) return;
     final nativeRendering =
         requiresNativeSubtitleRendering(track) ||
-        (Platform.isIOS && (_isPipActive || _iosPipStarting));
+        (VpS2Hooks.isIOS && (_isPipActive || _pip.iosPipStarting));
     await platform.setProperty(
       'sub-visibility',
       nativeRendering ? 'yes' : 'no',
@@ -5373,8 +5373,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'title': widget.contentTitle ?? widget.title,
       'contentType': widget.contentType,
     };
-    if (_iosPipSession?.isParked ?? false) {
-      _iosPipSession!.close(result);
+    if (_pip.iosPipSession?.isParked ?? false) {
+      _pip.iosPipSession!.close(result);
     } else {
       Navigator.of(context).pop(result);
     }
@@ -10553,258 +10553,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  bool _iosPipStarting = false;
-  bool _iosPipDetached = false;
-  PlayerPipSession? _iosPipSession;
-  int _lastIosPipPositionSecond = -1;
-
-  /// Enter PiP now, sized to the current video's pixel aspect when known.
-  Future<void> _enterPip() async {
-    if (!PipService.isOwner(this) ||
-        !_playerCreated ||
-        _isTransitioning ||
-        _iosPipStarting ||
-        _isPipActive)
-      return;
-    final player = _player;
-    if (Platform.isIOS) setState(() => _iosPipStarting = true);
-    var entered = false;
-    try {
-      final handle = Platform.isIOS ? await player.handle : null;
-      if (!mounted || !PipService.isOwner(this) || !identical(player, _player))
-        return;
-      if (Platform.isIOS) {
-        await _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle);
-      }
-      _pushPipState();
-      entered = await PipService.enterPip(
-        aspectWidth: player.state.width,
-        aspectHeight: player.state.height,
-        playerHandle: handle,
-      );
-    } catch (error) {
-      debugPrint('PiP entry failed: $error');
-    } finally {
-      if (mounted && PipService.isOwner(this) && identical(player, _player)) {
-        if (Platform.isIOS) {
-          setState(() => _iosPipStarting = false);
-          unawaited(
-            _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle),
-          );
-        }
-        if (!entered) {
-          if (WidgetsBinding.instance.lifecycleState ==
-              AppLifecycleState.paused) {
-            _pauseForBackground();
-          }
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Picture in Picture could not start. Please try again.',
-              ),
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  /// Arm auto-enter (Home button) for this screen, seeding the current video
-  /// aspect so the auto-entered window matches the video shape. No-op unless
-  /// this screen is the active, supported PiP owner.
-  void _armPipAutoEnter() {
-    if (Platform.isIOS) return; // iOS prepares its renderer on explicit entry.
-    if (!PipService.isOwner(this)) return;
-    final w = _player.state.width ?? 0;
-    final h = _player.state.height ?? 0;
-    unawaited(PipService.setAutoEnter(true, aspectWidth: w, aspectHeight: h));
-  }
-
-  /// Keep the native side's play/pause icon, Next button and window aspect in
-  /// sync with the live player — both for an open PiP window and for the next
-  /// Home-button auto-enter. No-op unless this screen is the active PiP owner.
-  void _pushPipState() {
-    if (!PipService.isOwner(this)) return;
-    final w = _player.state.width ?? 0;
-    final h = _player.state.height ?? 0;
-    unawaited(
-      PipService.updatePlaybackState(
-        isPlaying: _isPlaying,
-        hasNext: _hasAnyNext,
-        positionMs: _player.state.position.inMilliseconds,
-        durationMs: _player.state.duration.inMilliseconds,
-        aspectWidth: w,
-        aspectHeight: h,
-      ),
-    );
-  }
-
-  /// Collapse the control chrome while inside the small PiP window, and restore
-  /// it when the window expands back to fullscreen.
-  void _onPipModeChanged(bool inPip) {
-    if (!mounted) return;
-    if (inPip) {
-      _hideTimer?.cancel();
-      _controlsVisible.value = false;
-      _pushPipState();
-    }
-    setState(() => _isPipActive = inPip);
-    if (Platform.isIOS && _playerCreated) {
-      if (inPip && (_iosPipSession?.park() ?? false)) {
-        _iosPipDetached = true;
-        unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-        unawaited(
-          SystemChrome.setPreferredOrientations(DeviceOrientation.values),
-        );
-      } else if (!inPip && (_iosPipSession?.isParked ?? false)) {
-        // Native close (or a newer playback owner) ends the detached session.
-        // Fullscreen restoration has already reattached it before this event.
-        _iosPipSession?.close();
-        return;
-      }
-      unawaited(
-        _setNativeSubtitleVisibilityForTrack(_player.state.track.subtitle),
-      );
-    }
-  }
-
-  Future<bool> _restoreIosPipPlayer() async {
-    if (!mounted || !PipService.isOwner(this)) return false;
-    final session = _iosPipSession;
-    if (session == null) return false;
-    if (session.isParked && !session.restore()) return false;
-    _iosPipDetached = false;
-    await SystemChrome.setPreferredOrientations(
-      _display.landscapeLocked
-          ? const [
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ]
-          : const [DeviceOrientation.portraitUp],
-    );
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    await WidgetsBinding.instance.endOfFrame;
-    return mounted && PipService.isOwner(this);
-  }
-
-  /// Handle taps on the PiP window's action buttons.
-  void _onPipAction(String action) {
-    if (!mounted || !_playerCreated) return;
-    if (action.startsWith('seek:')) {
-      final seconds = double.tryParse(action.substring(5));
-      if (seconds == null || !seconds.isFinite || _isTransitioning) return;
-      final target =
-          (_player.state.position.inMilliseconds + (seconds * 1000).round())
-              .clamp(0, _player.state.duration.inMilliseconds);
-      final position = Duration(milliseconds: target);
-      unawaited(_player.seek(position));
-      _trakt.traktScrobbleSeek(position);
-      _simkl.simklScrobbleSeek(position);
-      _mdblist.mdblistScrobbleSeek(position);
-      return;
-    }
-    switch (action) {
-      case 'play':
-        if (!_isPlaying) _togglePlay();
-        break;
-      case 'pause':
-        if (_isPlaying) _togglePlay();
-        break;
-      case 'playpause':
-        _togglePlay();
-        break;
-      case 'next':
-        if (_hasAnyNext) _goToNextEpisode();
-        break;
-    }
-  }
-
-  /// The app left the foreground (Home, power button, app switch): stop
-  /// playback instead of decoding video nobody can see. Mobile only — on
-  /// desktop a minimized/covered window keeping its audio is normal use, and
-  /// desktop power budgets are not why this exists. PiP never gets here: a
-  /// visible PiP activity stays at `inactive` (see [_lifecycle]).
-  void _pauseForBackground() {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) return;
-    // Even paused playback can have a Start Over probe in flight. Cancel
-    // before the playing/transition checks, including recording teardown.
-    _cancelPendingIptvCatchup(hideFeedback: false);
-    // A renderer restart has intentionally invalidated the old player and may
-    // not have created the replacement yet. Preserve playback intent without
-    // requiring either instance to be live at this exact lifecycle callback.
-    if (_rendererFallbackInProgress) {
-      _pausedByLifecycle = true;
-      if (_playerCreated) unawaited(_player.pause());
-      return;
-    }
-    // _isTransitioning too, not just _isPlaying: mid-switch (next episode, a
-    // zap) `playing` is briefly false while an open(play: true) is in flight.
-    // Backgrounding in that window must still arm the flag, or the open lands
-    // moments later and plays behind the backgrounded app with the guard in
-    // the playing listener disarmed. A user's own pause has neither set.
-    final openingStartOver =
-        _iptvStartOverActive &&
-        _activeMediaShouldPlay &&
-        !_activeMediaUserPaused;
-    if (!_playerCreated ||
-        (!_isPlaying && !_isTransitioning && !openingStartOver)) {
-      return;
-    }
-    // A recovery in flight must not re-open streams behind a backgrounded
-    // app; the resume path below re-arms recovery when it matters.
-    _backgroundedAt = DateTime.now();
-    _iptvLiveRecovery.cancel();
-    _iptvReconnectText.value = null;
-    _pausedByLifecycle = true;
-    unawaited(_player.pause());
-  }
-
-  /// Undo [_pauseForBackground] when the app returns, restoring the
-  /// pre-existing contract that coming back to this screen shows it playing.
-  /// A pause the user made themselves (flag unset) stays a pause.
-  void _resumeFromBackground() {
-    if (!_pausedByLifecycle) return;
-    // Cleared BEFORE play(): the playing event this triggers must not read as
-    // "playback restarted behind a backgrounded app" to the guard in the
-    // playing listener.
-    _pausedByLifecycle = false;
-    // The replacement player will read the cleared lifecycle flag immediately
-    // before open/play. Calling play on the disposing instance would race the
-    // one-player ownership guarantee.
-    if (_rendererFallbackInProgress) return;
-    if (!_playerCreated || !mounted) return;
-    // Coming back from the background is not a request to un-stop the night:
-    // if the sleep timer fired while we were away, stay paused until someone
-    // presses play.
-    if (_sleepStopLatched) return;
-    // LIVE, back after a real absence: the paused stream is minutes behind
-    // the edge (or dead). Re-tune to the live edge — same "comes back
-    // playing" contract, at the right point in the broadcast. Short trips
-    // keep the cheap in-buffer resume (legitimate timeshift).
-    final backgroundedAt = _backgroundedAt;
-    _backgroundedAt = null;
-    if (_currentIptvChannel?.isLive == true &&
-        !_iptvStartOverActive &&
-        backgroundedAt != null &&
-        DateTime.now().difference(backgroundedAt) >
-            const Duration(seconds: 30)) {
-      _iptvLiveRecovery.userRetry('lifecycle-rejoin');
-      return;
-    }
-    unawaited(_player.play());
-  }
-
-  /// The screen wakelock follows PLAYBACK, not this screen's lifetime: a
-  /// paused video left on a table must not pin the display on until the
-  /// route pops — on phones the display is the single biggest battery
-  /// consumer. Buffering stalls keep the lock (media_kit's `playing` tracks
-  /// the pause property, which stays false during a stall). initState still
-  /// takes the lock up front so the screen can't sleep through a slow
-  /// resolve/open before the first playing event arrives.
-  void _syncWakelock(bool playing) {
-    unawaited(PlayerDisplayControls.instance.setWakelock(playing));
-  }
+  late final VpPipLifecycle _pip;
 
   @override
   void dispose() {
@@ -10814,9 +10563,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_serverWatch.close());
     _watchOpenEpoch++;
     final replacedPip =
-        (_iosPipSession?.wasReplaced ?? false) ||
-        (_iosPipDetached && !PipService.isOwner(this));
-    _iosPipSession?.close();
+        (_pip.iosPipSession?.wasReplaced ?? false) ||
+        (_pip.iosPipDetached && !PipService.isOwner(this));
+    _pip.iosPipSession?.close();
     PlayerVisibility.closed(this);
     if (!replacedPip) ProfileLockController.instance.setPlaybackActive(false);
     _iptvDiag.onSessionEnd();
@@ -12691,7 +12440,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // transient and the elevation setting already exists for exactly this
   // preference, so subtitles stay where the user put them.
   mkv.SubtitleViewConfiguration _buildSubtitleViewConfig() {
-    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) {
+    if (VpS2Hooks.isIOS && (_isPipActive || _pip.iosPipStarting)) {
       return const mkv.SubtitleViewConfiguration(visible: false);
     }
     final settings = _subtitleSettings;
@@ -14277,7 +14026,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       : null,
                                   showPipButton: PipService.isOwner(this),
                                   onPip: PipService.isOwner(this)
-                                      ? _enterPip
+                                      ? _pip.enterPip
                                       : null,
                                   hasRecord: _canRecord,
                                   isRecording: _recordingActiveNow,
@@ -16620,6 +16369,82 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 }
 
+class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
+  _VpPipLifecycleHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Object get pipOwner => _s;
+  @override
+  bool get isIOS => VpS2Hooks.isIOS;
+  @override
+  bool get isAndroid => VpS2Hooks.isAndroid;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get playerCreated => _s._playerCreated;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  bool get isPipActive => _s._isPipActive;
+  @override
+  set isPipActive(bool v) => _s._isPipActive = v;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get hasAnyNext => _s._hasAnyNext;
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  Future<void> setNativeSubtitleVisibilityForTrack(mk.SubtitleTrack track) =>
+      _s._setNativeSubtitleVisibilityForTrack(track);
+  @override
+  void togglePlay() => _s._togglePlay();
+  @override
+  Future<void> goToNextEpisode() => _s._goToNextEpisode();
+  @override
+  void cancelPendingIptvCatchup({bool hideFeedback = true}) =>
+      _s._cancelPendingIptvCatchup(hideFeedback: hideFeedback);
+  @override
+  bool get rendererFallbackInProgress => _s._rendererFallbackInProgress;
+  @override
+  bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override
+  set pausedByLifecycle(bool v) => _s._pausedByLifecycle = v;
+  @override
+  bool get iptvStartOverActive => _s._iptvStartOverActive;
+  @override
+  bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+  @override
+  bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  ValueNotifier<String?> get iptvReconnectText => _s._iptvReconnectText;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  void traktScrobbleSeek(Duration position) =>
+      _s._trakt.traktScrobbleSeek(position);
+  @override
+  void simklScrobbleSeek(Duration position) =>
+      _s._simkl.simklScrobbleSeek(position);
+  @override
+  void mdblistScrobbleSeek(Duration position) =>
+      _s._mdblist.mdblistScrobbleSeek(position);
+  @override
+  bool get landscapeLocked => _s._display.landscapeLocked;
+}
+
 class _VpLocalCompletionHostAdapter implements VpLocalCompletionHost {
   _VpLocalCompletionHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
@@ -16971,4 +16796,34 @@ class VideoPlayerScreenTestHooks {
         ? mkv.VideoController(player, configuration: configuration)
         : hooks.createVideoController(player, configuration);
   }
+}
+
+/// Platform predicates for the separately reviewed PiP characterization seam.
+@visibleForTesting
+class VpS2Hooks {
+  const VpS2Hooks({this.ios, this.android});
+  final bool Function()? ios;
+  final bool Function()? android;
+  static VpS2Hooks? _installed;
+
+  static void install(VpS2Hooks? hooks) {
+    if (kReleaseMode || kProfileMode) {
+      throw StateError(
+        'Video player platform hooks require an assertion-enabled test',
+      );
+    }
+    if (!const bool.fromEnvironment('DEBRIFY_VP_TEST_HOOKS')) {
+      throw StateError(
+        'Video player platform hooks require DEBRIFY_VP_TEST_HOOKS',
+      );
+    }
+    assert(() {
+      _installed = hooks;
+      return true;
+    }());
+  }
+
+  static bool get isIOS => _installed?.ios?.call() ?? Platform.isIOS;
+  static bool get isAndroid =>
+      _installed?.android?.call() ?? Platform.isAndroid;
 }

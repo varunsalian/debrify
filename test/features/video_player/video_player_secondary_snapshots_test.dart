@@ -63,15 +63,7 @@ void main() {
             );
             // Keep guide refreshes pending: its synthetic empty response must
             // not erase the seeded store while the player-reader race runs.
-            f.network.handler = (r) =>
-                r.method == 'GET' &&
-                    [
-                      'api.trakt.tv',
-                      'api.simkl.com',
-                      'api.mdblist.com',
-                    ].contains(r.url.host)
-                ? remote.future
-                : secondaryReply(r);
+            f.holdGuideRefresh(remote, secondaryReply);
             final b = (await runZonedGuarded(
               () => traktBrowser(t, f),
               (e, s) => errors.add(e),
@@ -90,7 +82,13 @@ void main() {
                 ),
               );
             }
-            final selection = reads.run(() => b.onEpisodeSelected(1, 2));
+            final selection = f.actions
+                .start<void>(
+                  'held episode selection',
+                  () => reads.run(() => b.onEpisodeSelected(1, 2)),
+                  held: true,
+                )
+                .future;
             await f.until(t, () => reads.pending.isNotEmpty);
             expect(reads.deliveries, 1);
             if (race == 'profile') {
@@ -262,7 +260,13 @@ void main() {
                   : WatchProgressSource.mdblist,
             ),
           );
-          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
+          final selection = f.actions
+              .start<void>(
+                'held episode selection',
+                () => reads.run(() => b.onEpisodeSelected(1, 2)),
+                held: true,
+              )
+              .future;
           await f.until(t, () => reads.pending.isNotEmpty);
           b.seriesPlaylist.imdbId = 'tt5200000';
           await t.runAsync(

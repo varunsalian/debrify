@@ -57,9 +57,7 @@ class TraktPlayerDriver {
   }
 
   Future<void> drain() async {
-    for (var i = 0; i < 12; i++) {
-      await f.advance(t, const Duration(milliseconds: 10));
-    }
+    await f.actions.settle(t);
     expect(
       uncaught,
       isEmpty,

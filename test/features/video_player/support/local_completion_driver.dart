@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'vp_fixture_actions.dart';
 import 'dart:convert';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -88,7 +90,12 @@ class CompletionDelivery {
             (R.toString() == 'void' || R.toString() == 'dynamic')) {
           if (!multiple) armed = false;
           values.add(value);
-          pending.add(() => zone.runUnary(callback, value));
+          pending.add(
+            VpFixtureActions.heldCallback(
+              'local_completion_driver.dart',
+              () => zone.runUnary(callback, value),
+            ),
+          );
           return null as R;
         }
         return callback(value);

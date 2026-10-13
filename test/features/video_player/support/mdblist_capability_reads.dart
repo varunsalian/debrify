@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'vp_fixture_actions.dart';
+
 import 'package:debrify/services/profiles/profile_async_authorization.dart';
 
 /// Holds the real capability at the player's await continuation, after the
@@ -25,7 +27,12 @@ class MdblistCapabilityReads {
             value is ProfileAsyncAuthorization &&
             (R.toString() == 'void' || R.toString() == 'dynamic')) {
           armed = false;
-          pending.add(() => zone.runUnary(callback, value));
+          pending.add(
+            VpFixtureActions.heldCallback(
+              'mdblist_capability_reads.dart',
+              () => zone.runUnary(callback, value),
+            ),
+          );
           return null as R;
         }
         return callback(value);

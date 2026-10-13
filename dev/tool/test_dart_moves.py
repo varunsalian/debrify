@@ -154,6 +154,8 @@ def run(package):
     secondary_tracker_tests(package)
     from test_dart_completion_moves import run as completion_tests
     completion_tests(package)
+    from test_dart_pip_moves import run as pip_tests
+    pip_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

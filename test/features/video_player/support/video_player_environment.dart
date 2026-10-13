@@ -37,6 +37,7 @@ import 'package:wakelock_plus_platform_interface/wakelock_plus_platform_interfac
 import '../../../support/catalog_detail_http_transport.dart';
 import 'fake_player.dart';
 import 'fake_video_controller.dart';
+import 'vp_fixture_actions.dart';
 
 class VideoPlayerPaths extends PathProviderPlatform {
   VideoPlayerPaths(this.path);
@@ -85,6 +86,7 @@ class VideoPlayerHttp extends HttpOverrides {
   final replies = <String, http.Response>{};
   final closedClients = <int>[];
   final pendingByClient = <int, List<Completer<http.Response>>>{};
+  VpFixtureActions? actions;
   bool abortOnClose = false;
   int _nextClient = 0;
   FutureOr<http.Response> Function(http.Request)? handler;
@@ -96,6 +98,10 @@ class VideoPlayerHttp extends HttpOverrides {
       CatalogFixtureHttpClient.new,
       () => _VideoPlayerMockClient(
         (request) async {
+          final activity = actions?.begin(
+            'http:${request.method} ${request.url.host}${request.url.path}',
+            held: true,
+          );
           requests.add(request);
           final response = Completer<http.Response>();
           pending.add(response);
@@ -120,6 +126,7 @@ class VideoPlayerHttp extends HttpOverrides {
             return await response.future;
           } finally {
             pending.remove(response);
+            activity?.complete();
           }
         },
         () {
@@ -152,6 +159,7 @@ class _VideoPlayerMockClient extends MockClient {
 /// Uses existing profile/storage/platform boundaries. No extra State access,
 /// platform predicate or service injection is added to application code.
 class VideoPlayerEnvironment {
+  final actions = VpFixtureActions();
   VideoPlayerEnvironment({
     this.native = false,
     this.committed = true,
@@ -192,10 +200,11 @@ class VideoPlayerEnvironment {
     ]).stdout.toString().trim();
     final evidence =
         Platform.environment['VPLAYER_EVIDENCE_ROOT'] ??
-        '$common/refactor-evidence/vplayer/p2';
+        '$common/refactor-evidence/vplayer/p8';
     final parent = Directory('$evidence/harness-runtime');
     await parent.create(recursive: true);
     directory = await parent.createTemp('case-');
+    network.actions = actions;
     wake.writes.clear();
     SharedPreferences.setMockInitialValues({});
     ProfileRuntime.debugReset();
@@ -263,7 +272,11 @@ class VideoPlayerEnvironment {
         ensureInitialized: () => creationOrder.add('media-kit-init'),
         createPlayer: (configuration) {
           creationOrder.add('player');
-          final player = FakePlayer(configuration, native: native);
+          final player = FakePlayer(
+            configuration,
+            native: native,
+            actions: actions,
+          );
           players.add(player);
           player.onOpen = () {
             player.publishFrame();
@@ -282,49 +295,30 @@ class VideoPlayerEnvironment {
     );
   }
 
-  Future<void> advance(
-    WidgetTester tester, [
-    Duration time = Duration.zero,
-  ]) async {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(time);
-    expect(tester.takeException(), isNull);
-  }
+  Future<void> advance(WidgetTester tester, [Duration time = Duration.zero]) =>
+      actions.advance(tester, time);
 
   Future<void> until(
     WidgetTester tester,
     bool Function() condition, {
     String? reason,
-  }) async {
-    for (var i = 0; i < 100 && !condition(); i++) {
-      await advance(tester, const Duration(milliseconds: 20));
-    }
-    expect(condition(), isTrue, reason: reason);
-  }
+  }) => actions.until(tester, condition, reason: reason);
 
-  Future<T> finish<T>(WidgetTester tester, Future<T> future) async {
-    var completed = false;
-    late T value;
-    Object? failure;
-    future.then(
-      (result) {
-        value = result;
-        completed = true;
-      },
-      onError: (Object error) {
-        failure = error;
-        completed = true;
-      },
-    );
-    await until(
-      tester,
-      () => completed,
-      reason: 'Original action must complete',
-    );
-    if (failure != null) throw failure!;
-    return value;
+  Future<T> finish<T>(WidgetTester tester, Future<T> future) =>
+      actions.finish(tester, future);
+
+  void holdGuideRefresh(
+    Completer<http.Response> response,
+    FutureOr<http.Response> Function(http.Request) fallback, {
+    List<String> hosts = const [
+      'api.trakt.tv',
+      'api.simkl.com',
+      'api.mdblist.com',
+    ],
+  }) {
+    network.handler = (r) => r.method == 'GET' && hosts.contains(r.url.host)
+        ? response.future
+        : fallback(r);
   }
 
   Future<void> mount(WidgetTester tester, VideoPlayerScreen screen) async {
@@ -374,6 +368,7 @@ class VideoPlayerEnvironment {
     expect(VideoOutputLease.isHeld, isFalse);
     // Widget binding checks pending timers when the test ends; the fixture
     // never cancels production timers or uses an unbounded pumpAndSettle.
+    await actions.drain(tester);
     for (final controller in controllers) {
       controller.close();
     }

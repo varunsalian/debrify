@@ -83,7 +83,13 @@ void main() {
             ),
           );
           final before = d.seeks.length;
-          final selection = reads.run(() => b.onEpisodeSelected(1, 2));
+          final selection = f.actions
+              .start<void>(
+                'held episode selection',
+                () => reads.run(() => b.onEpisodeSelected(1, 2)),
+                held: true,
+              )
+              .future;
           await f.until(t, () => reads.pending.isNotEmpty);
           await d.drain();
           expect(d.seeks, hasLength(before));
