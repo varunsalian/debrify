@@ -2604,7 +2604,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
 - **Checks/scope.** 143 focused completion/theme/source-contract tests pass.
   Scoped analyzer comparator/self-negatives: 98 occurrences, zero additions,
   moved `empty_catches` identity/multiplicity preserved. Format zero changes;
-  size 3,000 files / 140 ratchets, architecture 1,669 and its negatives pass.
+  size 3,001 files / 140 ratchets, architecture 1,669 and its negatives pass.
   No behavior/test assertion change, bug fix, pubspec change, real network,
   push/merge/switch or device execution. Clean-tree gate follows; end-of-series
   local movie/episode/rewatch/This-device and earlier device checklists pending.
@@ -2652,7 +2652,7 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   unchanged by the fixture closure, audited. CI format idempotent; root/strict-CI
   scoped comparator: 98 occurrences, zero additions, including moved
   `empty_catches` identity/multiplicity. Global 54-warning allowlist, comparator
-  negatives, size 3,000 files / 140 ratchets and architecture 1,669 / negatives
+  negatives, size 3,001 files / 140 ratchets and architecture 1,669 / negatives
   PASS. Isolated CLI parser packages and copied-kernel deletion are archived.
 - **Builds.** Clean `nice -n 19 flutter build apk --release --no-pub` and then
   `flutter build macos --release --no-pub` both PASS. APK/macOS executable/AOT
@@ -2663,6 +2663,13 @@ suite identities and analyzer (zero additions). Claude sample 18/20 (90 %). Merg
   alongside earlier device/PiP items. Original cross-profile completion writes
   remain preserved and documented in Follow-ups. No bug fix, pubspec change,
   real tracker network, device execution, push, merge, branch switch or later move.
+
+2026-10-13 — **Phase 7 independent review (Codex `vp-rev7`): no P1/P2 — "No P1s".**
+P3s: (1) harden the shared asynchronous fixtures once (action-completion
+waits, guide-refresh barriers, cleanup in shared support; stress-replay with
+unchanged assertions) — scheduled as test-only step H at the start of phase
+8, before milestone M1; (2) size summaries corrected to 3,001 files. Claude
+sample 20/20. Merged.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
