@@ -4016,6 +4016,28 @@ Validation: exact diff and `git diff --check`.
   device action, push/merge/branch switch. STOP for independent Step-0 sampling;
   production moves, registrations and ratchet lowering remain Step 1.
 
+### 2026-10-14 — Phase 11 Step 0b independent sample closure
+
+- Original `d5fd82210` (lib `7fdf59370`); addendum revision receipt
+  `p11/step0b/commit.json`. Claude sample 16/20 (80%); q3/q12/q13/q16 now
+  assertion-killed on the detached original: final 20/20 (100%). Five new
+  caller cases pin forced-only/audio policy, addon id collisions, mid-cleanup
+  manual/audio cancellation and pre-success audio persistence during late restore.
+- q16 is real: a public audio write before late restore success does not mark
+  its attempt persisted; a later decoder rollback changes native selection
+  without undoing that physical write. Existing behavior retained; no source
+  tests or private State injection. Root and detached controls pass with the
+  final test hash; exact patches/completed witnesses in `step0b/` and deps table.
+- `suite_evidence.py run vplayer/p11/step0b/baseline --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, `compare --against
+  step0/final-suite.jsonl baseline.jsonl` and strict identity comparison PASS:
+  13,747 successes, same 13 failures/28 load errors/20 skips; exactly five
+  passing additions, no old changes; stable tree and same SDK/flags. Test
+  analysis/format PASS. 195 P11 cases total; original sweep remains intact.
+- Failed pilot fixture/compile assumptions and initial wrong-CWD control are
+  archived uncredited; final serial controls/replays complete and lib restored.
+  No app/pubspec/allowlist/CI change or bug fix. Production Step 1 follows.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

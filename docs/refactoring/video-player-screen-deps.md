@@ -8192,3 +8192,75 @@ Final test analysis and normal formatting PASS (18 test/support files, zero issu
 Development deviations remain archived and uncredited: early focused filters omitted relevant cases; declaration deletion often broke syntax/type promotion; one error-only list access now has an assertion before reading it; throwing-queue initialization timed out and was replaced by a valid static-sharing mutation. Native metadata failure is caught by the helper, and TVMaze preserves supplied IMDb identity, so controls were corrected at the fixture boundary; the changed identity uses the exposed shared browser model. The foreign-policy fixture needed the actual matching native-language rule, not a guessed unknown-language shortcut. Reset fixture URLs were made valid after whitespace encoding mismatched their synthetic route. The original has two initial embedded applications in the policy case (provisional then regular), now pinned before a later refresh. A first full-suite invocation with extra concurrency1 was deliberately interrupted and uncredited, then rerun from scratch with exact baseline flags. Earlier environment omission/brief overlapping controls and failed probes were likewise excluded and serially re-run. Assertions and application behavior were preserved; no bug fixes, real network, build/run/install/device actions, push/merge/branch switch.
 
 STOP before production moves. Step-0 commit and full commands/receipts are archived in `p11/step0/commit.json`, `final-suite-strict.json`, `witness-audit.json`, completed JSON/stderr logs and mutation patches. Independent sampling/review follows.
+
+## Phase 11 Step 0b — independent sample closure
+
+Original `d5fd82210` has application code byte-identical to `7fdf59370`.
+Claude's independent sample (`p11/claude-sample/results.json`) killed **16/20
+valid mutations (80%)**. All four real survivors are now assertion-killed on
+the detached original; final **20/20 (100%)**, no equivalence exclusions. The
+unchanged original and facade both pass five new original-caller cases in
+`video_player_subtitle_sources_sample_test.dart`. The systematic Step-0
+611-point/67-typed/28-reference sweep is retained; these four independent
+points strengthen its behavioral matrix rather than replacing the sweep.
+
+| Coverage addition | Observable assertion | Original witness |
+|---|---|---|
+| Forced-only plus matching preferred audio | Forced embedded 2 still selected despite foreign-only policy; native forced metadata read | q3 |
+| Forced native id collides with addon ordinal 8 | Off selected; never loads addon 8 | q12 (also q3) |
+| Automatic cleanup crossed by manual choice | Remove 8 entered while pending; manual 3 preserved; no removal 9 after release | q13 |
+| Automatic cleanup crossed by audio revision | No removal 9; off policy result; pending refresh completes after old queue work releases | q13 |
+| Audio persistence before late restore success | Physical subtitle 3/audio 2 remains after decoder rollback to track 2 | q16 |
+
+**q16 is non-equivalent.** A stored-track restore is suspended after its
+settings read; a manual choice completes; the old restore then applies its
+captured track and is held at the 50 ms success turn. Reopening the real menu
+reads that optimistic player track. Its audio callback physically persists
+the matching subtitle before successReturned. The original deliberately
+does not stamp that attempt as persisted; after restore success a decoder
+failure rolls native selection back but leaves the pre-success audio write.
+The mutant stamps the attempt early and later rewrites the physical subtitle
+preference. No attempt injection or private State access; public menus,
+streams, storage and the existing delivery/turn barriers only. This does
+not invalidate P10 n15: the unmodified P11 guard still guarantees persisted
+implies successReturned; removing the guard changes that invariant.
+
+| Sample id | First sample | Final | Assertion evidence |
+|---|---|---|---|
+| q1 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q2 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q3 | survived | killed | `step0b/sample-closure/q3.jsonl` |
+| q4 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q5 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q6 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q7 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q8 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q9 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q10 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q11 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q12 | survived | killed | `step0b/sample-closure/q12.jsonl` |
+| q13 | survived | killed | `step0b/sample-closure/q13.jsonl` |
+| q14 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q15 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q16 | survived | killed | `step0b/sample-closure/q16.jsonl` |
+| q17 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q18 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q19 | killed | killed | `claude-sample/` (results lists failing test identities) |
+| q20 | killed | killed | `claude-sample/` (results lists failing test identities) |
+
+Each new case is covered by a complete assertion-failing mutation on its
+final file hash (recorded in `step0b/sample-closure-results.json`); detached
+controls in `original-control.jsonl`, root control `pilot5.jsonl`, and exact
+patches/results in `sample-closure/`. Early development compile/fixture
+failures (pilot1–4 and the wrong-CWD control) are uncredited; final controls
+and all four replays complete. The original lib is restored after every
+mutation. No source-text tests, production edits, bug fixes, allowlisting,
+network or device actions.
+
+Addendum baseline: `step0b/baseline.jsonl` and `.env.json`, stable tested tree
+`24e8248de263a03f976126d1d659502d7c4a9d8d`; same SDK/flags as Step 0.
+**13,747 success /13 failure /28 load error /20 skip**; helper and strict
+identity comparisons PASS against `step0/final-suite.jsonl`: exactly five
+passing additions, no changed/missing/fixed/newly skipped old identities.
+195 Phase-11 caller cases total. Test analysis/format PASS. The baseline
+remains the required clean Step-1 gate comparator; no allowlist change.
