@@ -3900,6 +3900,33 @@ Validation: exact diff and `git diff --check`.
   device-pending. Dormant paths and characterized original defects preserved;
   M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
 
+### 2026-10-14 — Phase 11 prerequisites; numeric ledger clarification pending
+
+- Revision: original `7fdf59370`, approved design `3720cfe96`; receipt in
+  `p11/prerequisites-commit.json`. Application/pubspec/CI unchanged.
+- Actual frozen table has 15 declarations (13 methods/getters +two fields),
+  not 14. Retained ledger has 28 occurrences (22 redirects +six unchanged reset
+  callers), not 27: reset's cleanup at 15077 is omitted. Only three chains occur
+  in named moves; sync-reset stays retained. Owner direction requested before
+  freezing counts; no membership silently added/dropped or source call invented.
+- Evidence-only complete prototype: 15 moves/770 retained/two patched, zero
+  comparison differences; formatted three destinations 303/282/412, all ≤500.
+  Minimal live Hosts/action signatures and scaffolds reviewable in
+  `p11/stepT/host-and-size-proposal.json`. Selected-audio remains State-owned;
+  the two owned initializers are inert. Optional-comma sites/idempotence archived.
+- All 40 existing prerequisite checks PASS: 26 other Dart manifests, P1–P10
+  named histories, Kotlin597, existing universal checker and all seam proofs.
+  Isolated copied parsers/kernels, nice19; original suite stable and identical to
+  P10 gate (13,552 successes, same 13 failures/28 load errors/20 skips).
+  Analyzer root104/strict177/prototype114, no errors; prior identities preserved.
+- 20 pilot caller cases only in detached original pass; each mutation-proven
+  with final files, including real bytes and files before fixture deletion.
+  Final analysis/format clean; original lib restored. Initial unscoped pilot and
+  missing prototype import are uncredited; reruns pass. Full discovery/priority,
+  restore/language, series-write matrix, systematic sweep and additions-only
+  Step-0 baseline remain. No P11 manifest frozen, production move or CI transition.
+  Detailed ledgers/commands/results in deps and `p11/`; STOP pending direction.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

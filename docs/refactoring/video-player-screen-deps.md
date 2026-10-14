@@ -7108,3 +7108,66 @@ Native decoder/bitmap rendering and physical PiP presentation remain device
 checks; no device parity claim. Dormant compatibility paths and original stale
 rollback/cross-profile/disposed-notifier outcomes remain frozen. M2 follows
 phase 11; no later phase, bug fix, push, merge or branch switch performed.
+
+
+## Phase 11 prerequisites — frozen ledger clarification pending
+
+Original application `7fdf59370`; approved design `3720cfe96`. Main application,
+CI and dependency files remain unchanged. The complete evidence-only prototype
+keeps the table's explicit membership, with 787 exhaustive original spans:
+**15 moved /770 retained /two patched**. Normally formatted files are **303
+(language policy), 282 (preferences), 412 (addon subtitles)**; no sibling/facade
+imports or Host construction reads. Both temp-file and queue initializers are
+inert. `_subtitleSelectedAudio` is State-owned, consistent with the resolution;
+the language Host forwards its live getter/setter and reset keeps its direct
+write. This is a proposal, not an applied or frozen P11 manifest.
+
+### Three contradictions requiring plan-owner direction
+
+| Frozen prose | Actual original/table | Evidence / proposed correction |
+|---|---|---|
+| 14 moves | 13 methods/getters plus two fields = **15 declarations** | `p11/stepT/membership-audit.json`; keep all table entries, correct numeric count. The getter is an independent declaration requiring its own fate. |
+| 27 retained references | **22 redirects plus six unchanged reset callers =28** | `occurrence-audit.json`; the ledger omits `_resetSubtitleState`'s cleanup call at **15077**. Keep that call in place and declare its one receiver rewrite. |
+| Four used P9/P10 chains | **Three used chains** | Sync-reset occurs only in retained callers, with zero occurrences inside any named move. Keep it in place; no unused Host action. External-path setter (two), track wait (one), diagnostic apply (eight) are the actual chains. |
+
+The plan's exhaustive-fates and declared-edit rules prevent silently dropping a
+named getter, omitting a live cleanup reference or inventing a moved sync-reset
+call. Numeric clarification was requested; the explicit table remains unchanged
+until the owner answers. `host-and-size-proposal.json`, `design-discrepancies.json`,
+the complete prototype/scaffolds and original AST occurrences are reviewable.
+
+**40 completed prerequisite checks PASS:** all 26 other Dart manifest self-tests,
+P1–P10 named same-revision historical checks, Kotlin self-test (597), the existing
+video-player universal self-test and S/S2/S2b/S2c proofs. Every parser run uses
+an isolated copied package under the corresponding worktree's
+`.dart_tool/vplayer_parser/`; copied kernels removed. Commands/completed logs:
+`p11/stepT/independent-results.json`, `self-and-seams-results.json`.
+
+The original full suite is complete, stable and exactly matches the P10 gate:
+**13,552 success /13 failure /28 load error /20 skip**, zero changed/added/missing
+identities, same SDK/flags. Root analyzer 104 scoped occurrences; strict original
+177; complete normally formatted hypothetical split 114, no errors. Prior P1–P10
+identities/multiplicities retained in the proposal. Formatter proof records
+17 optional comma insertions in the facade, three in language, two in preferences,
+five inserted/one deleted in addon; zero non-optional token differences and
+idempotence. Evidence-only declaration/body comparison has zero differences.
+The first probe's missing pure-policy import is archived uncredited; corrected
+prototype and analyzer replay pass. No analyzer inventory or CI transition yet.
+
+**Pilot only:** 20 original-caller cases in the detached `7fdf59370` worktree test
+streamed raw/gzip/ZIP non-UTF8 bytes, declared/actual limits, empty/HTML/status/body
+errors, independent exact 15-second budgets, valid/invalid cache cleanup, and
+write/rename held across reset/disposal. Actual final and `.part` files are
+asserted before fixture-directory deletion. All 20 final-file cases pass and
+have assertion-failing original mutations (client close, header/body duration,
+cached/written registration and write/rename await). Final controls, patches,
+completed failures, test hashes, clean analysis/format and restored lib hash are
+in `p11/step0/`. These are not the full Step-0 coverage matrix or systematic
+sweep; discovery/priority, restore/language and series-write matrices remain.
+
+Initial pilot omitted the evidence-root variable; its transient directories were
+removed, that run is uncredited, and final controls/witnesses use explicit P11
+environment. File-race fixture closure assertions now identify the subtitle's
+client, preserving assertions while excluding a separate disposal client.
+No production move, dependency change, build/run/install, device command, real
+network, push, merge or branch switch. Full Step T and Step 0 remain pending.
