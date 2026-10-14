@@ -160,6 +160,8 @@ def run(package):
     subtitle_sync_tests(package)
     from test_dart_subtitle_apply_moves import run as subtitle_apply_tests
     subtitle_apply_tests(package)
+    from test_dart_subtitle_sources_moves import run as subtitle_sources_tests
+    subtitle_sources_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

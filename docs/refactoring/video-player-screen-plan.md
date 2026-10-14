@@ -1553,7 +1553,7 @@ Subtitle work is split over phases 9–11 with one **state-ownership map**
 | `_autoSyncPillLastShown` (1341) | **State** | sole reader/writer is retained `build` (13640, fade cache) |
 | `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer` | **P9 controller** | inert initializers |
 | `_subtitleSelectionCorrection` (1109, notifier) | **State** (allocation) | P10 manipulates its value through a Host |
-| apply-attempt / diagnostic generation | P10 | |
+| apply-attempt / diagnostic generation | **State** (decided in phase 10) | |
 | addon/Stremio fetch, temp files, priority, track preferences | P11 | |
 
 ### Moves → one combined bridge `presentation/legacy_video_player/vp_subtitle_auto_sync.dart`
@@ -1776,7 +1776,166 @@ subtitle reverts to the previous one with a message; bitmap (PGS)
 subtitles show, and are rejected with a message on an incompatible Android
 renderer; the menu reflects the corrected selection.
 
+## Phase 11 — subtitle sources and track preferences
+
+Branch `refactor/vplayer-p11` off the phase-10 merge `7fdf59370`. Evidence
+`refactor-evidence/vplayer/p11/`. Line numbers at `7fdf59370`. M2 follows
+this phase.
+
+### Three sibling collaborators (design review P2: the two-file split broke the 500-line cap)
+
+Bodies stay whole; each destination's normal formatting is proved at step
+T before the split is frozen. No sibling imports; every cross call goes
+through the facade. The frozen membership is 15 moved declarations: 13
+methods/getters and the two owned fields. Step-T normal-format measurements
+are 303/282/412 lines respectively (all ≤500).
+
+| Destination | Declarations | Existing lines |
+|---|---|---|
+| `vp_subtitle_language_policy.dart` | `_applyDefaultAudioLanguage`, `_audioAllowsAutomaticSubtitles` (getter), `_refreshSubtitleAudioPolicy`, `_applyDefaultSubtitleLanguage`, `_applyForcedSubtitle` | 252 |
+| `vp_track_preferences.dart` | `_restoreTrackPreferences` (199), `_persistTrackChoice` | 239 |
+| `vp_addon_subtitles.dart` | `_downloadStremioSubtitleToTempFile`, `_applyExternalSubtitleTrack`, `_cleanupTempSubtitleFilesSync`, `_fetchAndMaybeAutoSelectAddonSubtitle`, `_applySubtitleSourcePriority`, `_applySubtitlePriorityUpdate` + fields `_tempSubtitleFiles` (empty set) and `_subtitlePrioritySelectionQueue` (implicit nullable-field constructor — inert) | 326 |
+
+**Stays in the facade:** `_resetSubtitleState` (shared content-reset
+orchestrator across phases 9–11), `_findSeriesEpisodeForCurrentIndex`
+(retained identity selection, addon discovery, skip adapter),
+`_menuSelectEmbeddedSubtitle`, `_menuSelectAddonSubtitle`,
+`_menuApplyTrackChange`, `_audioTrackChoiceChanged`, the metadata retry
+orchestrator. **State-owned fields:** the fetch token, three cache fields,
+selected addon id, embedded/manual/restore-ready flags, audio revision,
+injected launch slots, diagnostics, notifiers, UI flags, manual identity
+(they span retained menus/identify-title, reset, preferences and addon
+selection — the owned-field guard, `occurrence_field_bindings.py:150`,
+forbids forwarding a sibling-owned field). `_subtitleSelectedAudio` stays
+State-owned, with a live getter/setter in the language Host and its original
+reset write retained.
+
+**Hosts (frozen individually at step T):** live widget selectors `String
+title` (restore/persistence) and nullable `contentSeason`/`contentEpisode`
+(addon identity fallback); action signatures
+`applyIptvAudioPreference(int ticket)`,
+`waitForSubtitleTracks({required int token})`,
+`applyDefaultSubtitleLanguage({bool ignoreSourcePriority = false})`,
+`refreshSubtitleAudioPolicy({bool reselect = true})`,
+`applySubtitleSourcePriority(List<AddonSubtitleSlot>, int, {bool discoveryReady = true})`;
+nullable `isCurrent` callbacks and captured playlist/track-list/
+audio-revision/content-token locals preserved. No `BuildContext`,
+`setState` or owner identity needed. Three registered P9/P10 chains used
+inside moved bodies: external-path setter, track wait and diagnostic apply.
+Sync reset remains in the retained reset orchestrator. The exact three Hosts
+and their declarations are frozen by the approved
+`p11/stepT/host-and-size-proposal.json`.
+
+**Patched facade adapter:** only `_VpSubtitleApplyHostAdapter`
+(`patched_class_projection`, one counted rewrite of its persistence
+forwarder, 15971); the P9 adapter is unchanged.
+
+**Retained references (28 executable: 22 redirects and six unchanged reset calls):**
+
+| Group | Facade lines |
+|---|---|
+| Reset | 4848, 8269, 8531, 8740, 8868, 9169 |
+| Restore | 2423, 2513, 3332, 8151, 8316, 8366, 9264 |
+| Audio-policy refresh | 2748, 14833, 14861 |
+| Persistence | 14666, 14819, 14827, 15972 |
+| Download / external apply | 14910, 14946 / 14925, 14956 |
+| Cleanup (exact dispose/reset positions) | 10221, 15077 |
+| Metadata/identify-triggered fetch | 9981, 14507 |
+
+**Language behaviour (corrected terminology):** native selection first,
+then English / first real track where applicable; a null addon preference
+prefers English; forced selection defaults to English; **no UI-locale
+lookup**; ISO aliases, title-based metadata and the distinct `pt-BR` rule.
+Restore excludes app-managed addon tracks (15189) and falls through to
+default/priority selection. Priority settings are sampled on selection
+work; a storage change alone schedules nothing.
+
+**CI:** current/self-test and both analyzer inputs → P11; P10 `--at
+7fdf59370`; protect all 20 earlier destinations; all seam proofs; tests and
+destinations in `ci_behavior_tests.txt`, theme manifest, rendered set and
+the three source-guard lists. Collaborators assigned after `_subtitleApply`.
+
+### Step 0 — characterization of the original
+
+- **Streaming HTTP fixture** (test support only, `MockClient.streaming`
+  from the pinned package; no application seam): declared/undeclared
+  length limits, the separate 15 s header and body timeouts (15577), body
+  errors, client closure; caller-level byte assertions for non-UTF-8
+  content, gzip/ZIP extraction, HTML rejection, cache reuse and invalid
+  cached files.
+- **Cleanup races:** download has no token/mounted/profile guard and can
+  finish write → rename → temp-set registration (15603) after dispose
+  cleanup (10221) or reset; hold write/rename across reset/disposal and
+  inspect final and `.part` files **before** fixture directory deletion;
+  overlapping downloads of the same URL/cache stem. Leaks pinned as-is →
+  Follow-ups.
+- **Discovery/priority concurrency matrix:** final cache publication
+  checks only the token (15778; dispose does not bump it); no profile
+  identity in fetch or priority validity (15819); the queue coalesces
+  same-token updates and lets a newer token proceed. Cover a higher-priority
+  addon loading while a lower one succeeds, higher-priority failure and
+  fallback, multiple updates during a held download/apply, newer-content
+  work proceeding while old work is held, manual/audio changes invalidating
+  automatic selection — crossed with outgoing-profile-still-mounted and
+  disposal, distinguishing native effects from unobservable retired-State
+  cache writes; the service-owned three-attempt retry (500/1,500 ms
+  backoffs) outliving the route. Real fixture addon via
+  `StremioService.addAddon` (P9 precedent).
+- **Restore/default-language races:** restore guards the content token
+  but not manual choice, audio revision or profile; after awaiting the
+  stored-track language setting (15205) it can apply the captured stored
+  track despite a newer manual selection; default audio captures tracks
+  before a native-property await then uses the live player (15297); restore
+  publishes ready/embedded flags before another awaited policy refresh.
+  Held restore/default-audio cases across manual choice, overlapping
+  restores, reset, replacement, profile handoff and disposal; IPTV audio
+  override ordering preserved.
+- **Physical writes:** reuse P10's movie/content cases and add the
+  **series** branch (series persistence reads a map and later saves it,
+  `track_preferences_storage.dart:12`; the save reacquires active-profile
+  preferences, `playback_state_store.dart:33`) — both profiles' physical
+  maps incl. unrelated entries, sanitized title keys and fallback titles.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
+
+### Device checklist (end of series)
+
+Remembered audio/subtitle choices return on the next episode and session;
+default languages pick correctly; forced subtitles show for foreign
+dialogue; addon subtitles auto-select by priority; temp subtitle files are
+cleaned up.
+
+### Integration milestone M2 (after phase 11 merges)
+
+Parity against a **named, hashed original tree**: the S2c application code
+(`a2e034cb3`; it already contains the phase-9 extraction), so M2 parity
+covers phases 10–11 against S2c plus phase 9 against its own
+characterization; any seam projection needed for a pre-phase-9 baseline is
+documented. One scenario with a UTF-8 fixture SRT and the real auto-sync
+engine/metadata transport, ordered so manual-choice flags are reset before
+automatic audio-policy reselection, then subtitles reselected after
+renderer replacement creates a fresh engine: auto-sync + manual override
+during alignment, apply failure/rollback restoring the previous path,
+source/content reset, audio-policy change, renderer replacement, profile
+handoff and the PiP visibility caller. Assert files, native properties,
+offset/rendered configuration and profile writes; ≥ 5 mutations spread
+across phases 9–11; full suite and both release builds. Native decoding and
+PiP presentation stay device-pending.
+
 ## Follow-ups
+
+- **Phase-11 original late restore (preserved):** a stored-track language read
+  resumed after disposal still calls the disposed player's subtitle setter;
+  default audio can likewise apply its captured track through the live player
+  after manual choice, reset, profile handoff, disposal or renderer replacement.
+  Disposal during initial restoration can be followed by `_initializePlayer`
+  creating a new six-second autosave timer after dispose already cancelled its
+  earlier timers. The characterization asserts that specific leaked timer before
+  cancelling only its test-clock handle; application cleanup is unchanged.
+- **Phase-11 original file cleanup (preserved):** download has no lifetime guard.
+  Write/rename completion after reset/disposal can register a file after cleanup
+  ran, leaving the final file behind. Tests inspect final/partial bytes before
+  fixture deletion. Overlapping same-stem downloads replace the file in completion
+  order and share the set registration.
 
 - **Phase-10 subtitle apply races (S2c original, preserved):** decoder logs read
   the current attempt, so an old log can roll B back. An admitted A rollback
@@ -3759,6 +3918,174 @@ Validation: exact diff and `git diff --check`.
   device-pending. Dormant paths and characterized original defects preserved;
   M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
 
+### 2026-10-14 — Phase 11 prerequisites; numeric ledger clarification pending
+
+- Revision: original `7fdf59370`, approved design `3720cfe96`; receipt in
+  `p11/prerequisites-commit.json`. Application/pubspec/CI unchanged.
+- Actual frozen table has 15 declarations (13 methods/getters +two fields),
+  not 14. Retained ledger has 28 occurrences (22 redirects +six unchanged reset
+  callers), not 27: reset's cleanup at 15077 is omitted. Only three chains occur
+  in named moves; sync-reset stays retained. Owner direction requested before
+  freezing counts; no membership silently added/dropped or source call invented.
+- Evidence-only complete prototype: 15 moves/770 retained/two patched, zero
+  comparison differences; formatted three destinations 303/282/412, all ≤500.
+  Minimal live Hosts/action signatures and scaffolds reviewable in
+  `p11/stepT/host-and-size-proposal.json`. Selected-audio remains State-owned;
+  the two owned initializers are inert. Optional-comma sites/idempotence archived.
+- All 40 existing prerequisite checks PASS: 26 other Dart manifests, P1–P10
+  named histories, Kotlin597, existing universal checker and all seam proofs.
+  Isolated copied parsers/kernels, nice19; original suite stable and identical to
+  P10 gate (13,552 successes, same 13 failures/28 load errors/20 skips).
+  Analyzer root104/strict177/prototype114, no errors; prior identities preserved.
+- 20 pilot caller cases only in detached original pass; each mutation-proven
+  with final files, including real bytes and files before fixture deletion.
+  Final analysis/format clean; original lib restored. Initial unscoped pilot and
+  missing prototype import are uncredited; reruns pass. Full discovery/priority,
+  restore/language, series-write matrix, systematic sweep and additions-only
+  Step-0 baseline remain. No P11 manifest frozen, production move or CI transition.
+  Detailed ledgers/commands/results in deps and `p11/`; STOP pending direction.
+
+### 2026-10-14 — Phase 11 plan-owner numeric correction approved
+
+- Base `7fdf59370`; approved proposal
+  `p11/stepT/host-and-size-proposal.json`. Plan counts now match the measured
+  named table: 15 moves, 28 references, three used chains. Reset remains retained
+  and selected audio State-owned. Hosts frozen exactly as proposed; destinations
+  format to 303/282/412 lines. No production changes.
+- Documentation consistency and `git diff --check` pass. Step T and the full
+  Step-0 characterization continue under the approved correction.
+
+
+### 2026-10-14 — Phase 11 Step T complete (application still original)
+
+- Base `7fdf59370`; plan correction `07b61398b`; commit receipt
+  `p11/stepT/commit.json`. Complete draft `vplayer_p11.json`: 787 classified
+  declarations, 15 moved/770 retained/two patched, 28 references, three used
+  chains. Destinations format to 303/282/412; approved Hosts frozen exactly,
+  selected audio State-owned. All 20 earlier destinations protected.
+- `draft_vplayer_subtitle_sources_moves.py --parser-package <isolated>
+  --probe <p11/stepT/frozen>` and the real-config negatives PASS. Full
+  `check_dart_moves.py --manifest .../vplayer_p11.json --self-test
+  --self-compare-original --parser-package <isolated>` PASS: 787 all-retained
+  spans, zero differences. P1–P10 named `--at`, 26 other Dart self-tests,
+  Kotlin597 and S/S2/S2b/S2c proofs PASS; valid unchanged prerequisites reused.
+- Analyzer root104/strict177/materialized114, zero errors and no added
+  async-context identities. Earlier mappings preserved in the P11 inventory.
+  Optional-comma sites/idempotence archived. Completed commands/results in
+  `p11/stepT/frozen-result.json`. Independent disjoint edit-list ordering differs
+  from the prototype; canonical declarations, Hosts, scaffolds and bodies agree.
+  Application/pubspec/CI unchanged. Step 0 continues; no production moves.
+
+### 2026-10-14 — Phase 11 Step 0 complete (STOP before production moves)
+
+- **Revision/original.** Follows Step T `2ee13b490` and approved numeric correction
+  `07b61398b`; application original **`7fdf59370`**. Step-0 commit receipt:
+  `refactor-evidence/vplayer/p11/step0/commit.json`. App/pubspec unchanged;
+  all three destinations remain evidence-only; no production/CI transition.
+- **Characterization.** **190 passing original-caller cases** across 15 scenario
+  files: streamed raw/gzip/ZIP bytes and independent exact 15 s budgets; cache
+  formats/bounds/client closure; actual cleanup files and held write/rename
+  leaks; discovery/priority/manual/audio/profile/disposal races and retries;
+  restore/default-language captures; physical series writes in both profiles;
+  aliases/title metadata/pt-BR; early inputs; every live retained caller. Public
+  selections use step-H `finish()`; no private State or source-text coverage.
+  The shared driver adds only an opt-in legacy-profile fixture flag (true default).
+- **Sweep/proofs.** All 15 declarations and 28 references re-measured. AST 611:
+  **400 assertion kills /18 evidenced equivalence sites /two dormant catches /
+  191 invalid first candidates**; **67 typed alternatives all assertion-killed**.
+  All 25 live references assertion-killed; three unified-menu legacy references
+  dormant. Every final case-file hash has an original assertion-failing witness.
+  Full matrix/mutation/per-test tables in the deps report; exact patches,
+  completed logs, IDs, input hashes and reasons under `p11/step0/`.
+- **Baseline/checks.** Nice19, serialized suites:
+  `suite_evidence.py run vplayer/p11/step0/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  original-suite.jsonl final-suite.jsonl` and strict identities PASS:
+  **13,742 success /13 failure /28 load error /20 skip**, exactly 190 additions,
+  zero old changes/missing/newly skipped/fixed identities; same SDK/flags and
+  stable tested tree. Test analysis/format, size and architecture PASS.
+  Unchanged Step-T P1–P10 histories, seam proofs and all Dart/Kotlin self-tests
+  retained; nested parser invocations isolated under `.dart_tool/vplayer_parser/`.
+- **Deviations/limits.** Failed filters/fixture assumptions, type-invalid/error-only
+  mutations and the deliberately interrupted concurrency 1 suite are uncredited;
+  final controls/replays use the correct original behavior and baseline flags.
+  Original late restores, late file registration, leaked 6 s initialization timer
+  and cross-profile series map writes are pinned and recorded in Follow-ups.
+  Retired-State cache publication is unobservable; native decoding/real metadata
+  and durability stay device-pending. No bug fix, real transport, build/run/install,
+  device action, push/merge/branch switch. STOP for independent Step-0 sampling;
+  production moves, registrations and ratchet lowering remain Step 1.
+
+### 2026-10-14 — Phase 11 Step 0b independent sample closure
+
+- Original `d5fd82210` (lib `7fdf59370`); addendum revision receipt
+  `p11/step0b/commit.json`. Claude sample 16/20 (80%); q3/q12/q13/q16 now
+  assertion-killed on the detached original: final 20/20 (100%). Five new
+  caller cases pin forced-only/audio policy, addon id collisions, mid-cleanup
+  manual/audio cancellation and pre-success audio persistence during late restore.
+- q16 is real: a public audio write before late restore success does not mark
+  its attempt persisted; a later decoder rollback changes native selection
+  without undoing that physical write. Existing behavior retained; no source
+  tests or private State injection. Root and detached controls pass with the
+  final test hash; exact patches/completed witnesses in `step0b/` and deps table.
+- `suite_evidence.py run vplayer/p11/step0b/baseline --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, `compare --against
+  step0/final-suite.jsonl baseline.jsonl` and strict identity comparison PASS:
+  13,747 successes, same 13 failures/28 load errors/20 skips; exactly five
+  passing additions, no old changes; stable tree and same SDK/flags. Test
+  analysis/format PASS. 195 P11 cases total; original sweep remains intact.
+- Failed pilot fixture/compile assumptions and initial wrong-CWD control are
+  archived uncredited; final serial controls/replays complete and lib restored.
+  No app/pubspec/allowlist/CI change or bug fix. Production Step 1 follows.
+
+### 2026-10-14 — Phase 11 Step 1 applied
+
+- Follows addendum `10d4a06f3`; revision receipt `p11/step1/commit.json`.
+  Exact 15 moves/28 references into 303/282/412-line siblings; facade
+  15,880 (ratchet lowered from 16,477). Three eager inert assignments after
+  subtitleApply, two addon fields, frozen live Hosts, three chains and one
+  apply-adapter projection; State fields/reset/dispose positions preserved.
+- `check_dart_moves.py --manifest .../vplayer_p11.json --parser-package
+  <isolated>` PASS zero differences and exact Step-T materialization.
+  195 focused original-caller cases plus theme guard PASS on moved code;
+  comparator114 scoped diagnostics/zero additions, CI analyzer/allowlist,
+  format, size/architecture and scoped HTTP import negatives PASS.
+- CI current/self-test and both analyzer inputs P11, historical P1–P10 and
+  seams retained; behavior/theme/source-guard registrations complete. Seven
+  frozen unused imports registered exactly from the approved Step-T probe
+  under rule6; first missing-registration check archived uncredited. Exact
+  addon HTTP pair registered with positive/neighbor/shared-preferences negatives;
+  exit is the existing service/data ownership follow-up. No broad exemption.
+- No application bug fix, pubspec or assertion change. Clean-tree gate follows;
+  physical metadata/native decoding, TV interaction and cleanup durability stay
+  on the device checklist. No device/run/install/push/merge/switch action.
+
+### 2026-10-14 — Phase 11 gate complete; STOP
+
+- Tested clean Step-1 `fba8f3de1`; gate revision recorded in
+  `p11/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,747 success, identical 13 failures/28 load errors/20 skips; zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree and same SDK
+  and harness flag. No test flake stabilization or failure allowlisting.
+- All 44 mechanical jobs PASS: every other Dart manifest self-test, P11
+  universal/current, P1–P10 named histories, Kotlin checker self-test, S/S2/S2b/
+  S2c proofs, size/architecture and negatives. Isolated copied parser packages
+  and kernel deletion/routing audited. Facade 15,880; bridges 303/282/412 lines.
+- CI-scope analyzer/allowlist and P11 comparator PASS (114 scoped occurrences,
+  zero additions); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Application/input hashes and pubspec unchanged throughout. Evidence
+  `p11/gate/`; exact commands, complete logs, metadata and artifact receipts.
+- Physical native decoding/bitmap/forced metadata, PiP, TV remote selection
+  and preference/temp-file durability across restarts remain device-pending. Dormant paths and characterized
+  original defects preserved; M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
+
+2026-10-14 — **Phase 11 independent review (Codex `vp-rev11`): no P1/P2 — "No P1s".**
+15/28/3 ledger, bridges 303/282/412, 195 + 87 + 10 cases and gate identities
+verified; q16 is non-equivalent with a physical-write witness. P3: `//` →
+`||` (logical OR) in the p485/p496/p504/p524 equivalence rows, corrected.
+Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -3885,3 +4212,22 @@ body `VpS2Hooks.isAndroid`, read at the original moment. The corrected frozen
 Host has 18 names /21 declarations and four complete registered chains. This
 preserves S2c without a destination-to-facade import; proposal and exact patch:
 `refactor-evidence/vplayer/p10/stepT/host-correction-proposal.json`.
+
+## Phase 11 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: three collaborators to respect the 500-line cap
+(`_resetSubtitleState` retained); fields and Hosts frozen (only the temp-file
+set and priority queue move); streaming HTTP fixture and cleanup races;
+discovery/priority concurrency matrix incl. retries outliving the route;
+restore/default-language races and the series physical-write branch. P3s:
+28-reference ledger (corrected by the approved Step-T measurement), single patched adapter, corrected ownership map and
+language terminology, concrete M2 inputs and CI transition.
+
+
+Phase-11 plan-owner resolution (Claude, 2026-10-14): the numeric ledger
+correction in `refactor-evidence/vplayer/p11/stepT/host-and-size-proposal.json`
+is approved: 15 moves (13 methods/getters +two fields), 28 references and three
+used chains. Every named table entry is preserved; `_resetSubtitleState` stays
+in place. The proposed three Hosts are frozen, with normal-format sizes
+303/282/412. This resolves the prerequisite clarification without changing
+application behaviour or authorizing production moves at Step T/0.
