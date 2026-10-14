@@ -2029,6 +2029,94 @@ Identify title on phone and TV: search, pick a movie, pick a series
 episode (dialog only when coordinates are missing); addon subtitles fetch
 for the chosen identity; trackers and skip keep the launch identity.
 
+## Speed-up decision (user, 2026-10-15) and revised remaining phase map
+
+The user chose options 1+2+3 to speed up the remaining work:
+
+1. **Per-phase gate without the full suite and release builds.** Each
+   phase gate runs the move checker (current + all `--at`), all seam
+   proofs, every Dart manifest self-test + Kotlin self-test, analyzer
+   comparator, format, size/architecture, and **all
+   `test/features/video_player/**` tests plus the source-text readers and
+   theme guard** (by identity vs the step-0 baseline). **The full Flutter
+   suite and both release builds run at integration milestones (M3, M4,
+   M5) and at the final phase**, consistent with AGENTS (broad suites at
+   planned integration gates; mechanical moves need no repeated full run).
+2. **Pipelining.** While phase N is in its gate/review, phase N+1's design
+   review, step T and step 0 run in a second worktree
+   (`../debrify-wt/vplayer-next`) based on phase N's step-1 commit; after N
+   merges, N+1 (docs/tests only until its step 1) is rebased onto the merge
+   and its step-0 tests re-run before step 1.
+3. **Bigger phases.** The remaining ~13 provisional phases become nine:
+
+| Phase | Content | Notes |
+|---|---|---|
+| 13 | Tracks sheet + unified player menu; IPTV recording | two independent collaborators |
+| 14 | Resume: keys, restore, seek/verify/landing, enhanced state, save + write guard | |
+| 15 | IPTV workflow (paging, guide categories, catch-up/Start Over, retune, channel switch, live open, audio preference, stream error) | several collaborators, one switch/recovery owner |
+| 16 | Startup (debrid direct, startup VOD, failover, gate) + source switching | **M3** after (full suite + builds) |
+| 17 | Stremio TV / Debrify TV channel navigation + banners; episode fetch + synthetic guide | |
+| 18 | Episode navigation (ended, next/prev, shuffle, series next, title info) + playlist load/resolve, metadata wait, PikPak retry, metadata preload | **M4** after |
+| 19 | Player engine I: audio/output lease/effects, passthrough, tvOS remedy/display match, decoder/renderer fallback | |
+| 20 | Player engine II: `_initializePlayer`, open media, network tuning, instance subscriptions, startup watchdog | **M5** after |
+| 21 | Controls runtime (auto-hide, TV bar/scrub, keys, overlays, gestures); `build` decision (D6); end-state exception; completion audit; CI structure; device checklist | final full suite + builds |
+
+Kept unchanged: Codex design review until "No P1s", step T, step 0 with
+per-test mutation proofs and the systematic sweep, Claude's independent
+sample (≥ 75 %), step 0b, the independent post-gate review.
+
+## Phase 13 — tracks sheet, unified player menu and IPTV recording
+
+Branch `refactor/vplayer-p13` (pipelined; based on phase-12 step-1 commit
+`e4a9ab581`, rebased onto the phase-12 merge before step 1). Evidence
+`refactor-evidence/vplayer/p13/`. Line numbers at `e4a9ab581`.
+
+**Collaborator A — `vp_player_menu.dart` (+ helper if > 500):**
+`_showTracksSheet` 13900 (179; legacy sheet path — dead behind
+`kUnifiedPlayerMenuEnabled`, moves verbatim), `_openPlayerMenuAt` 14082,
+`_openPlayerMenuQuick` 14109, `_hidePlayerMenu` 14168,
+`_menuApplyTrackChange` 14174, `_audioTrackChoiceChanged` 14184,
+`_menuSelectAudio` 14198, `_withManualSubtitleChoice` 14207,
+`_menuSubtitlesOff` 14228, `_menuSelectEmbeddedSubtitle` 14240,
+`_menuSelectAddonSubtitle` 14261, `_applyStremioSubtitleFromTracksSheet`
+14305, `_buildPlayerMenuPanel` 14342 (builder; lexical contexts). ≈ 520
+lines. The `_playerMenuKey` GlobalKey and menu notifiers stay State-owned
+(allocation rule); every earlier Host forwarder reaching these members
+(sleep, display, PiP, subtitle apply/sources, identify) becomes a declared
+patched facade adapter.
+
+**Collaborator B — `vp_iptv_recording.dart`:** `_recordIptvWatchForChannel`
+6290, `_desktopCaptureForCurrent` 6322, `_toggleRecording` 6338 (173),
+`_playingLiveUrl` 6512, `_engineRecordUrlForCurrent` 6525,
+`_refreshEngineRecordingState` 6559, `_recordingFileName` 6593,
+`_currentRecordingResource` 6611, `_tapMpvLogsForRecording` 6647,
+`_untapMpvLogs` 6657, `_startRecording` 6662, `_disarmStrayRecording` 6734,
+`_stopRecording` 6754, `_publishRecording` 6813, `_recordingTargetPath`
+6845, plus `_canRecord` 1153 / `_recordingActiveNow` 12095 getters (by
+reader count). ≈ 610 lines → likely two files (actions vs resources).
+Recording fields by reader/writer count; revision listener and desktop
+recording service subscriptions keep their dispose positions.
+
+### Step 0 — characterization of the original
+
+Menu: open at section / quick sections from dock buttons (sleep, speed,
+aspect, shuffle, tracks), hide, audio track change + persistence + policy
+refresh, subtitle off/embedded/addon selection with manual-choice latch,
+Stremio subtitle from the sheet (download/apply/rollback through phases
+10–11), menu panel props (current values, callbacks, identify label),
+TV focus and Back, legacy sheet path classified dead. Recording: start/stop
+via engine (native mpv stream-record) and desktop capture, file
+naming/target paths, publish, stray-recording disarm on channel change,
+mpv log tap, limits/permissions dialogs, profile/disposal during an active
+recording, recording state refresh; through S2 where platform-gated.
+Early windows; mutation proofs; coverage; Claude sample.
+
+### Device checklist (end of series)
+
+Player menu on phone/TV/desktop: every section opens and applies; IPTV
+recording starts, stops, saves to the expected place and appears in
+Recordings; recording stops on channel change and app background.
+
 ## Follow-ups
 
 - **Phase-12 original identity-sheet windows (preserved):** the deferred initial
