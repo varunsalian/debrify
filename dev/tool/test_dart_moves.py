@@ -162,6 +162,8 @@ def run(package):
     subtitle_apply_tests(package)
     from test_dart_subtitle_sources_moves import run as subtitle_sources_tests
     subtitle_sources_tests(package)
+    from test_dart_identify_moves import run as identify_tests
+    identify_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

@@ -1921,7 +1921,131 @@ offset/rendered configuration and profile writes; ≥ 5 mutations spread
 across phases 9–11; full suite and both release builds. Native decoding and
 PiP presentation stay device-pending.
 
+## Phase 12 — identify title and the subtitle search sheet
+
+Branch `refactor/vplayer-p12` off the M2 merge `6053efabd`. Evidence
+`refactor-evidence/vplayer/p12/`. Line numbers at `6053efabd`.
+
+**Eight methods, 643 existing lines,** into two files (sizes proved at
+step T; no size exception, no widget-tree change):
+
+| Destination | Members | Lines |
+|---|---|---|
+| `vp_identify_title.dart` — `VpIdentifyTitle` + Host | `_currentPlaybackTitleForIdentity`, `_identitySearchInitialQuery`, `_subtitleIdentityLabelForSheet`, `_currentSeasonEpisodeForIdentity`, `_identifyTitleAndFetchSubtitles` | ≈ 195 |
+| `vp_identify_title_ui.dart` — `VpIdentifyTitleUi`, an **inert presentation helper** with live `mounted`/`context` forwarders + Host | `_buildIdentifyTitleResultTile`, `_showIdentifyTitleSearchSheet` (278), `_requestSeasonEpisodeForIdentity` (98, the episode dialog) | 448 |
+
+**Boundary (frozen):** `VpIdentifyTitle` reaches the sheet and dialog
+through **facade Host routing** (`_host.showIdentifyTitleSearchSheet`,
+`_host.requestSeasonEpisodeForIdentity` → `_s._identifyUi…`), not a sibling
+import. Result-tile taps keep using the **live State context** (13958) —
+never `sheetContext` through a new wrapper or parameter; sheet
+layout/close actions and episode-dialog actions keep their **lexical
+builder contexts**. Search results, tokens, flags, controllers, focus
+nodes, the handoff object and `initialSearchStarted` stay in their original
+invocation/builder scopes. `setSheetState` and `setDialogState` are
+registered with the lexical-setter guard (`occurrence_field_bindings.py:334`)
+with real-manifest negatives (each setter or builder context replaced by
+the Host's).
+
+**State-owned:** all five manual identity fields incl.
+`_manualSubtitleDisplayLabel`. **Host (frozen):** live widget selectors
+`title`, `contentTitle`, `contentSeason`, `contentEpisode`;
+playlist/index/title and coordinate getters; the required manual/cache/
+selection setters; `_vpSetState`; exactly
+`Future<void> fetchAndMaybeAutoSelectAddonSubtitle()` forwarding to
+`_s._addonSubtitles…` (complete receiver-chain substitution registered).
+No player, tracker, skip or preference controller in this Host. Probe
+receiver-induced async-context diagnostics (`_host.mounted` may stop
+satisfying the lint for `_host.context`).
+
+**Retained references (7):** `_currentPlaybackTitleForIdentity` 14547,
+14759; `_subtitleIdentityLabelForSheet` 14721, 15044;
+`_currentSeasonEpisodeForIdentity` 12646 (direct-episode prefetch);
+`_identifyTitleAndFetchSubtitles` 14720, 15043. Metadata retry calls P11
+directly (no reference here). **No P9–P11 adapter needs patching**; the
+existing addon manual-field forwarders stay unchanged. Phase-1 helpers
+imported: `vpNormalisedContentType`, `vpSubtitleSearchDisplayLabel`,
+`vpFilterIdentitySearchResults`, `vpNormalisePosterUrl`,
+`vpIdentityMetaSubtitle`, `VpSeasonEpisodeSelection`.
+
+**CI:** current/self-test and both analyzer inputs → P12; P11 `--at
+0c2fb62e8`; protect all 23 earlier destinations; all seam proofs; tests and
+both destinations in `ci_behavior_tests.txt`, theme manifest, rendered set
+and the three source-guard lists. Collaborators assigned after the P11
+ones; resource allocations stay inside the action methods.
+
+### Step 0 — characterization of the original
+
+- **Identity effect (corrected):** effective identity getters (1281) read
+  channel overrides and widget values, not manual identity; trackers and
+  skip use them. Launch identity A → manual subtitle identity B: subtitle
+  requests and menu labels adopt B (via the P11 addon Host, 15167) while
+  tracker and skip identity stay A. Separately, manual S/E reaching the
+  direct-episode prefetch (12646) when earlier coordinate sources are
+  absent. Preserve both outcomes.
+- **Search submission (no debounce):** typing only cancels focus handoff
+  (14186); searches start on submission, the suffix button or the deferred
+  initial search; editing does not bump `searchToken`, so an older
+  submitted search can publish beneath edited text. Cover typing alone,
+  empty submission, repeated submissions, older completion after a newer
+  submission, older completion after editing without submission — with
+  request counts.
+- **Episode dialog:** empty controllers (14336); available coordinates
+  **bypass** the dialog (14455) rather than prefill it; empty-field
+  validation and cancellation when coordinates are missing.
+- **Errors:** ordinary catalog HTTP/JSON failures collapse to empty
+  results (`stremio_service.dart:3668`) → classify as empty/partial; drive
+  the "Search failed" UI through a real stable-session addon-inventory/
+  storage failure. Reuse existing identity tests for filtering/poster
+  coverage.
+- **Async matrix at the real guards:** completion checks sheet activity,
+  State mounted and submitted token (14064) — no profile identity; the
+  deferred initial search's first setter runs before those guards;
+  resource cleanup only after the modal Future returns. Identification
+  commits manual identity and clears subtitle caches **before** fetching
+  (14478), never rolls back on failure, and returns after P11 auto-selection
+  without another token check (14514); empty-result and catch messages check
+  mounted only. Held boundaries at initial-search scheduling, addon-inventory
+  lookup, catalog response delivery, sheet selection, episode-dialog
+  completion, subtitle discovery and P11 auto-selection, crossed with
+  dismissal, content reset, profile handoff and disposal; pin stale results
+  and partial commits as-is; distinguish guarded inventory retirement from
+  an already-started catalog response under a new profile. Disposal tests
+  keep the root Navigator alive long enough to observe controller/focus
+  cleanup; step-H entered/completed waits; drain before transport reset.
+  Real fixture addon; no application seam.
+- **TV:** submitted TV search arms a one-shot handoff (14094); initial and
+  suffix-button searches do not — all three paths, focus movement while a
+  response is held, first-result activation, repeated directional keys,
+  Back during keyboard editing vs route dismissal, restoration to the menu
+  through real key events on the rendered menu action (menu focus
+  restoration, `player_menu_panel.dart:641`); the episode dialog's solid
+  Apply action is its TV autofocus anchor.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
+
+### Device checklist (end of series)
+
+Identify title on phone and TV: search, pick a movie, pick a series
+episode (dialog only when coordinates are missing); addon subtitles fetch
+for the chosen identity; trackers and skip keep the launch identity.
+
 ## Follow-ups
+
+- **Phase-12 original identity-sheet windows (preserved):** the deferred initial
+  search's first setter precedes liveness guards and can run after sheet
+  dismissal; result-tile taps use live State context and throw after player
+  disposal while the popup/root Navigator survive. Manual subtitle identity
+  commits before discovery and is not rolled back by a storage failure; tracker
+  and skip identity remain the launch identity. After P11 auto-selection there
+  is no renewed content/mounted guard, so old captured results can still return
+  after reset/profile handoff/disposal, with notifications checking mounted only.
+- **Phase-12 original early guide/playlist windows (preserved):** selecting a
+  Stremio guide item before player construction writes metadata then throws on
+  native subtitle reset, leaving the transition latch set. Defaults overwrite
+  the dynamic title but retain the partial Stremio title; a real source change
+  restores video. A resolver-owned playlist can change after commit while the
+  series metadata snapshot retains its earlier coordinates. Characterization
+  pins both behaviours without changing application code.
 
 - **Phase-11 original late restore (preserved):** a stored-track language read
   resumed after disposal still calls the disposed player's subtitle setter;
@@ -4119,6 +4243,124 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   physical PiP presentation remain device-pending. No later phase or
   push/merge/branch switch. STOP for review.
 
+### 2026-10-14 — Phase 12 Step T complete (application still original)
+
+- Design `2356e5404`; named original/base `6053efabd`. Complete draft:
+  781 declarations (772 retained/eight moved/one patched State constructor),
+  seven retained substitutions, 23 earlier destinations; exact inert Hosts,
+  live widget selectors/P11 chain, facade UI routing and lexical contexts/setters.
+  Normal-format evidence-only destinations **263/470** lines, both ≤500.
+- Materialization and universal real-config self-test/all-retained comparison
+  PASS zero differences. Independent declared-corruption lexical negatives
+  reject both setters and each builder context. Optional-comma anchor proof,
+  formatting idempotence and final comparison archived.
+- Fresh P1–P11 `--at` (P11 `0c2fb62e8`) and all S/S2/S2b/S2c proofs PASS.
+  Other 26 Dart manifest self-tests and Kotlin's 597 assertions reuse completed
+  M2 gate results after exact tooling/core/parser/manifest/app/SDK input checks;
+  all runs used isolated parser packages with kernels removed. The changed
+  universal registration and P12 negatives were rerun completely.
+- Analyzer root114/strict188/unformatted123/formatted124, zero errors. The
+  identification declaration gains three receiver-induced async-context infos
+  and one formatting-induced braces info; six facade imports become unused.
+  Recorded identities/maxima preserve earlier mappings, with no lint fix.
+  Evidence `p12/stepT/` includes commands, complete receipts, memberships,
+  Hosts and input hashes; initial failed pilots are uncredited.
+- Application/pubspec/CI/size baseline unchanged. Step 0 continues at original
+  application code; no production extraction or later step is started.
+
+### 2026-10-15 — Phase 12 Step 0 complete (STOP before production moves)
+
+- Revision: Step T `beb0da7ab`; original application/base `6053efabd`, lib tree
+  `53935a12f156964ae71adc17b1acde3e9b86e77a`. Step-0 commit receipt:
+  `refactor-evidence/vplayer/p12/step0/commit.json`. App/pubspec unchanged;
+  both 263/470-line destinations remain evidence-only; current CI stays P11.
+- Added **99 real-caller cases** in 12 scenario files and five small H-support
+  fixtures: identity A/B tracker/skip split; prefetch/coordinate precedence;
+  no-debounce request counts; dialogs/errors/retries; held scheduling/inventory/
+  catalog/selection/dialog/discovery/P11 results; cleanup; real TV keys/focus;
+  rendered UI; early guide failure and mutable resolver-list windows. Preserved
+  defects are in Follow-ups. No private State or source-text characterization.
+- Sweep: eight moves, **449 points** (437 AST plus 12 arrow bodies), seven refs.
+  **349 assertion kills /21 audited equivalents /23 guard operands /56 invalid
+  candidates excluded**; all five live refs killed, two legacy refs dormant.
+  Every final case-file hash has an original assertion witness (28 fresh serial
+  replay mutations). Complete coverage/mutation/per-case tables are in deps.
+- Nice19, serialized `run-suite` original/current focused runs PASS99 each.
+  `suite_evidence.py` fresh run/compare versus M2 PASS additions-only:
+  **13,847 successes; unchanged 13 failures/28 load errors/20 skips**, exactly
+  99 added identities, zero missing/changed/fixed/newly skipped. Same SDK/flags;
+  tested tree stable. Analyzer zero issues; format, size/architecture, diff PASS.
+  Evidence `p12/step0/` records commands, hashes, complete logs and comparisons.
+- Deviations: initial fixture/expectation/error-zone pilots and overlapping or
+  interrupted runs are uncredited. An evidence-only OS lock now covers source
+  edits and suite execution; assertion/observation corrections were validated
+  on the original first. No allowlisting or application fix. Native decoding,
+  platform IME/PiP presentation and physical phone/TV focus remain device-pending.
+
+### 2026-10-15 — Phase 12 Step 0b independent-sample closure
+
+- Original `705cbd2cd` = `6053efabd` application; Claude sample 16/20 kills
+  (80%) recorded unchanged in deps. r9 now assertion-killed through the real
+  guide pause window: incoming 7/9 coexists with manual 2/3, which wins.
+  r11/r12/r13 are source-proven equivalents (filtered immutable results,
+  complete coordinate pair or null, season assigned only on series); no kill
+  credit. Each equivalent also replays unchanged on the original.
+- Three public-caller cases registered; every final-file hash case has a
+  completed original assertion witness (r9, dialog guard, upstream prefix
+  filter). Original/current focused tests PASS. Fresh full suite via
+  `suite_evidence.py` versus Step 0 PASS additions-only: 13850 successes,
+  identical 13 failures/28 load errors/20 skips; exactly three passing additions.
+  Stable tree, same SDK/harness flag; analyzer zero issues, format/diff PASS.
+- Evidence `p12/step0b/` includes source/caller proofs, independent sample table,
+  completed replays, hashes and baseline receipts. Preliminary fixture/compile
+  pilots and a baseline stopped for test-only lint correction are uncredited;
+  final proofs/baseline rerun from scratch. No production/pubspec change,
+  allowlisting or bug fix. Step 1 continues within the approved frozen boundary.
+
+### 2026-10-15 — Phase 12 Step 1 frozen production move complete
+
+- Step-0b revision `7600bb4de`; eight frozen methods moved to
+  VpIdentifyTitle/VpIdentifyTitleUi, **263/470** lines. Facade Host routing,
+  live State tap context, lexical builders/setters, five State manual fields,
+  P11 complete chain and seven retained positions preserved; constructor
+  appends two inert assignments after P11. PiP/earlier adapters unchanged.
+- Fresh isolated-parser materialization equals Step-T files byte-for-byte;
+  current checker PASS zero differences, 23 earlier destinations protected.
+  Optional-comma proof reused by exact hashes; format, size, architecture and
+  diff/analyzer comparator PASS. Facade ratchet 15,880 → **15329**. Focused **102/102 PASS**
+  on moved code, including the mutation-proven original guide-pause overlap.
+- CI current/self-test and both analyzer inputs → P12; P11 `--at 0c2fb62e8`
+  added, earlier histories/seams retained. Both destinations in theme manifest,
+  rendered set/all three guard lists; tests registered. Six probe-known unused
+  facade warnings recorded verbatim, preserving exact imports and info mappings.
+  Evidence `p12/step1/`; complete receipts/hashes. Clean-tree gate follows.
+  No bug fix, dependency change or later phase started.
+
+### 2026-10-15 — Phase 12 gate complete; STOP
+
+- Tested clean Step-1 `e4a9ab581`; gate revision in `p12/gate/commit.json`.
+  Fresh full suite versus Step-0b baseline by identity PASS: **13,850 success**,
+  identical 13 failures/28 load errors/20 skips; zero changed/added/missing/fixed/
+  newly skipped identities. Stable tree, same SDK and harness flag. No flaky-test
+  stabilization, assertion weakening or failure allowlisting.
+- All **46** mechanical jobs PASS: every other Dart manifest self-test, P12
+  universal/current/same-revision check, P1–P11 histories, Kotlin self-test,
+  S/S2/S2b/S2c proofs, size/architecture and negatives. Isolated copied parsers,
+  kernel deletion and nested routing audited; 23 earlier destinations protected.
+  Facade **15329**; bridges **263/470** lines; ratchet enforced.
+- CI analyzer/shared allowlist and P12 comparator PASS (**124 scoped occurrences,
+  zero additions**); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Evidence `p12/gate/`: exact commands, complete logs, metadata, input and
+  artifact hashes; pubspec unchanged. Independent-sample closure in deps.
+  Evidence-only launcher/scheduling corrections documented: four completed
+  individual checks retained, every unfinished job rerun fresh; interrupted logs
+  uncredited and full suite untouched. No application/test input change.
+- Phone/TV title search/episode choice, platform IME/remote focus, native subtitle
+  presentation/decoding and physical PiP remain device-pending. Manual subtitle
+  identity vs tracker/skip launch identity, dormant paths and original defects
+  preserved. No production bug fix or later phase/push/merge/switch. STOP.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -4264,3 +4506,14 @@ used chains. Every named table entry is preserved; `_resetSubtitleState` stays
 in place. The proposed three Hosts are frozen, with normal-format sizes
 303/282/412. This resolves the prerequisite clarification without changing
 application behaviour or authorizing production moves at Step T/0.
+
+## Phase 12 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: manual identity affects subtitle discovery and the prefetch
+fallback only (not trackers/skip) — characterized as-is; search has no
+debounce, dialog bypassed when coordinates exist, error UI only via
+inventory/storage failure; presentation helper frozen (episode dialog
+grouped with the sheet, facade Host routing, live State context for tile
+taps, lexical setters/contexts guarded); async matrix at the real guards
+and commit points. P3s: 8-method/7-reference ledger, no adapter patches,
+corrected phase-1 helper names; concrete TV and CI coverage.

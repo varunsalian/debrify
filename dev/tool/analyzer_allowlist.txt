@@ -121,3 +121,10 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:http/http.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive
+# Phase 12 frozen move/probe: preserved facade directives, six now-unused imports.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/stremio_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive
