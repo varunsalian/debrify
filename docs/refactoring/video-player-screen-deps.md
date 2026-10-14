@@ -9158,3 +9158,79 @@ unawaited search rather than changing the other disposal/storage fixture paths.
 No application bug, dependency, allowlist, production checker/CI transition or
 size baseline is changed. The two destinations remain evidence-only. Native
 playback/platform input/PiP presentation retain the device-pending checklist.
+
+
+## Phase 12 Step 0b — independent sample closure (2026-10-15)
+
+Claude's independent ORIGINAL sample `705cbd2cd` (`6053efabd` application,
+lib tree `53935a12f156964ae71adc17b1acde3e9b86e77a`) observed **16/20 assertion
+kills (80%)** in the stated identity/subtitle-sources/menu/mount/M1/M2 scope.
+Evidence: `p12/claude-sample/`; unchanged raw outcomes retained. The three
+source-audited equivalent survivors below receive no behavioural-kill credit.
+The one non-equivalent survivor, r9, now has an assertion kill on the original.
+
+| Mutation | Final classification |
+|---|---|
+| r1 | assertion killed (independent sample) |
+| r2 | assertion killed (independent sample) |
+| r3 | assertion killed (independent sample) |
+| r4 | assertion killed (independent sample) |
+| r5 | assertion killed (independent sample) |
+| r6 | assertion killed (independent sample) |
+| r7 | assertion killed (independent sample) |
+| r8 | assertion killed (independent sample) |
+| r9 | assertion killed (new original guide-pause witness) |
+| r10 | assertion killed (independent sample) |
+| r11 | equivalent; source audit and unchanged original replay |
+| r12 | equivalent; source audit and unchanged original replay |
+| r13 | equivalent; source audit and unchanged original replay |
+| r14 | assertion killed (independent sample) |
+| r15 | assertion killed (independent sample) |
+| r16 | assertion killed (independent sample) |
+| r17 | assertion killed (independent sample) |
+| r18 | assertion killed (independent sample) |
+| r19 | assertion killed (independent sample) |
+| r20 | assertion killed (independent sample) |
+
+- **r9:** real guide callback writes incoming season/episode **7/9** before
+  awaiting native pause. That await precedes subtitle reset, so committed manual
+  **2/3** coexists. The public menu identify action runs during the held pause,
+  searches the incoming title but returns/request-labels **S2E3**. Swapping the
+  manual/TV episode precedence produces episode 9 and fails an assertion.
+- **r11 equivalent:** the private action has exactly one selected-result source,
+  the search sheet. Initial/submitted/suffix searches all publish only
+  `vpFilterIdentitySearchResults`; pointer and TV activation pop those same
+  immutable `StremioMeta` objects. Final `imdbId` and its getter cannot change
+  after filtering. Other pops dismiss with null; no selectable bypass exists.
+  A real catalog payload with a valid custom-series `imdb_id` has a non-null,
+  non-tt effective ID and is filtered out, with no request or commit. Removing
+  the upstream filter prefix guard is assertion-killed; removing the redundant
+  downstream prefix check passes unchanged. Ordinary tmdb payloads parse to
+  null and were not used as the witness.
+- **r12 equivalent:** `VpSeasonEpisodeSelection` has two non-null final ints.
+  The helper returns a complete pair or null; the action synchronously copies
+  both fields into fresh locals. Therefore season-null and episode-null are
+  identical at the tested guard. A widget season **7** with no episode opens
+  the empty dialog and requests entered **4/6**; disabling the whole dialog
+  guard is assertion-killed. The proposed one-operand mutation passes because
+  both local coordinates were null, not because the case was skipped.
+- **r13 equivalent (agree with Claude):** local season starts null and is
+  assigned only in the series branch. Direct assignment and the conditional
+  store the same value for both content types. Unchanged original replay passes.
+
+Coverage addendum: `video_player_identify_review_test.dart` adds three original
+caller cases covering the manual/TV precedence point, upstream selectable-result
+contract and incomplete-coordinate caller contract. Each final-file-hash case
+has a completed original assertion witness. The 449-point systematic inventory
+and five live/two dormant reference classification are preserved; r9 closes an
+additional overlapping-state input partition. Exact source hashes/excerpts,
+caller searches, before/after patches, commands and completed JSONL logs:
+`p12/step0b/source-audit.json`, `proof-results.json` and per-witness files.
+
+Fresh complete additions-only suite versus Step 0: **13850 successes,
+unchanged 13 failures/28 load errors/20 skips**, exactly three passing identities
+added; no missing, changed, fixed or newly skipped identity. Same SDK/flags,
+stable tested tree; new test analyzer zero issues and normal formatting passes.
+Pilots and the preliminary baseline stopped for a test-only lint correction are
+uncredited; final witnesses and baseline were rerun from scratch. No flake
+stabilization, assertion weakening, failure allowlisting or application change.

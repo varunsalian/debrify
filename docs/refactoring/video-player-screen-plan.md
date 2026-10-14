@@ -4297,6 +4297,26 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   on the original first. No allowlisting or application fix. Native decoding,
   platform IME/PiP presentation and physical phone/TV focus remain device-pending.
 
+### 2026-10-15 — Phase 12 Step 0b independent-sample closure
+
+- Original `705cbd2cd` = `6053efabd` application; Claude sample 16/20 kills
+  (80%) recorded unchanged in deps. r9 now assertion-killed through the real
+  guide pause window: incoming 7/9 coexists with manual 2/3, which wins.
+  r11/r12/r13 are source-proven equivalents (filtered immutable results,
+  complete coordinate pair or null, season assigned only on series); no kill
+  credit. Each equivalent also replays unchanged on the original.
+- Three public-caller cases registered; every final-file hash case has a
+  completed original assertion witness (r9, dialog guard, upstream prefix
+  filter). Original/current focused tests PASS. Fresh full suite via
+  `suite_evidence.py` versus Step 0 PASS additions-only: 13850 successes,
+  identical 13 failures/28 load errors/20 skips; exactly three passing additions.
+  Stable tree, same SDK/harness flag; analyzer zero issues, format/diff PASS.
+- Evidence `p12/step0b/` includes source/caller proofs, independent sample table,
+  completed replays, hashes and baseline receipts. Preliminary fixture/compile
+  pilots and a baseline stopped for test-only lint correction are uncredited;
+  final proofs/baseline rerun from scratch. No production/pubspec change,
+  allowlisting or bug fix. Step 1 continues within the approved frozen boundary.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
