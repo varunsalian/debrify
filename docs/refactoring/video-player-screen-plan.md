@@ -5001,6 +5001,37 @@ for Step 0 and Claude’s independent mutation sample.
   only docs. No production, pubspec, seam, allowlist, full suite, release/device,
   push, merge, branch switch or Phase-14 work. Android refresh/query remains
   device-pending. **STOP** for independent review.
+### 2026-10-15 — Phase 14 provisional Step T (production blocked on P13)
+
+- Design `8f9cd1387`; preparation original `1d7699d2e`, lib tree
+  `338d6b0b279c3d4fac6897d667ea25600ccb37c2`. Evidence-only normally
+  formatted keys/restore/save prototypes **137/381/457** lines. Exact Hosts
+  **9/27/37 names** (restore 31 declarations) recorded in deps and the manifest.
+- `draft_vplayer_resume_moves.py --parser-package <isolated> --probe <p14/stepT>`:
+  **zero differences**, all 779 original declaration fates (13 moved,
+  four patched, 762 retained), exhaustive facade/destination orders/imports.
+  The three adapter projections have one counted rewrite each; 25 other
+  retained rewrites complete the frozen 28-occurrence ledger. Zero field moves.
+- `test_dart_resume_moves.py --parser-package <isolated>`: 14 independent
+  real-config negatives rejected, including eager/copy/guard/argument/await/
+  owner corruption of the exact static `readLocalResume` forwarder. Optional
+  trailing-comma AST anchor proof and idempotence PASS. Analyzer prototype
+  compiles with **138 diagnostic occurrences, zero errors**; the original four
+  enhanced-read/locked-save infos preserve their declaration identities.
+- Manifest explicitly **PROVISIONAL**: no P13 history claim, dummy manifest,
+  production file, CI transition or history relaxation. After P13 merges,
+  regenerate construction/facade/adapter proofs on that base, preserving P13's
+  overlapping display/sleep rewrites; refresh affected analyzer/mutation
+  evidence and check actual P12/P13 merges and S2d. This checkpoint does not
+  authorize production moves or rebase. `pubspec` unchanged.
+- Reused the P13 speed-up/reduced-gate rules from `git show` (archived under
+  `p14/pipeline-rules.md`), without touching `vplayer-next`. Frozen base inventory
+  has 153 suites; Step 0 must prove every expected suite loads. Commands,
+  prototypes, Hosts, parser packages, comma sites and analyzer identities:
+  `p14/stepT/`; commit receipt there records this checkpoint's revision.
+- Prototype-only corrections: direct static receiver and the actual legacy
+  `IptvGuideContext`/episode-rewatch imports fixed before freezing. Superseded
+  compiler pilots are uncredited. Application code remains original.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

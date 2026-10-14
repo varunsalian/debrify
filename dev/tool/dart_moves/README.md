@@ -261,3 +261,13 @@ adapter and 18 earlier destinations are unchanged. CI selects P9 current/self
 and both analyzer inputs, P1–P8 histories and S/S2/S2b proofs; six behaviour files
 and every theme/source-guard destination list are registered. The validating
 reader discovers P9 automatically; no moved source-text anchor needs a retarget.
+
+
+P14 is a **PROVISIONAL** preparation manifest based on the P12 merge
+`1d7699d2e`. `draft_vplayer_resume_moves.py` materializes only beneath
+`refactor-evidence/vplayer/p14/`; `test_dart_resume_moves.py` exercises that
+real configuration with an isolated `--parser-package`. The three-file
+comparison is exhaustive but deliberately does not invoke history: P13
+has not merged. It is neither an applied manifest nor a CI transition.
+Regenerate all affected proofs after P13 merges; do not add a placeholder
+phase or weaken history to make this draft pass a production check.

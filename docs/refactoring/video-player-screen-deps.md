@@ -11055,3 +11055,120 @@ worktree's `.dart_tool/vplayer_parser/`, including nested readers; all Flutter
 suites are serialized. Changed Dart format and scoped Flutter analysis pass.
 Only documentation is finalized after that clean checkpoint; the final test
 and application inputs are identical. No full-suite or release/device action.
+
+## Phase 14 provisional Step T — resume (2026-10-15)
+
+Preparation original **1d7699d2e**, lib tree
+`338d6b0b279c3d4fac6897d667ea25600ccb37c2`. This checkpoint writes
+only docs/tools. The normally formatted evidence-only split is **137 /381 /457**
+lines (keys /restore /save); 13 moved declarations and zero field moves.
+`dev/tool/dart_moves/vplayer_p14.json` is explicitly **PROVISIONAL**. Complete
+comparison includes all retained declarations, member order, imports, adapters
+and frozen scaffolding; it makes **no history claim**. No dummy P13 manifest.
+
+The frozen Host signatures and live facade projections at this preparation
+base are below. Constructors are inert. Restore setters write the display
+fields directly; the exact static forwarder passes the `enhanced` tear-off
+without invoking it. No destination imports the facade or a sibling.
+
+VpResumeKeysHost (`9` declarations):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+int get currentIptvIndex => _s._currentIptvIndex;
+int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+int? get effectiveContentSeason => _s._effectiveContentSeason;
+List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+```
+
+VpResumeRestoreHost (`31` declarations):
+
+```dart
+bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
+Duration get duration => _s._duration;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+bool get isAutoAdvancing => _s._isAutoAdvancing;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+mk.Player get player => _s._player;
+int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+bool get screenDisposed => _s._screenDisposed;
+Future<void> waitForDuration() => _s._waitForDuration();
+Future<Map<String, dynamic>?> getEnhancedPlaybackState() => _s._resumeSave.getEnhancedPlaybackState();
+String get resumeKey => _s._resumeKeys.resumeKey;
+bool get mounted => _s.mounted;
+double? get traktProgressPercent => _s.widget.traktProgressPercent;
+double? get mdblistProgressPercent => _s.widget.mdblistProgressPercent;
+double? get simklProgressPercent => _s.widget.simklProgressPercent;
+bool get launchTraktPercentSpent => _s._trakt.launchTraktPercentSpent;
+set launchTraktPercentSpent(bool v) => _s._trakt.launchTraktPercentSpent = v;
+bool get launchSimklPercentSpent => _s._simkl.launchSimklPercentSpent;
+set launchSimklPercentSpent(bool v) => _s._simkl.launchSimklPercentSpent = v;
+bool get launchMdblistPercentSpent => _s._mdblist.launchMdblistPercentSpent;
+set launchMdblistPercentSpent(bool v) => _s._mdblist.launchMdblistPercentSpent = v;
+String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+set playbackSpeed(double v) => _s._display.playbackSpeed = v;
+set aspectMode(AspectMode v) => _s._display.aspectMode = v;
+Future<double?> currentEpisodeTraktPercent({bool forGuide = false}) => _s._trakt.currentEpisodeTraktPercent(forGuide: forGuide);
+Future<double?> currentEpisodeSimklPercent({bool forGuide = false}) => _s._simkl.currentEpisodeSimklPercent(forGuide: forGuide);
+Future<double?> currentEpisodeMdblistPercent({bool forGuide = false}) => _s._mdblist.currentEpisodeMdblistPercent(forGuide: forGuide);
+Future<void> applyAspectVideoZoom() => _s._display.applyAspectVideoZoom();
+Future<Map<String, dynamic>?> readLocalResume({required String? contentId, required String resumeKey, required Future<Map<String, dynamic>?> Function() enhanced}) => VideoPlayerScreen.readLocalResume(contentId: contentId, resumeKey: resumeKey, enhanced: enhanced);
+```
+
+VpResumeSaveHost (`37` declarations):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+String? get currentStreamUrl => _s._currentStreamUrl;
+String? get currentStremioTvContentTitle => _s._currentStremioTvContentTitle;
+Duration get duration => _s._duration;
+int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+int? get effectiveContentSeason => _s._effectiveContentSeason;
+String? get effectiveContentTitle => _s._effectiveContentTitle;
+String? get effectiveContentType => _s._effectiveContentType;
+List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+IptvGuideContext? get iptvGuideContextOverride => _s._iptvGuideContextOverride;
+bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+bool get isPlaying => _s._isPlaying;
+bool get isReady => _s._isReady;
+bool get isTransitioning => _s._isTransitioning;
+Torrent? get openedWatchSource => _s._openedWatchSource;
+Duration get position => _s._position;
+Lock get resumeSaveLock => _s._resumeSaveLock;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+MediaServerWatchController get serverWatch => _s._serverWatch;
+bool get validationGateActive => _s._validationGateActive;
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+String resumeIdForEntry(PlaylistEntry entry) => _s._resumeKeys.resumeIdForEntry(entry);
+String get resumeKey => _s._resumeKeys.resumeKey;
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+String? get contentImdbId => _s.widget.contentImdbId;
+String? get iptvSourceId => _s.widget.iptvSourceId;
+PlaybackResumePolicy get resumePolicy => _s.widget.resumePolicy;
+String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+bool get currentMovieMarkedAsFinished => _s._completion.currentMovieMarkedAsFinished;
+double get playbackSpeed => _s._display.playbackSpeed;
+AspectMode get aspectMode => _s._display.aspectMode;
+double? get speedBeforeHold => _s._display.speedBeforeHold;
+```
+
+The three whole-class patched facade declarations are
+`_VpLocalCompletionHostAdapter`, `_VpDisplayModeHostAdapter` and
+`_VpSleepTimerHostAdapter`, exactly one counted receiver rewrite each.
+They must be regenerated on the accepted P13 base, preserving its
+`openPlayerMenuQuick` rewrites. Likewise regenerate construction, facade
+partition/import/order proofs, analyzer inputs, mutation inputs and full
+history (P12 at its accepted merge, P13 at its accepted merge, S2d).
+Production moves remain blocked until P13 merges and the pipelined proofs
+are refreshed. Evidence: `p14/stepT/`.
