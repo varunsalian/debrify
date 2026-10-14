@@ -112,3 +112,12 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive
+
+# 2026-10-14 vplayer P11: seven frozen retained imports become unused; exact identities/counts recorded in the approved Step-T probe.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:http/http.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive

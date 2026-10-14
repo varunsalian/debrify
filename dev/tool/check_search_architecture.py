@@ -618,10 +618,16 @@ PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
     "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 592,
 }
 # User-approved verbatim DeoVR upload/UI bridge; exit: extract upload into a
-# data contract in a later control-flow change. The only other approved HTTP
-# import pair is DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT (D1).
+# data contract in a later control-flow change. Other approved HTTP import
+# pairs are scoped to their individually named files.
 PLAYER_LAUNCH_DEOVR_HTTP_IMPORT = (
     "lib/features/player_launch/presentation/legacy_launch/deovr_launch.dart",
+    "package:http/http.dart",
+)
+# Phase 11 moves the original addon download verbatim; exact HTTP pair only.
+# Exit: video-player service/data ownership follow-up replaces this downloader.
+VIDEO_PLAYER_ADDON_SUBTITLES_HTTP_IMPORT = (
+    VIDEO_PLAYER_BRIDGE + "vp_addon_subtitles.dart",
     "package:http/http.dart",
 )
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
@@ -1251,7 +1257,7 @@ def violations(path: Path) -> list[str]:
                              and (target.startswith("lib/services/") or (relative.startswith(ALLDEBRID_BRIDGE) and target.startswith("package:http/"))))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT, STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT) and target not in (
+                    "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT, STREMIO_TV_CATALOGS_URL_IMPORT_HTTP_IMPORT, VIDEO_PLAYER_ADDON_SUBTITLES_HTTP_IMPORT) and target not in (
                         PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):

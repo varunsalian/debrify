@@ -87,6 +87,11 @@ def main():
         probe('unknown pure utility rejected', base + 'application/vp_format.dart',
               "import 'package:debrify/utils/app_storage.dart';\n",
               'pure video-player import outside its exact compatibility/type list')
+        probe('exact addon HTTP allowed', bridge + 'vp_addon_subtitles.dart',
+              "import 'package:http/http.dart';\n")
+        probe('addon shared preferences rejected', bridge + 'vp_addon_subtitles.dart',
+              "import 'package:shared_preferences/shared_preferences.dart';\n",
+              'view directly imports data/platform API')
         probe('bridge HTTP rejected', bridge + 'probe.dart',
               "import 'package:http/http.dart';\n", 'view directly imports data/platform API')
         probe('501-line extraction rejected', base + 'presentation/probe.dart',

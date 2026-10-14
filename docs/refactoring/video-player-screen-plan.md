@@ -4038,6 +4038,28 @@ Validation: exact diff and `git diff --check`.
   archived uncredited; final serial controls/replays complete and lib restored.
   No app/pubspec/allowlist/CI change or bug fix. Production Step 1 follows.
 
+### 2026-10-14 — Phase 11 Step 1 applied
+
+- Follows addendum `10d4a06f3`; revision receipt `p11/step1/commit.json`.
+  Exact 15 moves/28 references into 303/282/412-line siblings; facade
+  15,880 (ratchet lowered from 16,477). Three eager inert assignments after
+  subtitleApply, two addon fields, frozen live Hosts, three chains and one
+  apply-adapter projection; State fields/reset/dispose positions preserved.
+- `check_dart_moves.py --manifest .../vplayer_p11.json --parser-package
+  <isolated>` PASS zero differences and exact Step-T materialization.
+  195 focused original-caller cases plus theme guard PASS on moved code;
+  comparator114 scoped diagnostics/zero additions, CI analyzer/allowlist,
+  format, size/architecture and scoped HTTP import negatives PASS.
+- CI current/self-test and both analyzer inputs P11, historical P1–P10 and
+  seams retained; behavior/theme/source-guard registrations complete. Seven
+  frozen unused imports registered exactly from the approved Step-T probe
+  under rule6; first missing-registration check archived uncredited. Exact
+  addon HTTP pair registered with positive/neighbor/shared-preferences negatives;
+  exit is the existing service/data ownership follow-up. No broad exemption.
+- No application bug fix, pubspec or assertion change. Clean-tree gate follows;
+  physical metadata/native decoding, TV interaction and cleanup durability stay
+  on the device checklist. No device/run/install/push/merge/switch action.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

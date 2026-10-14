@@ -8264,3 +8264,32 @@ identity comparisons PASS against `step0/final-suite.jsonl`: exactly five
 passing additions, no changed/missing/fixed/newly skipped old identities.
 195 Phase-11 caller cases total. Test analysis/format PASS. The baseline
 remains the required clean Step-1 gate comparator; no allowlist change.
+
+## Phase 11 Step 1 — applied production split
+
+Follows addendum `10d4a06f3`; production receipt `p11/step1/commit.json`.
+All 15 moves /28 reference occurrences match the frozen complete manifest
+with zero differences; materialized bytes match Step T. The three sibling
+bridges format to **303/282/412**, facade **15,880** (ratchet 16,477 →15,880).
+State constructor appends language, preferences and addons after subtitle
+apply; only the two inert addon fields move. State-owned fields and
+`_resetSubtitleState` stay in place; live selectors, three registered chains,
+the single apply-adapter patch and dispose cleanup order are unchanged.
+
+195 focused original-caller cases and the theme source guard PASS on moved
+code. Scoped analyzer comparator: **114 identities/occurrences, zero
+additions**; CI analyzer and shared allowlist PASS. Seven frozen retained
+imports become unused exactly as recorded in Step T; rule 6 registrations
+are finite and multiplicity remains enforced. The initial missing global
+registrations are archived as uncredited `first-*` logs. Format, size,
+architecture and exact-file HTTP positives/negatives PASS. The original
+downloader's HTTP import is permitted only for its named destination; the
+existing service/data ownership follow-up remains its exit. No broad
+exception, assertion removal, pubspec change or bug fix.
+
+CI current/self-test and both analyzer inputs point at P11; P1–P10 named
+historical checks and all seams remain registered. The 16 behavior files,
+three destinations in the theme manifest/rendered boundaries and all three
+source-guard lists are registered. Existing source-reader guards already
+chain applied manifests and require no weakened/retargeted assertion. Full
+clean-tree gate follows this commit.
