@@ -8328,3 +8328,72 @@ selection and durable preferences/temp cleanup across restarts remain device
 checks; no device parity claim. Dormant compatibility paths and original stale
 rollback/cross-profile/disposed-notifier outcomes remain frozen. M2 follows
 phase 11; no later phase, bug fix, push, merge or branch switch performed.
+
+## Integration milestone M2 — subtitles (2026-10-14)
+
+One scenario file, `video_player_m2_subtitle_integration_test.dart`, registered
+in `ci_behavior_tests.txt`, composes phases 9–11 and the retained PiP caller
+through the step-H fixture. A UTF-8 SRT passes the real parser/compute aligner
+and deterministic native audio-metadata transport. The real +2114 ms verdict
+updates native `sub-delay`, session settings and the line overlay; a second
+alignment remains held while manual +900 ms wins. A late decoder error rolls
+back to the previous external path, reactivates that path and restores the
+physical `stremio:manual` preference. Content reset deletes the downloaded
+files and clears path/offset/manual flags before English/French audio-policy
+automatic off/reselection. Same-State Android renderer fallback disposes the
+old engine; a new subtitle selection activates the fresh engine and aligns
+again. The profile handoff pins each profile's physical track map and independent
+color/elevation writes; rendered yellow/180 px becomes cyan/80 px. Native
+`sid=no` startup/fallback writes remain separate from optimistic Dart track
+selection. Held PiP entry asserts native visibility and hidden Flutter text;
+mode entry/exit restores rendered style/path and -450 ms session timing.
+All files are inspected before fixture deletion; route disposal cleans them.
+
+**Named original parity:** unchanged file on S2c `a2e034cb3`, lib tree
+`e2543c0219d9cc047bdc950723b78030cf092ed6`, and merged `0c2fb62e8`.
+S2c already has the P9 extraction: M2 before/after parity covers P10–11;
+P9 retains its own earlier characterization. No seam projection or additional
+installer is needed. The copied test/tool support does not alter original lib,
+package versions or local package sources. Exact test hash and completed
+controls: `m2/scenario/parity.json`; original application fully restored.
+
+| Tree | Phase | Original-caller assertion witness | Result |
+|---|---|---|---|
+| S2c original | 9 | automatic verdict writes zero to native sub-delay | killed: expected 2.114 |
+| S2c original | 9 | line-overlay manual offset fails to invalidate held alignment | killed: manual 900 must win |
+| S2c original | 10 | rollback forgets previous external path | killed: line overlay/path must return |
+| S2c original | 10 | native visibility ignores iOS PiP start/active state | killed: pending entry requires yes |
+| S2c original | 11 | registered temp cleanup omits deletion | killed: content reset removes files |
+| S2c original | 11 | audio-policy refresh omits the automatic off action | killed: preferred audio selects no subtitles |
+| merged bridge | 9 | automatic verdict writes zero to native sub-delay | killed independently: expected 2.114 |
+
+**Seven assertion kills** (six on the original across all three phases, one
+independent P9 merged-bridge kill); complete JSON runs, failed scenario
+assertions, zero load/compile/error-only kills. Unmodified controls before/after
+both mutation sets pass with the same final file hash. Exact patches, logs and
+assertion excerpts: `m2/mutations/`. Earlier pilot logs are separated from the
+final unchanged-file witnesses. The PiP fixture ordering was reproduced on
+S2c before correcting the pending-entry observation; details in
+`m2/scenario/fixture-note.md`. No application fix, shared-fixture edit or
+assertion weakening.
+
+Fresh full suite via `suite_evidence.py run vplayer/m2/gate/flutter-gate
+--no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true` compared by identity with
+`p11/gate/flutter-gate.jsonl`: **13,748 success /13 failure /28 load error /20
+skip**, exactly one passing M2 addition; zero changed/missing/newly skipped
+identities, same SDK/flags and stable staged test tree. All **44/44** mechanical
+checks PASS: all other Dart manifest self-tests, P11 current/universal self-test,
+P1–P10 named historical comparisons, Kotlin self-test, S/S2/S2b/S2c proofs,
+size/architecture and negatives. Isolated copied parser packages (kernels
+removed) are audited, including nested source readers. CI-scope analyzer,
+shared allowlist and P11 identity comparator PASS (**114 scoped occurrences,
+zero additions**); new-file analyzer and CI formatting PASS. Both serialized
+`flutter build apk --release --no-pub` and `flutter build macos --release
+--no-pub` PASS, without run/install. Logs, completed result records, tested
+input/tree hashes and release artifact receipts: `m2/gate/`.
+
+Native audio decoding, bitmap rendering and physical PiP presentation remain
+device-pending. S2/S2b exercise the approved predicates and native call
+contracts with distinct fake player instances; this is no device-rendering
+parity claim. Original session-only timing, mounted-only handoff and other
+recorded defects remain preserved. M2 complete; later work is not started.

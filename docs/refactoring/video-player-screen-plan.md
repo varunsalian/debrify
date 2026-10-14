@@ -4086,6 +4086,39 @@ verified; q16 is non-equivalent with a physical-write witness. P3: `//` →
 `||` (logical OR) in the p485/p496/p504/p524 equivalence rows, corrected.
 Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
 
+### 2026-10-14 — Integration milestone M2 gate complete; STOP
+
+- Merged base `0c2fb62e8`, branch `refactor/vplayer-m2`; gate revision and tested
+  input/tree metadata in `m2/gate/commit.json`. One registered cross-phase
+  scenario, shared step-H harness, real UTF-8 SRT/parser/compute alignment and
+  deterministic metadata transport. Automatic +2114 ms, manual +900 ms during
+  held alignment, decoder rollback to previous path, file/path/timing reset,
+  automatic audio-policy reselection after manual flags reset, same-State
+  renderer fallback with fresh-engine subtitle reselection, profile handoff,
+  per-profile physical track/style writes and held PiP visibility restoration.
+- Unchanged final file passes on S2c original `a2e034cb3`, lib tree
+  `e2543c0219d9cc047bdc950723b78030cf092ed6`, and merged code. S2c already
+  includes the P9 extraction: M2 parity covers P10–11; P9 keeps its earlier
+  characterization and has M2 mutation witnesses on both trees. Six original
+  assertion kills across P9/10/11 plus one independent merged P9 bridge kill;
+  unmodified controls before/after pass. `m2/scenario/parity.json` and
+  `m2/mutations/` archive exact bytes/patches, completed runs and assertions.
+- Full suite by identity vs P11 gate PASS: exactly one passing M2 addition,
+  13,748 success with identical 13 failures/28 load errors/20 skips; no changed/
+  missing/newly skipped identities, same SDK/flags, stable staged test tree.
+  All 44 mechanical jobs PASS (Dart self-tests, P11 current, P1–P10 histories,
+  Kotlin, all seam proofs, size/architecture/negatives), isolated parser/kernel
+  deletion audit; CI analyze/allowlist/P11 comparator PASS (114 scoped
+  occurrences, zero additions), format PASS. Both serialized apk/macOS release
+  builds PASS, no install/run. `m2/gate/` contains completed evidence/receipts.
+- Evidence only under `refactor-evidence/vplayer/m2/`; exact command/result
+  records, hashes and fixture note. The pending-PiP observation was reproduced
+  on S2c before correcting fixture ordering; no flaky-test stabilization, shared
+  fixture edit, weakened assertion, failure allowlisting or production change.
+  App/native code, dependencies and pubspec unchanged. Native decoding and
+  physical PiP presentation remain device-pending. No later phase or
+  push/merge/branch switch. STOP for review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
