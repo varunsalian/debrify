@@ -28,6 +28,7 @@ void main() {
     expect(result.stdout, contains('"s2_declarations_preserved": 9'));
     expect(result.stdout, contains('"s2b_sites": 2'));
     expect(result.stdout, contains('"s2c_sites": 1'));
+    expect(result.stdout, contains('"s2d_sites": 2'));
     for (final site in ['_initializePlayer', '_canFallbackExplicitRenderer']) {
       for (final negative in [
         'wrong predicate',
@@ -53,6 +54,20 @@ void main() {
         result.stdout,
         contains('S2c _setSubtitleTrackWithDiagnostics: $negative'),
       );
+    }
+    for (final site in ['initState', '_toggleRecording']) {
+      for (final negative in [
+        'wrong predicate',
+        'override bypassed',
+        'predicate twice',
+        'support twice',
+        'operand order',
+        'override polarity',
+        'support changed',
+        if (site == '_toggleRecording') 'recording support order',
+      ]) {
+        expect(result.stdout, contains('S2d $site: $negative'));
+      }
     }
   });
 

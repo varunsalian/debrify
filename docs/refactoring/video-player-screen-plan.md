@@ -2178,6 +2178,28 @@ publication are device-pending** (the service wrappers return early on
 desktop: `live_recording_service.dart:458`, `:521`;
 `android_native_downloader.dart:131`, `151`, `196`).
 
+**S2d sites (at `e4a9ab581`):** `initState` line **1563** (desktop
+revision-listener registration) and `_toggleRecording` line **6453**
+(desktop capture branch before the final TEE call). Each original
+`DesktopRecordingService.instance.isSupported` read stays first and once;
+append `&& !VpS2Hooks.isIOS` immediately after it, ahead of the toggle's
+existing `_recordingSupported` operand. The existing `ios: () => true`
+override suppresses these two desktop branches. No hook-class or installer
+change: native desktop support implies native `Platform.isIOS == false`,
+and unsupported platforms short-circuit before the extra read. The two
+native service reads and the remaining original operands retain their
+order. The checkpoint ledger is `dev/tool/dart_moves/vplayer_p13_seam.json`
+(two patched declarations, zero moves); earlier S/S2/S2b/S2c ledgers stay
+frozen. CI selects this checkpoint with the unchanged P12 diagnostic
+inventory; P12's historical `--at` waits for its accepted merge/rebase.
+
+**Temporary facade exception:** `lib/screens/video_player_screen.dart`
+remains oversized while P12 is in review and P13 moves are blocked. Menu,
+recording, resume, IPTV, startup/source, episode, engine and controls/build
+responsibilities remain; their exits are the revised phases 13–21. S2d
+adds only two formatter lines (15,329 → 15,331), explicitly registered in
+the size baseline; it does not complete an extraction milestone.
+
 ### Step 0 — characterization of the original
 
 - **Menu:** open-at-section and quick sections (sleep, speed, aspect,
@@ -4560,6 +4582,37 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   presentation/decoding and physical PiP remain device-pending. Manual subtitle
   identity vs tracker/skip launch identity, dormant paths and original defects
   preserved. No production bug fix or later phase/push/merge/switch. STOP.
+### 2026-10-15 — Phase 13 S2d seam extension checkpoint (STOP)
+
+- Preparation `e4a9ab581`, approved design `6631611a9`; receipt in
+  `p13/s2d/commit.json`. Only `initState`:1563 and `_toggleRecording`:6453
+  append `&& !VpS2Hooks.isIOS` after the original desktop-service support
+  read, ahead of the toggle's recording flag. Existing hooks/installers,
+  earlier ledgers, 25 destinations and pubspec are byte-identical. No move.
+- Checkpoint ledger: **779 spans, 777 retained/two patched**, zero scaffolds.
+  Exact counted patches and native service read/order preserved. CI selects
+  S2d with unchanged P12 analyzer inventory; historical P12 CI registration
+  waits for its accepted merge/rebase. Evidence-only P12 preparation `--at
+  e4a9ab581`, S2b/S2c histories, current/universal and all seam proofs PASS.
+- All **36 earlier +15 S2d independent negatives** PASS. Extracted actual
+  hook/service/conditions: five mode controls, **624 site cases**, plus
+  **15 compiling runtime assertion kills**. Serialized S/S2 guards PASS
+  **7/7 true +7/7 installation-negative false**, unchanged identities and
+  stable tested trees. Native TEE muxing and Android engine/publication
+  remain device-pending; this is not Step-0 recording characterization.
+- Before/after scoped analysis: **124 identical diagnostic occurrences**,
+  zero additions; guard-test analysis clean. Format/idempotence, size,
+  architecture/negatives, exact byte/token delta and diff PASS; zero comma
+  edits. Explicit facade allowance **15,329 → 15,331** (+2 formatter lines),
+  remaining responsibilities/exit phases documented. Nice19, isolated copied
+  parsers with kernels removed; evidence only under `p13/s2d/`.
+- Receipt correction: the first audit assumed untracked contents were in
+  suite snapshots. Its error log and passing original guard runs are retained;
+  final **staged** guard runs both PASS7 with complete input-tree/hash receipts.
+  No application/checker/test input changed; only documentation followed.
+- No Step T/0, production move, bug fix, dependency change, application build,
+  device/run/install, push/merge/switch or work in the P12 worktree. STOP for
+  independent S2d review; P13 moves remain blocked until P12 merges.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

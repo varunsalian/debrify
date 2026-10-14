@@ -9306,3 +9306,70 @@ subtitle presentation, and physical PiP remain device-pending. Manual identity
 changes subtitle/prefetch identity while tracker/skip launch identity is retained;
 original stale-result/early-guide defects and dormant references remain frozen.
 No later phase, application bug fix, push, merge or branch switch performed.
+## Phase 13 S2d — desktop recording seam checkpoint (2026-10-15)
+
+Prepared application `e4a9ab581`; approved design `6631611a9`. Exactly two
+desktop-support conditions change, reusing the existing live iOS getter:
+
+| Original facade site | Exact condition before → after |
+| --- | --- |
+| `initState`:1563, desktop revision listener | `DesktopRecordingService.instance.isSupported` → `DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS` |
+| `_toggleRecording`:6453, desktop capture before TEE | `DesktopRecordingService.instance.isSupported && _recordingSupported` → `DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS && _recordingSupported` |
+
+The native service-support getter remains first and once at each site. Its
+native desktop result implies `Platform.isIOS == false`; unsupported platforms
+short-circuit before the new read. A test iOS override suppresses only these
+desktop branches, allowing the final TEE start with the existing native fake.
+S and `VpS2Hooks`, including both installers, are byte-identical. Raw Android
+recording predicates, all other application bytes, the 25 earlier destinations,
+pubspec/lockfile and earlier seam ledgers remain unchanged. Android engine start
+and publication remain device-pending; real TEE/native muxing is not claimed.
+
+`vplayer_p13_seam.json` classifies **779 spans: 777 retained, two patched,
+zero moves/scaffolds**. Each whole declaration has one exact counted patch.
+History protects all 25 earlier destinations. CI current/self-test and analyzer
+manifest select the checkpoint with the unchanged P12 diagnostic inventory;
+P12's historical CI `--at` waits for its accepted merge and pipeline rebase.
+The evidence-only `--at e4a9ab581` run validates the preparation snapshot,
+without treating it as P12's accepted merge.
+
+S/S2/S2b/S2c/S2d proofs and checkpoint universal self-test pass. All 36 earlier
+independent source/default/installer/projection negatives remain, plus **15 S2d
+negatives** (51 total): wrong getter, bypassed override, duplicate iOS read,
+duplicate service read, reordered operands, inverted override, changed support
+getter at both sites, and reordered recording-support operand at the toggle.
+The Dart source guard requires every new receipt and preserves all old assertions.
+
+Actual hook, native service-support getter and before/after condition bodies
+are extracted into evidence-only runtime witnesses. Five controls pass:
+debug+flag **240** site cases, no flag **48**, assertions off **240**, profile
+**48**, compiled release **48** — **624 total**. Legal native platforms, web
+short-circuit, recording flag, default/partial/live iOS override, original
+service reads and operand ordering are covered. **15 independent runtime
+mutations compile and fail checked result/order assertions**, seven per site
+plus the toggle recording-flag order. These are seam proofs, not Step-0 player
+characterization or physical recording evidence.
+
+Serialized existing S/S2 guard suites pass **7/7** with the harness flag true
+and **7/7** in the explicit installation-negative false mode. Both expected
+suites load, identities are unchanged and tested trees stay stable. Before/after
+analysis has **124 identical diagnostic occurrences**, including infos and
+multiplicity; comparator reports zero additions. Changed guard analysis is
+clean. Format/idempotence, size, architecture/negatives and diff pass. The facade
+is **15,331** lines, an explicit +2-line S2d formatting exception with the
+remaining responsibilities exiting in revised phases 13–21. Zero comma edits.
+
+Complete commands, extracted bodies, patches, hashes, runtime failures, parser
+isolation/kernel-deletion audit, analyzer identities and final receipt are under
+`refactor-evidence/vplayer/p13/s2d/`. Nice19 throughout; no production move,
+bug fix, application build, device/run/install, push, merge or branch switch.
+Step T/0 and P13 production extraction have not started. Stop for independent
+S2d review; production moves also remain blocked on P12 merging.
+
+Receipt correction: the first final audit assumed the new, untracked manifest
+was included in suite snapshot trees. That audit error and the original passing
+guard runs remain archived. Both guard suites were rerun after staging: **7/7
+each**, complete input trees, identical before/after input hashes and no changed
+application/checker/test file. Final receipts are `seams-staged-true/false.*`;
+subsequent changes are documentation only. The long universal self-test remains
+valid with identical inputs and was not repeated.

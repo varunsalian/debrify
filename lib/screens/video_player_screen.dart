@@ -1560,7 +1560,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
 
     // Observe, don't sample: see [_desktopRecordingRevisionListener].
-    if (DesktopRecordingService.instance.isSupported) {
+    if (DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS) {
       void onRevision() {
         if (mounted) setState(() {});
       }
@@ -6450,7 +6450,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // tee is dead on media_kit's stock libs (no muxers in its FFmpeg). Never
     // fall through to the tee here; for unrecordable streams say so instead
     // of starting something that provably writes nothing.
-    if (DesktopRecordingService.instance.isSupported && _recordingSupported) {
+    if (DesktopRecordingService.instance.isSupported &&
+        !VpS2Hooks.isIOS &&
+        _recordingSupported) {
       final channel = _currentIptvChannel;
       final recordUrl = await _engineRecordUrlForCurrent();
       if (channel == null) return;

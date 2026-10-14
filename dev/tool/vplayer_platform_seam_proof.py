@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S2/S2b/S2c ownership, native default/order and installation/reference guards."""
+"""S2/S2b/S2c/S2d ownership, default/order and installation/reference guards."""
 import argparse
 import json
 import re
@@ -14,6 +14,7 @@ from vplayer_source_reader import read
 SOURCE = 'lib/screens/video_player_screen.dart'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p8_seam.json'
 S2C_MANIFEST = 'dev/tool/dart_moves/vplayer_p10_seam.json'
+S2D_MANIFEST = 'dev/tool/dart_moves/vplayer_p13_seam.json'
 HOOK = 'VpS2Hooks'
 S2_SITES = {
     'initState': {'isIOS': 1, 'isAndroid': 1},
@@ -62,6 +63,17 @@ S2C_CONTEXT = [
     '_androidVideoRendererMode', '!=', 'AndroidVideoRendererMode', '.',
     'directMediaCodec', ')',
 ]
+S2D_SUPPORT = ['DesktopRecordingService', '.', 'instance', '.', 'isSupported']
+S2D_PATCHES = {
+    'initState': dict(
+        before=['if', '(', *S2D_SUPPORT, ')'],
+        after=['if', '(', *S2D_SUPPORT, '&&', '!', HOOK, '.', 'isIOS', ')'],
+        count=1),
+    '_toggleRecording': dict(
+        before=['if', '(', *S2D_SUPPORT, '&&', '_recordingSupported', ')'],
+        after=['if', '(', *S2D_SUPPORT, '&&', '!', HOOK, '.', 'isIOS',
+               '&&', '_recordingSupported', ')'], count=1),
+}
 
 
 def includes(body, seq):
@@ -123,6 +135,17 @@ def subtitle_projection_errors(members):
             for name, body in expected.items() if members.get(name) != body]
 
 
+def recording_site_errors(members):
+    """Independent exact sites: original support read precedes the live override."""
+    errors = []
+    for name, patch in S2D_PATCHES.items():
+        body = members.get(name, [])
+        if (len(includes(body, patch['after'])) != 1
+                or len(includes(body, S2D_SUPPORT)) != 1):
+            errors.append('S2d desktop predicate default/count/order changed: ' + name)
+    return errors
+
+
 def source_errors(sources):
     errors = ['platform hook reference outside facade: ' + path for path, source in sources.items()
               if path != SOURCE and HOOK in source]
@@ -161,6 +184,17 @@ def prove(package, self_test=False):
     assert extension_patches[0]['patches'] == [S2C_PATCH]
     assert all(r['fate'] in {'retained', 'patched'} for r in extension['declarations'])
     assert extension['destinations'] == extension['scaffolding'] == {}
+    # The accepted S2c ledger also stays frozen. S2d owns just the two
+    # desktop gates; it adds no hook, installer or production destination.
+    assert extension == load_manifest(S2C_MANIFEST, 'a2e034cb3')
+    recording = load_manifest(S2D_MANIFEST)
+    recording_patches = {r['original']: r['patches'] for r in recording['declarations']
+                         if r['fate'] == 'patched'}
+    assert recording['base'] == 'e4a9ab581' and recording['checkpoint'] == 'S2d'
+    assert recording_patches == {'_VideoPlayerScreenState.' + name: [patch]
+                                  for name, patch in S2D_PATCHES.items()}
+    assert all(r['fate'] in {'retained', 'patched'} for r in recording['declarations'])
+    assert recording['destinations'] == recording['scaffolding'] == {}
     applied = []
     for path in (ROOT / 'dev/tool/dart_moves').glob('*.json'):
         candidate = json.loads(path.read_text())
@@ -200,6 +234,9 @@ def prove(package, self_test=False):
                               for n in adapter['members']}
         errors += subtitle_projection_errors(projection_members)
     errors += renderer_site_errors(renderer_members)
+    recording_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                         for n in state['members'] if n['name'] in S2D_PATCHES}
+    errors += recording_site_errors(recording_members)
     negatives = []
     if self_test:
         import copy
@@ -290,11 +327,44 @@ def prove(package, self_test=False):
             body[start:start + len(before)] = after
             assert renderer_site_errors(mutated), 'independent S2c site guard accepted ' + name
             negatives.append('S2c ' + S2C_SITE + ': ' + name)
+        for site, patch in S2D_PATCHES.items():
+            changes = [
+                ('wrong predicate', [HOOK, '.', 'isIOS'], [HOOK, '.', 'isAndroid']),
+                ('override bypassed', [HOOK], ['Platform']),
+                ('predicate twice', [HOOK, '.', 'isIOS'],
+                 [HOOK, '.', 'isIOS', '||', HOOK, '.', 'isIOS']),
+                ('support twice', S2D_SUPPORT, [*S2D_SUPPORT, '&&', *S2D_SUPPORT]),
+                ('operand order', [*S2D_SUPPORT, '&&', '!', HOOK, '.', 'isIOS'],
+                 ['!', HOOK, '.', 'isIOS', '&&', *S2D_SUPPORT]),
+                ('override polarity', ['&&', '!', HOOK], ['&&', HOOK]),
+                ('support changed', ['isSupported'], ['isAvailable']),
+            ]
+            if site == '_toggleRecording':
+                changes.append(('recording support order', patch['after'],
+                                ['if', '(', '_recordingSupported', '&&', *S2D_SUPPORT,
+                                 '&&', '!', HOOK, '.', 'isIOS', ')']))
+            for name, before, after in changes:
+                mutated = copy.deepcopy(recording_members)
+                body = mutated[site]
+                # initState already has an earlier PiP isIOS read. Mutate
+                # only the desktop condition, never that accepted S2 site.
+                start = includes(body, patch['after'])[0]
+                end = start + len(patch['after'])
+                condition = body[start:end]
+                hits = includes(condition, before)
+                assert len(hits) == 1, (site, name, hits)
+                at = hits[0]
+                condition[at:at + len(before)] = after
+                body[start:end] = condition
+                assert recording_site_errors(mutated), 'independent S2d site guard accepted ' + site + ': ' + name
+                negatives.append('S2d ' + site + ': ' + name)
     return errors, dict(patched_declarations=len(patched), counted_patches=sum(len(r['patches']) for r in patched), predicate_occurrences=sum(sum(c.values()) for c in SITES.values()),
                         classified_spans=len(checkpoint['declarations']), active_phase=active['phase'], independent_negatives=negatives,
                         s2_declarations_preserved=len(accepted_patches), s2b_sites=len(S2B_SITES),
                         s2c_sites=1, s2c_classified_spans=len(extension['declarations']),
-                        s2c_patched_declarations=1, s2c_predicate_occurrences=1)
+                        s2c_patched_declarations=1, s2c_predicate_occurrences=1,
+                        s2d_sites=len(S2D_PATCHES), s2d_classified_spans=len(recording['declarations']),
+                        s2d_patched_declarations=len(recording_patches), s2d_predicate_occurrences=2)
 
 
 def main():
