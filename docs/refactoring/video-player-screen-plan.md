@@ -2258,6 +2258,59 @@ recording, three contracts: **TEE** (Apple TV/iOS) stops on zap and player
 close; **Android engine** and **desktop capture** intentionally survive
 zaps and player closure; each saves to the expected place and appears in
 Recordings.
+## Phase 14 — resume: keys, restore and save
+
+Branch `refactor/vplayer-p14` (pipelined; prepared off the phase-12 merge
+`1d7699d2e` while phase 13 runs in `../debrify-wt/vplayer-next`; rebased
+onto the phase-13 merge before step 1 under the pipeline rebase rule).
+Evidence `refactor-evidence/vplayer/p14/`. Line numbers at `1d7699d2e`.
+Note: this branch's plan file lacks the phase-13 section edits made on the
+phase-13 branch; they reconcile at rebase.
+
+≈ 830 lines into three files (sizes proved at step T, ≤ 500 each):
+
+| Destination | Members | Lines |
+|---|---|---|
+| `vp_resume_keys.dart` | `_resumeKey` 10339, `_torboxResumeKeyForEntry` 10400, `_pikpakResumeKeyForEntry` 10425, `_resumeIdForEntry` 10438 (uses phase-1 `vpFilenameHash`) | ≈ 115 |
+| `vp_resume_restore.dart` | `_maybeRestoreResume` 10454 (204), `_seekForResume` 10659, `_verifyResumeLanding` 10697, `_resumeSeekLanded` 10739 | ≈ 330 |
+| `vp_resume_save.dart` | `_getEnhancedPlaybackState` 10783 (121), `_resumeSaveBlocked` 10905, `_observeServerWatch` 10925, `_saveResume` 10948, `_saveResumeLocked` 10969 (198) | ≈ 385 |
+
+**Stays State-owned (shared-state rule):** the resume write guard and
+epoch, the save lock, `_persistablePosition`, playback position/duration,
+playlist/index/identity, `_currentLocalMovieImdbId` and completion flags
+(phase 7 Host), `_speedBeforeHold`/`_playbackSpeed`/`_aspectMode` (phase 4
+display controller, read through the facade), `_activeExternalSubtitlePath`,
+server-watch controller and epoch, launch slots (`readLocalResume` static
+stays on the widget). Field decisions for resume-only fields (restore
+flags, verification timers/tickets) by reader/writer count at step T.
+
+**Earlier Host forwarders reaching moved members** (sleep, display,
+completion, PiP `saveResume`, trackers, subtitle preferences, …) become
+declared patched facade adapters — exact list at step T. Retained call
+sites: open/startup restore, every `_saveResume` caller (pause, seek,
+speed/aspect, sleep, EOF, dispose, background, source switch, episode
+navigation), autosave timer, menus — measured at step T.
+
+### Step 0 — characterization of the original
+
+Resume keys per source type (TorBox/PikPak/filename hash fallback, series
+vs movie, playlist entries, custom identity); restore: local vs tracker
+progress reconciliation via `readLocalResume`, held target and the resume
+write guard (no save while a requested resume has not landed), seek and
+landing verification incl. short-duration and failure fallbacks, restore
+after renderer replacement; save: enhanced state contents (speed incl. held
+2× exclusion, aspect, subtitle/external path, audio), blocked saves
+(validation, transitions, short durations), the save lock and queued
+saves sampling at write time, server-watch observation ordering, disposal
+save, profile handoff during a held save (captured-scope writes: pin
+as-is; cross-profile Follow-up if present). Mutation proofs; coverage;
+Claude sample. Reduced-gate test inventory per the speed-up section.
+
+### Device checklist (end of series)
+
+Resume lands at the saved position for movies, series episodes, TorBox
+and PikPak entries; leaving during a slow resume never resets the saved
+point to 0; speed/aspect/subtitle choices restore with the position.
 
 ## Follow-ups
 
