@@ -4060,6 +4060,26 @@ Validation: exact diff and `git diff --check`.
   physical metadata/native decoding, TV interaction and cleanup durability stay
   on the device checklist. No device/run/install/push/merge/switch action.
 
+### 2026-10-14 — Phase 11 gate complete; STOP
+
+- Tested clean Step-1 `fba8f3de1`; gate revision recorded in
+  `p11/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,747 success, identical 13 failures/28 load errors/20 skips; zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree and same SDK
+  and harness flag. No test flake stabilization or failure allowlisting.
+- All 44 mechanical jobs PASS: every other Dart manifest self-test, P11
+  universal/current, P1–P10 named histories, Kotlin checker self-test, S/S2/S2b/
+  S2c proofs, size/architecture and negatives. Isolated copied parser packages
+  and kernel deletion/routing audited. Facade 15,880; bridges 303/282/412 lines.
+- CI-scope analyzer/allowlist and P11 comparator PASS (114 scoped occurrences,
+  zero additions); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Application/input hashes and pubspec unchanged throughout. Evidence
+  `p11/gate/`; exact commands, complete logs, metadata and artifact receipts.
+- Physical native decoding/bitmap/forced metadata, PiP, TV remote selection
+  and preference/temp-file durability across restarts remain device-pending. Dormant paths and characterized
+  original defects preserved; M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

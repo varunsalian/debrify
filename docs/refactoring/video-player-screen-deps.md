@@ -8277,7 +8277,7 @@ apply; only the two inert addon fields move. State-owned fields and
 the single apply-adapter patch and dispose cleanup order are unchanged.
 
 195 focused original-caller cases and the theme source guard PASS on moved
-code. Scoped analyzer comparator: **114 identities/occurrences, zero
+code. Scoped analyzer comparator: **114 scoped occurrences, zero
 additions**; CI analyzer and shared allowlist PASS. Seven frozen retained
 imports become unused exactly as recorded in Step T; rule 6 registrations
 are finite and multiplicity remains enforced. The initial missing global
@@ -8293,3 +8293,38 @@ three destinations in the theme manifest/rendered boundaries and all three
 source-guard lists are registered. Existing source-reader guards already
 chain applied manifests and require no weakened/retargeted assertion. Full
 clean-tree gate follows this commit.
+
+
+## Phase 11 clean-tree gate (2026-10-14)
+
+Tested Step-1 `fba8f3de1`, clean and stable throughout the gate. Fresh full
+`suite_evidence.py run vplayer/p11/gate/flutter-gate --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true` matches the Step-0b baseline by every
+identity: **13,747 success /13 failure /28 load error /20 skip**. Zero changed,
+added, missing, fixed or newly skipped identities; same SDK and flags. Five passing additions to Step 0 are documented in Step
+0b. No test flake stabilization or failure allowlist change.
+
+**44/44 mechanical checks PASS:** 26 other Dart manifest self-tests, P11
+universal self-test/current comparison, P1–P10 named same-revision historical
+checks, Kotlin checker self-test, S/S2/S2b/S2c proofs, size, architecture and
+architecture negatives. Current P11 has zero differences and protects all 20
+earlier destinations. All primary and nested parser invocations use isolated
+copied packages under `.dart_tool/vplayer_parser/`, with copied kernels deleted;
+routing audit archived. CI-scope analyzer/allowlist and P11 identity comparator
+PASS: **114 scoped occurrences, zero additions**, including infos/multiplicity.
+CI formatting plus the changed theme guard passes. Facade **15,880** lines,
+bridges **303/282/412** lines; lowered ratchet enforced.
+
+Both `flutter build apk --release --no-pub` and
+`flutter build macos --release --no-pub` complete under nice19, without run or
+install. Full suite and builds were serialized. Application/input hashes and
+pubspec unchanged throughout. Commands, completed result records, SDK/tree
+metadata, analyzer/format logs, all checker logs, build logs and artifact hashes:
+`p11/gate/`. Evidence includes the independent sample and four assertion-killed original
+survivor replays under `p11/step0b/`; all guards remain unchanged.
+
+Native decoder/bitmap/forced metadata, physical PiP, TV remote track
+selection and durable preferences/temp cleanup across restarts remain device
+checks; no device parity claim. Dormant compatibility paths and original stale
+rollback/cross-profile/disposed-notifier outcomes remain frozen. M2 follows
+phase 11; no later phase, bug fix, push, merge or branch switch performed.
