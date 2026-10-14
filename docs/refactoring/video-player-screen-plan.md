@@ -1553,7 +1553,7 @@ Subtitle work is split over phases 9–11 with one **state-ownership map**
 | `_autoSyncPillLastShown` (1341) | **State** | sole reader/writer is retained `build` (13640, fade cache) |
 | `_subtitleAutoSyncEnabled`, `_subtitleAutoSync`, `_autoSyncWindowActive`, `_autoSyncPillHold`, `_autoSyncPillPhaseTimer` | **P9 controller** | inert initializers |
 | `_subtitleSelectionCorrection` (1109, notifier) | **State** (allocation) | P10 manipulates its value through a Host |
-| apply-attempt / diagnostic generation | P10 | |
+| apply-attempt / diagnostic generation | **State** (decided in phase 10) | |
 | addon/Stremio fetch, temp files, priority, track preferences | P11 | |
 
 ### Moves → one combined bridge `presentation/legacy_video_player/vp_subtitle_auto_sync.dart`
@@ -1779,72 +1779,143 @@ renderer; the menu reflects the corrected selection.
 ## Phase 11 — subtitle sources and track preferences
 
 Branch `refactor/vplayer-p11` off the phase-10 merge `7fdf59370`. Evidence
-`refactor-evidence/vplayer/p11/`. Line numbers at `0055d29a7` (phase-10
-step 0; the phase-10 move shifts them) — re-measure by name. Ownership per
-the phase-9 subtitle map; M2 follows this phase.
+`refactor-evidence/vplayer/p11/`. Line numbers at `7fdf59370`. M2 follows
+this phase.
 
-≈ 850 lines leave the facade into **two sibling collaborators** (no
-sibling imports; cross calls through the facade):
+### Three sibling collaborators (design review P2: the two-file split broke the 500-line cap)
 
-**`vp_track_preferences.dart` — `VpTrackPreferences` + Host (≈ 500
-lines):** `_resetSubtitleState` 15239, `_restoreTrackPreferences` 15267
-(199 lines), `_applyDefaultAudioLanguage` 15467,
-`_audioAllowsAutomaticSubtitles` 15522 (getter), `_refreshSubtitleAudioPolicy`
-15530, `_applyDefaultSubtitleLanguage` 15581, `_applyForcedSubtitle` 15693,
-`_persistTrackChoice` 16071 (the phase-10 Host's `persistTrackChoice`
-forwarder is re-pointed — a P11 patched facade adapter, phase-5/10
-precedent).
+Bodies stay whole; each destination's normal formatting is proved at step
+T before the split is frozen. No sibling imports; every cross call goes
+through the facade.
 
-**`vp_addon_subtitles.dart` — `VpAddonSubtitles` + Host (≈ 330 lines):**
-`_downloadStremioSubtitleToTempFile` 15724, `_applyExternalSubtitleTrack`
-15803, `_cleanupTempSubtitleFilesSync` 15847,
-`_fetchAndMaybeAutoSelectAddonSubtitle` 15859,
-`_applySubtitleSourcePriority` 15983, `_applySubtitlePriorityUpdate` 15995.
+| Destination | Declarations | Existing lines |
+|---|---|---|
+| `vp_subtitle_language_policy.dart` | `_applyDefaultAudioLanguage`, `_audioAllowsAutomaticSubtitles` (getter), `_refreshSubtitleAudioPolicy`, `_applyDefaultSubtitleLanguage`, `_applyForcedSubtitle` | 252 |
+| `vp_track_preferences.dart` | `_restoreTrackPreferences` (199), `_persistTrackChoice` | 239 |
+| `vp_addon_subtitles.dart` | `_downloadStremioSubtitleToTempFile`, `_applyExternalSubtitleTrack`, `_cleanupTempSubtitleFilesSync`, `_fetchAndMaybeAutoSelectAddonSubtitle`, `_applySubtitleSourcePriority`, `_applySubtitlePriorityUpdate` + fields `_tempSubtitleFiles` (empty set) and `_subtitlePrioritySelectionQueue` (implicit nullable-field constructor — inert) | 326 |
 
-Fields owned by these (temp-file list, addon fetch token, priority state,
-track-restore flags — exact list and State-vs-controller decision by
-reader/writer counts at step T; notifiers stay State-owned).
+**Stays in the facade:** `_resetSubtitleState` (shared content-reset
+orchestrator across phases 9–11), `_findSeriesEpisodeForCurrentIndex`
+(retained identity selection, addon discovery, skip adapter),
+`_menuSelectEmbeddedSubtitle`, `_menuSelectAddonSubtitle`,
+`_menuApplyTrackChange`, `_audioTrackChoiceChanged`, the metadata retry
+orchestrator. **State-owned fields:** the fetch token, three cache fields,
+selected addon id, embedded/manual/restore-ready flags, audio revision,
+injected launch slots, diagnostics, notifiers, UI flags, manual identity
+(they span retained menus/identify-title, reset, preferences and addon
+selection — the owned-field guard, `occurrence_field_bindings.py:150`,
+forbids forwarding a sibling-owned field). `_subtitleSelectedAudio` stays
+State-owned unless step T shows reset can write the language-policy owner
+directly (then it moves, frozen).
 
-**Stays in the facade for now:** `_findSeriesEpisodeForCurrentIndex`
-(shared: skip-segment Host, guide, trackers), the menu subtitle actions
-(`_withManualSubtitleChoice`, `_menuSubtitles*`,
-`_applyStremioSubtitleFromTracksSheet`, `_buildPlayerMenuPanel` — move with
-the tracks sheet/unified menu phase), `_subtitleSelectionCorrection`,
-`_subtitleSettings`, `_activeExternalSubtitlePath`.
+**Hosts (frozen individually at step T):** live widget selectors `String
+title` (restore/persistence) and nullable `contentSeason`/`contentEpisode`
+(addon identity fallback); action signatures
+`applyIptvAudioPreference(int ticket)`,
+`waitForSubtitleTracks({required int token})`,
+`applyDefaultSubtitleLanguage({bool ignoreSourcePriority = false})`,
+`refreshSubtitleAudioPolicy({bool reselect = true})`,
+`applySubtitleSourcePriority(List<AddonSubtitleSlot>, int, {bool discoveryReady = true})`;
+nullable `isCurrent` callbacks and captured playlist/track-list/
+audio-revision/content-token locals preserved. No `BuildContext`,
+`setState` or owner identity needed. Four registered P9/P10 chains used
+inside moved bodies: external-path setter, sync reset, track wait,
+diagnostic apply.
 
-**Retained references:** measured at step T (open/startup restore, audio
-track changes, content resets, menus, identify-title fetch, dispose temp
-cleanup, phase-9/10 Hosts' forwarders → patched adapters as needed).
+**Patched facade adapter:** only `_VpSubtitleApplyHostAdapter`
+(`patched_class_projection`, one counted rewrite of its persistence
+forwarder, 15971); the P9 adapter is unchanged.
+
+**Retained references (27 executable):**
+
+| Group | Facade lines |
+|---|---|
+| Reset | 4848, 8269, 8531, 8740, 8868, 9169 |
+| Restore | 2423, 2513, 3332, 8151, 8316, 8366, 9264 |
+| Audio-policy refresh | 2748, 14833, 14861 |
+| Persistence | 14666, 14819, 14827, 15972 |
+| Download / external apply | 14910, 14946 / 14925, 14956 |
+| Cleanup (exact dispose position) | 10221 |
+| Metadata/identify-triggered fetch | 9981, 14507 |
+
+**Language behaviour (corrected terminology):** native selection first,
+then English / first real track where applicable; a null addon preference
+prefers English; forced selection defaults to English; **no UI-locale
+lookup**; ISO aliases, title-based metadata and the distinct `pt-BR` rule.
+Restore excludes app-managed addon tracks (15189) and falls through to
+default/priority selection. Priority settings are sampled on selection
+work; a storage change alone schedules nothing.
+
+**CI:** current/self-test and both analyzer inputs → P11; P10 `--at
+7fdf59370`; protect all 20 earlier destinations; all seam proofs; tests and
+destinations in `ci_behavior_tests.txt`, theme manifest, rendered set and
+the three source-guard lists. Collaborators assigned after `_subtitleApply`.
 
 ### Step 0 — characterization of the original
 
-Track preference restore (per-show/per-content keys, audio-language
-fallbacks, subtitle off/embedded/addon/external restoration, forced
-subtitles, the audio-policy rule that allows/blocks automatic subtitles,
-re-evaluation on audio change); default audio/subtitle language selection
-across track lists (incl. language mapping and locale fallbacks);
-persistence identities and the cross-profile physical-write risk (same as
-phases 7/10 — pin as-is, Follow-up); addon subtitle fetch (HTTP harness:
-search, download to temp file, encoding, auto-select by priority/language,
-fetch token staleness on content change, profile switch and disposal
-during fetch, temp-file cleanup on dispose), source priority updates from
-settings; early windows; mutation proofs; coverage matrix; Claude sample.
+- **Streaming HTTP fixture** (test support only, `MockClient.streaming`
+  from the pinned package; no application seam): declared/undeclared
+  length limits, the separate 15 s header and body timeouts (15577), body
+  errors, client closure; caller-level byte assertions for non-UTF-8
+  content, gzip/ZIP extraction, HTML rejection, cache reuse and invalid
+  cached files.
+- **Cleanup races:** download has no token/mounted/profile guard and can
+  finish write → rename → temp-set registration (15603) after dispose
+  cleanup (10221) or reset; hold write/rename across reset/disposal and
+  inspect final and `.part` files **before** fixture directory deletion;
+  overlapping downloads of the same URL/cache stem. Leaks pinned as-is →
+  Follow-ups.
+- **Discovery/priority concurrency matrix:** final cache publication
+  checks only the token (15778; dispose does not bump it); no profile
+  identity in fetch or priority validity (15819); the queue coalesces
+  same-token updates and lets a newer token proceed. Cover a higher-priority
+  addon loading while a lower one succeeds, higher-priority failure and
+  fallback, multiple updates during a held download/apply, newer-content
+  work proceeding while old work is held, manual/audio changes invalidating
+  automatic selection — crossed with outgoing-profile-still-mounted and
+  disposal, distinguishing native effects from unobservable retired-State
+  cache writes; the service-owned three-attempt retry (500/1,500 ms
+  backoffs) outliving the route. Real fixture addon via
+  `StremioService.addAddon` (P9 precedent).
+- **Restore/default-language races:** restore guards the content token
+  but not manual choice, audio revision or profile; after awaiting the
+  stored-track language setting (15205) it can apply the captured stored
+  track despite a newer manual selection; default audio captures tracks
+  before a native-property await then uses the live player (15297); restore
+  publishes ready/embedded flags before another awaited policy refresh.
+  Held restore/default-audio cases across manual choice, overlapping
+  restores, reset, replacement, profile handoff and disposal; IPTV audio
+  override ordering preserved.
+- **Physical writes:** reuse P10's movie/content cases and add the
+  **series** branch (series persistence reads a map and later saves it,
+  `track_preferences_storage.dart:12`; the save reacquires active-profile
+  preferences, `playback_state_store.dart:33`) — both profiles' physical
+  maps incl. unrelated entries, sanitized title keys and fallback titles.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
 
 ### Device checklist (end of series)
 
-Remembered audio/subtitle choices return on the next episode and next
-session; default languages pick correctly; forced subtitles show for
-foreign dialogue; addon subtitles auto-select by priority; temp subtitle
-files are cleaned up.
+Remembered audio/subtitle choices return on the next episode and session;
+default languages pick correctly; forced subtitles show for foreign
+dialogue; addon subtitles auto-select by priority; temp subtitle files are
+cleaned up.
 
 ### Integration milestone M2 (after phase 11 merges)
 
-As specified in the phase-9 section: auto-sync + manual override during
-alignment, apply failure/rollback restoring the previous path,
-source/content reset, audio-policy changes, renderer replacement, profile
-handoff and the PiP visibility caller — one scenario, parity on the
-original and the merged tree, ≥ 5 cross-phase mutations, full suite and
-both release builds.
+Parity against a **named, hashed original tree**: the S2c application code
+(`a2e034cb3`; it already contains the phase-9 extraction), so M2 parity
+covers phases 10–11 against S2c plus phase 9 against its own
+characterization; any seam projection needed for a pre-phase-9 baseline is
+documented. One scenario with a UTF-8 fixture SRT and the real auto-sync
+engine/metadata transport, ordered so manual-choice flags are reset before
+automatic audio-policy reselection, then subtitles reselected after
+renderer replacement creates a fresh engine: auto-sync + manual override
+during alignment, apply failure/rollback restoring the previous path,
+source/content reset, audio-policy change, renderer replacement, profile
+handoff and the PiP visibility caller. Assert files, native properties,
+offset/rendered configuration and profile writes; ≥ 5 mutations spread
+across phases 9–11; full suite and both release builds. Native decoding and
+PiP presentation stay device-pending.
 
 ## Follow-ups
 
@@ -3955,3 +4026,13 @@ body `VpS2Hooks.isAndroid`, read at the original moment. The corrected frozen
 Host has 18 names /21 declarations and four complete registered chains. This
 preserves S2c without a destination-to-facade import; proposal and exact patch:
 `refactor-evidence/vplayer/p10/stepT/host-correction-proposal.json`.
+
+## Phase 11 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: three collaborators to respect the 500-line cap
+(`_resetSubtitleState` retained); fields and Hosts frozen (only the temp-file
+set and priority queue move); streaming HTTP fixture and cleanup races;
+discovery/priority concurrency matrix incl. retries outliving the route;
+restore/default-language races and the series physical-write branch. P3s:
+27-reference ledger, single patched adapter, corrected ownership map and
+language terminology, concrete M2 inputs and CI transition.
