@@ -6980,3 +6980,64 @@ The timed-out detached tester left by an uncredited mutation was terminated;
 `orphan-cleanup.json` records the exact owned process. No partial/interrupted run
 is credited. The public diagnostic-sink failure is an explicit unexpected-error
 transport fixture; normal native failures and HTTP 500 are separate cases.
+
+## Phase 10 Step 0b — independent sample and producer equivalences
+
+Claude's independent sample on ORIGINAL `0055d29a7` (identical S2c application
+tree) killed **18/20 valid mutations (90%)**. No compile error earns kill credit.
+The two survivors are equivalent for the complete original caller/producer
+graph; both guards remain in the frozen production move. The original control
+and each exact survivor replay run all 87 subtitle-apply cases, unchanged, in
+the detached original: completed exit 0, with no skipped or failed behavior.
+Commands, patches, test hashes and outcomes: `p10/step0b/replays.json`; exhaustive
+tracked-lib producer audit: `producer-audit.json`.
+
+- **n10:** a new apply increments the diagnostic generation before assigning its
+  attempt, with no await between them. Both content reset and disposal increment
+  that generation immediately before clearing the pointer. The only other
+  pointer clear is admitted failure, which sets `handled = true` first, again
+  without an await. Renderer replacement has no separate clear. Therefore an
+  unhandled attempt with the current generation is still the active attempt;
+  removing the pointer disjunct cannot admit another reachable failure.
+- **n15:** attempts initialize `persisted` and `successReturned` to false. The
+  sole `persisted = true` producer is `_persistTrackChoice`, gated by that same
+  attempt's `successReturned`. Its only mutation sets true after the 50 ms
+  success turn, and nothing resets it. A write started before that turn can
+  physically persist preferences but does not stamp the attempt as persisted.
+  Thus `persisted` implies `successReturned`, including held/failed writes.
+
+The existing checking-turn, superseding-apply, reset/disposal/renderer, delayed
+exception and optimistic-write cases exercise these windows through real
+callers. The systematic Step-0 matrix remains 110 assertion kills, seven
+equivalences and 35 invalid candidates; the independent sample adds two
+separately audited equivalents, with **18/18 non-equivalent candidates killed**.
+No additional behavior case or production change is needed.
+
+| Independent point | Final classification | Witness / proof |
+|---|---|---|
+| `n1` | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders; subtitle track polling accepts a real arrival while ignoring placeholders; subtitle old track poll stops on content token change before touching incoming preferences |
+| `n2` | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders; subtitle track polling accepts a real arrival while ignoring placeholders; subtitle old track poll stops on content token change before touching incoming preferences |
+| `n3` | assertion-killed | PiP iOS entry prepares native subtitles once, sends its distinct handle and leaves auto-enter unarmed; PiP iOS held handle across owner preserves original entry and finalization boundaries; PiP iOS held handle across profile preserves original entry and finalization boundaries; PiP iOS held subtitle across dispose preserves original entry and finalization boundaries |
+| `n4` | assertion-killed | subtitle Android bitmap codec renderer directSurface TV exempt selection preserves rejection and native visibility; subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility; subtitle Android image renderer directSurface TV exempt selection preserves rejection and native visibility; subtitle Android image renderer directMediaCodec TV exempt selection preserves rejection and native visibility |
+| `n5` | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility; subtitle Android bitmap codec renderer directMediaCodec phone selection preserves rejection and native visibility; subtitle Android image renderer directSurface phone selection preserves rejection and native visibility; subtitle Android image renderer directMediaCodec phone selection preserves rejection and native visibility |
+| `n6` | assertion-killed | subtitle initialization reaches the stored original apply caller; subtitle apply non-native success persists the matching identity after its diagnostic turn; subtitle late visibility exception after profile obeys only the original failure admission guard; subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is |
+| `n7` | assertion-killed | subtitle automatic language apply rejects its old content after held visibility without setting a second track; subtitle startup automatic apply superseded by a manual choice returns false to the original restore diagnostic |
+| `n8` | assertion-killed | subtitle apply visibility held across reset preserves the original admitted work; subtitle apply non-native success persists the matching identity after its diagnostic turn; subtitle apply native success persists the matching identity after its diagnostic turn; subtitle apply visibility held across profile preserves the original admitted work |
+| `n9` | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn; subtitle apply native success persists the matching identity after its diagnostic turn; subtitle rollback waits for successful optimistic persistence across same content; subtitle old decoder log rolls the current accepted B attempt back as-is |
+| `n10` | equivalent | Current generation plus unhandled implies active; exhaustive pointer/generation producers above. |
+| `n11` | assertion-killed | subtitle initialization reaches the stored original apply caller; subtitle failed apply falls back to no for previous auto selection; subtitle initialization reaches the no preference original apply caller; subtitle initialization reaches the language original apply caller |
+| `n12` | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `n13` | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `n14` | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure; late embedded failure restores previous addon selection once |
+| `n15` | equivalent | persisted implies successReturned; sole producer and monotonic flag above. |
+| `n16` | assertion-killed | off attempt ignores unrelated audio preference identity; external attempt ignores unrelated audio preference identity; subtitle admitted rollback clears the active attempt before a later audio preference write; embedded attempt ignores unrelated audio preference identity |
+| `n17` | assertion-killed | subtitle repeated decoder corrections reconcile the unified menu and reopened selection; subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `n18` | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn; subtitle apply native success persists the matching identity after its diagnostic turn; subtitle repeated decoder corrections reconcile the unified menu and reopened selection; subtitle empty codec failure uses the generic diagnostic and restores native visibility |
+| `n19` | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+| `n20` | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+
+The Step-0b baseline is the completed `p10/step0/after-step0.jsonl`: **13,552
+successes /13 failures /28 load errors /20 skips**, with the 87 additions versus
+the original and no changed/missing identity. Application, tests, dependencies
+and SDK are unchanged by this documentation-only addendum; baseline reuse is
+recorded in `p10/step0b/baseline-note.json`. No allowlist change.

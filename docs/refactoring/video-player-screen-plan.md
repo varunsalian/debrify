@@ -3707,6 +3707,21 @@ Validation: exact diff and `git diff --check`.
   as-is in Follow-ups. No allowlist/pubspec/production change; CI/source/theme
   transition and the actual move remain Step 1. No build or device work.
 
+### 2026-10-14 — Phase 10 Step 0b independent sample closure
+
+- Revision: ORIGINAL `0055d29a7` (S2c lib tree); addendum revision recorded in
+  `p10/step0b/commit.json`. Claude's independent sample: 18/20 assertion kills
+  (90%); n10/n15 source-audited equivalent, 18/18 non-equivalent killed.
+- Proof: all pointer/generation producers either increment before clearing or
+  mark handled before clearing; persisted is stamped only after successReturned
+  and that flag is never reset. No reachable proposed window distinguishes the
+  mutants. Exact detached original control and both replays complete with all
+  87 existing cases passing; hashes/patches/commands in `p10/step0b/`.
+- Deps matrix/table updated. No application, test, dependency or allowlist change;
+  reuse completed Step-0 baseline (13,552 successes, unchanged 13 failures/28
+  load errors/20 skips; 87 original additions only). Guards retained verbatim.
+  Production move and gate follow in separate commits.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
