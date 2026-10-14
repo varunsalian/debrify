@@ -1786,7 +1786,9 @@ this phase.
 
 Bodies stay whole; each destination's normal formatting is proved at step
 T before the split is frozen. No sibling imports; every cross call goes
-through the facade.
+through the facade. The frozen membership is 15 moved declarations: 13
+methods/getters and the two owned fields. Step-T normal-format measurements
+are 303/282/412 lines respectively (all ≤500).
 
 | Destination | Declarations | Existing lines |
 |---|---|---|
@@ -1805,8 +1807,8 @@ injected launch slots, diagnostics, notifiers, UI flags, manual identity
 (they span retained menus/identify-title, reset, preferences and addon
 selection — the owned-field guard, `occurrence_field_bindings.py:150`,
 forbids forwarding a sibling-owned field). `_subtitleSelectedAudio` stays
-State-owned unless step T shows reset can write the language-policy owner
-directly (then it moves, frozen).
+State-owned, with a live getter/setter in the language Host and its original
+reset write retained.
 
 **Hosts (frozen individually at step T):** live widget selectors `String
 title` (restore/persistence) and nullable `contentSeason`/`contentEpisode`
@@ -1818,15 +1820,17 @@ title` (restore/persistence) and nullable `contentSeason`/`contentEpisode`
 `applySubtitleSourcePriority(List<AddonSubtitleSlot>, int, {bool discoveryReady = true})`;
 nullable `isCurrent` callbacks and captured playlist/track-list/
 audio-revision/content-token locals preserved. No `BuildContext`,
-`setState` or owner identity needed. Four registered P9/P10 chains used
-inside moved bodies: external-path setter, sync reset, track wait,
-diagnostic apply.
+`setState` or owner identity needed. Three registered P9/P10 chains used
+inside moved bodies: external-path setter, track wait and diagnostic apply.
+Sync reset remains in the retained reset orchestrator. The exact three Hosts
+and their declarations are frozen by the approved
+`p11/stepT/host-and-size-proposal.json`.
 
 **Patched facade adapter:** only `_VpSubtitleApplyHostAdapter`
 (`patched_class_projection`, one counted rewrite of its persistence
 forwarder, 15971); the P9 adapter is unchanged.
 
-**Retained references (27 executable):**
+**Retained references (28 executable: 22 redirects and six unchanged reset calls):**
 
 | Group | Facade lines |
 |---|---|
@@ -1835,7 +1839,7 @@ forwarder, 15971); the P9 adapter is unchanged.
 | Audio-policy refresh | 2748, 14833, 14861 |
 | Persistence | 14666, 14819, 14827, 15972 |
 | Download / external apply | 14910, 14946 / 14925, 14956 |
-| Cleanup (exact dispose position) | 10221 |
+| Cleanup (exact dispose/reset positions) | 10221, 15077 |
 | Metadata/identify-triggered fetch | 9981, 14507 |
 
 **Language behaviour (corrected terminology):** native selection first,
@@ -3927,6 +3931,16 @@ Validation: exact diff and `git diff --check`.
   Step-0 baseline remain. No P11 manifest frozen, production move or CI transition.
   Detailed ledgers/commands/results in deps and `p11/`; STOP pending direction.
 
+### 2026-10-14 — Phase 11 plan-owner numeric correction approved
+
+- Base `7fdf59370`; approved proposal
+  `p11/stepT/host-and-size-proposal.json`. Plan counts now match the measured
+  named table: 15 moves, 28 references, three used chains. Reset remains retained
+  and selected audio State-owned. Hosts frozen exactly as proposed; destinations
+  format to 303/282/412 lines. No production changes.
+- Documentation consistency and `git diff --check` pass. Step T and the full
+  Step-0 characterization continue under the approved correction.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -4061,5 +4075,14 @@ P2s folded: three collaborators to respect the 500-line cap
 set and priority queue move); streaming HTTP fixture and cleanup races;
 discovery/priority concurrency matrix incl. retries outliving the route;
 restore/default-language races and the series physical-write branch. P3s:
-27-reference ledger, single patched adapter, corrected ownership map and
+28-reference ledger (corrected by the approved Step-T measurement), single patched adapter, corrected ownership map and
 language terminology, concrete M2 inputs and CI transition.
+
+
+Phase-11 plan-owner resolution (Claude, 2026-10-14): the numeric ledger
+correction in `refactor-evidence/vplayer/p11/stepT/host-and-size-proposal.json`
+is approved: 15 moves (13 methods/getters +two fields), 28 references and three
+used chains. Every named table entry is preserved; `_resetSubtitleState` stays
+in place. The proposed three Hosts are frozen, with normal-format sizes
+303/282/412. This resolves the prerequisite clarification without changing
+application behaviour or authorizing production moves at Step T/0.
