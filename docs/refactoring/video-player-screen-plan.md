@@ -95,7 +95,7 @@ contracts, behaviour fixes and dead-code removal.
 | D3 | Formatting | The original is not formatter-clean. Phase 1 starts with a **format-only commit (a)** on the original with the token/comma proof (precedent: spotlight/catalog); (a) becomes R for phase 1. |
 | D4 | Testability of the original | No existing test **mounts and characterizes the player State** (tests construct `VideoPlayerScreen` only to inspect launch contracts, and route observers intercept before its State mounts — `iptv_channel_sheet_responsive_test.dart:61`, `stremio_tv_fixture.dart:55`). `initState` initializes native media_kit (1753) and `_createPlayerInstance` constructs `mk.Player`/`mkv.VideoController` directly; private members are unreachable (no reflection in `flutter test`). See "Characterization harness". |
 | D5 | Destination | New feature `lib/features/video_player/`: `models/` and `application/` for service-free pure code, `presentation/legacy_video_player/` (the bridge) for collaborators that call services, storage, platform channels or the player. Registered in `check_search_architecture.py` like the other bridges. |
-| D6 | `build` (1,172 lines) | Move-only cannot split one method. Decided in phase 25: either it stays in the facade or moves whole to a builder; either way a **bounded, measured exception** (exact line count registered at creation, shrink-only ratchet in `file_size_baseline.txt`) with a named exit: a behaviour-level `build` decomposition into layout widgets with goldens, its own goal. Widget + lifecycle are already ≈ 580 lines, so the facade's end state is registered by measurement, never as an unspecified size. |
+| D6 | `build` (1,172 lines) | Move-only cannot split one method. Decided in phase 21: either it stays in the facade or moves whole to a builder; either way a **bounded, measured exception** (exact line count registered at creation, shrink-only ratchet in `file_size_baseline.txt`) with a named exit: a behaviour-level `build` decomposition into layout widgets with goldens, its own goal. Widget + lifecycle are already ≈ 580 lines, so the facade's end state is registered by measurement, never as an unspecified size. |
 
 ## Shared rules for every phase
 
@@ -460,7 +460,7 @@ complete ownership transfer:
 Each phase section lists every field it moves (with its readers/writers
 from the analyzer binding scan) and every shared field its Host forwards.
 
-## Phase map (risk- and dependency-ordered)
+## Phase map (risk- and dependency-ordered) — superseded for phases 13+ by the 2026-10-15 revised map
 
 Line numbers at `ed728b078`; each phase section re-measures. "≈ out" is
 declaration lines leaving the facade (facade growth from imports, Host
@@ -2061,61 +2061,173 @@ The user chose options 1+2+3 to speed up the remaining work:
 | 20 | Player engine II: `_initializePlayer`, open media, network tuning, instance subscriptions, startup watchdog | **M5** after |
 | 21 | Controls runtime (auto-hide, TV bar/scrub, keys, overlays, gestures); `build` decision (D6); end-state exception; completion audit; CI structure; device checklist | final full suite + builds |
 
+Milestone scenarios: **M3** recording/resume/source handoff; **M4** guide/
+episode/tracker/subtitle identity; **M5** player replacement/output
+ownership/subscription/teardown. Shared rule 7's per-phase full suite and
+release builds are superseded by this section for phases 13+.
+
 Kept unchanged: Codex design review until "No P1s", step T, step 0 with
 per-test mutation proofs and the systematic sweep, Claude's independent
 sample (≥ 75 %), step 0b, the independent post-gate review.
 
 ## Phase 13 — tracks sheet, unified player menu and IPTV recording
 
-Branch `refactor/vplayer-p13` (pipelined; based on phase-12 step-1 commit
-`e4a9ab581`, rebased onto the phase-12 merge before step 1). Evidence
-`refactor-evidence/vplayer/p13/`. Line numbers at `e4a9ab581`.
+Branch `refactor/vplayer-p13` (pipelined; prepared off phase-12 step-1
+`e4a9ab581`). Evidence `refactor-evidence/vplayer/p13/`. Line numbers at
+`e4a9ab581`. **Production moves are blocked until phase 12 merges.**
 
-**Collaborator A — `vp_player_menu.dart` (+ helper if > 500):**
-`_showTracksSheet` 13900 (179; legacy sheet path — dead behind
-`kUnifiedPlayerMenuEnabled`, moves verbatim), `_openPlayerMenuAt` 14082,
-`_openPlayerMenuQuick` 14109, `_hidePlayerMenu` 14168,
-`_menuApplyTrackChange` 14174, `_audioTrackChoiceChanged` 14184,
-`_menuSelectAudio` 14198, `_withManualSubtitleChoice` 14207,
-`_menuSubtitlesOff` 14228, `_menuSelectEmbeddedSubtitle` 14240,
-`_menuSelectAddonSubtitle` 14261, `_applyStremioSubtitleFromTracksSheet`
-14305, `_buildPlayerMenuPanel` 14342 (builder; lexical contexts). ≈ 520
-lines. The `_playerMenuKey` GlobalKey and menu notifiers stay State-owned
-(allocation rule); every earlier Host forwarder reaching these members
-(sleep, display, PiP, subtitle apply/sources, identify) becomes a declared
-patched facade adapter.
+### Pipeline rebase rule (design review P2)
 
-**Collaborator B — `vp_iptv_recording.dart`:** `_recordIptvWatchForChannel`
-6290, `_desktopCaptureForCurrent` 6322, `_toggleRecording` 6338 (173),
-`_playingLiveUrl` 6512, `_engineRecordUrlForCurrent` 6525,
-`_refreshEngineRecordingState` 6559, `_recordingFileName` 6593,
-`_currentRecordingResource` 6611, `_tapMpvLogsForRecording` 6647,
-`_untapMpvLogs` 6657, `_startRecording` 6662, `_disarmStrayRecording` 6734,
-`_stopRecording` 6754, `_publishRecording` 6813, `_recordingTargetPath`
-6845, plus `_canRecord` 1153 / `_recordingActiveNow` 12095 getters (by
-reader count). ≈ 610 lines → likely two files (actions vs resources).
-Recording fields by reader/writer count; revision listener and desktop
-recording service subscriptions keep their dispose positions.
+After phase 12 merges, rebase this branch onto the accepted merge, then
+compare the facade, earlier destinations, fixtures, checker inputs and
+diagnostic inventory against the preparation snapshot. Reuse a proof only
+where its inputs are identical; otherwise refresh the affected step-T
+manifests/prototypes, analyzer probes and mutation witnesses. Record the
+final original revision and the new baseline; never accept changed
+outcomes by re-recording. P12's `--at` revision is its actual accepted
+merge. Protect all 25 earlier destinations.
+
+### Moves (frozen)
+
+**Menu (13 methods, 523 lines → two files):**
+- `vp_player_menu_ui.dart` — presentation helper: `_showTracksSheet` 13900
+  (a **live** action: it resolves metadata, captures subtitle
+  coordinates/cache identity, checks its *parameter* context's mounted
+  state and opens the unified menu; only `TracksSheet.show` and its
+  callbacks are dormant under the constant-true flag, so
+  `_applyStremioSubtitleFromTracksSheet` is dormant too) and
+  `_buildPlayerMenuPanel` 14342 (plain helper invocation, no new widget
+  boundary, GlobalKey retained; local `cacheKey` snapshot 14352 kept).
+- `vp_player_menu.dart` — controller: `_openPlayerMenuAt`,
+  `_openPlayerMenuQuick`, `_hidePlayerMenu`, `_menuApplyTrackChange`,
+  `_audioTrackChoiceChanged`, `_menuSelectAudio`,
+  `_withManualSubtitleChoice`, `_menuSubtitlesOff`,
+  `_menuSelectEmbeddedSubtitle`, `_menuSelectAddonSubtitle`,
+  `_applyStremioSubtitleFromTracksSheet`.
+- The helper and controller reach each other through **facade Host
+  routing**. The lexical `BuildContext context` parameter of
+  `_showTracksSheet` is preserved (the TV caller passes State context
+  through a Builder whose parameter is `_`, 11378).
+
+**State-owned (menu):** `_showPlayerMenu` (overlay, Back, keyboard,
+pointer and reset read/write it: 11495, 11500, 11507, 12726, 13851, 13886,
+14447), `_playerMenuKey`, `_controlsVisible`, `_subtitleSelectionCorrection`
+and the seven snapshot fields `_playerMenuInitialSection`, `_menuImdbId`,
+`_menuContentType`, `_menuSeason`, `_menuEpisode`, `_menuCachedSlots`,
+`_menuCacheKey` (avoids forwarding sibling-owned fields).
+
+**Recording (15 methods − 1 + 2 getters, ≈ 600 lines → two files):**
+`vp_iptv_recording.dart` (actions: `_toggleRecording`, `_startRecording`,
+`_stopRecording`, `_disarmStrayRecording`, `_refreshEngineRecordingState`,
+`_publishRecording`) and `vp_iptv_recording_resources.dart` (resources:
+`_desktopCaptureForCurrent`, `_playingLiveUrl`, `_engineRecordUrlForCurrent`,
+`_recordingFileName`, `_currentRecordingResource`, `_tapMpvLogsForRecording`,
+`_untapMpvLogs`, `_recordingTargetPath`; the filename helpers use
+`DateTime.now()` and stay in the bridge), plus the `_canRecord` /
+`_recordingActiveNow` getters. **`_recordIptvWatchForChannel` moves to
+phase 15** (it writes on-demand Continue Watching history; its caller
+excludes live channels).
+
+**Recording fields:** `_recordingSupported`, `_isRecording` (also read by
+retained renderer eligibility at 3206 → State-owned, forwarded),
+`_recordingTempPath`, `_engineTaskId`, `_engineFlagOn`,
+`_engineRefreshTicket`, `_recordLogSub`, `_desktopRecordingRevisionListener`,
+`_recordingStartGen` — each classified at step T by reader/writer count;
+literal/null initializers inert. Listener registration (1563–1569), removal
+(10153–10158) and log cancellation (10255) stay in place. Collaborators
+assigned eagerly after phase 12's; no constructor reads its Host.
+
+**Patched facade adapters (exactly two):** `_VpDisplayModeHostAdapter`
+(`openPlayerMenuQuick`, 15143–15144) and `_VpSleepTimerHostAdapter`
+(15221–15222): `_s._openPlayerMenuQuick(section)` → the owning
+collaborator, whole-class `patched_class_projection`, one counted rewrite
+each. Subtitle-apply key forwarder (14818), PiP, addon-subtitle and
+identify adapters unchanged.
+
+**Hosts (frozen at step T):** chains to P9–P12 collaborators, sleep and
+display as narrow facade-routed operations/values (never collaborator
+objects); recording needs live `iptvSourceId`/`iptvSources` selectors and
+preserves `Future<({String id, int revision})?>` (resource lookup),
+`stopRecording({bool userInitiated = true})`,
+`recordingTargetPath(String, {String extension = 'mkv'})`. Probe the four
+existing `_toggleRecording` async-context infos.
+
+**Retained references (7 menu + 21 recording):**
+
+| Group | Facade lines |
+|---|---|
+| Tracks / quick menu / hide / panel | 11413, 13469 / 4405, 15144, 15222 / 11504 / 13852 |
+| Recording stop | 768, 883, 1556, 6924, 7118 |
+| Engine refresh | 2328, 7100, 11740 |
+| Recording toggle / publish | 11457, 13605 / 10200, 10205 |
+| Can-record / active getters | 11455, 11457, 13602, 13604 / 998, 11456, 12203, 13603 |
+
+(6978 watch registration moves with phase 15.) Stop-before-open ordering
+in retune, catch-up, channel switch and live-source replacement preserved.
+
+### Step S2d — two-predicate seam (reviewed separately)
+
+Recording uses raw platform predicates (2314–2315, 6385, 6563, 6704,
+6798, 6876, 10199) outside S2, across **three protocols**: libmpv TEE,
+Android foreground-service engine, desktop HTTP capture. **Decision:** S2d
+overrides only the facade's **two desktop-support checks** so the real
+Record button reaches the TEE path with the existing native fake (same
+rules as S2/S2b/S2c: native defaults, evaluation counts/order, installers
+unchanged, independent negatives). The **Android engine path and its
+publication are device-pending** (the service wrappers return early on
+desktop: `live_recording_service.dart:458`, `:521`;
+`android_native_downloader.dart:131`, `151`, `196`).
 
 ### Step 0 — characterization of the original
 
-Menu: open at section / quick sections from dock buttons (sleep, speed,
-aspect, shuffle, tracks), hide, audio track change + persistence + policy
-refresh, subtitle off/embedded/addon selection with manual-choice latch,
-Stremio subtitle from the sheet (download/apply/rollback through phases
-10–11), menu panel props (current values, callbacks, identify label),
-TV focus and Back, legacy sheet path classified dead. Recording: start/stop
-via engine (native mpv stream-record) and desktop capture, file
-naming/target paths, publish, stray-recording disarm on channel change,
-mpv log tap, limits/permissions dialogs, profile/disposal during an active
-recording, recording state refresh; through S2 where platform-gated.
-Early windows; mutation proofs; coverage; Claude sample.
+- **Menu:** open-at-section and quick sections (sleep, speed, aspect,
+  shuffle, tracks), hide; `_showTracksSheet` movie metadata success/failure,
+  content/profile change during metadata resolution, disposal, repeated
+  opens, quick-open's intentional absence of metadata fetches; audio change
+  + persistence/policy overlap; manual-choice failure restoration across
+  token/revision changes; closing the panel while an addon download/apply
+  is pending (closure permits cache write-back and sync reset,
+  `player_menu_panel.dart:382`, 702–707); TV focus/Back. Callback identity
+  is not compared by `didUpdateWidget` (345–379).
+- **Recording boundary matrix:** TEE start (captures player/channel/
+  generation before directory work, generation check before arming, disarm
+  after a stale property write, 6664–6696); desktop start (captures
+  channel/URL, awaits capacity, path/resource resolution and service start,
+  mostly `mounted`-guarded, 6386–6407, 6454–6491); refresh ticket bumped
+  only after the valid-live-channel check (6564–6579) — an older query
+  completing after a newer non-live/null-channel refresh; stop clears state
+  before awaiting the native clear (6759–6775) — overlapping stops, restart
+  during a held clear, failed clear, empty output, publication overlapping
+  restart; **disposal's distinct inline protocol** (generation bump/state
+  clear, property clear, unawaited publication, 10179–10205) — never
+  replaced by `stopRecording`. Profile capture happens inside service start
+  (`desktop_recording_service.dart:348`, `live_recording_service.dart:462`)
+  after earlier UI awaits: hold pre-service work across A→B and inspect
+  job/artifact ownership incl. revoked/deleted profiles; an already-started
+  capture keeps its owner. Desktop capture uses a continuous, cancellable
+  stream (the recordings fixture's real loopback technique,
+  `test/support/recordings_fixture.dart:167`); drain captures/artifacts
+  before resetting profiles. Defects → Follow-ups.
+- Early windows; mutation proofs; coverage; Claude sample.
+
+### Reduced-gate test inventory (design review P2)
+
+Freeze an explicit test-file inventory for base, step 0 and gate: every
+`test/features/video_player/**` file, the source readers and theme guards,
+and affected external boundary tests (`test/player_menu_panel_test.dart`,
+recording/profile contracts, recordings fixture tests). **Every expected
+suite must load** before identities/outcomes are compared (scoped
+`suite_evidence.py compare` filters the baseline to suites present, so an
+omitted file could otherwise pass). CI's curated behaviour list still runs
+on every `gate` push as additional coverage.
 
 ### Device checklist (end of series)
 
-Player menu on phone/TV/desktop: every section opens and applies; IPTV
-recording starts, stops, saves to the expected place and appears in
-Recordings; recording stops on channel change and app background.
+Player menu on phone/TV/desktop: every section opens and applies. IPTV
+recording, three contracts: **TEE** (Apple TV/iOS) stops on zap and player
+close; **Android engine** and **desktop capture** intentionally survive
+zaps and player closure; each saves to the expected place and appears in
+Recordings.
 
 ## Follow-ups
 
@@ -4605,3 +4717,16 @@ grouped with the sheet, facade Host routing, live State context for tile
 taps, lexical setters/contexts guarded); async matrix at the real guards
 and commit points. P3s: 8-method/7-reference ledger, no adapter patches,
 corrected phase-1 helper names; concrete TV and CI coverage.
+
+## Phase 13 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+Speed-up plan judged sound with fixes: frozen reduced-gate inventory with
+required suite loading; pipeline rebase re-compares all inputs. Phase 13:
+S2d (two desktop-support predicates) for TEE coverage, Android engine
+device-pending; menu helper+controller and recording two files; menu
+snapshot fields, `_showPlayerMenu`, key and `_isRecording` State-owned;
+exactly two patched adapters (display, sleep); `_showTracksSheet` live
+(only the legacy sheet dormant); recording boundary matrix incl. disposal's
+inline protocol and profile capture inside service start; watch-history
+write moved to phase 15; three recording contracts in the checklist;
+milestone scenarios named; old map/rule 7 marked superseded.
