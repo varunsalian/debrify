@@ -1,4 +1,5 @@
 # Files allowed over the size limit, with their maximum line count.
+# 2026-10-15 vplayer P12 Step 1: eight frozen moves; facade ratchet lowered 15880 -> 15329; remaining responsibilities exit in phases 13–25.
 # 2026-10-14 vplayer P11 Step 1: 15 frozen moves; facade ratchet lowered 16477 -> 15880; remaining responsibilities exit in phases 12–25.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 # 2026-10-11 vplayer P1 (a): formatter-only growth, 18 AST-optional commas; exit: phase-25 facade measurement.
@@ -14,7 +15,7 @@
 # 2026-10-13 vplayer P8 Step 1: 14 frozen PiP/lifecycle moves; facade ratchet lowered 17004 -> 16829; exit: remaining declared video-player phases (D6).
 # 2026-10-14 vplayer P9 Step 1: 21 frozen subtitle auto-sync moves; facade ratchet lowered 16829 -> 16603; exit: remaining declared video-player phases (D6).
 # 2026-10-14 vplayer P10 Step 1: five frozen subtitle apply moves; facade ratchet lowered 16603 -> 16477; exit: remaining declared video-player phases (D6).
-15880 lib/screens/video_player_screen.dart
+15329 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

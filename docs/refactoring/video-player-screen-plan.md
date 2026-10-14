@@ -4317,6 +4317,25 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   final proofs/baseline rerun from scratch. No production/pubspec change,
   allowlisting or bug fix. Step 1 continues within the approved frozen boundary.
 
+### 2026-10-15 — Phase 12 Step 1 frozen production move complete
+
+- Step-0b revision `7600bb4de`; eight frozen methods moved to
+  VpIdentifyTitle/VpIdentifyTitleUi, **263/470** lines. Facade Host routing,
+  live State tap context, lexical builders/setters, five State manual fields,
+  P11 complete chain and seven retained positions preserved; constructor
+  appends two inert assignments after P11. PiP/earlier adapters unchanged.
+- Fresh isolated-parser materialization equals Step-T files byte-for-byte;
+  current checker PASS zero differences, 23 earlier destinations protected.
+  Optional-comma proof reused by exact hashes; format, size, architecture and
+  diff/analyzer comparator PASS. Facade ratchet 15,880 → **15329**. Focused **102/102 PASS**
+  on moved code, including the mutation-proven original guide-pause overlap.
+- CI current/self-test and both analyzer inputs → P12; P11 `--at 0c2fb62e8`
+  added, earlier histories/seams retained. Both destinations in theme manifest,
+  rendered set/all three guard lists; tests registered. Six probe-known unused
+  facade warnings recorded verbatim, preserving exact imports and info mappings.
+  Evidence `p12/step1/`; complete receipts/hashes. Clean-tree gate follows.
+  No bug fix, dependency change or later phase started.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

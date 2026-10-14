@@ -9234,3 +9234,34 @@ stable tested tree; new test analyzer zero issues and normal formatting passes.
 Pilots and the preliminary baseline stopped for a test-only lint correction are
 uncredited; final witnesses and baseline were rerun from scratch. No flake
 stabilization, assertion weakening, failure allowlisting or application change.
+
+
+## Phase 12 Step 1 — frozen identify-title extraction (2026-10-15)
+
+Eight methods now live in **VpIdentifyTitle (263 lines)** and the inert
+**VpIdentifyTitleUi (470 lines)**. The facade Host routes sheet/dialog actions
+without a sibling import; result taps read live State context, builder contexts
+and setters remain lexical. All five manual fields stay State-owned. Eager
+constructor assignments follow the P11 collaborators, with no constructor Host
+read or resource allocation. Seven retained substitutions preserve statement
+positions (five live, two legacy dormant); PiP and all earlier adapters unchanged.
+
+Fresh materialization exactly equals the normally formatted Step-T files.
+Complete token comparison/current-tree protection PASS, zero differences, all
+23 earlier destinations protected. Optional-comma sites and idempotence retain
+Step-T proof by byte-identical input/output hashes; current formatting rerun PASS.
+Facade **15329** lines (ratchet lowered from 15,880); both bridges ≤500.
+All 102 identify-title cases pass on the moved code, including the original
+assertion-killed guide-pause witness. Size, architecture, format, analyzer identity comparator and diff checks
+pass; the clean-tree gate follows.
+
+CI current/self-test and analyzer manifest/inventory now use P12; P11 historical
+check `--at 0c2fb62e8` added, P1–P10 and all seam proofs preserved. Theme manifest,
+rendered set and all three source-guard lists include both files. No moved method
+has a direct source-reader anchor requiring retargeting; validating readers chain
+through the applied manifest. Original Step-0/0b files are registered. Six
+move-induced unused facade import warnings from the approved Step-T probe are
+registered verbatim; directive tokens retained and analyzer identity inventory
+already contains their maxima and the receiver/formatter infos. No lint fix or
+application behaviour change. Evidence `p12/step1/` records materialization,
+hashes, parser isolation, commands and complete focused/structural results.

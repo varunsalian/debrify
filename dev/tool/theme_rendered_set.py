@@ -78,6 +78,8 @@ ROUTE_BOUNDARIES = (
     "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_language_policy.dart",
     "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart",
     "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart",
+    "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart",
+    "lib/features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart",
     "lib/services/video_player_launcher.dart",
     "lib/features/player_launch/presentation/legacy_launch/",
     "lib/screens/catalog_item_detail_screen.dart",
