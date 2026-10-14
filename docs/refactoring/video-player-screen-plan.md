@@ -1778,6 +1778,22 @@ renderer; the menu reflects the corrected selection.
 
 ## Follow-ups
 
+- **Phase-10 subtitle apply races (S2c original, preserved):** decoder logs read
+  the current attempt, so an old log can roll B back. An admitted A rollback
+  continues after B/reset/profile/replacement and restores captured ids/path
+  without rechecking generation. Apply captures the native platform before its
+  await but reads the live player afterward. A manual addon apply can set its
+  stale native URI after reset while its outer caller rejects persistence.
+- Track preferences re-acquire the active profile after reading a map: A's
+  delayed map can overwrite B, including unrelated entries. Rollback waits for
+  the newest matching completer; an older physical write finishing last can
+  overwrite its correction. Tests inspect both profiles' physical contents.
+- A saved menu callback after disposal continues apply/persistence when the
+  correction notifier was already null; clearing a non-null correction throws
+  in debug mode. The existing disposal resume write can erase the previous
+  preference entry in that scenario. Original outcomes are pinned, not fixed.
+  Phase-10 evidence and follow-up coverage: `p10/step0/` and the deps matrix.
+
 - **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
   before output creation does not latch the first open; an older held
   background pause can complete after foreground play and win. A user-pause
@@ -3662,6 +3678,34 @@ Validation: exact diff and `git diff --check`.
   is archived uncredited; the full corrected command completed with exit 0.
   Final generator replay produces the identical manifest. No application,
   pubspec or production CI transition; Step 0 continues on S2c.
+
+### 2026-10-14 — Phase 10 Step 0 complete; STOP before production moves
+
+- Revision: original S2c application `a2e034cb3`, tooling `1a51002e7`; final
+  characterization commit recorded in `p10/step0/commit.json`. Added 87 original
+  caller cases in nine behavior files plus one shared H driver. Unchanged files
+  pass on detached S2c and current worktree; no private State/attempt injection.
+- Coverage: all five moves, 152 systematic AST points and 23 retained references.
+  Final mutations: 110 assertion kills, seven source-audited original-caller
+  equivalences, 35 flow/type-invalid candidates (no credit); 20/20 live retained
+  references killed, three dormant legacy sheet references frozen. Every new
+  test has a final-file original assertion witness. Full matrix, exact patches,
+  physical A/B storage writes, commands/hashes and classifications in deps and
+  `p10/step0/`.
+- Final serial original/current focused runs PASS (87 cases each); new-test
+  analyzer zero issues; format/idempotence, size/architecture and diff PASS.
+  Fresh `suite_evidence.py run/compare` versus the S2c original suite PASS:
+  13,552 successes, unchanged 13 failures/28 load errors/20 skips; exactly 87
+  additions, zero missing/changed/fixed/newly skipped identities. Tested tree
+  stable, same SDK/flags. `after-step0*`, baseline comparison and checks archived.
+- Notes: source-specific rejection and separate request counts prevent later
+  defaults from masking retained-call gaps. A non-pumping mutation matcher and
+  preliminary fixture expectations were corrected on the original; failed
+  attempts remain uncredited. One owned orphan tester from an uncredited timeout
+  was cleaned up. Seven equivalences are documented, not removed. Cross-profile
+  writes, stale rollback/native effects and disposed notifier behavior remain
+  as-is in Follow-ups. No allowlist/pubspec/production change; CI/source/theme
+  transition and the actual move remain Step 1. No build or device work.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

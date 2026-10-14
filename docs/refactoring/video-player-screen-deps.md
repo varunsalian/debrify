@@ -6611,3 +6611,372 @@ and facade imports. The new fixture is registered in the universal Dart checker
 self-test. Commands and completed results are archived in `p10/stepT/`; the 36
 unchanged prerequisite checks (26 existing Dart manifests, P1–P9 `--at`, Kotlin)
 are reused from `independent-results.json`.
+
+
+## Phase 10 Step 0 — original subtitle apply and diagnostics
+
+Application ORIGINAL: independently accepted S2c `a2e034cb3`; tooling checkpoint
+`1a51002e7`. No application or pubspec change. All tests call the original menu,
+subscription, initialization, channel guide or PiP paths. No private State access,
+fabricated attempt objects or source-text behavior assertions. Shared H pending
+activities remain separate from completion; native/player/50 ms/poll/storage
+barriers assert the intermediate state before release. Synthetic HTTP only.
+
+### Coverage matrix
+
+| Original responsibility | Executable boundary / evidence |
+|---|---|
+| `_waitForSubtitleTracks` | Real startup preferences caller: auto/no/empty IDs ignored; arrival on first poll; exactly fifty 100 ms polls; content token retirement. Startup is deliberately held before autosave registration. `wait_test`. |
+| `_setNativeSubtitleVisibilityForTrack` | Non-native/text/bitmap/image/external; request-level visibility calls; previous bitmap restoration; failed visibility retry; iOS PiP entry/start/restore via existing S2 original callers. `contract`, `renderer`, existing `pip_ios`. |
+| `_setSubtitleTrackWithDiagnostics` | Five boundary stages × reset/profile/dispose/replacement (20 cases); success/codec failures, exact 50 ms turn and no turn after immediate failure; Android directSurface rejection/directMediaCodec acceptance/TV exemption (8 cases); automatic live guard after visibility versus manual addon’s null callback. `boundaries`, `late_failures`, `callers`, `contract`, `renderer`. |
+| `_handleSubtitleApplyFailure` | Old log acts on current B; delayed A exception rejected; admitted A rollback continues across B; same-A log then exception handled once; previous auto/same/no/addon/bitmap and failed fallback; repeated/held-turn menu correction; both notifier values after disposal. `races`, `contract`, `disposed_menu`. |
+| `_showSubtitleFailureMessage` | Mounted floating four-second snackbar replaces previous message; renderer/load/missing-track/native/empty-codec/outer unexpected diagnostic-sink failure messages; post-disposal suppression. `contract`, `renderer`, `late_failures`. |
+| Persistence / completer identities | Successful/failed optimistic write × same/reset/profile/dispose; physical values before release; newest matching completer and both release orders; outgoing map written into incoming physical profile; unrelated entries in A/B; active attempt cleared before later audio write. `persistence`. |
+| Retained callers / early windows | Startup stored/no-preference/off/language/foreign-off/forced paths and stored rejection source; live audio change; public off, embedded/addon callbacks; four TV/channel opens; PiP adapter. Early startup held during track/default restoration before autosave registration; saved callbacks cross disposal. `callers`, existing `subtitle_edges`, `wait`, `disposed_menu`. |
+| Dormant compatibility | Unified menu’s constant-true return precedes TracksSheet installation: one legacy apply and two old addon error-message references. Only notifier listener is dormant; assignments are observable after disposal and are tested. Exact bodies remain frozen. |
+| Device-pending | Physical native decoder/bitmap rendering and platform PiP presentation remain device checks. Property protocols, rejection policy, callback/owner timing and UI outcomes are executable; no device parity claim. |
+
+The systematic original AST inventory enumerates **152 statement/branch/literal
+points** in five moves (including both counter increments) and **23 retained
+executable occurrences**. First sweep: 91 assertion kills, 24 survivors, 35
+invalid candidates and two uncredited runtime/timeout attempts. Closure: 19
+additional assertion kills and seven original-caller equivalences. Final: **110
+assertion kills /110 non-equivalent valid candidates**, seven equivalents and
+35 flow/type-invalid candidates; no compile/load error or timeout earns kill
+credit. Parent expression/snapshot/branch behavior is independently covered for
+invalid declaration-removal candidates. Retained-reference sweep: **20/20 live
+references assertion-killed**, three dormant legacy references frozen.
+
+`p10/step0/inventory-full.json`, `mutation-plan.json`, `mutation-final-results.json`,
+`reference-final-results.json`, patches and per-mutation JSON/stderr logs contain
+exact offsets (UTF-16), candidates, commands, completed events, test identities
+and hashes. `equivalence-source-audit.json` and adjacent original source context
+record the producer/guard invariants. Tests were strengthened for request counts,
+exact diagnostics, the post-visibility guard’s false result, failed visibility
+retry, current completer ownership and still-open parent menu selection.
+Initial uncredited attempts remain separate from final witnesses.
+
+### Systematic mutation table (S2c application code)
+
+| Point | Original declaration / line / kind | Final fate | Assertion witness / audit |
+|---|---|---|---|
+| `p000` | `_waitForSubtitleTracks`:3891 / integer | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p001` | `_waitForSubtitleTracks`:3891 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p002` | `_waitForSubtitleTracks`:3891 / integer | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p003` | `_waitForSubtitleTracks`:3891 / postfix | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p004` | `_waitForSubtitleTracks`:3892 / branch | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p005` | `_waitForSubtitleTracks`:3892 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p006` | `_waitForSubtitleTracks`:3892 / return | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p007` | `_waitForSubtitleTracks`:3893 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p008` | `_waitForSubtitleTracks`:3895 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p009` | `_waitForSubtitleTracks`:3896 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p010` | `_waitForSubtitleTracks`:3896 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p011` | `_waitForSubtitleTracks`:3896 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p012` | `_waitForSubtitleTracks`:3896 / string | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p013` | `_waitForSubtitleTracks`:3896 / operator | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p014` | `_waitForSubtitleTracks`:3896 / string | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p015` | `_waitForSubtitleTracks`:3898 / branch | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p016` | `_waitForSubtitleTracks`:3899 / return | assertion-killed | subtitle track polling accepts a real arrival while ignoring placeholders |
+| `p017` | `_waitForSubtitleTracks`:3901 / statement | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p018` | `_waitForSubtitleTracks`:3901 / integer | assertion-killed | subtitle track polling times out at exactly fifty polls while ignoring placeholders |
+| `p019` | `_setNativeSubtitleVisibilityForTrack`:3909 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p020` | `_setNativeSubtitleVisibilityForTrack`:3910 / branch | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p021` | `_setNativeSubtitleVisibilityForTrack`:3910 / return | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p022` | `_setNativeSubtitleVisibilityForTrack`:3911 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p023` | `_setNativeSubtitleVisibilityForTrack`:3912 / operator | assertion-killed | subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility |
+| `p024` | `_setNativeSubtitleVisibilityForTrack`:3913 / operator | assertion-killed | PiP iOS entry prepares native subtitles once, sends its distinct handle and leaves auto-enter unarmed |
+| `p025` | `_setNativeSubtitleVisibilityForTrack`:3913 / operator | assertion-killed | PiP iOS entry prepares native subtitles once, sends its distinct handle and leaves auto-enter unarmed |
+| `p026` | `_setNativeSubtitleVisibilityForTrack`:3914 / statement | assertion-killed | subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility |
+| `p027` | `_setNativeSubtitleVisibilityForTrack`:3915 / string | assertion-killed | subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility |
+| `p028` | `_setNativeSubtitleVisibilityForTrack`:3916 / conditional | assertion-killed | subtitle apply native success persists the matching identity after its diagnostic turn |
+| `p029` | `_setNativeSubtitleVisibilityForTrack`:3916 / string | assertion-killed | subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility |
+| `p030` | `_setNativeSubtitleVisibilityForTrack`:3916 / string | assertion-killed | subtitle apply native success persists the matching identity after its diagnostic turn |
+| `p031` | `_setSubtitleTrackWithDiagnostics`:3929 / branch | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p032` | `_setSubtitleTrackWithDiagnostics`:3929 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p033` | `_setSubtitleTrackWithDiagnostics`:3929 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p034` | `_setSubtitleTrackWithDiagnostics`:3929 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p035` | `_setSubtitleTrackWithDiagnostics`:3929 / return | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p036` | `_setSubtitleTrackWithDiagnostics`:3929 / boolean | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p037` | `_setSubtitleTrackWithDiagnostics`:3930 / branch | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p038` | `_setSubtitleTrackWithDiagnostics`:3930 / operator | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p039` | `_setSubtitleTrackWithDiagnostics`:3930 / operator | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p040` | `_setSubtitleTrackWithDiagnostics`:3930 / operator | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p041` | `_setSubtitleTrackWithDiagnostics`:3933 / operator | assertion-killed | subtitle Android image renderer directMediaCodec phone selection preserves rejection and native visibility |
+| `p042` | `_setSubtitleTrackWithDiagnostics`:3935 / statement | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p043` | `_setSubtitleTrackWithDiagnostics`:3936 / string | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p044` | `_setSubtitleTrackWithDiagnostics`:3938 / statement | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p045` | `_setSubtitleTrackWithDiagnostics`:3939 / interpolated-string | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p046` | `_setSubtitleTrackWithDiagnostics`:3940 / string | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p047` | `_setSubtitleTrackWithDiagnostics`:3942 / return | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p048` | `_setSubtitleTrackWithDiagnostics`:3942 / boolean | assertion-killed | subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility |
+| `p049` | `_setSubtitleTrackWithDiagnostics`:3944 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p050` | `_setSubtitleTrackWithDiagnostics`:3944 / prefix | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p051` | `_setSubtitleTrackWithDiagnostics`:3945 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p052` | `_setSubtitleTrackWithDiagnostics`:3953 / statement | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p053` | `_setSubtitleTrackWithDiagnostics`:3956 / statement | assertion-killed | subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is |
+| `p054` | `_setSubtitleTrackWithDiagnostics`:3956 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p055` | `_setSubtitleTrackWithDiagnostics`:3959 / statement | assertion-killed | subtitle apply native success persists the matching identity after its diagnostic turn |
+| `p056` | `_setSubtitleTrackWithDiagnostics`:3960 / branch | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p057` | `_setSubtitleTrackWithDiagnostics`:3960 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p058` | `_setSubtitleTrackWithDiagnostics`:3960 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p059` | `_setSubtitleTrackWithDiagnostics`:3960 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p060` | `_setSubtitleTrackWithDiagnostics`:3960 / return | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p061` | `_setSubtitleTrackWithDiagnostics`:3960 / boolean | assertion-killed | subtitle startup automatic apply superseded by a manual choice returns false to the original restore diagnostic |
+| `p062` | `_setSubtitleTrackWithDiagnostics`:3961 / statement | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p063` | `_setSubtitleTrackWithDiagnostics`:3963 / statement | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p064` | `_setSubtitleTrackWithDiagnostics`:3964 / interpolated-string | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p065` | `_setSubtitleTrackWithDiagnostics`:3965 / interpolated-string | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p066` | `_setSubtitleTrackWithDiagnostics`:3966 / interpolated-string | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p067` | `_setSubtitleTrackWithDiagnostics`:3968 / statement | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p068` | `_setSubtitleTrackWithDiagnostics`:3969 / return | assertion-killed | subtitle failed apply falls back to no for previous 2 selection |
+| `p069` | `_setSubtitleTrackWithDiagnostics`:3969 / boolean | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p070` | `_setSubtitleTrackWithDiagnostics`:3975 / statement | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p071` | `_setSubtitleTrackWithDiagnostics`:3975 / integer | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p072` | `_setSubtitleTrackWithDiagnostics`:3976 / branch | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p073` | `_setSubtitleTrackWithDiagnostics`:3976 / return | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p074` | `_setSubtitleTrackWithDiagnostics`:3976 / boolean | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p075` | `_setSubtitleTrackWithDiagnostics`:3978 / statement | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p076` | `_setSubtitleTrackWithDiagnostics`:3978 / boolean | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p077` | `_setSubtitleTrackWithDiagnostics`:3979 / return | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p078` | `_setSubtitleTrackWithDiagnostics`:3979 / boolean | assertion-killed | subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is |
+| `p079` | `_handleSubtitleApplyFailure`:3986 / branch | assertion-killed | subtitle old decoder log rolls the current accepted B attempt back as-is |
+| `p080` | `_handleSubtitleApplyFailure`:3986 / operator | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p081` | `_handleSubtitleApplyFailure`:3986 / operator | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p082` | `_handleSubtitleApplyFailure`:3987 / operator | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p083` | `_handleSubtitleApplyFailure`:3988 / operator | assertion-killed | subtitle late track exception after profile obeys only the original failure admission guard |
+| `p084` | `_handleSubtitleApplyFailure`:3989 / return | assertion-killed | subtitle delayed A apply exception is rejected after B becomes current |
+| `p085` | `_handleSubtitleApplyFailure`:3991 / statement | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p086` | `_handleSubtitleApplyFailure`:3991 / boolean | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p087` | `_handleSubtitleApplyFailure`:3992 / statement | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p088` | `_handleSubtitleApplyFailure`:3992 / boolean | equivalent-original-callers | Original producer invariants; equivalence-source-audit.json |
+| `p089` | `_handleSubtitleApplyFailure`:3993 / statement | assertion-killed | subtitle admitted rollback clears the active attempt before a later audio preference write |
+| `p090` | `_handleSubtitleApplyFailure`:3993 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p091` | `_handleSubtitleApplyFailure`:3995 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p092` | `_handleSubtitleApplyFailure`:3996 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p093` | `_handleSubtitleApplyFailure`:3996 / operator | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p094` | `_handleSubtitleApplyFailure`:3997 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p095` | `_handleSubtitleApplyFailure`:3997 / conditional | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p096` | `_handleSubtitleApplyFailure`:3997 / operator | assertion-killed | subtitle failed apply falls back to no for previous auto selection |
+| `p097` | `_handleSubtitleApplyFailure`:3997 / operator | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p098` | `_handleSubtitleApplyFailure`:3997 / string | assertion-killed | subtitle failed apply falls back to no for previous auto selection |
+| `p099` | `_handleSubtitleApplyFailure`:4000 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p100` | `_handleSubtitleApplyFailure`:4000 / operator | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p101` | `_handleSubtitleApplyFailure`:4002 / statement | assertion-killed | subtitle late text failure restores a previously selected bitmap with native visibility enabled |
+| `p102` | `_handleSubtitleApplyFailure`:4003 / statement | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p103` | `_handleSubtitleApplyFailure`:4005 / statement | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p104` | `_handleSubtitleApplyFailure`:4005 / boolean | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p105` | `_handleSubtitleApplyFailure`:4006 / statement | assertion-killed | subtitle rollback second native failure preserves one original codec message |
+| `p106` | `_handleSubtitleApplyFailure`:4007 / interpolated-string | assertion-killed | subtitle rollback second native failure preserves one original codec message |
+| `p107` | `_handleSubtitleApplyFailure`:4010 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p108` | `_handleSubtitleApplyFailure`:4011 / statement | assertion-killed | subtitle failed rollback visibility retries no-track visibility before applying the no track |
+| `p109` | `_handleSubtitleApplyFailure`:4012 / statement | assertion-killed | subtitle rollback second native failure preserves one original codec message |
+| `p110` | `_handleSubtitleApplyFailure`:4020 / statement | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p111` | `_handleSubtitleApplyFailure`:4020 / conditional | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p112` | `_handleSubtitleApplyFailure`:4022 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p113` | `_handleSubtitleApplyFailure`:4023 / statement | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p114` | `_handleSubtitleApplyFailure`:4024 / conditional | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p115` | `_handleSubtitleApplyFailure`:4024 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p116` | `_handleSubtitleApplyFailure`:4026 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p117` | `_handleSubtitleApplyFailure`:4027 / branch | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p118` | `_handleSubtitleApplyFailure`:4027 / operator | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p119` | `_handleSubtitleApplyFailure`:4027 / operator | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p120` | `_handleSubtitleApplyFailure`:4027 / null | assertion-killed | subtitle apply native success persists the matching identity after its diagnostic turn |
+| `p121` | `_handleSubtitleApplyFailure`:4028 / statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p122` | `_handleSubtitleApplyFailure`:4028 / interpolated-string | assertion-killed | subtitle previous addon identity and external path restore together after an embedded failure |
+| `p123` | `_handleSubtitleApplyFailure`:4030 / statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p124` | `_handleSubtitleApplyFailure`:4030 / conditional | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p125` | `_handleSubtitleApplyFailure`:4030 / string | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p126` | `_handleSubtitleApplyFailure`:4036 / branch | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p127` | `_handleSubtitleApplyFailure`:4036 / operator | assertion-killed | subtitle initialization reaches the forced original apply caller |
+| `p128` | `_handleSubtitleApplyFailure`:4037 / statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p129` | `_handleSubtitleApplyFailure`:4038 / statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p130` | `_handleSubtitleApplyFailure`:4043 / branch | assertion-killed | subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is |
+| `p131` | `_handleSubtitleApplyFailure`:4043 / return | assertion-killed | subtitle rollback track held across dispose preserves the original admitted work |
+| `p132` | `_handleSubtitleApplyFailure`:4044 / statement | assertion-killed | subtitle previous addon identity and external path clear when native rollback fails |
+| `p133` | `_handleSubtitleApplyFailure`:4045 / statement | assertion-killed | subtitle checking-turn decoder correction clears optimistic menu while apply remains pending |
+| `p134` | `_handleSubtitleApplyFailure`:4046 / statement | assertion-killed | subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is |
+| `p135` | `_handleSubtitleApplyFailure`:4048 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p136` | `_handleSubtitleApplyFailure`:4049 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p137` | `_handleSubtitleApplyFailure`:4049 / conditional | assertion-killed | subtitle empty codec failure uses the generic diagnostic and restores native visibility |
+| `p138` | `_handleSubtitleApplyFailure`:4049 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p139` | `_handleSubtitleApplyFailure`:4049 / operator | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p140` | `_handleSubtitleApplyFailure`:4049 / null | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p141` | `_handleSubtitleApplyFailure`:4050 / string | assertion-killed | subtitle empty codec failure uses the generic diagnostic and restores native visibility |
+| `p142` | `_handleSubtitleApplyFailure`:4051 / interpolated-string | assertion-killed | subtitle rollback second native failure preserves one original codec message |
+| `p143` | `_handleSubtitleApplyFailure`:4052 / statement | assertion-killed | subtitle empty codec failure uses the generic diagnostic and restores native visibility |
+| `p144` | `_handleSubtitleApplyFailure`:4053 / statement | assertion-killed | subtitle apply non-native success persists the matching identity after its diagnostic turn |
+| `p145` | `_handleSubtitleApplyFailure`:4054 / interpolated-string | assertion-killed | subtitle empty codec failure uses the generic diagnostic and restores native visibility |
+| `p146` | `_showSubtitleFailureMessage`:4059 / branch | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+| `p147` | `_showSubtitleFailureMessage`:4059 / return | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p148` | `_showSubtitleFailureMessage`:4060 / declaration-statement | invalid-candidate | Flow/type-invalid removal/replacement; no kill credit; parent behavior separately exercised |
+| `p149` | `_showSubtitleFailureMessage`:4061 / statement | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+| `p150` | `_showSubtitleFailureMessage`:4062 / statement | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+| `p151` | `_showSubtitleFailureMessage`:4066 / integer | assertion-killed | subtitle failure replaces the previous snackbar with a floating four-second message |
+
+Seven equivalences: initial false-return arm is unreachable because every pure
+non-null current closure is checked synchronously by its caller immediately
+before entry (the post-await check is non-equivalent); the signed generation
+sequence is unobserved with identity admission preserved; handled stamping and
+both single-token OR-to-AND rewrites preserve admission under original producers.
+Dart precedence matters: the rewrites are `(handled && differentObject) ||
+differentGeneration` and `handled || (differentObject && differentGeneration)`.
+No simplification or counter change is made. Current-object/generation capture,
+flags, comparisons and every dormant statement remain token-frozen.
+
+### Frozen retained-occurrence ledger
+
+| Occurrence | Original caller / line | Fate / witness |
+|---|---|---|
+| `r01` | `_bindPlayerInstanceSubscriptions`:2667 | assertion-killed — subtitle apply native success persists the matching identity after its diagnostic turn |
+| `r02` | `_goToNextEpisode`:5066 | assertion-killed — subtitle magic next open uses its diagnostic no-track caller and preserves rollback |
+| `r03` | `_switchToStremioTvChannel`:8721 | assertion-killed — subtitle Stremio guide open uses its diagnostic no-track caller and preserves rollback |
+| `r04` | `_goToChannelById`:8933 | assertion-killed — subtitle guide channel open uses its diagnostic no-track caller and preserves rollback |
+| `r05` | `_goToNextChannel`:9062 | assertion-killed — subtitle next channel open uses its diagnostic no-track caller and preserves rollback |
+| `r06` | `_showTracksSheet`:14888 | dormant-unified-menu-compatibility — constant kUnifiedPlayerMenuEnabled returns before TracksSheet installation; no public caller of the old addon helper; frozen unchanged body/token proof |
+| `r07` | `_menuSubtitlesOff`:15049 | assertion-killed — superseded subtitle apply cannot roll back newer accepted selection |
+| `r08` | `_menuSelectEmbeddedSubtitle`:15065 | assertion-killed — subtitle failure replaces the previous snackbar with a floating four-second message |
+| `r09` | `_menuSelectEmbeddedSubtitle`:15070 | assertion-killed — subtitle apply native success persists the matching identity after its diagnostic turn |
+| `r10` | `_menuSelectAddonSubtitle`:15093 | assertion-killed — subtitle addon download failure uses the load-failure message caller without native apply or persistence |
+| `r11` | `_menuSelectAddonSubtitle`:15115 | assertion-killed — subtitle addon unexpected diagnostic sink failure reaches its outer failure-message caller |
+| `r12` | `_applyStremioSubtitleFromTracksSheet`:15129 | dormant-unified-menu-compatibility — constant kUnifiedPlayerMenuEnabled returns before TracksSheet installation; no public caller of the old addon helper; frozen unchanged body/token proof |
+| `r13` | `_applyStremioSubtitleFromTracksSheet`:15150 | dormant-unified-menu-compatibility — constant kUnifiedPlayerMenuEnabled returns before TracksSheet installation; no public caller of the old addon helper; frozen unchanged body/token proof |
+| `r14` | `_restoreTrackPreferences`:15278 | assertion-killed — subtitle old track poll stops on content token change before touching incoming preferences |
+| `r15` | `_restoreTrackPreferences`:15412 | assertion-killed — subtitle stored preference rejection preserves its restore-specific diagnostic source |
+| `r16` | `_refreshSubtitleAudioPolicy`:15567 | assertion-killed — subtitle live audio policy uses the off apply caller before source priority reselects |
+| `r17` | `_applyDefaultSubtitleLanguage`:15595 | assertion-killed — subtitle initialization reaches the foreign off original apply caller |
+| `r18` | `_applyDefaultSubtitleLanguage`:15637 | assertion-killed — subtitle initialization reaches the no preference original apply caller |
+| `r19` | `_applyDefaultSubtitleLanguage`:15648 | assertion-killed — subtitle initialization reaches the off original apply caller |
+| `r20` | `_applyDefaultSubtitleLanguage`:15676 | assertion-killed — subtitle initialization reaches the language original apply caller |
+| `r21` | `_applyForcedSubtitle`:15717 | assertion-killed — subtitle initialization reaches the forced original apply caller |
+| `r22` | `_applyExternalSubtitleTrack`:15818 | assertion-killed — subtitle previous addon identity and external path clear when native rollback fails |
+| `r23` | `_VpPipLifecycleHostAdapter`:16181 | assertion-killed — PiP iOS entry prepares native subtitles once, sends its distinct handle and leaves auto-enter unarmed |
+
+The outer addon catch is reached by a failing public debugPrint sink while a
+native apply error is being diagnosed; this pins its unexpected-error fallback
+without injecting a private attempt or modifying production. Stored rejection
+pins the diagnostic source rather than allowing a later default selection to
+mask the missing stored call. Foreign-off startup pins its separate native
+request; three serial original controls pass before its mutation is credited.
+
+### Final per-test assertion witnesses
+
+Each of the 87 new cases passes on unmodified S2c and is killed by a valid original
+application mutation. `test-witnesses/` records complete final-file runs, patches
+and hashes; `per-test-witness-ledger.json` maps each test. The shared helper entry
+mutations supplement the point-specific sweep; they do not replace it.
+
+| Test | Original assertion-failing witness |
+|---|---|
+| subtitle apply visibility held across reset preserves the original admitted work | `apply-entry` |
+| subtitle apply visibility held across profile preserves the original admitted work | `apply-entry` |
+| subtitle apply visibility held across dispose preserves the original admitted work | `apply-entry` |
+| subtitle apply visibility held across replacement preserves the original admitted work | `apply-entry` |
+| subtitle apply track held across reset preserves the original admitted work | `apply-entry` |
+| subtitle apply track held across profile preserves the original admitted work | `apply-entry` |
+| subtitle apply track held across dispose preserves the original admitted work | `apply-entry` |
+| subtitle apply track held across replacement preserves the original admitted work | `apply-entry` |
+| subtitle rollback visibility held across reset preserves the original admitted work | `apply-entry` |
+| subtitle rollback visibility held across profile preserves the original admitted work | `apply-entry` |
+| subtitle rollback visibility held across dispose preserves the original admitted work | `apply-entry` |
+| subtitle rollback visibility held across replacement preserves the original admitted work | `apply-entry` |
+| subtitle rollback track held across reset preserves the original admitted work | `apply-entry` |
+| subtitle rollback track held across profile preserves the original admitted work | `apply-entry` |
+| subtitle rollback track held across dispose preserves the original admitted work | `apply-entry` |
+| subtitle rollback track held across replacement preserves the original admitted work | `apply-entry` |
+| subtitle success turn held across reset preserves the original admitted work | `apply-entry` |
+| subtitle success turn held across profile preserves the original admitted work | `apply-entry` |
+| subtitle success turn held across dispose preserves the original admitted work | `apply-entry` |
+| subtitle success turn held across replacement preserves the original admitted work | `apply-entry` |
+| subtitle initialization reaches the stored original apply caller | `apply-entry` |
+| subtitle initialization reaches the no preference original apply caller | `apply-entry` |
+| subtitle initialization reaches the off original apply caller | `apply-entry` |
+| subtitle initialization reaches the language original apply caller | `apply-entry` |
+| subtitle initialization reaches the foreign off original apply caller | `apply-entry` |
+| subtitle initialization reaches the forced original apply caller | `apply-entry` |
+| subtitle live audio policy uses the off apply caller before source priority reselects | `apply-entry` |
+| subtitle magic next open uses its diagnostic no-track caller and preserves rollback | `apply-entry` |
+| subtitle next channel open uses its diagnostic no-track caller and preserves rollback | `apply-entry` |
+| subtitle guide channel open uses its diagnostic no-track caller and preserves rollback | `apply-entry` |
+| subtitle Stremio guide open uses its diagnostic no-track caller and preserves rollback | `apply-entry` |
+| subtitle automatic language apply rejects its old content after held visibility without setting a second track | `apply-entry` |
+| subtitle startup automatic apply superseded by a manual choice returns false to the original restore diagnostic | `apply-entry` |
+| subtitle apply non-native success persists the matching identity after its diagnostic turn | `message-entry` |
+| subtitle apply native success persists the matching identity after its diagnostic turn | `message-entry` |
+| subtitle failed apply falls back to no for previous auto selection | `apply-entry` |
+| subtitle failed apply falls back to no for previous 2 selection | `apply-entry` |
+| subtitle rollback second native failure preserves one original codec message | `message-entry` |
+| subtitle failure replaces the previous snackbar with a floating four-second message | `message-entry` |
+| subtitle previous addon identity and external path restore together after an embedded failure | `apply-entry` |
+| subtitle previous addon identity and external path clear when native rollback fails | `apply-entry` |
+| subtitle empty codec failure uses the generic diagnostic and restores native visibility | `message-entry` |
+| subtitle late text failure restores a previously selected bitmap with native visibility enabled | `apply-entry` |
+| subtitle failed rollback visibility retries no-track visibility before applying the no track | `message-entry` |
+| subtitle saved menu callback after disposal continues a previously null correction through native apply and persistence as-is | `apply-entry` |
+| subtitle saved menu callback after disposal throws while clearing the corrected notifier as-is | `apply-entry` |
+| subtitle late visibility exception after reset obeys only the original failure admission guard | `apply-entry` |
+| subtitle late visibility exception after profile obeys only the original failure admission guard | `apply-entry` |
+| subtitle late visibility exception after dispose obeys only the original failure admission guard | `apply-entry` |
+| subtitle late visibility exception after replacement obeys only the original failure admission guard | `apply-entry` |
+| subtitle late track exception after reset obeys only the original failure admission guard | `apply-entry` |
+| subtitle late track exception after profile obeys only the original failure admission guard | `apply-entry` |
+| subtitle late track exception after dispose obeys only the original failure admission guard | `apply-entry` |
+| subtitle late track exception after replacement obeys only the original failure admission guard | `apply-entry` |
+| subtitle manual addon admitted apply continues across content reset before its outer guard rejects persistence | `apply-entry` |
+| subtitle rollback waits for successful optimistic persistence across same content | `apply-entry` |
+| subtitle rollback waits for successful optimistic persistence across reset | `apply-entry` |
+| subtitle rollback waits for successful optimistic persistence across profile | `apply-entry` |
+| subtitle rollback waits for successful optimistic persistence across dispose | `apply-entry` |
+| subtitle rollback waits for failed optimistic persistence across same content | `apply-entry` |
+| subtitle rollback waits for failed optimistic persistence across reset | `apply-entry` |
+| subtitle rollback waits for failed optimistic persistence across profile | `apply-entry` |
+| subtitle rollback waits for failed optimistic persistence across dispose | `apply-entry` |
+| subtitle rollback awaits the newest matching completer when writes finish oldest first | `apply-entry` |
+| subtitle rollback awaits the newest matching completer when writes finish newest first | `apply-entry` |
+| subtitle delayed preference map is written into the incoming profile as-is | `apply-entry` |
+| subtitle admitted rollback clears the active attempt before a later audio preference write | `apply-entry` |
+| subtitle old decoder log rolls the current accepted B attempt back as-is | `apply-entry` |
+| subtitle delayed A apply exception is rejected after B becomes current | `apply-entry` |
+| subtitle admitted A rollback continues over B without a generation recheck | `apply-entry` |
+| subtitle repeated decoder corrections reconcile the unified menu and reopened selection | `apply-entry` |
+| subtitle checking-turn decoder correction clears optimistic menu while apply remains pending | `apply-entry` |
+| subtitle A decoder rollback followed by the same A apply exception is handled once at the unchanged generation | `apply-entry` |
+| subtitle Android bitmap codec renderer directSurface phone selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android bitmap codec renderer directSurface TV exempt selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android bitmap codec renderer directMediaCodec phone selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android bitmap codec renderer directMediaCodec TV exempt selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android image renderer directSurface phone selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android image renderer directSurface TV exempt selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android image renderer directMediaCodec phone selection preserves rejection and native visibility | `apply-entry` |
+| subtitle Android image renderer directMediaCodec TV exempt selection preserves rejection and native visibility | `apply-entry` |
+| subtitle track polling times out at exactly fifty polls while ignoring placeholders | `wait-entry` |
+| subtitle track polling accepts a real arrival while ignoring placeholders | `wait-entry` |
+| subtitle old track poll stops on content token change before touching incoming preferences | `wait-entry` |
+| subtitle addon download failure uses the load-failure message caller without native apply or persistence | `message-entry` |
+| subtitle addon unexpected diagnostic sink failure reaches its outer failure-message caller | `message-entry` |
+| subtitle stored preference rejection preserves its restore-specific diagnostic source | `apply-entry` |
+
+
+### Step-0 suite baseline and final validation
+
+Fresh full suite at tooling checkpoint `1a51002e7` with S2c application code:
+**13,552 successes**, unchanged **13 failures /28 load errors /20 skips**.
+`suite_evidence.py compare --against p10/step0/original-suite.jsonl` PASS:
+**87 added identities only**, zero missing/changed/fixed/newly skipped identities.
+Same Flutter 3.44.8 /Dart 3.12.2 and hooks/no-pub flags; tested tree stayed stable.
+`p10/step0/after-step0.jsonl`, environment, stderr and comparison are complete;
+this is the new Step-0 baseline for the future move gate, not an allowlist update.
+
+Final unchanged original/current focused runs each pass all 87 cases; files are
+byte-identical across worktrees. Final witness runs use the formatted, lint-clean
+files and cover every case. New-test analysis has zero issues; format/idempotence,
+size/architecture and diff checks pass. Application/pubspecs remain unchanged.
+The current S2c analyzer/checker inputs remain selected; production P10 CI/theme
+and source-test retargets are reserved for Step 1.
+
+Notes: initial wrong fixture expectations, the matcher that did not pump its
+mutated future, and missing direct visibility/request assertions were corrected
+on the original before final credit. No production fix or weakened assertion.
+The timed-out detached tester left by an uncredited mutation was terminated;
+`orphan-cleanup.json` records the exact owned process. No partial/interrupted run
+is credited. The public diagnostic-sink failure is an explicit unexpected-error
+transport fixture; normal native failures and HTTP 500 are separate cases.
