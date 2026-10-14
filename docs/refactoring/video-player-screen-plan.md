@@ -2275,36 +2275,124 @@ phase-13 branch; they reconcile at rebase.
 | `vp_resume_restore.dart` | `_maybeRestoreResume` 10454 (204), `_seekForResume` 10659, `_verifyResumeLanding` 10697, `_resumeSeekLanded` 10739 | ≈ 330 |
 | `vp_resume_save.dart` | `_getEnhancedPlaybackState` 10783 (121), `_resumeSaveBlocked` 10905, `_observeServerWatch` 10925, `_saveResume` 10948, `_saveResumeLocked` 10969 (198) | ≈ 385 |
 
-**Stays State-owned (shared-state rule):** the resume write guard and
-epoch, the save lock, `_persistablePosition`, playback position/duration,
-playlist/index/identity, `_currentLocalMovieImdbId` and completion flags
-(phase 7 Host), `_speedBeforeHold`/`_playbackSpeed`/`_aspectMode` (phase 4
-display controller, read through the facade), `_activeExternalSubtitlePath`,
-server-watch controller and epoch, launch slots (`readLocalResume` static
-stays on the widget). Field decisions for resume-only fields (restore
-flags, verification timers/tickets) by reader/writer count at step T.
+**Zero field moves (frozen):** `_resumeWriteGuard`, `_resumeSaveLock`,
+`_resumeVerifyEpoch`, `_autosaveTimer`, `_isAutoAdvancing`,
+`_isManualEpisodeSelection`, `_allowResumeForManualSelection`,
+`_manualSelectionResetTimer`, `_serverWatch`, `_openedWatchSource`,
+`_watchOpenEpoch` stay State-owned (retained lifecycle/navigation/engine
+code uses them); guard, lock and server-watch object identities preserved.
+Completion identity/flags are borrowed live from the phase-7 collaborator
+and speed/aspect from phase 4 through facade adapters; restore's
+speed/aspect **setters write phase 4's fields directly** (10585–10588),
+never via display actions. `_activeExternalSubtitlePath` is not read.
 
-**Earlier Host forwarders reaching moved members** (sleep, display,
-completion, PiP `saveResume`, trackers, subtitle preferences, …) become
-declared patched facade adapters — exact list at step T. Retained call
-sites: open/startup restore, every `_saveResume` caller (pause, seek,
-speed/aspect, sleep, EOF, dispose, background, source switch, episode
-navigation), autosave timer, menus — measured at step T.
+**Static call boundary:** restore's `VideoPlayerScreen.readLocalResume`
+call (10572) goes through an exact Host method — `Future<Map<String,
+dynamic>?> readLocalResume({required String? contentId, required String
+resumeKey, required Future<Map<String, dynamic>?> Function() enhanced})` —
+whose adapter forwards to the static method with no guards, copies or
+eager `enhanced` call (the checker forbids a destination importing the
+facade, `check_search_architecture.py:1037`); proved in the real manifest
+with negatives.
+
+**Hosts (9 / 27 / 37 names; restore 31 declarations):** facade routing
+between the three siblings; eight live widget selectors (`title`,
+`videoUrl`, `contentImdbId`, `iptvSourceId`, `resumePolicy`, three tracker
+percentages); `Future<double?> currentEpisode…Percent({bool forGuide =
+false})`, `Future<void> waitForDuration()`, `({int? season, int? episode})
+traktSeasonEpisode()`. No `context`/`_vpSetState`. Inert constructors after
+phase 13's.
+
+**Patched facade adapters (exactly three):** `_VpLocalCompletionHostAdapter`
+(`resumeKey`, 14993), `_VpDisplayModeHostAdapter` (`saveResume`, 15141) and
+`_VpSleepTimerHostAdapter` (`saveResume`, 15236) — whole-class
+`patched_class_projection`, one counted rewrite each, regenerated **on the
+accepted phase-13 base** preserving phase 13's `openPlayerMenuQuick`
+rewrites in the display and sleep adapters. PiP, Trakt's borrowed guard
+and tracker `persistablePosition` forwarders unchanged.
+
+**Retained references (28):** `_resumeKey` 14993; `_resumeIdForEntry`
+2213; `_maybeRestoreResume` 2424, 2432, 2511, 2523, 9274; `_seekForResume`
+2429, 2520, 2776, 3343, 8136, 8160, 8313, 8372; `_observeServerWatch` 2743,
+2807, 3700, 3953, 10133; `_saveResume` 2562, 7972, 9168, 10222, 11978,
+13504, 15141, 15236. Preserve the six-second autosave timer, disposal's
+observe → close → later save order, and the outgoing checkpoint before
+guard clear/index change (9168–9176). All three files under
+`presentation/legacy_video_player/`; preserve the four analyzer infos on
+enhanced read / locked save.
+
+**History:** a pre-phase-13 step-T materialization is **provisional**; after
+phase 13 merges, rebase and regenerate the complete facade
+partition/import/order/adapter proofs, refresh analyzer probes and mutation
+witnesses, protect every earlier destination derived from the applied
+manifests (≈ 29), P12 `--at 1d7699d2e`, P13 at its accepted merge, S2d with
+the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
 
 ### Step 0 — characterization of the original
 
-Resume keys per source type (TorBox/PikPak/filename hash fallback, series
-vs movie, playlist entries, custom identity); restore: local vs tracker
-progress reconciliation via `readLocalResume`, held target and the resume
-write guard (no save while a requested resume has not landed), seek and
-landing verification incl. short-duration and failure fallbacks, restore
-after renderer replacement; save: enhanced state contents (speed incl. held
-2× exclusion, aspect, subtitle/external path, audio), blocked saves
-(validation, transitions, short durations), the save lock and queued
-saves sampling at write time, server-watch observation ordering, disposal
-save, profile handoff during a held save (captured-scope writes: pin
-as-is; cross-profile Follow-up if present). Mutation proofs; coverage;
-Claude sample. Reduced-gate test inventory per the speed-up section.
+- **Keys** per source (TorBox/PikPak/filename-hash fallback, series vs
+  movie, playlist entries, custom identity).
+- **Restore stale-result/arbitration matrix:** `_maybeRestoreResume` clears
+  the guard before early exits, loads policy, spends all three launch flags,
+  waits for duration, then does storage/player work without an internal
+  mounted/profile/media-generation guard (10464). Hold policy, duration,
+  tracker snapshot, completion/local-state delivery, rate/zoom and seek
+  separately; cross newer restore, source/item change, profile handoff,
+  replacement and disposal; record late effects and errors. Arbitration:
+  **Trakt → MDBList → Simkl**, strict `>` replacement, equal-percent ties,
+  explicit-launch precedence, policy-masked rewatch inputs, source-specific
+  vs canonical lookup, `preferLocalResume` bypassing the window; speed
+  `1.0` skips `setRate`; locally finished movies skip local presentation
+  restoration; first-load flags spent even on the local-preferred path;
+  `_seekForResume` reads `_resumeVerifyEpoch` **after** its seek await
+  (10694) — keep that capture moment.
+- **Landing verification:** three retries polling 1.5 s, 1.5 s, 3 s, then a
+  final 5 s check; landing confirmation waits 800 ms; deadlines use real
+  `DateTime.now()` (10761–10778) and the guard settles after 30 s real time.
+  Deterministic landing, transient landing, epoch/user-seek/disposal aborts
+  use the fixture (model masked/unlanded seek acknowledgements; the fake's
+  seek normally lands, `fake_player.dart:171`); **timeout/retry claims need
+  a bounded real-time driver, otherwise device-pending** (no clock seam in
+  this phase). Track outstanding verifier futures before teardown.
+- **Save (corrected):** a held target is **substituted** (save continues
+  with speed/aspect), skipped only when outside the reported duration
+  (10989); near-finished targets get no guard; user-seek release;
+  completion suppression; generic transitions block saves only for IPTV;
+  manual selection blocks only debounced saves. Writes contain position,
+  duration, speed, aspect and timestamps (not audio/subtitle ids — those
+  are phase 11) but share `playback_state_v1` with track preferences
+  (`video_progress_storage.dart:27` replaces the row;
+  `track_preferences_storage.dart:72` edits nested preferences) — cover
+  phase-13 menu / phase-11 preference vs resume-write overlap (the resume
+  lock does not serialize them) and pin any loss/overwrite as-is.
+- **Save/profile matrix at real capture points:** position/duration/speed/
+  aspect sampled when the lock callback starts (10975–11014); legacy key,
+  effective identity and source id read after enhanced persistence awaits
+  (11142–11156); `positionOverride` survives queueing. Hold at lock queueing,
+  enhanced-map delivery, enhanced physical write and legacy DB
+  admission/transaction (`IptvMediaStore:218`); cross content changes,
+  A→B/A→B→A, deletion, disposal and renderer replacement; inspect both
+  profiles' physical maps and DB rows incl. unrelated entries. Request-time
+  vs queued blocking; dropped debounced ticks vs queued explicit
+  checkpoints; completion after admission; enhanced failure then legacy;
+  legacy failure propagation; lock recovery; `_observeServerWatch` runs
+  before the busy-lock drop while checkpoint notification happens only on
+  the final explicit-save branch.
+- **Server watch** (no seam): existing client factories and real
+  watch-target `Torrent`s via `MediaServerService.openLibrary(...).sources(...)`
+  — request-time observations, held-resume suppression, EOF, outgoing
+  observation before `commit(null)`, source identity, authorization
+  retirement, observation-before-close on disposal.
+- **Source-text guards (five, validating reader + removal/reorder
+  negatives):** `media_server_player_resume_test.dart:105` (+ exact static
+  forwarding in the adapter; add non-negative anchor checks),
+  `playback_checkpoint_contract_test.dart:18` (per moved declaration),
+  `android_tv_mdblist_progress_source_test.dart:209`,
+  `manual_source_validation_contract_test.dart:255`,
+  `media_server_watch_player_wiring_test.dart:58`. The reduced-gate
+  inventory includes these five and the resume/server/profile boundary
+  tests; every expected suite must load.
+- Early windows; mutation proofs; coverage; Claude sample.
 
 ### Device checklist (end of series)
 
@@ -5083,3 +5171,12 @@ exactly two patched adapters (display, sleep); `_showTracksSheet` live
 inline protocol and profile capture inside service start; watch-history
 write moved to phase 15; three recording contracts in the checklist;
 milestone scenarios named; old map/rule 7 marked superseded.
+## Phase 14 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+P2s folded: zero field moves and the exact `readLocalResume` Host forwarder;
+exactly three patched adapters (two overlapping phase 13, regenerated on its
+merge); provisional history until phase 13 merges; corrected save semantics
+and the save/profile matrix at real capture points; restore arbitration and
+stale-result matrix; landing timeouts via a bounded real-time driver or
+device-pending; five source-text guards retargeted. P3: 28-reference ledger,
+CI transition.
