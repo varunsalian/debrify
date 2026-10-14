@@ -4336,6 +4336,31 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   Evidence `p12/step1/`; complete receipts/hashes. Clean-tree gate follows.
   No bug fix, dependency change or later phase started.
 
+### 2026-10-15 — Phase 12 gate complete; STOP
+
+- Tested clean Step-1 `e4a9ab581`; gate revision in `p12/gate/commit.json`.
+  Fresh full suite versus Step-0b baseline by identity PASS: **13,850 success**,
+  identical 13 failures/28 load errors/20 skips; zero changed/added/missing/fixed/
+  newly skipped identities. Stable tree, same SDK and harness flag. No flaky-test
+  stabilization, assertion weakening or failure allowlisting.
+- All **46** mechanical jobs PASS: every other Dart manifest self-test, P12
+  universal/current/same-revision check, P1–P11 histories, Kotlin self-test,
+  S/S2/S2b/S2c proofs, size/architecture and negatives. Isolated copied parsers,
+  kernel deletion and nested routing audited; 23 earlier destinations protected.
+  Facade **15329**; bridges **263/470** lines; ratchet enforced.
+- CI analyzer/shared allowlist and P12 comparator PASS (**124 scoped occurrences,
+  zero additions**); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Evidence `p12/gate/`: exact commands, complete logs, metadata, input and
+  artifact hashes; pubspec unchanged. Independent-sample closure in deps.
+  Evidence-only launcher/scheduling corrections documented: four completed
+  individual checks retained, every unfinished job rerun fresh; interrupted logs
+  uncredited and full suite untouched. No application/test input change.
+- Phone/TV title search/episode choice, platform IME/remote focus, native subtitle
+  presentation/decoding and physical PiP remain device-pending. Manual subtitle
+  identity vs tracker/skip launch identity, dormant paths and original defects
+  preserved. No production bug fix or later phase/push/merge/switch. STOP.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

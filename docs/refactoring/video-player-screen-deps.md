@@ -9265,3 +9265,44 @@ registered verbatim; directive tokens retained and analyzer identity inventory
 already contains their maxima and the receiver/formatter infos. No lint fix or
 application behaviour change. Evidence `p12/step1/` records materialization,
 hashes, parser isolation, commands and complete focused/structural results.
+
+
+## Phase 12 clean-tree gate (2026-10-15)
+
+Tested clean Step-1 `e4a9ab581`, stable throughout. Fresh full
+`suite_evidence.py run vplayer/p12/gate/flutter-gate --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true` matches the Step-0b baseline by every
+identity: **13,850 success /13 failure /28 load error /20 skip**; zero changed,
+added, missing, fixed or newly skipped identities. Three passing additions to
+Step 0 are documented above. Same SDK/config/flag. No flake stabilization or
+failure allowlist change.
+
+**46/46 mechanical checks PASS:** 26 other Dart manifest self-tests, P12
+universal self-test/current/same-revision `--at`, P1–P11 named historical checks,
+Kotlin checker self-test, S/S2/S2b/S2c proofs, size, architecture and architecture
+negatives. Current P12 has zero differences and protects all 23 earlier
+destinations. Primary and nested parser invocations use isolated copied packages
+under `.dart_tool/vplayer_parser/`, deleting kernels on copy; audit archived.
+CI-scope analyzer/shared warning allowlist and P12 comparator PASS: **124 scoped
+diagnostic occurrences, zero additions** (infos and multiplicity included).
+The six move-induced unused warnings remain the exact Step-T probe identities;
+no imports, lints or application behaviour were repaired. CI formatting plus the
+changed theme guard PASS. Facade **15329** lines; bridges **263/470**.
+
+Both `flutter build apk --release --no-pub` and
+`flutter build macos --release --no-pub` complete under nice19, without run or
+install. Suites and builds serialized; app/input hashes and pubspec unchanged
+throughout. Commands, complete logs, SDK/tree metadata, checker receipts, analyzer
+and format logs, build logs and artifact hashes: `p12/gate/`.
+
+Evidence-only launcher/path and scheduling corrections left inputs unchanged.
+Four completed individual checker receipts were retained after reordering; every
+unfinished checker restarted from scratch. Interrupted job logs and the
+superseded aggregate launcher are uncredited, archived with the scheduling note;
+the full suite continued untouched. No partial result is used as a pass.
+
+Phone/TV identify-title flow, platform keyboard/remote focus, native decoding and
+subtitle presentation, and physical PiP remain device-pending. Manual identity
+changes subtitle/prefetch identity while tracker/skip launch identity is retained;
+original stale-result/early-guide defects and dormant references remain frozen.
+No later phase, application bug fix, push, merge or branch switch performed.
