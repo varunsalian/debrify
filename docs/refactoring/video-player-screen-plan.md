@@ -3722,6 +3722,23 @@ Validation: exact diff and `git diff --check`.
   load errors/20 skips; 87 original additions only). Guards retained verbatim.
   Production move and gate follow in separate commits.
 
+### 2026-10-14 — Phase 10 Step 1 applied
+
+- Revision: addendum `8fb405474`; production revision recorded in
+  `p10/step1/commit.json`. Five moves into the 223-line subtitle apply bridge;
+  facade 16,477 lines (ratchet lowered from 16,603). Exact 18-name /21-declaration
+  Host, four chains, two patched declarations and 23 references; State-owned
+  diagnostics/notifier and teardown order preserved.
+- Current manifest PASS, zero differences; all 87 focused original-caller cases
+  PASS on moved code. Format, size/architecture, scoped analyzer comparator and
+  retargeted S2/S2b/S2c source proof PASS. Evidence `p10/step1/`; full gate follows
+  on this clean commit. S2c proof validates the live reader result and retains
+  earlier independent negatives, adding five exact adapter-projection negatives.
+- CI current/self-test and both analyzer inputs now P10; P1–P9 histories, all
+  seam proofs, nine behavior registrations, theme/source lists updated. No
+  pubspec or behavior change. Initial projection expected-shape error (missing
+  annotation tokens) is archived uncredited; corrected proof rerun passes.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

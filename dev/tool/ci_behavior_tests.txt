@@ -528,3 +528,14 @@ test/features/video_player/video_player_subtitle_sync_overlay_test.dart
 test/features/video_player/video_player_subtitle_sync_races_test.dart
 test/features/video_player/video_player_subtitle_sync_settings_test.dart
 test/features/video_player/video_player_subtitle_sync_sources_test.dart
+
+# Video player P10: subtitle apply, diagnostics, renderer policy and persistence races.
+test/features/video_player/video_player_subtitle_apply_boundaries_test.dart
+test/features/video_player/video_player_subtitle_apply_callers_test.dart
+test/features/video_player/video_player_subtitle_apply_contract_test.dart
+test/features/video_player/video_player_subtitle_apply_disposed_menu_test.dart
+test/features/video_player/video_player_subtitle_apply_late_failures_test.dart
+test/features/video_player/video_player_subtitle_apply_persistence_test.dart
+test/features/video_player/video_player_subtitle_apply_races_test.dart
+test/features/video_player/video_player_subtitle_apply_renderer_test.dart
+test/features/video_player/video_player_subtitle_apply_wait_test.dart

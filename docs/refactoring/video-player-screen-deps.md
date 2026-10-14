@@ -7041,3 +7041,36 @@ successes /13 failures /28 load errors /20 skips**, with the 87 additions versus
 the original and no changed/missing identity. Application, tests, dependencies
 and SDK are unchanged by this documentation-only addendum; baseline reuse is
 recorded in `p10/step0b/baseline-note.json`. No allowlist change.
+
+## Phase 10 Step 1 — subtitle apply bridge applied
+
+Five original methods now live in `vp_subtitle_apply.dart` (223 formatted lines).
+The facade ratchet falls from 16,603 to **16,477**. The applied ledger exhaustively
+classifies 789 spans: 782 retained, five moved and two patched. All 23 retained
+references remain in their original statement positions, including the PiP
+adapter's single counted projection. Constructor assignment is appended after
+`_subtitleSync`. Diagnostic fields and correction notifier remain State-owned;
+disposal/reset/log-subscription teardown ordering is unchanged.
+
+The approved Host has 18 names /21 declarations and four registered complete
+chains. The frozen Android getter reads `VpS2Hooks.isAndroid` live. Constructors
+are inert. The destination imports no facade or sibling controller. Exact
+imports, comments, captured locals, field writes and rollback guards match the
+reviewed Step-T materialization; its optional-comma proof still applies unchanged.
+
+CI current/self-test plus both analyzer inputs select P10; named P1–P9 histories
+and S/S2/S2b/S2c proofs remain enabled. Nine characterization files are registered
+in the behavior list. Theme manifest, rendered set and all three source-guard
+lists include the bridge; the dated facade baseline is lowered. The S2c source
+proof follows the validating per-declaration reader to the live moved method,
+then independently checks predicate count/order and exact live adapter bodies.
+Five additional projection negatives reject wrong/bypassed/cached/twice-read
+Android and cached renderer state; earlier negatives remain.
+
+Pre-commit checks: exhaustive current P10 comparison zero differences, S2/S2b/
+S2c proof with all independent negatives, 87 focused behavior cases, formatting,
+size/architecture and scoped analyzer identity comparator pass. Commands/logs
+are in `p10/step1/`. The first projection check omitted annotation tokens in its
+expected getter shape; its failed attempt is retained uncredited, and the exact
+`@override` shape passes the complete rerun. No application behavior correction,
+dependency change or analyzer allowlist expansion. Full clean-tree gate follows.

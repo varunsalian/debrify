@@ -9,6 +9,7 @@ from check_verbatim_moves import ROOT, parse, ensure_parser_package
 from check_dart_moves import run_manifest
 from check_settings_moves import tokens
 from dart_move_history import git_text, load_manifest
+from vplayer_source_reader import read
 
 SOURCE = 'lib/screens/video_player_screen.dart'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p8_seam.json'
@@ -110,6 +111,18 @@ def renderer_site_errors(members):
     return errors
 
 
+def subtitle_projection_errors(members):
+    """Check the live default path independently of ownership normalization."""
+    expected = {
+        'isAndroid': ['@', 'override', 'bool', 'get', 'isAndroid', '=>', HOOK, '.', 'isAndroid', ';'],
+        'androidVideoRendererMode': [
+            '@', 'override', 'AndroidVideoRendererMode', 'get', 'androidVideoRendererMode', '=>',
+            '_s', '.', '_androidVideoRendererMode', ';'],
+    }
+    return ['S2c live Host projection changed: ' + name
+            for name, body in expected.items() if members.get(name) != body]
+
+
 def source_errors(sources):
     errors = ['platform hook reference outside facade: ' + path for path, source in sources.items()
               if path != SOURCE and HOOK in source]
@@ -165,6 +178,27 @@ def prove(package, self_test=False):
     state = next(n for n in unit['declarations'] if n['name'] == '_VideoPlayerScreenState')
     renderer_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                         for n in state['members'] if n['name'] in {*S2B_SITES, S2C_SITE}}
+    projection_members = None
+    if S2C_SITE not in renderer_members:
+        # Resolve and validate the LIVE owner before examining the relocated
+        # predicate. This never returns git-show text or bypasses the move proof.
+        resolved = read('_VideoPlayerScreenState.' + S2C_SITE, package)
+        assert resolved['path'] == 'lib/features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart'
+        moved = parse({'live': resolved['source']}, package, ownership=True)['live']['declarations'][0]
+        body = [t['text'] for t in moved['tokens'] if not t['comment']]
+        for before, after in [
+            (['_host', '.', 'isAndroid'], [HOOK, '.', 'isAndroid']),
+            (['_host', '.', 'androidVideoRendererMode'], ['_androidVideoRendererMode']),
+        ]:
+            hits = includes(body, before)
+            assert len(hits) == 1, (before, hits)
+            at = hits[0]
+            body[at:at + len(before)] = after
+        renderer_members[S2C_SITE] = body
+        adapter = next(n for n in unit['declarations'] if n['name'] == '_VpSubtitleApplyHostAdapter')
+        projection_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                              for n in adapter['members']}
+        errors += subtitle_projection_errors(projection_members)
     errors += renderer_site_errors(renderer_members)
     negatives = []
     if self_test:
@@ -192,6 +226,23 @@ def prove(package, self_test=False):
         mutated = copy.deepcopy(members);mutated['other'] = ['_installed', '=', 'hooks', ';'];assert installation_errors(mutated);negatives.append('assignment in other member')
         assert source_errors({SOURCE:sources[SOURCE], 'lib/other.dart':HOOK + '.install(null);'});negatives.append('other lib reference')
         assert source_errors({SOURCE:sources[SOURCE] + '\n' + HOOK + '.install(null);'});negatives.append('facade installer reference')
+        if projection_members is not None:
+            for name, member, before, after in [
+                ('wrong predicate', 'isAndroid', ['isAndroid', ';'], ['isIOS', ';']),
+                ('override bypassed', 'isAndroid', [HOOK], ['Platform']),
+                ('cached predicate', 'isAndroid', [HOOK, '.', 'isAndroid'], ['_cachedAndroid']),
+                ('predicate twice', 'isAndroid', [HOOK, '.', 'isAndroid'],
+                 [HOOK, '.', 'isAndroid', '&&', HOOK, '.', 'isAndroid']),
+                ('cached renderer', 'androidVideoRendererMode', ['_s', '.', '_androidVideoRendererMode'], ['_cachedRenderer']),
+            ]:
+                mutated = copy.deepcopy(projection_members)
+                body = mutated[member]
+                hits = includes(body, before)
+                assert len(hits) == 1
+                at = hits[0]
+                body[at:at + len(before)] = after
+                assert subtitle_projection_errors(mutated), 'independent S2c projection accepted ' + name
+                negatives.append('S2c Host projection: ' + name)
         for site, context in S2B_CONTEXTS.items():
             for name in ['wrong predicate', 'override bypassed', 'predicate twice',
                          'operand order', 'TV predicate changed']:
