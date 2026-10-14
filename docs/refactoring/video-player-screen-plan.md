@@ -3941,6 +3941,27 @@ Validation: exact diff and `git diff --check`.
 - Documentation consistency and `git diff --check` pass. Step T and the full
   Step-0 characterization continue under the approved correction.
 
+
+### 2026-10-14 — Phase 11 Step T complete (application still original)
+
+- Base `7fdf59370`; plan correction `07b61398b`; commit receipt
+  `p11/stepT/commit.json`. Complete draft `vplayer_p11.json`: 787 classified
+  declarations, 15 moved/770 retained/two patched, 28 references, three used
+  chains. Destinations format to 303/282/412; approved Hosts frozen exactly,
+  selected audio State-owned. All 20 earlier destinations protected.
+- `draft_vplayer_subtitle_sources_moves.py --parser-package <isolated>
+  --probe <p11/stepT/frozen>` and the real-config negatives PASS. Full
+  `check_dart_moves.py --manifest .../vplayer_p11.json --self-test
+  --self-compare-original --parser-package <isolated>` PASS: 787 all-retained
+  spans, zero differences. P1–P10 named `--at`, 26 other Dart self-tests,
+  Kotlin597 and S/S2/S2b/S2c proofs PASS; valid unchanged prerequisites reused.
+- Analyzer root104/strict177/materialized114, zero errors and no added
+  async-context identities. Earlier mappings preserved in the P11 inventory.
+  Optional-comma sites/idempotence archived. Completed commands/results in
+  `p11/stepT/frozen-result.json`. Independent disjoint edit-list ordering differs
+  from the prototype; canonical declarations, Hosts, scaffolds and bodies agree.
+  Application/pubspec/CI unchanged. Step 0 continues; no production moves.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

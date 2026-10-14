@@ -7171,3 +7171,32 @@ environment. File-race fixture closure assertions now identify the subtitle's
 client, preserving assertions while excluding a separate disposal client.
 No production move, dependency change, build/run/install, device command, real
 network, push, merge or branch switch. Full Step T and Step 0 remain pending.
+
+
+## Phase 11 Step T — approved frozen split
+
+Owner approval resolves the prerequisite discrepancies (proposal
+`p11/stepT/host-and-size-proposal.json`, plan commit `07b61398b`). Frozen draft
+`dev/tool/dart_moves/vplayer_p11.json` has 15 moves, 770 retained declarations,
+two patched declarations and 28 retained references. Reset remains retained;
+its cleanup at 15077 is included. Selected audio stays State-owned. Three used
+chains have 2/1/8 occurrences; no unused sync-reset action. Hosts exactly match
+approval; destinations format to 303/282/412, virtual facade15880. Both owned
+initializers remain inert and 20 earlier destinations protected.
+
+| Step-T proof | Completed result / evidence |
+|---|---|
+| Complete materialization/historic protection | Zero differences; `p11/stepT/frozen/` |
+| Real-config negatives | 25 body/scaffold/order/signature/ownership mutations plus six removed chain/selector registrations rejected; `real-fixture-final-result.json` |
+| Expanded universal checker/all-retained original | PASS; 787 classified spans, zero differences; `complete-self-result.json` |
+| P1–P10 named histories, 26 other Dart manifests, Kotlin597 | PASS; valid unchanged prerequisites reused from `independent-results.json` |
+| S/S2/S2b/S2c | PASS; `self-and-seams-results.json`, application unchanged |
+| Analyzer probe | Root104/strict177/formatted receiver114, zero errors; prior mappings preserved, no new async-context identities |
+| Formatter proof | Exact optional-comma sites, non-optional tokens and idempotence in `optional-commas.json`; same formatted application projection |
+
+Isolated copied parsers with kernels removed and nice19 throughout. Negative
+text anchors were corrected against the actual materialization; failed attempts
+uncredited. Prototype and frozen manifests agree after canonicalizing independent
+disjoint edit-list order; Hosts, scaffolds and application bodies are identical.
+The inventory is drafted; current CI stays on P10 until Step 1. Step-0 controls,
+mutation sweep and suite baseline remain a separate checkpoint.
